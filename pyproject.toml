@@ -1,0 +1,71 @@
+[project]
+name = "pocketquant"
+version = "0.1.0"
+description = "Algorithmic trading platform with backtesting and forward testing capabilities"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "PocketQuant Team" }]
+
+dependencies = [
+    # Web Framework
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+
+    # Database
+    "motor>=3.3.0",           # Async MongoDB driver
+    "pymongo>=4.6.0",
+
+    # Cache
+    "redis>=5.0.0",
+
+    # Background Jobs
+    "arq>=0.25.0",            # Async Redis Queue for background jobs
+    "apscheduler>=3.10.0",    # For scheduled jobs
+
+    # Data Providers
+    "tvdatafeed>=2.1.0",      # TradingView data
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+
+    # Logging
+    "structlog>=24.1.0",      # Structured logging
+    "python-json-logger>=2.0.0",
+
+    # Utils
+    "httpx>=0.26.0",          # Async HTTP client
+    "python-dateutil>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
