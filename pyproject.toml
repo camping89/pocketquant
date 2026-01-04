@@ -26,7 +26,8 @@ dependencies = [
     "apscheduler>=3.10.0",    # For scheduled jobs
 
     # Data Providers
-    "tvdatafeed>=2.1.0",      # TradingView data
+    "tvdatafeed>=2.1.0",      # TradingView historical data
+    "websockets>=12.0",       # WebSocket client for real-time quotes
     "pandas>=2.1.0",
     "numpy>=1.26.0",
 

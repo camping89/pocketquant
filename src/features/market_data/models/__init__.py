@@ -7,6 +7,12 @@ from src.features.market_data.models.ohlcv import (
     OHLCVResponse,
     SyncStatus,
 )
+from src.features.market_data.models.quote import (
+    AggregatedBar,
+    Quote,
+    QuoteSubscription,
+    QuoteTick,
+)
 from src.features.market_data.models.symbol import Symbol, SymbolCreate
 
 __all__ = [
@@ -17,4 +23,8 @@ __all__ = [
     "SyncStatus",
     "Symbol",
     "SymbolCreate",
+    "Quote",
+    "QuoteSubscription",
+    "QuoteTick",
+    "AggregatedBar",
 ]
