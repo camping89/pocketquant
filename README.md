@@ -4,10 +4,12 @@ Algorithmic trading platform with backtesting and forward testing capabilities.
 
 ## Features
 
-- **Market Data Provider**: Pull OHLCV data from TradingView
+- **Historical Data**: Pull OHLCV data from TradingView (up to 5000 bars)
+- **Real-time Quotes**: WebSocket connection for live price updates
+- **Auto-Aggregation**: Real-time ticks automatically aggregated into OHLCV bars
 - **FastAPI Backend**: Async REST API with OpenAPI documentation
 - **MongoDB Storage**: Efficient storage for time-series market data
-- **Redis Cache**: Global caching layer for frequently accessed data
+- **Redis Cache**: Global caching layer for quotes and frequently accessed data
 - **Background Jobs**: Scheduled data synchronization
 - **Structured Logging**: JSON logs compatible with log aggregation services
 
@@ -96,6 +98,19 @@ src/
 | `/api/v1/market-data/symbols` | GET | List tracked symbols |
 | `/api/v1/market-data/sync-status` | GET | Get all sync statuses |
 
+### Real-time Quotes
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/quotes/start` | POST | Start the quote service (WebSocket) |
+| `/api/v1/quotes/stop` | POST | Stop the quote service |
+| `/api/v1/quotes/status` | GET | Get quote service status |
+| `/api/v1/quotes/subscribe` | POST | Subscribe to a symbol |
+| `/api/v1/quotes/unsubscribe` | POST | Unsubscribe from a symbol |
+| `/api/v1/quotes/latest/{exchange}/{symbol}` | GET | Get latest quote |
+| `/api/v1/quotes/all` | GET | Get all cached quotes |
+| `/api/v1/quotes/current-bar/{exchange}/{symbol}` | GET | Get current (incomplete) bar |
+
 ### Example: Sync Apple Stock Data
 
 ```bash
@@ -113,6 +128,61 @@ curl -X POST http://localhost:8000/api/v1/market-data/sync \
 
 ```bash
 curl "http://localhost:8000/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
+```
+
+### Example: Real-time Quotes
+
+```bash
+# 1. Start the quote service
+curl -X POST http://localhost:8000/api/v1/quotes/start
+
+# 2. Subscribe to a symbol
+curl -X POST http://localhost:8000/api/v1/quotes/subscribe \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "AAPL", "exchange": "NASDAQ"}'
+
+# 3. Get latest quote
+curl http://localhost:8000/api/v1/quotes/latest/NASDAQ/AAPL
+
+# 4. Get current bar being built from ticks
+curl "http://localhost:8000/api/v1/quotes/current-bar/NASDAQ/AAPL?interval=1m"
+```
+
+## Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        TradingView                               │
+└───────────────┬─────────────────────────────┬───────────────────┘
+                │                             │
+        Historical Data               WebSocket (Real-time)
+        (tvdatafeed)                  (quotes/ticks)
+                │                             │
+                ▼                             ▼
+┌───────────────────────┐         ┌───────────────────────┐
+│   Sync Service        │         │   Quote Service       │
+│   - Bulk fetch        │         │   - Subscribe         │
+│   - Scheduled sync    │         │   - Cache latest      │
+└───────────┬───────────┘         └───────────┬───────────┘
+            │                                 │
+            │                                 ▼
+            │                     ┌───────────────────────┐
+            │                     │   Quote Aggregator    │
+            │                     │   - Ticks → OHLCV     │
+            │                     │   - Auto-save bars    │
+            │                     └───────────┬───────────┘
+            │                                 │
+            ▼                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         MongoDB                                  │
+│                    (OHLCV Collection)                           │
+└─────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                          Redis                                   │
+│              (Latest quotes + Current bars cache)               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## TradingView Data
