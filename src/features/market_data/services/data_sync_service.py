@@ -56,7 +56,6 @@ class DataSyncService:
             interval=interval.value,
         )
 
-        # Update sync status to syncing
         await OHLCVRepository.update_sync_status(
             symbol=symbol,
             exchange=exchange,
@@ -90,23 +89,13 @@ class DataSyncService:
                     "bars_synced": 0,
                 }
 
-            # Upsert records to MongoDB
             upserted_count = await OHLCVRepository.upsert_many(records)
-
-            # Update symbol metadata
             await SymbolRepository.upsert(
-                SymbolCreate(
-                    symbol=symbol,
-                    exchange=exchange,
-                    is_active=True,
-                )
+                SymbolCreate(symbol=symbol, exchange=exchange, is_active=True)
             )
 
-            # Get updated stats
             total_bars = await OHLCVRepository.get_bar_count(symbol, exchange, interval)
             latest_bar = await OHLCVRepository.get_latest_bar(symbol, exchange, interval)
-
-            # Update sync status
             await OHLCVRepository.update_sync_status(
                 symbol=symbol,
                 exchange=exchange,
@@ -213,20 +202,16 @@ class DataSyncService:
         """
         symbol = symbol.upper()
         exchange = exchange.upper()
-
-        # Build cache key
         cache_key = f"ohlcv:{symbol}:{exchange}:{interval.value}:{limit}"
         if start_date:
             cache_key += f":from:{start_date.isoformat()}"
         if end_date:
             cache_key += f":to:{end_date.isoformat()}"
 
-        # Try cache first
         cached = await Cache.get(cache_key)
         if cached:
             return cached
 
-        # Fetch from database
         bars = await OHLCVRepository.get_bars(
             symbol=symbol,
             exchange=exchange,
@@ -236,7 +221,6 @@ class DataSyncService:
             limit=limit,
         )
 
-        # Convert to serializable format
         result = [
             {
                 "datetime": bar.datetime.isoformat(),

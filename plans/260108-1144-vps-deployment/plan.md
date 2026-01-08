@@ -258,7 +258,7 @@ systemctl restart docker
 # syntax=docker/dockerfile:1
 
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.14-slim as builder
 
 WORKDIR /app
 
@@ -274,7 +274,7 @@ RUN pip install --no-cache-dir build && \
     pip wheel --no-cache-dir --wheel-dir /wheels -e .
 
 # Runtime stage
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 

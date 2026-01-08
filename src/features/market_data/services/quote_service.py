@@ -51,11 +51,7 @@ class QuoteService:
             return
 
         logger.info("quote_service_starting")
-
-        # Connect to TradingView WebSocket
         await self._provider.connect()
-
-        # Start the WebSocket listener in background
         self._running = True
         self._ws_task = asyncio.create_task(self._provider.run_forever())
 
@@ -64,13 +60,9 @@ class QuoteService:
     async def stop(self) -> None:
         """Stop the quote service."""
         logger.info("quote_service_stopping")
-
         self._running = False
-
-        # Disconnect WebSocket
         await self._provider.disconnect()
 
-        # Cancel background task
         if self._ws_task:
             self._ws_task.cancel()
             try:
@@ -92,8 +84,6 @@ class QuoteService:
         """
         symbol = symbol.upper()
         exchange = exchange.upper()
-
-        # Subscribe with our quote handler
         key = await self._provider.subscribe(
             symbol=symbol,
             exchange=exchange,
@@ -111,8 +101,6 @@ class QuoteService:
             exchange: Exchange name.
         """
         await self._provider.unsubscribe(symbol.upper(), exchange.upper())
-
-        # Clean up cache
         symbol_key = f"{exchange}:{symbol}".upper()
         await Cache.delete(f"{self.QUOTE_KEY_PREFIX}{symbol_key}")
 
@@ -135,7 +123,6 @@ class QuoteService:
         if last_price is None:
             return
 
-        # Create Quote object
         quote = Quote(
             symbol=symbol,
             exchange=exchange,
@@ -152,11 +139,9 @@ class QuoteService:
             prev_close=quote_data.get("prev_close"),
         )
 
-        # Cache latest quote in Redis (short TTL since it's real-time)
         cache_key = f"{self.QUOTE_KEY_PREFIX}{symbol_key}"
         await Cache.set(cache_key, quote.to_cache_dict(), ttl=60)
 
-        # Create tick for aggregation
         tick = QuoteTick(
             symbol=symbol,
             exchange=exchange,
@@ -164,8 +149,6 @@ class QuoteService:
             price=last_price,
             volume=quote_data.get("volume"),
         )
-
-        # Feed tick to aggregator
         await self._aggregator.add_tick(tick)
 
         logger.debug(
@@ -199,11 +182,8 @@ class QuoteService:
         Returns:
             List of all cached quotes.
         """
-        # Note: This requires Redis SCAN which can be slow with many keys
-        # For production, consider maintaining a set of active subscriptions
+        # Redis SCAN can be slow with many keys; consider maintaining a set of active subscriptions
         quotes = []
-
-        # Get all quote keys from subscriptions
         for symbol_key in self._provider._subscriptions.keys():
             cache_key = f"{self.QUOTE_KEY_PREFIX}{symbol_key}"
             data = await Cache.get(cache_key)

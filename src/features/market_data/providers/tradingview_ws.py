@@ -31,18 +31,9 @@ logger = get_logger(__name__)
 # TradingView WebSocket endpoint
 WS_URL = "wss://data.tradingview.com/socket.io/websocket"
 
-# Fields to request for quotes
 QUOTE_FIELDS = [
-    "lp",           # Last price
-    "volume",       # Volume
-    "bid",          # Bid price
-    "ask",          # Ask price
-    "ch",           # Change
-    "chp",          # Change percent
-    "open_price",   # Open price
-    "high_price",   # High price
-    "low_price",    # Low price
-    "prev_close_price",  # Previous close
+    "lp", "volume", "bid", "ask", "ch", "chp",
+    "open_price", "high_price", "low_price", "prev_close_price",
 ]
 
 
@@ -93,16 +84,12 @@ def _parse_messages(raw_data: str) -> list[dict[str, Any]]:
         part = part.strip()
         if not part:
             continue
-
-        # Handle heartbeat
         if part.startswith("~h~"):
             continue
-
         try:
             data = json.loads(part)
             messages.append(data)
         except json.JSONDecodeError:
-            # Not JSON, might be a control message
             pass
 
     return messages
@@ -150,18 +137,11 @@ class TradingViewWebSocketProvider:
         )
 
         self._session_id = _generate_session_id("qs")
-
-        # Create quote session
         await self._send_message("quote_create_session", [self._session_id])
-
-        # Set quote fields
-        await self._send_message(
-            "quote_set_fields",
-            [self._session_id, *QUOTE_FIELDS],
-        )
+        await self._send_message("quote_set_fields", [self._session_id, *QUOTE_FIELDS])
 
         logger.info("tradingview_ws_connected", session_id=self._session_id)
-        self._reconnect_delay = 1.0  # Reset reconnect delay on successful connect
+        self._reconnect_delay = 1.0
 
     async def disconnect(self) -> None:
         """Close the WebSocket connection."""
@@ -209,13 +189,7 @@ class TradingViewWebSocketProvider:
 
         symbol_key = f"{exchange}:{symbol}".upper()
         self._subscriptions[symbol_key] = callback
-
-        # Add symbol to quote session
-        await self._send_message(
-            "quote_add_symbols",
-            [self._session_id, symbol_key],
-        )
-
+        await self._send_message("quote_add_symbols", [self._session_id, symbol_key])
         logger.info("tradingview_ws_subscribed", symbol=symbol_key)
         return symbol_key
 
@@ -281,7 +255,6 @@ class TradingViewWebSocketProvider:
         if not symbol_key or not values:
             return
 
-        # Build quote update dict
         quote_update = {
             "symbol_key": symbol_key,
             "timestamp": datetime.utcnow(),
@@ -297,7 +270,6 @@ class TradingViewWebSocketProvider:
             "prev_close": values.get("prev_close_price"),
         }
 
-        # Call registered callback
         callback = self._subscriptions.get(symbol_key)
         if callback:
             try:
@@ -329,26 +301,17 @@ class TradingViewWebSocketProvider:
                 if self._ws is None:
                     await self.connect()
 
-                    # Re-subscribe to all symbols after reconnect
+                    # Re-subscribe after reconnect
                     for symbol_key in list(self._subscriptions.keys()):
-                        await self._send_message(
-                            "quote_add_symbols",
-                            [self._session_id, symbol_key],
-                        )
+                        await self._send_message("quote_add_symbols", [self._session_id, symbol_key])
 
-                # Read messages
                 async for raw_data in self._ws:
                     if not self._running:
                         break
-
-                    # Handle heartbeat
                     if "~h~" in raw_data:
                         await self._send_heartbeat()
                         continue
-
-                    # Parse and handle messages
-                    messages = _parse_messages(raw_data)
-                    for message in messages:
+                    for message in _parse_messages(raw_data):
                         await self._handle_message(message)
 
             except websockets.ConnectionClosed as e:

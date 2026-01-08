@@ -162,7 +162,6 @@ class TradingViewProvider:
             )
             return []
 
-        # Convert DataFrame to list of OHLCVCreate objects
         records: list[OHLCVCreate] = []
 
         for idx, row in df.iterrows():

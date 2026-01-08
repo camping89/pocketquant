@@ -42,7 +42,7 @@ src/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.14+
 - Docker & Docker Compose (for MongoDB and Redis)
 
 ### Setup

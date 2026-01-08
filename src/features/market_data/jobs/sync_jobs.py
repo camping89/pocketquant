@@ -21,7 +21,6 @@ async def sync_all_symbols() -> None:
     service = DataSyncService(settings)
 
     try:
-        # Get all symbols that have been synced before
         statuses = await OHLCVRepository.get_all_sync_statuses()
 
         if not statuses:

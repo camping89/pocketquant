@@ -34,8 +34,6 @@ class Cache:
             decode_responses=True,
         )
         cls._default_ttl = settings.redis_cache_ttl
-
-        # Verify connection
         await cls._client.ping()
         logger.info("redis_connected")
 
