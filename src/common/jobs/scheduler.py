@@ -105,12 +105,18 @@ class JobScheduler:
         if cls._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
-        trigger = IntervalTrigger(
-            seconds=seconds,
-            minutes=minutes,
-            hours=hours,
-            start_date=start_date,
-        )
+        # Build trigger kwargs, excluding None values
+        trigger_kwargs: dict[str, Any] = {}
+        if seconds is not None:
+            trigger_kwargs["seconds"] = seconds
+        if minutes is not None:
+            trigger_kwargs["minutes"] = minutes
+        if hours is not None:
+            trigger_kwargs["hours"] = hours
+        if start_date is not None:
+            trigger_kwargs["start_date"] = start_date
+
+        trigger = IntervalTrigger(**trigger_kwargs)
 
         cls._scheduler.add_job(
             func,

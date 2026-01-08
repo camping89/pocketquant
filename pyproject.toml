@@ -26,7 +26,7 @@ dependencies = [
     "apscheduler>=3.10.0",    # For scheduled jobs
 
     # Data Providers
-    "tvdatafeed>=2.1.0",      # TradingView historical data
+    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",  # TradingView historical data
     "websockets>=12.0",       # WebSocket client for real-time quotes
     "pandas>=2.1.0",
     "numpy>=1.26.0",
@@ -53,6 +53,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

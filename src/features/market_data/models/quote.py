@@ -1,6 +1,6 @@
 """Quote (tick) data models for real-time market data."""
 
-from datetime import datetime
+from datetime import datetime as dt
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ class Quote(BaseModel):
 
     symbol: str = Field(..., description="Trading symbol")
     exchange: str = Field(..., description="Exchange name")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Quote timestamp")
+    timestamp: dt = Field(default_factory=dt.utcnow, description="Quote timestamp")
 
     # Price data
     last_price: float = Field(..., alias="lp", description="Last traded price")
@@ -56,7 +56,7 @@ class Quote(BaseModel):
     def from_cache_dict(cls, data: dict[str, Any]) -> "Quote":
         """Create from Redis cache dictionary."""
         if isinstance(data.get("timestamp"), str):
-            data["timestamp"] = datetime.fromisoformat(data["timestamp"])
+            data["timestamp"] = dt.fromisoformat(data["timestamp"])
         return cls(**data)
 
 
@@ -77,7 +77,7 @@ class QuoteTick(BaseModel):
 
     symbol: str
     exchange: str
-    timestamp: datetime
+    timestamp: dt
     price: float
     volume: float | None = None
 
@@ -98,8 +98,8 @@ class AggregatedBar(BaseModel):
     symbol: str
     exchange: str
     interval: str
-    bar_start: datetime
-    bar_end: datetime
+    bar_start: dt
+    bar_end: dt
     open: float
     high: float
     low: float
