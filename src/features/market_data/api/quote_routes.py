@@ -150,8 +150,8 @@ async def get_all_quotes(
 async def get_current_bar(
     exchange: str,
     symbol: str,
-    interval: Interval = Query(default=Interval.MINUTE_1),
     service: Annotated[QuoteService, Depends(get_service)],
+    interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> dict:
     """Get the current (incomplete) bar being built from ticks.
 

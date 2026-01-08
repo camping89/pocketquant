@@ -56,6 +56,13 @@ class OHLCVRepository:
             ohlcv = OHLCV(**record.model_dump())
             doc = ohlcv.to_mongo()
 
+            # Separate created_at for $setOnInsert to avoid conflict
+            created_at = doc.pop("created_at", None)
+
+            update_ops: dict = {"$set": doc}
+            if created_at:
+                update_ops["$setOnInsert"] = {"created_at": created_at}
+
             operations.append(
                 UpdateOne(
                     {
@@ -64,7 +71,7 @@ class OHLCVRepository:
                         "interval": doc["interval"],
                         "datetime": doc["datetime"],
                     },
-                    {"$set": doc},
+                    update_ops,
                     upsert=True,
                 )
             )

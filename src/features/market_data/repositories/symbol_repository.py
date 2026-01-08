@@ -37,12 +37,15 @@ class SymbolRepository:
         doc = symbol.to_mongo()
         doc["updated_at"] = datetime.utcnow()
 
+        # Remove created_at from $set to avoid conflict with $setOnInsert
+        created_at = doc.pop("created_at", None)
+
         await collection.update_one(
             {
                 "symbol": doc["symbol"],
                 "exchange": doc["exchange"],
             },
-            {"$set": doc, "$setOnInsert": {"created_at": datetime.utcnow()}},
+            {"$set": doc, "$setOnInsert": {"created_at": created_at or datetime.utcnow()}},
             upsert=True,
         )
 

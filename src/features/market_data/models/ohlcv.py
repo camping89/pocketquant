@@ -1,6 +1,6 @@
 """OHLCV (Open, High, Low, Close, Volume) data models."""
 
-from datetime import datetime
+from datetime import datetime as dt
 from enum import Enum
 from typing import Any
 
@@ -49,7 +49,7 @@ class OHLCVBase(BaseModel):
     symbol: str = Field(..., description="Trading symbol (e.g., AAPL, BTCUSD)")
     exchange: str = Field(..., description="Exchange name (e.g., NASDAQ, BINANCE)")
     interval: Interval = Field(..., description="Time interval")
-    datetime: datetime = Field(..., description="Bar datetime (UTC)")
+    datetime: dt = Field(..., description="Bar datetime (UTC)")
     open: float = Field(..., description="Open price")
     high: float = Field(..., description="High price")
     low: float = Field(..., description="Low price")
@@ -67,7 +67,7 @@ class OHLCV(OHLCVBase):
     """Full OHLCV model with database fields."""
 
     id: str | None = Field(None, alias="_id")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: dt = Field(default_factory=dt.utcnow)
 
     class Config:
         populate_by_name = True
@@ -103,8 +103,8 @@ class SyncStatus(BaseModel):
     symbol: str
     exchange: str
     interval: str
-    last_sync_at: datetime | None = None
-    last_bar_at: datetime | None = None
+    last_sync_at: dt | None = None
+    last_bar_at: dt | None = None
     bar_count: int = 0
     status: str = "pending"  # pending, syncing, completed, error
     error_message: str | None = None
