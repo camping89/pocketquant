@@ -39,7 +39,7 @@ source .venv/bin/activate
 **Verification:**
 ```bash
 which python  # Should show .venv/bin/python
-python --version  # Should be 3.11+
+python --version  # Should be 3.14+
 ```
 
 ### Task 1.2: Install Dependencies
@@ -511,7 +511,7 @@ Template:
 **Solutions:**
 1. Ensure venv is activated: `source .venv/bin/activate`
 2. Reinstall: `pip install -e ".[dev]"`
-3. Check Python version: `python --version` (needs 3.11+)
+3. Check Python version: `python --version` (needs 3.14+)
 
 ---
 

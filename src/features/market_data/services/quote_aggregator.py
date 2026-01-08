@@ -77,7 +77,6 @@ class BarBuilder:
         Returns:
             True if tick was added, False if tick is outside bar time range.
         """
-        # Check if tick is within bar time range
         if tick.timestamp < self.bar_start or tick.timestamp >= self.bar_end:
             return False
 
@@ -237,7 +236,6 @@ class QuoteAggregator:
         current_bar = self._bars[symbol_key].get(interval)
         bar_start = _get_bar_start(tick.timestamp, interval)
 
-        # Check if we need to create a new bar
         if current_bar is None:
             # First tick for this symbol/interval
             current_bar = BarBuilder(
@@ -260,10 +258,7 @@ class QuoteAggregator:
             )
             self._bars[symbol_key][interval] = current_bar
 
-        # Add tick to current bar
         current_bar.add_tick(tick)
-
-        # Update current bar in cache (for real-time API access)
         await self._cache_current_bar(symbol_key, interval, current_bar)
 
     async def _save_completed_bar(self, bar: BarBuilder) -> None:
@@ -279,7 +274,6 @@ class QuoteAggregator:
         if aggregated is None:
             return
 
-        # Convert to OHLCVCreate and save
         ohlcv = OHLCVCreate(
             symbol=aggregated.symbol,
             exchange=aggregated.exchange,

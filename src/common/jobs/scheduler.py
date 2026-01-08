@@ -105,7 +105,6 @@ class JobScheduler:
         if cls._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
-        # Build trigger kwargs, excluding None values
         trigger_kwargs: dict[str, Any] = {}
         if seconds is not None:
             trigger_kwargs["seconds"] = seconds

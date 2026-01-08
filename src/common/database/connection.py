@@ -35,8 +35,6 @@ class Database:
             maxPoolSize=settings.mongodb_max_pool_size,
         )
         cls._database = cls._client[settings.mongodb_database]
-
-        # Verify connection
         await cls._client.admin.command("ping")
         logger.info("mongodb_connected", database=settings.mongodb_database)
 
