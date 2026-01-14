@@ -11,8 +11,8 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 
 # Infrastructure (MongoDB + Redis)
-docker-compose up -d                              # Core services
-docker-compose --profile admin up -d              # With Mongo Express UI
+docker compose -f docker/compose.yml up -d                     # Core services
+docker compose -f docker/compose.yml --profile admin up -d     # With Mongo Express UI
 
 # Run application
 python -m src.main                                # Direct

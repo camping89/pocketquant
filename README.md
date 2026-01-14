@@ -214,7 +214,7 @@ For development, set `LOG_FORMAT=console` for human-readable output.
    ```bash
    # Ubuntu/Debian
    sudo apt update
-   sudo apt install -y python3.11 docker.io docker-compose
+   sudo apt install -y python3.11 docker.io
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
@@ -226,7 +226,7 @@ For development, set `LOG_FORMAT=console` for human-readable output.
    # Edit .env: ENVIRONMENT=production, LOG_LEVEL=info
 
    uv venv && uv pip install -e .
-   docker-compose up -d
+   docker compose -f docker/compose.yml up -d
    .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
    ```
 
