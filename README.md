@@ -47,43 +47,26 @@ src/
 
 ### Setup
 
-1. **Clone and navigate to the project:**
-   ```bash
-   cd pocketquant
-   ```
+```bash
+# 1. Configure environment
+cp .env.example .env
 
-2. **Create virtual environment:**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
+# 2. Start everything (venv + deps + docker + server)
+just start
+```
 
-3. **Install dependencies:**
-   ```bash
-   pip install -e ".[dev]"
-   ```
+That's it. Access the API at:
+- **API Docs:** http://localhost:8000/api/v1/docs
+- **Health Check:** http://localhost:8000/health
 
-4. **Start infrastructure:**
-   ```bash
-   docker-compose up -d
-   ```
+### Daily Workflow
 
-5. **Configure environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env as needed
-   ```
-
-6. **Run the application:**
-   ```bash
-   python -m src.main
-   # Or with uvicorn directly:
-   uvicorn src.main:app --reload
-   ```
-
-7. **Access the API:**
-   - API Docs: http://localhost:8000/api/v1/docs
-   - Health Check: http://localhost:8000/health
+| Command | Purpose |
+|---------|---------|
+| `just start` | Start dev environment (handles everything) |
+| `just stop` | Stop containers (data preserved) |
+| `just logs` | View container logs |
+| `just logs mongodb` | View specific service logs |
 
 ## API Endpoints
 
@@ -223,26 +206,45 @@ Logs are output in JSON format for compatibility with:
 
 For development, set `LOG_FORMAT=console` for human-readable output.
 
-## Development
+## Deployment
 
-### Running Tests
+### Production (VPS/Server)
 
-```bash
-pytest
-```
+1. **Install dependencies:**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update
+   sudo apt install -y python3.11 docker.io docker-compose
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
 
-### Linting
+2. **Setup and run:**
+   ```bash
+   git clone <repository-url> pocketquant
+   cd pocketquant
+   cp .env.example .env
+   # Edit .env: ENVIRONMENT=production, LOG_LEVEL=info
 
-```bash
-ruff check .
-ruff format .
-```
+   uv venv && uv pip install -e .
+   docker-compose up -d
+   .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+   ```
 
-### Type Checking
+3. **Systemd service (optional):**
+   ```ini
+   # /etc/systemd/system/pocketquant.service
+   [Unit]
+   Description=PocketQuant
+   After=network.target docker.service
 
-```bash
-mypy src/
-```
+   [Service]
+   WorkingDirectory=/path/to/pocketquant
+   ExecStart=/path/to/pocketquant/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+   Restart=always
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
 
 ## License
 
