@@ -143,7 +143,7 @@ class TradingViewProvider:
         )
 
         # Run sync tvdatafeed in thread pool to not block event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         df = await loop.run_in_executor(
             _executor,
             self._fetch_data_sync,

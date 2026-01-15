@@ -1,9 +1,14 @@
 """Symbol metadata models."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+def _utc_now() -> datetime:
+    """Return current UTC datetime with timezone info."""
+    return datetime.now(UTC)
 
 
 class SymbolBase(BaseModel):
@@ -27,8 +32,8 @@ class Symbol(SymbolBase):
     """Full symbol model with database fields."""
 
     id: str | None = Field(None, alias="_id")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=_utc_now)
 
     class Config:
         populate_by_name = True
@@ -38,7 +43,7 @@ class Symbol(SymbolBase):
         return self.model_dump(exclude={"id"})
 
     @classmethod
-    def from_mongo(cls, doc: dict[str, Any]) -> "Symbol":
+    def from_mongo(cls, doc: dict[str, Any]) -> Symbol:
         """Create instance from MongoDB document."""
         doc["_id"] = str(doc.get("_id", ""))
         return cls(**doc)

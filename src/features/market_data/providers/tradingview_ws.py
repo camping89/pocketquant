@@ -13,12 +13,13 @@ Protocol notes:
 """
 
 import asyncio
+import inspect
 import json
 import random
 import re
 import string
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import websockets
@@ -32,8 +33,16 @@ logger = get_logger(__name__)
 WS_URL = "wss://data.tradingview.com/socket.io/websocket"
 
 QUOTE_FIELDS = [
-    "lp", "volume", "bid", "ask", "ch", "chp",
-    "open_price", "high_price", "low_price", "prev_close_price",
+    "lp",
+    "volume",
+    "bid",
+    "ask",
+    "ch",
+    "chp",
+    "open_price",
+    "high_price",
+    "low_price",
+    "prev_close_price",
 ]
 
 
@@ -257,7 +266,7 @@ class TradingViewWebSocketProvider:
 
         quote_update = {
             "symbol_key": symbol_key,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(UTC),
             "last_price": values.get("lp"),
             "volume": values.get("volume"),
             "bid": values.get("bid"),
@@ -273,7 +282,7 @@ class TradingViewWebSocketProvider:
         callback = self._subscriptions.get(symbol_key)
         if callback:
             try:
-                if asyncio.iscoroutinefunction(callback):
+                if inspect.iscoroutinefunction(callback):
                     await callback(quote_update)
                 else:
                     callback(quote_update)
@@ -303,7 +312,8 @@ class TradingViewWebSocketProvider:
 
                     # Re-subscribe after reconnect
                     for symbol_key in list(self._subscriptions.keys()):
-                        await self._send_message("quote_add_symbols", [self._session_id, symbol_key])
+                        params = [self._session_id, symbol_key]
+                        await self._send_message("quote_add_symbols", params)
 
                 async for raw_data in self._ws:
                     if not self._running:

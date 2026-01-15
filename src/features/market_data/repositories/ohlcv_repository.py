@@ -1,6 +1,6 @@
 """Repository for OHLCV data persistence."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import UpdateOne
@@ -8,8 +8,8 @@ from pymongo import UpdateOne
 from src.common.database import Database
 from src.common.logging import get_logger
 from src.features.market_data.models.ohlcv import (
-    Interval,
     OHLCV,
+    Interval,
     OHLCVCreate,
     SyncStatus,
 )
@@ -222,7 +222,7 @@ class OHLCVRepository:
             "exchange": exchange.upper(),
             "interval": interval.value,
             "status": status,
-            "last_sync_at": datetime.utcnow(),
+            "last_sync_at": datetime.now(UTC),
         }
 
         if bar_count is not None:
