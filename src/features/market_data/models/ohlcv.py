@@ -79,7 +79,7 @@ class OHLCV(OHLCVBase):
         return data
 
     @classmethod
-    def from_mongo(cls, doc: dict[str, Any]) -> "OHLCV":
+    def from_mongo(cls, doc: dict[str, Any]) -> OHLCV:
         """Create instance from MongoDB document."""
         doc["_id"] = str(doc.get("_id", ""))
         if isinstance(doc.get("interval"), str):
@@ -114,7 +114,7 @@ class SyncStatus(BaseModel):
         return self.model_dump()
 
     @classmethod
-    def from_mongo(cls, doc: dict[str, Any]) -> "SyncStatus":
+    def from_mongo(cls, doc: dict[str, Any]) -> SyncStatus:
         """Create instance from MongoDB document."""
         doc.pop("_id", None)
         return cls(**doc)

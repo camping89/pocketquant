@@ -1,7 +1,7 @@
 """PocketQuant - FastAPI Application Entry Point."""
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,14 +11,15 @@ from src.common.database import Database
 from src.common.jobs import JobScheduler
 from src.common.logging import get_logger, setup_logging
 from src.config import get_settings
-from src.features.market_data.api import quote_router, router as market_data_router
+from src.features.market_data.api import quote_router
+from src.features.market_data.api import router as market_data_router
 from src.features.market_data.jobs import register_sync_jobs
 
 logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan manager for startup/shutdown events."""
     settings = get_settings()
     logger.info("application_starting", environment=settings.environment)

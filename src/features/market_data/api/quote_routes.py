@@ -47,7 +47,7 @@ class QuoteResponse(BaseModel):
     low_price: float | None = None
 
     @classmethod
-    def from_quote(cls, quote: Quote) -> "QuoteResponse":
+    def from_quote(cls, quote: Quote) -> QuoteResponse:
         """Create from Quote model."""
         return cls(
             symbol=quote.symbol,

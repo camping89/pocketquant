@@ -1,9 +1,10 @@
 """Redis cache implementation for global caching."""
 
 import json
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Any, AsyncGenerator
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -189,7 +190,7 @@ class Cache:
 
 
 @asynccontextmanager
-async def get_cache(settings: Settings) -> AsyncGenerator[type[Cache], None]:
+async def get_cache(settings: Settings) -> AsyncGenerator[type[Cache]]:
     """Context manager for cache connection.
 
     Args:
