@@ -1,7 +1,7 @@
 """MongoDB async connection management using Motor."""
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
@@ -75,7 +75,7 @@ class Database:
 
 
 @asynccontextmanager
-async def get_database(settings: Settings) -> AsyncGenerator[AsyncIOMotorDatabase, None]:
+async def get_database(settings: Settings) -> AsyncGenerator[AsyncIOMotorDatabase]:
     """Context manager for database connection.
 
     Args:

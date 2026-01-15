@@ -1,6 +1,6 @@
 """Repository for symbol metadata."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -35,7 +35,7 @@ class SymbolRepository:
 
         symbol = Symbol(**symbol_data.model_dump())
         doc = symbol.to_mongo()
-        doc["updated_at"] = datetime.utcnow()
+        doc["updated_at"] = datetime.now(UTC)
 
         # Remove created_at from $set to avoid conflict with $setOnInsert
         created_at = doc.pop("created_at", None)
@@ -45,7 +45,7 @@ class SymbolRepository:
                 "symbol": doc["symbol"],
                 "exchange": doc["exchange"],
             },
-            {"$set": doc, "$setOnInsert": {"created_at": created_at or datetime.utcnow()}},
+            {"$set": doc, "$setOnInsert": {"created_at": created_at or datetime.now(UTC)}},
             upsert=True,
         )
 

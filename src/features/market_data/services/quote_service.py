@@ -1,7 +1,7 @@
 """Service for managing real-time quotes and subscriptions."""
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.common.cache import Cache
@@ -126,7 +126,7 @@ class QuoteService:
         quote = Quote(
             symbol=symbol,
             exchange=exchange,
-            timestamp=quote_data.get("timestamp", datetime.utcnow()),
+            timestamp=quote_data.get("timestamp", datetime.now(UTC)),
             last_price=last_price,
             bid=quote_data.get("bid"),
             ask=quote_data.get("ask"),
@@ -205,7 +205,7 @@ class QuoteService:
         """Get number of active subscriptions."""
         return self._provider.subscription_count
 
-    def get_aggregator(self) -> "QuoteAggregator":
+    def get_aggregator(self) -> QuoteAggregator:
         """Get the quote aggregator instance.
 
         Returns:
