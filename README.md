@@ -214,7 +214,7 @@ For development, set `LOG_FORMAT=console` for human-readable output.
    ```bash
    # Ubuntu/Debian
    sudo apt update
-   sudo apt install -y python3.11 docker.io
+   sudo apt install -y python3.14 docker.io
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
