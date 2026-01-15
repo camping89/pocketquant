@@ -5,7 +5,7 @@ default:
     @just --list
 
 # Start everything: venv → deps → docker → server
-start port="8000":
+start port="8787":
     #!/usr/bin/env bash
     set -e
     [ ! -d ".venv" ] && uv venv
