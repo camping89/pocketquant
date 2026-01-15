@@ -56,8 +56,8 @@ just start
 ```
 
 That's it. Access the API at:
-- **API Docs:** http://localhost:8000/api/v1/docs
-- **Health Check:** http://localhost:8000/health
+- **API Docs:** http://localhost:8787/api/v1/docs
+- **Health Check:** http://localhost:8787/health
 
 ### Daily Workflow
 
@@ -97,7 +97,7 @@ That's it. Access the API at:
 ### Example: Sync Apple Stock Data
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/market-data/sync \
+curl -X POST http://localhost:8787/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "AAPL",
@@ -110,25 +110,25 @@ curl -X POST http://localhost:8000/api/v1/market-data/sync \
 ### Example: Get OHLCV Data
 
 ```bash
-curl "http://localhost:8000/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
+curl "http://localhost:8787/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
 ```
 
 ### Example: Real-time Quotes
 
 ```bash
 # 1. Start the quote service
-curl -X POST http://localhost:8000/api/v1/quotes/start
+curl -X POST http://localhost:8787/api/v1/quotes/start
 
 # 2. Subscribe to a symbol
-curl -X POST http://localhost:8000/api/v1/quotes/subscribe \
+curl -X POST http://localhost:8787/api/v1/quotes/subscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol": "AAPL", "exchange": "NASDAQ"}'
 
 # 3. Get latest quote
-curl http://localhost:8000/api/v1/quotes/latest/NASDAQ/AAPL
+curl http://localhost:8787/api/v1/quotes/latest/NASDAQ/AAPL
 
 # 4. Get current bar being built from ticks
-curl "http://localhost:8000/api/v1/quotes/current-bar/NASDAQ/AAPL?interval=1m"
+curl "http://localhost:8787/api/v1/quotes/current-bar/NASDAQ/AAPL?interval=1m"
 ```
 
 ## Data Flow
@@ -227,7 +227,7 @@ For development, set `LOG_FORMAT=console` for human-readable output.
 
    uv venv && uv pip install -e .
    docker compose -f docker/compose.yml up -d
-   .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+   .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8787 --workers 4
    ```
 
 3. **Systemd service (optional):**
@@ -239,7 +239,7 @@ For development, set `LOG_FORMAT=console` for human-readable output.
 
    [Service]
    WorkingDirectory=/path/to/pocketquant
-   ExecStart=/path/to/pocketquant/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+   ExecStart=/path/to/pocketquant/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8787 --workers 4
    Restart=always
 
    [Install]
