@@ -233,10 +233,10 @@ All settings via environment variables (`.env` file):
 
 ## Entry Points
 
-- **Development:** `python -m src.main` or `uvicorn src.main:app --reload`
-- **Production:** `uvicorn src.main:app --host 0.0.0.0 --port 8765 --workers 4`
-- **Documentation:** `http://localhost:8765/api/v1/docs`
-- **Health Check:** `http://localhost:8765/health`
+- **Development:** `python -m src.main` (config via `.env`)
+- **Production:** `python -m src.main` with `ENVIRONMENT=production`
+- **Documentation:** `http://localhost:$API_PORT/api/v1/docs`
+- **Health Check:** `http://localhost:$API_PORT/health`
 
 ## TODOs & Known Limitations
 

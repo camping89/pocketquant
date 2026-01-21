@@ -428,7 +428,8 @@ async with contextmanager(app):
 
 **Horizontal (multiple workers):**
 ```bash
-uvicorn src.main:app --workers 4 --port 8765
+# Workers configured via uvicorn; port/host via .env
+uvicorn src.main:app --workers 4
 ```
 - Each worker has independent singletons
 - Shared MongoDB/Redis across workers

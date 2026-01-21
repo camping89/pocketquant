@@ -17,13 +17,13 @@ Algorithmic trading platform with real-time market data, WebSocket quotes, and a
 **Prerequisites:** Python 3.14+ | Docker & Docker Compose
 
 ```bash
-# 1. Configure environment
+# 1. Configure environment (see .env.example for all options)
 cp .env.example .env
 
 # 2. Start everything
 just start
 
-# Access API: http://localhost:8765/api/v1/docs
+# Access API at configured API_PORT (default 8765): /api/v1/docs
 ```
 
 **Daily Commands:**
@@ -62,10 +62,12 @@ Total: ~3,600 LOC across 33 Python files.
 
 ## API Examples
 
+> **Note:** Examples use default port. Adjust `$API_PORT` per your `.env` config.
+
 ### Sync Historical Data
 
 ```bash
-curl -X POST http://localhost:8765/api/v1/market-data/sync \
+curl -X POST http://localhost:$API_PORT/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol": "AAPL", "exchange": "NASDAQ", "interval": "1d", "n_bars": 5000}'
 ```
@@ -74,24 +76,24 @@ curl -X POST http://localhost:8765/api/v1/market-data/sync \
 
 ```bash
 # Start service
-curl -X POST http://localhost:8765/api/v1/quotes/start
+curl -X POST http://localhost:$API_PORT/api/v1/quotes/start
 
 # Subscribe
-curl -X POST http://localhost:8765/api/v1/quotes/subscribe \
+curl -X POST http://localhost:$API_PORT/api/v1/quotes/subscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol": "AAPL", "exchange": "NASDAQ"}'
 
 # Get latest
-curl http://localhost:8765/api/v1/quotes/latest/NASDAQ/AAPL
+curl http://localhost:$API_PORT/api/v1/quotes/latest/NASDAQ/AAPL
 ```
 
 ### Query Historical Data
 
 ```bash
-curl "http://localhost:8765/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
+curl "http://localhost:$API_PORT/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
 ```
 
-**Full API Docs:** http://localhost:8765/api/v1/docs
+**Full API Docs:** `http://localhost:$API_PORT/api/v1/docs`
 
 ## Key Concepts
 
@@ -147,12 +149,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Setup
 git clone <repo> && cd pocketquant
-cp .env.example .env
+cp .env.example .env  # Configure API_PORT, MONGODB_URL, etc.
 uv venv && uv pip install -e .
 docker compose -f docker/compose.yml up -d
 
-# Run
-.venv/bin/uvicorn src.main:app --workers 4 --host 0.0.0.0 --port 8765
+# Run (reads config from .env)
+.venv/bin/python -m src.main
 ```
 
 ## Documentation
@@ -176,8 +178,8 @@ pip install -e ".[dev]"
 ### Commands
 
 ```bash
-# Run app
-python -m src.main  # or: uvicorn src.main:app --reload
+# Run app (config from .env)
+python -m src.main
 
 # Infrastructure
 docker compose -f docker/compose.yml up -d          # Services
