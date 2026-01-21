@@ -366,7 +366,7 @@ just start  # Start all services + app
 **Production:**
 ```bash
 docker compose -f docker/compose.yml up -d
-uvicorn src.main:app --workers 4 --host 0.0.0.0 --port 8765
+python -m src.main  # Config via .env (API_PORT, MONGODB_URL, etc.)
 ```
 
 ## Contact & Support
