@@ -86,7 +86,7 @@ docker-compose up -d
 **Services started:**
 | Service | Container | Port | Purpose |
 |---------|-----------|------|---------|
-| MongoDB 7.0 | pocketquant-mongodb | 27017 | OHLCV data storage |
+| MongoDB 7.0 | pocketquant-mongodb | 27018 | OHLCV data storage |
 | Redis 7.2 | pocketquant-redis | 6379 | Quote cache |
 
 ### Task 2.2: Verify Container Health
@@ -471,7 +471,7 @@ Template:
 **Solutions:**
 1. Check container is running: `docker-compose ps`
 2. Verify credentials in `.env` match `docker-compose.yml`
-3. Check port 27017 is not blocked: `lsof -i :27017`
+3. Check port 27018 is not blocked: `lsof -i :27018`
 
 ### Redis Connection Failed
 

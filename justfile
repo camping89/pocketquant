@@ -1,22 +1,62 @@
 # PocketQuant Development Tasks
-# Requires: just, uv, docker
+# Requires: just, docker
+# Auto-installs: uv (faster pip alternative)
+
+# Set shell for Windows
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+# Cross-platform executable paths
+python := if os() == "windows" { ".venv/Scripts/python.exe" } else { ".venv/bin/python" }
+pip := if os() == "windows" { ".venv/Scripts/pip.exe" } else { ".venv/bin/pip" }
+uvicorn := if os() == "windows" { ".venv/Scripts/uvicorn.exe" } else { ".venv/bin/uvicorn" }
+ruff := if os() == "windows" { ".venv/Scripts/ruff.exe" } else { ".venv/bin/ruff" }
+mypy := if os() == "windows" { ".venv/Scripts/mypy.exe" } else { ".venv/bin/mypy" }
 
 default:
     @just --list
 
-# Start everything: venv → deps → docker → server
-start port="8000":
-    #!/usr/bin/env bash
-    set -e
-    [ ! -d ".venv" ] && uv venv
-    uv pip install -e ".[dev]" -q
+# Cross-platform system Python
+sys_python := if os() == "windows" { "py -3" } else { "python3" }
+
+# Setup: install uv, create venv, install dependencies
+install:
+    {{sys_python}} -m pip install uv --quiet
+    {{sys_python}} -m venv .venv
+    {{pip}} install -e ".[dev]"
+
+# Start docker + server (run `just install` first if needed)
+start port="8765":
     docker compose -f docker/compose.yml up -d
-    .venv/bin/uvicorn src.main:app --reload --host 0.0.0.0 --port {{port}}
+    {{uvicorn}} src.main:app --reload --host 0.0.0.0 --port {{port}}
 
 # Stop containers (data preserved)
-stop:
+stop: 
     docker compose -f docker/compose.yml stop
 
 # View container logs
 logs service="":
     docker compose -f docker/compose.yml logs -f {{service}}
+
+# Reset everything: stop containers and delete all data volumes
+reset:
+    docker compose -f docker/compose.yml down -v
+
+# Check development environment (docker, mongodb, redis)
+check:
+    {{python}} scripts/check_env.py
+
+# Test MongoDB authentication (sync and async)
+test-mongo:
+    {{python}} scripts/test_mongodb_auth.py
+
+# Lint code (add --fix to auto-fix)
+lint *args:
+    {{ruff}} check . {{args}}
+
+# Format code
+format:
+    {{ruff}} format .
+
+# Type check
+typecheck:
+    {{mypy}} src/

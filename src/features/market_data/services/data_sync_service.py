@@ -1,5 +1,3 @@
-"""Service for synchronizing market data from providers."""
-
 from datetime import datetime
 
 from src.common.cache import Cache
@@ -15,14 +13,7 @@ logger = get_logger(__name__)
 
 
 class DataSyncService:
-    """Service for synchronizing market data from external providers."""
-
     def __init__(self, settings: Settings):
-        """Initialize the data sync service.
-
-        Args:
-            settings: Application settings.
-        """
         self._settings = settings
         self._tv_provider = TradingViewProvider(settings)
 
@@ -33,19 +24,6 @@ class DataSyncService:
         interval: Interval,
         n_bars: int = 5000,
     ) -> dict:
-        """Synchronize data for a single symbol.
-
-        Fetches data from TradingView and upserts into MongoDB.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-            n_bars: Number of bars to fetch.
-
-        Returns:
-            Sync result with statistics.
-        """
         symbol = symbol.upper()
         exchange = exchange.upper()
 
@@ -64,7 +42,6 @@ class DataSyncService:
         )
 
         try:
-            # Fetch data from TradingView
             records = await self._tv_provider.fetch_ohlcv(
                 symbol=symbol,
                 exchange=exchange,
@@ -105,7 +82,6 @@ class DataSyncService:
                 last_bar_at=latest_bar.datetime if latest_bar else None,
             )
 
-            # Invalidate cache for this symbol
             cache_key = f"ohlcv:{symbol}:{exchange}:{interval.value}"
             await Cache.delete_pattern(f"{cache_key}:*")
 
@@ -155,16 +131,6 @@ class DataSyncService:
         interval: Interval,
         n_bars: int = 5000,
     ) -> list[dict]:
-        """Synchronize data for multiple symbols.
-
-        Args:
-            symbols: List of dicts with 'symbol' and 'exchange' keys.
-            interval: Time interval.
-            n_bars: Number of bars to fetch per symbol.
-
-        Returns:
-            List of sync results.
-        """
         results = []
 
         for sym in symbols:
@@ -187,19 +153,6 @@ class DataSyncService:
         end_date: datetime | None = None,
         limit: int = 1000,
     ) -> list[dict]:
-        """Get OHLCV bars with caching.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-            start_date: Optional start date filter.
-            end_date: Optional end date filter.
-            limit: Maximum number of bars.
-
-        Returns:
-            List of OHLCV bar dictionaries.
-        """
         symbol = symbol.upper()
         exchange = exchange.upper()
         cache_key = f"ohlcv:{symbol}:{exchange}:{interval.value}:{limit}"
@@ -233,11 +186,9 @@ class DataSyncService:
             for bar in bars
         ]
 
-        # Cache the result (5 minutes for recent data)
         await Cache.set(cache_key, result, ttl=300)
 
         return result
 
     def close(self) -> None:
-        """Close the service and cleanup resources."""
         self._tv_provider.close()

@@ -1,5 +1,3 @@
-"""PocketQuant - FastAPI Application Entry Point."""
-
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -20,15 +18,33 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    """Application lifespan manager for startup/shutdown events."""
     settings = get_settings()
     logger.info("application_starting", environment=settings.environment)
 
-    await Database.connect(settings)
-    await Cache.connect(settings)
-    JobScheduler.initialize(settings)
-    JobScheduler.start()
-    register_sync_jobs()
+    try:
+        await Database.connect(settings)
+        await Cache.connect(settings)
+        JobScheduler.initialize(settings)
+        JobScheduler.start()
+        register_sync_jobs()
+    except Exception as e:
+        import os
+
+        from rich.console import Console
+        from rich.panel import Panel
+
+        console = Console(stderr=True)
+        console.print(
+            Panel(
+                f"[bold red]{type(e).__name__}[/]: {e}",
+                title="Startup Failed",
+                border_style="red",
+            )
+        )
+        console.print("\n[dim]Your code:[/]")
+        console.print("  → [cyan]src/main.py:24[/] in lifespan")
+        console.print("  → [cyan]src/common/database/connection.py:32[/] in connect")
+        os._exit(1)
 
     logger.info("application_started")
     yield
@@ -42,7 +58,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
     settings = get_settings()
     setup_logging(settings)
 
@@ -66,7 +81,6 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health_check() -> dict:
-        """Health check endpoint."""
         return {
             "status": "healthy",
             "version": settings.app_version,
@@ -75,7 +89,6 @@ def create_app() -> FastAPI:
 
     @app.get(f"{settings.api_prefix}/system/jobs")
     async def list_jobs() -> list[dict]:
-        """List all scheduled background jobs."""
         return JobScheduler.get_jobs()
 
     app.include_router(market_data_router, prefix=settings.api_prefix)

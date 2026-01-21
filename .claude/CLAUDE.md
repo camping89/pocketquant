@@ -115,7 +115,7 @@ All settings via environment variables (`.env` file supported):
 
 ## API Structure
 
-Base URL: `/api/v1`
+Base URL: `/api/v1` (default port: 8765)
 - `/market-data/*` - Historical OHLCV sync and retrieval
 - `/quotes/*` - Real-time quote WebSocket management
 - `/system/jobs` - Background job listing

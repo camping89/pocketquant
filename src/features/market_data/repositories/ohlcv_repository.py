@@ -1,9 +1,7 @@
-"""Repository for OHLCV data persistence."""
-
 from datetime import UTC, datetime
 
-from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import UpdateOne
+from pymongo.asynchronous.collection import AsyncCollection
 
 from src.common.database import Database
 from src.common.logging import get_logger
@@ -18,34 +16,19 @@ logger = get_logger(__name__)
 
 
 class OHLCVRepository:
-    """Repository for OHLCV data operations."""
-
     COLLECTION_NAME = "ohlcv"
     SYNC_STATUS_COLLECTION = "sync_status"
 
     @classmethod
-    def _get_collection(cls) -> AsyncIOMotorCollection:
-        """Get the OHLCV collection."""
+    def _get_collection(cls) -> AsyncCollection:
         return Database.get_collection(cls.COLLECTION_NAME)
 
     @classmethod
-    def _get_sync_collection(cls) -> AsyncIOMotorCollection:
-        """Get the sync status collection."""
+    def _get_sync_collection(cls) -> AsyncCollection:
         return Database.get_collection(cls.SYNC_STATUS_COLLECTION)
 
     @classmethod
     async def upsert_many(cls, records: list[OHLCVCreate]) -> int:
-        """Upsert multiple OHLCV records.
-
-        Uses bulk upsert to efficiently handle duplicates based on
-        (symbol, exchange, interval, datetime) unique constraint.
-
-        Args:
-            records: List of OHLCV records to upsert.
-
-        Returns:
-            Number of records modified/inserted.
-        """
         if not records:
             return 0
 
@@ -56,7 +39,6 @@ class OHLCVRepository:
             ohlcv = OHLCV(**record.model_dump())
             doc = ohlcv.to_mongo()
 
-            # Separate created_at for $setOnInsert to avoid conflict
             created_at = doc.pop("created_at", None)
 
             update_ops: dict = {"$set": doc}
@@ -98,19 +80,6 @@ class OHLCVRepository:
         end_date: datetime | None = None,
         limit: int = 1000,
     ) -> list[OHLCV]:
-        """Get OHLCV bars for a symbol.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-            start_date: Optional start date filter.
-            end_date: Optional end date filter.
-            limit: Maximum number of bars to return.
-
-        Returns:
-            List of OHLCV records sorted by datetime descending.
-        """
         collection = cls._get_collection()
 
         query: dict = {
@@ -141,16 +110,6 @@ class OHLCVRepository:
         exchange: str,
         interval: Interval,
     ) -> OHLCV | None:
-        """Get the most recent bar for a symbol.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-
-        Returns:
-            Most recent OHLCV record or None.
-        """
         collection = cls._get_collection()
 
         doc = await collection.find_one(
@@ -173,16 +132,6 @@ class OHLCVRepository:
         exchange: str,
         interval: Interval,
     ) -> int:
-        """Get total bar count for a symbol.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-
-        Returns:
-            Number of bars stored.
-        """
         collection = cls._get_collection()
 
         return await collection.count_documents(
@@ -204,17 +153,6 @@ class OHLCVRepository:
         last_bar_at: datetime | None = None,
         error_message: str | None = None,
     ) -> None:
-        """Update sync status for a symbol/interval combination.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-            status: Sync status (pending, syncing, completed, error).
-            bar_count: Optional total bar count.
-            last_bar_at: Optional datetime of last bar.
-            error_message: Optional error message if status is error.
-        """
         collection = cls._get_sync_collection()
 
         update_doc: dict = {
@@ -257,16 +195,6 @@ class OHLCVRepository:
         exchange: str,
         interval: Interval,
     ) -> SyncStatus | None:
-        """Get sync status for a symbol/interval combination.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Time interval.
-
-        Returns:
-            SyncStatus if found, None otherwise.
-        """
         collection = cls._get_sync_collection()
 
         doc = await collection.find_one(
@@ -283,11 +211,6 @@ class OHLCVRepository:
 
     @classmethod
     async def get_all_sync_statuses(cls) -> list[SyncStatus]:
-        """Get all sync statuses.
-
-        Returns:
-            List of all sync statuses.
-        """
         collection = cls._get_sync_collection()
         cursor = collection.find()
 

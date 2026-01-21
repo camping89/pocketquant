@@ -73,7 +73,7 @@ Internet → Cloudflare → Vultr (Singapore)
                            ├── nginx:443 (SSL termination)
                            │     └── proxy → app:8000
                            ├── app:8000 (FastAPI)
-                           ├── mongodb:27017
+                           ├── mongodb:27018
                            └── redis:6379
 ```
 

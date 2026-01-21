@@ -1,5 +1,3 @@
-"""Background job scheduler using APScheduler for scheduled tasks."""
-
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -17,21 +15,10 @@ logger = get_logger(__name__)
 
 
 class JobScheduler:
-    """Centralized job scheduler for background tasks.
-
-    Uses APScheduler for scheduled/recurring jobs.
-    For one-off async background tasks, use asyncio.create_task() directly.
-    """
-
     _scheduler: AsyncIOScheduler | None = None
 
     @classmethod
     def initialize(cls, settings: Settings) -> None:
-        """Initialize the job scheduler.
-
-        Args:
-            settings: Application settings.
-        """
         jobstores = {
             "default": MemoryJobStore(),
         }
@@ -41,7 +28,7 @@ class JobScheduler:
         }
 
         job_defaults = {
-            "coalesce": True,  # Combine missed runs into one
+            "coalesce": True,
             "max_instances": 3,
             "misfire_grace_time": 60,
         }
@@ -57,7 +44,6 @@ class JobScheduler:
 
     @classmethod
     def start(cls) -> None:
-        """Start the scheduler."""
         if cls._scheduler is None:
             raise RuntimeError("Scheduler not initialized. Call initialize() first.")
 
@@ -66,11 +52,6 @@ class JobScheduler:
 
     @classmethod
     def shutdown(cls, wait: bool = True) -> None:
-        """Shutdown the scheduler.
-
-        Args:
-            wait: Whether to wait for running jobs to complete.
-        """
         if cls._scheduler is not None:
             cls._scheduler.shutdown(wait=wait)
             cls._scheduler = None
@@ -88,20 +69,6 @@ class JobScheduler:
         start_date: datetime | None = None,
         **kwargs: Any,
     ) -> str:
-        """Add a job that runs at fixed intervals.
-
-        Args:
-            func: The function to run (can be async).
-            job_id: Unique identifier for this job.
-            seconds: Interval in seconds.
-            minutes: Interval in minutes.
-            hours: Interval in hours.
-            start_date: When to start running the job.
-            **kwargs: Additional arguments passed to the function.
-
-        Returns:
-            The job ID.
-        """
         if cls._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -147,20 +114,6 @@ class JobScheduler:
         day_of_week: str | None = None,
         **kwargs: Any,
     ) -> str:
-        """Add a job that runs on a cron schedule.
-
-        Args:
-            func: The function to run (can be async).
-            job_id: Unique identifier for this job.
-            cron_expression: Full cron expression (e.g., "0 9 * * 1-5").
-            hour: Hour to run (0-23).
-            minute: Minute to run (0-59).
-            day_of_week: Days to run (e.g., "mon-fri" or "0-4").
-            **kwargs: Additional arguments passed to the function.
-
-        Returns:
-            The job ID.
-        """
         if cls._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -200,14 +153,6 @@ class JobScheduler:
 
     @classmethod
     def remove_job(cls, job_id: str) -> bool:
-        """Remove a scheduled job.
-
-        Args:
-            job_id: The job ID to remove.
-
-        Returns:
-            True if job was removed, False if not found.
-        """
         if cls._scheduler is None:
             return False
 
@@ -221,11 +166,6 @@ class JobScheduler:
 
     @classmethod
     def get_jobs(cls) -> list[dict[str, Any]]:
-        """Get all scheduled jobs.
-
-        Returns:
-            List of job information dictionaries.
-        """
         if cls._scheduler is None:
             return []
 
@@ -244,14 +184,6 @@ class JobScheduler:
 
     @classmethod
     def run_job_now(cls, job_id: str) -> bool:
-        """Trigger a job to run immediately.
-
-        Args:
-            job_id: The job ID to run.
-
-        Returns:
-            True if job was triggered, False if not found.
-        """
         if cls._scheduler is None:
             return False
 

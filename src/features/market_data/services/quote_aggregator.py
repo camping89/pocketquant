@@ -1,13 +1,3 @@
-"""Quote aggregator for converting real-time ticks into OHLCV bars.
-
-This module aggregates incoming quote ticks into OHLCV bars at configured
-intervals. Completed bars are automatically saved to MongoDB.
-
-Flow:
-    Ticks → Buffer (in memory) → Completed Bar → MongoDB
-                              ↘ Current Bar → Redis (for API access)
-"""
-
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -21,7 +11,6 @@ from src.features.market_data.repositories.ohlcv_repository import OHLCVReposito
 
 logger = get_logger(__name__)
 
-# Interval durations in seconds
 INTERVAL_SECONDS = {
     Interval.MINUTE_1: 60,
     Interval.MINUTE_3: 180,
@@ -38,8 +27,6 @@ INTERVAL_SECONDS = {
 
 
 class BarBuilder:
-    """Builds OHLCV bars from ticks."""
-
     def __init__(
         self,
         symbol: str,
@@ -47,14 +34,6 @@ class BarBuilder:
         interval: Interval,
         bar_start: datetime,
     ):
-        """Initialize bar builder.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Bar interval.
-            bar_start: Bar start time.
-        """
         self.symbol = symbol
         self.exchange = exchange
         self.interval = interval
@@ -69,14 +48,6 @@ class BarBuilder:
         self.tick_count: int = 0
 
     def add_tick(self, tick: QuoteTick) -> bool:
-        """Add a tick to the bar.
-
-        Args:
-            tick: The tick to add.
-
-        Returns:
-            True if tick was added, False if tick is outside bar time range.
-        """
         if tick.timestamp < self.bar_start or tick.timestamp >= self.bar_end:
             return False
 
@@ -101,26 +72,12 @@ class BarBuilder:
         return True
 
     def is_complete(self, current_time: datetime) -> bool:
-        """Check if bar is complete (time has passed bar_end).
-
-        Args:
-            current_time: Current time to check against.
-
-        Returns:
-            True if bar is complete.
-        """
         return current_time >= self.bar_end
 
     def is_empty(self) -> bool:
-        """Check if bar has no ticks."""
         return self.tick_count == 0
 
     def to_aggregated_bar(self) -> AggregatedBar | None:
-        """Convert to AggregatedBar.
-
-        Returns:
-            AggregatedBar if bar has data, None otherwise.
-        """
         if self.is_empty():
             return None
 
@@ -139,7 +96,6 @@ class BarBuilder:
         )
 
     def to_cache_dict(self) -> dict[str, Any]:
-        """Convert current bar state to cache dictionary."""
         return {
             "symbol": self.symbol,
             "exchange": self.exchange,
@@ -156,22 +112,11 @@ class BarBuilder:
 
 
 def _get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
-    """Calculate bar start time for a given timestamp and interval.
-
-    Args:
-        timestamp: The timestamp to align.
-        interval: The bar interval.
-
-    Returns:
-        Bar start time aligned to interval.
-    """
     seconds = INTERVAL_SECONDS[interval]
 
-    # For daily bars, align to midnight UTC
     if interval == Interval.DAY_1:
         return timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # For other intervals, align to interval boundary
     epoch = datetime(1970, 1, 1)
     total_seconds = (timestamp - epoch).total_seconds()
     aligned_seconds = (total_seconds // seconds) * seconds
@@ -180,21 +125,9 @@ def _get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
 
 
 class QuoteAggregator:
-    """Aggregates quote ticks into OHLCV bars.
-
-    Maintains current bars for each symbol/interval combination and
-    automatically saves completed bars to MongoDB.
-    """
-
-    # Cache key prefix for current bars
     CURRENT_BAR_PREFIX = "bar:current:"
 
     def __init__(self, intervals: list[Interval] | None = None):
-        """Initialize the aggregator.
-
-        Args:
-            intervals: List of intervals to aggregate. Defaults to 1m, 5m, 1h, 1d.
-        """
         self._intervals = intervals or [
             Interval.MINUTE_1,
             Interval.MINUTE_5,
@@ -202,18 +135,11 @@ class QuoteAggregator:
             Interval.DAY_1,
         ]
 
-        # Current bars: {symbol_key: {interval: BarBuilder}}
         self._bars: dict[str, dict[Interval, BarBuilder]] = defaultdict(dict)
 
-        # Lock for thread-safe bar updates
         self._lock = asyncio.Lock()
 
     async def add_tick(self, tick: QuoteTick) -> None:
-        """Add a tick and update all relevant bars.
-
-        Args:
-            tick: The tick to process.
-        """
         symbol_key = f"{tick.exchange}:{tick.symbol}".upper()
 
         async with self._lock:
@@ -226,18 +152,10 @@ class QuoteAggregator:
         symbol_key: str,
         interval: Interval,
     ) -> None:
-        """Process tick for a specific interval.
-
-        Args:
-            tick: The tick to process.
-            symbol_key: Symbol key like "NASDAQ:AAPL".
-            interval: The interval to process for.
-        """
         current_bar = self._bars[symbol_key].get(interval)
         bar_start = _get_bar_start(tick.timestamp, interval)
 
         if current_bar is None:
-            # First tick for this symbol/interval
             current_bar = BarBuilder(
                 symbol=tick.symbol,
                 exchange=tick.exchange,
@@ -247,7 +165,6 @@ class QuoteAggregator:
             self._bars[symbol_key][interval] = current_bar
 
         elif current_bar.is_complete(tick.timestamp):
-            # Current bar is complete, save it and create new one
             await self._save_completed_bar(current_bar)
 
             current_bar = BarBuilder(
@@ -262,11 +179,6 @@ class QuoteAggregator:
         await self._cache_current_bar(symbol_key, interval, current_bar)
 
     async def _save_completed_bar(self, bar: BarBuilder) -> None:
-        """Save a completed bar to MongoDB.
-
-        Args:
-            bar: The completed bar to save.
-        """
         if bar.is_empty():
             return
 
@@ -303,13 +215,6 @@ class QuoteAggregator:
         interval: Interval,
         bar: BarBuilder,
     ) -> None:
-        """Cache current bar state for API access.
-
-        Args:
-            symbol_key: Symbol key.
-            interval: Bar interval.
-            bar: Current bar builder.
-        """
         cache_key = f"{self.CURRENT_BAR_PREFIX}{symbol_key}:{interval.value}"
         await Cache.set(cache_key, bar.to_cache_dict(), ttl=300)
 
@@ -319,28 +224,11 @@ class QuoteAggregator:
         exchange: str,
         interval: Interval,
     ) -> dict[str, Any] | None:
-        """Get the current (incomplete) bar for a symbol.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-            interval: Bar interval.
-
-        Returns:
-            Current bar data or None.
-        """
         symbol_key = f"{exchange}:{symbol}".upper()
         cache_key = f"{self.CURRENT_BAR_PREFIX}{symbol_key}:{interval.value}"
         return await Cache.get(cache_key)
 
     async def flush_all_bars(self) -> int:
-        """Force save all current bars to MongoDB.
-
-        Useful for graceful shutdown.
-
-        Returns:
-            Number of bars saved.
-        """
         saved_count = 0
 
         async with self._lock:
@@ -350,7 +238,6 @@ class QuoteAggregator:
                         await self._save_completed_bar(bar)
                         saved_count += 1
 
-            # Clear all bars
             self._bars.clear()
 
         logger.info("bars_flushed", count=saved_count)
@@ -358,10 +245,8 @@ class QuoteAggregator:
 
     @property
     def active_symbols(self) -> list[str]:
-        """Get list of symbols with active bars."""
         return list(self._bars.keys())
 
     @property
     def intervals(self) -> list[Interval]:
-        """Get configured intervals."""
         return self._intervals

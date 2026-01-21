@@ -1,5 +1,3 @@
-"""Redis cache implementation for global caching."""
-
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -15,18 +13,11 @@ logger = get_logger(__name__)
 
 
 class Cache:
-    """Redis cache manager for global application caching."""
-
     _client: redis.Redis | None = None
     _default_ttl: int = 3600
 
     @classmethod
     async def connect(cls, settings: Settings) -> None:
-        """Establish Redis connection.
-
-        Args:
-            settings: Application settings with Redis configuration.
-        """
         logger.info("connecting_to_redis")
 
         cls._client = redis.from_url(
@@ -40,7 +31,6 @@ class Cache:
 
     @classmethod
     async def disconnect(cls) -> None:
-        """Close Redis connection."""
         if cls._client is not None:
             await cls._client.close()
             cls._client = None
@@ -48,28 +38,12 @@ class Cache:
 
     @classmethod
     def _get_client(cls) -> redis.Redis:
-        """Get the Redis client.
-
-        Returns:
-            The Redis client instance.
-
-        Raises:
-            RuntimeError: If cache is not connected.
-        """
         if cls._client is None:
             raise RuntimeError("Cache not connected. Call Cache.connect() first.")
         return cls._client
 
     @classmethod
     async def get(cls, key: str) -> Any | None:
-        """Get a value from cache.
-
-        Args:
-            key: Cache key.
-
-        Returns:
-            The cached value or None if not found.
-        """
         client = cls._get_client()
         value = await client.get(key)
 
@@ -90,13 +64,6 @@ class Cache:
         value: Any,
         ttl: int | timedelta | None = None,
     ) -> None:
-        """Set a value in cache.
-
-        Args:
-            key: Cache key.
-            value: Value to cache (will be JSON serialized if not a string).
-            ttl: Time-to-live in seconds or as timedelta. Uses default if not specified.
-        """
         client = cls._get_client()
 
         if ttl is None:
@@ -114,14 +81,6 @@ class Cache:
 
     @classmethod
     async def delete(cls, key: str) -> bool:
-        """Delete a key from cache.
-
-        Args:
-            key: Cache key to delete.
-
-        Returns:
-            True if key was deleted, False if key didn't exist.
-        """
         client = cls._get_client()
         result = await client.delete(key)
         logger.debug("cache_delete", key=key, deleted=bool(result))
@@ -129,14 +88,6 @@ class Cache:
 
     @classmethod
     async def delete_pattern(cls, pattern: str) -> int:
-        """Delete all keys matching a pattern.
-
-        Args:
-            pattern: Pattern to match (e.g., "market_data:*").
-
-        Returns:
-            Number of keys deleted.
-        """
         client = cls._get_client()
         keys = []
 
@@ -152,14 +103,6 @@ class Cache:
 
     @classmethod
     async def exists(cls, key: str) -> bool:
-        """Check if a key exists in cache.
-
-        Args:
-            key: Cache key.
-
-        Returns:
-            True if key exists, False otherwise.
-        """
         client = cls._get_client()
         return bool(await client.exists(key))
 
@@ -170,16 +113,6 @@ class Cache:
         factory: callable,
         ttl: int | timedelta | None = None,
     ) -> Any:
-        """Get value from cache or compute and cache it.
-
-        Args:
-            key: Cache key.
-            factory: Async callable that produces the value if not cached.
-            ttl: Time-to-live for the cached value.
-
-        Returns:
-            The cached or computed value.
-        """
         value = await cls.get(key)
         if value is not None:
             return value
@@ -191,14 +124,6 @@ class Cache:
 
 @asynccontextmanager
 async def get_cache(settings: Settings) -> AsyncGenerator[type[Cache]]:
-    """Context manager for cache connection.
-
-    Args:
-        settings: Application settings.
-
-    Yields:
-        The Cache class with active connection.
-    """
     try:
         await Cache.connect(settings)
         yield Cache
