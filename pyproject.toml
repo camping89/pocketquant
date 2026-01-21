@@ -37,6 +37,7 @@ dependencies = [
     # Utils
     "httpx>=0.26.0",          # Async HTTP client
     "python-dateutil>=2.8.0",
+    "rich>=13.0.0",           # Rich console output for error messages
 ]
 
 [project.optional-dependencies]
