@@ -1,19 +1,21 @@
+name: pocketquant
+
 services:
   mongodb:
     image: mongo:7.0
     container_name: pocketquant-mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "27018:27018"
     environment:
       MONGO_INITDB_ROOT_USERNAME: pocketquant
       MONGO_INITDB_ROOT_PASSWORD: pocketquant_dev
       MONGO_INITDB_DATABASE: pocketquant
     volumes:
       - mongodb_data:/data/db
-      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--username", "pocketquant", "--password", "pocketquant_dev", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -43,7 +45,7 @@ services:
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: pocketquant
       ME_CONFIG_MONGODB_ADMINPASSWORD: pocketquant_dev
-      ME_CONFIG_MONGODB_URL: mongodb://pocketquant:pocketquant_dev@mongodb:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://pocketquant:pocketquant_dev@mongodb:27018/
       ME_CONFIG_BASICAUTH: "false"
     depends_on:
       mongodb:

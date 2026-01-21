@@ -1,5 +1,3 @@
-"""FastAPI routes for real-time quote endpoints."""
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,22 +15,16 @@ router = APIRouter(prefix="/quotes", tags=["Real-time Quotes"])
 
 
 class SubscribeRequest(BaseModel):
-    """Request to subscribe to a symbol."""
-
     symbol: str = Field(..., description="Trading symbol (e.g., AAPL)")
     exchange: str = Field(..., description="Exchange name (e.g., NASDAQ)")
 
 
 class SubscribeResponse(BaseModel):
-    """Response for subscription request."""
-
     subscription_key: str
     message: str
 
 
 class QuoteResponse(BaseModel):
-    """Response model for quote data."""
-
     symbol: str
     exchange: str
     timestamp: str
@@ -48,7 +40,6 @@ class QuoteResponse(BaseModel):
 
     @classmethod
     def from_quote(cls, quote: Quote) -> QuoteResponse:
-        """Create from Quote model."""
         return cls(
             symbol=quote.symbol,
             exchange=quote.exchange,
@@ -66,15 +57,12 @@ class QuoteResponse(BaseModel):
 
 
 class QuoteServiceStatus(BaseModel):
-    """Status of the quote service."""
-
     running: bool
     subscription_count: int
     active_symbols: list[str]
 
 
 def get_service(settings: Annotated[Settings, Depends(get_settings)]) -> QuoteService:
-    """Get the quote service instance."""
     return get_quote_service(settings)
 
 
@@ -83,11 +71,6 @@ async def subscribe_to_symbol(
     request: SubscribeRequest,
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> SubscribeResponse:
-    """Subscribe to real-time quotes for a symbol.
-
-    This starts receiving real-time price updates from TradingView.
-    The quote service must be started first via the /quotes/start endpoint.
-    """
     if not service.is_running():
         raise HTTPException(
             status_code=400,
@@ -107,7 +90,6 @@ async def unsubscribe_from_symbol(
     request: SubscribeRequest,
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> dict:
-    """Unsubscribe from a symbol."""
     await service.unsubscribe(request.symbol, request.exchange)
 
     return {
@@ -121,11 +103,6 @@ async def get_latest_quote(
     symbol: str,
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> QuoteResponse:
-    """Get the latest cached quote for a symbol.
-
-    Returns the most recent quote received from TradingView.
-    Symbol must be subscribed first.
-    """
     quote = await service.get_latest_quote(symbol, exchange)
 
     if quote is None:
@@ -141,7 +118,6 @@ async def get_latest_quote(
 async def get_all_quotes(
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> list[QuoteResponse]:
-    """Get all currently cached quotes."""
     quotes = await service.get_all_quotes()
     return [QuoteResponse.from_quote(q) for q in quotes]
 
@@ -153,10 +129,6 @@ async def get_current_bar(
     service: Annotated[QuoteService, Depends(get_service)],
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> dict:
-    """Get the current (incomplete) bar being built from ticks.
-
-    This returns the in-progress OHLCV bar for the current interval.
-    """
     aggregator = service.get_aggregator()
     bar = await aggregator.get_current_bar(symbol, exchange, interval)
 
@@ -173,10 +145,6 @@ async def get_current_bar(
 async def start_quote_service(
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> dict:
-    """Start the real-time quote service.
-
-    This establishes WebSocket connection to TradingView.
-    """
     if service.is_running():
         return {"status": "already_running", "message": "Quote service is already running"}
 
@@ -189,14 +157,9 @@ async def start_quote_service(
 async def stop_quote_service(
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> dict:
-    """Stop the real-time quote service.
-
-    This closes the WebSocket connection and flushes any pending bars.
-    """
     if not service.is_running():
         return {"status": "not_running", "message": "Quote service is not running"}
 
-    # Flush aggregated bars before stopping
     aggregator = service.get_aggregator()
     saved_count = await aggregator.flush_all_bars()
 
@@ -213,7 +176,6 @@ async def stop_quote_service(
 async def get_quote_service_status(
     service: Annotated[QuoteService, Depends(get_service)],
 ) -> QuoteServiceStatus:
-    """Get the status of the quote service."""
     aggregator = service.get_aggregator()
 
     return QuoteServiceStatus(

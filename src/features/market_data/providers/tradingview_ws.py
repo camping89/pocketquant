@@ -1,17 +1,3 @@
-"""TradingView WebSocket provider for real-time quotes.
-
-This provider connects to TradingView's WebSocket endpoint to receive
-real-time quote updates. Based on reverse-engineered protocol from:
-- https://github.com/mohamadkhalaj/tradingView-API
-- https://github.com/Troodi/TradingViewWebsocket
-
-Protocol notes:
-- Connection: wss://data.tradingview.com/socket.io/websocket
-- Messages are prefixed with ~m~ and length
-- Quote sessions use "qs_" prefix
-- Chart sessions use "cs_" prefix
-"""
-
 import asyncio
 import inspect
 import json
@@ -29,7 +15,6 @@ from src.common.logging import get_logger
 
 logger = get_logger(__name__)
 
-# TradingView WebSocket endpoint
 WS_URL = "wss://data.tradingview.com/socket.io/websocket"
 
 QUOTE_FIELDS = [
@@ -47,45 +32,19 @@ QUOTE_FIELDS = [
 
 
 def _generate_session_id(prefix: str = "qs") -> str:
-    """Generate a random session ID.
-
-    Args:
-        prefix: Session prefix (qs for quote, cs for chart).
-
-    Returns:
-        Random session ID like "qs_abc123xyz789".
-    """
     chars = string.ascii_lowercase + string.digits
     random_part = "".join(random.choices(chars, k=12))
     return f"{prefix}_{random_part}"
 
 
 def _create_message(method: str, params: list[Any]) -> str:
-    """Create a TradingView WebSocket message.
-
-    Args:
-        method: Method name (e.g., "quote_create_session").
-        params: List of parameters.
-
-    Returns:
-        Formatted message string.
-    """
     message = json.dumps({"m": method, "p": params})
     return f"~m~{len(message)}~m~{message}"
 
 
 def _parse_messages(raw_data: str) -> list[dict[str, Any]]:
-    """Parse raw WebSocket data into messages.
-
-    Args:
-        raw_data: Raw data from WebSocket.
-
-    Returns:
-        List of parsed message dictionaries.
-    """
     messages = []
 
-    # Split by message delimiter pattern
     pattern = r"~m~\d+~m~"
     parts = re.split(pattern, raw_data)
 
@@ -105,37 +64,16 @@ def _parse_messages(raw_data: str) -> list[dict[str, Any]]:
 
 
 class TradingViewWebSocketProvider:
-    """Real-time quote provider using TradingView WebSocket.
-
-    Usage:
-        provider = TradingViewWebSocketProvider()
-
-        async def on_quote(quote_data):
-            print(f"Received: {quote_data}")
-
-        await provider.connect()
-        await provider.subscribe("AAPL", "NASDAQ", on_quote)
-
-        # Keep running...
-        await provider.run_forever()
-    """
-
     def __init__(self, auth_token: str | None = None):
-        """Initialize the WebSocket provider.
-
-        Args:
-            auth_token: Optional TradingView auth token for premium data.
-        """
         self._auth_token = auth_token
         self._ws: WebSocketClientProtocol | None = None
         self._session_id: str = ""
-        self._subscriptions: dict[str, Callable] = {}  # symbol_key -> callback
+        self._subscriptions: dict[str, Callable] = {}
         self._running = False
         self._reconnect_delay = 1.0
         self._max_reconnect_delay = 60.0
 
     async def connect(self) -> None:
-        """Establish WebSocket connection to TradingView."""
         logger.info("tradingview_ws_connecting")
 
         self._ws = await websockets.connect(
@@ -153,7 +91,6 @@ class TradingViewWebSocketProvider:
         self._reconnect_delay = 1.0
 
     async def disconnect(self) -> None:
-        """Close the WebSocket connection."""
         self._running = False
 
         if self._ws is not None:
@@ -163,12 +100,6 @@ class TradingViewWebSocketProvider:
         logger.info("tradingview_ws_disconnected")
 
     async def _send_message(self, method: str, params: list[Any]) -> None:
-        """Send a message to TradingView.
-
-        Args:
-            method: Method name.
-            params: Method parameters.
-        """
         if self._ws is None:
             raise RuntimeError("WebSocket not connected")
 
@@ -183,16 +114,6 @@ class TradingViewWebSocketProvider:
         exchange: str,
         callback: Callable[[dict[str, Any]], None],
     ) -> str:
-        """Subscribe to real-time quotes for a symbol.
-
-        Args:
-            symbol: Trading symbol (e.g., "AAPL").
-            exchange: Exchange name (e.g., "NASDAQ").
-            callback: Async callback function for quote updates.
-
-        Returns:
-            Subscription key.
-        """
         if self._ws is None:
             raise RuntimeError("WebSocket not connected. Call connect() first.")
 
@@ -203,12 +124,6 @@ class TradingViewWebSocketProvider:
         return symbol_key
 
     async def unsubscribe(self, symbol: str, exchange: str) -> None:
-        """Unsubscribe from a symbol.
-
-        Args:
-            symbol: Trading symbol.
-            exchange: Exchange name.
-        """
         if self._ws is None:
             return
 
@@ -225,16 +140,10 @@ class TradingViewWebSocketProvider:
             logger.info("tradingview_ws_unsubscribed", symbol=symbol_key)
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
-        """Handle an incoming WebSocket message.
-
-        Args:
-            message: Parsed message dictionary.
-        """
         method = message.get("m")
         params = message.get("p", [])
 
         if method == "qsd":
-            # Quote data update
             await self._handle_quote_update(params)
         elif method == "quote_completed":
             logger.debug("tradingview_quote_completed", params=params)
@@ -244,11 +153,6 @@ class TradingViewWebSocketProvider:
             logger.error("tradingview_protocol_error", params=params)
 
     async def _handle_quote_update(self, params: list[Any]) -> None:
-        """Handle quote data update.
-
-        Args:
-            params: Quote update parameters.
-        """
         if len(params) < 2:
             return
 
@@ -258,7 +162,7 @@ class TradingViewWebSocketProvider:
         if session_id != self._session_id:
             return
 
-        symbol_key = quote_data.get("n", "")  # Symbol name like "NASDAQ:AAPL"
+        symbol_key = quote_data.get("n", "")
         values = quote_data.get("v", {})
 
         if not symbol_key or not values:
@@ -294,7 +198,6 @@ class TradingViewWebSocketProvider:
                 )
 
     async def _send_heartbeat(self) -> None:
-        """Send heartbeat to keep connection alive."""
         if self._ws is not None:
             try:
                 await self._ws.send("~h~1")
@@ -302,7 +205,6 @@ class TradingViewWebSocketProvider:
                 pass
 
     async def run_forever(self) -> None:
-        """Run the WebSocket client forever with auto-reconnect."""
         self._running = True
 
         while self._running:
@@ -310,7 +212,6 @@ class TradingViewWebSocketProvider:
                 if self._ws is None:
                     await self.connect()
 
-                    # Re-subscribe after reconnect
                     for symbol_key in list(self._subscriptions.keys()):
                         params = [self._session_id, symbol_key]
                         await self._send_message("quote_add_symbols", params)
@@ -351,14 +252,8 @@ class TradingViewWebSocketProvider:
                     )
 
     def is_connected(self) -> bool:
-        """Check if WebSocket is connected.
-
-        Returns:
-            True if connected, False otherwise.
-        """
         return self._ws is not None and self._ws.open
 
     @property
     def subscription_count(self) -> int:
-        """Get number of active subscriptions."""
         return len(self._subscriptions)

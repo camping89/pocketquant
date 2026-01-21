@@ -18,7 +18,7 @@ Deploy PocketQuant algo trading platform to Vultr 4GB Singapore VPS with product
 **Target Architecture:**
 ```
 Internet → Cloudflare → nginx:443 → app:8000
-                           ├── mongodb:27017 (internal)
+                           ├── mongodb:27018 (internal)
                            └── redis:6379 (internal)
 ```
 
@@ -349,7 +349,7 @@ services:
       - DEBUG=false
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
-      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB}?authSource=admin
+      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27018/${MONGO_DB}?authSource=admin
       - MONGODB_DATABASE=${MONGO_DB}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - API_HOST=0.0.0.0

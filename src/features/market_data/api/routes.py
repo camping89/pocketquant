@@ -1,5 +1,3 @@
-"""FastAPI routes for market data endpoints."""
-
 from datetime import datetime
 from typing import Annotated
 
@@ -19,8 +17,6 @@ router = APIRouter(prefix="/market-data", tags=["Market Data"])
 
 
 class SyncRequest(BaseModel):
-    """Request model for data sync."""
-
     symbol: str = Field(..., description="Trading symbol (e.g., AAPL, BTCUSD)")
     exchange: str = Field(..., description="Exchange name (e.g., NASDAQ, BINANCE)")
     interval: Interval = Field(default=Interval.DAY_1, description="Time interval")
@@ -28,8 +24,6 @@ class SyncRequest(BaseModel):
 
 
 class SyncResponse(BaseModel):
-    """Response model for sync operations."""
-
     symbol: str
     exchange: str
     interval: str
@@ -40,8 +34,6 @@ class SyncResponse(BaseModel):
 
 
 class BulkSyncRequest(BaseModel):
-    """Request model for bulk data sync."""
-
     symbols: list[dict] = Field(
         ...,
         description="List of symbols with 'symbol' and 'exchange' keys",
@@ -57,7 +49,6 @@ class BulkSyncRequest(BaseModel):
 def get_data_sync_service(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> DataSyncService:
-    """Dependency to get DataSyncService instance."""
     return DataSyncService(settings)
 
 
@@ -66,10 +57,6 @@ async def sync_symbol(
     request: SyncRequest,
     service: Annotated[DataSyncService, Depends(get_data_sync_service)],
 ) -> SyncResponse:
-    """Synchronize market data for a single symbol.
-
-    Fetches historical OHLCV data from TradingView and stores in database.
-    """
     logger.info(
         "api_sync_symbol",
         symbol=request.symbol,
@@ -97,11 +84,6 @@ async def sync_symbol_background(
     background_tasks: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict:
-    """Trigger background sync for a symbol.
-
-    Returns immediately while sync runs in background.
-    """
-
     async def run_sync() -> None:
         service = DataSyncService(settings)
         try:
@@ -127,7 +109,6 @@ async def sync_bulk(
     request: BulkSyncRequest,
     service: Annotated[DataSyncService, Depends(get_data_sync_service)],
 ) -> list[SyncResponse]:
-    """Synchronize market data for multiple symbols."""
     try:
         results = await service.sync_multiple_symbols(
             symbols=request.symbols,
@@ -151,10 +132,6 @@ async def get_ohlcv(
     limit: int = Query(default=1000, ge=1, le=5000),
     service: DataSyncService = Depends(get_data_sync_service),
 ) -> OHLCVResponse:
-    """Get OHLCV data for a symbol.
-
-    Returns cached data from database. Use /sync endpoint to fetch fresh data.
-    """
     try:
         bars = await service.get_cached_bars(
             symbol=symbol,
@@ -181,7 +158,6 @@ async def get_ohlcv(
 async def list_symbols(
     exchange: str | None = Query(default=None, description="Filter by exchange"),
 ) -> list[dict]:
-    """List all tracked symbols."""
     symbols = await SymbolRepository.get_all(exchange=exchange)
 
     return [
@@ -198,7 +174,6 @@ async def list_symbols(
 
 @router.get("/sync-status")
 async def get_sync_statuses() -> list[dict]:
-    """Get sync status for all tracked symbols."""
     statuses = await OHLCVRepository.get_all_sync_statuses()
 
     return [
@@ -222,7 +197,6 @@ async def get_symbol_sync_status(
     symbol: str,
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
-    """Get sync status for a specific symbol."""
     status = await OHLCVRepository.get_sync_status(
         symbol=symbol,
         exchange=exchange,

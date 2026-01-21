@@ -1,5 +1,3 @@
-"""Background jobs for market data synchronization."""
-
 from src.common.jobs import JobScheduler
 from src.common.logging import get_logger
 from src.config import get_settings
@@ -11,10 +9,6 @@ logger = get_logger(__name__)
 
 
 async def sync_all_symbols() -> None:
-    """Sync all tracked symbols with their configured intervals.
-
-    This job runs periodically to keep data up-to-date.
-    """
     logger.info("sync_all_symbols_start")
 
     settings = get_settings()
@@ -37,7 +31,7 @@ async def sync_all_symbols() -> None:
                     symbol=status.symbol,
                     exchange=status.exchange,
                     interval=interval,
-                    n_bars=500,  # Only fetch recent bars for updates
+                    n_bars=500,
                 )
 
                 if result["status"] == "completed":
@@ -66,10 +60,6 @@ async def sync_all_symbols() -> None:
 
 
 async def sync_daily_data() -> None:
-    """Sync daily data for all tracked symbols.
-
-    This is a lighter job that runs more frequently.
-    """
     logger.info("sync_daily_data_start")
 
     settings = get_settings()
@@ -78,7 +68,6 @@ async def sync_daily_data() -> None:
     try:
         statuses = await OHLCVRepository.get_all_sync_statuses()
 
-        # Only sync daily interval
         daily_statuses = [s for s in statuses if s.interval == Interval.DAY_1.value]
 
         for status in daily_statuses:
@@ -86,7 +75,7 @@ async def sync_daily_data() -> None:
                 symbol=status.symbol,
                 exchange=status.exchange,
                 interval=Interval.DAY_1,
-                n_bars=10,  # Just get the latest bars
+                n_bars=10,
             )
 
         logger.info("sync_daily_data_complete", count=len(daily_statuses))
@@ -96,16 +85,12 @@ async def sync_daily_data() -> None:
 
 
 def register_sync_jobs() -> None:
-    """Register market data sync jobs with the scheduler."""
-
-    # Sync all symbols every 6 hours
     JobScheduler.add_interval_job(
         sync_all_symbols,
         job_id="market_data_sync_all",
         hours=6,
     )
 
-    # Sync daily data every hour during market hours (Mon-Fri, 9-17 UTC)
     JobScheduler.add_cron_job(
         sync_daily_data,
         job_id="market_data_sync_daily",

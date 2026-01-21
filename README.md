@@ -1,250 +1,198 @@
 # PocketQuant
 
-Algorithmic trading platform with backtesting and forward testing capabilities.
+Algorithmic trading platform with real-time market data, WebSocket quotes, and automated bar aggregation.
 
 ## Features
 
 - **Historical Data**: Pull OHLCV data from TradingView (up to 5000 bars)
 - **Real-time Quotes**: WebSocket connection for live price updates
-- **Auto-Aggregation**: Real-time ticks automatically aggregated into OHLCV bars
-- **FastAPI Backend**: Async REST API with OpenAPI documentation
-- **MongoDB Storage**: Efficient storage for time-series market data
-- **Redis Cache**: Global caching layer for quotes and frequently accessed data
-- **Background Jobs**: Scheduled data synchronization
-- **Structured Logging**: JSON logs compatible with log aggregation services
-
-## Architecture
-
-The project uses **Vertical Slice Architecture** where each feature is self-contained:
-
-```
-src/
-├── common/                 # Shared infrastructure
-│   ├── database/           # MongoDB connection (Motor async driver)
-│   ├── cache/              # Redis cache abstraction
-│   ├── logging/            # Structured JSON logging
-│   └── jobs/               # Background job scheduler (APScheduler)
-│
-├── features/               # Vertical slices
-│   └── market_data/        # Market data feature
-│       ├── api/            # FastAPI routes
-│       ├── services/       # Business logic
-│       ├── repositories/   # Data access layer
-│       ├── models/         # Domain models & DTOs
-│       ├── jobs/           # Background sync jobs
-│       └── providers/      # External data providers (TradingView)
-│
-├── main.py                 # FastAPI app entry point
-└── config.py               # Pydantic settings
-```
+- **Auto-Aggregation**: Real-time ticks automatically aggregated into OHLCV bars at 13 intervals
+- **MongoDB Storage**: Efficient time-series data persistence
+- **Redis Cache**: High-performance caching (quotes, bars, queries)
+- **Background Jobs**: Scheduled data synchronization (6-hourly + market hours)
+- **Structured Logging**: JSON logs compatible with Datadog, Splunk, ELK, CloudWatch, Loki
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.14+
-- Docker & Docker Compose (for MongoDB and Redis)
-
-### Setup
+**Prerequisites:** Python 3.14+ | Docker & Docker Compose
 
 ```bash
 # 1. Configure environment
 cp .env.example .env
 
-# 2. Start everything (venv + deps + docker + server)
+# 2. Start everything
 just start
+
+# Access API: http://localhost:8765/api/v1/docs
 ```
 
-That's it. Access the API at:
-- **API Docs:** http://localhost:8000/api/v1/docs
-- **Health Check:** http://localhost:8000/health
-
-### Daily Workflow
-
+**Daily Commands:**
 | Command | Purpose |
 |---------|---------|
-| `just start` | Start dev environment (handles everything) |
-| `just stop` | Stop containers (data preserved) |
-| `just logs` | View container logs |
-| `just logs mongodb` | View specific service logs |
+| `just start` | Start services + app |
+| `just stop` | Stop containers |
+| `just logs` | View logs |
 
-## API Endpoints
+## Architecture
 
-### Market Data
+Vertical Slice Architecture with shared infrastructure (Database, Cache, Logging, Jobs):
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/market-data/sync` | POST | Sync data for a symbol |
-| `/api/v1/market-data/sync/background` | POST | Trigger background sync |
-| `/api/v1/market-data/sync/bulk` | POST | Sync multiple symbols |
-| `/api/v1/market-data/ohlcv/{exchange}/{symbol}` | GET | Get OHLCV data |
-| `/api/v1/market-data/symbols` | GET | List tracked symbols |
-| `/api/v1/market-data/sync-status` | GET | Get all sync statuses |
+```
+src/
+├── common/              # Shared infrastructure (singletons)
+│   ├── database/        # MongoDB (Motor async)
+│   ├── cache/           # Redis caching
+│   ├── logging/         # Structured JSON logging
+│   └── jobs/            # APScheduler wrapper
+│
+├── features/            # Feature slices
+│   └── market_data/     # Market data (2,714 LOC)
+│       ├── api/         # FastAPI routes (472 LOC)
+│       ├── services/    # Business logic (848 LOC)
+│       ├── repositories/ # Data access (428 LOC)
+│       ├── models/      # Pydantic models (289 LOC)
+│       ├── providers/   # TradingView integrations (572 LOC)
+│       └── jobs/        # Background sync (118 LOC)
+│
+├── main.py              # FastAPI + lifespan
+└── config.py            # Settings
+```
+
+Total: ~3,600 LOC across 33 Python files.
+
+## API Examples
+
+### Sync Historical Data
+
+```bash
+curl -X POST http://localhost:8765/api/v1/market-data/sync \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "AAPL", "exchange": "NASDAQ", "interval": "1d", "n_bars": 5000}'
+```
 
 ### Real-time Quotes
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/quotes/start` | POST | Start the quote service (WebSocket) |
-| `/api/v1/quotes/stop` | POST | Stop the quote service |
-| `/api/v1/quotes/status` | GET | Get quote service status |
-| `/api/v1/quotes/subscribe` | POST | Subscribe to a symbol |
-| `/api/v1/quotes/unsubscribe` | POST | Unsubscribe from a symbol |
-| `/api/v1/quotes/latest/{exchange}/{symbol}` | GET | Get latest quote |
-| `/api/v1/quotes/all` | GET | Get all cached quotes |
-| `/api/v1/quotes/current-bar/{exchange}/{symbol}` | GET | Get current (incomplete) bar |
-
-### Example: Sync Apple Stock Data
-
 ```bash
-curl -X POST http://localhost:8000/api/v1/market-data/sync \
-  -H "Content-Type: application/json" \
-  -d '{
-    "symbol": "AAPL",
-    "exchange": "NASDAQ",
-    "interval": "1d",
-    "n_bars": 5000
-  }'
-```
+# Start service
+curl -X POST http://localhost:8765/api/v1/quotes/start
 
-### Example: Get OHLCV Data
-
-```bash
-curl "http://localhost:8000/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
-```
-
-### Example: Real-time Quotes
-
-```bash
-# 1. Start the quote service
-curl -X POST http://localhost:8000/api/v1/quotes/start
-
-# 2. Subscribe to a symbol
-curl -X POST http://localhost:8000/api/v1/quotes/subscribe \
+# Subscribe
+curl -X POST http://localhost:8765/api/v1/quotes/subscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol": "AAPL", "exchange": "NASDAQ"}'
 
-# 3. Get latest quote
-curl http://localhost:8000/api/v1/quotes/latest/NASDAQ/AAPL
-
-# 4. Get current bar being built from ticks
-curl "http://localhost:8000/api/v1/quotes/current-bar/NASDAQ/AAPL?interval=1m"
+# Get latest
+curl http://localhost:8765/api/v1/quotes/latest/NASDAQ/AAPL
 ```
 
-## Data Flow
+### Query Historical Data
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        TradingView                               │
-└───────────────┬─────────────────────────────┬───────────────────┘
-                │                             │
-        Historical Data               WebSocket (Real-time)
-        (tvdatafeed)                  (quotes/ticks)
-                │                             │
-                ▼                             ▼
-┌───────────────────────┐         ┌───────────────────────┐
-│   Sync Service        │         │   Quote Service       │
-│   - Bulk fetch        │         │   - Subscribe         │
-│   - Scheduled sync    │         │   - Cache latest      │
-└───────────┬───────────┘         └───────────┬───────────┘
-            │                                 │
-            │                                 ▼
-            │                     ┌───────────────────────┐
-            │                     │   Quote Aggregator    │
-            │                     │   - Ticks → OHLCV     │
-            │                     │   - Auto-save bars    │
-            │                     └───────────┬───────────┘
-            │                                 │
-            ▼                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         MongoDB                                  │
-│                    (OHLCV Collection)                           │
-└─────────────────────────────────────────────────────────────────┘
-            │
-            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                          Redis                                   │
-│              (Latest quotes + Current bars cache)               │
-└─────────────────────────────────────────────────────────────────┘
+```bash
+curl "http://localhost:8765/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
 ```
 
-## TradingView Data
+**Full API Docs:** http://localhost:8765/api/v1/docs
 
-This project uses [tvdatafeed](https://github.com/rongardF/tvdatafeed) for pulling data from TradingView.
+## Key Concepts
+
+### Data Pipelines
+
+1. **Historical Sync**: TradingView REST → DataSyncService → MongoDB
+   - Single/bulk/background sync
+   - 5000 bar limit enforced
+   - Status tracking (pending → syncing → completed/error)
+
+2. **Real-time Quotes**: TradingView WebSocket → QuoteService → QuoteAggregator → MongoDB + Redis
+   - Binary protocol (custom frame format)
+   - Auto-reconnect with exponential backoff
+   - Multi-interval aggregation (1m to 1M)
+
+### Infrastructure Patterns
+
+- **Singleton:** Database, Cache, JobScheduler via class methods
+- **Repository:** Stateless data access (class methods only)
+- **Service:** Per-request (DataSyncService) or singleton (QuoteService)
+- **Thread Pool:** TradingView blocking I/O isolation (4 workers)
+- **Concurrency:** asyncio.Lock for atomic bar building
 
 ### Supported Intervals
 
-| Interval | Code |
-|----------|------|
-| 1 Minute | `1m` |
-| 5 Minutes | `5m` |
-| 15 Minutes | `15m` |
-| 1 Hour | `1h` |
-| 4 Hours | `4h` |
-| 1 Day | `1d` |
-| 1 Week | `1w` |
-| 1 Month | `1M` |
+1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M
 
-### Authentication (Optional)
+### Background Jobs
 
-For extended access to symbols, add TradingView credentials to `.env`:
+- `sync_all_symbols` - Every 6 hours (500 bars)
+- `sync_daily_data` - Hourly Mon-Fri 9-17 UTC (10 bars)
+
+## Configuration
+
+All settings via `.env`:
 
 ```env
-TRADINGVIEW_USERNAME=your_username
-TRADINGVIEW_PASSWORD=your_password
+MONGODB_URL=mongodb://localhost:27018
+REDIS_URL=redis://localhost:6379
+LOG_FORMAT=console          # or "json" for production
+LOG_LEVEL=info
+ENVIRONMENT=development     # or "production"
+TRADINGVIEW_USERNAME=optional_username
+TRADINGVIEW_PASSWORD=optional_password
 ```
 
-## Logging
+## Production Deployment
 
-Logs are output in JSON format for compatibility with:
-- Datadog
-- Splunk
-- ELK Stack
-- AWS CloudWatch
-- Google Cloud Logging
-- Grafana Loki
+```bash
+# Install
+sudo apt install python3.14 docker.io
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-For development, set `LOG_FORMAT=console` for human-readable output.
+# Setup
+git clone <repo> && cd pocketquant
+cp .env.example .env
+uv venv && uv pip install -e .
+docker compose -f docker/compose.yml up -d
 
-## Deployment
+# Run
+.venv/bin/uvicorn src.main:app --workers 4 --host 0.0.0.0 --port 8765
+```
 
-### Production (VPS/Server)
+## Documentation
 
-1. **Install dependencies:**
-   ```bash
-   # Ubuntu/Debian
-   sudo apt update
-   sudo apt install -y python3.11 docker.io
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
+- **[Architecture Guide](./docs/system-architecture.md)** - Infrastructure, data pipelines, concurrency
+- **[Code Standards](./docs/code-standards.md)** - Patterns, testing, code quality
+- **[Codebase Summary](./docs/codebase-summary.md)** - Module breakdown, LOC, key decisions
+- **[Project Overview](./docs/project-overview-pdr.md)** - Vision, requirements, status
+- **[Roadmap](./docs/project-roadmap.md)** - Phases, TODOs, release schedule
 
-2. **Setup and run:**
-   ```bash
-   git clone <repository-url> pocketquant
-   cd pocketquant
-   cp .env.example .env
-   # Edit .env: ENVIRONMENT=production, LOG_LEVEL=info
+## Development
 
-   uv venv && uv pip install -e .
-   docker compose -f docker/compose.yml up -d
-   .venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
-   ```
+### Setup
 
-3. **Systemd service (optional):**
-   ```ini
-   # /etc/systemd/system/pocketquant.service
-   [Unit]
-   Description=PocketQuant
-   After=network.target docker.service
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+```
 
-   [Service]
-   WorkingDirectory=/path/to/pocketquant
-   ExecStart=/path/to/pocketquant/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
-   Restart=always
+### Commands
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
+```bash
+# Run app
+python -m src.main  # or: uvicorn src.main:app --reload
+
+# Infrastructure
+docker compose -f docker/compose.yml up -d          # Services
+docker compose -f docker/compose.yml --profile admin up -d  # + Mongo UI
+
+# Testing
+pytest                                              # All tests
+pytest -v --tb=short                               # Verbose
+pytest --cov=src --cov-report=term-missing         # Coverage
+
+# Code quality
+ruff check .                                        # Lint
+ruff format .                                       # Format
+mypy src/                                           # Type check
+```
 
 ## License
 

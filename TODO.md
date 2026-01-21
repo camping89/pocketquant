@@ -13,3 +13,9 @@
 ## Priority 3: Live Trading
 - [ ] Broker Integration - Connect to exchanges/brokers (Alpaca, Interactive Brokers, etc.)
 - [ ] Order Management - Place, track, cancel orders
+
+---
+## Code
+- Update to simplify the port, we dont want it to be mentioned in too many places
+- Same for configs
+- All ports, configs, username, pwd should be centralized somewhere
