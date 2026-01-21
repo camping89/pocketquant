@@ -25,9 +25,10 @@ install:
     {{pip}} install -e ".[dev]"
 
 # Start docker + server (run `just install` first if needed)
-start port="8765":
+# Port configurable via API_PORT env var (default: 8765)
+start:
     docker compose -f docker/compose.yml up -d
-    {{uvicorn}} src.main:app --reload --host 0.0.0.0 --port {{port}}
+    {{python}} -m src.main
 
 # Stop containers (data preserved)
 stop: 
