@@ -6,7 +6,7 @@ services:
     container_name: pocketquant-mongodb
     restart: unless-stopped
     ports:
-      - "27018:27018"
+      - "27018:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: pocketquant
       MONGO_INITDB_ROOT_PASSWORD: pocketquant_dev
@@ -45,7 +45,7 @@ services:
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: pocketquant
       ME_CONFIG_MONGODB_ADMINPASSWORD: pocketquant_dev
-      ME_CONFIG_MONGODB_URL: mongodb://pocketquant:pocketquant_dev@mongodb:27018/
+      ME_CONFIG_MONGODB_URL: mongodb://pocketquant:pocketquant_dev@mongodb:27017/
       ME_CONFIG_BASICAUTH: "false"
     depends_on:
       mongodb:
