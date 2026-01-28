@@ -4,12 +4,22 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from src.common.constants import (
+    COLLECTION_SYMBOLS,
+    LIMIT_OHLCV_QUERY_MAX,
+    LIMIT_TVDATAFEED_MAX_BARS,
+)
+from src.common.database import Database
 from src.common.logging import get_logger
-from src.config import Settings, get_settings
+from src.common.mediator import Mediator
+from src.common.mediator.dependencies import get_mediator
 from src.features.market_data.models.ohlcv import Interval, OHLCVResponse
-from src.features.market_data.repositories.ohlcv_repository import OHLCVRepository
-from src.features.market_data.repositories.symbol_repository import SymbolRepository
-from src.features.market_data.services.data_sync_service import DataSyncService
+from src.features.market_data.ohlcv import GetOHLCVQuery
+from src.features.market_data.status import (
+    GetSymbolSyncStatusQuery,
+    GetSyncStatusQuery,
+)
+from src.features.market_data.sync import BulkSyncCommand, SyncSymbolCommand
 
 logger = get_logger(__name__)
 
@@ -20,7 +30,12 @@ class SyncRequest(BaseModel):
     symbol: str = Field(..., description="Trading symbol (e.g., AAPL, BTCUSD)")
     exchange: str = Field(..., description="Exchange name (e.g., NASDAQ, BINANCE)")
     interval: Interval = Field(default=Interval.DAY_1, description="Time interval")
-    n_bars: int = Field(default=5000, ge=1, le=5000, description="Number of bars to fetch")
+    n_bars: int = Field(
+        default=LIMIT_TVDATAFEED_MAX_BARS,
+        ge=1,
+        le=LIMIT_TVDATAFEED_MAX_BARS,
+        description="Number of bars to fetch",
+    )
 
 
 class SyncResponse(BaseModel):
@@ -43,58 +58,55 @@ class BulkSyncRequest(BaseModel):
         ],
     )
     interval: Interval = Field(default=Interval.DAY_1)
-    n_bars: int = Field(default=5000, ge=1, le=5000)
-
-
-def get_data_sync_service(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> DataSyncService:
-    return DataSyncService(settings)
+    n_bars: int = Field(default=LIMIT_TVDATAFEED_MAX_BARS, ge=1, le=LIMIT_TVDATAFEED_MAX_BARS)
 
 
 @router.post("/sync", response_model=SyncResponse)
 async def sync_symbol(
     request: SyncRequest,
-    service: Annotated[DataSyncService, Depends(get_data_sync_service)],
+    mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> SyncResponse:
     logger.info(
-        "api_sync_symbol",
+        "api.sync_requested",
         symbol=request.symbol,
         exchange=request.exchange,
         interval=request.interval.value,
     )
 
-    try:
-        result = await service.sync_symbol(
-            symbol=request.symbol,
-            exchange=request.exchange,
-            interval=request.interval,
-            n_bars=request.n_bars,
-        )
+    cmd = SyncSymbolCommand(
+        symbol=request.symbol,
+        exchange=request.exchange,
+        interval=request.interval.value,
+        n_bars=request.n_bars,
+    )
 
-        return SyncResponse(**result)
+    result = await mediator.send(cmd)
 
-    finally:
-        service.close()
+    return SyncResponse(
+        symbol=result.symbol,
+        exchange=result.exchange,
+        interval=result.interval,
+        status=result.status,
+        bars_synced=result.bars_synced,
+        total_bars=result.total_bars,
+        message=result.message,
+    )
 
 
 @router.post("/sync/background", response_model=dict)
 async def sync_symbol_background(
     request: SyncRequest,
     background_tasks: BackgroundTasks,
-    settings: Annotated[Settings, Depends(get_settings)],
+    mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> dict:
     async def run_sync() -> None:
-        service = DataSyncService(settings)
-        try:
-            await service.sync_symbol(
-                symbol=request.symbol,
-                exchange=request.exchange,
-                interval=request.interval,
-                n_bars=request.n_bars,
-            )
-        finally:
-            service.close()
+        cmd = SyncSymbolCommand(
+            symbol=request.symbol,
+            exchange=request.exchange,
+            interval=request.interval.value,
+            n_bars=request.n_bars,
+        )
+        await mediator.send(cmd)
 
     background_tasks.add_task(run_sync)
 
@@ -107,74 +119,90 @@ async def sync_symbol_background(
 @router.post("/sync/bulk", response_model=list[SyncResponse])
 async def sync_bulk(
     request: BulkSyncRequest,
-    service: Annotated[DataSyncService, Depends(get_data_sync_service)],
+    mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> list[SyncResponse]:
-    try:
-        results = await service.sync_multiple_symbols(
-            symbols=request.symbols,
-            interval=request.interval,
-            n_bars=request.n_bars,
+    cmd = BulkSyncCommand(
+        symbols=request.symbols,
+        interval=request.interval.value,
+        n_bars=request.n_bars,
+    )
+
+    results = await mediator.send(cmd)
+
+    return [
+        SyncResponse(
+            symbol=r.symbol,
+            exchange=r.exchange,
+            interval=r.interval,
+            status=r.status,
+            bars_synced=r.bars_synced,
+            total_bars=r.total_bars,
+            message=r.message,
         )
-
-        return [SyncResponse(**r) for r in results]
-
-    finally:
-        service.close()
+        for r in results
+    ]
 
 
 @router.get("/ohlcv/{exchange}/{symbol}", response_model=OHLCVResponse)
 async def get_ohlcv(
     exchange: str,
     symbol: str,
+    mediator: Annotated[Mediator, Depends(get_mediator)],
     interval: Interval = Query(default=Interval.DAY_1),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
-    limit: int = Query(default=1000, ge=1, le=5000),
-    service: DataSyncService = Depends(get_data_sync_service),
+    limit: int = Query(default=1000, ge=1, le=LIMIT_OHLCV_QUERY_MAX),
 ) -> OHLCVResponse:
-    try:
-        bars = await service.get_cached_bars(
-            symbol=symbol,
-            exchange=exchange,
-            interval=interval,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit,
-        )
+    query = GetOHLCVQuery(
+        symbol=symbol,
+        exchange=exchange,
+        interval=interval.value,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
 
-        return OHLCVResponse(
-            symbol=symbol.upper(),
-            exchange=exchange.upper(),
-            interval=interval.value,
-            data=bars,
-            count=len(bars),
-        )
+    bars = await mediator.send(query)
 
-    finally:
-        service.close()
+    return OHLCVResponse(
+        symbol=symbol.upper(),
+        exchange=exchange.upper(),
+        interval=interval.value,
+        data=bars,
+        count=len(bars),
+    )
 
 
 @router.get("/symbols")
 async def list_symbols(
     exchange: str | None = Query(default=None, description="Filter by exchange"),
 ) -> list[dict]:
-    symbols = await SymbolRepository.get_all(exchange=exchange)
+    collection = Database.get_collection(COLLECTION_SYMBOLS)
+
+    query = {}
+    if exchange:
+        query["exchange"] = exchange.upper()
+
+    cursor = collection.find(query).sort("symbol", 1)
 
     return [
         {
-            "symbol": s.symbol,
-            "exchange": s.exchange,
-            "name": s.name,
-            "asset_type": s.asset_type,
-            "is_active": s.is_active,
+            "symbol": doc["symbol"],
+            "exchange": doc["exchange"],
+            "name": doc.get("name"),
+            "asset_type": doc.get("asset_type"),
+            "is_active": doc.get("is_active", True),
         }
-        for s in symbols
+        async for doc in cursor
     ]
 
 
 @router.get("/sync-status")
-async def get_sync_statuses() -> list[dict]:
-    statuses = await OHLCVRepository.get_all_sync_statuses()
+async def get_sync_statuses(
+    mediator: Annotated[Mediator, Depends(get_mediator)],
+) -> list[dict]:
+    query = GetSyncStatusQuery()
+    statuses = await mediator.send(query)
 
     return [
         {
@@ -183,8 +211,8 @@ async def get_sync_statuses() -> list[dict]:
             "interval": s.interval,
             "status": s.status,
             "bar_count": s.bar_count,
-            "last_sync_at": s.last_sync_at.isoformat() if s.last_sync_at else None,
-            "last_bar_at": s.last_bar_at.isoformat() if s.last_bar_at else None,
+            "last_sync_at": s.last_sync_at,
+            "last_bar_at": s.last_bar_at,
             "error_message": s.error_message,
         }
         for s in statuses
@@ -195,27 +223,25 @@ async def get_sync_statuses() -> list[dict]:
 async def get_symbol_sync_status(
     exchange: str,
     symbol: str,
+    mediator: Annotated[Mediator, Depends(get_mediator)],
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
-    status = await OHLCVRepository.get_sync_status(
-        symbol=symbol,
-        exchange=exchange,
-        interval=interval,
+    query = GetSymbolSyncStatusQuery(
+        symbol=symbol, exchange=exchange, interval=interval.value
     )
 
-    if not status:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No sync status found for {symbol}:{exchange}",
-        )
+    try:
+        status = await mediator.send(query)
 
-    return {
-        "symbol": status.symbol,
-        "exchange": status.exchange,
-        "interval": status.interval,
-        "status": status.status,
-        "bar_count": status.bar_count,
-        "last_sync_at": status.last_sync_at.isoformat() if status.last_sync_at else None,
-        "last_bar_at": status.last_bar_at.isoformat() if status.last_bar_at else None,
-        "error_message": status.error_message,
-    }
+        return {
+            "symbol": status.symbol,
+            "exchange": status.exchange,
+            "interval": status.interval,
+            "status": status.status,
+            "bar_count": status.bar_count,
+            "last_sync_at": status.last_sync_at,
+            "last_bar_at": status.last_bar_at,
+            "error_message": status.error_message,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

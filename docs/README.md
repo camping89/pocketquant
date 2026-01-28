@@ -26,8 +26,7 @@ Welcome to PocketQuant documentation. Start below based on your role.
 
 ### For Project/Product Managers
 - Status: [project-overview-pdr.md](./project-overview-pdr.md) - Requirements & implementation
-- Planning: [project-roadmap.md](./project-roadmap.md) - Phases & timeline
-- Metrics: Both docs contain success criteria
+- Roadmap: [TODO.md](../TODO.md) - Priorities & next steps
 
 ---
 
@@ -192,43 +191,6 @@ Product goals, requirements (functional & non-functional), implementation status
 
 ---
 
-### [project-roadmap.md](./project-roadmap.md) (464 LOC)
-**Development timeline, phases, risks, and metrics**
-
-Version history, feature roadmap (Phases 2-5), timeline estimates, risk assessment, success metrics.
-
-**Use when:** Sprint planning, feature prioritization, estimating
-
-**Contains:**
-- v1.0 status (all 8 features complete)
-  - Detailed status per feature
-  - Test coverage (overall 80%)
-  - Implementation metrics
-- Known issues & technical debt (3 priority levels)
-  - P1: Parallelization, health check, search (2-4 days)
-  - P2: Auto-reconnect, rate limit, testing utils (3-5 days)
-  - P3: E2E tests, performance tests, chaos tests (5-7 days)
-- Code quality metrics (type 100%, linting 0 errors)
-- Phase 2-5 roadmap
-  - Phase 2: Extended data sources (Binance, Kraken)
-  - Phase 3: Backtesting engine
-  - Phase 4: Live trading
-  - Phase 5: Web UI & analytics
-- Release schedule (v1.0 Q1 2026 → v5.0 Q1 2027)
-- Next steps (week 1-4 breakdown)
-- Risk assessment (technical & schedule)
-- Success metrics (operational, development, adoption)
-
-**Timeline:**
-```
-v1.0: Q1 2026  ✅ Core features
-v1.1: Q1 2026  📅 Quality & docs
-v2.0: Q2 2026  📅 Multi-source data
-v3.0: Q3 2026  📅 Backtesting
-v4.0: Q4 2026  📅 Live trading
-v5.0: Q1 2027  📅 Web UI
-```
-
 ---
 
 ## Cross-References
@@ -239,7 +201,6 @@ v5.0: Q1 2027  📅 Web UI
 1. codebase-summary.md (structure)
 2. code-standards.md (patterns)
 3. system-architecture.md (design)
-4. project-roadmap.md (TODOs)
 
 **Frontend Engineer (future):**
 1. README.md (quick start)
@@ -249,32 +210,28 @@ v5.0: Q1 2027  📅 Web UI
 **QA/Tester:**
 1. project-overview-pdr.md (requirements)
 2. code-standards.md (test expectations)
-3. project-roadmap.md (test gaps)
 
 **Tech Lead:**
 1. system-architecture.md (design)
 2. code-standards.md (quality)
-3. project-roadmap.md (timeline)
-4. project-overview-pdr.md (scope)
+3. project-overview-pdr.md (scope)
 
 **Product Manager:**
 1. README.md (overview)
 2. project-overview-pdr.md (requirements)
-3. project-roadmap.md (timeline)
 
 ---
 
 ## Documentation Statistics
 
-| Document | LOC | Purpose | Audience |
-|----------|-----|---------|----------|
-| README.md | 199 | Quick start | All |
-| codebase-summary.md | 250 | Reference | Developers |
-| code-standards.md | 549 | Guidelines | Developers, Reviewers |
-| system-architecture.md | 482 | Design | Architects, Developers |
-| project-overview-pdr.md | 380 | Requirements | All |
-| project-roadmap.md | 464 | Planning | Leads, Managers |
-| **Total** | **2,324** | **Comprehensive** | **All** |
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| README.md | Quick start | All |
+| codebase-summary.md | Reference | Developers |
+| code-standards.md | Guidelines | Developers, Reviewers |
+| system-architecture.md | Design | Architects, Developers |
+| project-overview-pdr.md | Requirements | All |
+| deployment-guide.md | Production setup | DevOps |
 
 ---
 
@@ -321,7 +278,7 @@ A: Add to `/src/features/{feature}/api/` routes. Follow patterns in system-archi
 A: See code-standards.md section "Testing Standards". Run `pytest`.
 
 **Q: Where is the production deployment guide?**
-A: See README.md "Production Deployment" section or project-roadmap.md.
+A: See [deployment-guide.md](./deployment-guide.md).
 
 **Q: What's the testing strategy?**
 A: See code-standards.md "Testing Standards". Target: 80% coverage, unit + integration.
@@ -361,11 +318,10 @@ A: Use `Cache.set/get/delete_pattern()`. See system-architecture.md "Cache" sect
 
 When you make code changes:
 
-1. **Feature added:** Update project-roadmap.md status
-2. **Architecture changed:** Update system-architecture.md
-3. **Patterns changed:** Update code-standards.md
-4. **Module added:** Update codebase-summary.md
-5. **Requirements change:** Update project-overview-pdr.md
+1. **Architecture changed:** Update system-architecture.md
+2. **Patterns changed:** Update code-standards.md
+3. **Module added:** Update codebase-summary.md
+4. **Requirements change:** Update project-overview-pdr.md
 
 **Pre-commit check:** See if any docs need updating based on code changes.
 

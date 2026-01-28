@@ -1,5 +1,5 @@
-"""MongoDB database module."""
+"""MongoDB database module - re-exports from infrastructure."""
 
-from src.common.database.connection import Database, get_database
+from src.infrastructure.persistence import Database, get_database
 
 __all__ = ["Database", "get_database"]

@@ -6,12 +6,48 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.common.cache import Cache
 from src.common.database import Database
+from src.common.health import HealthCoordinator, check_database, check_redis
+from src.common.idempotency import IdempotencyMiddleware
 from src.common.jobs import JobScheduler
 from src.common.logging import get_logger, setup_logging
+from src.common.mediator import Mediator
+from src.common.messaging import EventBus
+from src.common.rate_limit import RateLimitMiddleware
+from src.common.tracing import CorrelationIDMiddleware
 from src.config import get_settings
 from src.features.market_data.api import quote_router
 from src.features.market_data.api import router as market_data_router
-from src.features.market_data.jobs import register_sync_jobs
+from src.features.market_data.jobs import register_sync_jobs, set_mediator
+from src.features.market_data.ohlcv import GetOHLCVHandler, GetOHLCVQuery
+from src.features.market_data.quote import (
+    GetAllQuotesHandler,
+    GetAllQuotesQuery,
+    GetLatestQuoteHandler,
+    GetLatestQuoteQuery,
+    StartQuoteFeedCommand,
+    StartQuoteFeedHandler,
+    StopQuoteFeedCommand,
+    StopQuoteFeedHandler,
+    SubscribeCommand,
+    SubscribeHandler,
+    UnsubscribeCommand,
+    UnsubscribeHandler,
+)
+from src.features.market_data.status import (
+    GetQuoteServiceStatusHandler,
+    GetQuoteServiceStatusQuery,
+    GetSymbolSyncStatusHandler,
+    GetSymbolSyncStatusQuery,
+    GetSyncStatusHandler,
+    GetSyncStatusQuery,
+)
+from src.features.market_data.sync import (
+    BulkSyncCommand,
+    BulkSyncHandler,
+    SyncSymbolCommand,
+    SyncSymbolHandler,
+)
+from src.infrastructure.tradingview import TradingViewProvider
 
 logger = get_logger(__name__)
 
@@ -21,12 +57,42 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     logger.info("application_starting", environment=settings.environment)
 
+    mediator = Mediator()
+    event_bus = EventBus(max_history=100)
+
+    app.state.mediator = mediator
+    app.state.event_bus = event_bus
+
     try:
         await Database.connect(settings)
         await Cache.connect(settings)
         JobScheduler.initialize(settings)
         JobScheduler.start()
         register_sync_jobs()
+
+        tv_provider = TradingViewProvider(settings)
+
+        sync_handler = SyncSymbolHandler(tv_provider, event_bus)
+        mediator.register(SyncSymbolCommand, sync_handler)
+        mediator.register(BulkSyncCommand, BulkSyncHandler(sync_handler))
+
+        mediator.register(GetOHLCVQuery, GetOHLCVHandler())
+
+        mediator.register(StartQuoteFeedCommand, StartQuoteFeedHandler(settings))
+        mediator.register(StopQuoteFeedCommand, StopQuoteFeedHandler(settings))
+        mediator.register(SubscribeCommand, SubscribeHandler(settings))
+        mediator.register(UnsubscribeCommand, UnsubscribeHandler(settings))
+        mediator.register(GetLatestQuoteQuery, GetLatestQuoteHandler())
+        mediator.register(GetAllQuotesQuery, GetAllQuotesHandler(settings))
+
+        mediator.register(GetSyncStatusQuery, GetSyncStatusHandler())
+        mediator.register(GetSymbolSyncStatusQuery, GetSymbolSyncStatusHandler())
+        mediator.register(
+            GetQuoteServiceStatusQuery, GetQuoteServiceStatusHandler(settings)
+        )
+
+        set_mediator(mediator)
+
     except Exception as e:
         import os
 
@@ -79,13 +145,20 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(RateLimitMiddleware, capacity=200, refill_rate=20.0)
+    app.add_middleware(IdempotencyMiddleware)
+    app.add_middleware(CorrelationIDMiddleware)
+
+    health_coordinator = HealthCoordinator(timeout=5.0)
+    health_coordinator.register("database", check_database)
+    health_coordinator.register("redis", check_redis)
+
     @app.get("/health")
     async def health_check() -> dict:
-        return {
-            "status": "healthy",
-            "version": settings.app_version,
-            "environment": settings.environment,
-        }
+        result = await health_coordinator.check_all()
+        result["version"] = settings.app_version
+        result["environment"] = settings.environment
+        return result
 
     @app.get(f"{settings.api_prefix}/system/jobs")
     async def list_jobs() -> list[dict]:

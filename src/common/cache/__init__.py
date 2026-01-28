@@ -1,5 +1,5 @@
-"""Redis cache module."""
+"""Redis cache module - re-exports from infrastructure."""
 
-from src.common.cache.redis_cache import Cache, get_cache
+from src.infrastructure.persistence import Cache, get_cache
 
 __all__ = ["Cache", "get_cache"]

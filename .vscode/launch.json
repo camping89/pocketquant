@@ -8,8 +8,7 @@
       "module": "uvicorn",
       "args": ["src.main:app", "--reload"],
       "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }

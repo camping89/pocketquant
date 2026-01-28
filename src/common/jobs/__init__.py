@@ -1,5 +1,5 @@
-"""Background jobs module."""
+"""Background jobs module - re-exports from infrastructure."""
 
-from src.common.jobs.scheduler import JobScheduler
+from src.infrastructure.scheduling import JobScheduler
 
 __all__ = ["JobScheduler"]
