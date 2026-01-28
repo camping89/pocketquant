@@ -66,9 +66,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         await Database.connect(settings)
         await Cache.connect(settings)
-        JobScheduler.initialize(settings)
-        JobScheduler.start()
-        register_sync_jobs()
+
+        if settings.enable_jobs:
+            JobScheduler.initialize(settings)
+            JobScheduler.start()
+            register_sync_jobs()
+            logger.info("background_jobs_enabled")
+        else:
+            logger.info("background_jobs_disabled")
 
         tv_provider = TradingViewProvider(settings)
 
@@ -116,7 +121,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
     logger.info("application_stopping")
 
-    JobScheduler.shutdown(wait=True)
+    if settings.enable_jobs:
+        JobScheduler.shutdown(wait=True)
+        
     await Cache.disconnect()
     await Database.disconnect()
 
