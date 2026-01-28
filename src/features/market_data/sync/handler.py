@@ -15,6 +15,7 @@ from src.common.logging import get_logger
 from src.common.mediator import Handler
 from src.common.messaging import EventBus
 from src.domain.ohlcv import OHLCVAggregate
+from src.domain.shared.value_objects import Interval as DomainInterval
 from src.features.market_data.models.ohlcv import OHLCV, Interval, OHLCVCreate
 from src.features.market_data.sync.command import BulkSyncCommand, SyncSymbolCommand
 from src.features.market_data.sync.dto import SyncResult
@@ -89,9 +90,9 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
 
             aggregate = OHLCVAggregate(symbol=symbol, exchange=exchange)
             aggregate.record_sync(
-                interval=interval,
-                bar_count=upserted_count,
-                last_bar_time=latest_bar.datetime if latest_bar else datetime.now(UTC),
+                interval=DomainInterval(interval.value),
+                bars_count=upserted_count,
+                last_bar_at=latest_bar.datetime if latest_bar else datetime.now(UTC),
             )
             await self.event_bus.publish_all(aggregate.get_uncommitted_events())
 
