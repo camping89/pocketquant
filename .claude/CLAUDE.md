@@ -5,10 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ```bash
-# Setup
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+# Setup (requires: just, uv)
+just install                   # Creates .venv + installs deps
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
 # Infrastructure (MongoDB + Redis)
 docker compose -f docker/compose.yml up -d                     # Core services

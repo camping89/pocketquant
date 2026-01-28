@@ -1,6 +1,9 @@
-"""Data providers for market data."""
+"""Data providers for market data - re-exports from infrastructure."""
 
-from src.features.market_data.providers.tradingview import TradingViewProvider
-from src.features.market_data.providers.tradingview_ws import TradingViewWebSocketProvider
+from src.infrastructure.tradingview import (
+    IDataProvider,
+    TradingViewProvider,
+    TradingViewWebSocketProvider,
+)
 
-__all__ = ["TradingViewProvider", "TradingViewWebSocketProvider"]
+__all__ = ["IDataProvider", "TradingViewProvider", "TradingViewWebSocketProvider"]

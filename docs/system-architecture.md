@@ -1,338 +1,497 @@
 # System Architecture
 
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-01-28
 
 ## High-Level Architecture
 
+PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer separation.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    TradingView Data Source                       │
-│              (REST API + WebSocket + Authentication)             │
+│                         External Services                        │
+│              TradingView (REST API + WebSocket)                  │
 └───────────────┬─────────────────────────────┬───────────────────┘
                 │                             │
         Historical Data              Real-time Quotes
-        (tvdatafeed)                 (Binary WebSocket)
                 │                             │
                 ▼                             ▼
-    ┌───────────────────────┐    ┌───────────────────────┐
-    │   FastAPI Endpoint    │    │   FastAPI Endpoint    │
-    │   /market-data/sync   │    │   /quotes/subscribe   │
-    └────────┬──────────────┘    └────────┬──────────────┘
-             │                            │
-             ▼                            ▼
-    ┌──────────────────────────────────────────────┐
-    │         Application Layer                    │
-    │  ┌────────────────┐  ┌──────────────────┐   │
-    │  │ DataSyncService│  │  QuoteService    │   │
-    │  │ (per-request)  │  │  (singleton)     │   │
-    │  └────────┬───────┘  └────────┬─────────┘   │
-    │           │                   │              │
-    │           │           ┌───────▼──────────┐   │
-    │           │           │QuoteAggregator   │   │
-    │           │           │(multi-interval)  │   │
-    │           └───────┬───┴──────────────────┘   │
-    └───────────────────┼──────────────────────────┘
-                        │
-           ┌────────────┴────────────┐
-           │                         │
-           ▼                         ▼
-    ┌──────────────────┐   ┌──────────────────┐
-    │   MongoDB        │   │   Redis Cache    │
-    │ (OHLCV Storage)  │   │ (Quote + Bars)   │
-    │ (Sync Status)    │   │ (300-3600s TTL)  │
-    │ (Symbols)        │   │                  │
-    └──────────────────┘   └──────────────────┘
-             ▲                      ▲
-             └──────────┬───────────┘
-                        │
-            ┌───────────▼──────────┐
-            │  Infrastructure Layer │
-            │ (Singleton Managers)  │
-            └───────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       API Layer (FastAPI)                        │
+│  POST /market-data/sync   GET /market-data/ohlcv   /quotes/*    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Middleware Stack (Ordered)                     │
+│  CorrelationId → RateLimit → Idempotency → Routes               │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CQRS Mediator (Dispatcher)                    │
+│  send(Command/Query) → Handler → Response                        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+            ┌────────────────┴────────────────┐
+            ▼                                 ▼
+┌───────────────────────┐       ┌───────────────────────┐
+│  Application Layer    │       │    Domain Layer       │
+│  (CQRS Handlers)      │◄──────│  (Pure Logic)         │
+│  - SyncHandler        │       │  - OHLCVAggregate     │
+│  - OHLCVHandler       │       │  - Symbol             │
+│  - QuoteHandler       │       │  - Interval           │
+└───────┬───────────────┘       └───────────────────────┘
+        │                                 │
+        │         ┌───────────────────────┘
+        │         │
+        ▼         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 Infrastructure Layer (I/O)                       │
+│  ┌───────────────┐  ┌──────────────┐  ┌──────────────────┐    │
+│  │  Persistence  │  │  Providers   │  │   Scheduling     │    │
+│  │  - MongoDB    │  │  - TradingVw │  │   - APScheduler  │    │
+│  │  - Redis      │  │  - HTTP      │  │   - Jobs         │    │
+│  └───────────────┘  └──────────────┘  └──────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
+│   MongoDB    │  │  TradingView │  │   Background     │
+│   (Bars)     │  │   (Market)   │  │   Jobs           │
+└──────────────┘  └──────────────┘  └──────────────────┘
 ```
 
-## Infrastructure Singletons
+## DDD Layer Architecture
 
-### Pattern: Class-Method Based Singletons
+### Layer 1: Domain (Pure Business Logic)
 
-All infrastructure components use class methods as their API. State is maintained in class variables and initialized once during app startup in the lifespan context manager.
+**Purpose:** Core business rules with ZERO external dependencies.
 
-```python
-# Usage pattern
-from src.common.database import Database
-from src.common.cache import Cache
+**Rules:**
+- No I/O imports (no pymongo, redis, aiohttp)
+- Immutable value objects (frozen dataclasses)
+- Domain events for state changes
+- Validated via __post_init__
 
-# Direct access via class methods
-collection = Database.get_collection("ohlcv")
-await Cache.set("key", {"data": "value"})
+**Components:**
+```
+domain/
+├── ohlcv/
+│   ├── aggregate.py      # OHLCVAggregate (collection validation)
+│   ├── value_objects.py  # OHLCVBar (immutable)
+│   ├── events.py         # BarSyncedEvent
+│   └── services/         # Domain services (pure logic)
+├── quote/
+│   ├── aggregate.py      # QuoteAggregate
+│   ├── value_objects.py  # QuoteTick
+│   └── events.py         # QuoteReceivedEvent
+├── symbol/
+│   ├── aggregate.py      # Symbol aggregate
+│   └── value_objects.py  # Symbol value object
+└── shared/
+    ├── value_objects.py  # Symbol, Interval, INTERVAL_SECONDS
+    └── events.py         # DomainEvent base class
 ```
 
-### Database (PyMongo Async + MongoDB)
-
-**Initialization (in main.py lifespan):**
+**Example Value Object:**
 ```python
-await Database.connect(settings)
+@dataclass(frozen=True)
+class Symbol:
+    code: str
+    exchange: str
+
+    def __post_init__(self) -> None:
+        if not self.code or not self.exchange:
+            raise ValueError("Symbol requires code and exchange")
 ```
 
-**State:**
-- `_client: pymongo.asynchronous.AsyncMongoClient` - MongoDB connection
-- `_database: pymongo.asynchronous.AsyncDatabase` - Default database reference
-- Connection pool: 5-50 connections (configurable)
+**Enforcement:** `test_domain_purity.py` uses AST parsing to detect forbidden imports.
 
-**Lifecycle:**
-- Connected once at startup
-- Single connection shared across all requests
-- Gracefully disconnected at shutdown
+### Layer 2: Application (CQRS Handlers)
 
-**API Methods:**
-- `connect(settings)` - Initialize connection
-- `disconnect()` - Close connection
-- `get_database(name=None)` - Get database reference
-- `get_collection(name)` - Get collection reference
-- `ping()` - Test connectivity
+**Purpose:** Orchestrate domain + infrastructure to fulfill use cases.
 
-**Collections:**
-- `ohlcv` - Time-series market data (indexed by symbol, exchange, interval, timestamp)
-- `sync_status` - Synchronization progress tracking
-- `symbols` - Symbol registry with metadata
+**Pattern:** Command/Query handlers registered with Mediator.
 
-### Cache (redis-py)
-
-**Initialization:**
-```python
-await Cache.connect(settings)
+**Structure:**
+```
+features/market_data/
+├── sync/
+│   ├── command.py        # SyncSymbolCommand
+│   ├── handler.py        # SyncSymbolHandler
+│   ├── dto.py            # Response DTOs
+│   └── event_handlers.py # EventBus subscribers
+├── ohlcv/
+│   ├── query.py          # GetBarsQuery, GetSymbolsQuery
+│   ├── handler.py        # Query handlers
+│   └── dto.py            # Response DTOs
+├── quote/
+│   ├── command.py        # Start/Stop/Subscribe commands
+│   ├── handler.py        # Command handlers
+│   └── dto.py            # Response DTOs
+└── status/
+    ├── query.py          # GetSyncStatusQuery
+    ├── handler.py        # Query handler
+    └── dto.py            # Response DTOs
 ```
 
-**State:**
-- `_pool: aioredis.Redis` - Redis connection pool
-- JSON serialization/deserialization with date handling
-- Default TTL: 3600s (configurable per operation)
+**Handler Responsibilities:**
+1. Receive Command/Query from Mediator
+2. Fetch data from Infrastructure
+3. Execute domain logic via Domain layer
+4. Persist results via Infrastructure
+5. Publish DomainEvents to EventBus
+6. Return DTO
 
-**Lifecycle:**
-- Single connection at startup (redis-py handles pooling internally)
-- Graceful disconnect at shutdown
-- Automatic reconnection on transient failures
-
-**API Methods:**
-- `connect(settings)` - Initialize connection
-- `disconnect()` - Close connection
-- `get(key)` - Retrieve and deserialize
-- `set(key, value, ttl=3600)` - Serialize and cache
-- `delete(key)` - Remove single key
-- `delete_pattern(pattern)` - SCAN-based pattern deletion (for invalidation)
-- `exists(key)` - Check existence
-- `get_or_set(key, factory, ttl=3600)` - Atomic get-or-compute
-
-**Cache Layers:**
-- `quote:latest:{EXCHANGE}:{SYMBOL}` (60s) - Latest market quote
-- `bar:current:{EXCHANGE}:{SYMBOL}:{interval}` (300s) - In-progress OHLCV bar
-- `ohlcv:{SYMBOL}:{EXCHANGE}:{interval}:{limit}` (300s) - Historical query results
-
-### Logging (structlog)
-
-**Initialization (in main.py):**
+**Example Handler:**
 ```python
-setup_logging(settings)
+class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
+    def __init__(self, provider: IDataProvider, event_bus: EventBus):
+        self.provider = provider
+        self.event_bus = event_bus
+
+    async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
+        # 1. Fetch from infrastructure
+        bars = await self.provider.fetch_ohlcv(...)
+
+        # 2. Domain validation
+        aggregate = OHLCVAggregate(bars)
+
+        # 3. Persist via infrastructure
+        await Database.get_collection("ohlcv").insert_many(...)
+
+        # 4. Publish events
+        await self.event_bus.publish(BarSyncedEvent(...))
+
+        # 5. Return DTO
+        return SyncResultDTO(bars_synced=len(bars))
 ```
 
-**Pipeline (processors):**
-1. `contextvars.get("request_id")` - Add request correlation ID
-2. Log level filtering
-3. Logger name mapping
-4. Timestamp generation
-5. Exception traceback formatting
-6. Application context (environment, version)
+### Layer 3: Infrastructure (External I/O)
 
-**Output Formats:**
-- **Production (LOG_FORMAT=json):** Single-line JSON for log aggregation
-- **Development (LOG_FORMAT=console):** Pretty-printed console output
+**Purpose:** All external integrations (DB, cache, HTTP, WebSocket, scheduling).
 
-**Compatible Sinks:** Datadog, Splunk, ELK, CloudWatch, Google Cloud Logging, Grafana Loki
+**Structure:**
+```
+infrastructure/
+├── persistence/
+│   ├── mongodb.py        # MongoDBConnection wrapper
+│   └── redis.py          # RedisConnection wrapper
+├── tradingview/
+│   ├── provider.py       # REST API (tvdatafeed + ThreadPoolExecutor)
+│   ├── websocket.py      # Binary WebSocket protocol
+│   └── base.py           # IDataProvider interface
+├── scheduling/
+│   └── scheduler.py      # APScheduler wrapper
+├── http_client/
+│   └── client.py         # Generic HTTP client (aiohttp)
+└── webhooks/
+    └── dispatcher.py     # Webhook notifications
+```
 
-### Job Scheduler (APScheduler)
+**Key Services:**
+- **MongoDBConnection:** Async collection access (PyMongo)
+- **RedisConnection:** JSON serialization + TTL support
+- **TradingViewProvider:** ThreadPoolExecutor for blocking I/O
+- **TradingViewWebSocketProvider:** Binary frame parsing (~m~{len}~m~{json})
+- **JobScheduler:** APScheduler (in-memory, non-persistent)
 
-**Initialization (in main.py):**
-```python
-JobScheduler.initialize(settings)
-JobScheduler.start()
+### Layer 4: Common (Cross-Cutting)
+
+**Purpose:** Mediator, EventBus, middleware, tracing, health.
+
+**Structure:**
+```
+common/
+├── mediator/
+│   ├── mediator.py       # CQRS dispatcher
+│   ├── handler.py        # Handler[TRequest, TResponse] base
+│   └── exceptions.py     # HandlerNotFoundError
+├── messaging/
+│   ├── event_bus.py      # In-memory async event bus
+│   └── event_handler.py  # EventHandler base
+├── tracing/
+│   ├── correlation.py    # Correlation ID management
+│   └── context.py        # ContextVar storage
+├── health/
+│   ├── coordinator.py    # Health aggregation
+│   └── checks.py         # DB/Cache/Jobs health checks
+├── idempotency/
+│   └── middleware.py     # IdempotencyMiddleware (24h TTL)
+├── rate_limit/
+│   └── middleware.py     # RateLimitMiddleware (200 req/10s)
+├── database/             # Singleton wrappers (legacy, in common for now)
+├── cache/
+├── logging/
+└── jobs/
+```
+
+## CQRS Flow
+
+### Request Flow (Commands)
+
+```
+1. HTTP Request
+   POST /market-data/sync
+   Body: {symbol, exchange, interval, n_bars}
+
+2. Middleware Stack
+   CorrelationIdMiddleware → inject correlation_id
+   RateLimitMiddleware → check token bucket
+   IdempotencyMiddleware → check cache (if idempotency_key)
+
+3. Route Handler
+   - Parse request body
+   - Build SyncSymbolCommand
+   - Call Mediator.send(command)
+
+4. Mediator Dispatch
+   - Lookup handler for SyncSymbolCommand
+   - Call handler.handle(command)
+
+5. Handler Execution
+   - Fetch from TradingViewProvider (infrastructure)
+   - Validate via OHLCVAggregate (domain)
+   - Save to MongoDB (infrastructure)
+   - Invalidate Redis cache (infrastructure)
+   - Publish BarSyncedEvent (event bus)
+   - Return SyncResultDTO
+
+6. Route Response
+   - Convert DTO to JSON
+   - Return HTTP 200 with body
+```
+
+### Request Flow (Queries)
+
+```
+1. HTTP Request
+   GET /market-data/ohlcv/{exchange}/{symbol}?interval=1d&limit=100
+
+2. Middleware Stack
+   CorrelationIdMiddleware → inject correlation_id
+   RateLimitMiddleware → check token bucket
+   (No idempotency for GET requests)
+
+3. Route Handler
+   - Parse query params
+   - Build GetBarsQuery
+   - Call Mediator.send(query)
+
+4. Mediator Dispatch
+   - Lookup handler for GetBarsQuery
+   - Call handler.handle(query)
+
+5. Handler Execution
+   - Check Redis cache (infrastructure)
+   - If miss: Query MongoDB (infrastructure)
+   - Cache result in Redis (infrastructure)
+   - Map to OHLCVBar value objects (domain)
+   - Return BarsDTO
+
+6. Route Response
+   - Convert DTO to JSON
+   - Return HTTP 200 with body
+```
+
+## Middleware Stack
+
+**Execution Order:** Request flows through middleware in registration order.
+
+```
+Request
+  ↓
+CorrelationIdMiddleware
+  - Generate/extract correlation_id
+  - Set in ContextVar for logging
+  ↓
+RateLimitMiddleware
+  - Check token bucket (200 req/10s per IP)
+  - Reject if exceeded (429 Too Many Requests)
+  ↓
+IdempotencyMiddleware
+  - Check idempotency_key header (POST only)
+  - Return cached response if duplicate
+  ↓
+Route Handler
+  - Execute business logic via Mediator
+  ↓
+Response
 ```
 
 **Configuration:**
-- **Executor:** AsyncIOExecutor (runs on event loop)
-- **Job Store:** MemoryJobStore (in-memory, non-persistent)
-- **Job Coalescing:** True (skip missed runs)
-- **Max Instances:** 3 (prevent overlapping job execution)
-- **Grace Time:** 60s (wait for graceful shutdown)
+```python
+# main.py
+app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(RateLimitMiddleware, capacity=200, refill_rate=20)
+app.add_middleware(IdempotencyMiddleware, ttl_seconds=86400)
+```
 
-**Lifecycle:**
-- Initialized and started at startup
-- Gracefully shutdown with `wait=True` (wait for running jobs)
-- In-memory storage acceptable for non-critical sync jobs
+## Event Bus Pattern
 
-**Scheduled Jobs:**
-- `sync_all_symbols` - Every 6 hours (500 bars per symbol)
-- `sync_daily_data` - Hourly Mon-Fri 9-17 UTC (10 bars, daily interval)
+**Purpose:** Decouple features via domain events.
+
+**Flow:**
+```
+Handler publishes event
+  ↓
+EventBus.publish(event)
+  ↓
+For each subscriber:
+  - Call handler(event)
+  - Await if coroutine
+  ↓
+Store in history (deque, max 50)
+```
+
+**Example:**
+```python
+# In SyncSymbolHandler
+await self.event_bus.publish(BarSyncedEvent(
+    symbol=symbol,
+    exchange=exchange,
+    bars_count=len(bars)
+))
+
+# In event_handlers.py
+async def on_bar_synced(event: BarSyncedEvent) -> None:
+    logger.info("bars_synced", symbol=event.symbol, count=event.bars_count)
+
+# Register subscriber
+event_bus.subscribe(BarSyncedEvent, on_bar_synced)
+```
+
+**Characteristics:**
+- In-memory (no persistence)
+- FIFO delivery order
+- Bounded history (50 events)
+- Sync + async handlers supported
 
 ## Data Pipelines
 
-### Pipeline 1: Historical Data Synchronization
+### Historical Data Sync Pipeline
 
 ```
-API Request (POST /market-data/sync)
-    │
-    ▼
-DataSyncService.sync_symbol()
-    │
-    ├─> Update sync_status → "pending"
-    │
-    ├─> TradingViewProvider (thread pool)
-    │   ├─> Lazy client init
-    │   ├─> Fetch bars (max 5000)
-    │   └─> Return OHLCV records
-    │
-    ├─> OHLCVRepository.upsert_many()
-    │   ├─> Bulk insert/update (MongoDB)
-    │   └─> Unique key: (symbol, exchange, interval, timestamp)
-    │
-    ├─> Update sync_status → "completed"
-    │
-    └─> Cache.delete_pattern("ohlcv:{symbol}:*")
-        └─> Invalidate all cached queries
+POST /market-data/sync
+  ↓
+Route → SyncSymbolCommand → Mediator
+  ↓
+SyncSymbolHandler
+  ├─> TradingViewProvider.fetch_ohlcv
+  │   ├─> ThreadPoolExecutor (blocking I/O isolation)
+  │   ├─> tvdatafeed.get_hist(symbol, exchange, interval, n_bars)
+  │   └─> Return list[OHLCVBar]
+  │
+  ├─> OHLCVAggregate(bars)  # Domain validation
+  │
+  ├─> MongoDB.bulk_write (upsert on timestamp)
+  │
+  ├─> Redis.delete_pattern(f"ohlcv:{symbol}:*")  # Cache invalidation
+  │
+  └─> EventBus.publish(BarSyncedEvent(...))
+
+Response: {bars_synced: 100, status: "completed"}
 ```
 
-**Status Tracking:**
-- Initial: `pending` (request received)
-- Running: `syncing` (data fetch in progress)
-- Final: `completed` (success) or `error` (with error_message)
-
-**Error Handling:**
-- Catches all exceptions
-- Updates sync_status with error details
-- Returns error response without re-raising
-
-### Pipeline 2: Real-time Quote Processing
+### Real-time Quote Pipeline
 
 ```
-WebSocket Frame (Binary Protocol)
-    │
-    ▼
-TradingViewWebSocketProvider
-    ├─> Parse frame: ~m~{length}~m~{json}
-    ├─> Validate message format
-    └─> Emit to subscribers
-        │
-        ▼
-QuoteService._on_quote_update()
-    ├─> Cache latest quote → Redis (60s TTL)
-    ├─> Log quote event
-    └─> Feed to QuoteAggregator
-        │
-        ▼
-QuoteAggregator.process_tick()
-    ├─> For each configured interval
-    │   ├─> Get/create BarBuilder
-    │   ├─> Update OHLCV fields atomically (asyncio.Lock)
-    │   └─> Check if bar complete (time boundary crossed)
-    │
-    ├─> On bar completion
-    │   ├─> Save to MongoDB (OHLCV collection)
-    │   ├─> Update current bar in Redis
-    │   └─> Log bar completed
-    │
-    └─> On process stop
-        └─> flush_all_bars()
-            ├─> Save incomplete bars
-            └─> Prevent data loss
+TradingView WebSocket
+  ↓
+Binary Frame: ~m~{length}~m~{json}
+  ↓
+TradingViewWebSocketProvider.parse_frame
+  ↓
+QuoteService._on_quote_update
+  ├─> Redis.set(f"quote:latest:{exchange}:{symbol}", quote, ttl=60)
+  │
+  ├─> BarManager.process_tick(quote)
+  │   ├─> For each interval (1m, 5m, 15m, ...)
+  │   │   ├─> Get/create BarBuilder
+  │   │   ├─> Update OHLC (asyncio.Lock for safety)
+  │   │   └─> Check time boundary
+  │   │
+  │   └─> On bar complete:
+  │       ├─> MongoDB.insert_one(bar)
+  │       ├─> Redis.set(f"bar:current:{exchange}:{symbol}:{interval}", bar)
+  │       └─> EventBus.publish(BarCompletedEvent(...))
+  │
+  └─> EventBus.publish(QuoteReceivedEvent(...))
 ```
-
-**Time Alignment:**
-- Daily bars: Midnight UTC boundary
-- Intraday bars: Epoch-aligned (UNIX timestamp % interval_seconds == 0)
-
-**Concurrency:**
-- asyncio.Lock per aggregator (thread-safe bar building)
-- No race conditions between tick processing and bar saves
-
-### Pipeline 3: Background Job Execution
-
-```
-APScheduler (startup)
-    │
-    ▼
-JobScheduler.start() + register_sync_jobs()
-    │
-    ├─> add_interval_job(sync_all_symbols, 6 hours)
-    │   └─> Every 6 hours
-    │       └─> For each symbol
-    │           └─> sync_symbol(symbol, exchange, "1d", n_bars=500)
-    │
-    └─> add_cron_job(sync_daily_data, 9-17 UTC Mon-Fri)
-        └─> Hourly 9-17 UTC Mon-Fri
-            └─> For each symbol
-                └─> sync_symbol(symbol, exchange, "1d", n_bars=10)
-```
-
-**Error Isolation:**
-- Per-symbol errors don't break loop
-- Failed symbols logged, loop continues
-- Status updates reflect individual symbol state
 
 ## Concurrency Model
 
-### Event Loop (Main Thread)
+### Event Loop (FastAPI/Uvicorn)
 
-FastAPI/Uvicorn runs async code on single event loop. All I/O awaited properly:
+All async code runs on single event loop.
 
+**Proper async:**
 ```python
-# Correct: async/await
-await Database.get_collection("x").find_one()
+await Database.get_collection("ohlcv").find_one()
 await Cache.set("key", value)
+await Mediator.send(command)
 ```
 
-### Thread Pool (I/O Isolation)
+### Thread Pool (Blocking I/O)
 
-Blocking I/O (TradingView tvdatafeed library) runs in ThreadPoolExecutor:
+TradingView REST API (tvdatafeed) is blocking:
 
 ```python
 # TradingViewProvider
 executor = ThreadPoolExecutor(max_workers=4)
-bars = await loop.run_in_executor(executor, client.get_bars, symbol)
+bars = await loop.run_in_executor(executor, client.get_hist, ...)
 ```
 
 **Why:**
-- tvdatafeed is blocking (no async support)
-- Running in thread pool prevents event loop blocking
-- Max 4 workers limit prevents resource exhaustion
-- Each request gets timeout protection
+- tvdatafeed has no async support
+- Thread pool prevents event loop blocking
+- Max 4 workers = limit concurrent blocking calls
 
-### Asyncio.Lock (Aggregator)
+### Asyncio.Lock (Quote Aggregation)
 
-QuoteAggregator uses asyncio.Lock for thread-safe bar building:
+BarManager uses lock for thread-safe bar building:
 
 ```python
 async with self._lock:
     bar_builder.update_ohlc(tick)
+    if bar_complete:
+        await self._save_bar(bar_builder.build())
 ```
 
 **Why:**
-- Multiple ticks may arrive while saving previous bar
+- Multiple ticks may arrive while saving bar
 - Lock ensures atomic read-modify-write
-- No data corruption or race conditions
+- No race conditions or data corruption
 
 ## Resource Lifecycle
 
-### Startup Sequence (main.py lifespan)
+### Startup Sequence
 
 ```python
-async with contextmanager(app):
+async with asynccontextmanager(app):
     # Initialize in order
     settings = get_settings()
     setup_logging(settings)
-    await Database.connect(settings)  # MongoDB
-    await Cache.connect(settings)      # Redis
-    JobScheduler.initialize(settings)  # APScheduler
-    JobScheduler.start()               # Start scheduling
-    register_sync_jobs()               # Register sync tasks
+
+    # Infrastructure
+    await Database.connect(settings)
+    await Cache.connect(settings)
+    JobScheduler.initialize(settings)
+    JobScheduler.start()
+
+    # Register handlers
+    mediator = Mediator()
+    event_bus = EventBus()
+
+    # Register CQRS handlers
+    mediator.register(SyncSymbolCommand, SyncSymbolHandler(...))
+    mediator.register(GetBarsQuery, GetBarsHandler(...))
+
+    # Register event subscribers
+    event_bus.subscribe(BarSyncedEvent, on_bar_synced)
+
+    # Register background jobs
+    register_sync_jobs()
 
     yield  # Serve requests
 
@@ -342,142 +501,95 @@ async with contextmanager(app):
     await Database.disconnect()
 ```
 
-### Connection Pooling
-
-- **MongoDB:** 5-50 connections (configurable min/max)
-- **Redis:** Internal connection pooling (redis-py handles)
-- **Thread Pool:** 4 workers for blocking I/O
-
 ### Graceful Shutdown
 
-1. JobScheduler.shutdown(wait=True) - Wait for running jobs
-2. Cache.disconnect() - Flush pending operations
-3. Database.disconnect() - Close all connections
-4. Uvicorn gracefully stops accepting new requests
-
-**Grace Period:** 60s (configured in JobScheduler)
+1. Stop accepting new requests (Uvicorn)
+2. JobScheduler.shutdown(wait=True) - Wait 60s for running jobs
+3. Cache.disconnect() - Flush pending operations
+4. Database.disconnect() - Close all connections
 
 ## Integration Points
 
 ### TradingView REST API
 
 - **Library:** tvdatafeed
-- **Authentication:** Optional username/password
-- **Rate Limiting:** None explicitly (TradingView limits internally)
-- **Max Bars:** 5000 per request
-- **Executor:** ThreadPoolExecutor isolation
+- **Auth:** Optional username/password
+- **Max bars:** 5000 per request
+- **Isolation:** ThreadPoolExecutor (max 4 workers)
+- **Timeout:** Per-request timeout protection
 
 ### TradingView WebSocket
 
-- **Protocol:** Binary frames: ~m~{length}~m~{json}
+- **Protocol:** Binary frames (~m~{length}~m~{json})
 - **Endpoint:** wss://data.tradingview.com/socket.io/websocket
-- **Message Types:** Quote updates, heartbeat pings
-- **Reconnection:** Exponential backoff (1s → 60s)
+- **Reconnection:** Exponential backoff (1s → 60s max)
 - **Re-subscription:** Automatic after reconnect
+- **Heartbeat:** Ping/pong handling
 
 ### MongoDB
 
 - **Driver:** PyMongo (native async API)
-- **Operations:** Async I/O, bulk upserts, aggregation pipelines
-- **Indexes:** Created manually or via init script
-- **TTL:** Not used (cache invalidation via pattern matching)
+- **Pool:** 5-50 connections (configurable)
+- **Operations:** Bulk upserts, aggregation pipelines
+- **Collections:** ohlcv, sync_status, symbols
 
 ### Redis
 
 - **Driver:** redis-py (async)
 - **Serialization:** JSON with custom date handling
-- **TTL:** 60s (quotes), 300s (bars/queries)
-- **Persistence:** Not used (ephemeral cache only)
+- **TTL:** 60s (quotes), 300s (bars/queries), 86400s (idempotency)
+- **Patterns:** SCAN for pattern-based deletion
 
-## Error Handling Strategy
+## Error Handling
 
 ### Transient Errors (Retryable)
 
-- Database connection timeouts
-- Redis connection failures
-- TradingView API temporary unavailability
-
-**Handling:** Exponential backoff, auto-reconnect, update status → "error"
+- Database connection timeouts → Auto-reconnect
+- Redis connection failures → Auto-reconnect
+- TradingView API temporary unavailable → Exponential backoff
 
 ### Permanent Errors (Non-retryable)
 
-- Invalid symbol or exchange
-- Authentication failure
-- Malformed API response
+- Invalid symbol/exchange → Return 400 Bad Request
+- Authentication failure → Return 401 Unauthorized
+- Handler not found → Return 500 Internal Server Error
 
-**Handling:** Update status → "error" with message, log, return to client
+### Silent Failures (Logged Only)
 
-### Silent Failures (Logged, No Status)
-
-- Job execution errors (logged but not exposed via status)
-- Cache invalidation failures (data continues to exist)
-
-**Handling:** Structured logging, monitoring via log aggregation
-
-## Production Considerations
-
-### Infrastructure Monitoring
-
-- [ ] Database connectivity health check (/health endpoint)
-- [ ] Redis connectivity health check
-- [ ] Job execution metrics (failed/succeeded counts)
-- [ ] WebSocket connection uptime
-- [ ] Cache hit/miss ratios
-
-### Scaling Strategies
-
-**Horizontal (multiple workers):**
-```bash
-# Workers configured via uvicorn; port/host via .env
-uvicorn src.main:app --workers 4
-```
-- Each worker has independent singletons
-- Shared MongoDB/Redis across workers
-- Job scheduler must handle distributed execution (currently in-memory only)
-
-**Vertical (single worker optimization):**
-- Tune MongoDB connection pool (min/max)
-- Adjust ThreadPoolExecutor workers (currently 4)
-- Optimize Redis batch operations
-
-### Observability
-
-**Logging:**
-- All events logged as JSON (production-ready)
-- Compatible with Datadog, Splunk, ELK, CloudWatch
-
-**Metrics Needed:**
-- Sync success/failure rates per symbol
-- WebSocket uptime/reconnect count
-- Cache hit rates
-- Database query latency
-- Job execution time
-
-### Security
-
-- TradingView credentials in environment variables (never committed)
-- MongoDB authentication via DSN
-- Redis authentication via DSN
-- CORS configuration available (not default-open)
+- Background job failures → Logged, next run continues
+- Cache invalidation failures → Logged, data stale but functional
+- Event subscriber errors → Logged, other subscribers continue
 
 ## Performance Characteristics
 
 ### Latency
 
 - **Historical Sync:** 1-5s per 5000 bars (network + DB write)
-- **WebSocket Quote:** <100ms from TradingView to client
-- **Bar Aggregation:** <1ms per tick (in-memory processing)
+- **WebSocket Quote:** <100ms from TradingView to handler
+- **Bar Aggregation:** <1ms per tick (in-memory)
 - **Cache Lookup:** <5ms (Redis)
+- **Mediator Dispatch:** <0.1ms (dict lookup)
 
 ### Throughput
 
 - **Concurrent Syncs:** Limited by ThreadPoolExecutor (4 workers)
-- **Quote Subscriptions:** Limited by WebSocket frame handling (1000+ ticks/sec)
+- **Quote Subscriptions:** 1000+ ticks/sec (WebSocket + asyncio)
 - **Database:** Depends on MongoDB capacity (bulk upserts optimized)
+- **Rate Limit:** 200 req/10s per IP (configurable)
 
 ### Memory
 
 - **MongoDB Pool:** ~10-20MB per connection
 - **Redis Pool:** <1MB
-- **In-memory Jobs:** <10MB (scheduler + job store)
-- **Aggregator State:** ~10MB per 10k subscriptions
+- **EventBus History:** ~1KB per 50 events
+- **Mediator Registry:** <1KB
+- **BarManager State:** ~10MB per 10k subscriptions
+
+## Security
+
+- **Credentials:** Environment variables only (never committed)
+- **MongoDB Auth:** Via DSN (username/password)
+- **Redis Auth:** Via DSN (optional password)
+- **Rate Limiting:** IP-based (200 req/10s)
+- **Idempotency:** Prevent duplicate requests (24h TTL)
+- **CORS:** Configurable (not default-open)

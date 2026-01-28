@@ -8,6 +8,15 @@ from structlog.types import Processor
 from src.config import Settings
 
 
+def add_correlation_id(
+    logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    from src.common.tracing.context import get_correlation_id
+
+    event_dict["correlation_id"] = get_correlation_id()
+    return event_dict
+
+
 def add_app_context(
     logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
@@ -29,6 +38,7 @@ def setup_logging(settings: Settings) -> None:
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
+        add_correlation_id,
         add_app_context,
     ]
 
