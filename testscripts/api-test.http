@@ -1,0 +1,105 @@
+# PocketQuant API Testing
+# Base URL: http://localhost:8765/api/v1
+
+### ===========================================
+### Health & System
+### ===========================================
+
+# Health Check
+curl -X GET http://localhost:8765/health
+
+###
+
+# List Background Jobs
+curl -X GET http://localhost:8765/api/v1/system/jobs
+
+### ===========================================
+### Market Data - Sync
+### ===========================================
+
+# Sync Single Symbol (Crypto)
+curl -X POST http://localhost:8765/api/v1/market-data/sync \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"BTCUSD","exchange":"BINANCE","interval":"1d","n_bars":100}'
+
+###
+
+# Sync Single Symbol (Stock)
+curl -X POST http://localhost:8765/api/v1/market-data/sync \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"AAPL","exchange":"NASDAQ","interval":"1d","n_bars":50}'
+
+###
+
+# Sync with 1h Interval
+curl -X POST http://localhost:8765/api/v1/market-data/sync \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"ETHUSD","exchange":"BINANCE","interval":"1h","n_bars":100}'
+
+###
+
+# Sync Background (Non-blocking)
+curl -X POST http://localhost:8765/api/v1/market-data/sync/background \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"SOLUSD","exchange":"BINANCE","interval":"1d","n_bars":30}'
+
+###
+
+# Bulk Sync Multiple Symbols
+curl -X POST http://localhost:8765/api/v1/market-data/sync/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":[{"symbol":"BTCUSD","exchange":"BINANCE"},{"symbol":"ETHUSD","exchange":"BINANCE"},{"symbol":"AAPL","exchange":"NASDAQ"}],"interval":"1d","n_bars":50}'
+
+### ===========================================
+### Market Data - OHLCV Query
+### ===========================================
+
+# Get OHLCV Data (Default)
+curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1d&limit=10"
+
+###
+
+# Get OHLCV with Date Range
+curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1d&start_date=2026-01-01&end_date=2026-01-28&limit=100"
+
+###
+
+# Get OHLCV Hourly Data
+curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1h&limit=24"
+
+###
+
+# Get Stock OHLCV
+curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=20"
+
+###
+
+# Get ETH OHLCV
+curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/ETHUSD?interval=1d&limit=10"
+
+### ===========================================
+### Market Data - Status & Symbols
+### ===========================================
+
+# List All Synced Symbols
+curl -X GET http://localhost:8765/api/v1/market-data/symbols
+
+###
+
+# Filter Symbols by Exchange
+curl -X GET "http://localhost:8765/api/v1/market-data/symbols?exchange=BINANCE"
+
+###
+
+# Get All Sync Statuses
+curl -X GET http://localhost:8765/api/v1/market-data/sync-status
+
+###
+
+# Get Specific Symbol Sync Status
+curl -X GET "http://localhost:8765/api/v1/market-data/sync-status/BINANCE/BTCUSD?interval=1d"
+
+###
+
+# Get Stock Sync Status
+curl -X GET "http://localhost:8765/api/v1/market-data/sync-status/NASDAQ/AAPL?interval=1d"
