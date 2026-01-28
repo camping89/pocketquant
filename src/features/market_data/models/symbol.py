@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _utc_now() -> datetime:
@@ -23,12 +23,11 @@ class SymbolCreate(SymbolBase):
 
 
 class Symbol(SymbolBase):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str | None = Field(None, alias="_id")
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
-
-    class Config:
-        populate_by_name = True
 
     def to_mongo(self) -> dict[str, Any]:
         return self.model_dump(exclude={"id"})
