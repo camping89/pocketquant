@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"]
 
     job_worker_count: int
+    enable_jobs: bool = True
 
 
 @lru_cache
