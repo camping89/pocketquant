@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets import State
+from websockets.asyncio.client import ClientConnection
 
 from src.common.logging import get_logger
 
@@ -66,7 +67,7 @@ def _parse_messages(raw_data: str) -> list[dict[str, Any]]:
 class TradingViewWebSocketProvider:
     def __init__(self, auth_token: str | None = None):
         self._auth_token = auth_token
-        self._ws: WebSocketClientProtocol | None = None
+        self._ws: ClientConnection | None = None
         self._session_id: str = ""
         self._subscriptions: dict[str, Callable] = {}
         self._running = False
@@ -81,6 +82,10 @@ class TradingViewWebSocketProvider:
             ping_interval=30,
             ping_timeout=10,
             close_timeout=5,
+            additional_headers={
+                "Origin": "https://www.tradingview.com",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
         )
 
         self._session_id = _generate_session_id("qs")
@@ -183,6 +188,10 @@ class TradingViewWebSocketProvider:
             "prev_close": values.get("prev_close_price"),
         }
 
+        # Log only fields with values
+        log_data = {k: v for k, v in quote_update.items() if v is not None}
+        logger.info("tradingview_ws.quote_update", **log_data)
+
         callback = self._subscriptions.get(symbol_key)
         if callback:
             try:
@@ -219,10 +228,18 @@ class TradingViewWebSocketProvider:
                 async for raw_data in self._ws:
                     if not self._running:
                         break
-                    if "~h~" in raw_data:
-                        await self._send_heartbeat()
-                        continue
-                    for message in _parse_messages(raw_data):
+                    # Ensure raw_data is string (API returns str | bytes)
+                    data_str = raw_data if isinstance(raw_data, str) else raw_data.decode()
+
+                    # Handle heartbeat - echo back with ~m~ wrapper format
+                    if "~h~" in data_str and self._ws is not None:
+                        match = re.search(r"~h~(\d+)", data_str)
+                        if match:
+                            heartbeat_content = f"~h~{match.group(1)}"
+                            await self._ws.send(f"~m~{len(heartbeat_content)}~m~{heartbeat_content}")
+
+                    # Parse and handle all messages (including those in same frame as heartbeat)
+                    for message in _parse_messages(data_str):
                         await self._handle_message(message)
 
             except websockets.ConnectionClosed as e:
@@ -252,7 +269,9 @@ class TradingViewWebSocketProvider:
                     )
 
     def is_connected(self) -> bool:
-        return self._ws is not None and self._ws.open
+        if self._ws is None:
+            return False
+        return self._ws.state is State.OPEN
 
     @property
     def subscription_count(self) -> int:

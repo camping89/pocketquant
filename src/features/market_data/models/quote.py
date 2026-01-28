@@ -1,10 +1,12 @@
 from datetime import datetime as dt
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Quote(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     symbol: str = Field(..., description="Trading symbol")
     exchange: str = Field(..., description="Exchange name")
     timestamp: dt = Field(default_factory=dt.utcnow, description="Quote timestamp")
@@ -22,9 +24,6 @@ class Quote(BaseModel):
     high_price: float | None = Field(None, description="Session high price")
     low_price: float | None = Field(None, description="Session low price")
     prev_close: float | None = Field(None, description="Previous close price")
-
-    class Config:
-        populate_by_name = True
 
     def to_cache_dict(self) -> dict[str, Any]:
         return {
