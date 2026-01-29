@@ -1,0 +1,61 @@
+# HTTP mode - for IP-only access
+# Replace with Caddyfile.domain when you have a domain
+
+:80 {
+    # API - Main application
+    handle /api/* {
+        reverse_proxy app:41920
+    }
+
+    # Health check (direct access)
+    handle /health {
+        reverse_proxy app:41920
+    }
+
+    # OpenAPI docs
+    handle /api/v1/docs* {
+        reverse_proxy app:41920
+    }
+    handle /api/v1/redoc* {
+        reverse_proxy app:41920
+    }
+    handle /api/v1/openapi.json {
+        reverse_proxy app:41920
+    }
+
+    # Portainer - Container management
+    handle /portainer/* {
+        uri strip_prefix /portainer
+        reverse_proxy portainer:9000
+    }
+
+    # Grafana - Monitoring dashboards
+    # Uses GF_SERVER_SERVE_FROM_SUB_PATH=true, so keep /grafana prefix
+    @grafana {
+        path /grafana /grafana/*
+    }
+    handle @grafana {
+        reverse_proxy grafana:3000
+    }
+
+    # Mongo Express - Database admin
+    # Uses ME_CONFIG_SITE_BASEURL=/mongo/, so keep /mongo prefix
+    @mongo {
+        path /mongo /mongo/*
+    }
+    handle @mongo {
+        reverse_proxy mongo-express:8081
+    }
+
+    # Default - redirect to API docs
+    handle {
+        redir /api/v1/docs permanent
+    }
+
+    # Logging
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
