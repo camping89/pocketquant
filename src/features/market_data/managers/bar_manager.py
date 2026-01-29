@@ -1,6 +1,6 @@
 import asyncio
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.common.cache import Cache
@@ -122,7 +122,12 @@ def _get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     if interval == Interval.DAY_1:
         return timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    epoch = datetime(1970, 1, 1)
+    # Use timezone-aware epoch if timestamp has timezone
+    if timestamp.tzinfo is not None:
+        epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    else:
+        epoch = datetime(1970, 1, 1)
+
     total_seconds = (timestamp - epoch).total_seconds()
     aligned_seconds = (total_seconds // seconds) * seconds
 
