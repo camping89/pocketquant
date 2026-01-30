@@ -148,7 +148,7 @@ services:
   # LOGGING (Loki + Promtail)
   # ===========================================
   loki:
-    image: grafana/loki:2.9.0
+    image: grafana/loki:3.0.0
     container_name: pocketquant-loki
     restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
@@ -167,7 +167,7 @@ services:
       - monitoring
 
   promtail:
-    image: grafana/promtail:2.9.0
+    image: grafana/promtail:3.0.0
     container_name: pocketquant-promtail
     restart: unless-stopped
     volumes:
