@@ -13,7 +13,7 @@ from src.common.logging import get_logger, setup_logging
 from src.common.mediator import Mediator
 from src.common.messaging import EventBus
 from src.common.rate_limit import RateLimitMiddleware
-from src.common.tracing import CorrelationIDMiddleware
+from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from src.config import get_settings
 from src.features.market_data.api import quote_router
 from src.features.market_data.api import router as market_data_router
@@ -152,6 +152,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(RateLimitMiddleware, capacity=200, refill_rate=20.0)
     app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(CorrelationIDMiddleware)
