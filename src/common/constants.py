@@ -6,6 +6,8 @@
 COLLECTION_OHLCV = "ohlcv"
 COLLECTION_SYNC_STATUS = "sync_status"
 COLLECTION_SYMBOLS = "symbols"
+COLLECTION_ORDERS = "orders"
+COLLECTION_POSITIONS = "positions"
 
 # ============================================================
 # CACHE_KEYS - Redis key patterns (use .format() for interpolation)

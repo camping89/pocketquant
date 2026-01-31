@@ -7,6 +7,7 @@ import structlog
 from src.common.messaging import EventBus
 from src.domain.order import OrderFilled, OrderSide
 from src.domain.position import PositionAggregate, PositionOpened, PositionSide
+from src.features.trading.repositories import PositionRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -23,9 +24,18 @@ class PositionTracker:
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
-        """Subscribe to order events."""
+        """Subscribe to order events and load open positions."""
+        await self.load_open_positions()
         self._event_bus.subscribe(OrderFilled, self._on_order_filled)
         logger.info("position_tracker_started")
+
+    async def load_open_positions(self) -> None:
+        """Load open positions from database on startup."""
+        positions = await PositionRepository.find_open()
+        async with self._lock:
+            for pos in positions:
+                self._positions[pos.strategy_id] = pos
+        logger.info("loaded_open_positions", count=len(positions))
 
     async def stop(self) -> None:
         """Unsubscribe from events."""
@@ -54,6 +64,9 @@ class PositionTracker:
                 )
 
                 self._positions[event.strategy_id] = position
+
+                # Persist new position
+                await PositionRepository.save(position)
 
                 await self._event_bus.publish(
                     PositionOpened(
@@ -89,6 +102,9 @@ class PositionTracker:
                     # Adding to position
                     position.add_quantity(event.filled_quantity, event.filled_price)
 
+                    # Persist updated position
+                    await PositionRepository.save(position)
+
                     logger.info(
                         "position_increased",
                         strategy_id=event.strategy_id,
@@ -97,6 +113,9 @@ class PositionTracker:
                 else:
                     # Reducing position
                     position.reduce_quantity(event.filled_quantity, event.filled_price)
+
+                    # Persist updated/closed position
+                    await PositionRepository.save(position)
 
                     if position.is_closed:
                         # Position fully closed
@@ -157,3 +176,12 @@ class PositionTracker:
             position = self._positions.get(strategy_id)
             if position and not position.is_closed:
                 position.update_price(price)
+                # Note: Price updates are frequent, don't persist every update
+                # Persistence happens on quantity changes
+
+    async def get_async(self, strategy_id: str) -> PositionAggregate | None:
+        """Get position from memory or database."""
+        position = self._positions.get(strategy_id)
+        if position:
+            return position
+        return await PositionRepository.get_by_strategy(strategy_id)
