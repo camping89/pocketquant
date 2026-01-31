@@ -16,6 +16,13 @@ from src.infrastructure.brokers.okx.okx_mapper import (
     map_okx_position_to_domain,
     map_order_to_okx_params,
 )
+from src.infrastructure.brokers.okx.websocket import (
+    OkxMessageParser,
+    OkxOrderMapper,
+    OkxPositionMapper,
+    OkxReconnectionHandler,
+    OkxWebSocketClient,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -44,11 +51,17 @@ class OKXBroker(IBroker):
         # SDK instances (lazy initialized)
         self._trade_api: Any = None
         self._account_api: Any = None
-        self._ws_client: Any = None
+        self._ws_client: OkxWebSocketClient | None = None
 
         self._order_callbacks: list[Callable[[OrderResult], None]] = []
         self._connected = False
         self._ws_task: asyncio.Task | None = None
+
+        # Deduplication set for terminal order states (filled, canceled)
+        self._seen_terminal_orders: set[str] = set()
+
+        # Reconnection handler (created when WS listener starts)
+        self._reconnection_handler: OkxReconnectionHandler | None = None
 
     @property
     def name(self) -> str:
@@ -281,24 +294,131 @@ class OKXBroker(IBroker):
             self._ws_task = None
 
     async def _ws_listener(self) -> None:
-        """WebSocket listener for order updates.
+        """WebSocket listener for order and position updates.
 
-        Note: Full WebSocket implementation would use okx.websocket module.
-        This is a placeholder for the pattern - actual implementation
-        requires careful handling of reconnection and message parsing.
+        Connects to OKX private WebSocket, subscribes to orders and positions
+        channels, and processes incoming messages. Handles reconnection via
+        OkxReconnectionHandler with exponential backoff.
         """
-        logger.info("okx_ws_listener_started")
+        logger.info("okx_ws_listener_starting")
 
         try:
-            while self._connected:
-                # Placeholder: In full implementation, connect to OKX WS
-                # and listen for order channel updates
-                await asyncio.sleep(1)
+            # Create WebSocket client
+            self._ws_client = OkxWebSocketClient(
+                api_key=self._api_key,
+                api_secret=self._api_secret,
+                passphrase=self._passphrase,
+                demo=self._demo,
+                on_disconnect=self._on_ws_disconnect,
+            )
+
+            # Create reconnection handler
+            self._reconnection_handler = OkxReconnectionHandler(
+                ws_client=self._ws_client,
+                broker=self,
+            )
+
+            # Connect and authenticate
+            await self._ws_client.connect()
+
+            # Subscribe to private channels
+            await self._ws_client.subscribe([
+                {"channel": "orders", "instType": "SWAP"},
+                {"channel": "positions", "instType": "SWAP"},
+            ])
+
+            logger.info("okx_ws_listener_started")
+
+            # Process messages
+            async for message in self._ws_client:
+                await self._handle_ws_message(message)
 
         except asyncio.CancelledError:
             logger.info("okx_ws_listener_cancelled")
+        except ConnectionError as e:
+            logger.error("okx_ws_connection_error", error=str(e))
+            # Trigger reconnection on connection error
+            if self._reconnection_handler and self._connected:
+                asyncio.create_task(self._reconnection_handler.handle_disconnect())
         except Exception as e:
             logger.error("okx_ws_listener_error", error=str(e))
+        finally:
+            if self._reconnection_handler:
+                self._reconnection_handler.stop()
+                self._reconnection_handler = None
+            if self._ws_client:
+                await self._ws_client.disconnect()
+                self._ws_client = None
+
+    async def _handle_ws_message(self, message: dict) -> None:
+        """Handle incoming WebSocket message.
+
+        Routes messages to appropriate handlers based on channel.
+        """
+        channel, data_items = OkxMessageParser.parse(message)
+
+        if channel == "orders":
+            for item in data_items:
+                await self._handle_order_update(item)
+        elif channel == "positions":
+            for item in data_items:
+                await self._handle_position_update(item)
+
+    async def _handle_order_update(self, data: dict) -> None:
+        """Handle order channel update.
+
+        Deduplicates terminal states and triggers callbacks.
+        """
+        ord_id = OkxOrderMapper.get_order_id(data)
+        state = OkxOrderMapper.get_state(data)
+
+        # Deduplicate terminal states (filled, canceled)
+        if OkxOrderMapper.is_terminal(state):
+            if ord_id in self._seen_terminal_orders:
+                logger.debug("okx_order_duplicate_terminal", ord_id=ord_id, state=state)
+                return
+            self._seen_terminal_orders.add(ord_id)
+
+        # Map to OrderResult and notify callbacks
+        result = OkxOrderMapper.to_order_result(data)
+
+        logger.info(
+            "okx_order_update",
+            order_id=result.order_id,
+            broker_order_id=result.broker_order_id,
+            status=result.status.value,
+            filled_qty=result.filled_quantity,
+        )
+
+        await self._notify_callbacks(result)
+
+    async def _handle_position_update(self, data: dict) -> None:
+        """Handle position channel update.
+
+        Logs position changes for monitoring.
+        Future: Could emit PositionUpdatedEvent via EventBus.
+        """
+        position = OkxPositionMapper.to_position_update(data)
+
+        logger.info(
+            "okx_position_update",
+            position_id=position.position_id,
+            symbol=position.symbol,
+            side=position.side,
+            quantity=position.quantity,
+            unrealized_pnl=position.unrealized_pnl,
+        )
+
+    def _on_ws_disconnect(self) -> None:
+        """Handle WebSocket disconnect event.
+
+        Triggers reconnection handler with exponential backoff.
+        """
+        logger.warning("okx_ws_disconnected_callback")
+
+        if self._reconnection_handler and self._connected:
+            # Start reconnection in background task
+            asyncio.create_task(self._reconnection_handler.handle_disconnect())
 
     async def _notify_callbacks(self, result: OrderResult) -> None:
         """Notify all registered callbacks of order update.

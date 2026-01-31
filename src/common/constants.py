@@ -8,6 +8,8 @@ COLLECTION_SYNC_STATUS = "sync_status"
 COLLECTION_SYMBOLS = "symbols"
 COLLECTION_ORDERS = "orders"
 COLLECTION_POSITIONS = "positions"
+COLLECTION_BACKTEST_RUNS = "backtest_runs"
+COLLECTION_OPTIMIZATION_RUNS = "optimization_runs"
 
 # ============================================================
 # CACHE_KEYS - Redis key patterns (use .format() for interpolation)
