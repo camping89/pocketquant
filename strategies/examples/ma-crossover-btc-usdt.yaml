@@ -1,0 +1,38 @@
+# Moving Average Crossover Strategy
+# Long when fast MA crosses above slow MA
+# Exit when fast MA crosses below slow MA
+
+id: ma-cross-btc-5m
+name: "MA Crossover BTC/USDT"
+symbol: BTCUSDT
+exchange: OKX
+interval: 5m
+trigger: bar
+
+# Use 'okx' for live trading, 'paper' for simulation
+broker: paper
+
+# Strategy-specific parameters
+parameters:
+  fast_period: 10
+  slow_period: 20
+  use_ema: true
+
+# Risk management
+risk:
+  model: percent_risk
+  risk_per_trade: 0.02      # 2% per trade
+  max_positions: 1
+  max_exposure_percent: 0.10  # 10% max
+
+# Order configuration
+orders:
+  entry_type: market
+  take_profit:
+    enabled: true
+    distance_percent: 0.02  # 2% TP
+  stop_loss:
+    enabled: true
+    distance_percent: 0.01  # 1% SL
+
+enabled: true

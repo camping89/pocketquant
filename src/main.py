@@ -47,6 +47,24 @@ from src.features.market_data.sync import (
     SyncSymbolCommand,
     SyncSymbolHandler,
 )
+from src.features.risk import RiskCheckHandler
+from src.features.strategy import (
+    GetStrategiesHandler,
+    GetStrategiesQuery,
+    GetStrategyHandler,
+    GetStrategyQuery,
+    LoadStrategyCommand,
+    LoadStrategyHandler,
+    StartStrategyCommand,
+    StartStrategyHandler,
+    StopStrategyCommand,
+    StopStrategyHandler,
+    StrategyEngine,
+    strategy_router,
+)
+from src.features.trading import OrderManager, PositionTracker
+from src.features.trading.api import trading_router
+from src.infrastructure.brokers import BrokerFactory
 from src.infrastructure.tradingview import TradingViewProvider
 
 logger = get_logger(__name__)
@@ -96,6 +114,51 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             GetQuoteServiceStatusQuery, GetQuoteServiceStatusHandler(settings)
         )
 
+        # === Strategy Engine Setup ===
+        broker_factory = BrokerFactory()
+        order_manager = OrderManager(event_bus)
+        position_tracker = PositionTracker(event_bus)
+        risk_handler = RiskCheckHandler()
+
+        # Default broker config from settings
+        default_broker_config = {
+            "initial_balance": settings.paper_initial_balance,
+            "slippage_percent": settings.paper_slippage_percent,
+            # OKX credentials (optional)
+            "api_key": settings.okx_api_key,
+            "api_secret": settings.okx_api_secret,
+            "passphrase": settings.okx_passphrase,
+            "demo": settings.okx_demo_mode,
+        }
+
+        strategy_engine = StrategyEngine(
+            event_bus=event_bus,
+            broker_factory=broker_factory,
+            order_manager=order_manager,
+            position_tracker=position_tracker,
+            risk_handler=risk_handler,
+            default_broker_config=default_broker_config,
+        )
+
+        app.state.strategy_engine = strategy_engine
+        app.state.order_manager = order_manager
+        app.state.position_tracker = position_tracker
+
+        # Register strategy handlers
+        mediator.register(LoadStrategyCommand, LoadStrategyHandler(strategy_engine))
+        mediator.register(StartStrategyCommand, StartStrategyHandler(strategy_engine))
+        mediator.register(StopStrategyCommand, StopStrategyHandler(strategy_engine))
+        mediator.register(GetStrategiesQuery, GetStrategiesHandler(strategy_engine))
+        mediator.register(GetStrategyQuery, GetStrategyHandler(strategy_engine))
+
+        # Start position tracker (subscribes to OrderFilled)
+        await position_tracker.start()
+
+        # Start strategy engine (subscribes to BarCompleted, QuoteReceived)
+        await strategy_engine.start()
+
+        logger.info("strategy_engine_initialized")
+
         set_mediator(mediator)
 
     except Exception as e:
@@ -121,9 +184,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield
     logger.info("application_stopping")
 
+    # Graceful shutdown
+    await strategy_engine.stop()
+
     if settings.enable_jobs:
         JobScheduler.shutdown(wait=True)
-        
+
     await Cache.disconnect()
     await Database.disconnect()
 
@@ -174,6 +240,8 @@ def create_app() -> FastAPI:
 
     app.include_router(market_data_router, prefix=settings.api_prefix)
     app.include_router(quote_router, prefix=settings.api_prefix)
+    app.include_router(strategy_router, prefix=settings.api_prefix)
+    app.include_router(trading_router, prefix=settings.api_prefix)
 
     return app
 

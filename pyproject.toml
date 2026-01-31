@@ -30,6 +30,10 @@ dependencies = [
     "pandas>=2.1.0",
     "numpy>=1.26.0",
 
+    # Brokers
+    "python-okx>=0.4.1",      # OKX exchange API
+    "pyyaml>=6.0",            # YAML strategy configs
+
     # Logging
     "structlog>=24.1.0",      # Structured logging
     "python-json-logger>=2.0.0",
