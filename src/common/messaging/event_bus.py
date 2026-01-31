@@ -5,7 +5,7 @@ from collections import deque
 from collections.abc import Callable
 from typing import Any
 
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 class EventBus:

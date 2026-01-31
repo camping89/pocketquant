@@ -4,9 +4,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.domain.position.events import PositionClosed, PositionOpened, PositionUpdated
+from src.domain.position.position_event import (
+    PositionClosedEvent,
+    PositionOpenedEvent,
+    PositionUpdatedEvent,
+)
 from src.domain.position.value_objects import PnL, PositionSide
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 @dataclass
@@ -58,7 +62,7 @@ class PositionAggregate:
             current_price=entry_price,
         )
         position._events.append(
-            PositionOpened(
+            PositionOpenedEvent(
                 position_id=position.id,
                 strategy_id=strategy_id,
                 symbol=symbol,
@@ -93,7 +97,7 @@ class PositionAggregate:
         self.current_price = price
 
         self._events.append(
-            PositionUpdated(
+            PositionUpdatedEvent(
                 position_id=self.id,
                 strategy_id=self.strategy_id,
                 quantity=self.quantity,
@@ -123,7 +127,7 @@ class PositionAggregate:
             return self._close(price)
 
         self._events.append(
-            PositionUpdated(
+            PositionUpdatedEvent(
                 position_id=self.id,
                 strategy_id=self.strategy_id,
                 quantity=self.quantity,
@@ -144,7 +148,7 @@ class PositionAggregate:
         self.is_closed = True
         self.closed_at = datetime.now(UTC)
         self._events.append(
-            PositionClosed(
+            PositionClosedEvent(
                 position_id=self.id,
                 strategy_id=self.strategy_id,
                 symbol=self.symbol,

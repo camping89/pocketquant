@@ -3,11 +3,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 @dataclass(frozen=True)
-class HistoricalDataSynced(DomainEvent):
+class HistoricalDataSyncedEvent(DomainEvent):
     """Raised when historical OHLCV data is synchronized from provider."""
 
     symbol: str = ""
@@ -19,7 +19,7 @@ class HistoricalDataSynced(DomainEvent):
 
 
 @dataclass(frozen=True)
-class BarCompleted(DomainEvent):
+class BarCompletedEvent(DomainEvent):
     """Raised when a real-time bar is completed."""
 
     symbol: str = ""

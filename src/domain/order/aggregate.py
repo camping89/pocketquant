@@ -4,15 +4,15 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from src.domain.order.events import (
-    OrderCancelled,
-    OrderFilled,
-    OrderPartiallyFilled,
-    OrderRejected,
-    OrderSubmitted,
+from src.domain.order.order_event import (
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderPartiallyFilledEvent,
+    OrderRejectedEvent,
+    OrderSubmittedEvent,
 )
 from src.domain.order.value_objects import OrderSide, OrderStatus, OrderType
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 class InvalidOrderTransitionError(Exception):
@@ -82,7 +82,7 @@ class OrderAggregate:
         self.broker_order_id = broker_order_id
         self.updated_at = datetime.now(UTC)
         self._events.append(
-            OrderSubmitted(
+            OrderSubmittedEvent(
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 symbol=self.symbol,
@@ -116,7 +116,7 @@ class OrderAggregate:
         self.updated_at = datetime.now(UTC)
 
         self._events.append(
-            OrderPartiallyFilled(
+            OrderPartiallyFilledEvent(
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 filled_quantity=quantity,
@@ -151,7 +151,7 @@ class OrderAggregate:
         self.updated_at = datetime.now(UTC)
 
         self._events.append(
-            OrderFilled(
+            OrderFilledEvent(
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 symbol=self.symbol,
@@ -172,7 +172,7 @@ class OrderAggregate:
         self.status = OrderStatus.CANCELLED
         self.updated_at = datetime.now(UTC)
         self._events.append(
-            OrderCancelled(
+            OrderCancelledEvent(
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 reason=reason,
@@ -186,7 +186,7 @@ class OrderAggregate:
         self.status = OrderStatus.REJECTED
         self.updated_at = datetime.now(UTC)
         self._events.append(
-            OrderRejected(
+            OrderRejectedEvent(
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 reason=reason,

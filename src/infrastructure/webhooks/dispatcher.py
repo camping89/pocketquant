@@ -7,7 +7,7 @@ from dataclasses import asdict
 from typing import Any
 
 from src.common.logging import get_logger
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 from src.infrastructure.http_client.client import ResilientHttpClient
 from src.infrastructure.webhooks.config import WebhookConfig
 
@@ -33,6 +33,7 @@ class WebhookDispatcher:
 
         payload = self._build_payload(event)
 
+        errors: list[Exception] = []
         for endpoint in endpoints:
             try:
                 headers = {}
@@ -52,6 +53,12 @@ class WebhookDispatcher:
                     url=endpoint.url,
                     error=str(e),
                 )
+                errors.append(e)
+
+        if errors:
+            # NOTE: Re-raising first error after attempting all endpoints.
+            # This ensures all endpoints are attempted while still surfacing failures.
+            raise errors[0]
 
     def _build_payload(self, event: DomainEvent) -> dict[str, Any]:
         """Build webhook payload from domain event."""
