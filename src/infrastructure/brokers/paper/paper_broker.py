@@ -39,6 +39,8 @@ class PaperBroker(IBroker):
         self._order_callbacks: list[Callable[[OrderResult], None]] = []
         self._lock = asyncio.Lock()
         self._connected = False
+        # Current market prices for each symbol (used in backtesting)
+        self._current_prices: dict[str, float] = {}
 
     @property
     def name(self) -> str:
@@ -129,6 +131,15 @@ class PaperBroker(IBroker):
         """Clear all order callbacks."""
         self._order_callbacks.clear()
 
+    def set_current_price(self, symbol: str, price: float) -> None:
+        """Set current market price for a symbol (used in backtesting).
+
+        Args:
+            symbol: Trading symbol (e.g., "BTCUSDT").
+            price: Current market price (typically bar close).
+        """
+        self._current_prices[symbol.upper()] = price
+
     def _get_market_price(self, order: OrderAggregate) -> float:
         """Get simulated market price for order.
 
@@ -137,6 +148,11 @@ class PaperBroker(IBroker):
         """
         if order.price:
             return order.price
+
+        # Check tracked prices first (set by backtest runner)
+        symbol_upper = order.symbol.upper()
+        if symbol_upper in self._current_prices:
+            return self._current_prices[symbol_upper]
 
         # Check if we have a position with current price
         position_key = f"{order.strategy_id}:{order.symbol}"
@@ -238,3 +254,4 @@ class PaperBroker(IBroker):
         self._balance = self._initial_balance
         self._positions.clear()
         self._orders.clear()
+        self._current_prices.clear()

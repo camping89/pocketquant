@@ -62,6 +62,20 @@ from src.features.strategy import (
     StrategyEngine,
     strategy_router,
 )
+from src.features.backtesting import (
+    GetBacktestHandler,
+    GetBacktestQuery,
+    GetOptimizationHandler,
+    GetOptimizationQuery,
+    ListBacktestsHandler,
+    ListBacktestsQuery,
+    RunBacktestCommand,
+    RunBacktestHandler,
+    RunOptimizationCommand,
+    RunOptimizationHandler,
+    backtest_router,
+)
+from src.features.backtesting.repository import BacktestRepository
 from src.features.trading import OrderManager, PositionTracker
 from src.features.trading.api import trading_router
 from src.features.trading.repositories import OrderRepository, PositionRepository
@@ -89,6 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Ensure MongoDB indexes for trading collections
         await OrderRepository.ensure_indexes()
         await PositionRepository.ensure_indexes()
+        await BacktestRepository.ensure_indexes()
         logger.info("trading_indexes_ensured")
 
         if settings.enable_jobs:
@@ -167,6 +182,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await strategy_engine.start()
 
         logger.info("strategy_engine_initialized")
+
+        # Register backtest handlers
+        mediator.register(
+            RunBacktestCommand, RunBacktestHandler(event_bus, strategy_engine)
+        )
+        mediator.register(
+            RunOptimizationCommand, RunOptimizationHandler(event_bus, strategy_engine)
+        )
+        mediator.register(GetBacktestQuery, GetBacktestHandler())
+        mediator.register(GetOptimizationQuery, GetOptimizationHandler())
+        mediator.register(ListBacktestsQuery, ListBacktestsHandler())
+
+        logger.info("backtest_handlers_registered")
 
         set_mediator(mediator)
 
@@ -251,6 +279,7 @@ def create_app() -> FastAPI:
     app.include_router(quote_router, prefix=settings.api_prefix)
     app.include_router(strategy_router, prefix=settings.api_prefix)
     app.include_router(trading_router, prefix=settings.api_prefix)
+    app.include_router(backtest_router, prefix=settings.api_prefix)
 
     return app
 
