@@ -3,11 +3,11 @@
 from dataclasses import dataclass
 
 from src.domain.order.value_objects import OrderSide
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 @dataclass(frozen=True)
-class OrderSubmitted(DomainEvent):
+class OrderSubmittedEvent(DomainEvent):
     """Event raised when an order is submitted to broker."""
 
     order_id: str = ""
@@ -20,7 +20,7 @@ class OrderSubmitted(DomainEvent):
 
 
 @dataclass(frozen=True)
-class OrderFilled(DomainEvent):
+class OrderFilledEvent(DomainEvent):
     """Event raised when an order is fully filled."""
 
     order_id: str = ""
@@ -33,7 +33,7 @@ class OrderFilled(DomainEvent):
 
 
 @dataclass(frozen=True)
-class OrderPartiallyFilled(DomainEvent):
+class OrderPartiallyFilledEvent(DomainEvent):
     """Event raised when an order is partially filled."""
 
     order_id: str = ""
@@ -44,7 +44,7 @@ class OrderPartiallyFilled(DomainEvent):
 
 
 @dataclass(frozen=True)
-class OrderCancelled(DomainEvent):
+class OrderCancelledEvent(DomainEvent):
     """Event raised when an order is cancelled."""
 
     order_id: str = ""
@@ -53,7 +53,7 @@ class OrderCancelled(DomainEvent):
 
 
 @dataclass(frozen=True)
-class OrderRejected(DomainEvent):
+class OrderRejectedEvent(DomainEvent):
     """Event raised when an order is rejected by broker."""
 
     order_id: str = ""

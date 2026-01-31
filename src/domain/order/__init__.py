@@ -1,24 +1,24 @@
 """Order domain - Order lifecycle management."""
 
 from src.domain.order.aggregate import InvalidOrderTransitionError, OrderAggregate
-from src.domain.order.events import (
-    OrderCancelled,
-    OrderFilled,
-    OrderPartiallyFilled,
-    OrderRejected,
-    OrderSubmitted,
+from src.domain.order.order_event import (
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderPartiallyFilledEvent,
+    OrderRejectedEvent,
+    OrderSubmittedEvent,
 )
 from src.domain.order.value_objects import OrderSide, OrderStatus, OrderType
 
 __all__ = [
     "InvalidOrderTransitionError",
     "OrderAggregate",
-    "OrderCancelled",
-    "OrderFilled",
-    "OrderPartiallyFilled",
-    "OrderRejected",
+    "OrderCancelledEvent",
+    "OrderFilledEvent",
+    "OrderPartiallyFilledEvent",
+    "OrderRejectedEvent",
     "OrderSide",
     "OrderStatus",
-    "OrderSubmitted",
+    "OrderSubmittedEvent",
     "OrderType",
 ]

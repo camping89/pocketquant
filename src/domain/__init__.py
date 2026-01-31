@@ -1,22 +1,22 @@
 """Domain layer - Pure business logic with zero I/O imports."""
 
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 from src.domain.shared.value_objects import Interval, Symbol
 
 # Strategy domain
-from src.domain.strategy import Direction, Signal, SignalGenerated
+from src.domain.strategy import Direction, Signal, SignalGeneratedEvent
 
 # Order domain
 from src.domain.order import (
     InvalidOrderTransitionError,
     OrderAggregate,
-    OrderCancelled,
-    OrderFilled,
-    OrderPartiallyFilled,
-    OrderRejected,
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderPartiallyFilledEvent,
+    OrderRejectedEvent,
     OrderSide,
     OrderStatus,
-    OrderSubmitted,
+    OrderSubmittedEvent,
     OrderType,
 )
 
@@ -24,10 +24,10 @@ from src.domain.order import (
 from src.domain.position import (
     PnL,
     PositionAggregate,
-    PositionClosed,
-    PositionOpened,
+    PositionClosedEvent,
+    PositionOpenedEvent,
     PositionSide,
-    PositionUpdated,
+    PositionUpdatedEvent,
 )
 
 # Risk domain
@@ -41,25 +41,25 @@ __all__ = [
     # Strategy
     "Direction",
     "Signal",
-    "SignalGenerated",
+    "SignalGeneratedEvent",
     # Order
     "InvalidOrderTransitionError",
     "OrderAggregate",
-    "OrderCancelled",
-    "OrderFilled",
-    "OrderPartiallyFilled",
-    "OrderRejected",
+    "OrderCancelledEvent",
+    "OrderFilledEvent",
+    "OrderPartiallyFilledEvent",
+    "OrderRejectedEvent",
     "OrderSide",
     "OrderStatus",
-    "OrderSubmitted",
+    "OrderSubmittedEvent",
     "OrderType",
     # Position
     "PnL",
     "PositionAggregate",
-    "PositionClosed",
-    "PositionOpened",
+    "PositionClosedEvent",
+    "PositionOpenedEvent",
     "PositionSide",
-    "PositionUpdated",
+    "PositionUpdatedEvent",
     # Risk
     "PositionSizer",
     "RiskConfig",

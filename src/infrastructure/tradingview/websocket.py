@@ -58,8 +58,10 @@ def _parse_messages(raw_data: str) -> list[dict[str, Any]]:
         try:
             data = json.loads(part)
             messages.append(data)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            # NOTE: Re-raising JSON decode errors. Invalid WebSocket messages
+            # indicate protocol issues that should not be silently ignored.
+            raise ValueError(f"Invalid WebSocket message JSON: {part[:100]}") from e
 
     return messages
 
@@ -205,13 +207,20 @@ class TradingViewWebSocketProvider:
                     symbol=symbol_key,
                     error=str(e),
                 )
+                # NOTE: Re-raising to surface callback failures. Quote updates
+                # are critical for trading strategies - silent failures could
+                # cause missed signals or stale data.
+                raise
 
     async def _send_heartbeat(self) -> None:
         if self._ws is not None:
             try:
                 await self._ws.send("~h~1")
             except Exception as e:
-                logger.debug("tradingview_ws.heartbeat_failed", error=str(e))
+                logger.error("tradingview_ws.heartbeat_failed", error=str(e))
+                # NOTE: Re-raising heartbeat failures. A failed heartbeat indicates
+                # connection degradation - the caller should handle reconnection.
+                raise
 
     async def run_forever(self) -> None:
         self._running = True

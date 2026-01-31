@@ -301,7 +301,12 @@ class OKXBroker(IBroker):
             logger.error("okx_ws_listener_error", error=str(e))
 
     async def _notify_callbacks(self, result: OrderResult) -> None:
-        """Notify all registered callbacks of order update."""
+        """Notify all registered callbacks of order update.
+
+        NOTE: Callback errors are re-raised after logging. If callbacks must not
+        break the broker, the caller should handle exceptions appropriately.
+        """
+        errors: list[Exception] = []
         for callback in self._order_callbacks:
             try:
                 if asyncio.iscoroutinefunction(callback):
@@ -310,3 +315,9 @@ class OKXBroker(IBroker):
                     callback(result)
             except Exception as e:
                 logger.warning("okx_callback_error", error=str(e))
+                errors.append(e)
+
+        if errors:
+            # NOTE: Re-raising first error after all callbacks attempted.
+            # This ensures all callbacks get notified while still surfacing failures.
+            raise errors[0]

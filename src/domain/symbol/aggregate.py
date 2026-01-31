@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 from src.domain.symbol.value_objects import SymbolInfo
 
 

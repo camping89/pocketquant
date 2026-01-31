@@ -12,7 +12,7 @@ default:
 
 # Setup: create venv and install dependencies
 install:
-    uv venv
+    uv venv --allow-existing
     uv pip install -e ".[dev]"
 
 # Start infrastructure (MongoDB + Redis) - run app via VS Code F5

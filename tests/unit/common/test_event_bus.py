@@ -3,7 +3,7 @@
 import pytest
 
 from src.common.messaging import EventBus
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 class TestEvent(DomainEvent):

@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from src.domain.quote.events import QuoteReceived, QuoteUpdated
-from src.domain.shared.events import DomainEvent
+from src.domain.quote.quote_event import QuoteReceivedEvent, QuoteUpdatedEvent
+from src.domain.shared.domain_event import DomainEvent
 
 
 @dataclass(eq=False)
@@ -62,7 +62,7 @@ class QuoteAggregate:
         self.last_update = timestamp
 
         self._events.append(
-            QuoteReceived(
+            QuoteReceivedEvent(
                 symbol=self.symbol,
                 exchange=self.exchange,
                 price=price,
@@ -74,7 +74,7 @@ class QuoteAggregate:
     def mark_updated(self) -> None:
         """Mark that quote was persisted/cached."""
         self._events.append(
-            QuoteUpdated(
+            QuoteUpdatedEvent(
                 symbol=self.symbol,
                 exchange=self.exchange,
                 last_price=self.last_price or 0.0,

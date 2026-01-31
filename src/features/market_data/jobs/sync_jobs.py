@@ -38,6 +38,7 @@ async def sync_all_symbols() -> None:
 
     synced_count = 0
     error_count = 0
+    errors: list[Exception] = []
 
     for status in statuses:
         try:
@@ -62,6 +63,7 @@ async def sync_all_symbols() -> None:
                 error=str(e),
             )
             error_count += 1
+            errors.append(e)
 
     logger.info(
         "market_data.sync_all.completed",
@@ -69,6 +71,11 @@ async def sync_all_symbols() -> None:
         error_count=error_count,
         total_symbols=len(statuses),
     )
+
+    if errors:
+        # NOTE: Re-raising first error after attempting all symbols.
+        # This ensures all symbols are attempted while still surfacing failures.
+        raise errors[0]
 
 
 async def sync_daily_data() -> None:
@@ -81,16 +88,40 @@ async def sync_daily_data() -> None:
     statuses = await _get_all_sync_statuses()
     daily_statuses = [s for s in statuses if s.interval == Interval.DAY_1.value]
 
-    for status in daily_statuses:
-        cmd = SyncSymbolCommand(
-            symbol=status.symbol,
-            exchange=status.exchange,
-            interval=Interval.DAY_1.value,
-            n_bars=10,
-        )
-        await _mediator.send(cmd)
+    synced_count = 0
+    error_count = 0
+    errors: list[Exception] = []
 
-    logger.info("market_data.sync_daily.completed", synced_count=len(daily_statuses))
+    for status in daily_statuses:
+        try:
+            cmd = SyncSymbolCommand(
+                symbol=status.symbol,
+                exchange=status.exchange,
+                interval=Interval.DAY_1.value,
+                n_bars=10,
+            )
+            await _mediator.send(cmd)
+            synced_count += 1
+        except Exception as e:
+            logger.error(
+                "market_data.sync_daily.symbol_failed",
+                symbol=status.symbol,
+                exchange=status.exchange,
+                error=str(e),
+            )
+            error_count += 1
+            errors.append(e)
+
+    logger.info(
+        "market_data.sync_daily.completed",
+        synced_count=synced_count,
+        error_count=error_count,
+    )
+
+    if errors:
+        # NOTE: Re-raising first error after attempting all symbols.
+        # This ensures all symbols are attempted while still surfacing failures.
+        raise errors[0]
 
 
 def register_sync_jobs() -> None:

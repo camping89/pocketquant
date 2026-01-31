@@ -54,8 +54,11 @@ class Cache:
         logger.debug("redis.cache_hit", key=key)
         try:
             return json.loads(value)
-        except json.JSONDecodeError:
-            return value
+        except json.JSONDecodeError as e:
+            # NOTE: Re-raising JSON decode errors. Corrupted cache data should
+            # not be silently returned as it could cause downstream failures.
+            logger.error("redis.cache_corrupted", key=key, error=str(e))
+            raise ValueError(f"Corrupted cache data for key '{key}'") from e
 
     @classmethod
     async def set(

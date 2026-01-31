@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 import structlog
 
 from src.common.messaging import EventBus
-from src.domain.ohlcv.events import BarCompleted
+from src.domain.ohlcv.ohlcv_event import BarCompletedEvent
 from src.domain.order import OrderAggregate, OrderSide, OrderType
-from src.domain.quote.events import QuoteReceived
+from src.domain.quote.quote_event import QuoteReceivedEvent
 from src.domain.risk import PositionSizer
 from src.domain.strategy import Direction, Signal
 from src.features.strategy.base import IStrategy, StrategyConfig
@@ -61,8 +61,8 @@ class StrategyEngine:
         if self._running:
             return
 
-        self._event_bus.subscribe(BarCompleted, self._on_bar_completed)
-        self._event_bus.subscribe(QuoteReceived, self._on_quote_received)
+        self._event_bus.subscribe(BarCompletedEvent, self._on_bar_completed)
+        self._event_bus.subscribe(QuoteReceivedEvent, self._on_quote_received)
         self._running = True
 
         logger.info("strategy_engine_started")
@@ -185,7 +185,7 @@ class StrategyEngine:
         """Get strategy by ID."""
         return self._strategies.get(strategy_id)
 
-    async def _on_bar_completed(self, event: BarCompleted) -> None:
+    async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Handle bar completed event."""
         strategies = self._find_strategies(
             event.symbol, event.exchange, event.interval, trigger="bar"
@@ -217,7 +217,7 @@ class StrategyEngine:
                     error=str(e),
                 )
 
-    async def _on_quote_received(self, event: QuoteReceived) -> None:
+    async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
         """Handle quote received event."""
         strategies = self._find_strategies(
             event.symbol, event.exchange, trigger="tick"
@@ -229,8 +229,7 @@ class StrategyEngine:
                     "symbol": event.symbol,
                     "exchange": event.exchange,
                     "price": event.price,
-                    "bid": event.bid,
-                    "ask": event.ask,
+                    "volume": event.volume,
                     "timestamp": event.timestamp,
                 }
 

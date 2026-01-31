@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 
-from src.domain.shared.events import DomainEvent
+from src.domain.shared.domain_event import DomainEvent
 from src.domain.strategy.value_objects import Direction
 
 
 @dataclass(frozen=True)
-class SignalGenerated(DomainEvent):
+class SignalGeneratedEvent(DomainEvent):
     """Event raised when a strategy generates a trading signal."""
 
     strategy_id: str = ""

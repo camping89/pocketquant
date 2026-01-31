@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from src.domain.ohlcv.events import BarCompleted, HistoricalDataSynced
-from src.domain.shared.events import DomainEvent
+from src.domain.ohlcv.ohlcv_event import BarCompletedEvent, HistoricalDataSyncedEvent
+from src.domain.shared.domain_event import DomainEvent
 from src.domain.shared.value_objects import Interval
 
 
@@ -39,7 +39,7 @@ class OHLCVAggregate:
         last_bar_at: datetime | None = None,
     ) -> None:
         """Record that historical data was synced."""
-        event = HistoricalDataSynced(
+        event = HistoricalDataSyncedEvent(
             symbol=self.symbol,
             exchange=self.exchange,
             interval=interval.value,
@@ -61,7 +61,7 @@ class OHLCVAggregate:
         tick_count: int,
     ) -> None:
         """Record that a bar was completed."""
-        event = BarCompleted(
+        event = BarCompletedEvent(
             symbol=self.symbol,
             exchange=self.exchange,
             interval=interval.value,
