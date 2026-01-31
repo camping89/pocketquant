@@ -6,6 +6,7 @@ import structlog
 
 from src.common.messaging import EventBus
 from src.domain.order import OrderAggregate, OrderFilled, OrderStatus
+from src.features.trading.repositories import OrderRepository
 from src.infrastructure.brokers import IBroker, OrderResult
 
 logger = structlog.get_logger(__name__)
@@ -41,17 +42,27 @@ class OrderManager:
         async with self._lock:
             self._pending[order.id] = order
 
+        # Persist initial order state
+        await OrderRepository.save(order)
+
         try:
             result = await broker.submit_order(order)
 
             async with self._lock:
                 if result.is_success:
                     self._broker_map[order.id] = result.broker_order_id
+                    order.broker_order_id = result.broker_order_id
 
                     if result.status == OrderStatus.FILLED:
+                        # Update order with fill info
+                        order.fill(result.filled_quantity, result.filled_price or 0.0)
+
                         # Move to completed orders
                         self._orders[order.id] = order
                         self._pending.pop(order.id, None)
+
+                        # Persist filled order
+                        await OrderRepository.save(order)
 
                         # Publish fill event
                         await self._event_bus.publish(
@@ -73,7 +84,10 @@ class OrderManager:
                             filled_price=result.filled_price,
                         )
                     else:
-                        # Keep in pending
+                        # Update status and persist
+                        order.submit(result.broker_order_id)
+                        await OrderRepository.save(order)
+
                         logger.info(
                             "order_submitted",
                             order_id=order.id,
@@ -81,7 +95,10 @@ class OrderManager:
                             status=result.status.value,
                         )
                 else:
-                    # Remove from pending on rejection
+                    # Mark as rejected and persist
+                    order.reject(result.error_message or "Order rejected")
+                    await OrderRepository.save(order)
+
                     self._pending.pop(order.id, None)
                     logger.warning(
                         "order_rejected",
@@ -93,6 +110,8 @@ class OrderManager:
 
         except Exception as e:
             async with self._lock:
+                order.reject(str(e))
+                await OrderRepository.save(order)
                 self._pending.pop(order.id, None)
 
             logger.error("order_submit_error", order_id=order.id, error=str(e))
@@ -116,6 +135,7 @@ class OrderManager:
         """
         async with self._lock:
             broker_order_id = self._broker_map.get(order_id)
+            order = self._pending.get(order_id)
             if not broker_order_id:
                 logger.warning("cancel_unknown_order", order_id=order_id)
                 return False
@@ -125,6 +145,9 @@ class OrderManager:
 
             if success:
                 async with self._lock:
+                    if order:
+                        order.cancel()
+                        await OrderRepository.save(order)
                     self._pending.pop(order_id, None)
 
                 logger.info("order_cancelled", order_id=order_id)
@@ -163,6 +186,9 @@ class OrderManager:
                 return
 
             if result.status == OrderStatus.FILLED:
+                order.fill(result.filled_quantity, result.filled_price or 0.0)
+                await OrderRepository.save(order)
+
                 self._orders[result.order_id] = order
                 self._pending.pop(result.order_id, None)
 
@@ -179,4 +205,29 @@ class OrderManager:
                 )
 
             elif result.status == OrderStatus.CANCELLED:
+                order.cancel()
+                await OrderRepository.save(order)
                 self._pending.pop(result.order_id, None)
+
+    async def load_pending_orders(self) -> None:
+        """Load pending orders from database on startup."""
+        pending = await OrderRepository.find_pending()
+        async with self._lock:
+            for order in pending:
+                self._pending[order.id] = order
+                if order.broker_order_id:
+                    self._broker_map[order.id] = order.broker_order_id
+        logger.info("loaded_pending_orders", count=len(pending))
+
+    async def get_order_async(self, order_id: str) -> OrderAggregate | None:
+        """Get order by ID from memory or database."""
+        order = self._orders.get(order_id) or self._pending.get(order_id)
+        if order:
+            return order
+        return await OrderRepository.get(order_id)
+
+    async def get_orders_by_strategy_async(
+        self, strategy_id: str
+    ) -> list[OrderAggregate]:
+        """Get all orders for a strategy from database."""
+        return await OrderRepository.find_by_strategy(strategy_id)

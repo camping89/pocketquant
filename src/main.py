@@ -64,6 +64,7 @@ from src.features.strategy import (
 )
 from src.features.trading import OrderManager, PositionTracker
 from src.features.trading.api import trading_router
+from src.features.trading.repositories import OrderRepository, PositionRepository
 from src.infrastructure.brokers import BrokerFactory
 from src.infrastructure.tradingview import TradingViewProvider
 
@@ -84,6 +85,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         await Database.connect(settings)
         await Cache.connect(settings)
+
+        # Ensure MongoDB indexes for trading collections
+        await OrderRepository.ensure_indexes()
+        await PositionRepository.ensure_indexes()
+        logger.info("trading_indexes_ensured")
 
         if settings.enable_jobs:
             JobScheduler.initialize(settings)
@@ -151,7 +157,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         mediator.register(GetStrategiesQuery, GetStrategiesHandler(strategy_engine))
         mediator.register(GetStrategyQuery, GetStrategyHandler(strategy_engine))
 
-        # Start position tracker (subscribes to OrderFilled)
+        # Load pending orders from database
+        await order_manager.load_pending_orders()
+
+        # Start position tracker (subscribes to OrderFilled, loads open positions)
         await position_tracker.start()
 
         # Start strategy engine (subscribes to BarCompleted, QuoteReceived)
