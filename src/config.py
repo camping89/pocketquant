@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     job_worker_count: int
     enable_jobs: bool = True
 
+    # OKX Broker (optional, for live trading)
+    okx_api_key: str | None = None
+    okx_api_secret: str | None = None
+    okx_passphrase: str | None = None
+    okx_demo_mode: bool = True
+
+    # Strategy Engine
+    default_broker: Literal["paper", "okx"] = "paper"
+    paper_initial_balance: float = 100_000.0
+    paper_slippage_percent: float = 0.001
+
 
 @lru_cache
 def get_settings() -> Settings:
