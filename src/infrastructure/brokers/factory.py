@@ -36,13 +36,13 @@ class BrokerFactory:
             api_secret = config.get("api_secret")
             passphrase = config.get("passphrase")
 
-            if not all([api_key, api_secret, passphrase]):
+            if not api_key or not api_secret or not passphrase:
                 raise ValueError("OKX broker requires api_key, api_secret, passphrase")
 
             return OKXBroker(
-                api_key=api_key,
-                api_secret=api_secret,
-                passphrase=passphrase,
+                api_key=str(api_key),
+                api_secret=str(api_secret),
+                passphrase=str(passphrase),
                 demo=config.get("demo", True),
                 inst_suffix=config.get("inst_suffix", "USDT"),
             )

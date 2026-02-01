@@ -93,7 +93,7 @@ class GridOptimizer:
         failed_count = 0
 
         for params, result in zip(combinations, results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning(
                     "optimization_backtest_exception",
                     optimization_id=optimization_id,

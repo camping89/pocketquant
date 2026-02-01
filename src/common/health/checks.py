@@ -16,6 +16,6 @@ async def check_database() -> dict:
 async def check_redis() -> dict:
     """Check Redis connectivity and measure latency."""
     start = time.time()
-    client = Cache._get_client()
+    client = Cache.get_client()
     await client.ping()
     return {"latency_ms": int((time.time() - start) * 1000)}

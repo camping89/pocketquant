@@ -2,21 +2,23 @@
 
 import inspect
 from collections import deque
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, TypeVar
 
 from src.domain.shared.domain_event import DomainEvent
+
+TEvent = TypeVar("TEvent", bound=DomainEvent)
 
 
 class EventBus:
     """In-memory async event bus with FIFO delivery and bounded history."""
 
     def __init__(self, max_history: int = 50) -> None:
-        self._handlers: dict[type, list[Callable]] = {}
+        self._handlers: dict[type, list[Callable[[Any], Any]]] = {}
         self._history: deque[DomainEvent] = deque(maxlen=max_history)
 
     def subscribe(
-        self, event_type: type[DomainEvent], handler: Callable[[DomainEvent], Any]
+        self, event_type: type[TEvent], handler: Callable[[TEvent], Any]
     ) -> None:
         """Register handler for event type."""
         if event_type not in self._handlers:
@@ -24,7 +26,7 @@ class EventBus:
         self._handlers[event_type].append(handler)
 
     def unsubscribe(
-        self, event_type: type[DomainEvent], handler: Callable[[DomainEvent], Any]
+        self, event_type: type[TEvent], handler: Callable[[TEvent], Any]
     ) -> bool:
         """Unregister handler for event type. Returns True if handler was found."""
         handlers = self._handlers.get(event_type, [])
@@ -42,7 +44,7 @@ class EventBus:
                 await result
         self._history.append(event)
 
-    async def publish_all(self, events: list[DomainEvent]) -> None:
+    async def publish_all(self, events: Sequence[DomainEvent]) -> None:
         """Publish multiple events in order."""
         for event in events:
             await self.publish(event)

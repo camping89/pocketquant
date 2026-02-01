@@ -138,14 +138,14 @@ class OkxReconnectionHandler:
         This prevents re-processing of orders that reached terminal state
         while we were disconnected.
         """
-        if not self._broker._trade_api:
+        if not self._broker.trade_api:
             return
 
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self._broker._trade_api.get_orders_history(
+                lambda: self._broker.trade_api.get_orders_history(
                     instType="SWAP", limit="100"
                 ),
             )
@@ -164,7 +164,7 @@ class OkxReconnectionHandler:
                 if state in ("filled", "canceled", "mmp_canceled"):
                     ord_id = order.get("ordId", "")
                     if ord_id:
-                        self._broker._seen_terminal_orders.add(ord_id)
+                        self._broker.seen_terminal_orders.add(ord_id)
                         terminal_count += 1
 
             logger.info("okx_terminal_orders_synced", count=terminal_count)
@@ -203,14 +203,14 @@ class OkxStateReconciler:
 
     async def _fetch_open_orders(self) -> list[dict]:
         """Fetch pending orders via REST API."""
-        if not self._broker._trade_api:
+        if not self._broker.trade_api:
             return []
 
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self._broker._trade_api.get_order_list(instType="SWAP"),
+                lambda: self._broker.trade_api.get_order_list(instType="SWAP"),
             )
 
             if response.get("code") != "0":

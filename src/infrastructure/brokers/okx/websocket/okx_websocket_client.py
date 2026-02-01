@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets.asyncio.client import ClientConnection
 
 from src.infrastructure.brokers.okx.websocket.okx_auth import (
     build_login_message,
@@ -59,7 +59,7 @@ class OkxWebSocketClient:
         self._demo = demo
         self._on_disconnect = on_disconnect
 
-        self._ws: WebSocketClientProtocol | None = None
+        self._ws: ClientConnection | None = None
         self._connected = False
         self._authenticated = False
         self._heartbeat_task: asyncio.Task | None = None
@@ -153,6 +153,9 @@ class OkxWebSocketClient:
             raise ConnectionError("WebSocket not connected or authenticated")
 
         subscribe_msg = {"op": "subscribe", "args": channels}
+
+        if self._ws is None:
+            raise ConnectionError("WebSocket not connected")
 
         await self._ws.send(json.dumps(subscribe_msg))
 

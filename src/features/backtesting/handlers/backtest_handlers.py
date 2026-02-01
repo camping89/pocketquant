@@ -37,24 +37,24 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
 
-    async def handle(self, command: RunBacktestCommand) -> BacktestResult:
+    async def handle(self, request: RunBacktestCommand) -> BacktestResult:
         """Execute backtest and return result."""
         config = BacktestConfig(
-            strategy_id=command.strategy_id,
-            symbol=command.symbol,
-            exchange=command.exchange,
-            interval=command.interval,
-            start_date=command.start_date,
-            end_date=command.end_date,
-            initial_capital=command.initial_capital,
-            slippage_bps=command.slippage_bps,
-            commission_bps=command.commission_bps,
-            parameters=command.parameters or {},
+            strategy_id=request.strategy_id,
+            symbol=request.symbol,
+            exchange=request.exchange,
+            interval=request.interval,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            initial_capital=request.initial_capital,
+            slippage_bps=request.slippage_bps,
+            commission_bps=request.commission_bps,
+            parameters=request.parameters or {},
         )
 
         # Create fresh broker for this backtest
         broker = PaperBroker(
-            initial_balance=command.initial_capital,
+            initial_balance=request.initial_capital,
             slippage_percent=config.slippage_percent,
         )
 
@@ -78,21 +78,21 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
 
-    async def handle(self, command: RunOptimizationCommand) -> OptimizationResult:
+    async def handle(self, request: RunOptimizationCommand) -> OptimizationResult:
         """Execute optimization and return result."""
         config = OptimizationConfig(
-            strategy_id=command.strategy_id,
-            symbol=command.symbol,
-            exchange=command.exchange,
-            interval=command.interval,
-            start_date=command.start_date,
-            end_date=command.end_date,
-            parameter_grid=command.parameter_grid,
-            initial_capital=command.initial_capital,
-            slippage_bps=command.slippage_bps,
-            commission_bps=command.commission_bps,
-            target_metric=command.target_metric,
-            max_workers=command.max_workers,
+            strategy_id=request.strategy_id,
+            symbol=request.symbol,
+            exchange=request.exchange,
+            interval=request.interval,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            parameter_grid=request.parameter_grid,
+            initial_capital=request.initial_capital,
+            slippage_bps=request.slippage_bps,
+            commission_bps=request.commission_bps,
+            target_metric=request.target_metric,
+            max_workers=request.max_workers,
         )
 
         optimizer = GridOptimizer(
@@ -118,18 +118,18 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
 class GetBacktestHandler(Handler[GetBacktestQuery, BacktestResult | None]):
     """Handle GetBacktestQuery - retrieve backtest result by ID."""
 
-    async def handle(self, query: GetBacktestQuery) -> BacktestResult | None:
+    async def handle(self, request: GetBacktestQuery) -> BacktestResult | None:
         """Fetch backtest result from repository."""
-        return await BacktestRepository.get(query.run_id)
+        return await BacktestRepository.get(request.run_id)
 
 
 class GetOptimizationHandler(Handler[GetOptimizationQuery, OptimizationResult | None]):
     """Handle GetOptimizationQuery - retrieve optimization result by ID."""
 
-    async def handle(self, query: GetOptimizationQuery) -> OptimizationResult | None:
+    async def handle(self, request: GetOptimizationQuery) -> OptimizationResult | None:
         """Fetch optimization result from MongoDB."""
         collection = Database.get_collection(COLLECTION_OPTIMIZATION_RUNS)
-        doc = await collection.find_one({"_id": query.optimization_id})
+        doc = await collection.find_one({"_id": request.optimization_id})
 
         if not doc:
             return None
@@ -140,10 +140,10 @@ class GetOptimizationHandler(Handler[GetOptimizationQuery, OptimizationResult | 
 class ListBacktestsHandler(Handler[ListBacktestsQuery, list[BacktestResult]]):
     """Handle ListBacktestsQuery - list backtest results for a strategy."""
 
-    async def handle(self, query: ListBacktestsQuery) -> list[BacktestResult]:
+    async def handle(self, request: ListBacktestsQuery) -> list[BacktestResult]:
         """Fetch backtest results from repository."""
         return await BacktestRepository.list_by_strategy(
-            strategy_id=query.strategy_id,
-            limit=query.limit,
-            include_failed=query.include_failed,
+            strategy_id=request.strategy_id,
+            limit=request.limit,
+            include_failed=request.include_failed,
         )

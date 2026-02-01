@@ -37,10 +37,16 @@ class Cache:
             logger.info("redis.disconnected")
 
     @classmethod
-    def _get_client(cls) -> redis.Redis:
+    def get_client(cls) -> redis.Redis:
+        """Get Redis client, raising if not connected."""
         if cls._client is None:
             raise RuntimeError("Cache not connected. Call Cache.connect() first.")
         return cls._client
+
+    @classmethod
+    def _get_client(cls) -> redis.Redis:
+        """Deprecated: Use get_client() instead."""
+        return cls.get_client()
 
     @classmethod
     async def get(cls, key: str) -> Any | None:

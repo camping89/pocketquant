@@ -50,12 +50,12 @@ class QuoteServiceState:
             symbol=symbol,
             exchange=exchange,
             timestamp=quote_data.get("timestamp", datetime.now(UTC)),
-            last_price=last_price,
+            lp=last_price,
             bid=quote_data.get("bid"),
             ask=quote_data.get("ask"),
             volume=quote_data.get("volume"),
-            change=quote_data.get("change"),
-            change_percent=quote_data.get("change_percent"),
+            ch=quote_data.get("change"),
+            chp=quote_data.get("change_percent"),
             open_price=quote_data.get("open_price"),
             high_price=quote_data.get("high_price"),
             low_price=quote_data.get("low_price"),
@@ -100,7 +100,7 @@ class StartQuoteFeedHandler(Handler[StartQuoteFeedCommand, dict]):
     def __init__(self, settings: Settings):
         self.state = get_quote_state(settings)
 
-    async def handle(self, cmd: StartQuoteFeedCommand) -> dict:
+    async def handle(self, request: StartQuoteFeedCommand) -> dict:
         if self.state.running:
             logger.warning("quote_service.already_running")
             return {
@@ -123,7 +123,7 @@ class StopQuoteFeedHandler(Handler[StopQuoteFeedCommand, dict]):
     def __init__(self, settings: Settings):
         self.state = get_quote_state(settings)
 
-    async def handle(self, cmd: StopQuoteFeedCommand) -> dict:
+    async def handle(self, request: StopQuoteFeedCommand) -> dict:
         if not self.state.running:
             return {"status": "not_running", "message": "Quote service is not running"}
 
@@ -155,14 +155,14 @@ class SubscribeHandler(Handler[SubscribeCommand, dict]):
     def __init__(self, settings: Settings):
         self.state = get_quote_state(settings)
 
-    async def handle(self, cmd: SubscribeCommand) -> dict:
+    async def handle(self, request: SubscribeCommand) -> dict:
         if not self.state.running or not self.state.provider.is_connected():
             raise ValueError(
                 "Quote service not running. Start it first via StartQuoteFeedCommand"
             )
 
-        symbol = cmd.symbol.upper()
-        exchange = cmd.exchange.upper()
+        symbol = request.symbol.upper()
+        exchange = request.exchange.upper()
 
         key = await self.state.provider.subscribe(
             symbol=symbol,
@@ -183,9 +183,9 @@ class UnsubscribeHandler(Handler[UnsubscribeCommand, dict]):
     def __init__(self, settings: Settings):
         self.state = get_quote_state(settings)
 
-    async def handle(self, cmd: UnsubscribeCommand) -> dict:
-        symbol = cmd.symbol.upper()
-        exchange = cmd.exchange.upper()
+    async def handle(self, request: UnsubscribeCommand) -> dict:
+        symbol = request.symbol.upper()
+        exchange = request.exchange.upper()
 
         await self.state.provider.unsubscribe(symbol, exchange)
         cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
@@ -198,9 +198,9 @@ class UnsubscribeHandler(Handler[UnsubscribeCommand, dict]):
 class GetLatestQuoteHandler(Handler[GetLatestQuoteQuery, QuoteResult | None]):
     """Handle getting the latest quote for a symbol."""
 
-    async def handle(self, query: GetLatestQuoteQuery) -> QuoteResult | None:
+    async def handle(self, request: GetLatestQuoteQuery) -> QuoteResult | None:
         cache_key = CACHE_KEY_QUOTE_LATEST.format(
-            exchange=query.exchange.upper(), symbol=query.symbol.upper()
+            exchange=request.exchange.upper(), symbol=request.symbol.upper()
         )
 
         data = await Cache.get(cache_key)
@@ -217,9 +217,9 @@ class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
     def __init__(self, settings: Settings):
         self.state = get_quote_state(settings)
 
-    async def handle(self, query: GetAllQuotesQuery) -> list[QuoteResult]:
+    async def handle(self, request: GetAllQuotesQuery) -> list[QuoteResult]:
         quotes = []
-        for symbol_key in self.state.provider._subscriptions.keys():
+        for symbol_key in self.state.provider.subscriptions.keys():
             exchange, symbol = symbol_key.split(":", 1)
             cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
             data = await Cache.get(cache_key)

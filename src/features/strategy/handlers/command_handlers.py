@@ -16,12 +16,12 @@ class LoadStrategyHandler(Handler[LoadStrategyCommand, str]):
     def __init__(self, engine: StrategyEngine) -> None:
         self._engine = engine
 
-    async def handle(self, command: LoadStrategyCommand) -> str:
+    async def handle(self, request: LoadStrategyCommand) -> str:
         """Load strategy from config or path."""
-        if command.config:
-            config = command.config
-        elif command.path:
-            config = StrategyLoader.load(command.path)
+        if request.config:
+            config = request.config
+        elif request.path:
+            config = StrategyLoader.load(request.path)
         else:
             raise ValueError("Either config or path must be provided")
 
@@ -34,9 +34,9 @@ class StartStrategyHandler(Handler[StartStrategyCommand, bool]):
     def __init__(self, engine: StrategyEngine) -> None:
         self._engine = engine
 
-    async def handle(self, command: StartStrategyCommand) -> bool:
+    async def handle(self, request: StartStrategyCommand) -> bool:
         """Start a loaded strategy."""
-        await self._engine.start_strategy(command.strategy_id)
+        await self._engine.start_strategy(request.strategy_id)
         return True
 
 
@@ -46,7 +46,7 @@ class StopStrategyHandler(Handler[StopStrategyCommand, bool]):
     def __init__(self, engine: StrategyEngine) -> None:
         self._engine = engine
 
-    async def handle(self, command: StopStrategyCommand) -> bool:
+    async def handle(self, request: StopStrategyCommand) -> bool:
         """Stop a running strategy."""
-        await self._engine.stop_strategy(command.strategy_id)
+        await self._engine.stop_strategy(request.strategy_id)
         return True

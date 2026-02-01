@@ -110,7 +110,7 @@ class TradingViewProvider(IDataProvider):
         records: list[OHLCVCreate] = []
 
         for idx, row in df.iterrows():
-            bar_datetime = idx if isinstance(idx, datetime) else pd.to_datetime(idx)
+            bar_datetime = idx if isinstance(idx, datetime) else pd.to_datetime(idx).to_pydatetime()  # type: ignore[arg-type, union-attr]
 
             records.append(
                 OHLCVCreate(
@@ -118,11 +118,11 @@ class TradingViewProvider(IDataProvider):
                     exchange=exchange.upper(),
                     interval=interval,
                     datetime=bar_datetime,
-                    open=float(row["open"]),
-                    high=float(row["high"]),
-                    low=float(row["low"]),
-                    close=float(row["close"]),
-                    volume=float(row["volume"]),
+                    open=float(row["open"]),  # type: ignore[arg-type]
+                    high=float(row["high"]),  # type: ignore[arg-type]
+                    low=float(row["low"]),  # type: ignore[arg-type]
+                    close=float(row["close"]),  # type: ignore[arg-type]
+                    volume=float(row["volume"]),  # type: ignore[arg-type]
                 )
             )
 

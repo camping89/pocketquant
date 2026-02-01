@@ -17,7 +17,7 @@ from src.features.market_data.status.query import (
 class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
     """Handle getting all sync statuses."""
 
-    async def handle(self, query: GetSyncStatusQuery) -> list[SyncStatusResult]:
+    async def handle(self, request: GetSyncStatusQuery) -> list[SyncStatusResult]:
         collection = Database.get_collection(COLLECTION_SYNC_STATUS)
         cursor = collection.find()
 
@@ -43,21 +43,21 @@ class GetSymbolSyncStatusHandler(
 ):
     """Handle getting sync status for a specific symbol."""
 
-    async def handle(self, query: GetSymbolSyncStatusQuery) -> SyncStatusResult:
+    async def handle(self, request: GetSymbolSyncStatusQuery) -> SyncStatusResult:
         collection = Database.get_collection(COLLECTION_SYNC_STATUS)
-        interval = Interval(query.interval)
+        interval = Interval(request.interval)
 
         doc = await collection.find_one(
             {
-                "symbol": query.symbol.upper(),
-                "exchange": query.exchange.upper(),
+                "symbol": request.symbol.upper(),
+                "exchange": request.exchange.upper(),
                 "interval": interval.value,
             }
         )
 
         if not doc:
             raise ValueError(
-                f"No sync status found for {query.symbol}:{query.exchange}"
+                f"No sync status found for {request.symbol}:{request.exchange}"
             )
 
         status = SyncStatus.from_mongo(doc)
@@ -82,7 +82,7 @@ class GetQuoteServiceStatusHandler(
     def __init__(self, settings: Settings):
         self.state = get_quote_state(settings)
 
-    async def handle(self, query: GetQuoteServiceStatusQuery) -> StatusResult:
+    async def handle(self, request: GetQuoteServiceStatusQuery) -> StatusResult:
         return StatusResult(
             running=self.state.running and self.state.provider.is_connected(),
             subscription_count=self.state.provider.subscription_count,

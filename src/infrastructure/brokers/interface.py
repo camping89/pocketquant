@@ -1,11 +1,15 @@
 """Broker interface - abstract base class for all brokers."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from typing import Union
 
 from src.domain.order import OrderAggregate
 from src.domain.position import PositionAggregate
 from src.infrastructure.brokers.models import AccountBalance, OrderResult
+
+# Callback can be sync or async
+OrderCallback = Callable[[OrderResult], Union[None, Awaitable[None]]]
 
 
 class IBroker(ABC):
@@ -81,13 +85,11 @@ class IBroker(ABC):
         ...
 
     @abstractmethod
-    async def subscribe_order_updates(
-        self, callback: Callable[[OrderResult], None]
-    ) -> None:
+    async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         """Subscribe to order status updates.
 
         Args:
-            callback: Function to call on order updates
+            callback: Function to call on order updates (sync or async)
         """
         ...
 

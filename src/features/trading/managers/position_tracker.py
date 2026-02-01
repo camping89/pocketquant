@@ -164,11 +164,12 @@ class PositionTracker:
 
     def get_all_summaries(self) -> list[dict]:
         """Get all position summaries."""
-        return [
-            self.get_position_summary(sid)
-            for sid in self._positions.keys()
-            if self.get_position_summary(sid)
-        ]
+        summaries = []
+        for sid in self._positions.keys():
+            summary = self.get_position_summary(sid)
+            if summary:
+                summaries.append(summary)
+        return summaries
 
     async def update_price(self, strategy_id: str, price: float) -> None:
         """Update current price for a position."""

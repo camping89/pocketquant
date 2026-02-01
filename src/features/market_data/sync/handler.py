@@ -31,10 +31,10 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
         self.provider = provider
         self.event_bus = event_bus
 
-    async def handle(self, cmd: SyncSymbolCommand) -> SyncResult:
-        symbol = cmd.symbol.upper()
-        exchange = cmd.exchange.upper()
-        interval = Interval(cmd.interval)
+    async def handle(self, request: SyncSymbolCommand) -> SyncResult:
+        symbol = request.symbol.upper()
+        exchange = request.exchange.upper()
+        interval = Interval(request.interval)
 
         logger.info(
             "market_data.sync.started",
@@ -50,7 +50,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
                 symbol=symbol,
                 exchange=exchange,
                 interval=interval,
-                n_bars=cmd.n_bars,
+                n_bars=request.n_bars,
             )
 
             if not records:
@@ -262,14 +262,14 @@ class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResult]]):
     def __init__(self, sync_handler: SyncSymbolHandler):
         self.sync_handler = sync_handler
 
-    async def handle(self, cmd: BulkSyncCommand) -> list[SyncResult]:
+    async def handle(self, request: BulkSyncCommand) -> list[SyncResult]:
         results = []
-        for sym in cmd.symbols:
+        for sym in request.symbols:
             sync_cmd = SyncSymbolCommand(
                 symbol=sym["symbol"],
                 exchange=sym["exchange"],
-                interval=cmd.interval,
-                n_bars=cmd.n_bars,
+                interval=request.interval,
+                n_bars=request.n_bars,
             )
             result = await self.sync_handler.handle(sync_cmd)
             results.append(result)
