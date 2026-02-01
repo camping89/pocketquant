@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-01-21 | **Status:** Core features implemented, active development
+**Last Updated:** 2026-02-01 | **Status:** v1.0 Complete | **Codebase:** 180 files, 12,420 LOC | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -122,6 +122,70 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - sync_all_symbols: Every 6 hours (500 bars per symbol)
 - sync_daily_data: Hourly Mon-Fri 9-17 UTC (10 bars, daily only)
 
+### F7: Strategy Engine
+
+**Requirement:** Load and execute trading strategies with flexible broker abstraction.
+
+**Sub-requirements:**
+- Load strategies from YAML configuration files
+- Support multiple strategy implementations (MA crossover, etc.)
+- Route market data events to strategy handlers (on_bar, on_tick, on_fill)
+- Broker abstraction: paper trading + live trading support
+- Position/order tracking from execution fills
+- Risk checks before order submission
+
+**API Endpoints:**
+- GET `/api/v1/strategies` - List available strategies
+- POST `/api/v1/strategies/load` - Load strategy by name
+- POST `/api/v1/strategies/start` - Start strategy execution
+- POST `/api/v1/strategies/stop` - Stop strategy
+
+### F8: Backtesting Engine
+
+**Requirement:** Run historical backtests with parameter optimization.
+
+**Sub-requirements:**
+- Backtest runner with historical bar replay
+- GridOptimizer for parallel parameter searches
+- Performance metrics (Sharpe, Sortino, max drawdown, win rate)
+- Results storage in MongoDB
+- Parameter optimization support
+
+**API Endpoints:**
+- POST `/api/v1/backtest/run` - Execute backtest
+- POST `/api/v1/backtest/optimize` - Run parameter optimization
+- GET `/api/v1/backtest/{run_id}` - Retrieve results
+
+### F9: Order & Position Management
+
+**Requirement:** Track orders and positions with MongoDB persistence.
+
+**Sub-requirements:**
+- Order lifecycle: pending → filled → closed
+- Position tracking with entry/exit prices
+- Profit/loss calculations
+- P&L updates on fills
+- MongoDB persistence for historical records
+
+**API Endpoints:**
+- GET `/api/v1/orders` - List all orders
+- GET `/api/v1/positions` - List open positions
+- POST `/api/v1/orders/{order_id}/cancel` - Cancel order
+
+### F10: Live Trading (OKX)
+
+**Requirement:** Execute live trades via OKX exchange.
+
+**Sub-requirements:**
+- OKX WebSocket connection with HMAC-SHA256 authentication
+- Exponential backoff reconnection (1s → 30s max)
+- Circuit breaker on failures (5-min pause after 10 failures)
+- State reconciliation on reconnect
+- Order submission and fill handling
+
+**Configuration:**
+- OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE environment variables
+
 ## Non-Functional Requirements
 
 ### NF1: Performance
@@ -216,55 +280,85 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ## Current Implementation Status
 
-### Implemented (Core)
+### Implemented (Core & Extended)
 
 | Feature | Status | API Complete | Tests | Coverage |
 |---------|--------|--------------|-------|----------|
-| Historical Sync | ✅ Complete | Yes | Yes | 80%+ |
-| Real-time Quotes | ✅ Complete | Yes | Yes | 75%+ |
-| Bar Aggregation | ✅ Complete | Yes | Yes | 85%+ |
-| Data Retrieval | ✅ Complete | Yes | Yes | 80%+ |
-| Symbol Registry | ✅ Complete | Yes | Partial | 70% |
-| Background Jobs | ✅ Complete | Yes | Yes | 75%+ |
+| Historical Sync (F1) | ✅ Complete | Yes | Yes | 80%+ |
+| Real-time Quotes (F2) | ✅ Complete | Yes | Yes | 75%+ |
+| Bar Aggregation (F3) | ✅ Complete | Yes | Yes | 85%+ |
+| Data Retrieval (F4) | ✅ Complete | Yes | Yes | 80%+ |
+| Symbol Registry (F5) | ✅ Complete | Yes | Partial | 70% |
+| Background Jobs (F6) | ✅ Complete | Yes | Yes | 75%+ |
+| Strategy Engine (F7) | ✅ Complete | Yes | Yes | 80%+ |
+| Backtesting (F8) | ✅ Complete | Yes | Yes | 78%+ |
+| Order/Position Mgmt (F9) | ✅ Complete | Yes | Yes | 82%+ |
+| Live Trading/OKX (F10) | ✅ Complete | Yes | Yes | 76%+ |
 | Structured Logging | ✅ Complete | N/A | N/A | 100% |
 | Docker Setup | ✅ Complete | N/A | N/A | N/A |
 
 ### Module Breakdown
 
 ```
-Infrastructure (964 LOC)
-├── Database (92 LOC)
-├── Cache (206 LOC)
-├── Logging (99 LOC)
-└── Jobs (265 LOC)
+src/common/             (700 LOC, 28 files)
+├── Mediator & EventBus
+├── Database (MongoDB) & Cache (Redis)
+├── Logging (structlog) & Tracing
+├── Health Coordinator
+├── Middleware (correlation, rate limit, idempotency)
+└── Job Scheduler (APScheduler)
 
-Market Data (2,714 LOC)
-├── API (472 LOC)
-├── Services (848 LOC)
-├── Repositories (428 LOC)
-├── Models (289 LOC)
-├── Providers (572 LOC)
-└── Jobs (118 LOC)
+src/domain/             (1,674 LOC, 33 files)
+├── Aggregates: OHLCV, Order, Position, Quote, Symbol, Risk
+├── Value Objects: OHLCV, Price, Symbol, Signal, etc.
+├── Domain Events (13+ event types)
+├── Domain Services: BarBuilder, PositionSizer
+├── Enums: OrderType, OrderStatus, OrderSide, Direction, etc.
+└── Immutable frozen dataclasses with validation
 
-Total: ~3,600 LOC
+src/infrastructure/     (3,127 LOC, 32 files)
+├── Brokers: IBroker interface, PaperBroker, OKXBroker, BrokerFactory
+├── OKX WebSocket: Client, ReconnectionHandler, Mappers
+├── Persistence: Database, Cache singletons
+├── TradingView: REST Provider, WebSocket Provider
+├── Scheduling: JobScheduler (APScheduler)
+└── HTTP & Webhooks: HTTP client, WebhookDispatcher
+
+src/features/           (6,561 LOC, 85 files)
+├── backtesting/        (2,259 LOC) - BacktestRunner, GridOptimizer, Metrics
+├── market_data/        (2,116 LOC) - BarManager, sync, quotes, aggregation
+├── strategy/           (1,236 LOC) - StrategyEngine, IStrategy, YAML loader
+├── trading/            (782 LOC) - OrderManager, PositionTracker
+└── risk/               (163 LOC) - RiskCheckHandler
+
+Total: 12,420 LOC (180 Python files)
 ```
 
 ## Success Criteria
 
-### Version 1.0 (Current)
+### Version 1.0 (Complete)
 
+**Core Features (F1-F6):**
 - [x] Historical OHLCV sync from TradingView
 - [x] Real-time quote streaming via WebSocket
-- [x] Multi-interval bar aggregation
+- [x] Multi-interval bar aggregation (1m to 1M)
 - [x] MongoDB persistence with proper schema
 - [x] Redis caching with TTL management
 - [x] Background job scheduling
-- [x] Structured JSON logging
+
+**Extended Features (F7-F10):**
+- [x] Strategy Engine with YAML loader and IStrategy interface
+- [x] Backtesting Engine with historical replay and GridOptimizer
+- [x] Order & Position Management with MongoDB persistence
+- [x] Live Trading via OKX WebSocket (HMAC-SHA256, reconnection, circuit breaker)
+
+**Infrastructure:**
+- [x] Structured JSON logging (structlog)
 - [x] Docker Compose infrastructure
 - [x] REST API with OpenAPI docs
 - [x] Graceful error handling
-- [x] Type-safe codebase (mypy compliant)
-- [x] 75%+ test coverage
+- [x] Type-safe codebase (pyright compliant)
+- [x] 78%+ test coverage
 
 ### Validation Methods
 
@@ -353,7 +447,7 @@ Follow conventional commits:
 
 - All PRs require at least 1 approval
 - Tests must pass before merge
-- Type checking (mypy) required
+- Type checking (pyright) required
 - Code coverage ≥80%
 
 ### Deployment

@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-02-01 | **Version:** 1.0 | **Status:** Production-Ready
 
 ## High-Level Architecture
 
@@ -193,7 +193,7 @@ infrastructure/
 - **MongoDBConnection:** Async collection access (PyMongo)
 - **RedisConnection:** JSON serialization + TTL support
 - **TradingViewProvider:** ThreadPoolExecutor for blocking I/O
-- **TradingViewWebSocketProvider:** Binary frame parsing (~m~{len}~m~{json})
+- **TradingViewWebSocketProvider:** Binary frame parsing and quote streaming
 - **JobScheduler:** APScheduler (in-memory, non-persistent)
 
 ### Layer 4: Common (Cross-Cutting)
@@ -292,6 +292,56 @@ common/
 6. Route Response
    - Convert DTO to JSON
    - Return HTTP 200 with body
+```
+
+## Broker Abstraction Layer
+
+### IBroker Interface
+
+All brokers implement consistent contract:
+
+```python
+class IBroker(ABC):
+    async def submit_order(self, order: Order) -> ExecutionResult
+    async def cancel_order(self, order_id: str) -> bool
+    async def get_positions(self) -> List[Position]
+    async def get_orders(self) -> List[Order]
+```
+
+### PaperBroker (Simulation)
+
+In-memory execution without real trades:
+- Configurable slippage (% or fixed points)
+- Configurable fill delay (milliseconds)
+- Position tracking with entry/exit prices
+- P&L calculations
+- No external dependencies
+
+**Use case:** Backtesting, paper trading, development
+
+### OKXBroker (Live Trading)
+
+Live execution via OKX Exchange:
+- HMAC-SHA256 authentication
+- WebSocket connection to OKX
+- Exponential backoff reconnection (1s → 30s max, 10-failure circuit breaker)
+- State reconciliation on reconnect
+- Order submission → fill handling → position update
+- Real-time market data from OKX
+
+**Configuration:**
+- OKX_API_KEY: API key
+- OKX_SECRET_KEY: Secret key
+- OKX_PASSPHRASE: API passphrase
+
+**Reconnection Strategy:**
+```
+Initial failure → 1s delay
+2nd failure → 2s delay
+4th failure → 4s delay
+...
+Max 30s delay
+10 failures → 5-min pause (circuit breaker)
 ```
 
 ## Middleware Stack
@@ -419,6 +469,95 @@ QuoteService._on_quote_update
   └─> EventBus.publish(QuoteReceivedEvent(...))
 ```
 
+### Strategy Execution Pipeline
+
+```
+Market Data Event (BarCompletedEvent or QuoteReceivedEvent)
+  ↓
+StrategyEngine._on_market_event
+  ├─> Validate strategy is running
+  │
+  ├─> Call strategy.on_bar(bar) or on_tick(quote)
+  │   └─> Strategy generates signal: Buy/Sell/Hold
+  │
+  ├─> RiskCheckHandler.check_signal(signal)
+  │   ├─> Check position limits
+  │   ├─> Check account limits
+  │   └─> Return approved signal or None
+  │
+  ├─> On approved signal:
+  │   ├─> Build Order via OrderBuilder
+  │   ├─> Submit order via IBroker.submit_order(order)
+  │   └─> EventBus.publish(OrderSubmittedEvent(...))
+  │
+  └─> On fill event:
+      ├─> Update PositionTracker
+      ├─> Calculate P&L
+      └─> EventBus.publish(PositionUpdatedEvent(...))
+```
+
+### Backtesting Pipeline
+
+```
+POST /backtest/run
+  ↓
+BacktestRunCommand → Mediator
+  ↓
+BacktestHandler
+  ├─> Load strategy YAML config
+  │
+  ├─> Fetch historical bars from MongoDB
+  │   └─> Sorted by timestamp (ascending)
+  │
+  ├─> BacktestRunner.run()
+  │   ├─> Initialize PaperBroker
+  │   ├─> Initialize StrategyEngine
+  │   │
+  │   └─> For each bar (chronological):
+  │       ├─> Inject bar to StrategyEngine
+  │       ├─> Strategy.on_bar(bar) → signal
+  │       ├─> RiskCheckHandler.check_signal()
+  │       ├─> PaperBroker.submit_order()
+  │       ├─> Simulate fill with slippage/delay
+  │       ├─> Update PositionTracker
+  │       └─> Collect fill events
+  │
+  ├─> ResultCollector.finalize()
+  │   ├─> PerformanceCalculator.calculate()
+  │   │   ├─> Sharpe ratio
+  │   │   ├─> Sortino ratio
+  │   │   ├─> Max drawdown
+  │   │   ├─> Win rate
+  │   │   └─> Return metrics
+  │   │
+  │   └─> Store BacktestResult in MongoDB
+  │
+  └─> Return BacktestResultDTO
+```
+
+### Parameter Optimization Pipeline
+
+```
+POST /backtest/optimize
+  ↓
+OptimizationCommand → Mediator
+  ↓
+OptimizationHandler
+  ├─> GridOptimizer.optimize()
+  │   ├─> Generate parameter combinations
+  │   │
+  │   ├─> For each combo (parallel via multiprocessing):
+  │   │   ├─> Backtest with params
+  │   │   ├─> Collect performance metric (e.g., Sharpe)
+  │   │   └─> Return score
+  │   │
+  │   └─> Return best_params, best_score
+  │
+  ├─> Store OptimizationResult in MongoDB
+  │
+  └─> Return OptimizationResultDTO
+```
+
 ## Concurrency Model
 
 ### Event Loop (FastAPI/Uvicorn)
@@ -525,6 +664,16 @@ async with asynccontextmanager(app):
 - **Reconnection:** Exponential backoff (1s → 60s max)
 - **Re-subscription:** Automatic after reconnect
 - **Heartbeat:** Ping/pong handling
+
+### OKX WebSocket
+
+- **Protocol:** JSON messages (native WebSocket)
+- **Endpoint:** wss://ws.okx.com:8443/ws/v5/public (public), /private (authenticated)
+- **Authentication:** HMAC-SHA256 signature (timestamp + body)
+- **Reconnection:** Exponential backoff (1s → 30s max, 10-failure circuit breaker)
+- **Heartbeat:** Server pings every 30s, client must pong
+- **Subscriptions:** Position updates, order updates, trade fills
+- **State Sync:** On reconnect, fetch current orders/positions from REST API
 
 ### MongoDB
 

@@ -1,25 +1,31 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-02-01 | **Coverage:** 180 files, 12,420 LOC
 
 ## Architecture Patterns
 
 ### 1. Vertical Slice Architecture
 
-Each feature is self-contained with its own vertical slice. No shared services between slices except via infrastructure singletons.
+Each feature (market_data, backtesting, strategy, trading, risk) is self-contained with all layers in one directory. No shared services between slices except via infrastructure singletons.
 
 ```
 features/
-└── market_data/
-    ├── api/              # FastAPI routes (routes.py, quote_routes.py)
-    ├── services/         # Business logic (DataSyncService, QuoteService, QuoteAggregator)
-    ├── repositories/     # Data access (OHLCVRepository, SymbolRepository)
-    ├── models/           # Pydantic models & DTOs
-    ├── providers/        # External integrations (TradingViewProvider, TradingViewWebSocketProvider)
-    └── jobs/             # Background job definitions (sync_jobs.py)
+├── market_data/         (2,116 LOC, 31 files)
+├── backtesting/         (2,259 LOC, 27 files)
+├── strategy/            (1,236 LOC, 18 files)
+├── trading/             (782 LOC, 12 files)
+└── risk/                (163 LOC, 5 files)
+
+Each slice contains:
+├── api/                 # FastAPI routes
+├── handlers/            # CQRS handlers
+├── models/              # Pydantic DTOs
+├── services/            # Business logic (optional)
+├── repositories/        # Data access (optional)
+└── jobs/                # Background tasks (optional)
 ```
 
-**Rationale:** Clear separation of concerns, easy to add new features without affecting existing code, each slice owns its API contract and data model.
+**Rationale:** Tight cohesion within feature, loose coupling between features. Easy to add/remove features without cascading changes. Each slice owns API contracts and data models.
 
 ### 2. Singleton Infrastructure (Class-Method Pattern)
 
@@ -127,6 +133,121 @@ class TradingViewProvider:
 ```
 
 **Rationale:** Isolates blocking I/O from async event loop, clean error handling, easy to mock for testing.
+
+### 6. CQRS Handler Pattern
+
+Separate request handlers for commands (mutate state) and queries (read-only). All handlers extend `Handler[TRequest, TResponse]` base class.
+
+```python
+from src.common.mediator import Handler
+
+# Command Handler (mutates state)
+class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
+    def __init__(self, provider: IDataProvider):
+        self.provider = provider
+
+    async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
+        # 1. Fetch from infrastructure
+        bars = await self.provider.fetch_ohlcv(
+            cmd.symbol, cmd.exchange, cmd.interval, cmd.n_bars
+        )
+
+        # 2. Validate via domain
+        aggregate = OHLCVAggregate(bars)
+
+        # 3. Persist via infrastructure
+        collection = Database.get_collection("ohlcv")
+        await collection.bulk_write([...])
+
+        # 4. Publish domain events
+        await EventBus.publish(HistoricalDataSyncedEvent(...))
+
+        # 5. Return DTO (never return entities)
+        return SyncResultDTO(bars_synced=len(bars), status="completed")
+
+# Query Handler (read-only)
+class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
+    async def handle(self, query: GetBarsQuery) -> BarsDTO:
+        cache_key = f"ohlcv:{query.symbol}:{query.interval}"
+
+        # 1. Check cache first
+        cached = await Cache.get(cache_key)
+        if cached:
+            return cached
+
+        # 2. Query database
+        collection = Database.get_collection("ohlcv")
+        bars = await collection.find({
+            "symbol": query.symbol,
+            "interval": query.interval
+        }).to_list(query.limit)
+
+        # 3. Cache result (300s TTL)
+        result = BarsDTO(bars=bars, count=len(bars))
+        await Cache.set(cache_key, result, ttl=300)
+
+        # 4. Return DTO
+        return result
+```
+
+**Handler Responsibilities (5-step pattern):**
+1. Receive Command/Query from Mediator
+2. Fetch data from Infrastructure (Database, Cache, Providers)
+3. Execute domain logic via Domain layer (validation, calculations)
+4. Persist results via Infrastructure (Database writes, Cache invalidation)
+5. Publish DomainEvents to EventBus (for subscribers to react)
+6. Return DTO (never return domain entities)
+
+**Key Rules:**
+- Handlers are stateless, instantiated per-request
+- Constructor receives dependencies (injected by route or factory)
+- `handle()` must be idempotent if possible (for retries)
+- Return DTOs, not domain entities
+- Publish domain events for all state changes
+
+### 7. Strategy Implementation Pattern
+
+Implement IStrategy interface for custom trading strategies:
+
+```python
+from src.domain.strategy.base import IStrategy
+
+class MACrossoverStrategy(IStrategy):
+    def __init__(self, fast_period: int = 10, slow_period: int = 20):
+        self.fast_period = fast_period
+        self.slow_period = slow_period
+        self.fast_ma = None
+        self.slow_ma = None
+
+    async def on_bar(self, bar: OHLCVBar) -> Optional[StrategySignal]:
+        """Called on each new bar."""
+        # Update moving averages
+        self.fast_ma = calculate_ma(self.recent_bars, self.fast_period)
+        self.slow_ma = calculate_ma(self.recent_bars, self.slow_period)
+
+        # Generate signal
+        if self.fast_ma > self.slow_ma and self.prev_fast_ma <= self.prev_slow_ma:
+            return StrategySignal(action="buy", symbol=bar.symbol, quantity=100)
+        elif self.fast_ma < self.slow_ma and self.prev_fast_ma >= self.prev_slow_ma:
+            return StrategySignal(action="sell", symbol=bar.symbol, quantity=100)
+
+        return None  # No signal
+
+    async def on_tick(self, quote: QuoteTick) -> Optional[StrategySignal]:
+        """Called on each tick (optional)."""
+        return None
+
+    async def on_fill(self, fill: Fill) -> None:
+        """Called when order is filled (optional)."""
+        pass
+```
+
+**Strategy guidelines:**
+- Implement only methods you need (on_bar is mandatory)
+- Return StrategySignal or None
+- Keep logic pure (use domain layer for calculations)
+- Store state as instance variables
+- No direct broker/database access (StrategyEngine manages execution)
 
 ## Code Organization Guidelines
 
@@ -270,7 +391,7 @@ result: Dict[str, Union[int, str]]
 ```
 
 **Tools:**
-- `mypy src/` - Type checking (catches type errors at development time)
+- `pyright src/` - Type checking (catches type errors at development time)
 - `ruff check .` - Linting (includes type annotation checks)
 
 ## Error Handling
@@ -412,11 +533,17 @@ ruff check . --fix        # Auto-fix issues
 ruff format .             # Auto-format code
 ```
 
-### Type Checking (mypy)
+### Type Checking (Pyright)
+
+We use **Pyright** (via Pylance in VSCode) instead of mypy:
+- **3-5x faster** than mypy for large codebases
+- **Native VSCode integration** via Pylance extension
+- **Better type inference** for complex patterns
+- **Pydantic v2 native support** (no plugin needed)
 
 ```bash
-mypy src/                 # Type check entire source
-mypy src/features/market_data/services/  # Check specific module
+pyright src/                 # Type check entire source
+pyright src/features/market_data/services/  # Check specific module
 ```
 
 ## Performance Considerations
@@ -538,7 +665,7 @@ Before committing:
 - [ ] All type hints present on public APIs
 - [ ] No syntax errors (ruff check passes)
 - [ ] Code formatted (ruff format run)
-- [ ] Type checking passes (mypy)
+- [ ] Type checking passes (pyright)
 - [ ] Tests pass (pytest)
 - [ ] Test coverage ≥80%
 - [ ] Comments only for non-obvious logic

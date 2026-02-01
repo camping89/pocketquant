@@ -41,34 +41,31 @@ just start
 - **Historical Data**: Pull OHLCV data from TradingView (up to 5000 bars)
 - **Real-time Quotes**: WebSocket connection for live price updates
 - **Auto-Aggregation**: Real-time ticks aggregated into OHLCV bars (1m to 1M)
+- **Strategy Engine**: Load and run trading strategies with broker abstraction
+- **Backtesting**: Full backtest engine with historical replay and parameter optimization
+- **Paper Trading**: Simulate trades with PaperBroker (slippage, fill delays)
+- **Live Trading**: OKX WebSocket integration with order/position management
 - **MongoDB Storage**: Efficient time-series data persistence
 - **Redis Cache**: High-performance caching
 - **Background Jobs**: Scheduled data sync (6-hourly + market hours)
 - **Structured Logging**: JSON logs for Datadog, Splunk, ELK, etc.
 
-## Architecture
+## Architecture (DDD + CQRS + Vertical Slice)
 
-Vertical Slice Architecture with shared infrastructure:
+**12,420 LOC across 180 Python files:**
 
 ```
 src/
-├── common/              # Shared infrastructure (singletons)
-│   ├── database/        # MongoDB (Motor async)
-│   ├── cache/           # Redis caching
-│   ├── logging/         # Structured JSON logging
-│   └── jobs/            # APScheduler wrapper
-│
-├── features/            # Feature slices
-│   └── market_data/     # Market data feature
-│       ├── api/         # FastAPI routes
-│       ├── services/    # Business logic
-│       ├── repositories/ # Data access
-│       ├── models/      # Pydantic models
-│       ├── providers/   # TradingView integrations
-│       └── jobs/        # Background sync
-│
-├── main.py              # FastAPI + lifespan
-└── config.py            # Settings
+├── common/              (700 LOC)   - Mediator, EventBus, middleware, singletons
+├── domain/              (1,674 LOC) - Pure business logic (zero I/O)
+├── infrastructure/      (3,127 LOC) - Brokers, persistence, providers, scheduling
+└── features/            (6,561 LOC) - Vertical slices: market_data, backtesting,
+    │                                  strategy, trading, risk
+    ├── backtesting/     (2,259 LOC) - BacktestRunner, GridOptimizer
+    ├── market_data/     (2,116 LOC) - BarManager, sync, quotes
+    ├── strategy/        (1,236 LOC) - StrategyEngine, IStrategy interface
+    ├── trading/         (782 LOC)   - OrderManager, PositionTracker
+    └── risk/            (163 LOC)   - RiskCheckHandler
 ```
 
 ## API Examples
@@ -76,21 +73,26 @@ src/
 > Adjust port per your `.env` config (default: 8765)
 
 ```bash
-# Sync historical data
+# Market Data - Sync historical data
 curl -X POST http://localhost:8765/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
-  -d '{"symbol": "AAPL", "exchange": "NASDAQ", "interval": "1d", "n_bars": 5000}'
+  -d '{"symbol": "AAPL", "exchange": "NASDAQ", "interval": "1d", "n_bars": 500}'
 
-# Start real-time quotes
+# Real-time Quotes - Start WebSocket stream
 curl -X POST http://localhost:8765/api/v1/quotes/start
 
-# Subscribe to symbol
-curl -X POST http://localhost:8765/api/v1/quotes/subscribe \
+# Backtesting - Run backtest
+curl -X POST http://localhost:8765/api/v1/backtest/run \
   -H "Content-Type: application/json" \
-  -d '{"symbol": "AAPL", "exchange": "NASDAQ"}'
+  -d '{"strategy_name": "ma_crossover", "symbol": "AAPL", "start_date": "2024-01-01", "end_date": "2025-01-01"}'
 
-# Get latest quote
-curl http://localhost:8765/api/v1/quotes/latest/NASDAQ/AAPL
+# Strategy - Load and start strategy
+curl -X POST http://localhost:8765/api/v1/strategies/load \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ma_crossover", "config_path": "strategies/ma_crossover.yaml"}'
+
+# Trading - Get open orders
+curl http://localhost:8765/api/v1/orders
 
 # Query historical data
 curl "http://localhost:8765/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
