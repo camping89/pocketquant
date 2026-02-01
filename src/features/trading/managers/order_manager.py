@@ -5,7 +5,7 @@ import asyncio
 import structlog
 
 from src.common.messaging import EventBus
-from src.domain.order import OrderAggregate, OrderFilled, OrderStatus
+from src.domain.order import OrderAggregate, OrderFilledEvent, OrderStatus
 from src.features.trading.repositories import OrderRepository
 from src.infrastructure.brokers import IBroker, OrderResult
 
@@ -66,7 +66,7 @@ class OrderManager:
 
                         # Publish fill event
                         await self._event_bus.publish(
-                            OrderFilled(
+                            OrderFilledEvent(
                                 order_id=order.id,
                                 strategy_id=order.strategy_id,
                                 symbol=order.symbol,
@@ -193,7 +193,7 @@ class OrderManager:
                 self._pending.pop(result.order_id, None)
 
                 await self._event_bus.publish(
-                    OrderFilled(
+                    OrderFilledEvent(
                         order_id=order.id,
                         strategy_id=order.strategy_id,
                         symbol=order.symbol,

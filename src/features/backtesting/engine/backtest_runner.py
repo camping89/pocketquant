@@ -11,7 +11,6 @@ from src.common.messaging import EventBus
 from src.common.time.simulation import clear_simulation_time
 from src.features.backtesting.engine.historical_replay_engine import (
     HistoricalReplayEngine,
-    ReplayStats,
 )
 from src.features.backtesting.metrics.result_collector import BacktestResultCollector
 from src.features.backtesting.models.backtest_config import BacktestConfig

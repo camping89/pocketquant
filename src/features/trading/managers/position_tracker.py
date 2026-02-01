@@ -5,8 +5,8 @@ import asyncio
 import structlog
 
 from src.common.messaging import EventBus
-from src.domain.order import OrderFilled, OrderSide
-from src.domain.position import PositionAggregate, PositionOpened, PositionSide
+from src.domain.order import OrderFilledEvent, OrderSide
+from src.domain.position import PositionAggregate, PositionOpenedEvent, PositionSide
 from src.features.trading.repositories import PositionRepository
 
 logger = structlog.get_logger(__name__)
@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 class PositionTracker:
     """Tracks positions per strategy with P&L calculation.
 
-    Subscribes to OrderFilled events to update positions automatically.
+    Subscribes to OrderFilledEvent events to update positions automatically.
     """
 
     def __init__(self, event_bus: EventBus) -> None:
@@ -26,7 +26,7 @@ class PositionTracker:
     async def start(self) -> None:
         """Subscribe to order events and load open positions."""
         await self.load_open_positions()
-        self._event_bus.subscribe(OrderFilled, self._on_order_filled)
+        self._event_bus.subscribe(OrderFilledEvent, self._on_order_filled)
         logger.info("position_tracker_started")
 
     async def load_open_positions(self) -> None:
@@ -41,7 +41,7 @@ class PositionTracker:
         """Unsubscribe from events."""
         logger.info("position_tracker_stopped")
 
-    async def _on_order_filled(self, event: OrderFilled) -> None:
+    async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Handle order fill by updating position."""
         async with self._lock:
             position = self._positions.get(event.strategy_id)
@@ -69,7 +69,7 @@ class PositionTracker:
                 await PositionRepository.save(position)
 
                 await self._event_bus.publish(
-                    PositionOpened(
+                    PositionOpenedEvent(
                         position_id=position.id,
                         strategy_id=event.strategy_id,
                         symbol=event.symbol,
