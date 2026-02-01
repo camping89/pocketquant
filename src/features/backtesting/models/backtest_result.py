@@ -1,5 +1,7 @@
 """Backtest result models - metrics, trades, and run results."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -32,7 +34,7 @@ class TradeRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TradeRecord":
+    def from_dict(cls, data: dict[str, Any]) -> TradeRecord:
         """Create from dictionary."""
         return cls(
             order_id=data["order_id"],
@@ -62,7 +64,7 @@ class EquityPoint:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "EquityPoint":
+    def from_dict(cls, data: dict[str, Any]) -> EquityPoint:
         return cls(
             timestamp=data["timestamp"],
             equity=data["equity"],
@@ -112,7 +114,7 @@ class BacktestMetrics:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BacktestMetrics":
+    def from_dict(cls, data: dict[str, Any]) -> BacktestMetrics:
         duration_sec = data.get("avg_trade_duration_seconds")
         return cls(
             total_return=data["total_return"],
@@ -132,7 +134,7 @@ class BacktestMetrics:
         )
 
     @classmethod
-    def empty(cls) -> "BacktestMetrics":
+    def empty(cls) -> BacktestMetrics:
         """Return empty metrics for failed or no-trade backtests."""
         return cls(
             total_return=0.0,
@@ -185,7 +187,7 @@ class BacktestResult:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BacktestResult":
+    def from_dict(cls, data: dict[str, Any]) -> BacktestResult:
         """Create from MongoDB document."""
         return cls(
             id=data["_id"],

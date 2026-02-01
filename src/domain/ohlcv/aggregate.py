@@ -1,5 +1,7 @@
 """OHLCV aggregate root."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -27,7 +29,7 @@ class OHLCVAggregate(BaseModel):
         return hash(self.id)
 
     @classmethod
-    def create(cls, symbol: str, exchange: str) -> "OHLCVAggregate":
+    def create(cls, symbol: str, exchange: str) -> OHLCVAggregate:
         """Factory method to create a new aggregate."""
         return cls(symbol=symbol.upper(), exchange=exchange.upper())
 

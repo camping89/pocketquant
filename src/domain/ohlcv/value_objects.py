@@ -1,5 +1,7 @@
 """OHLCV value objects."""
 
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -17,7 +19,7 @@ class OHLCV(BaseModel):
     volume: float
 
     @model_validator(mode="after")
-    def validate_ohlcv(self) -> "OHLCV":
+    def validate_ohlcv(self) -> OHLCV:
         if self.high < self.low:
             raise ValueError("High must be >= Low")
         if self.open < self.low or self.open > self.high:
@@ -38,7 +40,7 @@ class BarRange(BaseModel):
     end: datetime
 
     @model_validator(mode="after")
-    def validate_range(self) -> "BarRange":
+    def validate_range(self) -> BarRange:
         if self.end <= self.start:
             raise ValueError("End must be after start")
         return self

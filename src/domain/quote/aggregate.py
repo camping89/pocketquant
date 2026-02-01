@@ -1,5 +1,7 @@
 """Quote aggregate root."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -33,7 +35,7 @@ class QuoteAggregate(BaseModel):
         return hash(self.id)
 
     @classmethod
-    def create(cls, symbol: str, exchange: str) -> "QuoteAggregate":
+    def create(cls, symbol: str, exchange: str) -> QuoteAggregate:
         """Factory method to create a new quote aggregate."""
         return cls(symbol=symbol.upper(), exchange=exchange.upper())
 

@@ -1,5 +1,7 @@
 """Shared value objects for the domain layer."""
 
+from __future__ import annotations
+
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -49,7 +51,7 @@ class Symbol(BaseModel):
         return f"{self.exchange}:{self.code}"
 
     @classmethod
-    def from_string(cls, symbol_key: str) -> "Symbol":
+    def from_string(cls, symbol_key: str) -> Symbol:
         """Parse 'EXCHANGE:SYMBOL' format."""
         if ":" not in symbol_key:
             raise ValueError(f"Invalid symbol format: {symbol_key}")

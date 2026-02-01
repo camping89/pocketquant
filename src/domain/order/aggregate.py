@@ -1,5 +1,7 @@
 """Order aggregate with state machine for order lifecycle."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -54,7 +56,7 @@ class OrderAggregate(BaseModel):
         quantity: float,
         price: float | None = None,
         stop_price: float | None = None,
-    ) -> "OrderAggregate":
+    ) -> OrderAggregate:
         """Factory method to create a new order."""
         if quantity <= 0:
             raise ValueError("Quantity must be positive")
@@ -75,7 +77,7 @@ class OrderAggregate(BaseModel):
             stop_price=stop_price,
         )
 
-    def submit(self, broker_order_id: str) -> "OrderAggregate":
+    def submit(self, broker_order_id: str) -> OrderAggregate:
         """Transition to SUBMITTED state."""
         self._validate_transition(OrderStatus.SUBMITTED)
         self.status = OrderStatus.SUBMITTED
@@ -94,7 +96,7 @@ class OrderAggregate(BaseModel):
         )
         return self
 
-    def partial_fill(self, quantity: float, price: float) -> "OrderAggregate":
+    def partial_fill(self, quantity: float, price: float) -> OrderAggregate:
         """Record a partial fill."""
         self._validate_transition(OrderStatus.PARTIALLY_FILLED)
         if quantity <= 0:
@@ -126,7 +128,7 @@ class OrderAggregate(BaseModel):
         )
         return self
 
-    def fill(self, quantity: float, price: float) -> "OrderAggregate":
+    def fill(self, quantity: float, price: float) -> OrderAggregate:
         """Fully fill the order."""
         if self.status == OrderStatus.PARTIALLY_FILLED:
             # Complete a partial fill
@@ -163,7 +165,7 @@ class OrderAggregate(BaseModel):
         )
         return self
 
-    def cancel(self, reason: str = "") -> "OrderAggregate":
+    def cancel(self, reason: str = "") -> OrderAggregate:
         """Cancel the order."""
         if self.status.is_terminal:
             raise InvalidOrderTransitionError(
@@ -180,7 +182,7 @@ class OrderAggregate(BaseModel):
         )
         return self
 
-    def reject(self, reason: str) -> "OrderAggregate":
+    def reject(self, reason: str) -> OrderAggregate:
         """Reject the order (broker rejection)."""
         self._validate_transition(OrderStatus.REJECTED)
         self.status = OrderStatus.REJECTED

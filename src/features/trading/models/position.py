@@ -1,5 +1,7 @@
 """Position document model for MongoDB."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -25,7 +27,7 @@ class PositionDocument(BaseModel):
     model_config = {"populate_by_name": True}
 
     @classmethod
-    def from_aggregate(cls, pos: PositionAggregate) -> "PositionDocument":
+    def from_aggregate(cls, pos: PositionAggregate) -> PositionDocument:
         return cls(
             _id=pos.id,
             strategy_id=pos.strategy_id,
