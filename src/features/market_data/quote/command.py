@@ -1,33 +1,29 @@
 """Quote commands."""
 
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class SubscribeCommand:
+class SubscribeCommand(BaseModel):
     """Subscribe to real-time quotes for a symbol."""
 
-    symbol: str
-    exchange: str
+    symbol: str = Field(..., description="Trading symbol")
+    exchange: str = Field(..., description="Exchange name")
 
 
-@dataclass
-class UnsubscribeCommand:
+class UnsubscribeCommand(BaseModel):
     """Unsubscribe from real-time quotes for a symbol."""
 
-    symbol: str
-    exchange: str
+    symbol: str = Field(..., description="Trading symbol")
+    exchange: str = Field(..., description="Exchange name")
 
 
-@dataclass
-class StartQuoteFeedCommand:
+class StartQuoteFeedCommand(BaseModel):
     """Start the quote WebSocket feed."""
 
     pass
 
 
-@dataclass
-class StopQuoteFeedCommand:
+class StopQuoteFeedCommand(BaseModel):
     """Stop the quote WebSocket feed."""
 
     pass

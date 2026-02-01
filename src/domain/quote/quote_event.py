@@ -1,12 +1,10 @@
 """Quote domain events."""
 
-from dataclasses import dataclass
 from datetime import datetime
 
 from src.domain.shared.domain_event import DomainEvent
 
 
-@dataclass(frozen=True)
 class QuoteReceivedEvent(DomainEvent):
     """Raised when a new quote tick is received."""
 
@@ -17,7 +15,6 @@ class QuoteReceivedEvent(DomainEvent):
     timestamp: datetime | None = None
 
 
-@dataclass(frozen=True)
 class QuoteUpdatedEvent(DomainEvent):
     """Raised when quote data is updated in cache."""
 

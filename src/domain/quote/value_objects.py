@@ -1,26 +1,32 @@
 """Quote value objects."""
 
-from dataclasses import dataclass
 from datetime import datetime
 
+from pydantic import BaseModel, ConfigDict, field_validator
 
-@dataclass(frozen=True)
-class Price:
+
+class Price(BaseModel):
     """Immutable price value."""
+
+    model_config = ConfigDict(frozen=True)
 
     value: float
 
-    def __post_init__(self) -> None:
-        if self.value < 0:
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, v: float) -> float:
+        if v < 0:
             raise ValueError("Price must be non-negative")
+        return v
 
     def __float__(self) -> float:
         return self.value
 
 
-@dataclass(frozen=True)
-class QuoteTick:
+class QuoteTick(BaseModel):
     """Immutable tick data from real-time feed."""
+
+    model_config = ConfigDict(frozen=True)
 
     symbol: str
     exchange: str
@@ -30,11 +36,19 @@ class QuoteTick:
     bid: float | None = None
     ask: float | None = None
 
-    def __post_init__(self) -> None:
-        if self.price < 0:
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, v: float) -> float:
+        if v < 0:
             raise ValueError("Price must be non-negative")
-        if self.volume is not None and self.volume < 0:
+        return v
+
+    @field_validator("volume")
+    @classmethod
+    def validate_volume(cls, v: float | None) -> float | None:
+        if v is not None and v < 0:
             raise ValueError("Volume must be non-negative")
+        return v
 
     @property
     def symbol_key(self) -> str:

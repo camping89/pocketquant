@@ -1,12 +1,14 @@
 """OHLCV value objects."""
 
-from dataclasses import dataclass
 from datetime import datetime
 
+from pydantic import BaseModel, ConfigDict, model_validator
 
-@dataclass(frozen=True)
-class OHLCV:
+
+class OHLCV(BaseModel):
     """Immutable OHLCV price bar data."""
+
+    model_config = ConfigDict(frozen=True)
 
     open: float
     high: float
@@ -14,7 +16,8 @@ class OHLCV:
     close: float
     volume: float
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def validate_ohlcv(self) -> "OHLCV":
         if self.high < self.low:
             raise ValueError("High must be >= Low")
         if self.open < self.low or self.open > self.high:
@@ -23,18 +26,22 @@ class OHLCV:
             raise ValueError("Close must be between Low and High")
         if self.volume < 0:
             raise ValueError("Volume must be non-negative")
+        return self
 
 
-@dataclass(frozen=True)
-class BarRange:
+class BarRange(BaseModel):
     """Time range for a bar."""
+
+    model_config = ConfigDict(frozen=True)
 
     start: datetime
     end: datetime
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def validate_range(self) -> "BarRange":
         if self.end <= self.start:
             raise ValueError("End must be after start")
+        return self
 
     def contains(self, timestamp: datetime) -> bool:
         """Check if timestamp falls within this bar range."""

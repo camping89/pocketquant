@@ -1,12 +1,9 @@
 """Order domain events."""
 
-from dataclasses import dataclass
-
 from src.domain.order.value_objects import OrderSide
 from src.domain.shared.domain_event import DomainEvent
 
 
-@dataclass(frozen=True)
 class OrderSubmittedEvent(DomainEvent):
     """Event raised when an order is submitted to broker."""
 
@@ -19,7 +16,6 @@ class OrderSubmittedEvent(DomainEvent):
     price: float | None = None
 
 
-@dataclass(frozen=True)
 class OrderFilledEvent(DomainEvent):
     """Event raised when an order is fully filled."""
 
@@ -32,7 +28,6 @@ class OrderFilledEvent(DomainEvent):
     filled_price: float = 0.0
 
 
-@dataclass(frozen=True)
 class OrderPartiallyFilledEvent(DomainEvent):
     """Event raised when an order is partially filled."""
 
@@ -43,7 +38,6 @@ class OrderPartiallyFilledEvent(DomainEvent):
     remaining_quantity: float = 0.0
 
 
-@dataclass(frozen=True)
 class OrderCancelledEvent(DomainEvent):
     """Event raised when an order is cancelled."""
 
@@ -52,7 +46,6 @@ class OrderCancelledEvent(DomainEvent):
     reason: str = ""
 
 
-@dataclass(frozen=True)
 class OrderRejectedEvent(DomainEvent):
     """Event raised when an order is rejected by broker."""
 

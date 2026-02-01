@@ -1,7 +1,8 @@
 """Position value objects - PnL and PositionSide."""
 
-from dataclasses import dataclass
 from enum import Enum
+
+from pydantic import BaseModel, ConfigDict
 
 
 class PositionSide(Enum):
@@ -11,9 +12,10 @@ class PositionSide(Enum):
     SHORT = "short"
 
 
-@dataclass(frozen=True)
-class PnL:
+class PnL(BaseModel):
     """Profit and Loss calculation result."""
+
+    model_config = ConfigDict(frozen=True)
 
     unrealized: float
     realized: float

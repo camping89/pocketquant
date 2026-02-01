@@ -18,23 +18,23 @@ from src.domain.ohlcv import OHLCVAggregate
 from src.domain.shared.value_objects import Interval as DomainInterval
 from src.features.market_data.models.ohlcv import OHLCV, Interval, OHLCVCreate
 from src.features.market_data.sync.command import BulkSyncCommand, SyncSymbolCommand
-from src.features.market_data.sync.dto import SyncResult
+from src.features.market_data.sync.dto import SyncResponse
 from src.infrastructure.tradingview import TradingViewProvider
 
 logger = get_logger(__name__)
 
 
-class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
+class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     """Handle syncing a single symbol."""
 
     def __init__(self, provider: TradingViewProvider, event_bus: EventBus):
         self.provider = provider
         self.event_bus = event_bus
 
-    async def handle(self, request: SyncSymbolCommand) -> SyncResult:
+    async def handle(self, request: SyncSymbolCommand) -> SyncResponse:
         symbol = request.symbol.upper()
         exchange = request.exchange.upper()
-        interval = Interval(request.interval)
+        interval = request.interval  # Already Interval enum from Pydantic
 
         logger.info(
             "market_data.sync.started",
@@ -61,7 +61,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
                     "error",
                     error_message="No data returned from provider",
                 )
-                return SyncResult(
+                return SyncResponse(
                     symbol=symbol,
                     exchange=exchange,
                     interval=interval.value,
@@ -96,7 +96,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
             )
             await self.event_bus.publish_all(aggregate.get_uncommitted_events())
 
-            result = SyncResult(
+            result = SyncResponse(
                 symbol=symbol,
                 exchange=exchange,
                 interval=interval.value,
@@ -128,7 +128,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
                 symbol, exchange, interval, "error", error_message=error_msg
             )
 
-            return SyncResult(
+            return SyncResponse(
                 symbol=symbol,
                 exchange=exchange,
                 interval=interval.value,
@@ -256,13 +256,13 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResult]):
         )
 
 
-class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResult]]):
+class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ignore[type-arg]
     """Handle syncing multiple symbols."""
 
     def __init__(self, sync_handler: SyncSymbolHandler):
         self.sync_handler = sync_handler
 
-    async def handle(self, request: BulkSyncCommand) -> list[SyncResult]:
+    async def handle(self, request: BulkSyncCommand) -> list[SyncResponse]:
         results = []
         for sym in request.symbols:
             sync_cmd = SyncSymbolCommand(

@@ -1,12 +1,10 @@
 """OHLCV domain events."""
 
-from dataclasses import dataclass
 from datetime import datetime
 
 from src.domain.shared.domain_event import DomainEvent
 
 
-@dataclass(frozen=True)
 class HistoricalDataSyncedEvent(DomainEvent):
     """Raised when historical OHLCV data is synchronized from provider."""
 
@@ -18,7 +16,6 @@ class HistoricalDataSyncedEvent(DomainEvent):
     last_bar_at: datetime | None = None
 
 
-@dataclass(frozen=True)
 class BarCompletedEvent(DomainEvent):
     """Raised when a real-time bar is completed."""
 

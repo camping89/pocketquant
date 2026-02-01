@@ -1,22 +1,22 @@
 """OHLCV aggregate root."""
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID, uuid4
+
+from pydantic import BaseModel, Field, PrivateAttr
 
 from src.domain.ohlcv.ohlcv_event import BarCompletedEvent, HistoricalDataSyncedEvent
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.shared.value_objects import Interval
 
 
-@dataclass(eq=False)
-class OHLCVAggregate:
+class OHLCVAggregate(BaseModel):
     """Aggregate root for OHLCV data operations."""
 
-    id: UUID = field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)
     symbol: str = ""
     exchange: str = ""
-    _events: list[DomainEvent] = field(default_factory=list)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, OHLCVAggregate):
@@ -27,7 +27,7 @@ class OHLCVAggregate:
         return hash(self.id)
 
     @classmethod
-    def create(cls, symbol: str, exchange: str) -> OHLCVAggregate:
+    def create(cls, symbol: str, exchange: str) -> "OHLCVAggregate":
         """Factory method to create a new aggregate."""
         return cls(symbol=symbol.upper(), exchange=exchange.upper())
 

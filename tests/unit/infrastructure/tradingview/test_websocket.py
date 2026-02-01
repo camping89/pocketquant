@@ -88,11 +88,10 @@ class TestHelperFunctions:
         assert len(messages) == 0
 
     def test_parse_messages_skip_invalid_json(self):
-        """Invalid JSON should be skipped silently."""
+        """Invalid JSON raises ValueError (protocol issues should not be ignored)."""
         raw = "~m~10~m~not valid json"
-        messages = _parse_messages(raw)
-
-        assert len(messages) == 0
+        with pytest.raises(ValueError, match="Invalid WebSocket message JSON"):
+            _parse_messages(raw)
 
     def test_parse_messages_empty(self):
         """Empty string returns empty list."""
@@ -320,11 +319,11 @@ class TestTradingViewWebSocketProvider:
 
     @pytest.mark.asyncio
     async def test_handle_quote_update_callback_exception_logged(self):
-        """Callback exceptions should be caught and logged."""
+        """Callback exceptions are logged and re-raised (critical for strategies)."""
         provider = TradingViewWebSocketProvider()
         provider._session_id = "test_session"
 
-        def bad_callback(data):
+        def bad_callback(_data):
             raise ValueError("Test error")
 
         provider._subscriptions["NASDAQ:AAPL"] = bad_callback
@@ -334,8 +333,9 @@ class TestTradingViewWebSocketProvider:
             {"n": "NASDAQ:AAPL", "v": {"lp": 100}},
         ]
 
-        # Should not raise
-        await provider._handle_quote_update(params)
+        # Should raise the callback exception (logged but re-raised)
+        with pytest.raises(ValueError, match="Test error"):
+            await provider._handle_quote_update(params)
 
     @pytest.mark.asyncio
     async def test_send_heartbeat(self):

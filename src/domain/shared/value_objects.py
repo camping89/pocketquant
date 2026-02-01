@@ -1,7 +1,8 @@
 """Shared value objects for the domain layer."""
 
-from dataclasses import dataclass
 from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Interval(str, Enum):
@@ -22,24 +23,33 @@ class Interval(str, Enum):
     MONTH_1 = "1M"
 
 
-@dataclass(frozen=True)
-class Symbol:
+class Symbol(BaseModel):
     """Value object representing a tradeable symbol."""
+
+    model_config = ConfigDict(frozen=True)
 
     code: str
     exchange: str
 
-    def __post_init__(self) -> None:
-        if not self.code:
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        if not v:
             raise ValueError("Symbol code is required")
-        if not self.exchange:
+        return v
+
+    @field_validator("exchange")
+    @classmethod
+    def validate_exchange(cls, v: str) -> str:
+        if not v:
             raise ValueError("Exchange is required")
+        return v
 
     def __str__(self) -> str:
         return f"{self.exchange}:{self.code}"
 
     @classmethod
-    def from_string(cls, symbol_key: str) -> Symbol:
+    def from_string(cls, symbol_key: str) -> "Symbol":
         """Parse 'EXCHANGE:SYMBOL' format."""
         if ":" not in symbol_key:
             raise ValueError(f"Invalid symbol format: {symbol_key}")
