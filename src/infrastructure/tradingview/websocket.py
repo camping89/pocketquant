@@ -71,7 +71,7 @@ class TradingViewWebSocketProvider:
         self._auth_token = auth_token
         self._ws: ClientConnection | None = None
         self._session_id: str = ""
-        self._subscriptions: dict[str, Callable] = {}
+        self._subscriptions: dict[str, Callable[[dict[str, Any]], Any]] = {}
         self._running = False
         self._reconnect_delay = 1.0
         self._max_reconnect_delay = 60.0
@@ -119,7 +119,7 @@ class TradingViewWebSocketProvider:
         self,
         symbol: str,
         exchange: str,
-        callback: Callable[[dict[str, Any]], None],
+        callback: Callable[[dict[str, Any]], Any],
     ) -> str:
         if self._ws is None:
             raise RuntimeError("WebSocket not connected. Call connect() first.")
@@ -234,6 +234,9 @@ class TradingViewWebSocketProvider:
                         params = [self._session_id, symbol_key]
                         await self._send_message("quote_add_symbols", params)
 
+                if self._ws is None:
+                    continue
+
                 async for raw_data in self._ws:
                     if not self._running:
                         break
@@ -285,3 +288,8 @@ class TradingViewWebSocketProvider:
     @property
     def subscription_count(self) -> int:
         return len(self._subscriptions)
+
+    @property
+    def subscriptions(self) -> dict[str, Callable[[dict[str, Any]], Any]]:
+        """Get subscriptions dict (symbol_key -> callback)."""
+        return self._subscriptions

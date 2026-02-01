@@ -1,13 +1,12 @@
 """Paper broker implementation for simulated trading."""
 
 import asyncio
-from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.domain.order import OrderAggregate, OrderSide, OrderStatus
 from src.domain.position import PositionAggregate, PositionSide
-from src.infrastructure.brokers.interface import IBroker
+from src.infrastructure.brokers.interface import IBroker, OrderCallback
 from src.infrastructure.brokers.models import AccountBalance, OrderResult
 
 
@@ -36,7 +35,7 @@ class PaperBroker(IBroker):
 
         self._positions: dict[str, PositionAggregate] = {}
         self._orders: dict[str, OrderAggregate] = {}
-        self._order_callbacks: list[Callable[[OrderResult], None]] = []
+        self._order_callbacks: list[OrderCallback] = []
         self._lock = asyncio.Lock()
         self._connected = False
         # Current market prices for each symbol (used in backtesting)
@@ -49,6 +48,16 @@ class PaperBroker(IBroker):
     @property
     def is_connected(self) -> bool:
         return self._connected
+
+    @property
+    def slippage(self) -> float:
+        """Get current slippage percentage."""
+        return self._slippage
+
+    @slippage.setter
+    def slippage(self, value: float) -> None:
+        """Set slippage percentage."""
+        self._slippage = value
 
     async def connect(self) -> None:
         """Paper broker is always ready."""
@@ -121,9 +130,7 @@ class PaperBroker(IBroker):
                 unrealized_pnl=unrealized,
             )
 
-    async def subscribe_order_updates(
-        self, callback: Callable[[OrderResult], None]
-    ) -> None:
+    async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         """Add order update callback."""
         self._order_callbacks.append(callback)
 

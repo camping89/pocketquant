@@ -84,7 +84,7 @@ class BacktestRunner:
             self._broker.reset()
 
             # Configure broker slippage from config
-            self._broker._slippage = config.slippage_percent
+            self._broker.slippage = config.slippage_percent
 
             # Subscribe collector to broker fills
             await self._broker.subscribe_order_updates(collector.on_fill)

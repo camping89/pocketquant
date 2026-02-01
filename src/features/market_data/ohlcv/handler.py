@@ -11,25 +11,25 @@ from src.features.market_data.ohlcv.query import GetOHLCVQuery
 class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
     """Handle OHLCV data retrieval."""
 
-    async def handle(self, query: GetOHLCVQuery) -> list[dict]:
-        symbol = query.symbol.upper()
-        exchange = query.exchange.upper()
-        interval = Interval(query.interval)
+    async def handle(self, request: GetOHLCVQuery) -> list[dict]:
+        symbol = request.symbol.upper()
+        exchange = request.exchange.upper()
+        interval = Interval(request.interval)
 
         cache_key = CACHE_KEY_OHLCV.format(
-            symbol=symbol, exchange=exchange, interval=interval.value, limit=query.limit
+            symbol=symbol, exchange=exchange, interval=interval.value, limit=request.limit
         )
-        if query.start_date:
-            cache_key += f":from:{query.start_date.isoformat()}"
-        if query.end_date:
-            cache_key += f":to:{query.end_date.isoformat()}"
+        if request.start_date:
+            cache_key += f":from:{request.start_date.isoformat()}"
+        if request.end_date:
+            cache_key += f":to:{request.end_date.isoformat()}"
 
         cached = await Cache.get(cache_key)
         if cached:
             return cached
 
         bars = await self._get_bars(
-            symbol, exchange, interval, query.start_date, query.end_date, query.limit
+            symbol, exchange, interval, request.start_date, request.end_date, request.limit
         )
 
         result = [

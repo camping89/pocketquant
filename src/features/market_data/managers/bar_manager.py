@@ -86,6 +86,10 @@ class BarBuilder:
         if self.is_empty():
             return None
 
+        # All OHLC values are guaranteed non-None when not empty
+        if self.open is None or self.high is None or self.low is None or self.close is None:
+            return None
+
         return AggregatedBar(
             symbol=self.symbol,
             exchange=self.exchange,
@@ -197,6 +201,7 @@ class BarManager:
             return
 
         ohlcv = OHLCV(
+            _id=None,
             symbol=aggregated.symbol,
             exchange=aggregated.exchange,
             interval=Interval(aggregated.interval),
@@ -263,8 +268,8 @@ class BarManager:
         saved_count = 0
 
         async with self._lock:
-            for symbol_key, intervals in self._bars.items():
-                for interval, bar in intervals.items():
+            for _symbol_key, intervals in self._bars.items():
+                for _interval, bar in intervals.items():
                     if not bar.is_empty():
                         await self._save_completed_bar(bar)
                         saved_count += 1

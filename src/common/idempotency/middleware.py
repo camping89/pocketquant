@@ -1,5 +1,7 @@
 """Idempotency middleware with Redis-backed response caching."""
 
+from typing import Any
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -13,7 +15,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
     TTL = 86400  # 24 hours
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         if request.method not in ["POST", "PATCH"]:
             return await call_next(request)
 
@@ -33,8 +35,11 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response_body = b""
-        async for chunk in response.body_iterator:
-            response_body += chunk
+        # StreamingResponse has body_iterator attribute
+        body_iter = getattr(response, "body_iterator", None)
+        if body_iter is not None:
+            async for chunk in body_iter:
+                response_body += chunk
 
         await Cache.set(
             cache_key,

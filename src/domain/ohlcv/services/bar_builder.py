@@ -46,7 +46,7 @@ class BarBuilder:
 
     def add_tick(self, price: float, volume: float | None, timestamp: datetime) -> bool:
         """Add a tick to the bar. Returns False if tick is outside bar range."""
-        if timestamp < self.bar_start or timestamp >= self.bar_end:
+        if self.bar_end is None or timestamp < self.bar_start or timestamp >= self.bar_end:
             return False
 
         if self.open is None:
@@ -68,7 +68,7 @@ class BarBuilder:
 
     def is_complete(self, current_time: datetime) -> bool:
         """Check if the bar period has ended."""
-        return current_time >= self.bar_end
+        return self.bar_end is not None and current_time >= self.bar_end
 
     def is_empty(self) -> bool:
         """Check if no ticks have been added."""

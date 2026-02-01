@@ -52,10 +52,10 @@ class BulkSyncRequest(BaseModel):
     symbols: list[dict] = Field(
         ...,
         description="List of symbols with 'symbol' and 'exchange' keys",
-        example=[
+        examples=[[
             {"symbol": "AAPL", "exchange": "NASDAQ"},
             {"symbol": "BTCUSD", "exchange": "BINANCE"},
-        ],
+        ]],
     )
     interval: Interval = Field(default=Interval.DAY_1)
     n_bars: int = Field(default=LIMIT_TVDATAFEED_MAX_BARS, ge=1, le=LIMIT_TVDATAFEED_MAX_BARS)

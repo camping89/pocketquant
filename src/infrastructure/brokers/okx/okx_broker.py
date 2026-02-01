@@ -1,7 +1,6 @@
 """OKX broker implementation for live trading."""
 
 import asyncio
-from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,7 +8,7 @@ import structlog
 
 from src.domain.order import OrderAggregate, OrderStatus
 from src.domain.position import PositionAggregate
-from src.infrastructure.brokers.interface import IBroker
+from src.infrastructure.brokers.interface import IBroker, OrderCallback
 from src.infrastructure.brokers.models import AccountBalance, OrderResult
 from src.infrastructure.brokers.okx.okx_mapper import (
     map_okx_balance_to_domain,
@@ -53,7 +52,7 @@ class OKXBroker(IBroker):
         self._account_api: Any = None
         self._ws_client: OkxWebSocketClient | None = None
 
-        self._order_callbacks: list[Callable[[OrderResult], None]] = []
+        self._order_callbacks: list[OrderCallback] = []
         self._connected = False
         self._ws_task: asyncio.Task | None = None
 
@@ -70,6 +69,16 @@ class OKXBroker(IBroker):
     @property
     def is_connected(self) -> bool:
         return self._connected
+
+    @property
+    def trade_api(self) -> Any:
+        """Get OKX Trade API instance."""
+        return self._trade_api
+
+    @property
+    def seen_terminal_orders(self) -> set[str]:
+        """Get set of terminal order IDs for deduplication."""
+        return self._seen_terminal_orders
 
     async def connect(self) -> None:
         """Initialize OKX API clients."""
@@ -275,9 +284,7 @@ class OKXBroker(IBroker):
                 total_equity=0, available_balance=0, currency="USDT"
             )
 
-    async def subscribe_order_updates(
-        self, callback: Callable[[OrderResult], None]
-    ) -> None:
+    async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         """Subscribe to order updates via WebSocket."""
         self._order_callbacks.append(callback)
 

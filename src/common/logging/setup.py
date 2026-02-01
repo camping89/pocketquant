@@ -38,8 +38,8 @@ def setup_logging(settings: Settings) -> None:
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
-        add_correlation_id,
-        add_app_context,
+        add_correlation_id,  # type: ignore[list-item]
+        add_app_context,  # type: ignore[list-item]
     ]
 
     if settings.log_format == "json":

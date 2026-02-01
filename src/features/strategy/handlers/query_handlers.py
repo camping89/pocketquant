@@ -11,7 +11,7 @@ class GetStrategiesHandler(Handler[GetStrategiesQuery, list]):
     def __init__(self, engine: StrategyEngine) -> None:
         self._engine = engine
 
-    async def handle(self, query: GetStrategiesQuery) -> list:
+    async def handle(self, request: GetStrategiesQuery) -> list:
         """Get all loaded strategies."""
         return self._engine.get_strategies()
 
@@ -22,9 +22,9 @@ class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
     def __init__(self, engine: StrategyEngine) -> None:
         self._engine = engine
 
-    async def handle(self, query: GetStrategyQuery) -> dict | None:
+    async def handle(self, request: GetStrategyQuery) -> dict | None:
         """Get a specific strategy by ID."""
-        strategy = self._engine.get_strategy(query.strategy_id)
+        strategy = self._engine.get_strategy(request.strategy_id)
         if not strategy:
             return None
 
