@@ -1,5 +1,7 @@
 """Position aggregate for tracking open positions and P&L."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -44,7 +46,7 @@ class PositionAggregate(BaseModel):
         side: PositionSide,
         entry_price: float,
         quantity: float,
-    ) -> "PositionAggregate":
+    ) -> PositionAggregate:
         """Factory method to open a new position."""
         if quantity <= 0:
             raise ValueError("Quantity must be positive")
@@ -74,14 +76,14 @@ class PositionAggregate(BaseModel):
         )
         return position
 
-    def update_price(self, current_price: float) -> "PositionAggregate":
+    def update_price(self, current_price: float) -> PositionAggregate:
         """Update current market price for P&L calculation."""
         if current_price <= 0:
             raise ValueError("Price must be positive")
         self.current_price = current_price
         return self
 
-    def add_quantity(self, quantity: float, price: float) -> "PositionAggregate":
+    def add_quantity(self, quantity: float, price: float) -> PositionAggregate:
         """Add to position (scale in) with weighted average price."""
         if self.is_closed:
             raise ValueError("Cannot add to closed position")
@@ -107,7 +109,7 @@ class PositionAggregate(BaseModel):
         )
         return self
 
-    def reduce_quantity(self, quantity: float, price: float) -> "PositionAggregate":
+    def reduce_quantity(self, quantity: float, price: float) -> PositionAggregate:
         """Reduce position (scale out) and realize P&L."""
         if self.is_closed:
             raise ValueError("Cannot reduce closed position")
@@ -137,13 +139,13 @@ class PositionAggregate(BaseModel):
         )
         return self
 
-    def close(self, exit_price: float) -> "PositionAggregate":
+    def close(self, exit_price: float) -> PositionAggregate:
         """Fully close the position at exit price."""
         if self.is_closed:
             raise ValueError("Position already closed")
         return self.reduce_quantity(self.quantity, exit_price)
 
-    def _close(self, exit_price: float) -> "PositionAggregate":
+    def _close(self, exit_price: float) -> PositionAggregate:
         """Internal close after reducing to zero."""
         self.is_closed = True
         self.closed_at = datetime.now(UTC)

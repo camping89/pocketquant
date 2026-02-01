@@ -1,5 +1,7 @@
 """Symbol aggregate root."""
 
+from __future__ import annotations
+
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -30,7 +32,7 @@ class SymbolAggregate(BaseModel):
         exchange: str,
         name: str | None = None,
         asset_type: str | None = None,
-    ) -> "SymbolAggregate":
+    ) -> SymbolAggregate:
         """Factory method to create a new symbol aggregate."""
         info = SymbolInfo(
             code=code.upper(),

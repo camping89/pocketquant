@@ -1,5 +1,7 @@
 """Risk value objects - RiskConfig and RiskModel."""
 
+from __future__ import annotations
+
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -27,7 +29,7 @@ class RiskConfig(BaseModel):
     max_exposure_percent: float = 0.10  # 10% max portfolio exposure
 
     @model_validator(mode="after")
-    def validate_risk(self) -> "RiskConfig":
+    def validate_risk(self) -> RiskConfig:
         """Validate risk parameters."""
         if not 0 < self.risk_per_trade <= 0.10:
             raise ValueError(

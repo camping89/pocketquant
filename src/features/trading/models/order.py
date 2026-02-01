@@ -1,5 +1,7 @@
 """Order document model for MongoDB."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -28,7 +30,7 @@ class OrderDocument(BaseModel):
     model_config = {"populate_by_name": True}
 
     @classmethod
-    def from_aggregate(cls, order: OrderAggregate) -> "OrderDocument":
+    def from_aggregate(cls, order: OrderAggregate) -> OrderDocument:
         return cls(
             _id=order.id,
             strategy_id=order.strategy_id,

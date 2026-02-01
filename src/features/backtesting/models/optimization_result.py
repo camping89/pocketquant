@@ -1,5 +1,7 @@
 """Optimization result models for grid search results."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -25,7 +27,7 @@ class OptimizationResultEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "OptimizationResultEntry":
+    def from_dict(cls, data: dict[str, Any]) -> OptimizationResultEntry:
         return cls(
             parameters=data["parameters"],
             metrics=BacktestMetrics.from_dict(data["metrics"]),
@@ -73,7 +75,7 @@ class OptimizationResult:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "OptimizationResult":
+    def from_dict(cls, data: dict[str, Any]) -> OptimizationResult:
         """Create from MongoDB document."""
         return cls(
             id=data["_id"],

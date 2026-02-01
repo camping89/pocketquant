@@ -1,5 +1,7 @@
 """Backtest configuration dataclass for defining backtest parameters."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -35,7 +37,7 @@ class BacktestConfig:
     replay_speed: float = 0.0  # 0 = max speed, 1 = real-time, 10 = 10x
     parameters: dict[str, Any] = field(default_factory=dict)
 
-    def with_parameters(self, params: dict[str, Any]) -> "BacktestConfig":
+    def with_parameters(self, params: dict[str, Any]) -> BacktestConfig:
         """Create new config with updated parameters (for grid optimizer)."""
         return BacktestConfig(
             strategy_id=self.strategy_id,
