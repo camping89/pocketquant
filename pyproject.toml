@@ -21,7 +21,6 @@ dependencies = [
     "redis>=5.0.0",
 
     # Background Jobs
-    "arq>=0.25.0",            # Async Redis Queue for background jobs
     "apscheduler>=3.10.0",    # For scheduled jobs
 
     # Data Providers
@@ -36,11 +35,9 @@ dependencies = [
 
     # Logging
     "structlog>=24.1.0",      # Structured logging
-    "python-json-logger>=2.0.0",
 
     # Utils
     "httpx>=0.26.0",          # Async HTTP client
-    "python-dateutil>=2.8.0",
     "rich>=13.0.0",           # Rich console output for error messages
 ]
 

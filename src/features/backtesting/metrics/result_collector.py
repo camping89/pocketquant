@@ -1,7 +1,6 @@
 """Result collector - tracks equity and trades during backtest execution."""
 
 from datetime import datetime, timedelta
-from typing import Any
 
 import numpy as np
 

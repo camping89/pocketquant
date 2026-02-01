@@ -1,6 +1,5 @@
 """OKX WebSocket message parser - routes messages by channel type."""
 
-from typing import Any
 
 
 class OkxMessageParser:
