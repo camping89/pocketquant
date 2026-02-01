@@ -2,13 +2,8 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 
-from src.common.constants import (
-    COLLECTION_SYMBOLS,
-    LIMIT_OHLCV_QUERY_MAX,
-    LIMIT_TVDATAFEED_MAX_BARS,
-)
+from src.common.constants import COLLECTION_SYMBOLS, LIMIT_OHLCV_QUERY_MAX
 from src.common.database import Database
 from src.common.logging import get_logger
 from src.common.mediator import Mediator
@@ -20,127 +15,50 @@ from src.features.market_data.status import (
     GetSyncStatusQuery,
 )
 from src.features.market_data.sync import BulkSyncCommand, SyncSymbolCommand
+from src.features.market_data.sync.dto import SyncResponse
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/market-data", tags=["Market Data"])
 
 
-class SyncRequest(BaseModel):
-    symbol: str = Field(..., description="Trading symbol (e.g., AAPL, BTCUSD)")
-    exchange: str = Field(..., description="Exchange name (e.g., NASDAQ, BINANCE)")
-    interval: Interval = Field(default=Interval.DAY_1, description="Time interval")
-    n_bars: int = Field(
-        default=LIMIT_TVDATAFEED_MAX_BARS,
-        ge=1,
-        le=LIMIT_TVDATAFEED_MAX_BARS,
-        description="Number of bars to fetch",
-    )
-
-
-class SyncResponse(BaseModel):
-    symbol: str
-    exchange: str
-    interval: str
-    status: str
-    message: str | None = None
-    bars_synced: int = 0
-    total_bars: int | None = None
-
-
-class BulkSyncRequest(BaseModel):
-    symbols: list[dict] = Field(
-        ...,
-        description="List of symbols with 'symbol' and 'exchange' keys",
-        examples=[[
-            {"symbol": "AAPL", "exchange": "NASDAQ"},
-            {"symbol": "BTCUSD", "exchange": "BINANCE"},
-        ]],
-    )
-    interval: Interval = Field(default=Interval.DAY_1)
-    n_bars: int = Field(default=LIMIT_TVDATAFEED_MAX_BARS, ge=1, le=LIMIT_TVDATAFEED_MAX_BARS)
-
-
 @router.post("/sync", response_model=SyncResponse)
 async def sync_symbol(
-    request: SyncRequest,
+    cmd: SyncSymbolCommand,
     mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> SyncResponse:
     logger.info(
         "api.sync_requested",
-        symbol=request.symbol,
-        exchange=request.exchange,
-        interval=request.interval.value,
+        symbol=cmd.symbol,
+        exchange=cmd.exchange,
+        interval=cmd.interval.value,
     )
-
-    cmd = SyncSymbolCommand(
-        symbol=request.symbol,
-        exchange=request.exchange,
-        interval=request.interval.value,
-        n_bars=request.n_bars,
-    )
-
-    result = await mediator.send(cmd)
-
-    return SyncResponse(
-        symbol=result.symbol,
-        exchange=result.exchange,
-        interval=result.interval,
-        status=result.status,
-        bars_synced=result.bars_synced,
-        total_bars=result.total_bars,
-        message=result.message,
-    )
+    return await mediator.send(cmd)
 
 
 @router.post("/sync/background", response_model=dict)
 async def sync_symbol_background(
-    request: SyncRequest,
+    cmd: SyncSymbolCommand,
     background_tasks: BackgroundTasks,
     mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> dict:
     async def run_sync() -> None:
-        cmd = SyncSymbolCommand(
-            symbol=request.symbol,
-            exchange=request.exchange,
-            interval=request.interval.value,
-            n_bars=request.n_bars,
-        )
         await mediator.send(cmd)
 
     background_tasks.add_task(run_sync)
 
     return {
         "status": "accepted",
-        "message": f"Sync started for {request.symbol}:{request.exchange}",
+        "message": f"Sync started for {cmd.symbol}:{cmd.exchange}",
     }
 
 
 @router.post("/sync/bulk", response_model=list[SyncResponse])
 async def sync_bulk(
-    request: BulkSyncRequest,
+    cmd: BulkSyncCommand,
     mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> list[SyncResponse]:
-    cmd = BulkSyncCommand(
-        symbols=request.symbols,
-        interval=request.interval.value,
-        n_bars=request.n_bars,
-    )
-
-    results = await mediator.send(cmd)
-
-    return [
-        SyncResponse(
-            symbol=r.symbol,
-            exchange=r.exchange,
-            interval=r.interval,
-            status=r.status,
-            bars_synced=r.bars_synced,
-            total_bars=r.total_bars,
-            message=r.message,
-        )
-        for r in results
-    ]
+    return await mediator.send(cmd)
 
 
 @router.get("/ohlcv/{exchange}/{symbol}", response_model=OHLCVResponse)

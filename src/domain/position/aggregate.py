@@ -1,8 +1,9 @@
 """Position aggregate for tracking open positions and P&L."""
 
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
+
+from pydantic import BaseModel, Field, PrivateAttr
 
 from src.domain.position.position_event import (
     PositionClosedEvent,
@@ -13,8 +14,7 @@ from src.domain.position.value_objects import PnL, PositionSide
 from src.domain.shared.domain_event import DomainEvent
 
 
-@dataclass
-class PositionAggregate:
+class PositionAggregate(BaseModel):
     """Position aggregate root tracking entry, quantity, and P&L.
 
     Handles position lifecycle from open to close with proper
@@ -31,9 +31,9 @@ class PositionAggregate:
     current_price: float
     realized_pnl: float = 0.0
     is_closed: bool = False
-    opened_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    opened_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     closed_at: datetime | None = None
-    _events: list[DomainEvent] = field(default_factory=list, repr=False)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     @classmethod
     def open(
@@ -44,7 +44,7 @@ class PositionAggregate:
         side: PositionSide,
         entry_price: float,
         quantity: float,
-    ) -> PositionAggregate:
+    ) -> "PositionAggregate":
         """Factory method to open a new position."""
         if quantity <= 0:
             raise ValueError("Quantity must be positive")
@@ -74,14 +74,14 @@ class PositionAggregate:
         )
         return position
 
-    def update_price(self, current_price: float) -> PositionAggregate:
+    def update_price(self, current_price: float) -> "PositionAggregate":
         """Update current market price for P&L calculation."""
         if current_price <= 0:
             raise ValueError("Price must be positive")
         self.current_price = current_price
         return self
 
-    def add_quantity(self, quantity: float, price: float) -> PositionAggregate:
+    def add_quantity(self, quantity: float, price: float) -> "PositionAggregate":
         """Add to position (scale in) with weighted average price."""
         if self.is_closed:
             raise ValueError("Cannot add to closed position")
@@ -107,7 +107,7 @@ class PositionAggregate:
         )
         return self
 
-    def reduce_quantity(self, quantity: float, price: float) -> PositionAggregate:
+    def reduce_quantity(self, quantity: float, price: float) -> "PositionAggregate":
         """Reduce position (scale out) and realize P&L."""
         if self.is_closed:
             raise ValueError("Cannot reduce closed position")
@@ -137,13 +137,13 @@ class PositionAggregate:
         )
         return self
 
-    def close(self, exit_price: float) -> PositionAggregate:
+    def close(self, exit_price: float) -> "PositionAggregate":
         """Fully close the position at exit price."""
         if self.is_closed:
             raise ValueError("Position already closed")
         return self.reduce_quantity(self.quantity, exit_price)
 
-    def _close(self, exit_price: float) -> PositionAggregate:
+    def _close(self, exit_price: float) -> "PositionAggregate":
         """Internal close after reducing to zero."""
         self.is_closed = True
         self.closed_at = datetime.now(UTC)

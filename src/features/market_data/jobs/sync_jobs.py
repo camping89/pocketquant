@@ -45,7 +45,7 @@ async def sync_all_symbols() -> None:
             cmd = SyncSymbolCommand(
                 symbol=status.symbol,
                 exchange=status.exchange,
-                interval=status.interval,
+                interval=Interval(status.interval),
                 n_bars=500,
             )
             result = await _mediator.send(cmd)
@@ -97,7 +97,7 @@ async def sync_daily_data() -> None:
             cmd = SyncSymbolCommand(
                 symbol=status.symbol,
                 exchange=status.exchange,
-                interval=Interval.DAY_1.value,
+                interval=Interval.DAY_1,
                 n_bars=10,
             )
             await _mediator.send(cmd)

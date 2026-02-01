@@ -1,28 +1,28 @@
 """Strategy command definitions."""
 
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, Field
 
 from src.features.strategy.base import StrategyConfig
 
 
-@dataclass
-class LoadStrategyCommand:
+class LoadStrategyCommand(BaseModel):
     """Load a strategy from configuration."""
 
+    model_config = {"arbitrary_types_allowed": True}
+
     config: StrategyConfig | None = None
-    path: Path | None = None  # Alternative: load from file
+    path: Path | None = Field(default=None, description="Alternative: load from file")
 
 
-@dataclass
-class StartStrategyCommand:
+class StartStrategyCommand(BaseModel):
     """Start a loaded strategy."""
 
-    strategy_id: str
+    strategy_id: str = Field(..., description="Strategy identifier")
 
 
-@dataclass
-class StopStrategyCommand:
+class StopStrategyCommand(BaseModel):
     """Stop a running strategy."""
 
-    strategy_id: str
+    strategy_id: str = Field(..., description="Strategy identifier")

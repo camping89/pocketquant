@@ -9,9 +9,7 @@ from src.domain.shared.domain_event import DomainEvent
 class TestEvent(DomainEvent):
     """Test domain event."""
 
-    def __init__(self, data: str) -> None:
-        super().__init__()
-        self.data = data
+    data: str = ""
 
 
 @pytest.mark.asyncio
@@ -25,7 +23,7 @@ async def test_event_bus_delivers_to_subscribers():
 
     bus.subscribe(TestEvent, handler)
 
-    event = TestEvent("test")
+    event = TestEvent(data="test")
     await bus.publish(event)
 
     assert len(received) == 1
@@ -48,7 +46,7 @@ async def test_event_bus_delivers_to_multiple_subscribers():
     bus.subscribe(TestEvent, handler1)
     bus.subscribe(TestEvent, handler2)
 
-    event = TestEvent("test")
+    event = TestEvent(data="test")
     await bus.publish(event)
 
     assert len(received1) == 1
@@ -66,7 +64,7 @@ async def test_event_bus_publish_all():
 
     bus.subscribe(TestEvent, handler)
 
-    events = [TestEvent("a"), TestEvent("b"), TestEvent("c")]
+    events = [TestEvent(data="a"), TestEvent(data="b"), TestEvent(data="c")]
     await bus.publish_all(events)
 
     assert len(received) == 3
@@ -82,7 +80,7 @@ def test_event_bus_limits_history():
 def test_event_bus_tracks_history():
     """Test event bus stores published events in history."""
     bus = EventBus()
-    event = TestEvent("test")
+    event = TestEvent(data="test")
 
     # Publish synchronously for testing
     import asyncio

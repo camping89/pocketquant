@@ -1,19 +1,19 @@
 """Symbol aggregate root."""
 
-from dataclasses import dataclass, field
 from uuid import UUID, uuid4
+
+from pydantic import BaseModel, Field, PrivateAttr
 
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.symbol.value_objects import SymbolInfo
 
 
-@dataclass(eq=False)
-class SymbolAggregate:
+class SymbolAggregate(BaseModel):
     """Aggregate root for symbol management."""
 
-    id: UUID = field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)
     info: SymbolInfo | None = None
-    _events: list[DomainEvent] = field(default_factory=list)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SymbolAggregate):
@@ -30,7 +30,7 @@ class SymbolAggregate:
         exchange: str,
         name: str | None = None,
         asset_type: str | None = None,
-    ) -> SymbolAggregate:
+    ) -> "SymbolAggregate":
         """Factory method to create a new symbol aggregate."""
         info = SymbolInfo(
             code=code.upper(),

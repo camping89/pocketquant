@@ -1,11 +1,12 @@
 """Symbol value objects."""
 
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
-@dataclass(frozen=True)
-class SymbolInfo:
+class SymbolInfo(BaseModel):
     """Immutable symbol metadata."""
+
+    model_config = ConfigDict(frozen=True)
 
     code: str
     exchange: str
@@ -13,11 +14,19 @@ class SymbolInfo:
     asset_type: str | None = None
     is_active: bool = True
 
-    def __post_init__(self) -> None:
-        if not self.code:
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        if not v:
             raise ValueError("Symbol code is required")
-        if not self.exchange:
+        return v
+
+    @field_validator("exchange")
+    @classmethod
+    def validate_exchange(cls, v: str) -> str:
+        if not v:
             raise ValueError("Exchange is required")
+        return v
 
     @property
     def symbol_key(self) -> str:

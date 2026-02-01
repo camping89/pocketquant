@@ -1,11 +1,10 @@
 """DTOs for sync operations."""
 
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class SyncResult:
-    """Result of a sync operation."""
+class SyncResponse(BaseModel):
+    """Result of sync operation - used as handler return and API response."""
 
     symbol: str
     exchange: str

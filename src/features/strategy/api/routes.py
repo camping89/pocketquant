@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/strategies", tags=["strategies"])
 class LoadStrategyRequest(BaseModel):
     """Request to load a strategy from file path."""
 
-    path: str
+    path: str = Field(..., description="Path to strategy YAML file")
 
 
 class StrategyResponse(BaseModel):
