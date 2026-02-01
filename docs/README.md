@@ -1,6 +1,6 @@
 # PocketQuant Documentation Index
 
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-02-01 | **Codebase:** 12,420 LOC (180 files) | **Test Coverage:** 78%+
 
 Welcome to PocketQuant documentation. Start below based on your role.
 
@@ -49,37 +49,30 @@ Quick start guide, API examples, setup instructions, development commands.
 
 ---
 
-### [codebase-summary.md](./codebase-summary.md) (250 LOC)
-**Codebase reference**
+### [codebase-summary.md](./codebase-summary.md) (420+ LOC)
+**Codebase reference for developers**
 
-High-level module breakdown, codebase statistics, entry points, configuration.
+Detailed module breakdown, layer responsibilities, data pipelines, patterns, and testing strategy.
 
-**Use when:** Understanding project structure, finding modules
+**Use when:** Understanding project structure, finding modules, implementing new features
 
 **Contains:**
-- Architecture overview (Vertical Slice)
-- Core infrastructure (964 LOC breakdown)
-  - Database: PyMongo async, MongoDB, connection pooling
-  - Cache: redis-py, JSON serialization
-  - Logging: structlog, JSON format
-  - Jobs: APScheduler, job definitions
-- Market data feature (2,714 LOC breakdown)
-  - API: 472 LOC, routes
-  - Services: 848 LOC, business logic
-  - Repositories: 428 LOC, data access
-  - Models: 289 LOC, Pydantic definitions
-  - Providers: 572 LOC, TradingView integrations
-  - Jobs: 118 LOC, scheduled sync
-- Startup sequence (11 steps)
-- Key decisions explained
-- Configuration variables
-- Entry points (dev/prod)
-- TODOs & limitations
+- Architecture overview (DDD + CQRS + Vertical Slice)
+- Module breakdown by layer:
+  - **src/common** (700 LOC) - Mediator, EventBus, middleware, singletons
+  - **src/domain** (1,674 LOC) - Aggregates, value objects, domain events, services
+  - **src/infrastructure** (3,127 LOC) - Brokers, persistence, providers, scheduling
+  - **src/features** (6,561 LOC) - Feature slices (market_data, backtesting, strategy, trading, risk)
+- CQRS flow and data pipelines
+- Key architectural patterns (value objects, broker abstraction, domain purity)
+- Testing strategy and configuration
 
 **Key Stats:**
-- Total: ~3,600 LOC (33 Python files)
-- Largest module: 472 LOC (routes.py)
-- All others: <400 LOC (except justified exceptions)
+- Total: 12,420 LOC (180 Python files)
+- src/common: 700 LOC (28 files)
+- src/domain: 1,674 LOC (33 files)
+- src/infrastructure: 3,127 LOC (32 files)
+- src/features: 6,561 LOC (85 files)
 
 ---
 
@@ -136,11 +129,11 @@ Architecture patterns, code organization, testing, quality standards, performanc
 - Commenting standards (DO/DO NOT)
   - DO: WHY, constraints, gotchas, algorithms
   - DO NOT: Obvious code, variable restating
-- Type hints (mypy compliance)
+- Type hints (pyright compliance)
 - Error handling (try-except, propagation)
 - Logging with structlog (context variables)
 - Testing standards (fixtures, mocking, 80% coverage)
-- Code quality tools (ruff, mypy, pytest)
+- Code quality tools (ruff, pyright, pytest)
 - Performance tips (blocking I/O, bulk ops, caching, concurrency)
 - Configuration & secrets (.env usage)
 - Quality checklist (pre-commit validation)
@@ -156,7 +149,7 @@ data_sync_service.py:    244 LOC  ✅
 
 ---
 
-### [project-overview-pdr.md](./project-overview-pdr.md) (380 LOC)
+### [project-overview-pdr.md](./project-overview-pdr.md) (450+ LOC)
 **Project vision, requirements, and status**
 
 Product goals, requirements (functional & non-functional), implementation status, roadmap preview.
@@ -165,29 +158,28 @@ Product goals, requirements (functional & non-functional), implementation status
 
 **Contains:**
 - Project vision (5 strategic goals)
-- Functional requirements (6 main features)
-  - F1: Historical data sync
-  - F2: Real-time quotes
-  - F3: Multi-interval aggregation
-  - F4: Data retrieval
-  - F5: Symbol registry
-  - F6: Background jobs
+- Functional requirements (10 features: F1-F10)
+  - F1-F6: Market data (sync, quotes, aggregation, retrieval, registry, jobs)
+  - F7: Strategy Engine (load, execute, broker abstraction)
+  - F8: Backtesting Engine (run, optimize, metrics)
+  - F9: Order & Position Management (lifecycle, P&L tracking)
+  - F10: Live Trading (OKX integration, WebSocket)
 - Non-functional requirements (6 categories)
   - Performance, reliability, observability, security, maintainability, scalability
 - Implementation status (per feature)
-  - All core features 100% complete
-  - Test coverage by component (avg 80%)
-  - Module breakdown with LOC
-- Success criteria (v1.0 checklist)
-- Known limitations & TODOs (3 priority levels)
-- Roadmap phases (Phase 2-5 preview)
+  - All 10 features 100% complete ✅
+  - Test coverage by component (74-85%)
+  - Module breakdown with LOC breakdown
+- Success criteria (v1.0 checklist: all 12 items complete)
+- Known limitations & TODOs
+- Roadmap phases (Phase 2-5 preview: data sources, extended backtesting, advanced trading)
 - Development practices (branching, commits, code review)
 
 **Status Summary:**
-- v1.0: Core features complete ✅
-- Documentation: 90% complete
-- Test coverage: 80% average
-- Code quality: 100% type coverage
+- v1.0: Extended features complete ✅ (strategy, backtesting, trading, OKX)
+- Documentation: 95% complete
+- Test coverage: 78% average (strategic features well-tested)
+- Code quality: 100% type coverage, DDD architecture
 
 ---
 
@@ -224,14 +216,15 @@ Product goals, requirements (functional & non-functional), implementation status
 
 ## Documentation Statistics
 
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| README.md | Quick start | All |
-| codebase-summary.md | Reference | Developers |
-| code-standards.md | Guidelines | Developers, Reviewers |
-| system-architecture.md | Design | Architects, Developers |
-| project-overview-pdr.md | Requirements | All |
-| deployment-guide.md | Production setup | DevOps |
+| Document | Purpose | Audience | LOC |
+|----------|---------|----------|-----|
+| README.md | Quick start | All | 177 |
+| codebase-summary.md | Reference | Developers | 420+ |
+| code-standards.md | Guidelines | Developers, Reviewers | 650+ |
+| system-architecture.md | Design | Architects, Developers | 480+ |
+| project-overview-pdr.md | Requirements | All | 473 |
+| deployment-guide.md | Production setup | DevOps | 200 |
+| **Total** | | | **2,400+** |
 
 ---
 
@@ -269,25 +262,31 @@ TradingView blocking I/O runs in ThreadPoolExecutor (max 4 workers).
 ### Common Questions
 
 **Q: Where do I add a new feature?**
-A: Create `/src/features/{feature}/` following market_data structure. See code-standards.md.
+A: Create `/src/features/{feature}/` following vertical slice pattern. See code-standards.md.
 
-**Q: How do I add an endpoint?**
-A: Add to `/src/features/{feature}/api/` routes. Follow patterns in system-architecture.md.
+**Q: How do I add a CQRS handler?**
+A: Create command/query class, handler class (extends Handler base), register with Mediator. See code-standards.md "CQRS Handler Pattern".
+
+**Q: How do I write a trading strategy?**
+A: Implement IStrategy interface (on_bar method), return StrategySignal on trading conditions. See code-standards.md "Strategy Implementation Pattern".
+
+**Q: How do I run a backtest?**
+A: POST /backtest/run with strategy name and date range. GridOptimizer handles parameter optimization. See deployment-guide.md.
+
+**Q: How do I set up live trading with OKX?**
+A: Add OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE to .env. See deployment-guide.md "OKX Setup".
 
 **Q: How do I test code?**
-A: See code-standards.md section "Testing Standards". Run `pytest`.
+A: See code-standards.md "Testing Standards". Run `pytest`. Target: 80% coverage, unit + integration.
 
 **Q: Where is the production deployment guide?**
-A: See [deployment-guide.md](./deployment-guide.md).
-
-**Q: What's the testing strategy?**
-A: See code-standards.md "Testing Standards". Target: 80% coverage, unit + integration.
+A: See [deployment-guide.md](./deployment-guide.md). Covers systemd, env vars, health checks.
 
 **Q: How do I handle errors?**
-A: See code-standards.md "Error Handling". Be specific with exceptions, log with context.
+A: See code-standards.md "Error Handling". Be specific with exceptions, log with context variables.
 
 **Q: Should I use DI or singletons?**
-A: Routes use FastAPI Depends(). Infrastructure uses class-method singletons. See system-architecture.md.
+A: Routes use FastAPI Depends(). Infrastructure (DB/Cache) uses class-method singletons. See system-architecture.md.
 
 **Q: How do I cache data?**
 A: Use `Cache.set/get/delete_pattern()`. See system-architecture.md "Cache" section.
@@ -305,7 +304,7 @@ A: Use `Cache.set/get/delete_pattern()`. See system-architecture.md "Cache" sect
 - Run verbose: `pytest -v --tb=short`
 
 **Type errors:**
-- Run mypy: `mypy src/`
+- Run pyright: `pyright src/`
 - See code-standards.md "Type Hints"
 
 **Linting errors:**
@@ -342,8 +341,10 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
+| 2026-02-01 | AS-IS codebase documentation: 180 files, 12,420 LOC. Added detailed module breakdown, domain services, OKX reconnection handler, GridOptimizer details |
+| 2026-01-28 | Codebase growth: 4,200 → 12,377 LOC (65 → 180 files) |
 | 2026-01-21 | Initial documentation suite (5 docs, 2,324 LOC) |
 
 ---
 
-**Last Updated:** 2026-01-21 | **Maintained By:** docs-manager | **Next Review:** 2026-02-21
+**Last Updated:** 2026-02-01 | **Codebase:** 12,420 LOC (180 files) | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01

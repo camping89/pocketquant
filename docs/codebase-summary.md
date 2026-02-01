@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-01-28 | **Codebase Size:** ~4,200 LOC | **Python Files:** 65
+**Last Updated:** 2026-02-01 | **Codebase Size:** 12,420 LOC | **Python Files:** 180
 
 ## Architecture Overview
 
@@ -10,143 +10,231 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
 - **Application Layer:** CQRS handlers + feature slices
 - **Common Layer:** Mediator, EventBus, middleware, tracing
 
-```
-src/
-├── common/              # CQRS + utilities (~800 LOC)
-│   ├── constants.py     # Centralized constants
-│   ├── mediator/        # CQRS Mediator (request dispatch)
-│   ├── messaging/       # In-memory EventBus
-│   ├── tracing/         # Correlation ID + context
-│   ├── health/          # Health coordinator
-│   ├── idempotency/     # Idempotency middleware
-│   ├── rate_limit/      # Rate limiting middleware
-│   ├── database/        # Database singleton (moved to infrastructure mentally)
-│   ├── cache/           # Cache singleton (moved to infrastructure mentally)
-│   ├── logging/         # Structured logging
-│   └── jobs/            # Scheduler singleton (moved to infrastructure mentally)
-│
-├── domain/              # PURE business logic (~600 LOC, ZERO I/O)
-│   ├── ohlcv/           # OHLCV aggregate + entities + value objects + events
-│   ├── quote/           # Quote aggregate + events
-│   ├── symbol/          # Symbol aggregate + value objects
-│   └── shared/          # Shared value objects (Symbol, Interval) + base events
-│
-├── infrastructure/      # ALL external I/O (~900 LOC)
-│   ├── persistence/     # MongoDB + Redis wrappers
-│   ├── scheduling/      # APScheduler wrapper
-│   ├── tradingview/     # TradingView REST + WebSocket providers
-│   ├── http_client/     # HTTP client abstraction
-│   └── webhooks/        # Webhook dispatcher
-│
-├── features/market_data/  # Application Layer (~1,800 LOC)
-│   ├── sync/            # Command: SyncSymbol (historical data)
-│   ├── ohlcv/           # Query: GetBars, GetSymbols
-│   ├── quote/           # Command: Start/Stop/Subscribe WebSocket
-│   ├── status/          # Query: GetSyncStatus, GetQuoteStatus
-│   ├── api/             # FastAPI routes (dispatch to Mediator)
-│   ├── jobs/            # Background sync jobs
-│   ├── models/          # Legacy models (being deprecated)
-│   ├── managers/        # BarManager (quote aggregation)
-│   └── services/        # Legacy services (being deprecated)
-│
-└── main.py              # FastAPI app + lifespan + middleware stack
-```
+## Module Breakdown
 
-## Layer Responsibilities
+### src/common (700 LOC, 28 files)
 
-### Common Layer (Coordinators + Mediator)
+**Coordinators & Mediator:**
+- **Mediator:** CQRS dispatcher, routes commands/queries to handlers
+  - `register(request_type, handler)` - Register handler
+  - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
+- **EventBus:** In-memory async event bus (FIFO, 50 event max history)
+  - `subscribe(event_type, handler)` - Register event subscriber
+  - `publish(event)` - Notify all subscribers sequentially
+  - `publish_all(events)` - Batch publish multiple events
 
-**Mediator:** Routes commands/queries to handlers
-- `register(request_type, handler)` - Register handler
-- `send(request)` - Dispatch to handler
+**Tracing & Middleware:**
+- **CorrelationIDMiddleware** - Inject correlation_id into context for request tracking
+- **RequestLoggingMiddleware** - Log all requests/responses with correlation IDs
+- `get_correlation_id()` - Access current correlation ID in async context
+- **IdempotencyMiddleware** - Cache POST responses by idempotency_key header (24h TTL)
+- **RateLimitMiddleware** - Token bucket (100 capacity, 10 tokens/sec refill) per IP
 
-**EventBus:** In-memory async event bus (FIFO)
-- `subscribe(event_type, handler)` - Register listener
-- `publish(event)` - Notify all subscribers
-- `publish_all(events)` - Batch publish
-- Max 50 event history (bounded deque)
+**Infrastructure Singletons:**
+- **Database** - Async MongoDB singleton (Motor)
+  - `get_collection(name)` - Access collection
+  - `connect(settings)` - Initialize connection pool
+  - `disconnect()` - Clean shutdown
+- **Cache** - Async Redis singleton
+  - `get(key)`, `set(key, value, ttl=None)`, `delete(key)`
+  - `get_or_set(key, func, ttl)` - Cache-aside pattern
+- **HealthCoordinator** - Parallel health checks (database, redis, jobs)
+- **JobScheduler** - APScheduler wrapper (AsyncIOExecutor)
 
-**Tracing:** Correlation ID for request tracking
-- `CorrelationIdMiddleware` - Inject correlation_id
-- `get_correlation_id()` - Access current correlation_id
+**Logging & Constants:**
+- `setup_logging()` - structlog with JSON/console output
+- `get_correlation_id()` - Thread/async-safe context variable access
+- **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-**Health:** Dependency health checks
-- `HealthCoordinator` - Aggregate health from DB, Cache, Jobs
-- `/health` endpoint - JSON status + dependencies
+### src/domain (1,674 LOC, 33 files)
 
-**Idempotency:** Prevent duplicate POST requests
-- `IdempotencyMiddleware` - Cache responses by idempotency_key
-- 24h TTL on cached responses
+**Aggregates (6):**
+- **OHLCVAggregate** - Collection of OHLCV bars with validation
+- **OrderAggregate** - Order lifecycle state machine
+- **PositionAggregate** - Position tracking with P&L calculations
+- **QuoteAggregate** - Quote with metadata
+- **SymbolAggregate** - Symbol with exchange metadata
+- **RiskConfigAggregate** - Risk parameters and position sizing
 
-**Rate Limiting:** Token bucket rate limiting
-- `RateLimitMiddleware` - 200 req/10s per IP
-- Redis-backed distributed rate limiting
+**Value Objects (Frozen Dataclasses):**
+- **OHLCV** - (open, high, low, close, volume, timestamp)
+- **BarRange** - (start_time, end_time) for bar alignment
+- **PnL** - (unrealized, realized, total)
+- **Signal** - Buy/sell signal with quantity
+- **SymbolInfo** - (code, exchange, name, description)
+- **Price** - Decimal price wrapper
+- **QuoteTick** - Real-time price update
+- **RiskConfig** - Risk model + parameters
+- **Symbol** - (code, exchange) value object
 
-### Domain Layer (Pure Business Logic)
+**Enums:**
+- **OrderType** - MARKET, LIMIT, STOP_LIMIT, STOP_MARKET
+- **OrderSide** - BUY, SELL
+- **OrderStatus** - PENDING, PARTIAL_FILL, FILLED, CANCELLED, REJECTED, ERROR (6 states with is_terminal, is_active)
+- **PositionSide** - LONG, SHORT
+- **Direction** - LONG, SHORT, EXIT, FLAT
+- **RiskModel** - PERCENT_RISK, KELLY, FIXED
+- **Interval** - 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M (13 timeframes)
 
-**OHLCV:**
-- `OHLCVBar` - Value object (open, high, low, close, volume, timestamp)
-- `OHLCVAggregate` - Bar collection with validation
-- `BarSyncedEvent` - Domain event when bars saved
+**Domain Events (13+):**
+- **OHLCV:** HistoricalDataSyncedEvent, BarCompletedEvent
+- **Order:** OrderSubmittedEvent, OrderFilledEvent, OrderPartiallyFilledEvent, OrderCancelledEvent, OrderRejectedEvent
+- **Position:** PositionOpenedEvent, PositionUpdatedEvent, PositionClosedEvent
+- **Quote:** QuoteReceivedEvent, QuoteUpdatedEvent
+- **Strategy:** SignalGeneratedEvent
 
-**Quote:**
-- `QuoteTick` - Real-time price update value object
-- `QuoteAggregate` - Quote with metadata
-- `QuoteReceivedEvent` - Domain event on new quote
+**Domain Services:**
+- **BarBuilder** - Incremental OHLCV bar construction from ticks
+  - `add_tick(price, volume)` - Update bar with new tick
+  - `is_complete()` - Check if bar period elapsed
+  - `to_dict()` - Export bar as dict
+- **PositionSizer** - Calculate position size by risk model
+  - `calculate_size(account_balance, signal)` - Returns quantity
+  - Supports: PERCENT_RISK, KELLY, FIXED
 
-**Symbol:**
-- `Symbol(code, exchange)` - Value object (frozen dataclass)
-- `Symbol.from_string("NASDAQ:AAPL")` - Parse helper
-- Validation: requires non-empty code + exchange
+### src/infrastructure (3,127 LOC, 32 files)
 
-**Shared:**
-- `Interval` - Enum (1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M)
-- `INTERVAL_SECONDS` - Mapping to seconds
-- `DomainEvent` - Base class (event_id, occurred_at)
+**Brokers (Pluggable Execution):**
+- **IBroker** - Abstract contract
+  - `connect()`, `disconnect()` - Lifecycle
+  - `submit_order(symbol, side, type, quantity, price)` - Place order
+  - `cancel_order(order_id)` - Cancel by ID
+  - `get_balance()` - Account balance
+  - `get_positions()` - Open positions
+- **PaperBroker** - In-memory simulation
+  - Slippage simulation (configurable % or fixed points)
+  - Fill delay (configurable milliseconds)
+  - Position tracking with entry/exit prices
+  - P&L calculations
+  - `set_current_price(symbol, price)` - Update price for fills
+- **OKXBroker** - OKX live trading
+  - REST API + WebSocket integration
+  - HMAC-SHA256 authentication
+  - Demo mode support
+- **BrokerFactory** - Factory pattern
+  - `create(type, config)` → IBroker (paper, okx)
 
-### Infrastructure Layer (External I/O)
+**OKX WebSocket Integration:**
+- **OkxWebSocketClient** - Low-level WebSocket handler
+  - HMAC login authentication
+  - Heartbeat (25s ping)
+  - Binary frame parsing
+  - Async iterator interface
+- **OkxReconnectionHandler** - Resilient connection management
+  - Exponential backoff (1s → 30s max)
+  - Circuit breaker (10 failures → 5m pause)
+  - Automatic re-subscription on reconnect
+- **Mappers:** OkxOrderMapper, OkxPositionMapper for state translation
 
 **Persistence:**
-- `MongoDBConnection` - Async MongoDB client wrapper
-- `RedisConnection` - Async Redis client wrapper
-- Direct collection access for handlers (no repository pattern)
+- **Database** - MongoDB async wrapper (Motor)
+  - Connection pooling
+  - Async collection access
+  - Transaction support
+- **Cache** - Redis async wrapper
+  - TTL-based expiration
+  - JSON serialization
+  - Key pattern deletion
 
-**TradingView:**
-- `TradingViewProvider` - REST API (tvdatafeed, ThreadPoolExecutor)
-- `TradingViewWebSocketProvider` - Binary WebSocket protocol
-- `IDataProvider` - Abstract interface for providers
+**Data Providers:**
+- **TradingViewProvider** - REST API (tvdatafeed)
+  - ThreadPoolExecutor (max 4 workers) for blocking I/O
+  - `fetch_ohlcv(symbol, exchange, interval, n_bars)` - Fetch historical bars
+- **TradingViewWebSocketProvider** - Binary WebSocket protocol
+  - Custom frame format parsing (~m~{len}~m~{json})
+  - Quote streaming
+  - Auto-reconnection
+- **IDataProvider** - Abstract interface for providers
 
 **Scheduling:**
-- `JobScheduler` - APScheduler wrapper (AsyncIOExecutor)
-- In-memory job store (non-persistent)
-- Coalesce=True (skip missed runs)
+- **JobScheduler** - APScheduler wrapper
+  - AsyncIOExecutor for async jobs
+  - In-memory job store (non-persistent)
+  - `add_interval_job(func, interval)` - Periodic execution
+  - `add_cron_job(func, cron_expr)` - Scheduled execution
+  - Coalesce=True (skip missed runs)
 
-**HTTP Client:**
-- Generic async HTTP client wrapper (aiohttp)
+**HTTP & Webhooks:**
+- Generic async HTTP client (aiohttp)
+- **WebhookDispatcher** - Event notifications
+  - HMAC-SHA256 signing
+  - Resilient delivery with retry
 
-**Webhooks:**
-- Webhook dispatcher for external notifications
+### src/features (6,561 LOC, 85 files)
 
-### Application Layer (CQRS Handlers)
+**backtesting/ (2,259 LOC)**
+- **Routes:**
+  - POST `/api/v1/backtest/run` - Execute backtest
+  - POST `/api/v1/backtest/optimize` - Parameter optimization
+  - GET `/api/v1/backtest/{run_id}` - Retrieve results
+  - GET `/api/v1/backtest/{run_id}/equity` - Equity curve
+  - GET `/api/v1/backtest/optimization/{id}` - Optimization results
+  - GET `/api/v1/backtest/strategy/{id}` - Strategy results
+- **Core Classes:**
+  - **BacktestRunner** - Orchestrates backtest execution
+  - **HistoricalReplayEngine** - Chronological bar replay
+  - **GridOptimizer** - Parallel parameter search (multiprocessing)
+  - **PerformanceCalculator** - Metrics (Sharpe, Sortino, max drawdown, win rate)
+  - **BacktestResultCollector** - Aggregates results
+  - **BacktestRepository** - MongoDB persistence
 
-**Sync Feature (Commands):**
-- `SyncSymbolCommand` - Fetch historical bars
-- `SyncSymbolHandler` - Orchestrates: Provider → Domain → DB → Events
+**market_data/ (2,116 LOC)**
+- **Routes:**
+  - POST `/api/v1/market-data/sync` - Single symbol sync (blocking)
+  - POST `/api/v1/market-data/sync/background` - Async sync
+  - POST `/api/v1/market-data/sync/bulk` - Multiple symbols
+  - GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Query bars
+  - GET `/api/v1/market-data/symbols` - List symbols
+  - GET `/api/v1/market-data/sync-status` - Sync progress
+  - POST `/api/v1/quotes/start` - Start WebSocket
+  - POST `/api/v1/quotes/stop` - Stop WebSocket
+  - GET `/api/v1/quotes/latest/{exchange}/{symbol}` - Latest quote
+- **Core Classes:**
+  - **BarManager** - Real-time multi-interval aggregation
+  - **SyncSymbolHandler** - CQRS handler for sync
+  - **BulkSyncHandler** - Batch sync handler
+  - **GetOHLCVHandler** - Query handler
+  - **GetSyncStatusHandler** - Status query
+  - **StartQuoteFeedHandler**, **StopQuoteFeedHandler** - Quote management
+  - **GetLatestQuoteHandler** - Quote retrieval
 
-**OHLCV Feature (Queries):**
-- `GetBarsQuery` - Retrieve historical bars
-- `GetSymbolsQuery` - List tracked symbols
-- Handlers fetch directly from MongoDB
+**strategy/ (1,236 LOC)**
+- **Routes:**
+  - GET `/api/v1/strategies` - List strategies
+  - GET `/api/v1/strategies/{strategy_id}` - Get strategy details
+  - POST `/api/v1/strategies/load` - Load strategy by name
+  - POST `/api/v1/strategies/{id}/start` - Start strategy
+  - POST `/api/v1/strategies/{id}/stop` - Stop strategy
+- **Core Classes:**
+  - **StrategyEngine** - Orchestrates strategy execution
+  - **IStrategy** - ABC interface
+    - `async on_bar(bar: OHLCVBar) → Optional[StrategySignal]`
+    - `async on_tick(tick: QuoteTick) → Optional[StrategySignal]`
+    - `async on_fill(order: Order) → None`
+  - **StrategyLoader** - YAML loader
+  - **LoadStrategyHandler**, **StartStrategyHandler**, **StopStrategyHandler** - CQRS handlers
 
-**Quote Feature (Commands):**
-- `StartQuoteStreamCommand` - Start WebSocket
-- `StopQuoteStreamCommand` - Stop WebSocket
-- `SubscribeQuoteCommand` - Register for symbol updates
-- Handlers manage QuoteService singleton
+**trading/ (782 LOC)**
+- **Routes:**
+  - GET `/api/v1/orders` - List orders
+  - GET `/api/v1/orders/{order_id}` - Get order
+  - GET `/api/v1/positions` - List positions
+  - GET `/api/v1/positions/{strategy_id}` - Strategy positions
+- **Core Classes:**
+  - **OrderManager** - Order lifecycle
+    - `async submit(symbol, side, type, quantity, price)`
+    - `async cancel(order_id)`
+    - `on_order_update(event)` - Event handler
+  - **PositionTracker** - Subscribes to OrderFilledEvent
+  - MongoDB persistence for orders and positions
 
-**Status Feature (Queries):**
-- `GetSyncStatusQuery` - Sync job status
-- `GetQuoteStatusQuery` - WebSocket connection status
+**risk/ (163 LOC)**
+- **Core Classes:**
+  - **RiskCheckHandler** - Pre-trade validation
+    - Check account balance
+    - Validate position size
+    - Check direction changes
+    - Returns risk validation result
 
 ## CQRS Flow
 
@@ -170,17 +258,6 @@ src/
 7. Route converts DTO to HTTP response
 ```
 
-## Middleware Stack (Execution Order)
-
-```
-Request → CorrelationIdMiddleware → RateLimitMiddleware → IdempotencyMiddleware → Route
-```
-
-1. **CorrelationIdMiddleware:** Inject correlation_id into context
-2. **RateLimitMiddleware:** Check token bucket (200 req/10s per IP)
-3. **IdempotencyMiddleware:** Check cache for duplicate requests (POST only)
-4. **Route:** Execute business logic via Mediator
-
 ## Data Pipelines
 
 ### Historical Data Pipeline
@@ -188,52 +265,92 @@ Request → CorrelationIdMiddleware → RateLimitMiddleware → IdempotencyMiddl
 ```
 POST /market-data/sync
     ↓
-SyncSymbolCommand → Mediator
-    ↓
-SyncSymbolHandler
+SyncSymbolCommand → Mediator → SyncSymbolHandler
     ├─> TradingViewProvider.fetch_ohlcv (thread pool)
     ├─> Domain validation via OHLCVAggregate
     ├─> MongoDB bulk_write (upsert)
     ├─> Redis cache invalidation (pattern delete)
-    └─> EventBus.publish(BarSyncedEvent)
+    └─> EventBus.publish(HistoricalDataSyncedEvent)
 ```
 
 ### Real-time Quote Pipeline
 
 ```
-TradingView WebSocket → Binary Frame
+TradingView WebSocket → TradingViewWebSocketProvider
     ↓
-TradingViewWebSocketProvider.parse_frame
-    ↓
-QuoteService._on_quote_update
+Parse binary frame → QuoteService._on_quote_update
     ├─> Redis cache (60s TTL)
     ├─> BarManager.process_tick (multi-interval aggregation)
-    │   ├─> Build OHLCV bars (1m, 5m, 15m, etc.)
-    │   └─> On bar complete → MongoDB save
+    │   ├─> Build OHLCV bars (1m, 5m, 15m, ..., 1M)
+    │   ├─> Detect bar completion
+    │   └─> MongoDB save on complete
     └─> EventBus.publish(QuoteReceivedEvent)
+```
+
+### Background Job Pipeline
+
+```
+APScheduler triggers job (6-hourly or market hours)
+    ↓
+sync_all_symbols job (each symbol independently)
+    ├─> TradingViewProvider.fetch_ohlcv
+    ├─> OHLCVRepository.upsert_many
+    └─> Error logging per symbol (don't break loop)
 ```
 
 ## Key Patterns
 
-**Mediator Pattern:** Single entry point for all requests
-- Decouples routes from handlers
-- Easy to add middleware/logging/tracing
-- Testable in isolation
+**CQRS (Command Query Responsibility Segregation):**
+- Commands mutate state, Queries read-only
+- Separate handlers for each command/query type
+- Routes build requests, Mediator dispatches to handlers
+- Returns DTOs (not entities)
 
 **Event Bus Pattern:** Decoupled domain events
-- Handlers publish events, subscribers react
+- Handlers publish domain events to EventBus
+- Subscribers react asynchronously (FIFO order)
+- In-memory with bounded history (50 events)
 - No direct coupling between features
-- In-memory (no persistence overhead)
 
 **Value Objects:** Immutable domain primitives
-- Symbol, Interval, OHLCVBar, QuoteTick
+- Symbol, Interval, OHLCVBar, QuoteTick, Price
 - Frozen dataclasses for immutability
 - Validation in __post_init__
+- 20+ immutable value objects in codebase
 
-**CQRS:** Commands vs Queries separation
-- Commands: mutate state, return DTO
-- Queries: read-only, return DTO
-- No shared models between command/query
+**Mediator Pattern:** Single entry point for all requests
+- Routes only parse requests and call Mediator
+- Decouples routes from handlers
+- Testable in isolation
+- Centralized handler registration
+
+**Broker Abstraction:** Pluggable execution layer
+- IBroker interface for order execution
+- PaperBroker: in-memory simulation with slippage/delays
+- OKXBroker: live trading via OKX WebSocket
+- StrategyEngine routes signals to broker
+
+**Domain Purity:** Zero I/O in domain layer
+- Domain layer contains only business rules
+- No pymongo, redis, aiohttp imports allowed
+- Validation via test_domain_purity.py (AST check)
+- Pure, testable, reusable logic
+
+## Testing Strategy
+
+**Unit Tests:**
+- `tests/unit/common/` - Mediator, EventBus, middleware
+- `tests/unit/domain/` - Value objects, aggregates, services
+- `tests/unit/features/` - Handler tests with mocks
+
+**Domain Purity Test:**
+- AST parser checks for forbidden imports in `src/domain/`
+- Forbidden: pymongo, redis, aiohttp, src.infrastructure imports
+- Ensures domain layer has zero I/O dependencies
+
+**Integration Tests:**
+- Route tests with real DB/Cache (mocked)
+- CQRS flow validation
 
 ## Configuration
 
@@ -245,60 +362,32 @@ All settings via environment variables (`.env` file):
 - `TRADINGVIEW_USERNAME` - Optional TradingView auth
 - `TRADINGVIEW_PASSWORD` - Optional TradingView auth
 - `ENVIRONMENT` - "development" or "production"
-
-## Testing Strategy
-
-**Unit Tests:**
-- `tests/unit/common/` - Mediator, EventBus
-- `tests/unit/domain/` - Value objects, aggregates, purity check
-- `tests/unit/features/` - Handler tests with mocks
-
-**Domain Purity Test:**
-- AST parser checks for forbidden imports in `src/domain/`
-- Forbidden: pymongo, redis, aiohttp, src.infrastructure, src.common.database
-- Ensures domain layer has zero I/O dependencies
-
-**Integration Tests:**
-- `tests/integration/` - Route tests with real DB/Cache (future)
+- `API_PORT` - API server port (default: 8765)
 
 ## Dependencies
 
 - **fastapi** - Web framework
-- **pymongo** - MongoDB driver (async)
+- **pydantic** - Settings + validation
+- **motor** - Async MongoDB driver
 - **redis** - Async Redis client
 - **structlog** - Structured logging
-- **pydantic** - Settings + validation
 - **apscheduler** - Job scheduling
 - **tvdatafeed** - TradingView data source
 - **aiohttp** - Async HTTP + WebSocket
-- **pytest** - Testing
+- **pytest** - Testing framework
 
 ## Entry Points
 
 - **Development:** `python -m src.main` (config via `.env`)
 - **Production:** `python -m src.main` with `ENVIRONMENT=production`
-- **Documentation:** `http://localhost:$API_PORT/api/v1/docs`
+- **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
-
-## Migration Status
-
-**Completed:**
-- ✅ Constants centralized
-- ✅ Infrastructure layer extracted
-- ✅ Domain layer created (pure, zero I/O)
-- ✅ Mediator + EventBus implemented
-- ✅ Features refactored to CQRS
-- ✅ Middleware stack integrated
-- ✅ Health + idempotency + rate limiting + tracing
-
-**Deprecated (to be removed):**
-- `features/market_data/repositories/` - Direct DB access in handlers now
-- `features/market_data/services/` - Replaced by CQRS handlers
 
 ## Known Limitations
 
-- In-memory EventBus (events lost on crash)
-- In-memory job store (jobs lost on restart)
-- No persistent outbox pattern
-- WebSocket reconnection requires resubscription
-- Rate limiting state lost on Redis restart
+- In-memory EventBus (events lost on crash; use for non-critical events)
+- In-memory job store (jobs lost on restart; reschedule on startup)
+- No persistent outbox pattern (consider for mission-critical systems)
+- Rate limiting state lost on Redis restart (acceptable for burst protection)
+- Single-threaded strategy execution (one strategy per process)
+- Domain purity enforced via AST check (cannot use I/O in domain/)
