@@ -1,7 +1,7 @@
 ---
 title: "MongoDB Persistence for Orders and Positions"
 description: "Add MongoDB repositories for OrderAggregate and PositionAggregate with async operations"
-status: pending
+status: complete
 priority: P1
 effort: 3h
 branch: feat/strategy-init
@@ -329,13 +329,13 @@ src/features/trading/
 
 ## Success Criteria
 
-- [ ] OrderRepository saves/loads orders correctly
-- [ ] PositionRepository saves/loads positions correctly
-- [ ] OrderManager persists state changes
-- [ ] PositionTracker persists state changes
-- [ ] Indexes created for query performance
-- [ ] Existing tests pass
-- [ ] Recovery on restart loads open positions/pending orders
+- [x] OrderRepository saves/loads orders correctly
+- [x] PositionRepository saves/loads positions correctly
+- [x] OrderManager persists state changes
+- [x] PositionTracker persists state changes
+- [x] Indexes created for query performance
+- [x] Existing tests pass (56/56 passed)
+- [x] Recovery on restart loads open positions/pending orders
 
 ---
 
