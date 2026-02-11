@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
+
+from src.common.uuid import UUID, generate_id
 
 from src.domain.quote.quote_event import QuoteReceivedEvent, QuoteUpdatedEvent
 from src.domain.shared.domain_event import DomainEvent
@@ -14,7 +15,7 @@ from src.domain.shared.domain_event import DomainEvent
 class QuoteAggregate(BaseModel):
     """Aggregate root for real-time quote management."""
 
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=generate_id)
     symbol: str = ""
     exchange: str = ""
     last_price: float | None = None

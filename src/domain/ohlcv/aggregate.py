@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
+
+from src.common.uuid import UUID, generate_id
 
 from src.domain.ohlcv.ohlcv_event import BarCompletedEvent, HistoricalDataSyncedEvent
 from src.domain.shared.domain_event import DomainEvent
@@ -15,7 +16,7 @@ from src.domain.shared.value_objects import Interval
 class OHLCVAggregate(BaseModel):
     """Aggregate root for OHLCV data operations."""
 
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=generate_id)
     symbol: str = ""
     exchange: str = ""
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)

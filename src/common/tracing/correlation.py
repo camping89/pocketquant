@@ -1,8 +1,8 @@
 """Correlation ID middleware for request tracing."""
 
-from uuid import uuid4
-
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from src.common.uuid import generate_id_str
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -14,7 +14,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
     """Injects correlation ID into request context and response headers."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        request_id = request.headers.get(HEADER_CORRELATION_ID) or str(uuid4())
+        request_id = request.headers.get(HEADER_CORRELATION_ID) or generate_id_str()
         token = request_id_contextvar.set(request_id)
 
         try:

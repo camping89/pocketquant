@@ -2,8 +2,8 @@
 
 import asyncio
 from datetime import UTC, datetime
-from uuid import uuid4
 
+from src.common.uuid import generate_id_str
 from src.domain.order import OrderAggregate, OrderSide, OrderStatus
 from src.domain.position import PositionAggregate, PositionSide
 from src.infrastructure.brokers.interface import IBroker, OrderCallback
@@ -83,13 +83,13 @@ class PaperBroker(IBroker):
             if order.side == OrderSide.BUY and order_value > self._balance:
                 return OrderResult(
                     order_id=order.id,
-                    broker_order_id=str(uuid4()),
+                    broker_order_id=generate_id_str(),
                     status=OrderStatus.REJECTED,
                     error_message="Insufficient balance",
                 )
 
             # Execute the fill
-            broker_order_id = str(uuid4())
+            broker_order_id = generate_id_str()
             self._execute_fill(order, fill_price)
             self._orders[order.id] = order
 

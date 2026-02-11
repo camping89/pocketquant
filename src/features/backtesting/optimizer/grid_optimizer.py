@@ -4,9 +4,9 @@ import asyncio
 import itertools
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from src.common.logging import get_logger
+from src.common.uuid import generate_id_str
 from src.common.messaging import EventBus
 from src.features.backtesting.engine.backtest_runner import BacktestRunner
 from src.features.backtesting.models.backtest_config import BacktestConfig
@@ -64,7 +64,7 @@ class GridOptimizer:
         # Validate before starting
         config.validate()
 
-        optimization_id = str(uuid4())
+        optimization_id = generate_id_str()
         started_at = datetime.now(UTC)
 
         # Generate all parameter combinations

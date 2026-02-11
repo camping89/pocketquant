@@ -1,8 +1,8 @@
 """OHLCV entities."""
 
 from dataclasses import dataclass, field
-from uuid import UUID, uuid4
 
+from src.common.uuid import UUID, generate_id
 from src.domain.ohlcv.value_objects import OHLCV, BarRange
 from src.domain.shared.value_objects import Interval, Symbol
 
@@ -11,7 +11,7 @@ from src.domain.shared.value_objects import Interval, Symbol
 class Bar:
     """Entity representing a price bar with identity."""
 
-    id: UUID = field(default_factory=uuid4)
+    id: UUID = field(default_factory=generate_id)
     symbol: Symbol | None = None
     interval: Interval | None = None
     time_range: BarRange | None = None
