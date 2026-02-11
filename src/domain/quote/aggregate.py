@@ -23,7 +23,7 @@ class QuoteAggregate(BaseModel):
     volume: float | None = None
     change: float | None = None
     change_percent: float | None = None
-    last_update: datetime | None = None
+    updated_at: datetime | None = None
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     def __eq__(self, other: object) -> bool:
@@ -61,7 +61,7 @@ class QuoteAggregate(BaseModel):
             self.change = change
         if change_percent is not None:
             self.change_percent = change_percent
-        self.last_update = timestamp
+        self.updated_at = timestamp
 
         self._events.append(
             QuoteReceivedEvent(
