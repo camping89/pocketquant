@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
+
+from src.common.uuid import generate_id_str
 
 from src.domain.position.position_event import (
     PositionClosedEvent,
@@ -54,7 +55,7 @@ class PositionAggregate(BaseModel):
             raise ValueError("Entry price must be positive")
 
         position = cls(
-            id=str(uuid4()),
+            id=generate_id_str(),
             strategy_id=strategy_id,
             symbol=symbol,
             exchange=exchange,

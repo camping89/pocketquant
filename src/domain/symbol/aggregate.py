@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from uuid import UUID, uuid4
-
 from pydantic import BaseModel, Field, PrivateAttr
+
+from src.common.uuid import UUID, generate_id
 
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.symbol.value_objects import SymbolInfo
@@ -13,7 +13,7 @@ from src.domain.symbol.value_objects import SymbolInfo
 class SymbolAggregate(BaseModel):
     """Aggregate root for symbol management."""
 
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=generate_id)
     info: SymbolInfo | None = None
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 

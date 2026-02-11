@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
+
+from src.common.uuid import generate_id_str
 
 from src.domain.order.order_event import (
     OrderCancelledEvent,
@@ -66,7 +67,7 @@ class OrderAggregate(BaseModel):
             raise ValueError("Stop order requires stop_price")
 
         return cls(
-            id=str(uuid4()),
+            id=generate_id_str(),
             strategy_id=strategy_id,
             symbol=symbol,
             exchange=exchange,

@@ -2,9 +2,9 @@
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, AsyncIterator
-from uuid import uuid4
 
 from src.common.constants import COLLECTION_OHLCV
+from src.common.uuid import generate_id_str
 from src.common.database import Database
 from src.common.logging import get_logger
 from src.common.messaging import EventBus
@@ -64,7 +64,7 @@ class BacktestRunner:
         Returns:
             BacktestResult with metrics, equity curve, and trade history.
         """
-        run_id = str(uuid4())
+        run_id = generate_id_str()
         started_at = datetime.now(UTC)
 
         logger.info(
