@@ -294,6 +294,57 @@ common/
    - Return HTTP 200 with body
 ```
 
+## Trading Persistence Layer
+
+### MongoDB Collections
+
+**Orders Collection (`orders`):**
+- Persists all order lifecycle events (submitted, filled, partial, cancelled, rejected)
+- Documents indexed by: `_id` (order_id), `strategy_id`, `status`, `(symbol, exchange)`
+- `OrderRepository.save()` - Upsert order state
+- `OrderRepository.find_pending()` - Recover orders in non-terminal states on startup
+- All order state changes persisted immediately (submit, fill, cancel, reject)
+
+**Positions Collection (`positions`):**
+- Tracks per-strategy open and closed positions with P&L
+- Documents indexed by: `_id` (position_id), `strategy_id`, `is_closed`, `(symbol, exchange)`
+- `PositionRepository.save()` - Upsert position state
+- `PositionRepository.find_open()` - Recover open positions on startup
+- Position created on first OrderFilledEvent, updated on subsequent fills, closed when quantity reaches 0
+
+### Recovery on Startup
+
+```
+Application Startup
+  ↓
+OrderRepository.ensure_indexes() - Create MongoDB indexes
+PositionRepository.ensure_indexes()
+  ↓
+OrderManager.load_pending_orders()
+  └─> Load orders with status: pending, submitted, partially_filled
+      └─> Restore in-memory state + broker_order_id mapping
+  ↓
+PositionTracker.start()
+  └─> PositionRepository.find_open()
+      └─> Load all is_closed=false positions
+      └─> Restore in-memory position state
+  ↓
+Ready to process market events and recover fills
+```
+
+### State Transitions
+
+**Order Lifecycle:**
+- **Submit:** OrderAggregate created → OrderRepository.save()
+- **Fill:** OrderStatus = FILLED → OrderRepository.save() + publish OrderFilledEvent
+- **Cancel:** OrderStatus = CANCELLED → OrderRepository.save()
+- **Reject:** OrderStatus = REJECTED → OrderRepository.save()
+
+**Position Lifecycle:**
+- **Open:** First fill creates position → PositionRepository.save() + publish PositionOpenedEvent
+- **Update:** Same-side fills increase quantity → PositionRepository.save()
+- **Close:** Opposite-side fills reduce to zero → PositionRepository.save() + mark is_closed=true
+
 ## Broker Abstraction Layer
 
 ### IBroker Interface
@@ -488,12 +539,16 @@ StrategyEngine._on_market_event
   ├─> On approved signal:
   │   ├─> Build Order via OrderBuilder
   │   ├─> Submit order via IBroker.submit_order(order)
+  │   ├─> OrderRepository.save(order) - MongoDB persistence
   │   └─> EventBus.publish(OrderSubmittedEvent(...))
   │
   └─> On fill event:
-      ├─> Update PositionTracker
+      ├─> PositionTracker._on_order_filled
+      │   ├─> Create/update position
+      │   ├─> PositionRepository.save(position) - MongoDB persistence
+      │   └─> EventBus.publish(PositionOpenedEvent/PositionUpdatedEvent)
       ├─> Calculate P&L
-      └─> EventBus.publish(PositionUpdatedEvent(...))
+      └─> OrderRepository.save(order) - Persist filled state
 ```
 
 ### Backtesting Pipeline

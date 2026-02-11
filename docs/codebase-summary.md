@@ -221,12 +221,27 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
   - GET `/api/v1/positions` - List positions
   - GET `/api/v1/positions/{strategy_id}` - Strategy positions
 - **Core Classes:**
-  - **OrderManager** - Order lifecycle
-    - `async submit(symbol, side, type, quantity, price)`
-    - `async cancel(order_id)`
-    - `on_order_update(event)` - Event handler
-  - **PositionTracker** - Subscribes to OrderFilledEvent
-  - MongoDB persistence for orders and positions
+  - **OrderManager** - Order lifecycle with MongoDB persistence
+    - `async submit(order, broker)` - Submit and persist initial state
+    - `async cancel(order_id, broker)` - Cancel and persist state
+    - `on_order_update(result)` - Handle fill/cancel from broker
+    - `async load_pending_orders()` - Recover pending orders on startup
+    - `async get_order_async(order_id)` - Fetch from memory or database
+  - **OrderRepository** - MongoDB `orders` collection
+    - `save(order)` - Upsert order document
+    - `find_pending()` - Recover non-terminal orders
+    - `find_by_strategy(strategy_id)` - Query orders by strategy
+    - Auto-creates indexes on startup
+  - **PositionTracker** - Position lifecycle with MongoDB persistence
+    - `async load_open_positions()` - Recover open positions on startup
+    - `@event_handler(OrderFilledEvent)` - Auto-register event subscriber
+    - `async _on_order_filled(event)` - Create/update/close positions
+    - `async update_price(strategy_id, price)` - Update unrealized P&L (in-memory)
+  - **PositionRepository** - MongoDB `positions` collection
+    - `save(position)` - Upsert position document
+    - `find_open()` - Recover open positions
+    - `get_by_strategy(strategy_id)` - Query active position for strategy
+    - Auto-creates indexes on startup
 
 **risk/ (163 LOC)**
 - **Core Classes:**
