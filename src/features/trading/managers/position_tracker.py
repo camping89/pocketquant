@@ -4,7 +4,7 @@ import asyncio
 
 import structlog
 
-from src.common.messaging import EventBus
+from src.common.messaging import EventBus, event_handler, get_event_registry
 from src.domain.order import OrderFilledEvent, OrderSide
 from src.domain.position import PositionAggregate, PositionOpenedEvent, PositionSide
 from src.features.trading.repositories import PositionRepository
@@ -26,7 +26,9 @@ class PositionTracker:
     async def start(self) -> None:
         """Subscribe to order events and load open positions."""
         await self.load_open_positions()
-        self._event_bus.subscribe(OrderFilledEvent, self._on_order_filled)
+        # Auto-register decorated event handlers
+        registry = get_event_registry()
+        registry.register_instance(self, self._event_bus)
         logger.info("position_tracker_started")
 
     async def load_open_positions(self) -> None:
@@ -41,6 +43,7 @@ class PositionTracker:
         """Unsubscribe from events."""
         logger.info("position_tracker_stopped")
 
+    @event_handler(OrderFilledEvent)
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Handle order fill by updating position."""
         async with self._lock:

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from src.common.messaging import EventBus
+from src.common.messaging import EventBus, event_handler, get_event_registry
 from src.domain.ohlcv.ohlcv_event import BarCompletedEvent
 from src.domain.order import OrderAggregate, OrderSide, OrderType
 from src.domain.quote.quote_event import QuoteReceivedEvent
@@ -61,8 +61,9 @@ class StrategyEngine:
         if self._running:
             return
 
-        self._event_bus.subscribe(BarCompletedEvent, self._on_bar_completed)
-        self._event_bus.subscribe(QuoteReceivedEvent, self._on_quote_received)
+        # Auto-register decorated event handlers
+        registry = get_event_registry()
+        registry.register_instance(self, self._event_bus)
         self._running = True
 
         logger.info("strategy_engine_started")
@@ -185,6 +186,7 @@ class StrategyEngine:
         """Get strategy by ID."""
         return self._strategies.get(strategy_id)
 
+    @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Handle bar completed event."""
         strategies = self._find_strategies(
@@ -217,6 +219,7 @@ class StrategyEngine:
                     error=str(e),
                 )
 
+    @event_handler(QuoteReceivedEvent)
     async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
         """Handle quote received event."""
         strategies = self._find_strategies(
