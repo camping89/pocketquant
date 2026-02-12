@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import generate_id_str
-
 from src.domain.position.position_event import (
     PositionClosedEvent,
     PositionOpenedEvent,

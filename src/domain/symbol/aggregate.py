@@ -5,7 +5,6 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
-
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.symbol.value_objects import SymbolInfo
 

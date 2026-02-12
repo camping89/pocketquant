@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.common.logging import get_logger
-from src.common.uuid import generate_id_str
 from src.common.messaging import EventBus
+from src.common.uuid import generate_id_str
 from src.features.backtesting.engine.backtest_runner import BacktestRunner
 from src.features.backtesting.models.backtest_config import BacktestConfig
 from src.features.backtesting.models.backtest_result import BacktestMetrics, BacktestResult

@@ -4,11 +4,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, AsyncIterator
 
 from src.common.constants import COLLECTION_OHLCV
-from src.common.uuid import generate_id_str
 from src.common.database import Database
 from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import clear_simulation_time
+from src.common.uuid import generate_id_str
 from src.features.backtesting.engine.historical_replay_engine import (
     HistoricalReplayEngine,
 )

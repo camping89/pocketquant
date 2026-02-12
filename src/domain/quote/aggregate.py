@@ -7,7 +7,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
-
 from src.domain.quote.quote_event import QuoteReceivedEvent, QuoteUpdatedEvent
 from src.domain.shared.domain_event import DomainEvent
 

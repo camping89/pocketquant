@@ -15,6 +15,20 @@ from src.common.messaging import EventBus
 from src.common.rate_limit import RateLimitMiddleware
 from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from src.config import get_settings
+from src.features.backtesting import (
+    GetBacktestHandler,
+    GetBacktestQuery,
+    GetOptimizationHandler,
+    GetOptimizationQuery,
+    ListBacktestsHandler,
+    ListBacktestsQuery,
+    RunBacktestCommand,
+    RunBacktestHandler,
+    RunOptimizationCommand,
+    RunOptimizationHandler,
+    backtest_router,
+)
+from src.features.backtesting.repository import BacktestRepository
 from src.features.market_data.api import quote_router
 from src.features.market_data.api import router as market_data_router
 from src.features.market_data.jobs import register_sync_jobs, set_mediator
@@ -62,20 +76,6 @@ from src.features.strategy import (
     StrategyEngine,
     strategy_router,
 )
-from src.features.backtesting import (
-    GetBacktestHandler,
-    GetBacktestQuery,
-    GetOptimizationHandler,
-    GetOptimizationQuery,
-    ListBacktestsHandler,
-    ListBacktestsQuery,
-    RunBacktestCommand,
-    RunBacktestHandler,
-    RunOptimizationCommand,
-    RunOptimizationHandler,
-    backtest_router,
-)
-from src.features.backtesting.repository import BacktestRepository
 from src.features.trading import OrderManager, PositionTracker
 from src.features.trading.api import trading_router
 from src.features.trading.repositories import OrderRepository, PositionRepository

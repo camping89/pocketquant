@@ -7,7 +7,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
-
 from src.domain.ohlcv.ohlcv_event import BarCompletedEvent, HistoricalDataSyncedEvent
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.shared.value_objects import Interval

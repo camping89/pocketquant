@@ -1,11 +1,5 @@
 """Domain layer - Pure business logic with zero I/O imports."""
 
-from src.domain.shared.domain_event import DomainEvent
-from src.domain.shared.value_objects import Interval, Symbol
-
-# Strategy domain
-from src.domain.strategy import Direction, Signal, SignalGeneratedEvent
-
 # Order domain
 from src.domain.order import (
     InvalidOrderTransitionError,
@@ -32,6 +26,11 @@ from src.domain.position import (
 
 # Risk domain
 from src.domain.risk import PositionSizer, RiskConfig, RiskModel
+from src.domain.shared.domain_event import DomainEvent
+from src.domain.shared.value_objects import Interval, Symbol
+
+# Strategy domain
+from src.domain.strategy import Direction, Signal, SignalGeneratedEvent
 
 __all__ = [
     # Shared
