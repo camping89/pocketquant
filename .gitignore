@@ -92,3 +92,6 @@ dmypy.json
 # Ruff
 .ruff_cache/
 .envrc
+
+# Generated artifacts
+repomix-output.xml
