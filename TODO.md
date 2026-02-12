@@ -1,5 +1,49 @@
 # PocketQuant TODO
 
+## Debugging Starting Point
+
+**Entry endpoint:** `POST /api/v1/market-data/sync` — simplest write path, touches every layer
+
+### Request Flow to Trace
+```
+routes.py:25 → SyncSymbolCommand → mediator.send()
+  → mediator.py:22 → looks up handler by type(request)
+    → sync/handler.py → SyncSymbolHandler.handle()
+      → TradingViewProvider.fetch_ohlcv() → DB insert → EventBus.publish()
+```
+
+### Key Files for Breakpoints
+| File | Why |
+|------|-----|
+| `src/features/market_data/api/routes.py:25` | Request entry |
+| `src/common/mediator/mediator.py:22` | Dispatcher (type→handler mapping) |
+| `src/features/market_data/sync/handler.py` | Core business logic |
+| `src/common/messaging/event_bus.py:37` | Event publish |
+| `src/main.py` (lifespan) | Wiring at startup |
+
+### Exercise Progression (from learning guide)
+- [ ] **Ex 1** (30min): Trace sync request flow, answer: where is command created? how does mediator find handler? what events published? who receives them?
+- [ ] **Ex 2** (1hr): Create `GetSymbolStatsQuery` handler (reinforces CQRS)
+- [ ] **Ex 3** (45min): Add event subscriber for `HistoricalDataSyncedEvent` (reinforces decoupling)
+- [ ] **Ex 4** (1hr): Write tests with mocked singletons (reinforces pytest)
+
+### After Sync, Try Read Path
+`GET /api/v1/market-data/ohlcv/NASDAQ/AAPL` — no events, just query→handler→MongoDB
+
+### Learning Materials
+- `plans/reports/brainstorm-260201-1223-python-learning-guide.md` — main guide (C# → Python)
+- `docs/learning/python-asyncio-guide.md` — coroutines, event loop, locks
+- `docs/learning/python-event-patterns-guide.md` — Observer, EventBus, domain events
+- `docs/learning/uuid-versions-guide.md` — UUID7 time-ordered IDs
+
+### How to Start
+1. `just start` (spins up MongoDB, Redis, app)
+2. Open Swagger UI: `http://localhost:8765/api/v1/docs`
+3. Hit POST `/sync` with `{"symbol": "AAPL", "exchange": "NASDAQ", "interval": "1d", "n_bars": 500}`
+4. Step through with debugger or add log statements at each layer
+
+---
+
 ## Next Steps
 
 ### 1. Learn Python from this project
