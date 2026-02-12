@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-02-01 | **Version:** 1.0 | **Min Python:** 3.14+
+**Last Updated:** 2026-02-12 | **Version:** 1.0 | **Min Python:** 3.14+
 
 ## Prerequisites
 

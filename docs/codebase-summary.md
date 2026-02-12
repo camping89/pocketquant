@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-01 | **Codebase Size:** 12,420 LOC | **Python Files:** 180
+**Last Updated:** 2026-02-12 | **Codebase Size:** 14,393 LOC | **Total Files:** 213 (182 Python files in src/)
 
 ## Architecture Overview
 
@@ -12,7 +12,7 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
 
 ## Module Breakdown
 
-### src/common (700 LOC, 28 files)
+### src/common (700+ LOC, 28 files)
 
 **Coordinators & Mediator:**
 - **Mediator:** CQRS dispatcher, routes commands/queries to handlers
@@ -23,12 +23,25 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
   - `publish(event)` - Notify all subscribers sequentially
   - `publish_all(events)` - Batch publish multiple events
 
+**Event Handling & Auto-Discovery:**
+- **@event_handler decorator** - Mark methods as event subscribers (86 LOC)
+- **EventRegistry** - Auto-discover and bind decorated handlers
+  - `register_instance(obj, event_bus)` - Scan obj for decorated methods, subscribe all
+  - Supports single or multiple event types per handler
+  - Returns count of registered handlers for verification
+
 **Tracing & Middleware:**
 - **CorrelationIDMiddleware** - Inject correlation_id into context for request tracking
 - **RequestLoggingMiddleware** - Log all requests/responses with correlation IDs
 - `get_correlation_id()` - Access current correlation ID in async context
 - **IdempotencyMiddleware** - Cache POST responses by idempotency_key header (24h TTL)
 - **RateLimitMiddleware** - Token bucket (100 capacity, 10 tokens/sec refill) per IP
+
+**UUID Utilities:**
+- **uuid.py** - UUID7 generation (19 LOC)
+  - `generate_id()` - Return UUID v7 (time-ordered)
+  - `generate_id_str()` - Return UUID v7 as string
+  - Replaces UUID4 for better database performance (chronological sorting)
 
 **Infrastructure Singletons:**
 - **Database** - Async MongoDB singleton (Motor)
@@ -46,15 +59,15 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
 - `get_correlation_id()` - Thread/async-safe context variable access
 - **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-### src/domain (1,674 LOC, 33 files)
+### src/domain (1,674+ LOC, 33 files)
 
 **Aggregates (6):**
 - **OHLCVAggregate** - Collection of OHLCV bars with validation
-- **OrderAggregate** - Order lifecycle state machine
-- **PositionAggregate** - Position tracking with P&L calculations
-- **QuoteAggregate** - Quote with metadata
-- **SymbolAggregate** - Symbol with exchange metadata
-- **RiskConfigAggregate** - Risk parameters and position sizing
+- **OrderAggregate** - Order lifecycle state machine (UUID7 IDs)
+- **PositionAggregate** - Position tracking with P&L calculations (UUID7 IDs)
+- **QuoteAggregate** - Quote with metadata (field: updated_at)
+- **SymbolAggregate** - Symbol with exchange metadata (UUID7 IDs)
+- **RiskConfigAggregate** - Risk parameters and position sizing (UUID7 IDs)
 
 **Value Objects (Frozen Dataclasses):**
 - **OHLCV** - (open, high, low, close, volume, timestamp)
@@ -92,7 +105,7 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
   - `calculate_size(account_balance, signal)` - Returns quantity
   - Supports: PERCENT_RISK, KELLY, FIXED
 
-### src/infrastructure (3,127 LOC, 32 files)
+### src/infrastructure (3,127+ LOC, 32 files)
 
 **Brokers (Pluggable Execution):**
 - **IBroker** - Abstract contract
@@ -160,7 +173,7 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
   - HMAC-SHA256 signing
   - Resilient delivery with retry
 
-### src/features (6,561 LOC, 85 files)
+### src/features (6,561+ LOC, 85 files)
 
 **backtesting/ (2,259 LOC)**
 - **Routes:**
@@ -397,6 +410,24 @@ All settings via environment variables (`.env` file):
 - **Production:** `python -m src.main` with `ENVIRONMENT=production`
 - **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
+
+## Recent Changes (2026-02-12)
+
+**New Features:**
+- Event handler auto-discovery: `@event_handler` decorator + `EventRegistry`
+  - Enables self-documenting event subscriptions
+  - Automatic binding during startup via `register_instance()`
+  - File: src/common/messaging/event_registry.py (86 LOC)
+
+**UUID7 Migration:**
+- All aggregates now use UUID7 (time-ordered) instead of UUID4
+- Better database index performance (chronological sorting)
+- File: src/common/uuid.py (19 LOC)
+  - `generate_id()` - Return UUID v7
+  - `generate_id_str()` - Return as string
+
+**Field Renames:**
+- QuoteAggregate: `last_update` → `updated_at` (consistency)
 
 ## Known Limitations
 

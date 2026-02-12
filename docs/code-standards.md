@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-01 | **Coverage:** 180 files, 12,420 LOC
+**Last Updated:** 2026-02-12 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/)
 
 ## Architecture Patterns
 
@@ -134,7 +134,41 @@ class TradingViewProvider:
 
 **Rationale:** Isolates blocking I/O from async event loop, clean error handling, easy to mock for testing.
 
-### 6. CQRS Handler Pattern
+### 6. Event Handler Auto-Discovery Pattern
+
+Register event subscribers automatically using the `@event_handler` decorator:
+
+```python
+from src.common.messaging.event_registry import event_handler
+
+class PositionTracker:
+    @event_handler(OrderFilledEvent)
+    async def _on_order_filled(self, event: OrderFilledEvent) -> None:
+        """Called when order is filled (auto-registered)."""
+        await self.update_position(event)
+
+    @event_handler(BarCompletedEvent, QuoteReceivedEvent)
+    async def _on_market_event(self, event: DomainEvent) -> None:
+        """Called on market data events (auto-registered)."""
+        pass
+```
+
+Auto-registration during startup:
+```python
+from src.common.messaging.event_registry import get_event_registry
+
+registry = get_event_registry()
+count = registry.register_instance(position_tracker, event_bus)
+# All @event_handler methods now subscribed to EventBus
+```
+
+**Benefits:**
+- Decorative, self-documenting: Clear which methods handle which events
+- Auto-discovery: No manual subscribe() calls
+- Scalable: Add new handlers without modifying mediator
+- Type-safe: Event types checked at decorator definition
+
+### 7. CQRS Handler Pattern
 
 Separate request handlers for commands (mutate state) and queries (read-only). All handlers extend `Handler[TRequest, TResponse]` base class.
 
@@ -205,7 +239,7 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 - Return DTOs, not domain entities
 - Publish domain events for all state changes
 
-### 7. Strategy Implementation Pattern
+### 8. Strategy Implementation Pattern
 
 Implement IStrategy interface for custom trading strategies:
 
@@ -645,6 +679,27 @@ TRADINGVIEW_USERNAME=username_placeholder
 - `quote_aggregator.py` - 368 LOC (core algorithm, complexity justified)
 - `routes.py` - 472 LOC (may benefit from split)
 
+## UUID Generation (Time-Ordered IDs)
+
+All aggregates use UUID7 (time-ordered) for better database indexing:
+
+```python
+from src.common.uuid import generate_id, generate_id_str
+
+# Generate UUID v7 (timestamp-based, sortable)
+order_id = generate_id()        # UUID object
+order_id_str = generate_id_str() # "550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Migration from UUID4:**
+- Old: Random UUID4 (bad for B-tree indexes, cluster keys)
+- New: UUID7 (timestamp-based, naturally sorts chronologically)
+- Benefit: Better MongoDB shard key performance, faster range queries
+
+All aggregates migrated:
+- OHLCVAggregate, OrderAggregate, PositionAggregate, etc.
+- All repositories use UUID7 for _id generation
+
 ## Deprecated Patterns (Do Not Use)
 
 ❌ Synchronous blocking I/O in async context
@@ -657,6 +712,8 @@ TRADINGVIEW_USERNAME=username_placeholder
 ❌ Comments explaining obvious code
 ❌ Circular imports between features
 ❌ Feature-specific configuration in main module
+❌ Manual event subscription instead of @event_handler decorator
+❌ UUID4 for aggregates (use UUID7)
 
 ## Quality Checklist
 
