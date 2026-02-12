@@ -52,14 +52,14 @@ just start
 
 ## Architecture (DDD + CQRS + Vertical Slice)
 
-**12,420 LOC across 180 Python files:**
+**14,393 LOC across 213 files (182 Python files in src/):**
 
 ```
 src/
-├── common/              (700 LOC)   - Mediator, EventBus, middleware, singletons
-├── domain/              (1,674 LOC) - Pure business logic (zero I/O)
-├── infrastructure/      (3,127 LOC) - Brokers, persistence, providers, scheduling
-└── features/            (6,561 LOC) - Vertical slices: market_data, backtesting,
+├── common/              (700+ LOC)  - Mediator, EventBus, @event_handler, UUID7, singletons
+├── domain/              (1,674+ LOC)- Pure business logic (zero I/O), all UUID7 IDs
+├── infrastructure/      (3,127+ LOC)- Brokers, persistence, providers, scheduling
+└── features/            (6,561+ LOC)- Vertical slices: market_data, backtesting,
     │                                  strategy, trading, risk
     ├── backtesting/     (2,259 LOC) - BacktestRunner, GridOptimizer
     ├── market_data/     (2,116 LOC) - BarManager, sync, quotes

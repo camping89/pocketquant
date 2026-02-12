@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-02-01 | **Status:** v1.0 Complete | **Codebase:** 180 files, 12,420 LOC | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-02-12 | **Status:** v1.0 Complete | **Codebase:** 213 files, 14,393 LOC (182 py in src/) | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -300,23 +300,25 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 ### Module Breakdown
 
 ```
-src/common/             (700 LOC, 28 files)
+src/common/             (700+ LOC, 28 files)
 ├── Mediator & EventBus
+├── Event Handler Auto-Discovery (@event_handler, EventRegistry)
+├── UUID Utilities (UUID7 generation)
 ├── Database (MongoDB) & Cache (Redis)
 ├── Logging (structlog) & Tracing
 ├── Health Coordinator
 ├── Middleware (correlation, rate limit, idempotency)
 └── Job Scheduler (APScheduler)
 
-src/domain/             (1,674 LOC, 33 files)
-├── Aggregates: OHLCV, Order, Position, Quote, Symbol, Risk
+src/domain/             (1,674+ LOC, 33 files)
+├── Aggregates: OHLCV, Order, Position, Quote, Symbol, Risk (all with UUID7)
 ├── Value Objects: OHLCV, Price, Symbol, Signal, etc.
 ├── Domain Events (13+ event types)
 ├── Domain Services: BarBuilder, PositionSizer
 ├── Enums: OrderType, OrderStatus, OrderSide, Direction, etc.
 └── Immutable frozen dataclasses with validation
 
-src/infrastructure/     (3,127 LOC, 32 files)
+src/infrastructure/     (3,127+ LOC, 32 files)
 ├── Brokers: IBroker interface, PaperBroker, OKXBroker, BrokerFactory
 ├── OKX WebSocket: Client, ReconnectionHandler, Mappers
 ├── Persistence: Database, Cache singletons
@@ -324,14 +326,17 @@ src/infrastructure/     (3,127 LOC, 32 files)
 ├── Scheduling: JobScheduler (APScheduler)
 └── HTTP & Webhooks: HTTP client, WebhookDispatcher
 
-src/features/           (6,561 LOC, 85 files)
+src/features/           (6,561+ LOC, 85 files)
 ├── backtesting/        (2,259 LOC) - BacktestRunner, GridOptimizer, Metrics
 ├── market_data/        (2,116 LOC) - BarManager, sync, quotes, aggregation
 ├── strategy/           (1,236 LOC) - StrategyEngine, IStrategy, YAML loader
 ├── trading/            (782 LOC) - OrderManager, PositionTracker
 └── risk/               (163 LOC) - RiskCheckHandler
 
-Total: 12,420 LOC (180 Python files)
+tests/                  (843 LOC, 17 files)
+docker/                 (401 LOC, 5 files)
+
+Total: 14,393 LOC (213 files, 182 Python files in src/)
 ```
 
 ## Success Criteria

@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-02-01 | **Version:** 1.0 | **Status:** Production-Ready
+**Last Updated:** 2026-02-12 | **Version:** 1.0 | **Status:** Production-Ready
 
 ## High-Level Architecture
 
@@ -198,7 +198,7 @@ infrastructure/
 
 ### Layer 4: Common (Cross-Cutting)
 
-**Purpose:** Mediator, EventBus, middleware, tracing, health.
+**Purpose:** Mediator, EventBus, middleware, tracing, health, UUID utilities.
 
 **Structure:**
 ```
@@ -209,7 +209,9 @@ common/
 │   └── exceptions.py     # HandlerNotFoundError
 ├── messaging/
 │   ├── event_bus.py      # In-memory async event bus
-│   └── event_handler.py  # EventHandler base
+│   ├── event_handler.py  # EventHandler base
+│   ├── event_registry.py # @event_handler decorator + auto-discovery
+│   └── event_registry.py # EventRegistry for scanning & binding handlers
 ├── tracing/
 │   ├── correlation.py    # Correlation ID management
 │   └── context.py        # ContextVar storage
@@ -220,6 +222,7 @@ common/
 │   └── middleware.py     # IdempotencyMiddleware (24h TTL)
 ├── rate_limit/
 │   └── middleware.py     # RateLimitMiddleware (200 req/10s)
+├── uuid.py               # UUID7 generation (time-ordered IDs)
 ├── database/             # Singleton wrappers (legacy, in common for now)
 ├── cache/
 ├── logging/
@@ -792,8 +795,6 @@ async with asynccontextmanager(app):
 ## Security
 
 - **Credentials:** Environment variables only (never committed)
-- **MongoDB Auth:** Via DSN (username/password)
-- **Redis Auth:** Via DSN (optional password)
+- **Auth:** MongoDB/Redis via DSN (username/password)
 - **Rate Limiting:** IP-based (200 req/10s)
 - **Idempotency:** Prevent duplicate requests (24h TTL)
-- **CORS:** Configurable (not default-open)

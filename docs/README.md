@@ -1,6 +1,6 @@
 # PocketQuant Documentation Index
 
-**Last Updated:** 2026-02-01 | **Codebase:** 12,420 LOC (180 files) | **Test Coverage:** 78%+
+**Last Updated:** 2026-02-12 | **Codebase:** 14,393 LOC (213 files) | **Test Coverage:** 78%+
 
 Welcome to PocketQuant documentation. Start below based on your role.
 
@@ -68,11 +68,13 @@ Detailed module breakdown, layer responsibilities, data pipelines, patterns, and
 - Testing strategy and configuration
 
 **Key Stats:**
-- Total: 12,420 LOC (180 Python files)
-- src/common: 700 LOC (28 files)
-- src/domain: 1,674 LOC (33 files)
-- src/infrastructure: 3,127 LOC (32 files)
-- src/features: 6,561 LOC (85 files)
+- Total: 14,393 LOC (213 files, 182 Python files in src/)
+- src/common: 700+ LOC (28 files)
+- src/domain: 1,674+ LOC (33 files)
+- src/infrastructure: 3,127+ LOC (32 files)
+- src/features: 6,561+ LOC (85 files)
+- tests/: 843 LOC (17 files)
+- docker/: 401 LOC (5 files)
 
 ---
 
@@ -341,10 +343,11 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
+| 2026-02-12 | Updated stats: 213 files, 14,393 LOC. Documented @event_handler decorator & auto-discovery, UUID7 migration, updated_at field rename |
 | 2026-02-01 | AS-IS codebase documentation: 180 files, 12,420 LOC. Added detailed module breakdown, domain services, OKX reconnection handler, GridOptimizer details |
 | 2026-01-28 | Codebase growth: 4,200 → 12,377 LOC (65 → 180 files) |
 | 2026-01-21 | Initial documentation suite (5 docs, 2,324 LOC) |
 
 ---
 
-**Last Updated:** 2026-02-01 | **Codebase:** 12,420 LOC (180 files) | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01
+**Last Updated:** 2026-02-12 | **Codebase:** 14,393 LOC (213 files) | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01
