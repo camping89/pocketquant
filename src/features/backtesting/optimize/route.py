@@ -1,0 +1,54 @@
+"""API routes for running optimization."""
+
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
+from src.common.mediator import Mediator
+from src.common.mediator.dependencies import get_mediator
+from src.features.backtesting.optimize.command import RunOptimizationCommand
+
+router = APIRouter()
+
+
+class OptimizationSummaryResponse(BaseModel):
+    """Summary of optimization run."""
+
+    id: str
+    strategy_id: str
+    status: str
+    total_combinations: int
+    completed_combinations: int
+    failed_combinations: int
+    target_metric: str
+    best_parameters: dict[str, Any]
+    best_metric_value: float
+
+
+@router.post("/optimize", response_model=OptimizationSummaryResponse)
+async def run_optimization(
+    cmd: RunOptimizationCommand,
+    mediator: Annotated[Mediator, Depends(get_mediator)],
+) -> dict:
+    """Run grid optimization across parameter combinations.
+
+    Tests all combinations of parameters and returns ranked results.
+    Maximum 1000 combinations allowed.
+    """
+    try:
+        result = await mediator.send(cmd)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return {
+        "id": result.id,
+        "strategy_id": result.strategy_id,
+        "status": result.status,
+        "total_combinations": result.total_combinations,
+        "completed_combinations": result.completed_combinations,
+        "failed_combinations": result.failed_combinations,
+        "target_metric": result.target_metric,
+        "best_parameters": result.best_parameters,
+        "best_metric_value": getattr(result.best_metrics, result.target_metric, 0),
+    }
