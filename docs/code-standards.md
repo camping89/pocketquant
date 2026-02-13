@@ -16,16 +16,33 @@ features/
 ├── trading/             (782 LOC, 12 files)
 └── risk/                (163 LOC, 5 files)
 
-Each slice contains:
-├── api/                 # FastAPI routes
-├── handlers/            # CQRS handlers
-├── models/              # Pydantic DTOs
-├── services/            # Business logic (optional)
-├── repositories/        # Data access (optional)
-└── jobs/                # Background tasks (optional)
+Canonical slice structure (operation-centric):
+├── base/                # Shared infrastructure
+│   ├── models/          # Pydantic DTOs
+│   ├── repositories/    # Data access (optional)
+│   └── managers/        # Stateful services (optional)
+├── operation_name/      # Each operation is a folder
+│   ├── dto.py           # Operation-specific DTOs
+│   ├── command.py       # Command/Query definition
+│   └── handler.py       # CQRS handler
+└── router.py            # FastAPI routes
+
+Example (backtesting):
+├── base/
+│   ├── models/
+│   ├── repository/
+│   └── engine/
+├── run/                 # RunBacktest operation
+│   ├── dto.py
+│   ├── command.py
+│   └── handler.py
+├── get_result/          # GetBacktest operation
+│   ├── query.py
+│   └── handler.py
+└── router.py
 ```
 
-**Rationale:** Tight cohesion within feature, loose coupling between features. Easy to add/remove features without cascading changes. Each slice owns API contracts and data models.
+**Rationale:** Tight cohesion within feature, loose coupling between features. Operation-centric structure makes each use case explicit and self-contained. Easy to add/remove operations without cascading changes.
 
 ### 2. Singleton Infrastructure (Class-Method Pattern)
 
@@ -673,11 +690,12 @@ TRADINGVIEW_USERNAME=username_placeholder
 | quote_aggregator.py | 368 LOC | <400 (complex algorithm exception) |
 | quote_service.py | 236 LOC | <200 (consider split if modified) |
 | data_sync_service.py | 244 LOC | <200 |
-| routes.py | 472 LOC | Split into smaller route modules |
+| handler.py (operation) | <150 LOC | <200 (single operation per file) |
+| router.py (feature) | <300 LOC | <400 (all operations for one feature) |
 
 **Current largest files (acceptable but monitor):**
 - `quote_aggregator.py` - 368 LOC (core algorithm, complexity justified)
-- `routes.py` - 472 LOC (may benefit from split)
+- Individual `router.py` files - <300 LOC each (operation-centric routes)
 
 ## UUID Generation (Time-Ordered IDs)
 

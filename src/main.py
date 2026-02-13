@@ -28,12 +28,12 @@ from src.features.backtesting import (
     RunOptimizationHandler,
     backtest_router,
 )
-from src.features.backtesting.repository import BacktestRepository
-from src.features.market_data.api import quote_router
-from src.features.market_data.api import router as market_data_router
-from src.features.market_data.jobs import register_sync_jobs, set_mediator
+from src.features.backtesting.base.repository import BacktestRepository
+from src.features.market_data.base.jobs import register_sync_jobs, set_mediator
+from src.features.market_data.list_symbols import ListSymbolsQuery
+from src.features.market_data.list_symbols.handler import ListSymbolsHandler
 from src.features.market_data.ohlcv import GetOHLCVHandler, GetOHLCVQuery
-from src.features.market_data.quote import (
+from src.features.market_data.quotes import (
     GetAllQuotesHandler,
     GetAllQuotesQuery,
     GetLatestQuoteHandler,
@@ -47,6 +47,8 @@ from src.features.market_data.quote import (
     UnsubscribeCommand,
     UnsubscribeHandler,
 )
+from src.features.market_data.quotes.router import router as quote_router
+from src.features.market_data.router import router as market_data_router
 from src.features.market_data.status import (
     GetQuoteServiceStatusHandler,
     GetQuoteServiceStatusQuery,
@@ -76,9 +78,20 @@ from src.features.strategy import (
     StrategyEngine,
     strategy_router,
 )
-from src.features.trading import OrderManager, PositionTracker
-from src.features.trading.api import trading_router
-from src.features.trading.repositories import OrderRepository, PositionRepository
+from src.features.trading import (
+    GetOrderHandler,
+    GetOrderQuery,
+    GetPositionHandler,
+    GetPositionQuery,
+    ListOrdersHandler,
+    ListOrdersQuery,
+    ListPositionsHandler,
+    ListPositionsQuery,
+    OrderManager,
+    PositionTracker,
+    trading_router,
+)
+from src.features.trading.base.repositories import OrderRepository, PositionRepository
 from src.infrastructure.brokers import BrokerFactory
 from src.infrastructure.tradingview import TradingViewProvider
 
@@ -134,6 +147,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         mediator.register(
             GetQuoteServiceStatusQuery, GetQuoteServiceStatusHandler(settings)
         )
+        mediator.register(ListSymbolsQuery, ListSymbolsHandler())
 
         # === Strategy Engine Setup ===
         broker_factory = BrokerFactory()
@@ -182,6 +196,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await strategy_engine.start()
 
         logger.info("strategy_engine_initialized")
+
+        # Register trading handlers
+        mediator.register(ListOrdersQuery, ListOrdersHandler(order_manager))
+        mediator.register(GetOrderQuery, GetOrderHandler(order_manager))
+        mediator.register(ListPositionsQuery, ListPositionsHandler(position_tracker))
+        mediator.register(GetPositionQuery, GetPositionHandler(position_tracker))
+
+        logger.info("trading_handlers_registered")
 
         # Register backtest handlers
         mediator.register(
