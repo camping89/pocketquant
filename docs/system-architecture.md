@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-02-12 | **Version:** 1.0 | **Status:** Production-Ready
+**Last Updated:** 2026-02-13 | **Version:** 1.0 | **Status:** Production-Ready | **Pattern:** Operation-First Vertical Slices
 
 ## High-Level Architecture
 
@@ -196,66 +196,9 @@ operation_name/
 └── __init__.py
 ```
 
-**Real Operation Example (backtesting/run):**
-```
-backtesting/run/
-├── command.py
-│   class RunBacktestCommand(BaseModel):
-│       strategy_name: str
-│       symbol: str
-│       start_date: date
-│       end_date: date
+**Handler Responsibilities:** Receive Command/Query → Fetch from Infrastructure → Execute Domain logic → Persist → Publish DomainEvents → Return DTO
 
-├── handler.py
-│   class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
-│       async def handle(self, cmd: RunBacktestCommand) -> BacktestResultDTO:
-│           # 1. Load strategy
-│           # 2. Fetch historical data
-│           # 3. Run backtest via BacktestRunner
-│           # 4. Calculate metrics
-│           # 5. Persist to MongoDB
-│           # 6. Return result DTO
-
-└── route.py
-   @router.post("/run")
-   async def run_backtest(
-       cmd: RunBacktestCommand,
-       mediator: Mediator = Depends(get_mediator)
-   ) -> BacktestResultDTO:
-       return await mediator.send(cmd)
-```
-
-**Handler Responsibilities:**
-1. Receive Command/Query from Mediator
-2. Fetch data from Infrastructure
-3. Execute domain logic via Domain layer
-4. Persist results via Infrastructure
-5. Publish DomainEvents to EventBus
-6. Return DTO
-
-**Example Handler:**
-```python
-class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
-    def __init__(self, provider: IDataProvider, event_bus: EventBus):
-        self.provider = provider
-        self.event_bus = event_bus
-
-    async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
-        # 1. Fetch from infrastructure
-        bars = await self.provider.fetch_ohlcv(...)
-
-        # 2. Domain validation
-        aggregate = OHLCVAggregate(bars)
-
-        # 3. Persist via infrastructure
-        await Database.get_collection("ohlcv").insert_many(...)
-
-        # 4. Publish events
-        await self.event_bus.publish(BarSyncedEvent(...))
-
-        # 5. Return DTO
-        return SyncResultDTO(bars_synced=len(bars))
-```
+**Example:** `backtesting/run/` contains `command.py` (RunBacktestCommand), `handler.py` (RunBacktestHandler), `route.py` (POST /run). Handler loads strategy, fetches historical bars, runs BacktestRunner, calculates metrics, persists to MongoDB, returns result DTO.
 
 ### Layer 3: Infrastructure (External I/O)
 
@@ -754,46 +697,17 @@ async with self._lock:
 
 ### Startup Sequence
 
-```python
-async with asynccontextmanager(app):
-    # Initialize in order
-    settings = get_settings()
-    setup_logging(settings)
-
-    # Infrastructure
-    await Database.connect(settings)
-    await Cache.connect(settings)
-    JobScheduler.initialize(settings)
-    JobScheduler.start()
-
-    # Register handlers
-    mediator = Mediator()
-    event_bus = EventBus()
-
-    # Register CQRS handlers
-    mediator.register(SyncSymbolCommand, SyncSymbolHandler(...))
-    mediator.register(GetBarsQuery, GetBarsHandler(...))
-
-    # Register event subscribers
-    event_bus.subscribe(BarSyncedEvent, on_bar_synced)
-
-    # Register background jobs
-    register_sync_jobs()
-
-    yield  # Serve requests
-
-    # Cleanup in reverse order
-    JobScheduler.shutdown(wait=True)
-    await Cache.disconnect()
-    await Database.disconnect()
-```
+1. `get_settings()` + `setup_logging()`
+2. `Database.connect()` → `Cache.connect()` → `JobScheduler.start()`
+3. Create `Mediator` + `EventBus`, register all CQRS handlers
+4. `register_sync_jobs()` for background scheduling
+5. `yield` → serve requests
 
 ### Graceful Shutdown
 
 1. Stop accepting new requests (Uvicorn)
-2. JobScheduler.shutdown(wait=True) - Wait 60s for running jobs
-3. Cache.disconnect() - Flush pending operations
-4. Database.disconnect() - Close all connections
+2. `strategy_engine.stop()` → `JobScheduler.shutdown(wait=True)`
+3. `Cache.disconnect()` → `Database.disconnect()`
 
 ## Integration Points
 
@@ -859,28 +773,18 @@ async with asynccontextmanager(app):
 
 ## Performance Characteristics
 
-### Latency
-
-- **Historical Sync:** 1-5s per 5000 bars (network + DB write)
-- **WebSocket Quote:** <100ms from TradingView to handler
-- **Bar Aggregation:** <1ms per tick (in-memory)
-- **Cache Lookup:** <5ms (Redis)
-- **Mediator Dispatch:** <0.1ms (dict lookup)
-
-### Throughput
-
-- **Concurrent Syncs:** Limited by ThreadPoolExecutor (4 workers)
-- **Quote Subscriptions:** 1000+ ticks/sec (WebSocket + asyncio)
-- **Database:** Depends on MongoDB capacity (bulk upserts optimized)
-- **Rate Limit:** 200 req/10s per IP (configurable)
-
-### Memory
-
-- **MongoDB Pool:** ~10-20MB per connection
-- **Redis Pool:** <1MB
-- **EventBus History:** ~1KB per 50 events
-- **Mediator Registry:** <1KB
-- **BarManager State:** ~10MB per 10k subscriptions
+| Metric | Value |
+|--------|-------|
+| Historical Sync | 1-5s per 5000 bars |
+| WebSocket Quote | <100ms TradingView→handler |
+| Bar Aggregation | <1ms per tick (in-memory) |
+| Cache Lookup | <5ms (Redis) |
+| Mediator Dispatch | <0.1ms (dict lookup) |
+| Concurrent Syncs | 4 workers (ThreadPoolExecutor) |
+| Quote Throughput | 1000+ ticks/sec |
+| Rate Limit | 200 req/10s per IP |
+| Memory (MongoDB Pool) | ~10-20MB per connection |
+| Memory (BarManager) | ~10MB per 10k subscriptions |
 
 ## Security
 

@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-12 | **Codebase Size:** 14,393 LOC | **Total Files:** 213 (182 Python files in src/)
+**Last Updated:** 2026-02-13 | **Codebase Size:** 14,393 LOC | **Total Files:** 213 (182 Python files in src/) | **Architecture:** Operation-First Vertical Slices
 
 ## Architecture Overview
 

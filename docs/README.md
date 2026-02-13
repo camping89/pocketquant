@@ -1,6 +1,6 @@
 # PocketQuant Documentation Index
 
-**Last Updated:** 2026-02-12 | **Codebase:** 14,393 LOC (213 files) | **Test Coverage:** 78%+
+**Last Updated:** 2026-02-13 | **Codebase:** 14,393 LOC (213 files) | **Architecture:** Operation-First Vertical Slices | **Test Coverage:** 78%+
 
 Welcome to PocketQuant documentation. Start below based on your role.
 
@@ -232,10 +232,22 @@ Product goals, requirements (functional & non-functional), implementation status
 
 ## Key Concepts Explained
 
-### Vertical Slice Architecture
-Each feature (e.g., market_data) contains all layers: API, services, repositories, models, providers, jobs.
+### Vertical Slice Architecture (Operation-First)
+Each feature (market_data, backtesting, strategy, trading, risk) is self-contained. **Operations are the primary organizational unit.** Each operation folder contains: command/query.py, handler.py, optional route.py. Shared code within a feature is in base/.
 
-**Why:** Clear separation, easy to add features without affecting others.
+**Example Structure:**
+```
+features/backtesting/
+├── base/          # Shared: engine, metrics, models, optimizer, repository
+├── run/           # Operation: execute backtest
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+├── optimize/      # Operation: optimize parameters
+└── router.py
+```
+
+**Why:** Clear separation of use cases. Each operation is self-contained and testable. Easy to add/remove operations without cascading changes. Developers understand an entire feature by reading operations.
 
 ### Singleton Infrastructure
 Database, Cache, JobScheduler are class-based singletons with class method APIs.
@@ -343,6 +355,7 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
+| 2026-02-13 | Operation-first vertical slice restructure: All features reorganized with operations as primary unit. Updated architecture docs, code standards, feature structure. Each operation folder self-contained. |
 | 2026-02-12 | Updated stats: 213 files, 14,393 LOC. Documented @event_handler decorator & auto-discovery, UUID7 migration, updated_at field rename |
 | 2026-02-01 | AS-IS codebase documentation: 180 files, 12,420 LOC. Added detailed module breakdown, domain services, OKX reconnection handler, GridOptimizer details |
 | 2026-01-28 | Codebase growth: 4,200 → 12,377 LOC (65 → 180 files) |
@@ -350,4 +363,4 @@ When you make code changes:
 
 ---
 
-**Last Updated:** 2026-02-12 | **Codebase:** 14,393 LOC (213 files) | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01
+**Last Updated:** 2026-02-13 | **Codebase:** 14,393 LOC (213 files) | **Architecture:** Operation-First Vertical Slices | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01

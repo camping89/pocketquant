@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-02-12 | **Status:** v1.0 Complete | **Codebase:** 213 files, 14,393 LOC (182 py in src/) | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-02-13 | **Status:** v1.0 Complete | **Codebase:** 213 files, 14,393 LOC (182 py in src/) | **Architecture:** Operation-First Vertical Slices | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -297,16 +297,16 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 | Structured Logging | ✅ Complete | N/A | N/A | 100% |
 | Docker Setup | ✅ Complete | N/A | N/A | N/A |
 
-### Module Breakdown
+### Module Breakdown (Operation-First Architecture)
 
 ```
 src/common/             (700+ LOC, 28 files)
-├── Mediator & EventBus
+├── Mediator & EventBus - CQRS dispatcher & event pub/sub
 ├── Event Handler Auto-Discovery (@event_handler, EventRegistry)
-├── UUID Utilities (UUID7 generation)
-├── Database (MongoDB) & Cache (Redis)
-├── Logging (structlog) & Tracing
-├── Health Coordinator
+├── UUID Utilities (UUID7 generation - time-ordered IDs)
+├── Database (MongoDB) & Cache (Redis) - Async singletons
+├── Logging (structlog) & Tracing - Structured JSON logs
+├── Health Coordinator - Infrastructure health checks
 ├── Middleware (correlation, rate limit, idempotency)
 └── Job Scheduler (APScheduler)
 
@@ -326,18 +326,51 @@ src/infrastructure/     (3,127+ LOC, 32 files)
 ├── Scheduling: JobScheduler (APScheduler)
 └── HTTP & Webhooks: HTTP client, WebhookDispatcher
 
-src/features/           (6,561+ LOC, 85 files)
-├── backtesting/        (2,259 LOC) - BacktestRunner, GridOptimizer, Metrics
-├── market_data/        (2,116 LOC) - BarManager, sync, quotes, aggregation
-├── strategy/           (1,236 LOC) - StrategyEngine, IStrategy, YAML loader
-├── trading/            (782 LOC) - OrderManager, PositionTracker
-└── risk/               (163 LOC) - RiskCheckHandler
+src/features/           (6,561+ LOC, 85 files) - Operation-First Vertical Slices
+├── backtesting/        (2,259 LOC, 27 files)
+│   ├── base/ (engine, metrics, models, optimizer, repository)
+│   ├── run/ (operation: execute backtest)
+│   ├── optimize/ (operation: parameter optimization)
+│   ├── get_result/ (operation: retrieve result)
+│   ├── get_optimization/ (operation: get optimization)
+│   ├── list_results/ (operation: list backtests)
+│   └── router.py
+├── market_data/        (2,116 LOC, 31 files)
+│   ├── base/ (jobs, managers, models, providers, services)
+│   ├── sync/sync_one/ (operation: sync single symbol)
+│   ├── sync/sync_bulk/ (operation: sync multiple symbols)
+│   ├── ohlcv/get_ohlcv/ (operation: query bars)
+│   ├── quotes/ (operations: start_feed, stop_feed, subscribe, get_all, get_latest)
+│   ├── status/ (operations: get_sync_status, get_quote_service_status)
+│   ├── list_symbols/ (operation: list symbols)
+│   ├── repositories/
+│   └── router.py
+├── strategy/           (1,236 LOC, 18 files)
+│   ├── base/ (engine, interfaces, loader)
+│   ├── get_all/ (operation: list strategies)
+│   ├── get_one/ (operation: get strategy details)
+│   ├── load/ (operation: load strategy)
+│   ├── start/ (operation: start strategy)
+│   ├── stop/ (operation: stop strategy)
+│   └── router.py
+├── trading/            (782 LOC, 12 files)
+│   ├── base/ (managers, models, repositories)
+│   ├── list_orders/ (operation: list orders)
+│   ├── get_order/ (operation: get order)
+│   ├── list_positions/ (operation: list positions)
+│   ├── get_position/ (operation: get position)
+│   └── router.py
+└── risk/               (163 LOC, 5 files)
+    ├── check_risk/ (operation: validate signal)
+    └── __init__.py
 
 tests/                  (843 LOC, 17 files)
 docker/                 (401 LOC, 5 files)
 
 Total: 14,393 LOC (213 files, 182 Python files in src/)
 ```
+
+**Operation-First Pattern:** Each feature contains self-contained operations (folders). Each operation is a complete use case: command/query definition, handler logic, optional route. Shared infrastructure within a feature is in base/.
 
 ## Success Criteria
 

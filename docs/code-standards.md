@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-12 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/)
+**Last Updated:** 2026-02-13 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/) | **Architecture:** Operation-First Vertical Slices
 
 ## Architecture Patterns
 
