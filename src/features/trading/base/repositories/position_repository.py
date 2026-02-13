@@ -3,7 +3,7 @@
 from src.common.constants import COLLECTION_POSITIONS
 from src.common.database import Database
 from src.domain.position import PositionAggregate
-from src.features.trading.models import PositionDocument
+from src.features.trading.base.models import PositionDocument
 
 
 class PositionRepository:

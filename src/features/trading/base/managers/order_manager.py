@@ -6,7 +6,7 @@ import structlog
 
 from src.common.messaging import EventBus
 from src.domain.order import OrderAggregate, OrderFilledEvent, OrderStatus
-from src.features.trading.repositories import OrderRepository
+from src.features.trading.base.repositories import OrderRepository
 from src.infrastructure.brokers import IBroker, OrderResult
 
 logger = structlog.get_logger(__name__)

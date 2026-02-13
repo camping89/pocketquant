@@ -3,7 +3,7 @@
 from src.common.constants import COLLECTION_ORDERS
 from src.common.database import Database
 from src.domain.order import OrderAggregate
-from src.features.trading.models import OrderDocument
+from src.features.trading.base.models import OrderDocument
 
 
 class OrderRepository:
