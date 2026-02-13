@@ -2,14 +2,13 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Union
 
 from src.domain.order import OrderAggregate
 from src.domain.position import PositionAggregate
 from src.infrastructure.brokers.models import AccountBalance, OrderResult
 
 # Callback can be sync or async
-OrderCallback = Callable[[OrderResult], Union[None, Awaitable[None]]]
+OrderCallback = Callable[[OrderResult], None | Awaitable[None]]
 
 
 class IBroker(ABC):

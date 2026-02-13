@@ -5,7 +5,6 @@ import os
 
 FORBIDDEN_IMPORTS = [
     "pymongo",
-    "motor",
     "redis",
     "aiohttp",
     "httpx",

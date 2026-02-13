@@ -99,7 +99,7 @@ class OkxWebSocketClient:
 
             logger.info("okx_ws_connected", authenticated=self._authenticated)
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             logger.error("okx_ws_connect_timeout")
             raise ConnectionError("WebSocket connection timeout") from e
         except Exception as e:
@@ -135,7 +135,7 @@ class OkxWebSocketClient:
             else:
                 logger.warning("okx_ws_unexpected_login_response", data=data)
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             logger.error("okx_ws_auth_timeout")
             raise ConnectionError("Authentication timeout") from e
 
@@ -174,7 +174,7 @@ class OkxWebSocketClient:
                 logger.error("okx_ws_subscribe_failed", error=error_msg)
                 raise ConnectionError(f"Subscribe failed: {error_msg}")
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             logger.error("okx_ws_subscribe_timeout")
             raise ConnectionError("Subscribe timeout") from e
 
@@ -220,7 +220,7 @@ class OkxWebSocketClient:
                         # Note: This is simplified - real impl would use a queue
                         logger.debug("okx_ws_heartbeat_non_pong", response=response[:100])
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning("okx_ws_pong_timeout")
                     await self._handle_disconnect()
                     return

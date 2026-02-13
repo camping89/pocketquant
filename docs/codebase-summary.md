@@ -175,94 +175,191 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
 
 ### src/features (6,561+ LOC, 85 files)
 
-**backtesting/ (2,259 LOC)**
-- **Routes:**
-  - POST `/api/v1/backtest/run` - Execute backtest
-  - POST `/api/v1/backtest/optimize` - Parameter optimization
-  - GET `/api/v1/backtest/{run_id}` - Retrieve results
-  - GET `/api/v1/backtest/{run_id}/equity` - Equity curve
-  - GET `/api/v1/backtest/optimization/{id}` - Optimization results
-  - GET `/api/v1/backtest/strategy/{id}` - Strategy results
-- **Core Classes:**
-  - **BacktestRunner** - Orchestrates backtest execution
-  - **HistoricalReplayEngine** - Chronological bar replay
-  - **GridOptimizer** - Parallel parameter search (multiprocessing)
-  - **PerformanceCalculator** - Metrics (Sharpe, Sortino, max drawdown, win rate)
-  - **BacktestResultCollector** - Aggregates results
-  - **BacktestRepository** - MongoDB persistence
+**Vertical Slice Architecture (Operation-First Pattern):**
+Each feature is self-contained with all layers in one directory. Operations are the primary organizational unit.
 
-**market_data/ (2,116 LOC)**
-- **Routes:**
-  - POST `/api/v1/market-data/sync` - Single symbol sync (blocking)
-  - POST `/api/v1/market-data/sync/background` - Async sync
-  - POST `/api/v1/market-data/sync/bulk` - Multiple symbols
-  - GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Query bars
-  - GET `/api/v1/market-data/symbols` - List symbols
-  - GET `/api/v1/market-data/sync-status` - Sync progress
-  - POST `/api/v1/quotes/start` - Start WebSocket
-  - POST `/api/v1/quotes/stop` - Stop WebSocket
-  - GET `/api/v1/quotes/latest/{exchange}/{symbol}` - Latest quote
-- **Core Classes:**
-  - **BarManager** - Real-time multi-interval aggregation
-  - **SyncSymbolHandler** - CQRS handler for sync
-  - **BulkSyncHandler** - Batch sync handler
-  - **GetOHLCVHandler** - Query handler
-  - **GetSyncStatusHandler** - Status query
-  - **StartQuoteFeedHandler**, **StopQuoteFeedHandler** - Quote management
-  - **GetLatestQuoteHandler** - Quote retrieval
+**backtesting/ (2,259 LOC, 27 files)**
 
-**strategy/ (1,236 LOC)**
-- **Routes:**
-  - GET `/api/v1/strategies` - List strategies
-  - GET `/api/v1/strategies/{strategy_id}` - Get strategy details
-  - POST `/api/v1/strategies/load` - Load strategy by name
-  - POST `/api/v1/strategies/{id}/start` - Start strategy
-  - POST `/api/v1/strategies/{id}/stop` - Stop strategy
-- **Core Classes:**
-  - **StrategyEngine** - Orchestrates strategy execution
-  - **IStrategy** - ABC interface
-    - `async on_bar(bar: OHLCVBar) → Optional[StrategySignal]`
-    - `async on_tick(tick: QuoteTick) → Optional[StrategySignal]`
-    - `async on_fill(order: Order) → None`
-  - **StrategyLoader** - YAML loader
-  - **LoadStrategyHandler**, **StartStrategyHandler**, **StopStrategyHandler** - CQRS handlers
+Structure:
+```
+backtesting/
+├── base/                 # Shared infrastructure
+│   ├── engine/          # BacktestRunner, HistoricalReplayEngine
+│   ├── metrics/         # PerformanceCalculator
+│   ├── models/          # DTOs
+│   ├── optimizer/       # GridOptimizer
+│   └── repository/      # BacktestRepository
+├── run/                 # Operation: Execute backtest
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+├── optimize/            # Operation: Optimize parameters
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+├── get_result/          # Operation: Retrieve backtest
+│   ├── query.py
+│   ├── handler.py
+│   └── route.py
+├── get_optimization/    # Operation: Get optimization
+│   ├── query.py
+│   └── handler.py
+├── list_results/        # Operation: List backtests
+│   ├── query.py
+│   └── handler.py
+└── router.py            # Main feature router
+```
 
-**trading/ (782 LOC)**
-- **Routes:**
-  - GET `/api/v1/orders` - List orders
-  - GET `/api/v1/orders/{order_id}` - Get order
-  - GET `/api/v1/positions` - List positions
-  - GET `/api/v1/positions/{strategy_id}` - Strategy positions
-- **Core Classes:**
-  - **OrderManager** - Order lifecycle with MongoDB persistence
-    - `async submit(order, broker)` - Submit and persist initial state
-    - `async cancel(order_id, broker)` - Cancel and persist state
-    - `on_order_update(result)` - Handle fill/cancel from broker
-    - `async load_pending_orders()` - Recover pending orders on startup
-    - `async get_order_async(order_id)` - Fetch from memory or database
-  - **OrderRepository** - MongoDB `orders` collection
-    - `save(order)` - Upsert order document
-    - `find_pending()` - Recover non-terminal orders
-    - `find_by_strategy(strategy_id)` - Query orders by strategy
-    - Auto-creates indexes on startup
-  - **PositionTracker** - Position lifecycle with MongoDB persistence
-    - `async load_open_positions()` - Recover open positions on startup
-    - `@event_handler(OrderFilledEvent)` - Auto-register event subscriber
-    - `async _on_order_filled(event)` - Create/update/close positions
-    - `async update_price(strategy_id, price)` - Update unrealized P&L (in-memory)
-  - **PositionRepository** - MongoDB `positions` collection
-    - `save(position)` - Upsert position document
-    - `find_open()` - Recover open positions
-    - `get_by_strategy(strategy_id)` - Query active position for strategy
-    - Auto-creates indexes on startup
+Routes:
+- POST `/api/v1/backtest/run` - Execute backtest
+- POST `/api/v1/backtest/optimize` - Parameter optimization
+- GET `/api/v1/backtest/{run_id}` - Retrieve results
+- GET `/api/v1/backtest/optimization/{id}` - Optimization results
+- GET `/api/v1/backtest/strategy/{id}` - Strategy results
 
-**risk/ (163 LOC)**
-- **Core Classes:**
-  - **RiskCheckHandler** - Pre-trade validation
-    - Check account balance
-    - Validate position size
-    - Check direction changes
-    - Returns risk validation result
+**market_data/ (2,116 LOC, 31 files)**
+
+Structure:
+```
+market_data/
+├── base/                # Shared infrastructure
+│   ├── jobs/           # Background job definitions
+│   ├── managers/       # BarManager
+│   ├── models/         # DTOs
+│   ├── providers/      # Data providers
+│   └── services/       # Sync service
+├── sync/                # Sync feature (nested)
+│   ├── sync_one/       # Operation: Sync single
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── sync_bulk/      # Operation: Sync bulk
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── dto.py
+│   └── router.py
+├── ohlcv/               # OHLCV feature (nested)
+│   ├── get_ohlcv/      # Operation: Get bars
+│   │   ├── query.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   └── router.py
+├── quotes/              # Quotes feature (nested)
+│   ├── get_all/        # Operation: Get all quotes
+│   ├── get_current_bar/
+│   ├── get_latest/
+│   ├── start_feed/
+│   ├── stop_feed/
+│   ├── subscribe/
+│   ├── unsubscribe/
+│   └── router.py
+├── status/              # Status feature (nested)
+│   ├── get_quote_service_status/
+│   ├── get_symbol_sync_status/
+│   ├── get_sync_status/
+│   └── router.py
+├── list_symbols/        # Operation: List symbols
+│   ├── query.py
+│   ├── handler.py
+│   └── route.py
+├── repositories/        # Data access
+│   ├── ohlcv_repository.py
+│   ├── symbol_repository.py
+│   └── sync_status_repository.py
+└── router.py            # Main feature router
+```
+
+Routes:
+- POST `/api/v1/market-data/sync` - Single symbol sync
+- POST `/api/v1/market-data/sync/bulk` - Bulk sync
+- GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Query bars
+- GET `/api/v1/market-data/symbols` - List symbols
+- POST `/api/v1/quotes/start` - Start WebSocket
+- POST `/api/v1/quotes/stop` - Stop WebSocket
+
+**strategy/ (1,236 LOC, 18 files)**
+
+Structure:
+```
+strategy/
+├── base/                # Shared infrastructure
+│   ├── engine/         # StrategyEngine
+│   ├── interfaces/     # IStrategy interface
+│   └── loader/         # YAML loader
+├── get_all/            # Operation: List strategies
+│   ├── query.py
+│   ├── handler.py
+│   └── route.py
+├── get_one/            # Operation: Get strategy
+│   ├── query.py
+│   └── handler.py
+├── load/               # Operation: Load strategy
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+├── start/              # Operation: Start strategy
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+├── stop/               # Operation: Stop strategy
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+└── router.py           # Main feature router
+```
+
+Routes:
+- GET `/api/v1/strategies` - List strategies
+- POST `/api/v1/strategies/load` - Load strategy
+- POST `/api/v1/strategies/start` - Start strategy
+- POST `/api/v1/strategies/stop` - Stop strategy
+
+**trading/ (782 LOC, 12 files)**
+
+Structure:
+```
+trading/
+├── base/                # Shared infrastructure
+│   ├── managers/       # OrderManager, PositionTracker
+│   ├── models/         # DTOs
+│   └── repositories/   # OrderRepository, PositionRepository
+├── list_orders/        # Operation: List orders
+│   ├── query.py
+│   ├── handler.py
+│   └── route.py
+├── get_order/          # Operation: Get order
+│   ├── query.py
+│   └── handler.py
+├── list_positions/     # Operation: List positions
+│   ├── query.py
+│   ├── handler.py
+│   └── route.py
+├── get_position/       # Operation: Get position
+│   ├── query.py
+│   └── handler.py
+└── router.py           # Main feature router
+```
+
+Routes:
+- GET `/api/v1/orders` - List orders
+- GET `/api/v1/orders/{order_id}` - Get order
+- GET `/api/v1/positions` - List positions
+
+**risk/ (163 LOC, 5 files)**
+
+Structure:
+```
+risk/
+├── check_risk/         # Operation: Check risk
+│   ├── command.py
+│   ├── handler.py
+│   └── route.py
+└── __init__.py
+```
+
+Routes:
+- POST `/api/v1/risk/check` - Pre-trade validation
 
 ## CQRS Flow
 
@@ -396,7 +493,7 @@ All settings via environment variables (`.env` file):
 
 - **fastapi** - Web framework
 - **pydantic** - Settings + validation
-- **motor** - Async MongoDB driver
+- **pymongo** - MongoDB driver (native async API)
 - **redis** - Async Redis client
 - **structlog** - Structured logging
 - **apscheduler** - Job scheduling
@@ -411,23 +508,22 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
 
-## Recent Changes (2026-02-12)
+## Recent Changes (2026-02-13)
 
-**New Features:**
+**Vertical Slice Restructure (Operation-First Pattern):**
+- Completed restructure of all 5 feature slices (backtesting, market_data, strategy, trading, risk)
+- Operations now primary organizational unit (get_all/, load/, run/, check_risk/, etc.)
+- Each operation is a folder containing: command/query.py, handler.py, route.py (optional)
+- Shared code within features moved to base/ (engine/, managers/, models/, repositories/, providers/)
+- Clearer vertical separation: no cross-feature service dependencies
+- Operation folders are self-contained use cases
+- Example: backtesting/run/ → backtesting/run/command.py, handler.py, route.py
+- Commits: refactor(strategy), refactor(backtesting), refactor(market-data), refactor(trading), refactor(risk)
+
+**Previous Changes (2026-02-12):**
 - Event handler auto-discovery: `@event_handler` decorator + `EventRegistry`
-  - Enables self-documenting event subscriptions
-  - Automatic binding during startup via `register_instance()`
-  - File: src/common/messaging/event_registry.py (86 LOC)
-
-**UUID7 Migration:**
-- All aggregates now use UUID7 (time-ordered) instead of UUID4
-- Better database index performance (chronological sorting)
-- File: src/common/uuid.py (19 LOC)
-  - `generate_id()` - Return UUID v7
-  - `generate_id_str()` - Return as string
-
-**Field Renames:**
-- QuoteAggregate: `last_update` → `updated_at` (consistency)
+- UUID7 migration: All aggregates use time-ordered UUIDs
+- QuoteAggregate field rename: `last_update` → `updated_at`
 
 ## Known Limitations
 

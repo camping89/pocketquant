@@ -4,9 +4,9 @@
 
 ## Architecture Patterns
 
-### 1. Vertical Slice Architecture
+### 1. Vertical Slice Architecture (Operation-First)
 
-Each feature (market_data, backtesting, strategy, trading, risk) is self-contained with all layers in one directory. No shared services between slices except via infrastructure singletons.
+Each feature (market_data, backtesting, strategy, trading, risk) is self-contained with all layers in one directory. **Operations are the primary organizational unit.** No shared services between slices except via infrastructure singletons.
 
 ```
 features/
@@ -16,33 +16,73 @@ features/
 ├── trading/             (782 LOC, 12 files)
 └── risk/                (163 LOC, 5 files)
 
-Canonical slice structure (operation-centric):
-├── base/                # Shared infrastructure
-│   ├── models/          # Pydantic DTOs
-│   ├── repositories/    # Data access (optional)
-│   └── managers/        # Stateful services (optional)
-├── operation_name/      # Each operation is a folder
-│   ├── dto.py           # Operation-specific DTOs
-│   ├── command.py       # Command/Query definition
-│   └── handler.py       # CQRS handler
-└── router.py            # FastAPI routes
+Operation-First Slice Structure:
+├── base/                       # Shared within feature
+│   ├── engine/                 # Core engines (e.g., BacktestRunner, StrategyEngine)
+│   ├── managers/               # Stateful services (e.g., BarManager, OrderManager)
+│   ├── models/                 # Pydantic DTOs
+│   ├── repositories/           # Data access (e.g., OrderRepository)
+│   ├── providers/              # External integrations (e.g., TradingViewProvider)
+│   └── jobs/                   # Background jobs (optional)
+├── operation_name/             # Each operation is a folder
+│   ├── command.py              # Command/Query definition
+│   ├── handler.py              # CQRS handler (always present)
+│   ├── route.py                # FastAPI route (optional, often in parent router)
+│   └── __init__.py
+└── router.py                   # Main feature router (aggregates all operations)
 
-Example (backtesting):
+Real Example (backtesting):
 ├── base/
+│   ├── engine/
+│   │   ├── backtest_runner.py
+│   │   └── historical_replay_engine.py
+│   ├── metrics/
+│   │   └── performance_calculator.py
 │   ├── models/
-│   ├── repository/
-│   └── engine/
-├── run/                 # RunBacktest operation
-│   ├── dto.py
-│   ├── command.py
-│   └── handler.py
-├── get_result/          # GetBacktest operation
-│   ├── query.py
-│   └── handler.py
-└── router.py
+│   │   └── backtest_models.py
+│   ├── optimizer/
+│   │   └── grid_optimizer.py
+│   └── repository/
+│       └── backtest_repository.py
+├── run/                        # Operation: Execute backtest
+│   ├── command.py              # RunBacktestCommand
+│   ├── handler.py              # RunBacktestHandler
+│   └── route.py                # /api/v1/backtest/run
+├── optimize/                   # Operation: Optimize parameters
+│   ├── command.py              # OptimizeBacktestCommand
+│   ├── handler.py              # OptimizeBacktestHandler
+│   └── route.py                # /api/v1/backtest/optimize
+├── get_result/                 # Operation: Get result
+│   ├── query.py                # GetBacktestResultQuery
+│   └── handler.py              # GetBacktestResultHandler
+├── list_results/               # Operation: List results
+│   ├── query.py                # ListBacktestResultsQuery
+│   └── handler.py              # ListBacktestResultsHandler
+└── router.py                   # Main feature router (includes sub-routers)
+
+Nested Operations Example (market_data/sync):
+├── sync/
+│   ├── sync_one/               # Operation: Sync single symbol
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── sync_bulk/              # Operation: Sync multiple symbols
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── dto.py                  # Shared DTOs for sync operations
+│   └── router.py               # Sync sub-router
 ```
 
-**Rationale:** Tight cohesion within feature, loose coupling between features. Operation-centric structure makes each use case explicit and self-contained. Easy to add/remove operations without cascading changes.
+**Key Rules:**
+1. Each operation is a folder containing its command/query and handler
+2. Operations should be focused and cohesive (single use case per operation)
+3. Shared code within feature goes to base/ directory
+4. No cross-feature dependencies (loose coupling)
+5. Routes are organized hierarchically (router.py per feature, optional route.py per operation)
+6. Operation folders may be nested for logical grouping (e.g., sync/sync_one/, sync/sync_bulk/)
+
+**Rationale:** Tight cohesion within feature, loose coupling between features. Operation-centric structure makes each use case explicit and self-contained. Easy to add/remove operations without cascading changes. Developers can understand an entire use case by reading one operation folder.
 
 ### 2. Singleton Infrastructure (Class-Method Pattern)
 
@@ -344,7 +384,7 @@ import structlog
 # 3. Local
 from src.common.database import Database
 from src.common.logging import get_logger
-from src.features.market_data.models import OHLCV
+from src.features.market_data.base.models import OHLCV
 ```
 
 ## Commenting & Documentation
@@ -594,7 +634,7 @@ We use **Pyright** (via Pylance in VSCode) instead of mypy:
 
 ```bash
 pyright src/                 # Type check entire source
-pyright src/features/market_data/services/  # Check specific module
+pyright src/features/market_data/base/  # Check specific module
 ```
 
 ## Performance Considerations

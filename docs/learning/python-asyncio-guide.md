@@ -548,7 +548,7 @@ asyncio.run(save_trade("TR-001"))
 3. **Avoid blocking the event loop:**
    - Use `asyncio.sleep()` not `time.sleep()`
    - Use `aiohttp` not `requests`
-   - Use async database drivers (asyncpg, motor)
+   - Use async database drivers (asyncpg, pymongo native async)
 
 4. **Handle exceptions properly:**
    - Use `try/except` in coroutines
