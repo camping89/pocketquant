@@ -1,4 +1,4 @@
-"""Risk feature - risk validation and management."""
+"""Risk check operation."""
 
 from src.features.risk.check_risk.handler import RiskCheckHandler
 
