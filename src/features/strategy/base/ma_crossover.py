@@ -4,7 +4,8 @@ from collections import deque
 from datetime import UTC, datetime
 
 from src.domain.strategy import Direction, Signal
-from src.features.strategy.base import IStrategy, StrategyConfig
+from src.features.strategy.base.strategy_config import StrategyConfig
+from src.features.strategy.base.strategy_interface import IStrategy
 
 
 class MACrossoverStrategy(IStrategy):

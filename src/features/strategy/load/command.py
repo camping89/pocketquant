@@ -1,4 +1,4 @@
-"""Strategy command definitions."""
+"""Load strategy command definition."""
 
 from pathlib import Path
 
@@ -14,15 +14,3 @@ class LoadStrategyCommand(BaseModel):
 
     config: StrategyConfig | None = None
     path: Path | None = Field(default=None, description="Alternative: load from file")
-
-
-class StartStrategyCommand(BaseModel):
-    """Start a loaded strategy."""
-
-    strategy_id: str = Field(..., description="Strategy identifier")
-
-
-class StopStrategyCommand(BaseModel):
-    """Stop a running strategy."""
-
-    strategy_id: str = Field(..., description="Strategy identifier")

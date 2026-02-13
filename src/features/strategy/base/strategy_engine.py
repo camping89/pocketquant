@@ -11,13 +11,14 @@ from src.domain.order import OrderAggregate, OrderSide, OrderType
 from src.domain.quote.quote_event import QuoteReceivedEvent
 from src.domain.risk import PositionSizer
 from src.domain.strategy import Direction, Signal
-from src.features.strategy.base import IStrategy, StrategyConfig
+from src.features.strategy.base.strategy_config import StrategyConfig
+from src.features.strategy.base.strategy_interface import IStrategy
 from src.infrastructure.brokers import BrokerFactory, IBroker
 
 if TYPE_CHECKING:
-    from src.features.risk.handlers.risk_check_handler import RiskCheckHandler
-    from src.features.trading.managers.order_manager import OrderManager
-    from src.features.trading.managers.position_tracker import PositionTracker
+    from src.features.risk.check_risk.handler import RiskCheckHandler
+    from src.features.trading.base.managers.order_manager import OrderManager
+    from src.features.trading.base.managers.position_tracker import PositionTracker
 
 logger = structlog.get_logger(__name__)
 
