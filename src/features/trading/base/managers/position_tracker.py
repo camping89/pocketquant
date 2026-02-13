@@ -7,7 +7,7 @@ import structlog
 from src.common.messaging import EventBus, event_handler, get_event_registry
 from src.domain.order import OrderFilledEvent, OrderSide
 from src.domain.position import PositionAggregate, PositionOpenedEvent, PositionSide
-from src.features.trading.repositories import PositionRepository
+from src.features.trading.base.repositories import PositionRepository
 
 logger = structlog.get_logger(__name__)
 
