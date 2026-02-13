@@ -1,1 +1,1 @@
-"""Market Data feature - data provider and ingestion."""
+"""Market data feature - OHLCV, quotes, sync, and status operations."""

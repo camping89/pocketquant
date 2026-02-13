@@ -248,7 +248,10 @@ class TradingViewWebSocketProvider:
                         match = re.search(r"~h~(\d+)", data_str)
                         if match:
                             heartbeat_content = f"~h~{match.group(1)}"
-                            await self._ws.send(f"~m~{len(heartbeat_content)}~m~{heartbeat_content}")
+                            heartbeat_msg = (
+                                f"~m~{len(heartbeat_content)}~m~{heartbeat_content}"
+                            )
+                            await self._ws.send(heartbeat_msg)
 
                     # Parse and handle all messages (including those in same frame as heartbeat)
                     for message in _parse_messages(data_str):
