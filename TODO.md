@@ -6,18 +6,18 @@
 
 ### Request Flow to Trace
 ```
-routes.py:25 → SyncSymbolCommand → mediator.send()
+sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
   → mediator.py:22 → looks up handler by type(request)
-    → sync/handler.py → SyncSymbolHandler.handle()
+    → sync/sync_one/handler.py → SyncSymbolHandler.handle()
       → TradingViewProvider.fetch_ohlcv() → DB insert → EventBus.publish()
 ```
 
 ### Key Files for Breakpoints
 | File | Why |
 |------|-----|
-| `src/features/market_data/api/routes.py:25` | Request entry |
+| `src/features/market_data/sync/sync_one/route.py:18` | Request entry |
 | `src/common/mediator/mediator.py:22` | Dispatcher (type→handler mapping) |
-| `src/features/market_data/sync/handler.py` | Core business logic |
+| `src/features/market_data/sync/sync_one/handler.py` | Core business logic |
 | `src/common/messaging/event_bus.py:37` | Event publish |
 | `src/main.py` (lifespan) | Wiring at startup |
 
@@ -82,24 +82,25 @@ routes.py:25 → SyncSymbolCommand → mediator.send()
 - Event Handler Auto-Discovery
 - UUID v7 Migration
 - Pydantic Everywhere
+- Vertical Slice Restructure (all features → operation-first folder pattern)
 
 ---
 
 ## Legacy Roadmap
 
 ### Priority 1: Core Trading Engine
-- [x] Strategy Framework - Base class for defining trading strategies
-- [ ] Backtesting Engine - Run strategies against historical OHLCV data
-- [ ] Portfolio Tracker - Track positions, P&L, holdings
+- [x] Strategy Framework - Base class, YAML loader, MA crossover example
+- [x] Backtesting Engine - Run/optimize strategies against historical OHLCV data
+- [x] Portfolio Tracker - Position tracking via PositionTracker + MongoDB persistence
 
 ### Priority 2: Simulation & Analysis
-- [ ] Forward Testing - Paper trading mode using real-time quotes
-- [ ] Risk Management - Stop losses, take profits, position limits
+- [x] Forward Testing - Paper broker with simulated fills
+- [x] Risk Management - RiskCheckHandler, position sizer, risk value objects
 - [ ] Performance Reports - Trade logs, equity curves, analytics dashboard
 
 ### Priority 3: Live Trading
-- [ ] Broker Integration - Connect to exchanges/brokers
-- [ ] Order Management - Place, track, cancel orders
+- [x] Broker Integration - OKX (live + demo), Paper broker via BrokerFactory
+- [x] Order Management - OrderManager with MongoDB persistence, event-driven fills
 
 ---
 

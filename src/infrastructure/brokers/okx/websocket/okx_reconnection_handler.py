@@ -37,7 +37,7 @@ class OkxReconnectionHandler:
     def __init__(
         self,
         ws_client: OkxWebSocketClient,
-        broker: "OKXBroker",
+        broker: OKXBroker,
         initial_delay: float = DEFAULT_INITIAL_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         multiplier: float = DEFAULT_MULTIPLIER,
@@ -184,7 +184,7 @@ class OkxStateReconciler:
     Used after reconnection to detect any missed order fills.
     """
 
-    def __init__(self, broker: "OKXBroker") -> None:
+    def __init__(self, broker: OKXBroker) -> None:
         self._broker = broker
 
     async def sync(self) -> dict[str, Any]:

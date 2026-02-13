@@ -107,32 +107,122 @@ class Symbol:
 
 **Enforcement:** `test_domain_purity.py` uses AST parsing to detect forbidden imports.
 
-### Layer 2: Application (CQRS Handlers)
+### Layer 2: Application (CQRS Handlers, Operation-First)
 
-**Purpose:** Orchestrate domain + infrastructure to fulfill use cases.
+**Purpose:** Orchestrate domain + infrastructure to fulfill use cases. Each operation is a self-contained use case.
 
-**Pattern:** Command/Query handlers registered with Mediator.
+**Pattern:** Command/Query handlers registered with Mediator. Each operation folder contains its complete logic.
 
-**Structure:**
+**Structure (Operation-First Vertical Slice):**
 ```
 features/market_data/
-├── sync/
-│   ├── command.py        # SyncSymbolCommand
-│   ├── handler.py        # SyncSymbolHandler
-│   ├── dto.py            # Response DTOs
-│   └── event_handlers.py # EventBus subscribers
-├── ohlcv/
-│   ├── query.py          # GetBarsQuery, GetSymbolsQuery
-│   ├── handler.py        # Query handlers
-│   └── dto.py            # Response DTOs
-├── quote/
-│   ├── command.py        # Start/Stop/Subscribe commands
-│   ├── handler.py        # Command handlers
-│   └── dto.py            # Response DTOs
-└── status/
-    ├── query.py          # GetSyncStatusQuery
-    ├── handler.py        # Query handler
-    └── dto.py            # Response DTOs
+├── base/                        # Shared infrastructure within feature
+│   ├── jobs/                    # Background job definitions
+│   ├── managers/                # Stateful services (BarManager)
+│   ├── models/                  # Pydantic DTOs shared by multiple operations
+│   ├── providers/               # External integrations (TradingViewProvider)
+│   └── services/                # Business logic (DataSyncService)
+├── sync/                        # Nested feature: Data synchronization
+│   ├── sync_one/                # Operation: Sync single symbol
+│   │   ├── command.py           # SyncSymbolCommand
+│   │   ├── handler.py           # SyncSymbolHandler
+│   │   └── route.py             # Route: POST /market-data/sync
+│   ├── sync_bulk/               # Operation: Sync multiple symbols
+│   │   ├── command.py           # BulkSyncCommand
+│   │   ├── handler.py           # BulkSyncHandler
+│   │   └── route.py             # Route: POST /market-data/sync/bulk
+│   ├── dto.py                   # DTOs shared by sync operations
+│   └── router.py                # Sync sub-router (imports sync_one, sync_bulk routes)
+├── ohlcv/                       # Nested feature: OHLCV queries
+│   ├── get_ohlcv/               # Operation: Get bars
+│   │   ├── query.py             # GetOHLCVQuery
+│   │   ├── handler.py           # GetOHLCVHandler
+│   │   └── route.py             # Route: GET /market-data/ohlcv/{exchange}/{symbol}
+│   └── router.py
+├── quotes/                      # Nested feature: Quote management
+│   ├── start_feed/              # Operation: Start WebSocket
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── stop_feed/               # Operation: Stop WebSocket
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── subscribe/               # Operation: Subscribe symbol
+│   │   ├── command.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── get_all/                 # Operation: Get all quotes
+│   │   ├── query.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   ├── get_latest/              # Operation: Get latest quote
+│   │   ├── query.py
+│   │   ├── handler.py
+│   │   └── route.py
+│   └── router.py
+├── status/                      # Nested feature: Status queries
+│   ├── get_sync_status/         # Operation: Get sync status
+│   │   ├── query.py
+│   │   └── handler.py
+│   ├── get_quote_service_status/# Operation: Get quote feed status
+│   │   ├── query.py
+│   │   └── handler.py
+│   └── router.py
+├── list_symbols/                # Standalone operation
+│   ├── query.py                 # ListSymbolsQuery
+│   ├── handler.py               # ListSymbolsHandler
+│   └── route.py                 # Route: GET /market-data/symbols
+├── repositories/                # Data access layer (shared)
+│   ├── ohlcv_repository.py
+│   ├── symbol_repository.py
+│   └── sync_status_repository.py
+├── router.py                    # Main feature router
+└── __init__.py
+```
+
+**Operation Structure (Inside an operation folder):**
+```
+operation_name/
+├── command.py           # Command definition + validation (mutating operations)
+│   # class {Action}Command(BaseModel): ...
+├── query.py             # Query definition + validation (read-only operations)
+│   # class Get{Resource}Query(BaseModel): ...
+├── handler.py           # CQRS handler (always present)
+│   # class {Action}Handler(Handler[{Command/Query}, {Response}]):
+│   #     async def handle(self, request: {Command/Query}) -> {Response}: ...
+├── route.py             # FastAPI route (optional, not always needed)
+│   # @router.post("/...") async def route(...): ...
+└── __init__.py
+```
+
+**Real Operation Example (backtesting/run):**
+```
+backtesting/run/
+├── command.py
+│   class RunBacktestCommand(BaseModel):
+│       strategy_name: str
+│       symbol: str
+│       start_date: date
+│       end_date: date
+
+├── handler.py
+│   class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
+│       async def handle(self, cmd: RunBacktestCommand) -> BacktestResultDTO:
+│           # 1. Load strategy
+│           # 2. Fetch historical data
+│           # 3. Run backtest via BacktestRunner
+│           # 4. Calculate metrics
+│           # 5. Persist to MongoDB
+│           # 6. Return result DTO
+
+└── route.py
+   @router.post("/run")
+   async def run_backtest(
+       cmd: RunBacktestCommand,
+       mediator: Mediator = Depends(get_mediator)
+   ) -> BacktestResultDTO:
+       return await mediator.send(cmd)
 ```
 
 **Handler Responsibilities:**

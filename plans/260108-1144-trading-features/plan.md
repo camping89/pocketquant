@@ -845,7 +845,7 @@ src/features/trading/
 
 No new dependencies required. Uses existing:
 - `pandas`, `numpy` - calculations
-- `motor`, `pymongo` - MongoDB
+- `pymongo` - MongoDB (native async API)
 - `redis` - caching
 - `pydantic` - models
 
