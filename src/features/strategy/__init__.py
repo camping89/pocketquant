@@ -1,22 +1,19 @@
 """Strategy feature - trading strategy management and execution."""
 
-from src.features.strategy.api import strategy_router
-from src.features.strategy.base import IStrategy, OrderConfig, StrategyConfig
-from src.features.strategy.engine import StrategyEngine
-from src.features.strategy.examples import MACrossoverStrategy
-from src.features.strategy.handlers import (
-    GetStrategiesHandler,
-    GetStrategiesQuery,
-    GetStrategyHandler,
-    GetStrategyQuery,
-    LoadStrategyCommand,
-    LoadStrategyHandler,
-    StartStrategyCommand,
-    StartStrategyHandler,
-    StopStrategyCommand,
-    StopStrategyHandler,
+from src.features.strategy.base import (
+    IStrategy,
+    MACrossoverStrategy,
+    OrderConfig,
+    StrategyConfig,
+    StrategyEngine,
+    StrategyLoader,
 )
-from src.features.strategy.loader import StrategyLoader
+from src.features.strategy.get_all import GetStrategiesHandler, GetStrategiesQuery
+from src.features.strategy.get_one import GetStrategyHandler, GetStrategyQuery
+from src.features.strategy.load import LoadStrategyCommand, LoadStrategyHandler
+from src.features.strategy.router import router as strategy_router
+from src.features.strategy.start import StartStrategyCommand, StartStrategyHandler
+from src.features.strategy.stop import StopStrategyCommand, StopStrategyHandler
 
 __all__ = [
     # Base

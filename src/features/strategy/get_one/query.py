@@ -1,13 +1,6 @@
-"""Strategy query definitions."""
+"""Get strategy query definition."""
 
 from dataclasses import dataclass
-
-
-@dataclass
-class GetStrategiesQuery:
-    """Get all loaded strategies."""
-
-    pass
 
 
 @dataclass
