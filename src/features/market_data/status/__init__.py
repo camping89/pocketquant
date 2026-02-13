@@ -1,14 +1,16 @@
 """Status queries and handlers."""
 
 from src.features.market_data.status.dto import StatusResult, SyncStatusResult
-from src.features.market_data.status.handler import (
+from src.features.market_data.status.get_quote_service_status import (
     GetQuoteServiceStatusHandler,
-    GetSymbolSyncStatusHandler,
-    GetSyncStatusHandler,
-)
-from src.features.market_data.status.query import (
     GetQuoteServiceStatusQuery,
+)
+from src.features.market_data.status.get_symbol_sync_status import (
+    GetSymbolSyncStatusHandler,
     GetSymbolSyncStatusQuery,
+)
+from src.features.market_data.status.get_sync_status import (
+    GetSyncStatusHandler,
     GetSyncStatusQuery,
 )
 

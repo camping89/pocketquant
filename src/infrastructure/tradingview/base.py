@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.features.market_data.models.ohlcv import Interval, OHLCVCreate
+from src.features.market_data.base.models.ohlcv import Interval, OHLCVCreate
 
 
 class IDataProvider(ABC):

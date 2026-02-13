@@ -8,7 +8,7 @@ from tvDatafeed import TvDatafeed
 
 from src.common.logging import get_logger
 from src.config import Settings
-from src.features.market_data.models.ohlcv import (
+from src.features.market_data.base.models.ohlcv import (
     INTERVAL_TO_TVDATAFEED,
     Interval,
     OHLCVCreate,
