@@ -150,7 +150,7 @@ router = APIRouter(prefix="/market-data", tags=["Market Data"])
 router.include_router(sync_router)       # from sync/router.py
 router.include_router(ohlcv_router)      # from ohlcv/router.py
 router.include_router(status_router)     # from status/router.py
-router.include_router(symbols_router)    # from list_symbols/route.py
+router.include_router(symbols_router)    # from list_symbols/router.py
 
 # quotes/router.py (separate prefix)
 router = APIRouter(prefix="/quotes", tags=["Real-time Quotes"])

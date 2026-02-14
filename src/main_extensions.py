@@ -1,6 +1,6 @@
 """Helpers for main.py: lifespan lifecycle, middleware, and route registration."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.application.market_data.sync_jobs import register_sync_jobs, set_mediator
@@ -188,12 +188,14 @@ def register_routes(app: FastAPI, settings) -> None:
         result["environment"] = settings.environment
         return result
 
-    @app.get(f"{settings.api_prefix}/system/jobs")
+    api = APIRouter(prefix=settings.api_prefix)
+    @api.get("/system/jobs")
     async def list_jobs() -> list[dict]:
         return JobScheduler.get_jobs()
+    api.include_router(market_data_router)
+    api.include_router(quote_router)
+    api.include_router(strategy_router)
+    api.include_router(trading_router)
+    api.include_router(backtest_router)
 
-    app.include_router(market_data_router, prefix=settings.api_prefix)
-    app.include_router(quote_router, prefix=settings.api_prefix)
-    app.include_router(strategy_router, prefix=settings.api_prefix)
-    app.include_router(trading_router, prefix=settings.api_prefix)
-    app.include_router(backtest_router, prefix=settings.api_prefix)
+    app.include_router(api)

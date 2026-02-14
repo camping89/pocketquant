@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from src.features.market_data.sync.sync_bulk.route import router as sync_bulk_router
+from src.features.market_data.sync.sync_bulk.router import router as sync_bulk_router
 from src.features.market_data.sync.sync_one.route import router as sync_one_router
 
 router = APIRouter()

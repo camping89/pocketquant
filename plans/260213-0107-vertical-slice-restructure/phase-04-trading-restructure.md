@@ -69,7 +69,7 @@ class ListOrdersHandler(Handler[ListOrdersQuery, list[dict]]):
         self.order_manager = order_manager
     async def handle(self, query: ListOrdersQuery) -> list[dict]: ...
 
-# list_orders/route.py
+# list_orders/router.py
 @router.get("/orders")
 async def list_orders(mediator: Annotated[Mediator, Depends(get_mediator)]) -> list[dict]:
     return await mediator.send(ListOrdersQuery())
