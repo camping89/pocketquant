@@ -1,7 +1,7 @@
 """Trading feature - order and position management."""
 
-from src.features.trading.base.managers.order_manager import OrderManager
-from src.features.trading.base.managers.position_tracker import PositionTracker
+from src.application.trading.order_manager import OrderManager
+from src.application.trading.position_tracker import PositionTracker
 from src.features.trading.get_order import GetOrderHandler, GetOrderQuery
 from src.features.trading.get_position import GetPositionHandler, GetPositionQuery
 from src.features.trading.list_orders import ListOrdersHandler, ListOrdersQuery

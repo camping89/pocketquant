@@ -6,7 +6,7 @@ from src.common.mediator import Handler, handles
 from src.features.strategy.get_one.query import GetStrategyQuery
 
 if TYPE_CHECKING:
-    from src.features.strategy.base import StrategyEngine
+    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 @handles(GetStrategyQuery)

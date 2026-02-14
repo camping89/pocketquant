@@ -1,9 +1,9 @@
 """Handler for getting backtest result."""
 
+from src.application.backtesting.models.backtest_result import BacktestResult
 from src.common.mediator import Handler, handles
-from src.features.backtesting.base.models.backtest_result import BacktestResult
-from src.features.backtesting.base.repository.backtest_repository import BacktestRepository
 from src.features.backtesting.get_result.query import GetBacktestQuery
+from src.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 
 
 @handles(GetBacktestQuery)

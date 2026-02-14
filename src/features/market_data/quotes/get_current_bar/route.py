@@ -4,9 +4,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from src.application.market_data.quote_service import get_quote_service
 from src.config import Settings, get_settings
-from src.features.market_data.base.models.ohlcv import Interval
-from src.features.market_data.quotes.quote_service import get_quote_service
+from src.domain.shared.value_objects import Interval
 
 router = APIRouter()
 

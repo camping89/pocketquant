@@ -2,17 +2,17 @@
 
 from typing import TYPE_CHECKING
 
+from src.application.backtesting.grid_optimizer import GridOptimizer
+from src.application.backtesting.models.optimization_config import OptimizationConfig
+from src.application.backtesting.models.optimization_result import OptimizationResult
 from src.common.constants import COLLECTION_OPTIMIZATION_RUNS
 from src.common.database import Database
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
-from src.features.backtesting.base.models.optimization_config import OptimizationConfig
-from src.features.backtesting.base.models.optimization_result import OptimizationResult
-from src.features.backtesting.base.optimizer.grid_optimizer import GridOptimizer
 from src.features.backtesting.optimize.command import RunOptimizationCommand
 
 if TYPE_CHECKING:
-    from src.features.strategy.base import StrategyEngine
+    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 @handles(RunOptimizationCommand)

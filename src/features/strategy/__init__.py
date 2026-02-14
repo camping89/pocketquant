@@ -1,13 +1,10 @@
 """Strategy feature - trading strategy management and execution."""
 
-from src.features.strategy.base import (
-    IStrategy,
-    MACrossoverStrategy,
-    OrderConfig,
-    StrategyConfig,
-    StrategyEngine,
-    StrategyLoader,
-)
+from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.strategy.yaml_strategy_loader import StrategyLoader
+from src.domain.strategy.interfaces import IStrategy
+from src.domain.strategy.strategies.ma_crossover import MACrossoverStrategy
+from src.domain.strategy.value_objects import OrderConfig, StrategyConfig
 from src.features.strategy.get_all import GetStrategiesHandler, GetStrategiesQuery
 from src.features.strategy.get_one import GetStrategyHandler, GetStrategyQuery
 from src.features.strategy.load import LoadStrategyCommand, LoadStrategyHandler

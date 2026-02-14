@@ -6,9 +6,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from src.application.strategy.yaml_strategy_loader import StrategyLoader, StrategyLoaderError
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
-from src.features.strategy.base import StrategyLoader, StrategyLoaderError
 from src.features.strategy.load.command import LoadStrategyCommand
 
 router = APIRouter()

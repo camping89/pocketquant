@@ -4,8 +4,9 @@ from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_OHLCV, COLLECTION_OHLCV, TTL_OHLCV_QUERY
 from src.common.database import Database
 from src.common.mediator import Handler, handles
-from src.features.market_data.base.models.ohlcv import OHLCV, Interval
+from src.domain.shared.value_objects import Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
+from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV
 
 
 @handles(GetOHLCVQuery)

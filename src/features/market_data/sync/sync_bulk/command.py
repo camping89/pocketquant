@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from src.common.constants import LIMIT_TVDATAFEED_MAX_BARS
-from src.features.market_data.base.models.ohlcv import Interval
+from src.domain.shared.value_objects import Interval
 
 
 class BulkSyncCommand(BaseModel):

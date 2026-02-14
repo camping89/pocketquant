@@ -1,7 +1,7 @@
 """List orders handler."""
 
+from src.application.trading.order_manager import OrderManager
 from src.common.mediator import Handler, handles
-from src.features.trading.base.managers.order_manager import OrderManager
 from src.features.trading.list_orders.query import ListOrdersQuery
 
 

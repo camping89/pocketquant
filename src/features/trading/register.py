@@ -1,8 +1,8 @@
 """Auto-register all trading CQRS handlers with mediator."""
 
+from src.application.trading.order_manager import OrderManager
+from src.application.trading.position_tracker import PositionTracker
 from src.common.mediator import HandlerRegistry, Mediator
-from src.features.trading.base.managers.order_manager import OrderManager
-from src.features.trading.base.managers.position_tracker import PositionTracker
 from src.features.trading.get_order.handler import GetOrderHandler
 from src.features.trading.get_position.handler import GetPositionHandler
 from src.features.trading.list_orders.handler import ListOrdersHandler

@@ -3,11 +3,12 @@
 from src.common.constants import COLLECTION_SYNC_STATUS
 from src.common.database import Database
 from src.common.mediator import Handler, handles
-from src.features.market_data.base.models.ohlcv import Interval, SyncStatus
+from src.domain.shared.value_objects import Interval
 from src.features.market_data.status.dto import SyncStatusResult
 from src.features.market_data.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )
+from src.infrastructure.persistence.schemas.ohlcv_schema import SyncStatus
 
 
 @handles(GetSymbolSyncStatusQuery)

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.application.market_data.sync_jobs import register_sync_jobs, set_mediator
 from src.common.cache import Cache
 from src.common.database import Database
 from src.common.health import HealthCoordinator, check_database, check_redis
@@ -16,11 +17,9 @@ from src.common.rate_limit import RateLimitMiddleware
 from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from src.config import get_settings
 from src.features.backtesting import backtest_router
-from src.features.backtesting.base.repository import BacktestRepository
 
 # Feature handler registrations (auto-discover via @handles decorator)
 from src.features.backtesting.register import register_handlers as register_backtesting
-from src.features.market_data.base.jobs import register_sync_jobs, set_mediator
 from src.features.market_data.quotes.router import router as quote_router
 from src.features.market_data.register import register_handlers as register_market_data
 from src.features.market_data.router import router as market_data_router
@@ -28,9 +27,11 @@ from src.features.risk import RiskCheckHandler
 from src.features.strategy import StrategyEngine, strategy_router
 from src.features.strategy.register import register_handlers as register_strategy
 from src.features.trading import OrderManager, PositionTracker, trading_router
-from src.features.trading.base.repositories import OrderRepository, PositionRepository
 from src.features.trading.register import register_handlers as register_trading
 from src.infrastructure.brokers import BrokerFactory
+from src.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from src.infrastructure.persistence.repositories.order_repository import OrderRepository
+from src.infrastructure.persistence.repositories.position_repository import PositionRepository
 from src.infrastructure.tradingview import TradingViewProvider
 
 logger = get_logger(__name__)

@@ -2,16 +2,16 @@
 
 from typing import TYPE_CHECKING
 
+from src.application.backtesting.backtest_runner import BacktestRunner
+from src.application.backtesting.models.backtest_config import BacktestConfig
+from src.application.backtesting.models.backtest_result import BacktestResult
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
-from src.features.backtesting.base.engine.backtest_runner import BacktestRunner
-from src.features.backtesting.base.models.backtest_config import BacktestConfig
-from src.features.backtesting.base.models.backtest_result import BacktestResult
 from src.features.backtesting.run.command import RunBacktestCommand
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
 
 if TYPE_CHECKING:
-    from src.features.strategy.base import StrategyEngine
+    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 @handles(RunBacktestCommand)
