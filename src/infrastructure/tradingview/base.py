@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from src.domain.shared.value_objects import Interval
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCVCreate
+from src.persistence.schemas.ohlcv_schema import OHLCVCreate
 
 
 class IDataProvider(ABC):

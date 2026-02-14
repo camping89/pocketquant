@@ -7,7 +7,7 @@ from src.common.mediator import Handler, handles
 from src.config import Settings
 from src.features.market_data.quotes.dto import QuoteResult
 from src.features.market_data.quotes.get_all.query import GetAllQuotesQuery
-from src.infrastructure.persistence.schemas.quote_schema import Quote
+from src.persistence.schemas.quote_schema import Quote
 
 
 @handles(GetAllQuotesQuery)

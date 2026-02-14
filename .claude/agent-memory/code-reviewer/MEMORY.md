@@ -11,35 +11,42 @@
 - **Handler registration**: `register.py` per feature, `@handles` decorator, `HandlerRegistry` auto-registration
 - **Event handlers**: `@event_handler` decorator + `EventRegistry` for auto-discovery
 
-### Layer Structure (post-refactor 2026-02-14)
+### Layer Structure (post-persistence-refactor 2026-02-14)
 ```
 src/domain/          # Pure: value objects, aggregates, events, interfaces, domain services
 src/application/     # Orchestrators: strategy_engine, order_manager, position_tracker, bar_manager, sync_jobs, backtest_runner
-src/infrastructure/  # I/O: persistence/ (schemas, repositories), brokers/, tradingview/, webhooks/
+src/persistence/     # Top-level: Database, Cache, BaseRepository, 7 repos, schemas
+src/infrastructure/  # I/O: brokers/, tradingview/, webhooks/ (persistence moved out)
 src/features/        # Thin CQRS: commands, queries, handlers, routes, DTOs, register.py, router.py
-src/common/          # Cross-cutting: mediator, messaging, logging, cache, database, jobs
+src/common/          # Cross-cutting: mediator, messaging, logging, cache (re-export shim), database (re-export shim), jobs
 ```
 
 ### Dependency Rules
 - features -> application -> domain (allowed)
-- infrastructure -> domain (allowed)
+- features/application -> persistence (repos, schemas) (allowed)
+- infrastructure -> domain, persistence.schemas (allowed)
+- persistence -> domain, common, application.models (2 accepted exceptions: BacktestResult, OptimizationResult)
 - domain -> nothing except src.common utilities
-- 3 accepted exceptions documented in review report
+- common/database and common/cache are re-export shims -> src.persistence
 
 ### Key Files
-- `src/main.py` - App lifespan, DI composition root, router inclusion
+- `src/main.py` - App lifespan, DI composition root, router inclusion, index creation
+- `src/persistence/base_repository.py` - BaseRepository mixin (single Database.get_collection call)
+- `src/persistence/repositories/` - 7 repos: OHLCV, SyncStatus, Symbol, Optimization, Order, Position, Backtest
 - `src/features/*/register.py` - Handler registration with mediator
 - `src/common/mediator/` - CQRS mediator + HandlerRegistry
 - `src/common/messaging/` - EventBus + EventRegistry for domain events
 
 ### Known Issues (as of 2026-02-14)
 - `market_data/__init__.py` still thin (just docstring), no facade re-exports
-- Application layer has direct `Database.get_collection` calls (bar_manager, sync_jobs, backtest_runner) -- should use repos
 - `RiskCheckHandler` in features is actually a domain/application service, not a CQRS handler
 - Domain purity test missing `src.application`, `src.features`, `fastapi` in FORBIDDEN_IMPORTS
-- Orphan dir: `src/features/market_data/repositories/` (only pycache, no Python files)
 - `sync_jobs.py` uses module-global `_mediator` (service locator anti-pattern)
-- Feature handlers in market_data have direct `Database.get_collection` calls (no repos for OHLCV/sync-status/symbols)
+- `dt.utcnow` deprecation in `ohlcv_schema.py:29` and `quote_schema.py:12` (should use `datetime.now(UTC)`)
+- `OHLCVRepository.stream()` takes `interval: str` but all other methods take `Interval` enum -- inconsistent
+- `persistence -> application` upward deps: backtest_repository imports BacktestResult, optimization_repository imports OptimizationResult
+- `common/database`, `common/cache`, `infrastructure/__init__` all re-export from persistence -- 3 import paths for same classes
+- `SymbolRepository.find_all()` returns `list[dict]` not typed `Symbol` model -- breaks repo pattern
 
 ### Tech Stack
 - Python 3.14, FastAPI, Pydantic, structlog, MongoDB (pymongo native async), Redis, APScheduler
@@ -48,6 +55,7 @@ src/common/          # Cross-cutting: mediator, messaging, logging, cache, datab
 - Tests: pytest + pytest-asyncio (60 tests passing)
 
 ### Review Reports
+- `plans/reports/code-review-260214-persistence-layer.md` - Persistence layer extraction review
 - `plans/reports/code-review-260214-clean-architecture-refactor.md` - Full clean arch refactor review
 - `plans/reports/code-reviewer-260214-1331-mediator-auto-discovery.md` - Mediator decorator review
 - `plans/reports/code-reviewer-260213-0127-vertical-slice-review.md` - Vertical slice review

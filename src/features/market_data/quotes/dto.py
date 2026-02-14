@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from src.infrastructure.persistence.schemas.quote_schema import Quote
+from src.persistence.schemas.quote_schema import Quote
 
 
 @dataclass

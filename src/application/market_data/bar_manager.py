@@ -5,17 +5,13 @@ from collections import defaultdict
 from typing import Any
 
 from src.common.cache import Cache
-from src.common.constants import (
-    CACHE_KEY_BAR_CURRENT,
-    COLLECTION_OHLCV,
-    TTL_BAR_CURRENT,
-)
-from src.common.database import Database
+from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT
 from src.common.logging import get_logger
 from src.domain.ohlcv.services.bar_builder import BarBuilder, get_bar_start
 from src.domain.shared.value_objects import Interval
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV
-from src.infrastructure.persistence.schemas.quote_schema import QuoteTick
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.schemas.ohlcv_schema import OHLCV
+from src.persistence.schemas.quote_schema import QuoteTick
 
 logger = get_logger(__name__)
 
@@ -94,24 +90,7 @@ class BarManager:
             volume=bar.volume,
         )
 
-        collection = Database.get_collection(COLLECTION_OHLCV)
-        doc = ohlcv.to_mongo()
-        created_at = doc.pop("created_at", None)
-
-        update_ops: dict = {"$set": doc}
-        if created_at:
-            update_ops["$setOnInsert"] = {"created_at": created_at}
-
-        await collection.update_one(
-            {
-                "symbol": doc["symbol"],
-                "exchange": doc["exchange"],
-                "interval": doc["interval"],
-                "datetime": doc["datetime"],
-            },
-            update_ops,
-            upsert=True,
-        )
+        await OHLCVRepository.upsert_bar(ohlcv)
 
         logger.info(
             "bar_manager.bar_saved",

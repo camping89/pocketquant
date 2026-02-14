@@ -29,10 +29,14 @@ from src.features.strategy.register import register_handlers as register_strateg
 from src.features.trading import OrderManager, PositionTracker, trading_router
 from src.features.trading.register import register_handlers as register_trading
 from src.infrastructure.brokers import BrokerFactory
-from src.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
-from src.infrastructure.persistence.repositories.order_repository import OrderRepository
-from src.infrastructure.persistence.repositories.position_repository import PositionRepository
 from src.infrastructure.tradingview import TradingViewProvider
+from src.persistence.repositories.backtest_repository import BacktestRepository
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.optimization_repository import OptimizationRepository
+from src.persistence.repositories.order_repository import OrderRepository
+from src.persistence.repositories.position_repository import PositionRepository
+from src.persistence.repositories.symbol_repository import SymbolRepository
+from src.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
 
@@ -52,11 +56,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await Database.connect(settings)
         await Cache.connect(settings)
 
-        # Ensure MongoDB indexes for trading collections
+        # Ensure MongoDB indexes for all collections
         await OrderRepository.ensure_indexes()
         await PositionRepository.ensure_indexes()
         await BacktestRepository.ensure_indexes()
-        logger.info("trading_indexes_ensured")
+        await OHLCVRepository.ensure_indexes()
+        await SyncStatusRepository.ensure_indexes()
+        await SymbolRepository.ensure_indexes()
+        await OptimizationRepository.ensure_indexes()
+        logger.info("database_indexes_ensured")
 
         if settings.enable_jobs:
             JobScheduler.initialize(settings)

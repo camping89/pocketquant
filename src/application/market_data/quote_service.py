@@ -9,8 +9,8 @@ from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from src.common.logging import get_logger
 from src.config import Settings
-from src.infrastructure.persistence.schemas.quote_schema import Quote, QuoteTick
 from src.infrastructure.tradingview import TradingViewWebSocketProvider
+from src.persistence.schemas.quote_schema import Quote, QuoteTick
 
 logger = get_logger(__name__)
 

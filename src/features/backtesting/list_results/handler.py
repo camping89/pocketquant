@@ -3,7 +3,7 @@
 from src.application.backtesting.models.backtest_result import BacktestResult
 from src.common.mediator import Handler, handles
 from src.features.backtesting.list_results.query import ListBacktestsQuery
-from src.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from src.persistence.repositories.backtest_repository import BacktestRepository
 
 
 @handles(ListBacktestsQuery)

@@ -10,8 +10,8 @@ from src.common.logging import get_logger
 from src.config import Settings
 from src.domain.ohlcv import INTERVAL_TO_TVDATAFEED
 from src.domain.shared.value_objects import Interval
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCVCreate
 from src.infrastructure.tradingview.base import IDataProvider
+from src.persistence.schemas.ohlcv_schema import OHLCVCreate
 
 logger = get_logger(__name__)
 

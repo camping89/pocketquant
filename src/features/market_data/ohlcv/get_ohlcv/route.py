@@ -10,7 +10,7 @@ from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCVResponse
+from src.persistence.schemas.ohlcv_schema import OHLCVResponse
 
 router = APIRouter()
 
