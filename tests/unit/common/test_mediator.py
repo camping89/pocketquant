@@ -2,7 +2,14 @@
 
 import pytest
 
-from src.common.mediator import Handler, HandlerNotFoundError, Mediator
+from src.common.mediator import (
+    DuplicateHandlerError,
+    Handler,
+    HandlerNotFoundError,
+    HandlerRegistry,
+    Mediator,
+    handles,
+)
 
 
 class TestCommand:
@@ -55,3 +62,54 @@ def test_mediator_register_alternative_signature():
     mediator.register_handler(handler, TestCommand)
 
     assert mediator.has_handler(TestCommand)
+
+
+def test_mediator_raises_on_duplicate_handler():
+    """One command/query can only have one handler."""
+    mediator = Mediator()
+    mediator.register(TestCommand, TestHandler())
+
+    with pytest.raises(DuplicateHandlerError):
+        mediator.register(TestCommand, TestHandler())
+
+
+def test_handles_decorator_stores_request_type():
+    """@handles decorator stores request type on class."""
+
+    @handles(TestCommand)
+    class DecoratedHandler(Handler[TestCommand, str]):
+        async def handle(self, request: TestCommand) -> str:
+            return "ok"
+
+    assert hasattr(DecoratedHandler, "_handles_request_type")
+    assert DecoratedHandler._handles_request_type is TestCommand
+
+
+def test_handler_registry_auto_registers():
+    """HandlerRegistry reads @handles metadata and registers with mediator."""
+
+    @handles(TestCommand)
+    class AutoHandler(Handler[TestCommand, str]):
+        async def handle(self, request: TestCommand) -> str:
+            return "auto"
+
+    mediator = Mediator()
+    registry = HandlerRegistry()
+    count = registry.register_all(mediator, [AutoHandler()])
+
+    assert count == 1
+    assert mediator.has_handler(TestCommand)
+
+
+def test_handler_registry_rejects_undecorated():
+    """HandlerRegistry raises TypeError for handlers without @handles."""
+
+    class PlainHandler(Handler[TestCommand, str]):
+        async def handle(self, request: TestCommand) -> str:
+            return "plain"
+
+    mediator = Mediator()
+    registry = HandlerRegistry()
+
+    with pytest.raises(TypeError, match="not decorated"):
+        registry.register_all(mediator, [PlainHandler()])

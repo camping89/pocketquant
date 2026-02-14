@@ -2,13 +2,14 @@
 
 from typing import TYPE_CHECKING
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.strategy.stop.command import StopStrategyCommand
 
 if TYPE_CHECKING:
     from src.features.strategy.base import StrategyEngine
 
 
+@handles(StopStrategyCommand)
 class StopStrategyHandler(Handler[StopStrategyCommand, bool]):
     """Handle StopStrategyCommand."""
 

@@ -2,7 +2,7 @@
 
 from src.common.constants import COLLECTION_SYNC_STATUS
 from src.common.database import Database
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.market_data.base.models.ohlcv import Interval, SyncStatus
 from src.features.market_data.status.dto import SyncStatusResult
 from src.features.market_data.status.get_symbol_sync_status.query import (
@@ -10,6 +10,7 @@ from src.features.market_data.status.get_symbol_sync_status.query import (
 )
 
 
+@handles(GetSymbolSyncStatusQuery)
 class GetSymbolSyncStatusHandler(
     Handler[GetSymbolSyncStatusQuery, SyncStatusResult]
 ):

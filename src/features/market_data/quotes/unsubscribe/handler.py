@@ -3,7 +3,7 @@
 from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
 from src.common.logging import get_logger
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.config import Settings
 from src.features.market_data.quotes.quote_service import get_quote_service
 from src.features.market_data.quotes.unsubscribe.command import UnsubscribeCommand
@@ -11,6 +11,7 @@ from src.features.market_data.quotes.unsubscribe.command import UnsubscribeComma
 logger = get_logger(__name__)
 
 
+@handles(UnsubscribeCommand)
 class UnsubscribeHandler(Handler[UnsubscribeCommand, dict]):
     """Handle unsubscribing from a symbol."""
 

@@ -1,10 +1,11 @@
 """List positions handler."""
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.trading.base.managers.position_tracker import PositionTracker
 from src.features.trading.list_positions.query import ListPositionsQuery
 
 
+@handles(ListPositionsQuery)
 class ListPositionsHandler(Handler[ListPositionsQuery, list[dict]]):
     """Handler to list all positions."""
 

@@ -3,11 +3,12 @@
 from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_OHLCV, COLLECTION_OHLCV, TTL_OHLCV_QUERY
 from src.common.database import Database
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.market_data.base.models.ohlcv import OHLCV, Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
 
 
+@handles(GetOHLCVQuery)
 class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
     """Handle OHLCV data retrieval."""
 

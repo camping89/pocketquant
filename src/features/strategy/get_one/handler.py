@@ -2,13 +2,14 @@
 
 from typing import TYPE_CHECKING
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.strategy.get_one.query import GetStrategyQuery
 
 if TYPE_CHECKING:
     from src.features.strategy.base import StrategyEngine
 
 
+@handles(GetStrategyQuery)
 class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
     """Handle GetStrategyQuery."""
 

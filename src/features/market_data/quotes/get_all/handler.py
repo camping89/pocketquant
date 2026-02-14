@@ -2,7 +2,7 @@
 
 from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.config import Settings
 from src.features.market_data.base.models.quote import Quote
 from src.features.market_data.quotes.dto import QuoteResult
@@ -10,6 +10,7 @@ from src.features.market_data.quotes.get_all.query import GetAllQuotesQuery
 from src.features.market_data.quotes.quote_service import get_quote_service
 
 
+@handles(GetAllQuotesQuery)
 class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
     """Handle getting all active quotes."""
 

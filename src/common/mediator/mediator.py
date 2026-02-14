@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from src.common.mediator.exceptions import HandlerNotFoundError
+from src.common.mediator.exceptions import DuplicateHandlerError, HandlerNotFoundError
 from src.common.mediator.handler import Handler
 
 
@@ -13,12 +13,18 @@ class Mediator:
         self._handlers: dict[type, Handler] = {}
 
     def register(self, request_type: type, handler: Handler) -> None:
-        """Register a handler for a request type."""
+        """Register a handler for a request type. Throws if duplicate."""
+        if request_type in self._handlers:
+            raise DuplicateHandlerError(
+                request_type,
+                type(self._handlers[request_type]),
+                type(handler),
+            )
         self._handlers[request_type] = handler
 
     def register_handler(self, handler: Handler, request_type: type) -> None:
         """Register a handler for a request type (alternative signature)."""
-        self._handlers[request_type] = handler
+        self.register(request_type, handler)
 
     async def send(self, request: Any) -> Any:
         """Dispatch request to registered handler."""

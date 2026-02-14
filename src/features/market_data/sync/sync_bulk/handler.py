@@ -1,12 +1,13 @@
 """Handler for bulk sync command."""
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_bulk.command import BulkSyncCommand
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
 from src.features.market_data.sync.sync_one.handler import SyncSymbolHandler
 
 
+@handles(BulkSyncCommand)
 class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ignore[type-arg]
     """Handle syncing multiple symbols."""
 

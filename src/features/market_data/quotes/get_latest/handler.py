@@ -2,12 +2,13 @@
 
 from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.market_data.base.models.quote import Quote
 from src.features.market_data.quotes.dto import QuoteResult
 from src.features.market_data.quotes.get_latest.query import GetLatestQuoteQuery
 
 
+@handles(GetLatestQuoteQuery)
 class GetLatestQuoteHandler(Handler[GetLatestQuoteQuery, QuoteResult | None]):
     """Handle getting the latest quote for a symbol."""
 

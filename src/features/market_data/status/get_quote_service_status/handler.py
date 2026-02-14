@@ -1,6 +1,6 @@
 """Handler for get quote service status query."""
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.config import Settings
 from src.features.market_data.quotes.quote_service import get_quote_service
 from src.features.market_data.status.dto import StatusResult
@@ -9,6 +9,7 @@ from src.features.market_data.status.get_quote_service_status.query import (
 )
 
 
+@handles(GetQuoteServiceStatusQuery)
 class GetQuoteServiceStatusHandler(
     Handler[GetQuoteServiceStatusQuery, StatusResult]
 ):
