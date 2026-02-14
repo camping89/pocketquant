@@ -295,13 +295,13 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         )
 ```
 
-### Layer 4: Infrastructure (External I/O) — src/infrastructure/
+### Layer 4: Infrastructure (External I/O) — src/infrastructure/ + src/persistence/
 
 **Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP.
 
 **Structure:**
 ```
-infrastructure/
+infrastructure/                        # External I/O (brokers, providers, scheduling, webhooks)
 ├── brokers/                  # Order execution abstraction
 │   ├── interface.py         # IBroker interface (submit, cancel, get positions)
 │   ├── factory.py           # BrokerFactory (create paper or okx)
@@ -318,18 +318,33 @@ infrastructure/
 │           ├── okx_order_mapper.py       # Order state mapping
 │           ├── okx_position_mapper.py    # Position state mapping
 │           └── okx_reconnection_handler.py  # Resilient connection
-├── persistence/              # Database connections
-│   ├── mongodb.py           # MongoDB async singleton (PyMongo)
-│   └── redis.py             # Redis async singleton (redis-py)
-├── providers/                # External data sources
-│   ├── tradingview/         # TradingView integration
-│   │   ├── provider.py      # TradingViewProvider (REST via tvdatafeed)
-│   │   └── websocket.py     # TradingViewWebSocketProvider (binary frames)
-│   └── base.py              # IDataProvider interface
+├── tradingview/              # TradingView integration
+│   ├── provider.py          # TradingViewProvider (REST via tvdatafeed)
+│   └── websocket.py         # TradingViewWebSocketProvider (binary frames)
 ├── http_client/              # Generic HTTP utilities
 │   └── client.py            # Async HTTP client (aiohttp wrapper)
+├── scheduling/               # Job scheduling (APScheduler)
 └── webhooks/                 # Webhook delivery
     └── dispatcher.py        # WebhookDispatcher (HMAC signing, retry)
+
+persistence/                           # Data access (MongoDB, Redis, repositories)
+├── mongodb.py               # MongoDB async singleton (PyMongo)
+├── redis.py                 # Redis async singleton (redis-py)
+├── base_repository.py       # BaseRepository mixin (_collection() helper)
+├── repositories/            # Data access layers (stateless class methods)
+│   ├── ohlcv_repository.py     # OHLCV bar data access
+│   ├── order_repository.py     # Order persistence
+│   ├── position_repository.py  # Position tracking
+│   ├── backtest_repository.py  # Backtest results
+│   ├── optimization_repository.py  # Parameter optimization results
+│   ├── symbol_repository.py    # Symbol metadata
+│   └── sync_status_repository.py   # Data sync status
+└── schemas/                 # MongoDB document schemas
+    ├── ohlcv_schema.py
+    ├── order_schema.py
+    ├── position_schema.py
+    ├── symbol_schema.py
+    └── quote_schema.py
 ```
 
 **Key Services:**
@@ -464,21 +479,25 @@ Route Response
 
 ## Trading Persistence Layer
 
-### MongoDB Collections
+### MongoDB Collections & Repository Access
 
-**Orders Collection (`orders`):**
-- Persists all order lifecycle events (submitted, filled, partial, cancelled, rejected)
-- Documents indexed by: `_id` (order_id), `strategy_id`, `status`, `(symbol, exchange)`
-- `OrderRepository.save()` - Upsert order state
-- `OrderRepository.find_pending()` - Recover orders in non-terminal states on startup
-- All order state changes persisted immediately (submit, fill, cancel, reject)
+**Collections available via Persistence Layer:**
 
-**Positions Collection (`positions`):**
-- Tracks per-strategy open and closed positions with P&L
-- Documents indexed by: `_id` (position_id), `strategy_id`, `is_closed`, `(symbol, exchange)`
-- `PositionRepository.save()` - Upsert position state
-- `PositionRepository.find_open()` - Recover open positions on startup
-- Position created on first OrderFilledEvent, updated on subsequent fills, closed when quantity reaches 0
+| Collection | Purpose | Repository | Key Methods |
+|-----------|---------|-----------|------------|
+| `ohlcv` | Market bars (OHLCV data) | OHLCVRepository | `get_bars()`, `upsert_many()` |
+| `orders` | Order lifecycle | OrderRepository | `save()`, `find_pending()`, `get_by_id()` |
+| `positions` | Position tracking | PositionRepository | `save()`, `find_open()`, `get_by_id()` |
+| `backtests` | Backtest results | BacktestRepository | `save()`, `find_by_id()`, `list_by_strategy()` |
+| `optimizations` | Parameter optimization results | OptimizationRepository | `save()`, `find_by_id()` |
+| `symbols` | Symbol metadata | SymbolRepository | `find_by_code()`, `list_all()` |
+| `sync_status` | Data sync progress | SyncStatusRepository | `save()`, `find_by_symbol()`, `update_status()` |
+
+**All repositories:**
+- Inherit from `BaseRepository` (provides `_collection()` helper)
+- Use stateless class methods only (no instance state)
+- Zero direct `Database.get_collection()` calls outside persistence layer
+- Enforce schema validation via MongoDB schemas
 
 ### Recovery on Startup
 

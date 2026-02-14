@@ -160,10 +160,10 @@ class StrategyEngine:
 Expensive connections (DB, Cache, JobScheduler) are singletons with class methods:
 
 ```python
-# Database
+# Database (internal use only - accessed via repositories)
 from src.common.database import Database
-collection = Database.get_collection("ohlcv")
 await Database.connect(settings)
+# Note: Access collections via Repository classes, not directly
 
 # Cache
 from src.common.cache import Cache
@@ -173,29 +173,56 @@ await Cache.set("key", value, ttl=3600)
 # Jobs
 from src.common.jobs import JobScheduler
 JobScheduler.add_interval_job(func, interval_seconds)
+
+# Repository access (preferred pattern)
+from src.persistence.repositories import OHLCVRepository, OrderRepository
+bars = await OHLCVRepository.get_bars(symbol, exchange, interval)
+await OrderRepository.save(order)
 ```
 
-**Rationale:** Single shared connection per resource, initialized once at startup, avoids DI complexity.
+**Rationale:**
+- Single shared connection per resource, initialized once at startup
+- Avoids DI complexity
+- All DB access routed through `src/persistence/` layer for consistency
+- Repositories provide clean, validated data access interface
 
 ### 4. Repository Pattern (Stateless Data Access)
 
-All data access through class methods. No instance state.
+All data access through class methods in `src/persistence/repositories/`. No instance state. All repositories inherit from `BaseRepository` for safe collection access.
 
 ```python
-# OHLCVRepository
-class OHLCVRepository:
+# OHLCVRepository (in src/persistence/repositories/)
+class OHLCVRepository(BaseRepository):
     @classmethod
     async def upsert_many(cls, records: List[OHLCVCreate]) -> int:
         # Bulk insert/update with unique key
+        collection = cls._collection("ohlcv")  # BaseRepository helper
         pass
 
     @classmethod
-    async def get_bars(cls, symbol: str, exchange: str, interval: str, limit: int = 100):
+    async def get_bars(
+        cls,
+        symbol: str,
+        exchange: str,
+        interval: str,
+        limit: int = 100
+    ):
         # Query with filtering and sorting
+        collection = cls._collection("ohlcv")
         pass
 ```
 
-**Rationale:** Stateless design, easy to test, no complex lifecycle management, class methods used directly without instantiation.
+**Centralized Persistence Layer (`src/persistence/`):**
+- Database connections: `mongodb.py`, `redis.py` (singletons)
+- BaseRepository mixin: `_collection(name)` helper for safe access
+- 7 repositories: OHLCVRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
+- MongoDB schemas: Validation for all documents
+
+**Rationale:**
+- Stateless design, easy to test
+- No complex lifecycle management
+- Class methods used directly without instantiation
+- All DB access via persistence layer (zero direct `Database.get_collection()` calls elsewhere)
 
 ### 5. Service Pattern (Business Logic)
 
@@ -866,6 +893,8 @@ All aggregates migrated:
 
 ❌ Business logic in features/ (move to application/)
 ❌ Business logic in domain/ with I/O (move to application/)
+❌ Direct `Database.get_collection()` calls (use repositories in src/persistence/)
+❌ Persistence code outside src/persistence/ (all data access centralized there)
 ❌ Direct database calls in handlers (use repositories)
 ❌ Synchronous blocking I/O in async context
 ❌ Global mutable state outside singletons
@@ -881,6 +910,7 @@ All aggregates migrated:
 ❌ Manual mediator.register() in main.py (use @handles + register.py)
 ❌ Handler classes without @handles decorator
 ❌ UUID4 for aggregates (use UUID7)
+❌ Old `src/infrastructure/persistence/` path (moved to `src/persistence/`)
 
 ## Quality Checklist
 

@@ -1,12 +1,13 @@
 ---
 title: "Consolidate persistence into top-level src/persistence/ package"
 description: "Move all DB/cache code to src/persistence/, create missing repos, eliminate raw get_collection() calls"
-status: pending
+status: completed
 priority: P1
 effort: 3h
 branch: feat/strategy-init
 tags: [refactor, persistence, clean-architecture]
 created: 2026-02-14
+completed: 2026-02-14
 ---
 
 # Persistence Layer Consolidation
@@ -25,9 +26,9 @@ Replace scattered `Database.get_collection()` calls across 13 files with proper 
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| [Phase 1](./phase-01-scaffold-and-move.md) | Create `src/persistence/`, move files, update re-export shims | pending |
-| [Phase 2](./phase-02-new-repositories.md) | Create 4 new repos + base class, wire into handlers | pending |
-| [Phase 3](./phase-03-cleanup-and-verify.md) | Delete old path, update main.py imports, final test run | pending |
+| [Phase 1](./phase-01-scaffold-and-move.md) | Create `src/persistence/`, move files, update re-export shims | completed |
+| [Phase 2](./phase-02-new-repositories.md) | Create 4 new repos + base class, wire into handlers | completed |
+| [Phase 3](./phase-03-cleanup-and-verify.md) | Delete old path, update main.py imports, final test run | completed |
 
 ## Key Decisions
 - **No base class ABC** -- just a minimal mixin with `_collection()` helper (KISS)
@@ -44,3 +45,6 @@ Replace scattered `Database.get_collection()` calls across 13 files with proper 
 - All 60 tests pass after each phase
 - `src/infrastructure/persistence/` deleted
 - All imports resolve to `src/persistence/` paths
+
+## Completion Summary
+All 3 phases completed. 60/60 tests passing. Zero raw DB calls outside persistence layer. All imports consolidated to src/persistence/.

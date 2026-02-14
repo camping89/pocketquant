@@ -1,6 +1,6 @@
 # Phase 2: Create New Repositories and Eliminate Raw DB Access
 
-## Priority: P1 | Status: pending
+## Priority: P1 | Status: completed
 
 ## Overview
 Create 4 missing repositories (OHLCV, SyncStatus, Symbol, Optimization), add a minimal base mixin, and replace all `Database.get_collection()` calls in handlers/application code with repository method calls.
@@ -232,3 +232,6 @@ class OptimizationRepository(BaseRepository):
 ## Risk
 - backtest_runner._load_bars() uses async generator -- OHLCVRepository needs a `stream()` method that returns AsyncIterator, not a list. Watch for this.
 - sync_one/handler.py is 259 lines and does a lot -- after extracting DB logic to repos it should shrink to ~150 lines
+
+## Completion Status
+Phase 2 complete. All 4 new repositories created (OHLCVRepository, SyncStatusRepository, SymbolRepository, OptimizationRepository). Existing 3 repos refactored to use BaseRepository. All 9 handlers updated to use repositories instead of raw DB calls. 60/60 tests passing.
