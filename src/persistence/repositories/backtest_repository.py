@@ -4,13 +4,13 @@ from typing import Any
 
 from src.application.backtesting.models.backtest_result import BacktestResult
 from src.common.constants import COLLECTION_BACKTEST_RUNS
-from src.common.database import Database
 from src.common.logging import get_logger
+from src.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)
 
 
-class BacktestRepository:
+class BacktestRepository(BaseRepository):
     """MongoDB repository for backtest run persistence.
 
     Collections:
@@ -22,6 +22,8 @@ class BacktestRepository:
     - status: For filtering by completion status
     """
 
+    _collection_name = COLLECTION_BACKTEST_RUNS
+
     @staticmethod
     async def save(result: BacktestResult) -> str:
         """Save or update a backtest result.
@@ -32,7 +34,7 @@ class BacktestRepository:
         Returns:
             The result ID.
         """
-        collection = Database.get_collection(COLLECTION_BACKTEST_RUNS)
+        collection = BacktestRepository._collection()
         doc = result.to_dict()
 
         await collection.replace_one({"_id": result.id}, doc, upsert=True)
@@ -50,7 +52,7 @@ class BacktestRepository:
         Returns:
             BacktestResult if found, None otherwise.
         """
-        collection = Database.get_collection(COLLECTION_BACKTEST_RUNS)
+        collection = BacktestRepository._collection()
         doc = await collection.find_one({"_id": run_id})
 
         if not doc:
@@ -72,7 +74,7 @@ class BacktestRepository:
         Returns:
             List of BacktestResult ordered by started_at descending.
         """
-        collection = Database.get_collection(COLLECTION_BACKTEST_RUNS)
+        collection = BacktestRepository._collection()
 
         query: dict[str, Any] = {"strategy_id": strategy_id}
         if not include_failed:
@@ -100,7 +102,7 @@ class BacktestRepository:
         Returns:
             List of BacktestResult ordered by metric descending.
         """
-        collection = Database.get_collection(COLLECTION_BACKTEST_RUNS)
+        collection = BacktestRepository._collection()
 
         cursor = (
             collection.find({"strategy_id": strategy_id, "status": "completed"})
@@ -124,14 +126,14 @@ class BacktestRepository:
         Returns:
             True if deleted, False if not found.
         """
-        collection = Database.get_collection(COLLECTION_BACKTEST_RUNS)
+        collection = BacktestRepository._collection()
         result = await collection.delete_one({"_id": run_id})
         return result.deleted_count > 0
 
     @staticmethod
     async def ensure_indexes() -> None:
         """Create indexes for efficient queries."""
-        collection = Database.get_collection(COLLECTION_BACKTEST_RUNS)
+        collection = BacktestRepository._collection()
 
         await collection.create_index("strategy_id")
         await collection.create_index("started_at")

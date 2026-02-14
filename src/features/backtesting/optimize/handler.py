@@ -5,11 +5,10 @@ from typing import TYPE_CHECKING
 from src.application.backtesting.grid_optimizer import GridOptimizer
 from src.application.backtesting.models.optimization_config import OptimizationConfig
 from src.application.backtesting.models.optimization_result import OptimizationResult
-from src.common.constants import COLLECTION_OPTIMIZATION_RUNS
-from src.common.database import Database
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.optimize.command import RunOptimizationCommand
+from src.persistence.repositories.optimization_repository import OptimizationRepository
 
 if TYPE_CHECKING:
     from src.application.strategy.strategy_engine import StrategyEngine
@@ -52,13 +51,6 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
         result = await optimizer.optimize(config)
 
         # Persist optimization result
-        await self._save_optimization_result(result)
+        await OptimizationRepository.save(result)
 
         return result
-
-    async def _save_optimization_result(self, result: OptimizationResult) -> None:
-        """Persist optimization result to MongoDB."""
-        collection = Database.get_collection(COLLECTION_OPTIMIZATION_RUNS)
-        await collection.replace_one(
-            {"_id": result.id}, result.to_dict(), upsert=True
-        )

@@ -1,11 +1,9 @@
-from src.common.constants import COLLECTION_SYNC_STATUS
-from src.common.database import Database
 from src.common.jobs import JobScheduler
 from src.common.logging import get_logger
 from src.common.mediator import Mediator
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.sync import SyncSymbolCommand
-from src.infrastructure.persistence.schemas.ohlcv_schema import SyncStatus
+from src.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
 
@@ -18,12 +16,6 @@ def set_mediator(mediator: Mediator) -> None:
     _mediator = mediator
 
 
-async def _get_all_sync_statuses() -> list[SyncStatus]:
-    collection = Database.get_collection(COLLECTION_SYNC_STATUS)
-    cursor = collection.find()
-    return [SyncStatus.from_mongo(doc) async for doc in cursor]
-
-
 async def sync_all_symbols() -> None:
     if not _mediator:
         logger.error("market_data.sync_all.skipped", reason="mediator_not_set")
@@ -31,7 +23,7 @@ async def sync_all_symbols() -> None:
 
     logger.info("market_data.sync_all.started")
 
-    statuses = await _get_all_sync_statuses()
+    statuses = await SyncStatusRepository.find_all()
 
     if not statuses:
         logger.info("market_data.sync_all.skipped", reason="no_tracked_symbols")
@@ -86,7 +78,7 @@ async def sync_daily_data() -> None:
 
     logger.info("market_data.sync_daily.started")
 
-    statuses = await _get_all_sync_statuses()
+    statuses = await SyncStatusRepository.find_all()
     daily_statuses = [s for s in statuses if s.interval == Interval.DAY_1.value]
 
     synced_count = 0

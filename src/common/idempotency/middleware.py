@@ -7,7 +7,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from src.common.constants import HEADER_IDEMPOTENCY_KEY
-from src.infrastructure.persistence import Cache
+from src.persistence import Cache
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):

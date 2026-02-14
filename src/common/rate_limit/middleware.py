@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from src.infrastructure.persistence import Cache
+from src.persistence import Cache
 
 
 class TokenBucket:

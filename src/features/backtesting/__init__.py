@@ -28,7 +28,7 @@ from src.features.backtesting.run import (
     RunBacktestCommand,
     RunBacktestHandler,
 )
-from src.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from src.persistence.repositories.backtest_repository import BacktestRepository
 
 __all__ = [
     # Router

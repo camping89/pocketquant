@@ -1,9 +1,13 @@
-from datetime import datetime as dt
+from datetime import UTC, datetime as dt
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.domain.shared.value_objects import Interval
+
+
+def _utc_now() -> dt:
+    return dt.now(UTC)
 
 
 class OHLCVBase(BaseModel):
@@ -26,7 +30,7 @@ class OHLCV(OHLCVBase):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str | None = Field(None, alias="_id")
-    created_at: dt = Field(default_factory=dt.utcnow)
+    created_at: dt = Field(default_factory=_utc_now)
 
     def to_mongo(self) -> dict[str, Any]:
         data = self.model_dump(exclude={"id"})

@@ -2,25 +2,18 @@
 
 from datetime import UTC, datetime
 
-from pymongo import UpdateOne
-
 from src.common.cache import Cache
-from src.common.constants import (
-    COLLECTION_OHLCV,
-    COLLECTION_SYMBOLS,
-    COLLECTION_SYNC_STATUS,
-)
-from src.common.database import Database
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.domain.ohlcv import OHLCVAggregate
-from src.domain.shared.value_objects import Interval
 from src.domain.shared.value_objects import Interval as DomainInterval
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV, OHLCVCreate
 from src.infrastructure.tradingview import TradingViewProvider
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.symbol_repository import SymbolRepository
+from src.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
 
@@ -45,7 +38,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             interval=interval.value,
         )
 
-        await self._update_sync_status(symbol, exchange, interval, "syncing")
+        await SyncStatusRepository.upsert(symbol, exchange, interval, "syncing")
 
         try:
             records = await self.provider.fetch_ohlcv(
@@ -56,7 +49,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             )
 
             if not records:
-                await self._update_sync_status(
+                await SyncStatusRepository.upsert(
                     symbol,
                     exchange,
                     interval,
@@ -72,13 +65,13 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                     bars_synced=0,
                 )
 
-            upserted_count = await self._upsert_many(records)
-            await self._upsert_symbol(symbol, exchange)
+            upserted_count = await OHLCVRepository.upsert_many(records)
+            await SymbolRepository.upsert(symbol, exchange)
 
-            total_bars = await self._get_bar_count(symbol, exchange, interval)
-            latest_bar = await self._get_latest_bar(symbol, exchange, interval)
+            total_bars = await OHLCVRepository.count(symbol, exchange, interval)
+            latest_bar = await OHLCVRepository.get_latest(symbol, exchange, interval)
 
-            await self._update_sync_status(
+            await SyncStatusRepository.upsert(
                 symbol,
                 exchange,
                 interval,
@@ -126,7 +119,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 error=error_msg,
             )
 
-            await self._update_sync_status(
+            await SyncStatusRepository.upsert(
                 symbol, exchange, interval, "error", error_message=error_msg
             )
 
@@ -138,121 +131,3 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 message=error_msg,
                 bars_synced=0,
             )
-
-    async def _upsert_many(self, records: list[OHLCVCreate]) -> int:
-        if not records:
-            return 0
-
-        collection = Database.get_collection(COLLECTION_OHLCV)
-        operations = []
-
-        for record in records:
-            ohlcv = OHLCV(**record.model_dump())
-            doc = ohlcv.to_mongo()
-            created_at = doc.pop("created_at", None)
-
-            update_ops: dict = {"$set": doc}
-            if created_at:
-                update_ops["$setOnInsert"] = {"created_at": created_at}
-
-            operations.append(
-                UpdateOne(
-                    {
-                        "symbol": doc["symbol"],
-                        "exchange": doc["exchange"],
-                        "interval": doc["interval"],
-                        "datetime": doc["datetime"],
-                    },
-                    update_ops,
-                    upsert=True,
-                )
-            )
-
-        result = await collection.bulk_write(operations, ordered=False)
-        total = result.upserted_count + result.modified_count
-
-        logger.info(
-            "data_sync.upserted",
-            upserted_count=result.upserted_count,
-            modified_count=result.modified_count,
-            total_count=total,
-        )
-
-        return total
-
-    async def _update_sync_status(
-        self,
-        symbol: str,
-        exchange: str,
-        interval: Interval,
-        status: str,
-        bar_count: int | None = None,
-        last_bar_at: datetime | None = None,
-        error_message: str | None = None,
-    ) -> None:
-        collection = Database.get_collection(COLLECTION_SYNC_STATUS)
-
-        update_doc: dict = {
-            "symbol": symbol.upper(),
-            "exchange": exchange.upper(),
-            "interval": interval.value,
-            "status": status,
-            "last_sync_at": datetime.now(UTC),
-        }
-
-        if bar_count is not None:
-            update_doc["bar_count"] = bar_count
-        if last_bar_at is not None:
-            update_doc["last_bar_at"] = last_bar_at
-        if error_message is not None:
-            update_doc["error_message"] = error_message
-
-        await collection.update_one(
-            {
-                "symbol": symbol.upper(),
-                "exchange": exchange.upper(),
-                "interval": interval.value,
-            },
-            {"$set": update_doc},
-            upsert=True,
-        )
-
-    async def _get_bar_count(
-        self, symbol: str, exchange: str, interval: Interval
-    ) -> int:
-        collection = Database.get_collection(COLLECTION_OHLCV)
-        return await collection.count_documents(
-            {
-                "symbol": symbol.upper(),
-                "exchange": exchange.upper(),
-                "interval": interval.value,
-            }
-        )
-
-    async def _get_latest_bar(
-        self, symbol: str, exchange: str, interval: Interval
-    ) -> OHLCV | None:
-        collection = Database.get_collection(COLLECTION_OHLCV)
-        doc = await collection.find_one(
-            {
-                "symbol": symbol.upper(),
-                "exchange": exchange.upper(),
-                "interval": interval.value,
-            },
-            sort=[("datetime", -1)],
-        )
-        return OHLCV.from_mongo(doc) if doc else None
-
-    async def _upsert_symbol(self, symbol: str, exchange: str) -> None:
-        collection = Database.get_collection(COLLECTION_SYMBOLS)
-        symbol_doc = {
-            "symbol": symbol,
-            "exchange": exchange,
-            "is_active": True,
-            "updated_at": datetime.now(UTC),
-        }
-        await collection.update_one(
-            {"symbol": symbol, "exchange": exchange},
-            {"$set": symbol_doc, "$setOnInsert": {"created_at": datetime.now(UTC)}},
-            upsert=True,
-        )

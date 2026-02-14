@@ -1,12 +1,11 @@
 """Handler for OHLCV query."""
 
 from src.common.cache import Cache
-from src.common.constants import CACHE_KEY_OHLCV, COLLECTION_OHLCV, TTL_OHLCV_QUERY
-from src.common.database import Database
+from src.common.constants import CACHE_KEY_OHLCV, TTL_OHLCV_QUERY
 from src.common.mediator import Handler, handles
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 
 
 @handles(GetOHLCVQuery)
@@ -30,7 +29,7 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         if cached:
             return cached
 
-        bars = await self._get_bars(
+        bars = await OHLCVRepository.find(
             symbol, exchange, interval, request.start_date, request.end_date, request.limit
         )
 
@@ -49,35 +48,3 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         await Cache.set(cache_key, result, ttl=TTL_OHLCV_QUERY)
 
         return result
-
-    async def _get_bars(
-        self,
-        symbol: str,
-        exchange: str,
-        interval: Interval,
-        start_date,
-        end_date,
-        limit: int,
-    ) -> list[OHLCV]:
-        collection = Database.get_collection(COLLECTION_OHLCV)
-
-        query: dict = {
-            "symbol": symbol.upper(),
-            "exchange": exchange.upper(),
-            "interval": interval.value,
-        }
-
-        if start_date or end_date:
-            query["datetime"] = {}
-            if start_date:
-                query["datetime"]["$gte"] = start_date
-            if end_date:
-                query["datetime"]["$lte"] = end_date
-
-        cursor = collection.find(query).sort("datetime", -1).limit(limit)
-
-        records = []
-        async for doc in cursor:
-            records.append(OHLCV.from_mongo(doc))
-
-        return records

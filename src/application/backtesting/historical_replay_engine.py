@@ -11,7 +11,7 @@ from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import set_simulation_time
 from src.domain.ohlcv import BarCompletedEvent
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV
+from src.persistence.schemas.ohlcv_schema import OHLCV
 
 logger = get_logger(__name__)
 

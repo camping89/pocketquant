@@ -2,7 +2,7 @@
 
 import time
 
-from src.infrastructure.persistence import Cache, Database
+from src.persistence import Cache, Database
 
 
 async def check_database() -> dict:

@@ -10,16 +10,15 @@ from src.application.backtesting.historical_replay_engine import (
 from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.application.backtesting.models.backtest_result import BacktestResult
 from src.application.backtesting.result_collector import BacktestResultCollector
-from src.common.constants import COLLECTION_OHLCV
-from src.common.database import Database
+from src.domain.shared.value_objects import Interval
 from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import clear_simulation_time
 from src.common.uuid import generate_id_str
-from src.domain.shared.value_objects import Interval
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
-from src.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
-from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV
+from src.persistence.repositories.backtest_repository import BacktestRepository
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.schemas.ohlcv_schema import OHLCV
 
 if TYPE_CHECKING:
     from src.application.strategy.strategy_engine import StrategyEngine
@@ -151,27 +150,14 @@ class BacktestRunner:
 
     async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[OHLCV]:
         """Load OHLCV bars from MongoDB for the configured date range."""
-        collection = Database.get_collection(COLLECTION_OHLCV)
-
         # Convert date to datetime for MongoDB query
         start_datetime = datetime.combine(config.start_date, datetime.min.time())
         end_datetime = datetime.combine(config.end_date, datetime.max.time())
 
-        query = {
-            "symbol": config.symbol.upper(),
-            "exchange": config.exchange.upper(),
-            "interval": config.interval,
-            "datetime": {"$gte": start_datetime, "$lte": end_datetime},
-        }
-
-        # Sort ascending for chronological replay
-        cursor = collection.find(query).sort("datetime", 1)
-
-        async for doc in cursor:
-            # Convert interval string to Interval enum if needed
-            if isinstance(doc.get("interval"), str):
-                doc["interval"] = Interval(doc["interval"])
-            yield OHLCV.from_mongo(doc)
+        async for bar in OHLCVRepository.stream(
+            config.symbol, config.exchange, Interval(config.interval), start_datetime, end_datetime
+        ):
+            yield bar
 
     async def _wrap_bars_with_price_update(
         self, config: BacktestConfig, bars: AsyncIterator[OHLCV]
