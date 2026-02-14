@@ -1,6 +1,6 @@
 # Phase 1: Scaffold src/persistence/ and Move Files
 
-## Priority: P1 | Status: pending
+## Priority: P1 | Status: completed
 
 ## Overview
 Create the new `src/persistence/` package, copy all files from `src/infrastructure/persistence/`, and update the re-export shims so existing imports keep working throughout the migration.
@@ -138,3 +138,6 @@ src/infrastructure/tradingview/base.py
 - Re-export shims (`src.common.database`, `src.common.cache`) still work
 - All 60 tests pass
 - Old `src/infrastructure/persistence/` still exists but is no longer imported by anything
+
+## Completion Status
+Phase 1 complete. All files created at src/persistence/, imports updated, re-export shims working, 60/60 tests pass.

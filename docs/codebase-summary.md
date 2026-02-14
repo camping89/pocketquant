@@ -134,7 +134,7 @@ Stateful services that coordinate domain logic + infrastructure:
 
 No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 
-### src/infrastructure (3,127+ LOC, 32 files) — External I/O
+### src/infrastructure (3,000+ LOC, 25 files) — External I/O & Brokers
 
 **Brokers (Pluggable Execution):**
 - **IBroker** - Abstract contract
@@ -168,16 +168,6 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
   - Automatic re-subscription on reconnect
 - **Mappers:** OkxOrderMapper, OkxPositionMapper for state translation
 
-**Persistence:**
-- **Database** - MongoDB async wrapper (Motor)
-  - Connection pooling
-  - Async collection access
-  - Transaction support
-- **Cache** - Redis async wrapper
-  - TTL-based expiration
-  - JSON serialization
-  - Key pattern deletion
-
 **Data Providers:**
 - **TradingViewProvider** - REST API (tvdatafeed)
   - ThreadPoolExecutor (max 4 workers) for blocking I/O
@@ -201,6 +191,57 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 - **WebhookDispatcher** - Event notifications
   - HMAC-SHA256 signing
   - Resilient delivery with retry
+
+### src/persistence (700+ LOC, 18 files) — Data Access Layer
+
+**Database Connections (Singletons):**
+- **MongoDBConnection** - Async MongoDB wrapper
+  - PyMongo native async API
+  - Connection pooling (5-50 connections)
+  - Single `get_collection()` entry point
+- **RedisConnection** - Async Redis client
+  - JSON serialization with custom date handling
+  - TTL support (60s quotes, 300s bars, 86400s idempotency)
+  - Pattern-based deletion via SCAN
+
+**BaseRepository Mixin:**
+- `_collection(name)` - Get MongoDB collection safely
+- Ensures all repositories use connection pooling
+- Zero direct `Database.get_collection()` calls outside persistence/
+
+**Repositories (7 stateless data access layers):**
+1. **OHLCVRepository** - Market bar persistence
+   - `get_bars(symbol, exchange, interval, limit)` - Query bars
+   - `upsert_many(records)` - Bulk insert/update (unique on timestamp)
+2. **OrderRepository** - Order lifecycle
+   - `save(order)` - Persist order state
+   - `find_pending()` - Recover non-terminal orders on startup
+   - `get_by_id(order_id)` - Fetch single order
+3. **PositionRepository** - Position tracking
+   - `save(position)` - Persist position state
+   - `find_open()` - Recover open positions on startup
+   - `get_by_id(position_id)` - Fetch single position
+4. **BacktestRepository** - Backtest result storage
+   - `save(result)` - Store completed backtest
+   - `find_by_id(run_id)` - Retrieve backtest
+   - `list_by_strategy(strategy_id)` - Query strategy backtests
+5. **OptimizationRepository** - Parameter optimization results
+   - `save(result)` - Store optimization result
+   - `find_by_id(optimization_id)` - Retrieve result
+6. **SymbolRepository** - Symbol metadata
+   - `find_by_code(code, exchange)` - Lookup symbol
+   - `list_all()` - Get all symbols
+7. **SyncStatusRepository** - Data sync progress tracking
+   - `save(status)` - Record sync status
+   - `find_by_symbol(symbol, exchange)` - Get last sync
+   - `update_status(status_id, progress, error)` - Update progress
+
+**MongoDB Schemas (Document validation):**
+- ohlcv_schema.py - Bar structure (open, high, low, close, volume, timestamp)
+- order_schema.py - Order fields (status, symbol, exchange, quantity, price, etc.)
+- position_schema.py - Position fields (symbol, exchange, side, quantity, entry_price, etc.)
+- symbol_schema.py - Symbol metadata (code, exchange, name, description)
+- quote_schema.py - Quote structure (symbol, exchange, price, volume, timestamp)
 
 ### src/features (6,561+ LOC, 85 files) — CQRS Operation Routes
 
@@ -542,17 +583,25 @@ All settings via environment variables (`.env` file):
 
 ## Recent Changes (2026-02-14)
 
-**Clean Architecture Refactor Complete:**
+**Persistence Layer Refactor:**
+- Promoted `src/infrastructure/persistence/` → `src/persistence/` (top-level package)
+- Created `BaseRepository` mixin: `_collection(name)` provides safe collection access
+- 7 repositories now centralized: OHLCVRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
+- All MongoDB schemas consolidated in `src/persistence/schemas/`
+- Zero `Database.get_collection()` calls outside persistence layer
+- All data access routed through repository methods for consistency & validation
+- Updated docs: system-architecture.md, codebase-summary.md, code-standards.md
+
+**Clean Architecture Refactor Complete (2026-02-14):**
 - Moved core business logic out of features/ into src/domain/
 - Created src/application/ with orchestrators (StrategyEngine, BacktestRunner, BarManager, OrderManager, PositionTracker)
-- Created src/infrastructure/ with brokers, providers, persistence (MongoDB, Redis), scheduling
+- Created src/infrastructure/ with brokers, providers, scheduling
 - Features/ now thin CQRS operation layers (routes, commands, queries, handlers only)
-- **Dependency direction:** Features → Application → Domain ← Infrastructure
+- **Dependency direction:** Features → Application → Domain ← Infrastructure + Persistence
 - **Domain purity enforced:** AST checks prevent I/O imports in domain/
 - **Auto-discovery:** @handles decorator for CQRS handlers, @event_handler for domain events
 - All 5 feature slices now cleanly separated: no circular dependencies
 - Example: backtesting/run/handler.py calls Application-layer BacktestRunner, not business logic
-- Commits: feat(mediator), docs, refactor(strategy), refactor(backtesting), refactor(market-data), refactor(trading), refactor(risk)
 
 **Previous Changes (2026-02-12):**
 - Event handler auto-discovery: `@event_handler` decorator + `EventRegistry`
