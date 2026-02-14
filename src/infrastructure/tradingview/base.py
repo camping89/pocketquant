@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
-from src.features.market_data.base.models.ohlcv import Interval, OHLCVCreate
+from src.domain.shared.value_objects import Interval
+from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCVCreate
 
 
 class IDataProvider(ABC):

@@ -13,7 +13,7 @@ from src.features.backtesting.optimize.handler import RunOptimizationHandler
 from src.features.backtesting.run.handler import RunBacktestHandler
 
 if TYPE_CHECKING:
-    from src.features.strategy.base import StrategyEngine
+    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 def register_handlers(

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
-from src.features.market_data.base.models.ohlcv import Interval
+from src.domain.shared.value_objects import Interval
 from src.features.market_data.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )

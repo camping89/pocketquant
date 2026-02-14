@@ -1,333 +1,465 @@
 # System Architecture
 
-**Last Updated:** 2026-02-13 | **Version:** 1.0 | **Status:** Production-Ready | **Pattern:** Operation-First Vertical Slices
+**Last Updated:** 2026-02-14 | **Version:** 2.0 | **Status:** Clean Architecture Refactor Complete | **Pattern:** DDD + CQRS + Clean Architecture Layers
 
 ## High-Level Architecture
 
-PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer separation.
+PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependency flow: Features → Application → Domain, Infrastructure → Domain.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         External Services                        │
-│              TradingView (REST API + WebSocket)                  │
-└───────────────┬─────────────────────────────┬───────────────────┘
-                │                             │
-        Historical Data              Real-time Quotes
-                │                             │
-                ▼                             ▼
+│     TradingView (REST + WS)  │  OKX (REST + WS)  │  Scheduler   │
+└───────────┬─────────────────────────┬───────────────────────────┘
+            │                         │
+            ▼                         ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                       API Layer (FastAPI)                        │
-│  POST /market-data/sync   GET /market-data/ohlcv   /quotes/*    │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
+│              Features Layer (CQRS Operation Routers)             │
+│  Commands/Queries → Handlers → Domain + Infrastructure          │
+│  backtesting/ | market_data/ | strategy/ | trading/ | risk/     │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+            ┌────────────┴────────────┐
+            │                         │
+            ▼                         ▼
+┌──────────────────────────┐   ┌──────────────────────────┐
+│  Application Layer       │   │   Domain Layer           │
+│  (Orchestrators)         │◄──┤   (Pure Logic)           │
+│  ├─ StrategyEngine       │   │   ├─ Aggregates         │
+│  ├─ BacktestRunner       │   │   ├─ Value Objects      │
+│  ├─ BarManager           │   │   ├─ Domain Events      │
+│  ├─ OrderManager         │   │   ├─ Interfaces         │
+│  └─ PositionTracker      │   │   └─ Domain Services    │
+└──────────┬───────────────┘   └──────────────────────────┘
+           │                            │
+           │    ┌───────────────────────┘
+           │    │
+           ▼    ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Middleware Stack (Ordered)                     │
-│  CorrelationId → RateLimit → Idempotency → Routes               │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    CQRS Mediator (Dispatcher)                    │
-│  send(Command/Query) → Handler → Response                        │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-            ┌────────────────┴────────────────┐
-            ▼                                 ▼
-┌───────────────────────┐       ┌───────────────────────┐
-│  Application Layer    │       │    Domain Layer       │
-│  (CQRS Handlers)      │◄──────│  (Pure Logic)         │
-│  - SyncHandler        │       │  - OHLCVAggregate     │
-│  - OHLCVHandler       │       │  - Symbol             │
-│  - QuoteHandler       │       │  - Interval           │
-└───────┬───────────────┘       └───────────────────────┘
-        │                                 │
-        │         ┌───────────────────────┘
-        │         │
-        ▼         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 Infrastructure Layer (I/O)                       │
-│  ┌───────────────┐  ┌──────────────┐  ┌──────────────────┐    │
-│  │  Persistence  │  │  Providers   │  │   Scheduling     │    │
-│  │  - MongoDB    │  │  - TradingVw │  │   - APScheduler  │    │
-│  │  - Redis      │  │  - HTTP      │  │   - Jobs         │    │
-│  └───────────────┘  └──────────────┘  └──────────────────┘    │
+│              Infrastructure Layer (External I/O)                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
+│  │ Brokers  │  │Providers │  │Persistence│  │ Scheduling  │   │
+│  │ (OKX,   │  │(TradingVw│  │(MongoDB,  │  │  (APScheduler)  │
+│  │ Paper)  │  │ WebSocket│  │ Redis)    │  │              │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
-        │                    │                    │
-        ▼                    ▼                    ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-│   MongoDB    │  │  TradingView │  │   Background     │
-│   (Bars)     │  │   (Market)   │  │   Jobs           │
-└──────────────┘  └──────────────┘  └──────────────────┘
+        │              │               │            │
+        ▼              ▼               ▼            ▼
+    ┌────────┐  ┌──────────┐  ┌──────────────┐  ┌──────────┐
+    │  OKX   │  │TradingVw │  │  MongoDB     │  │ Redis /  │
+    │ Live   │  │ Market   │  │  (Bars,     │  │BackgroundJobs
+    │Trading │  │  Data    │  │  Orders,    │  │          │
+    │        │  │          │  │  Positions) │  │          │
+    └────────┘  └──────────┘  └──────────────┘  └──────────┘
 ```
 
-## DDD Layer Architecture
+**Dependency Direction:** Features ← Application ← Domain, Infrastructure ← Domain (no reverse dependencies)
 
-### Layer 1: Domain (Pure Business Logic)
+## Clean Architecture Layer Breakdown
 
-**Purpose:** Core business rules with ZERO external dependencies.
+### Layer 1: Domain (Pure Business Logic) — src/domain/
+
+**Purpose:** Core business rules with ZERO external dependencies. Reusable domain concepts.
 
 **Rules:**
-- No I/O imports (no pymongo, redis, aiohttp)
-- Immutable value objects (frozen dataclasses)
-- Domain events for state changes
-- Validated via __post_init__
+- No I/O imports (no pymongo, redis, aiohttp, http)
+- Immutable value objects (frozen dataclasses, enums)
+- Domain events for state changes (HistoricalDataSyncedEvent, OrderFilledEvent, etc.)
+- Validation via __post_init__
+- Enforced via `test_domain_purity.py` (AST check)
 
-**Components:**
+**Structure:**
 ```
 domain/
-├── ohlcv/
-│   ├── aggregate.py      # OHLCVAggregate (collection validation)
-│   ├── value_objects.py  # OHLCVBar (immutable)
-│   ├── events.py         # BarSyncedEvent
-│   └── services/         # Domain services (pure logic)
-├── quote/
-│   ├── aggregate.py      # QuoteAggregate
-│   ├── value_objects.py  # QuoteTick
-│   └── events.py         # QuoteReceivedEvent
-├── symbol/
-│   ├── aggregate.py      # Symbol aggregate
-│   └── value_objects.py  # Symbol value object
-└── shared/
-    ├── value_objects.py  # Symbol, Interval, INTERVAL_SECONDS
-    └── events.py         # DomainEvent base class
+├── backtest/               # Backtesting domain
+│   └── services/performance_calculator.py
+├── ohlcv/                  # Market data aggregates
+│   ├── aggregate.py        # OHLCVAggregate (bar collection)
+│   ├── entities.py         # Entities
+│   ├── value_objects.py    # OHLCV, BarRange, immutable bar
+│   ├── ohlcv_event.py      # HistoricalDataSyncedEvent, BarCompletedEvent
+│   └── services/bar_builder.py  # BarBuilder service (incremental bar construction)
+├── order/                  # Order lifecycle domain
+│   ├── aggregate.py        # OrderAggregate
+│   ├── value_objects.py    # Order, OrderStatus, OrderType, OrderSide enums
+│   └── order_event.py      # OrderSubmittedEvent, OrderFilledEvent, etc.
+├── position/               # Position tracking domain
+│   ├── aggregate.py        # PositionAggregate
+│   ├── value_objects.py    # Position, PositionSide, PnL
+│   └── position_event.py   # PositionOpenedEvent, PositionClosedEvent
+├── quote/                  # Real-time quote domain
+│   ├── aggregate.py        # QuoteAggregate
+│   ├── value_objects.py    # QuoteTick (price, volume, timestamp)
+│   └── quote_event.py      # QuoteReceivedEvent
+├── risk/                   # Risk management domain
+│   ├── aggregate.py        # RiskConfigAggregate
+│   ├── value_objects.py    # RiskConfig, RiskModel enum
+│   └── services/position_sizer.py  # Position sizing calculations
+├── strategy/               # Strategy domain
+│   ├── interfaces.py       # IStrategy interface (on_bar, on_tick, on_fill)
+│   ├── value_objects.py    # StrategyConfig, StrategySignal
+│   ├── strategy_event.py   # SignalGeneratedEvent
+│   └── strategies/         # Concrete strategies
+│       └── ma_crossover_strategy.py  # MACrossoverStrategy
+├── shared/                 # Shared domain concepts
+│   ├── value_objects.py    # Symbol, Interval, Price enums/dataclasses
+│   └── events.py           # DomainEvent base class
+└── common/                 # Domain utilities (no I/O)
 ```
 
-**Example Value Object:**
+**Example - Pure Value Object:**
 ```python
 @dataclass(frozen=True)
 class Symbol:
     code: str
     exchange: str
-
     def __post_init__(self) -> None:
         if not self.code or not self.exchange:
             raise ValueError("Symbol requires code and exchange")
 ```
 
-**Enforcement:** `test_domain_purity.py` uses AST parsing to detect forbidden imports.
+**Example - Domain Service (Pure):**
+```python
+class BarBuilder:
+    """Incremental OHLCV construction. Zero I/O."""
+    def add_tick(self, price: float, volume: float) -> None:
+        self.high = max(self.high, price)
+        self.low = min(self.low, price)
+        self.close = price
+        self.volume += volume
 
-### Layer 2: Application (CQRS Handlers, Operation-First)
-
-**Purpose:** Orchestrate domain + infrastructure to fulfill use cases. Each operation is a self-contained use case.
-
-**Pattern:** Command/Query handlers registered with Mediator. Each operation folder contains its complete logic.
-
-**Structure (Operation-First Vertical Slice):**
+    def is_complete(self) -> bool:
+        return time.time() >= self.bar_close_time
 ```
-features/market_data/
-├── base/                        # Shared infrastructure within feature
-│   ├── jobs/                    # Background job definitions
-│   ├── managers/                # Stateful services (BarManager)
-│   ├── models/                  # Pydantic DTOs shared by multiple operations
-│   ├── providers/               # External integrations (TradingViewProvider)
-│   └── services/                # Business logic (DataSyncService)
-├── sync/                        # Nested feature: Data synchronization
-│   ├── sync_one/                # Operation: Sync single symbol
-│   │   ├── command.py           # SyncSymbolCommand
-│   │   ├── handler.py           # SyncSymbolHandler
-│   │   └── route.py             # Route: POST /market-data/sync
-│   ├── sync_bulk/               # Operation: Sync multiple symbols
-│   │   ├── command.py           # BulkSyncCommand
-│   │   ├── handler.py           # BulkSyncHandler
-│   │   └── route.py             # Route: POST /market-data/sync/bulk
-│   ├── dto.py                   # DTOs shared by sync operations
-│   └── router.py                # Sync sub-router (imports sync_one, sync_bulk routes)
-├── ohlcv/                       # Nested feature: OHLCV queries
-│   ├── get_ohlcv/               # Operation: Get bars
-│   │   ├── query.py             # GetOHLCVQuery
-│   │   ├── handler.py           # GetOHLCVHandler
-│   │   └── route.py             # Route: GET /market-data/ohlcv/{exchange}/{symbol}
-│   └── router.py
-├── quotes/                      # Nested feature: Quote management
-│   ├── start_feed/              # Operation: Start WebSocket
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── stop_feed/               # Operation: Stop WebSocket
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── subscribe/               # Operation: Subscribe symbol
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── get_all/                 # Operation: Get all quotes
-│   │   ├── query.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── get_latest/              # Operation: Get latest quote
-│   │   ├── query.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   └── router.py
-├── status/                      # Nested feature: Status queries
-│   ├── get_sync_status/         # Operation: Get sync status
-│   │   ├── query.py
-│   │   └── handler.py
-│   ├── get_quote_service_status/# Operation: Get quote feed status
-│   │   ├── query.py
-│   │   └── handler.py
-│   └── router.py
-├── list_symbols/                # Standalone operation
-│   ├── query.py                 # ListSymbolsQuery
-│   ├── handler.py               # ListSymbolsHandler
-│   └── route.py                 # Route: GET /market-data/symbols
-├── repositories/                # Data access layer (shared)
-│   ├── ohlcv_repository.py
-│   ├── symbol_repository.py
-│   └── sync_status_repository.py
-├── router.py                    # Main feature router
+
+### Layer 2: Application (Orchestrators) — src/application/
+
+**Purpose:** Orchestrate domain logic + infrastructure I/O to fulfill business use cases. Stateful services and engines that coordinate between layers.
+
+**Structure:**
+```
+application/
+├── backtesting/              # Backtest orchestration
+│   ├── backtest_runner.py   # BacktestRunner engine (execute backtest)
+│   ├── grid_optimizer.py    # GridOptimizer (parameter optimization)
+│   ├── historical_replay_engine.py  # Inject historical bars chronologically
+│   ├── result_collector.py  # Collect fills, calculate P&L
+│   └── models/              # PerformanceCalculator, DTOs
+├── market_data/              # Data sync orchestration
+│   ├── bar_manager.py       # BarManager (real-time multi-interval aggregation)
+│   ├── quote_service.py     # QuoteService (WebSocket lifecycle, tick distribution)
+│   ├── sync_jobs.py         # Background sync jobs (APScheduler tasks)
+│   └── models/              # DTOs for market data
+├── strategy/                 # Strategy orchestration
+│   ├── strategy_engine.py   # StrategyEngine (on_bar/on_tick dispatch, signal handling)
+│   └── yaml_strategy_loader.py  # StrategyLoader (YAML → IStrategy instances)
+├── trading/                  # Trading orchestration
+│   ├── order_manager.py     # OrderManager (order state, recovery)
+│   └── position_tracker.py  # PositionTracker (position state, P&L aggregation)
 └── __init__.py
 ```
 
-**Operation Structure (Inside an operation folder):**
+**Example - Application Service:**
+```python
+# StrategyEngine - orchestrates domain strategy + infrastructure execution
+class StrategyEngine:
+    def __init__(self, broker: IBroker, event_bus: EventBus):
+        self.broker = broker
+        self.event_bus = event_bus
+        self.strategy: Optional[IStrategy] = None
+
+    async def on_bar(self, bar: OHLCVBar) -> None:
+        """Called by BarManager when new bar completes."""
+        # 1. Domain: Get strategy signal
+        signal = await self.strategy.on_bar(bar)
+
+        # 2. Domain: Check risk
+        approved = await risk_check(signal)
+
+        # 3. Infrastructure: Execute via broker
+        if approved:
+            order = await self.broker.submit_order(approved.order)
+
+        # 4. Infrastructure: Publish event
+        await self.event_bus.publish(SignalGeneratedEvent(...))
+```
+
+### Layer 3: Features (CQRS Operation Routes) — src/features/
+
+**Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to handlers, return responses.
+
+**Pattern:** Operation-first vertical slices. Each operation is a self-contained use case (command/query + handler).
+
+**Structure:**
+```
+features/
+├── backtesting/              # Backtest feature (5 operations)
+│   ├── run/                 # Operation: Execute backtest
+│   │   ├── command.py       # RunBacktestCommand
+│   │   ├── handler.py       # RunBacktestHandler → BacktestRunner.run()
+│   │   └── route.py         # POST /api/v1/backtest/run
+│   ├── optimize/            # Operation: Optimize parameters
+│   │   ├── command.py       # OptimizeCommand
+│   │   ├── handler.py       # OptimizeHandler → GridOptimizer.optimize()
+│   │   └── route.py         # POST /api/v1/backtest/optimize
+│   ├── get_result/          # Operation: Get backtest result
+│   │   ├── query.py
+│   │   └── handler.py
+│   ├── list_results/        # Operation: List results
+│   │   ├── query.py
+│   │   └── handler.py
+│   ├── get_optimization/    # Operation: Get optimization result
+│   │   ├── query.py
+│   │   └── handler.py
+│   ├── register.py          # Handler registration (auto-discovery)
+│   └── router.py            # Feature router (aggregates all operations)
+├── market_data/              # Market data feature (7 nested operations)
+│   ├── sync/                # Nested group
+│   │   ├── sync_one/       # Operation: Sync single symbol
+│   │   ├── sync_bulk/      # Operation: Sync multiple symbols
+│   │   ├── dto.py
+│   │   └── router.py
+│   ├── ohlcv/               # Nested group
+│   │   ├── get_ohlcv/      # Operation: Get bars
+│   │   └── router.py
+│   ├── quotes/              # Nested group
+│   │   ├── start_feed/     # Operation: Start WebSocket
+│   │   ├── stop_feed/      # Operation: Stop WebSocket
+│   │   ├── subscribe/      # Operation: Subscribe symbol
+│   │   ├── get_all/        # Operation: Get all quotes
+│   │   ├── get_latest/     # Operation: Get latest quote
+│   │   └── router.py
+│   ├── status/              # Nested group
+│   │   ├── get_sync_status/
+│   │   ├── get_quote_service_status/
+│   │   └── router.py
+│   ├── list_symbols/        # Operation: List symbols
+│   ├── register.py
+│   └── router.py
+├── strategy/                 # Strategy feature (4 operations)
+│   ├── get_all/            # Operation: List strategies
+│   ├── get_one/            # Operation: Get strategy
+│   ├── load/               # Operation: Load strategy YAML
+│   ├── start/              # Operation: Start strategy
+│   ├── stop/               # Operation: Stop strategy
+│   ├── register.py
+│   └── router.py
+├── trading/                  # Trading feature (3 operations)
+│   ├── list_orders/        # Operation: List orders
+│   ├── get_order/          # Operation: Get order
+│   ├── list_positions/     # Operation: List positions
+│   ├── get_position/       # Operation: Get position
+│   ├── register.py
+│   └── router.py
+├── risk/                     # Risk feature (1 operation)
+│   ├── check_risk/         # Operation: Pre-trade validation
+│   ├── register.py
+│   └── router.py
+└── __init__.py
+```
+
+**Operation Pattern (Inside each operation folder):**
 ```
 operation_name/
-├── command.py           # Command definition + validation (mutating operations)
-│   # class {Action}Command(BaseModel): ...
-├── query.py             # Query definition + validation (read-only operations)
-│   # class Get{Resource}Query(BaseModel): ...
-├── handler.py           # CQRS handler (always present)
-│   # class {Action}Handler(Handler[{Command/Query}, {Response}]):
-│   #     async def handle(self, request: {Command/Query}) -> {Response}: ...
-├── route.py             # FastAPI route (optional, not always needed)
-│   # @router.post("/...") async def route(...): ...
+├── command.py or query.py    # Request definition (Pydantic model)
+├── handler.py                # CQRS handler (async handle method)
+├── route.py                  # FastAPI route (optional, often in parent router)
 └── __init__.py
 ```
 
-**Handler Responsibilities:** Receive Command/Query → Fetch from Infrastructure → Execute Domain logic → Persist → Publish DomainEvents → Return DTO
+**Handler 5-Step Pattern:**
+1. Receive Command/Query → 2. Fetch Infrastructure → 3. Execute Domain → 4. Persist Infrastructure → 5. Return DTO
 
-**Example:** `backtesting/run/` contains `command.py` (RunBacktestCommand), `handler.py` (RunBacktestHandler), `route.py` (POST /run). Handler loads strategy, fetches historical bars, runs BacktestRunner, calculates metrics, persists to MongoDB, returns result DTO.
+**Example:**
+```python
+@handles(RunBacktestCommand)
+class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
+    async def handle(self, cmd: RunBacktestCommand) -> BacktestResultDTO:
+        # 1. Fetch strategy config from infrastructure
+        strategy = await StrategyLoader.load_yaml(cmd.strategy_yaml)
 
-### Layer 3: Infrastructure (External I/O)
+        # 2. Fetch historical bars from infrastructure
+        bars = await OHLCVRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
 
-**Purpose:** All external integrations (DB, cache, HTTP, WebSocket, scheduling).
+        # 3. Execute domain logic via BacktestRunner
+        results = BacktestRunner.run(strategy, bars, self.broker)
+
+        # 4. Persist to MongoDB
+        await BacktestRepository.save(results)
+
+        # 5. Return DTO (not domain entity)
+        return BacktestResultDTO(
+            run_id=results.id,
+            sharpe_ratio=results.metrics.sharpe,
+            ...
+        )
+```
+
+### Layer 4: Infrastructure (External I/O) — src/infrastructure/
+
+**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP.
 
 **Structure:**
 ```
 infrastructure/
-├── persistence/
-│   ├── mongodb.py        # MongoDBConnection wrapper
-│   └── redis.py          # RedisConnection wrapper
-├── tradingview/
-│   ├── provider.py       # REST API (tvdatafeed + ThreadPoolExecutor)
-│   ├── websocket.py      # Binary WebSocket protocol
-│   └── base.py           # IDataProvider interface
-├── scheduling/
-│   └── scheduler.py      # APScheduler wrapper
-├── http_client/
-│   └── client.py         # Generic HTTP client (aiohttp)
-└── webhooks/
-    └── dispatcher.py     # Webhook notifications
+├── brokers/                  # Order execution abstraction
+│   ├── interface.py         # IBroker interface (submit, cancel, get positions)
+│   ├── factory.py           # BrokerFactory (create paper or okx)
+│   ├── models.py            # Execution models (ExecutionResult, etc.)
+│   ├── paper/               # PaperBroker (in-memory simulation)
+│   │   └── paper_broker.py
+│   └── okx/                 # OKXBroker (live trading)
+│       ├── okx_broker.py    # REST + WebSocket integration
+│       ├── okx_mapper.py    # Domain ↔ OKX model mapping
+│       └── websocket/       # OKX WebSocket protocol
+│           ├── okx_websocket_client.py   # Low-level WebSocket
+│           ├── okx_auth.py               # HMAC-SHA256 auth
+│           ├── okx_message_parser.py     # JSON message parsing
+│           ├── okx_order_mapper.py       # Order state mapping
+│           ├── okx_position_mapper.py    # Position state mapping
+│           └── okx_reconnection_handler.py  # Resilient connection
+├── persistence/              # Database connections
+│   ├── mongodb.py           # MongoDB async singleton (PyMongo)
+│   └── redis.py             # Redis async singleton (redis-py)
+├── providers/                # External data sources
+│   ├── tradingview/         # TradingView integration
+│   │   ├── provider.py      # TradingViewProvider (REST via tvdatafeed)
+│   │   └── websocket.py     # TradingViewWebSocketProvider (binary frames)
+│   └── base.py              # IDataProvider interface
+├── http_client/              # Generic HTTP utilities
+│   └── client.py            # Async HTTP client (aiohttp wrapper)
+└── webhooks/                 # Webhook delivery
+    └── dispatcher.py        # WebhookDispatcher (HMAC signing, retry)
 ```
 
 **Key Services:**
-- **MongoDBConnection:** Async collection access (PyMongo)
-- **RedisConnection:** JSON serialization + TTL support
-- **TradingViewProvider:** ThreadPoolExecutor for blocking I/O
-- **TradingViewWebSocketProvider:** Binary frame parsing and quote streaming
-- **JobScheduler:** APScheduler (in-memory, non-persistent)
 
-### Layer 4: Common (Cross-Cutting)
+| Service | Purpose |
+|---------|---------|
+| **MongoDBConnection** | Async collection access, pooling (5-50 connections) |
+| **RedisConnection** | JSON serialization, pattern deletion, TTL support |
+| **PaperBroker** | In-memory simulation, configurable slippage/delay |
+| **OKXBroker** | Live trading, HMAC auth, exponential backoff reconnection |
+| **TradingViewProvider** | REST API via ThreadPoolExecutor (max 4 workers) |
+| **TradingViewWebSocketProvider** | Binary frame parsing (~m~{len}~m~{json}) |
+| **JobScheduler** | APScheduler wrapper, async job execution |
 
-**Purpose:** Mediator, EventBus, middleware, tracing, health, UUID utilities.
+### Layer 5: Common (Cross-Cutting) — src/common/
+
+**Purpose:** Shared utilities: CQRS mediator, event bus, middleware, tracing, health checks.
 
 **Structure:**
 ```
 common/
 ├── mediator/
-│   ├── mediator.py       # CQRS dispatcher
-│   ├── handler.py        # Handler[TRequest, TResponse] base
-│   └── exceptions.py     # HandlerNotFoundError
+│   ├── mediator.py           # Mediator (CQRS dispatcher)
+│   ├── handler.py            # Handler[TRequest, TResponse] base + @handles decorator
+│   ├── registry.py           # HandlerRegistry (auto-discovery)
+│   └── exceptions.py         # HandlerNotFoundError, DuplicateHandlerError
 ├── messaging/
-│   ├── event_bus.py      # In-memory async event bus
-│   ├── event_handler.py  # EventHandler base
-│   ├── event_registry.py # @event_handler decorator + auto-discovery
-│   └── event_registry.py # EventRegistry for scanning & binding handlers
+│   ├── event_bus.py          # EventBus (in-memory, FIFO, 50-event history)
+│   ├── event_handler.py      # EventHandler base class
+│   ├── event_registry.py     # @event_handler decorator + auto-discovery
+│   └── ...
+├── middleware/
+│   ├── correlation_id.py     # CorrelationIdMiddleware (request tracking)
+│   ├── request_logging.py    # RequestLoggingMiddleware
+│   ├── idempotency.py        # IdempotencyMiddleware (24h TTL)
+│   └── rate_limit.py         # RateLimitMiddleware (200 req/10s per IP)
 ├── tracing/
-│   ├── correlation.py    # Correlation ID management
-│   └── context.py        # ContextVar storage
+│   ├── correlation.py        # CorrelationID context management
+│   └── context.py            # ContextVar storage
 ├── health/
-│   ├── coordinator.py    # Health aggregation
-│   └── checks.py         # DB/Cache/Jobs health checks
-├── idempotency/
-│   └── middleware.py     # IdempotencyMiddleware (24h TTL)
-├── rate_limit/
-│   └── middleware.py     # RateLimitMiddleware (200 req/10s)
-├── uuid.py               # UUID7 generation (time-ordered IDs)
-├── database/             # Singleton wrappers (legacy, in common for now)
-├── cache/
-├── logging/
-└── jobs/
+│   ├── coordinator.py        # HealthCoordinator (parallel checks)
+│   └── checks.py             # Database, cache, jobs health probes
+├── database.py               # Database singleton (MongoDB)
+├── cache.py                  # Cache singleton (Redis)
+├── jobs.py                   # JobScheduler singleton (APScheduler)
+├── uuid.py                   # UUID7 generation (time-ordered IDs)
+├── logging.py                # Structured logging (structlog)
+├── constants.py              # Cache keys, TTLs, limits, headers
+└── __init__.py
 ```
 
-## CQRS Flow
+**Key Components:**
 
-### Request Flow (Commands)
+| Component | Purpose |
+|-----------|---------|
+| **Mediator** | Route commands/queries to handlers, auto-discover via @handles |
+| **EventBus** | Publish domain events, subscribe handlers via @event_handler |
+| **CorrelationIdMiddleware** | Inject request ID for distributed tracing |
+| **RateLimitMiddleware** | Token bucket per IP (200 req/10s) |
+| **IdempotencyMiddleware** | Cache POST responses by idempotency_key header |
+| **Database** | MongoDB async singleton |
+| **Cache** | Redis async singleton |
+| **JobScheduler** | APScheduler async wrapper |
 
-```
-1. HTTP Request
-   POST /market-data/sync
-   Body: {symbol, exchange, interval, n_bars}
+## Clean Architecture Request Flow
 
-2. Middleware Stack
-   CorrelationIdMiddleware → inject correlation_id
-   RateLimitMiddleware → check token bucket
-   IdempotencyMiddleware → check cache (if idempotency_key)
-
-3. Route Handler
-   - Parse request body
-   - Build SyncSymbolCommand
-   - Call Mediator.send(command)
-
-4. Mediator Dispatch
-   - Lookup handler for SyncSymbolCommand
-   - Call handler.handle(command)
-
-5. Handler Execution
-   - Fetch from TradingViewProvider (infrastructure)
-   - Validate via OHLCVAggregate (domain)
-   - Save to MongoDB (infrastructure)
-   - Invalidate Redis cache (infrastructure)
-   - Publish BarSyncedEvent (event bus)
-   - Return SyncResultDTO
-
-6. Route Response
-   - Convert DTO to JSON
-   - Return HTTP 200 with body
-```
-
-### Request Flow (Queries)
+### Command Flow (State Mutation)
 
 ```
-1. HTTP Request
-   GET /market-data/ohlcv/{exchange}/{symbol}?interval=1d&limit=100
+HTTP Request (POST /market-data/sync)
+  ↓
+Middleware Stack
+  ├─ CorrelationIdMiddleware → inject correlation_id
+  ├─ RateLimitMiddleware → check token bucket (200 req/10s)
+  └─ IdempotencyMiddleware → return cached response if duplicate
+  ↓
+Route (features/market_data/sync/sync_one/route.py)
+  ├─ Parse request body
+  ├─ Build SyncSymbolCommand
+  └─ Call Mediator.send(command)
+  ↓
+Mediator (common/mediator/mediator.py)
+  ├─ Lookup handler via @handles(SyncSymbolCommand)
+  └─ Call handler.handle(command)
+  ↓
+Handler (features/market_data/sync/sync_one/handler.py)
+  ├─ [1] Fetch: TradingViewProvider.fetch_ohlcv()  [infrastructure]
+  ├─ [2] Validate: OHLCVAggregate(bars)             [domain]
+  ├─ [3] Persist: OHLCVRepository.upsert_many()     [infrastructure]
+  ├─ [4] Invalidate: Cache.delete_pattern()         [infrastructure]
+  └─ [5] Publish: EventBus.publish(HistoricalDataSyncedEvent)
+  ↓
+Route Response
+  └─ Return SyncResultDTO as JSON 200
+```
 
-2. Middleware Stack
-   CorrelationIdMiddleware → inject correlation_id
-   RateLimitMiddleware → check token bucket
-   (No idempotency for GET requests)
+**Handler 5-Step Pattern:**
+1. **Fetch** from infrastructure (providers, repositories)
+2. **Validate** via domain layer (aggregates, value objects)
+3. **Persist** via infrastructure (database, cache writes)
+4. **Invalidate** cache (pattern-based deletion)
+5. **Publish** domain events (event subscribers react async)
 
-3. Route Handler
-   - Parse query params
-   - Build GetBarsQuery
-   - Call Mediator.send(query)
+### Query Flow (Read-Only)
 
-4. Mediator Dispatch
-   - Lookup handler for GetBarsQuery
-   - Call handler.handle(query)
-
-5. Handler Execution
-   - Check Redis cache (infrastructure)
-   - If miss: Query MongoDB (infrastructure)
-   - Cache result in Redis (infrastructure)
-   - Map to OHLCVBar value objects (domain)
-   - Return BarsDTO
-
-6. Route Response
-   - Convert DTO to JSON
-   - Return HTTP 200 with body
+```
+HTTP Request (GET /market-data/ohlcv/{exchange}/{symbol}?interval=1d&limit=100)
+  ↓
+Middleware Stack
+  ├─ CorrelationIdMiddleware → inject correlation_id
+  ├─ RateLimitMiddleware → check token bucket
+  └─ (No idempotency for GET)
+  ↓
+Route (features/market_data/ohlcv/get_ohlcv/route.py)
+  ├─ Parse query params
+  ├─ Build GetOHLCVQuery
+  └─ Call Mediator.send(query)
+  ↓
+Mediator (common/mediator/mediator.py)
+  ├─ Lookup handler via @handles(GetOHLCVQuery)
+  └─ Call handler.handle(query)
+  ↓
+Handler (features/market_data/ohlcv/get_ohlcv/handler.py)
+  ├─ [1] Fetch: Cache.get(key) or OHLCVRepository.get_bars()
+  ├─ [2] Validate: OHLCVBar value objects
+  ├─ [3] Cache: Cache.set(key, result, ttl=300)
+  └─ [4] Return: BarsDTO (never return entities)
+  ↓
+Route Response
+  └─ Return BarsDTO as JSON 200
 ```
 
 ## Trading Persistence Layer

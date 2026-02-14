@@ -1,11 +1,11 @@
 """Handler for unsubscribing from a symbol."""
 
+from src.application.market_data.quote_service import get_quote_service
 from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
 from src.config import Settings
-from src.features.market_data.quotes.quote_service import get_quote_service
 from src.features.market_data.quotes.unsubscribe.command import UnsubscribeCommand
 
 logger = get_logger(__name__)

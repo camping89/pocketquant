@@ -15,10 +15,11 @@ from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.domain.ohlcv import OHLCVAggregate
+from src.domain.shared.value_objects import Interval
 from src.domain.shared.value_objects import Interval as DomainInterval
-from src.features.market_data.base.models.ohlcv import OHLCV, Interval, OHLCVCreate
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
+from src.infrastructure.persistence.schemas.ohlcv_schema import OHLCV, OHLCVCreate
 from src.infrastructure.tradingview import TradingViewProvider
 
 logger = get_logger(__name__)

@@ -1,7 +1,7 @@
 """List positions handler."""
 
+from src.application.trading.position_tracker import PositionTracker
 from src.common.mediator import Handler, handles
-from src.features.trading.base.managers.position_tracker import PositionTracker
 from src.features.trading.list_positions.query import ListPositionsQuery
 
 

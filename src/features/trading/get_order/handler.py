@@ -2,8 +2,8 @@
 
 from fastapi import HTTPException
 
+from src.application.trading.order_manager import OrderManager
 from src.common.mediator import Handler, handles
-from src.features.trading.base.managers.order_manager import OrderManager
 from src.features.trading.get_order.query import GetOrderQuery
 
 

@@ -1,7 +1,7 @@
 """Auto-register all strategy CQRS handlers with mediator."""
 
+from src.application.strategy.strategy_engine import StrategyEngine
 from src.common.mediator import HandlerRegistry, Mediator
-from src.features.strategy.base import StrategyEngine
 from src.features.strategy.get_all.handler import GetStrategiesHandler
 from src.features.strategy.get_one.handler import GetStrategyHandler
 from src.features.strategy.load.handler import LoadStrategyHandler

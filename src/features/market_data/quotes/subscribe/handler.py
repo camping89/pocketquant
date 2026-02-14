@@ -1,9 +1,9 @@
 """Handler for subscribing to a symbol."""
 
+from src.application.market_data.quote_service import get_quote_service
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
 from src.config import Settings
-from src.features.market_data.quotes.quote_service import get_quote_service
 from src.features.market_data.quotes.subscribe.command import SubscribeCommand
 
 logger = get_logger(__name__)

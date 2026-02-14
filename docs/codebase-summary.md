@@ -1,14 +1,27 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-13 | **Codebase Size:** 14,393 LOC | **Total Files:** 213 (182 Python files in src/) | **Architecture:** Operation-First Vertical Slices
+**Last Updated:** 2026-02-14 | **Codebase Size:** ~14,393 LOC | **Total Files:** 213 (182 Python files in src/) | **Architecture:** Clean Architecture + DDD + CQRS
 
 ## Architecture Overview
 
-PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer separation:
-- **Domain Layer:** Pure business logic (zero I/O)
-- **Infrastructure Layer:** All external I/O (DB, cache, providers, scheduling)
-- **Application Layer:** CQRS handlers + feature slices
-- **Common Layer:** Mediator, EventBus, middleware, tracing
+PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependencies:
+
+```
+Features (Routes, Commands, Queries, Handlers)
+  ↓ depends on
+Application (Orchestrators: StrategyEngine, BacktestRunner, BarManager)
+  ↓ depends on
+Domain (Pure business logic: Aggregates, Value Objects, Events)
+  ↑ depended on by
+Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
+```
+
+**Key Characteristics:**
+- **Domain Layer:** Pure business logic with ZERO I/O dependencies (enforced via AST checks)
+- **Application Layer:** Stateful orchestrators (StrategyEngine, BacktestRunner, BarManager, etc.)
+- **Features Layer:** Thin CQRS operation routes (routes → commands/queries → handlers)
+- **Infrastructure Layer:** All external I/O (brokers, providers, database, cache, scheduling)
+- **Common Layer:** Shared utilities (Mediator, EventBus, middleware, health checks)
 
 ## Module Breakdown
 
@@ -59,7 +72,9 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
 - `get_correlation_id()` - Thread/async-safe context variable access
 - **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-### src/domain (1,674+ LOC, 33 files)
+### src/domain (1,674+ LOC, 33 files) — Pure Business Logic
+
+**Rules:** No I/O imports. No pymongo, redis, aiohttp. Immutable value objects. Domain events. Validation in __post_init__.
 
 **Aggregates (6):**
 - **OHLCVAggregate** - Collection of OHLCV bars with validation
@@ -105,7 +120,21 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
   - `calculate_size(account_balance, signal)` - Returns quantity
   - Supports: PERCENT_RISK, KELLY, FIXED
 
-### src/infrastructure (3,127+ LOC, 32 files)
+### src/application (2,500+ LOC, 18 files) — Orchestrators
+
+Stateful services that coordinate domain logic + infrastructure:
+- **BacktestRunner:** Execute strategy on historical bars
+- **GridOptimizer:** Parameter optimization (multiprocessing)
+- **BarManager:** Real-time multi-interval bar aggregation
+- **QuoteService:** WebSocket lifecycle, tick distribution
+- **StrategyEngine:** Strategy dispatch (on_bar, on_tick, on_fill)
+- **OrderManager:** Order state machine + recovery
+- **PositionTracker:** Position state, P&L calculation
+- **StrategyLoader:** YAML → IStrategy instantiation
+
+No CQRS in this layer. These are business orchestrators called by CQRS handlers.
+
+### src/infrastructure (3,127+ LOC, 32 files) — External I/O
 
 **Brokers (Pluggable Execution):**
 - **IBroker** - Abstract contract
@@ -173,10 +202,13 @@ PocketQuant uses **DDD + CQRS + Vertical Slice Architecture** with strict layer 
   - HMAC-SHA256 signing
   - Resilient delivery with retry
 
-### src/features (6,561+ LOC, 85 files)
+### src/features (6,561+ LOC, 85 files) — CQRS Operation Routes
 
 **Vertical Slice Architecture (Operation-First Pattern):**
-Each feature is self-contained with all layers in one directory. Operations are the primary organizational unit.
+Each feature is self-contained. Operations are the primary organizational unit. Routes are thin (parse request, call handler, return response). All business logic delegated to handlers.
+
+**Dependency:** Features depend on Application + Domain + Infrastructure.
+**No reverse dependencies:** Domain never imports from Features.
 
 **backtesting/ (2,259 LOC, 27 files)**
 
@@ -508,17 +540,19 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
 
-## Recent Changes (2026-02-13)
+## Recent Changes (2026-02-14)
 
-**Vertical Slice Restructure (Operation-First Pattern):**
-- Completed restructure of all 5 feature slices (backtesting, market_data, strategy, trading, risk)
-- Operations now primary organizational unit (get_all/, load/, run/, check_risk/, etc.)
-- Each operation is a folder containing: command/query.py, handler.py, route.py (optional)
-- Shared code within features moved to base/ (engine/, managers/, models/, repositories/, providers/)
-- Clearer vertical separation: no cross-feature service dependencies
-- Operation folders are self-contained use cases
-- Example: backtesting/run/ → backtesting/run/command.py, handler.py, route.py
-- Commits: refactor(strategy), refactor(backtesting), refactor(market-data), refactor(trading), refactor(risk)
+**Clean Architecture Refactor Complete:**
+- Moved core business logic out of features/ into src/domain/
+- Created src/application/ with orchestrators (StrategyEngine, BacktestRunner, BarManager, OrderManager, PositionTracker)
+- Created src/infrastructure/ with brokers, providers, persistence (MongoDB, Redis), scheduling
+- Features/ now thin CQRS operation layers (routes, commands, queries, handlers only)
+- **Dependency direction:** Features → Application → Domain ← Infrastructure
+- **Domain purity enforced:** AST checks prevent I/O imports in domain/
+- **Auto-discovery:** @handles decorator for CQRS handlers, @event_handler for domain events
+- All 5 feature slices now cleanly separated: no circular dependencies
+- Example: backtesting/run/handler.py calls Application-layer BacktestRunner, not business logic
+- Commits: feat(mediator), docs, refactor(strategy), refactor(backtesting), refactor(market-data), refactor(trading), refactor(risk)
 
 **Previous Changes (2026-02-12):**
 - Event handler auto-discovery: `@event_handler` decorator + `EventRegistry`

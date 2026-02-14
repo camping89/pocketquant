@@ -2,12 +2,12 @@
 
 from typing import TYPE_CHECKING
 
+from src.application.strategy.yaml_strategy_loader import StrategyLoader
 from src.common.mediator import Handler, handles
-from src.features.strategy.base import StrategyLoader
 from src.features.strategy.load.command import LoadStrategyCommand
 
 if TYPE_CHECKING:
-    from src.features.strategy.base import StrategyEngine
+    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 @handles(LoadStrategyCommand)

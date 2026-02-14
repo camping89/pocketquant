@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from src.features.market_data.base.models.quote import Quote
+from src.infrastructure.persistence.schemas.quote_schema import Quote
 
 
 @dataclass

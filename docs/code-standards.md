@@ -1,117 +1,183 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-13 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/) | **Architecture:** Operation-First Vertical Slices
+**Last Updated:** 2026-02-14 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/) | **Architecture:** Clean Architecture + DDD + CQRS
+
+## Clean Architecture Rules
+
+### Dependency Direction (MANDATORY)
+```
+Features (routes, commands, queries, handlers)
+  ↓ imports
+Application (orchestrators: StrategyEngine, BacktestRunner, etc.)
+  ↓ imports
+Domain (aggregates, value objects, events)
+  ↑ imports ← Infrastructure (brokers, providers, persistence)
+
+CRITICAL: No reverse dependencies.
+- Domain NEVER imports from Application, Features, or Infrastructure
+- Enforced via test_domain_purity.py (AST check)
+```
+
+### Layer Responsibilities
+
+| Layer | Responsibility | I/O |
+|-------|---|---|
+| **Domain** | Business rules, validation, events | NONE (zero I/O) |
+| **Application** | Orchestrators, state machines, coordination | Calls infrastructure |
+| **Features** | HTTP routes, request parsing, response formatting | Calls application handlers |
+| **Infrastructure** | DB, brokers, providers, scheduling, HTTP | All external I/O |
+| **Common** | Mediator, EventBus, middleware, utilities | Cross-cutting concerns |
 
 ## Architecture Patterns
 
 ### 1. Vertical Slice Architecture (Operation-First)
 
-Each feature (market_data, backtesting, strategy, trading, risk) is self-contained with all layers in one directory. **Operations are the primary organizational unit.** No shared services between slices except via infrastructure singletons.
+Features are thin HTTP routing layers. **Operations are primary organizational unit.** All business logic moved to Application layer.
 
 ```
 features/
-├── market_data/         (2,116 LOC, 31 files)
-├── backtesting/         (2,259 LOC, 27 files)
-├── strategy/            (1,236 LOC, 18 files)
-├── trading/             (782 LOC, 12 files)
-└── risk/                (163 LOC, 5 files)
+├── market_data/         (routes, commands, queries, handlers)
+├── backtesting/         (routes, commands, queries, handlers)
+├── strategy/            (routes, commands, queries, handlers)
+├── trading/             (routes, commands, queries, handlers)
+└── risk/                (routes, commands, queries, handlers)
 
-Operation-First Slice Structure:
-├── base/                       # Shared within feature
-│   ├── engine/                 # Core engines (e.g., BacktestRunner, StrategyEngine)
-│   ├── managers/               # Stateful services (e.g., BarManager, OrderManager)
-│   ├── models/                 # Pydantic DTOs
-│   ├── repositories/           # Data access (e.g., OrderRepository)
-│   ├── providers/              # External integrations (e.g., TradingViewProvider)
-│   └── jobs/                   # Background jobs (optional)
+Operation-First Structure:
 ├── operation_name/             # Each operation is a folder
-│   ├── command.py              # Command/Query definition
-│   ├── handler.py              # CQRS handler (always present)
-│   ├── route.py                # FastAPI route (optional, often in parent router)
+│   ├── command.py or query.py  # Request definition (Pydantic)
+│   ├── handler.py              # CQRS handler (@handles decorator)
+│   ├── route.py                # FastAPI route (optional)
 │   └── __init__.py
-└── router.py                   # Main feature router (aggregates all operations)
+├── register.py                 # Handler registration (auto-discovery)
+├── router.py                   # Feature router (aggregates all operations)
+└── __init__.py
 
-Real Example (backtesting):
-├── base/
-│   ├── engine/
-│   │   ├── backtest_runner.py
-│   │   └── historical_replay_engine.py
-│   ├── metrics/
-│   │   └── performance_calculator.py
-│   ├── models/
-│   │   └── backtest_models.py
-│   ├── optimizer/
-│   │   └── grid_optimizer.py
-│   └── repository/
-│       └── backtest_repository.py
+IMPORTANT: No business logic in features/. All logic in:
+- Application layer (orchestrators, state machines)
+- Domain layer (aggregates, value objects, events)
+
+Clean Architecture Example (backtesting):
+
+**Features Layer (Thin routes):**
+```
+features/backtesting/
 ├── run/                        # Operation: Execute backtest
 │   ├── command.py              # RunBacktestCommand
-│   ├── handler.py              # RunBacktestHandler
-│   └── route.py                # /api/v1/backtest/run
+│   ├── handler.py              # RunBacktestHandler (calls Application-layer BacktestRunner)
+│   └── route.py                # POST /api/v1/backtest/run
 ├── optimize/                   # Operation: Optimize parameters
-│   ├── command.py              # OptimizeBacktestCommand
-│   ├── handler.py              # OptimizeBacktestHandler
-│   └── route.py                # /api/v1/backtest/optimize
-├── get_result/                 # Operation: Get result
-│   ├── query.py                # GetBacktestResultQuery
-│   └── handler.py              # GetBacktestResultHandler
-├── list_results/               # Operation: List results
-│   ├── query.py                # ListBacktestResultsQuery
-│   └── handler.py              # ListBacktestResultsHandler
-└── router.py                   # Main feature router (includes sub-routers)
-
-Nested Operations Example (market_data/sync):
-├── sync/
-│   ├── sync_one/               # Operation: Sync single symbol
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── sync_bulk/              # Operation: Sync multiple symbols
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── dto.py                  # Shared DTOs for sync operations
-│   └── router.py               # Sync sub-router
+│   ├── command.py
+│   ├── handler.py              # Calls Application-layer GridOptimizer
+│   └── route.py
+├── get_result/
+│   ├── query.py
+│   └── handler.py
+├── list_results/
+│   ├── query.py
+│   └── handler.py
+├── register.py                 # register_handlers(mediator) auto-discovery
+└── router.py                   # Aggregate all operation routes
 ```
 
+**Application Layer (Orchestrators):**
+```
+application/backtesting/
+├── backtest_runner.py          # BacktestRunner (engine, execute backtest)
+├── grid_optimizer.py           # GridOptimizer (parameter search)
+├── historical_replay_engine.py # HistoricalReplayEngine (inject bars)
+├── result_collector.py         # ResultCollector (collect fills, metrics)
+└── models/                     # DTOs, config models
+```
+
+**Domain Layer (Pure logic):**
+```
+domain/backtest/
+└── services/
+    └── performance_calculator.py  # Calculate Sharpe, Sortino, max drawdown (pure, no I/O)
+```
+
+**Key:** Handler in features/ calls BacktestRunner in application/, which uses PerformanceCalculator from domain/. PerformanceCalculator has ZERO I/O imports.
+
 **Key Rules:**
-1. Each operation is a folder containing its command/query and handler
-2. Operations should be focused and cohesive (single use case per operation)
-3. Shared code within feature goes to base/ directory
-4. No cross-feature dependencies (loose coupling)
-5. Routes are organized hierarchically (router.py per feature, optional route.py per operation)
-6. Operation folders may be nested for logical grouping (e.g., sync/sync_one/, sync/sync_bulk/)
+1. Each operation is a folder (command/query.py + handler.py + optional route.py)
+2. Operations are self-contained use cases (no shared state between operations)
+3. Handler 5-step pattern: Fetch Infrastructure → Validate Domain → Persist Infrastructure → Invalidate Cache → Publish Events
+4. Routes are thin (parse, delegate, respond)
+5. NO business logic in features/ (all in Application or Domain)
+6. Operation folders may be nested (sync/sync_one/, sync/sync_bulk/)
+7. No cross-feature dependencies (loose coupling via infrastructure singletons)
 
-**Rationale:** Tight cohesion within feature, loose coupling between features. Operation-centric structure makes each use case explicit and self-contained. Easy to add/remove operations without cascading changes. Developers can understand an entire use case by reading one operation folder.
+**Rationale:**
+- Tight cohesion within feature (all operation code together)
+- Loose coupling between features (no direct imports)
+- Clean architecture (domain pure, application orchestrates, features delegate)
+- Easy to add/remove operations without cascading changes
 
-### 2. Singleton Infrastructure (Class-Method Pattern)
+### 2. Application Layer (Orchestrators & State Machines)
 
-Expensive connections (DB, Cache, JobScheduler) are singletons with class methods as API:
+Business logic that coordinates Domain + Infrastructure. Unlike Domain (pure logic), Application can call Infrastructure for I/O.
+
+**Examples:**
+- **StrategyEngine:** Listen to market events (bars, ticks), call strategy.on_bar(), check risk, submit orders via broker
+- **BacktestRunner:** Load strategy, inject historical bars, collect fills, calculate metrics
+- **BarManager:** Aggregate incoming ticks into OHLCV bars at multiple intervals
+- **OrderManager:** Order state machine, recovery on startup
+- **PositionTracker:** Track open/closed positions, calculate P&L
+
+**No CQRS in this layer.** These are business orchestrators called by CQRS handlers.
+
+```python
+# Application-layer service (orchestrates domain + infrastructure)
+class StrategyEngine:
+    def __init__(self, broker: IBroker, event_bus: EventBus):
+        self.broker = broker
+        self.event_bus = event_bus
+
+    async def on_bar(self, bar: OHLCVBar) -> None:
+        # 1. Domain: Call strategy logic
+        signal = await self.strategy.on_bar(bar)
+
+        # 2. Infrastructure: Check risk
+        approved = await risk_check(signal)
+
+        # 3. Infrastructure: Execute via broker
+        if approved:
+            order = await self.broker.submit_order(approved.order)
+
+        # 4. Infrastructure: Publish event
+        await self.event_bus.publish(SignalGeneratedEvent(...))
+```
+
+**Rules:**
+- Can import Domain and Infrastructure
+- No CQRS decorators (@handles, @event_handler)
+- Stateful (maintains runtime state)
+- Called by CQRS handlers in features/ layer
+- Often singletons (StrategyEngine, QuoteService) or per-request (DataSyncService)
+
+### 3. Singleton Infrastructure (Class-Method Pattern)
+
+Expensive connections (DB, Cache, JobScheduler) are singletons with class methods:
 
 ```python
 # Database
 from src.common.database import Database
-
 collection = Database.get_collection("ohlcv")
 await Database.connect(settings)
-await Database.disconnect()
 
 # Cache
 from src.common.cache import Cache
-
 value = await Cache.get("key")
 await Cache.set("key", value, ttl=3600)
 
 # Jobs
 from src.common.jobs import JobScheduler
-
-JobScheduler.initialize(settings)
 JobScheduler.add_interval_job(func, interval_seconds)
 ```
 
-**Rationale:** Avoids DI complexity for expensive resources, single shared connection per resource type, initialized once at startup, clean API.
+**Rationale:** Single shared connection per resource, initialized once at startup, avoids DI complexity.
 
-### 3. Repository Pattern (Stateless Data Access)
+### 4. Repository Pattern (Stateless Data Access)
 
 All data access through class methods. No instance state.
 
@@ -131,7 +197,7 @@ class OHLCVRepository:
 
 **Rationale:** Stateless design, easy to test, no complex lifecycle management, class methods used directly without instantiation.
 
-### 4. Service Pattern (Business Logic)
+### 5. Service Pattern (Business Logic)
 
 Two patterns depending on state requirements:
 
@@ -173,7 +239,7 @@ Used for: WebSocket connections, persistent state, event distribution.
 
 **Rationale:** Per-request services are simple and testable. Singleton services for state that must persist across requests.
 
-### 5. Provider Pattern (External Integrations)
+### 6. Provider Pattern (External Integrations)
 
 Encapsulate external API calls with clean interface:
 
@@ -191,7 +257,7 @@ class TradingViewProvider:
 
 **Rationale:** Isolates blocking I/O from async event loop, clean error handling, easy to mock for testing.
 
-### 6. Event Handler Auto-Discovery Pattern
+### 7. Event Handler Auto-Discovery Pattern
 
 Register event subscribers automatically using the `@event_handler` decorator:
 
@@ -225,7 +291,7 @@ count = registry.register_instance(position_tracker, event_bus)
 - Scalable: Add new handlers without modifying mediator
 - Type-safe: Event types checked at decorator definition
 
-### 7. CQRS Handler Pattern (Auto-Discovery)
+### 8. CQRS Handler Pattern (Auto-Discovery)
 
 Separate request handlers for commands (mutate state) and queries (read-only). All handlers extend `Handler[TRequest, TResponse]` and use `@handles(RequestType)` for auto-discovery.
 
@@ -304,7 +370,7 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 **Registration Pattern:**
 Each feature has a `register.py` with `register_handlers(mediator, **deps)` that uses `HandlerRegistry.register_all()` for auto-discovery. New handlers only need `@handles` + adding to the feature's `register.py`.
 
-### 8. Strategy Implementation Pattern
+### 9. Strategy Implementation Pattern
 
 Implement IStrategy interface for custom trading strategies:
 
@@ -766,8 +832,41 @@ All aggregates migrated:
 - OHLCVAggregate, OrderAggregate, PositionAggregate, etc.
 - All repositories use UUID7 for _id generation
 
+## Clean Architecture Rules (MANDATORY)
+
+**Domain Layer:**
+- ❌ No I/O imports (pymongo, redis, aiohttp, http, infrastructure)
+- ✅ Immutable value objects, frozen dataclasses
+- ✅ Domain events for state changes
+- ✅ Validation in __post_init__
+- ✅ Pure business logic only
+- Enforced via: `test_domain_purity.py` (AST check)
+
+**Application Layer:**
+- ❌ No CQRS decorators (@handles, @event_handler)
+- ✅ Can import Domain and Infrastructure
+- ✅ Orchestrate domain + infrastructure
+- ✅ Stateful services (StrategyEngine, BarManager)
+- ✅ Called by CQRS handlers in features/
+
+**Features Layer:**
+- ❌ No business logic (all in Application or Domain)
+- ✅ Thin routes (parse, delegate, respond)
+- ✅ Commands and Queries (Pydantic models)
+- ✅ CQRS handlers with @handles decorator
+- ✅ Call Application-layer services
+
+**Infrastructure Layer:**
+- ❌ Never imported by Domain
+- ✅ Can import Domain
+- ✅ Brokers, providers, persistence, scheduling
+- ✅ All external I/O
+
 ## Deprecated Patterns (Do Not Use)
 
+❌ Business logic in features/ (move to application/)
+❌ Business logic in domain/ with I/O (move to application/)
+❌ Direct database calls in handlers (use repositories)
 ❌ Synchronous blocking I/O in async context
 ❌ Global mutable state outside singletons
 ❌ Bare except clauses
@@ -778,8 +877,8 @@ All aggregates migrated:
 ❌ Comments explaining obvious code
 ❌ Circular imports between features
 ❌ Feature-specific configuration in main module
-❌ Manual event subscription instead of @event_handler decorator
-❌ Manual mediator.register() in main.py (use @handles + feature register.py)
+❌ Manual event subscription (use @event_handler decorator)
+❌ Manual mediator.register() in main.py (use @handles + register.py)
 ❌ Handler classes without @handles decorator
 ❌ UUID4 for aggregates (use UUID7)
 
