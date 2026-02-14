@@ -15,83 +15,21 @@ from src.common.messaging import EventBus
 from src.common.rate_limit import RateLimitMiddleware
 from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from src.config import get_settings
-from src.features.backtesting import (
-    GetBacktestHandler,
-    GetBacktestQuery,
-    GetOptimizationHandler,
-    GetOptimizationQuery,
-    ListBacktestsHandler,
-    ListBacktestsQuery,
-    RunBacktestCommand,
-    RunBacktestHandler,
-    RunOptimizationCommand,
-    RunOptimizationHandler,
-    backtest_router,
-)
+from src.features.backtesting import backtest_router
 from src.features.backtesting.base.repository import BacktestRepository
+
+# Feature handler registrations (auto-discover via @handles decorator)
+from src.features.backtesting.register import register_handlers as register_backtesting
 from src.features.market_data.base.jobs import register_sync_jobs, set_mediator
-from src.features.market_data.list_symbols import ListSymbolsQuery
-from src.features.market_data.list_symbols.handler import ListSymbolsHandler
-from src.features.market_data.ohlcv import GetOHLCVHandler, GetOHLCVQuery
-from src.features.market_data.quotes import (
-    GetAllQuotesHandler,
-    GetAllQuotesQuery,
-    GetLatestQuoteHandler,
-    GetLatestQuoteQuery,
-    StartQuoteFeedCommand,
-    StartQuoteFeedHandler,
-    StopQuoteFeedCommand,
-    StopQuoteFeedHandler,
-    SubscribeCommand,
-    SubscribeHandler,
-    UnsubscribeCommand,
-    UnsubscribeHandler,
-)
 from src.features.market_data.quotes.router import router as quote_router
+from src.features.market_data.register import register_handlers as register_market_data
 from src.features.market_data.router import router as market_data_router
-from src.features.market_data.status import (
-    GetQuoteServiceStatusHandler,
-    GetQuoteServiceStatusQuery,
-    GetSymbolSyncStatusHandler,
-    GetSymbolSyncStatusQuery,
-    GetSyncStatusHandler,
-    GetSyncStatusQuery,
-)
-from src.features.market_data.sync import (
-    BulkSyncCommand,
-    BulkSyncHandler,
-    SyncSymbolCommand,
-    SyncSymbolHandler,
-)
 from src.features.risk import RiskCheckHandler
-from src.features.strategy import (
-    GetStrategiesHandler,
-    GetStrategiesQuery,
-    GetStrategyHandler,
-    GetStrategyQuery,
-    LoadStrategyCommand,
-    LoadStrategyHandler,
-    StartStrategyCommand,
-    StartStrategyHandler,
-    StopStrategyCommand,
-    StopStrategyHandler,
-    StrategyEngine,
-    strategy_router,
-)
-from src.features.trading import (
-    GetOrderHandler,
-    GetOrderQuery,
-    GetPositionHandler,
-    GetPositionQuery,
-    ListOrdersHandler,
-    ListOrdersQuery,
-    ListPositionsHandler,
-    ListPositionsQuery,
-    OrderManager,
-    PositionTracker,
-    trading_router,
-)
+from src.features.strategy import StrategyEngine, strategy_router
+from src.features.strategy.register import register_handlers as register_strategy
+from src.features.trading import OrderManager, PositionTracker, trading_router
 from src.features.trading.base.repositories import OrderRepository, PositionRepository
+from src.features.trading.register import register_handlers as register_trading
 from src.infrastructure.brokers import BrokerFactory
 from src.infrastructure.tradingview import TradingViewProvider
 
@@ -129,25 +67,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         tv_provider = TradingViewProvider(settings)
 
-        sync_handler = SyncSymbolHandler(tv_provider, event_bus)
-        mediator.register(SyncSymbolCommand, sync_handler)
-        mediator.register(BulkSyncCommand, BulkSyncHandler(sync_handler))
-
-        mediator.register(GetOHLCVQuery, GetOHLCVHandler())
-
-        mediator.register(StartQuoteFeedCommand, StartQuoteFeedHandler(settings))
-        mediator.register(StopQuoteFeedCommand, StopQuoteFeedHandler(settings))
-        mediator.register(SubscribeCommand, SubscribeHandler(settings))
-        mediator.register(UnsubscribeCommand, UnsubscribeHandler(settings))
-        mediator.register(GetLatestQuoteQuery, GetLatestQuoteHandler())
-        mediator.register(GetAllQuotesQuery, GetAllQuotesHandler(settings))
-
-        mediator.register(GetSyncStatusQuery, GetSyncStatusHandler())
-        mediator.register(GetSymbolSyncStatusQuery, GetSymbolSyncStatusHandler())
-        mediator.register(
-            GetQuoteServiceStatusQuery, GetQuoteServiceStatusHandler(settings)
+        # === Register all CQRS handlers (auto-discovered via @handles) ===
+        register_market_data(
+            mediator,
+            settings=settings,
+            tv_provider=tv_provider,
+            event_bus=event_bus,
         )
-        mediator.register(ListSymbolsQuery, ListSymbolsHandler())
 
         # === Strategy Engine Setup ===
         broker_factory = BrokerFactory()
@@ -155,11 +81,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         position_tracker = PositionTracker(event_bus)
         risk_handler = RiskCheckHandler()
 
-        # Default broker config from settings
         default_broker_config = {
             "initial_balance": settings.paper_initial_balance,
             "slippage_percent": settings.paper_slippage_percent,
-            # OKX credentials (optional)
             "api_key": settings.okx_api_key,
             "api_secret": settings.okx_api_secret,
             "passphrase": settings.okx_passphrase,
@@ -179,12 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.order_manager = order_manager
         app.state.position_tracker = position_tracker
 
-        # Register strategy handlers
-        mediator.register(LoadStrategyCommand, LoadStrategyHandler(strategy_engine))
-        mediator.register(StartStrategyCommand, StartStrategyHandler(strategy_engine))
-        mediator.register(StopStrategyCommand, StopStrategyHandler(strategy_engine))
-        mediator.register(GetStrategiesQuery, GetStrategiesHandler(strategy_engine))
-        mediator.register(GetStrategyQuery, GetStrategyHandler(strategy_engine))
+        register_strategy(mediator, strategy_engine=strategy_engine)
 
         # Load pending orders from database
         await order_manager.load_pending_orders()
@@ -197,26 +116,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         logger.info("strategy_engine_initialized")
 
-        # Register trading handlers
-        mediator.register(ListOrdersQuery, ListOrdersHandler(order_manager))
-        mediator.register(GetOrderQuery, GetOrderHandler(order_manager))
-        mediator.register(ListPositionsQuery, ListPositionsHandler(position_tracker))
-        mediator.register(GetPositionQuery, GetPositionHandler(position_tracker))
-
-        logger.info("trading_handlers_registered")
-
-        # Register backtest handlers
-        mediator.register(
-            RunBacktestCommand, RunBacktestHandler(event_bus, strategy_engine)
+        register_trading(
+            mediator,
+            order_manager=order_manager,
+            position_tracker=position_tracker,
         )
-        mediator.register(
-            RunOptimizationCommand, RunOptimizationHandler(event_bus, strategy_engine)
-        )
-        mediator.register(GetBacktestQuery, GetBacktestHandler())
-        mediator.register(GetOptimizationQuery, GetOptimizationHandler())
-        mediator.register(ListBacktestsQuery, ListBacktestsHandler())
 
-        logger.info("backtest_handlers_registered")
+        register_backtesting(
+            mediator,
+            event_bus=event_bus,
+            strategy_engine=strategy_engine,
+        )
 
         set_mediator(mediator)
 

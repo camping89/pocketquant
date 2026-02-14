@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from src.common.constants import COLLECTION_OPTIMIZATION_RUNS
 from src.common.database import Database
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.base.models.optimization_config import OptimizationConfig
 from src.features.backtesting.base.models.optimization_result import OptimizationResult
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from src.features.strategy.base import StrategyEngine
 
 
+@handles(RunOptimizationCommand)
 class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]):
     """Handle RunOptimizationCommand - execute grid optimization."""
 

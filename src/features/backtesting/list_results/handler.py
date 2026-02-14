@@ -1,11 +1,12 @@
 """Handler for listing backtests."""
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.backtesting.base.models.backtest_result import BacktestResult
 from src.features.backtesting.base.repository.backtest_repository import BacktestRepository
 from src.features.backtesting.list_results.query import ListBacktestsQuery
 
 
+@handles(ListBacktestsQuery)
 class ListBacktestsHandler(Handler[ListBacktestsQuery, list[BacktestResult]]):
     """Handle ListBacktestsQuery - list backtest results for a strategy."""
 

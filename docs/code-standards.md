@@ -225,14 +225,17 @@ count = registry.register_instance(position_tracker, event_bus)
 - Scalable: Add new handlers without modifying mediator
 - Type-safe: Event types checked at decorator definition
 
-### 7. CQRS Handler Pattern
+### 7. CQRS Handler Pattern (Auto-Discovery)
 
-Separate request handlers for commands (mutate state) and queries (read-only). All handlers extend `Handler[TRequest, TResponse]` base class.
+Separate request handlers for commands (mutate state) and queries (read-only). All handlers extend `Handler[TRequest, TResponse]` and use `@handles(RequestType)` for auto-discovery.
+
+**Rule: One handler per command/query.** `DuplicateHandlerError` thrown at startup if two handlers claim the same request type.
 
 ```python
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 
 # Command Handler (mutates state)
+@handles(SyncSymbolCommand)
 class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
     def __init__(self, provider: IDataProvider):
         self.provider = provider
@@ -257,6 +260,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
         return SyncResultDTO(bars_synced=len(bars), status="completed")
 
 # Query Handler (read-only)
+@handles(GetBarsQuery)
 class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
     async def handle(self, query: GetBarsQuery) -> BarsDTO:
         cache_key = f"ohlcv:{query.symbol}:{query.interval}"
@@ -290,11 +294,15 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 6. Return DTO (never return domain entities)
 
 **Key Rules:**
-- Handlers are stateless, instantiated per-request
-- Constructor receives dependencies (injected by route or factory)
+- Every handler MUST use `@handles(RequestType)` decorator
+- One handler per command/query (enforced at startup, `DuplicateHandlerError`)
+- Constructor receives dependencies (injected in feature `register.py`)
 - `handle()` must be idempotent if possible (for retries)
 - Return DTOs, not domain entities
 - Publish domain events for all state changes
+
+**Registration Pattern:**
+Each feature has a `register.py` with `register_handlers(mediator, **deps)` that uses `HandlerRegistry.register_all()` for auto-discovery. New handlers only need `@handles` + adding to the feature's `register.py`.
 
 ### 8. Strategy Implementation Pattern
 
@@ -771,6 +779,8 @@ All aggregates migrated:
 ❌ Circular imports between features
 ❌ Feature-specific configuration in main module
 ❌ Manual event subscription instead of @event_handler decorator
+❌ Manual mediator.register() in main.py (use @handles + feature register.py)
+❌ Handler classes without @handles decorator
 ❌ UUID4 for aggregates (use UUID7)
 
 ## Quality Checklist

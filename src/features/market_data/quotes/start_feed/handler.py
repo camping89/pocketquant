@@ -3,7 +3,7 @@
 import asyncio
 
 from src.common.logging import get_logger
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.config import Settings
 from src.features.market_data.quotes.quote_service import get_quote_service
 from src.features.market_data.quotes.start_feed.command import StartQuoteFeedCommand
@@ -11,6 +11,7 @@ from src.features.market_data.quotes.start_feed.command import StartQuoteFeedCom
 logger = get_logger(__name__)
 
 
+@handles(StartQuoteFeedCommand)
 class StartQuoteFeedHandler(Handler[StartQuoteFeedCommand, dict]):
     """Handle starting the quote feed."""
 

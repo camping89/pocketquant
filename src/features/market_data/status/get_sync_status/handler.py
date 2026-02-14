@@ -2,12 +2,13 @@
 
 from src.common.constants import COLLECTION_SYNC_STATUS
 from src.common.database import Database
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.market_data.base.models.ohlcv import SyncStatus
 from src.features.market_data.status.dto import SyncStatusResult
 from src.features.market_data.status.get_sync_status.query import GetSyncStatusQuery
 
 
+@handles(GetSyncStatusQuery)
 class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
     """Handle getting all sync statuses."""
 

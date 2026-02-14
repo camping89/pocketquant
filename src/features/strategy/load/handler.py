@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.strategy.base import StrategyLoader
 from src.features.strategy.load.command import LoadStrategyCommand
 
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from src.features.strategy.base import StrategyEngine
 
 
+@handles(LoadStrategyCommand)
 class LoadStrategyHandler(Handler[LoadStrategyCommand, str]):
     """Handle LoadStrategyCommand."""
 

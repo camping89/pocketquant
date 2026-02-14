@@ -1,10 +1,11 @@
 """List orders handler."""
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.trading.base.managers.order_manager import OrderManager
 from src.features.trading.list_orders.query import ListOrdersQuery
 
 
+@handles(ListOrdersQuery)
 class ListOrdersHandler(Handler[ListOrdersQuery, list[dict]]):
     """Handler to list all orders."""
 

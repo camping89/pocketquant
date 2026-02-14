@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.base.engine.backtest_runner import BacktestRunner
 from src.features.backtesting.base.models.backtest_config import BacktestConfig
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from src.features.strategy.base import StrategyEngine
 
 
+@handles(RunBacktestCommand)
 class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
     """Handle RunBacktestCommand - execute a single backtest."""
 

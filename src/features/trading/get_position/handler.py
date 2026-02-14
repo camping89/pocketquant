@@ -2,11 +2,12 @@
 
 from fastapi import HTTPException
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.trading.base.managers.position_tracker import PositionTracker
 from src.features.trading.get_position.query import GetPositionQuery
 
 
+@handles(GetPositionQuery)
 class GetPositionHandler(Handler[GetPositionQuery, dict]):
     """Handler to get a specific position."""
 

@@ -2,10 +2,11 @@
 
 from src.common.constants import COLLECTION_SYMBOLS
 from src.common.database import Database
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.market_data.list_symbols.query import ListSymbolsQuery
 
 
+@handles(ListSymbolsQuery)
 class ListSymbolsHandler(Handler[ListSymbolsQuery, list[dict]]):
     """Handle listing symbols from database."""
 

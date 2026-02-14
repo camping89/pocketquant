@@ -12,7 +12,7 @@ from src.common.constants import (
 )
 from src.common.database import Database
 from src.common.logging import get_logger
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.domain.ohlcv import OHLCVAggregate
 from src.domain.shared.value_objects import Interval as DomainInterval
@@ -24,6 +24,7 @@ from src.infrastructure.tradingview import TradingViewProvider
 logger = get_logger(__name__)
 
 
+@handles(SyncSymbolCommand)
 class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     """Handle syncing a single symbol."""
 

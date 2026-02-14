@@ -2,11 +2,12 @@
 
 from fastapi import HTTPException
 
-from src.common.mediator import Handler
+from src.common.mediator import Handler, handles
 from src.features.trading.base.managers.order_manager import OrderManager
 from src.features.trading.get_order.query import GetOrderQuery
 
 
+@handles(GetOrderQuery)
 class GetOrderHandler(Handler[GetOrderQuery, dict]):
     """Handler to get a specific order."""
 
