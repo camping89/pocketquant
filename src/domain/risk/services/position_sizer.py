@@ -37,13 +37,9 @@ class PositionSizer:
                 account_balance, entry_price, stop_loss_price, risk_config
             )
         elif risk_config.model == RiskModel.KELLY:
-            return PositionSizer._kelly_size(
-                account_balance, entry_price, risk_config
-            )
+            return PositionSizer._kelly_size(account_balance, entry_price, risk_config)
         elif risk_config.model == RiskModel.FIXED:
-            return PositionSizer._fixed_size(
-                account_balance, entry_price, risk_config
-            )
+            return PositionSizer._fixed_size(account_balance, entry_price, risk_config)
         else:
             return 0.0
 

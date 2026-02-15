@@ -6,5 +6,5 @@ from src.common.mediator.mediator import Mediator
 
 
 def get_mediator(request: Request) -> Mediator:
-    """Get the mediator from FastAPI app state."""
-    return request.app.state.mediator
+    """Get Mediator from DI container."""
+    return request.app.state.container.mediator()

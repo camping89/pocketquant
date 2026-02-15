@@ -52,9 +52,7 @@ class StrategyLoader:
             # Validate configuration
             errors = config.validate()
             if errors:
-                raise StrategyLoaderError(
-                    f"Invalid strategy config in {path}: {', '.join(errors)}"
-                )
+                raise StrategyLoaderError(f"Invalid strategy config in {path}: {', '.join(errors)}")
 
             logger.info(
                 "strategy_loaded",

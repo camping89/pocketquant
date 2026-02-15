@@ -10,6 +10,9 @@ from src.persistence.repositories.optimization_repository import OptimizationRep
 class GetOptimizationHandler(Handler[GetOptimizationQuery, OptimizationResult | None]):
     """Handle GetOptimizationQuery - retrieve optimization result by ID."""
 
+    def __init__(self, optimization_repository: OptimizationRepository):
+        self._optimization_repo = optimization_repository
+
     async def handle(self, request: GetOptimizationQuery) -> OptimizationResult | None:
         """Fetch optimization result from MongoDB."""
-        return await OptimizationRepository.get(request.optimization_id)
+        return await self._optimization_repo.get(request.optimization_id)

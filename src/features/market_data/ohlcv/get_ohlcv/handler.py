@@ -12,6 +12,10 @@ from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
     """Handle OHLCV data retrieval."""
 
+    def __init__(self, cache: Cache, ohlcv_repository: OHLCVRepository):
+        self._cache = cache
+        self._ohlcv_repo = ohlcv_repository
+
     async def handle(self, request: GetOHLCVQuery) -> list[dict]:
         symbol = request.symbol.upper()
         exchange = request.exchange.upper()
@@ -25,11 +29,11 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         if request.end_date:
             cache_key += f":to:{request.end_date.isoformat()}"
 
-        cached = await Cache.get(cache_key)
+        cached = await self._cache.get(cache_key)
         if cached:
             return cached
 
-        bars = await OHLCVRepository.find(
+        bars = await self._ohlcv_repo.find(
             symbol, exchange, interval, request.start_date, request.end_date, request.limit
         )
 
@@ -45,6 +49,6 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
             for bar in bars
         ]
 
-        await Cache.set(cache_key, result, ttl=TTL_OHLCV_QUERY)
+        await self._cache.set(cache_key, result, ttl=TTL_OHLCV_QUERY)
 
         return result

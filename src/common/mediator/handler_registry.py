@@ -55,9 +55,7 @@ class HandlerRegistry:
         for handler in handlers:
             request_type = get_request_type(handler)
             if request_type is None:
-                raise TypeError(
-                    f"{type(handler).__name__} is not decorated with @handles"
-                )
+                raise TypeError(f"{type(handler).__name__} is not decorated with @handles")
             mediator.register(request_type, handler)
             count += 1
 

@@ -12,8 +12,6 @@ router = APIRouter()
 
 
 @router.get("/orders/{order_id}")
-async def get_order(
-    order_id: str, mediator: Annotated[Mediator, Depends(get_mediator)]
-) -> dict:
+async def get_order(order_id: str, mediator: Annotated[Mediator, Depends(get_mediator)]) -> dict:
     """Get a specific order."""
     return await mediator.send(GetOrderQuery(order_id=order_id))

@@ -53,9 +53,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             async for chunk in response.body_iterator:
                 body_chunks.append(chunk)
             response_body_bytes = b"".join(body_chunks)
-            response_body = response_body_bytes[:MAX_BODY_LOG_SIZE].decode(
-                errors="replace"
-            )
+            response_body = response_body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
 
             async def new_body_iterator():
                 yield response_body_bytes

@@ -207,7 +207,8 @@ class OKXBroker(IBroker):
             response = await loop.run_in_executor(
                 None,
                 lambda: self._trade_api.cancel_order(
-                    instId="", ordId=broker_order_id  # OKX requires instId but can be empty
+                    instId="",
+                    ordId=broker_order_id,  # OKX requires instId but can be empty
                 ),
             )
 
@@ -234,9 +235,7 @@ class OKXBroker(IBroker):
 
         try:
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, lambda: self._account_api.get_positions()
-            )
+            response = await loop.run_in_executor(None, lambda: self._account_api.get_positions())
 
             if response.get("code") != "0":
                 logger.warning("okx_get_positions_failed", error=response.get("msg"))
@@ -257,9 +256,7 @@ class OKXBroker(IBroker):
     async def get_balance(self) -> AccountBalance:
         """Get account balance from OKX."""
         if not self._connected or not self._account_api:
-            return AccountBalance(
-                total_equity=0, available_balance=0, currency="USDT"
-            )
+            return AccountBalance(total_equity=0, available_balance=0, currency="USDT")
 
         try:
             loop = asyncio.get_event_loop()
@@ -269,9 +266,7 @@ class OKXBroker(IBroker):
 
             if response.get("code") != "0":
                 logger.warning("okx_get_balance_failed", error=response.get("msg"))
-                return AccountBalance(
-                    total_equity=0, available_balance=0, currency="USDT"
-                )
+                return AccountBalance(total_equity=0, available_balance=0, currency="USDT")
 
             data = response.get("data", [{}])[0]
             balance_dict = map_okx_balance_to_domain(data)
@@ -280,9 +275,7 @@ class OKXBroker(IBroker):
 
         except Exception as e:
             logger.error("okx_get_balance_error", error=str(e))
-            return AccountBalance(
-                total_equity=0, available_balance=0, currency="USDT"
-            )
+            return AccountBalance(total_equity=0, available_balance=0, currency="USDT")
 
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         """Subscribe to order updates via WebSocket."""
@@ -329,10 +322,12 @@ class OKXBroker(IBroker):
             await self._ws_client.connect()
 
             # Subscribe to private channels
-            await self._ws_client.subscribe([
-                {"channel": "orders", "instType": "SWAP"},
-                {"channel": "positions", "instType": "SWAP"},
-            ])
+            await self._ws_client.subscribe(
+                [
+                    {"channel": "orders", "instType": "SWAP"},
+                    {"channel": "positions", "instType": "SWAP"},
+                ]
+            )
 
             logger.info("okx_ws_listener_started")
 

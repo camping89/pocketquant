@@ -4,11 +4,11 @@ import asyncio
 from collections import defaultdict
 from typing import Any
 
-from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT
 from src.common.logging import get_logger
 from src.domain.ohlcv.services.bar_builder import BarBuilder, get_bar_start
 from src.domain.shared.value_objects import Interval
+from src.persistence.redis import Cache
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 from src.persistence.schemas.ohlcv_schema import OHLCV
 from src.persistence.schemas.quote_schema import QuoteTick
@@ -19,7 +19,14 @@ logger = get_logger(__name__)
 class BarManager:
     """Aggregates real-time ticks into OHLCV bars at multiple intervals."""
 
-    def __init__(self, intervals: list[Interval] | None = None):
+    def __init__(
+        self,
+        cache: Cache,
+        ohlcv_repository: OHLCVRepository,
+        intervals: list[Interval] | None = None,
+    ):
+        self._cache = cache
+        self._ohlcv_repo = ohlcv_repository
         self._intervals = intervals or [
             Interval.MINUTE_1,
             Interval.MINUTE_5,
@@ -90,7 +97,7 @@ class BarManager:
             volume=bar.volume,
         )
 
-        await OHLCVRepository.upsert_bar(ohlcv)
+        await self._ohlcv_repo.upsert_bar(ohlcv)
 
         logger.info(
             "bar_manager.bar_saved",
@@ -111,7 +118,7 @@ class BarManager:
         cache_key = CACHE_KEY_BAR_CURRENT.format(
             exchange=exchange, symbol=symbol, interval=interval.value
         )
-        await Cache.set(cache_key, bar.to_dict(), ttl=TTL_BAR_CURRENT)
+        await self._cache.set(cache_key, bar.to_dict(), ttl=TTL_BAR_CURRENT)
 
     async def get_current_bar(
         self,
@@ -122,7 +129,7 @@ class BarManager:
         cache_key = CACHE_KEY_BAR_CURRENT.format(
             exchange=exchange.upper(), symbol=symbol.upper(), interval=interval.value
         )
-        return await Cache.get(cache_key)
+        return await self._cache.get(cache_key)
 
     async def flush_all_bars(self) -> int:
         saved_count = 0

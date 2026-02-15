@@ -1,13 +1,20 @@
 """Base repository mixin for MongoDB collections."""
 
+from __future__ import annotations
+
 from src.persistence.mongodb import Database
 
 
 class BaseRepository:
-    """Mixin providing collection access. Subclasses set _collection_name."""
+    """Base repository with DI-injected Database instance.
+
+    Subclasses set _collection_name and receive Database via constructor.
+    """
 
     _collection_name: str
 
-    @classmethod
-    def _collection(cls):
-        return Database.get_collection(cls._collection_name)
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def _collection(self):
+        return self._database.get_collection(self._collection_name)

@@ -88,10 +88,12 @@ class OkxReconnectionHandler:
                 await self._sync_state()
 
                 # Re-subscribe to channels
-                await self._ws_client.subscribe([
-                    {"channel": "orders", "instType": "SWAP"},
-                    {"channel": "positions", "instType": "SWAP"},
-                ])
+                await self._ws_client.subscribe(
+                    [
+                        {"channel": "orders", "instType": "SWAP"},
+                        {"channel": "positions", "instType": "SWAP"},
+                    ]
+                )
 
                 # Success - reset state
                 self._reconnecting = False
@@ -145,9 +147,7 @@ class OkxReconnectionHandler:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self._broker.trade_api.get_orders_history(
-                    instType="SWAP", limit="100"
-                ),
+                lambda: self._broker.trade_api.get_orders_history(instType="SWAP", limit="100"),
             )
 
             if response.get("code") != "0":

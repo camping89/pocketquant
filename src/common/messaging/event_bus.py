@@ -17,17 +17,13 @@ class EventBus:
         self._handlers: dict[type, list[Callable[[Any], Any]]] = {}
         self._history: deque[DomainEvent] = deque(maxlen=max_history)
 
-    def subscribe(
-        self, event_type: type[TEvent], handler: Callable[[TEvent], Any]
-    ) -> None:
+    def subscribe(self, event_type: type[TEvent], handler: Callable[[TEvent], Any]) -> None:
         """Register handler for event type."""
         if event_type not in self._handlers:
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
 
-    def unsubscribe(
-        self, event_type: type[TEvent], handler: Callable[[TEvent], Any]
-    ) -> bool:
+    def unsubscribe(self, event_type: type[TEvent], handler: Callable[[TEvent], Any]) -> bool:
         """Unregister handler for event type. Returns True if handler was found."""
         handlers = self._handlers.get(event_type, [])
         if handler in handlers:

@@ -10,6 +10,9 @@ from src.persistence.repositories.backtest_repository import BacktestRepository
 class GetBacktestHandler(Handler[GetBacktestQuery, BacktestResult | None]):
     """Handle GetBacktestQuery - retrieve backtest result by ID."""
 
+    def __init__(self, backtest_repository: BacktestRepository):
+        self._backtest_repo = backtest_repository
+
     async def handle(self, request: GetBacktestQuery) -> BacktestResult | None:
         """Fetch backtest result from repository."""
-        return await BacktestRepository.get(request.run_id)
+        return await self._backtest_repo.get(request.run_id)

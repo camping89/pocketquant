@@ -5,11 +5,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.application.market_data.bar_manager import BarManager
-from src.common.cache import Cache
 from src.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from src.common.logging import get_logger
 from src.config import Settings
 from src.infrastructure.tradingview import TradingViewWebSocketProvider
+from src.persistence.redis import Cache
 from src.persistence.schemas.quote_schema import Quote, QuoteTick
 
 logger = get_logger(__name__)
@@ -18,10 +18,11 @@ logger = get_logger(__name__)
 class QuoteService:
     """Manages quote WebSocket feed, subscriptions, and tick processing."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, cache: Cache, bar_manager: BarManager):
         self.settings = settings
+        self._cache = cache
         self.provider = TradingViewWebSocketProvider()
-        self.bar_manager = BarManager()
+        self.bar_manager = bar_manager
         self.running = False
         self.ws_task: asyncio.Task | None = None
 
@@ -54,7 +55,7 @@ class QuoteService:
         )
 
         cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
-        await Cache.set(cache_key, quote.to_cache_dict(), ttl=TTL_QUOTE_LATEST)
+        await self._cache.set(cache_key, quote.to_cache_dict(), ttl=TTL_QUOTE_LATEST)
 
         tick = QuoteTick(
             symbol=symbol,
@@ -70,16 +71,3 @@ class QuoteService:
             symbol=symbol_key,
             price=last_price,
         )
-
-
-_quote_service: QuoteService | None = None
-
-
-def get_quote_service(settings: Settings) -> QuoteService:
-    """Get or create the shared quote service."""
-    global _quote_service
-
-    if _quote_service is None:
-        _quote_service = QuoteService(settings)
-
-    return _quote_service

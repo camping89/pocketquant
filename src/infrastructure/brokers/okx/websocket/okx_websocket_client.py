@@ -111,17 +111,13 @@ class OkxWebSocketClient:
         if not self._ws:
             raise ConnectionError("WebSocket not connected")
 
-        login_msg = build_login_message(
-            self._api_key, self._api_secret, self._passphrase
-        )
+        login_msg = build_login_message(self._api_key, self._api_secret, self._passphrase)
 
         await self._ws.send(json.dumps(login_msg))
 
         # Wait for login response
         try:
-            response = await asyncio.wait_for(
-                self._ws.recv(), timeout=LOGIN_TIMEOUT
-            )
+            response = await asyncio.wait_for(self._ws.recv(), timeout=LOGIN_TIMEOUT)
             data = json.loads(response)
 
             if data.get("event") == "login":
@@ -161,9 +157,7 @@ class OkxWebSocketClient:
 
         # Wait for subscribe confirmation
         try:
-            response = await asyncio.wait_for(
-                self._ws.recv(), timeout=SUBSCRIBE_TIMEOUT
-            )
+            response = await asyncio.wait_for(self._ws.recv(), timeout=SUBSCRIBE_TIMEOUT)
             data = json.loads(response)
 
             if data.get("event") == "subscribe":
@@ -212,9 +206,7 @@ class OkxWebSocketClient:
 
                 # Wait for pong with timeout
                 try:
-                    response = await asyncio.wait_for(
-                        self._ws.recv(), timeout=PONG_TIMEOUT
-                    )
+                    response = await asyncio.wait_for(self._ws.recv(), timeout=PONG_TIMEOUT)
                     if response != "pong":
                         # Not a pong, put it back for message processing
                         # Note: This is simplified - real impl would use a queue

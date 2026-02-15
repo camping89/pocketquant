@@ -10,11 +10,11 @@ from src.application.backtesting.historical_replay_engine import (
 from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.application.backtesting.models.backtest_result import BacktestResult
 from src.application.backtesting.result_collector import BacktestResultCollector
-from src.domain.shared.value_objects import Interval
 from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import clear_simulation_time
 from src.common.uuid import generate_id_str
+from src.domain.shared.value_objects import Interval
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
 from src.persistence.repositories.backtest_repository import BacktestRepository
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository

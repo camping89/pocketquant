@@ -1,3 +1,5 @@
+"""Background job scheduler — instance-based for DI container."""
+
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -16,51 +18,42 @@ logger = get_logger(__name__)
 
 
 class JobScheduler:
-    _scheduler: AsyncIOScheduler | None = None
+    """APScheduler wrapper. Instance-based, managed by DI container."""
 
-    @classmethod
-    def initialize(cls, settings: Settings) -> None:
-        jobstores = {
-            "default": MemoryJobStore(),
-        }
+    def __init__(self) -> None:
+        self._scheduler: AsyncIOScheduler | None = None
 
-        executors = {
-            "default": AsyncIOExecutor(),
-        }
-
+    def initialize(self, settings: Settings) -> None:
+        jobstores = {"default": MemoryJobStore()}
+        executors = {"default": AsyncIOExecutor()}
         job_defaults = {
             "coalesce": True,
             "max_instances": 3,
             "misfire_grace_time": 60,
         }
 
-        cls._scheduler = AsyncIOScheduler(
+        self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
             executors=executors,
             job_defaults=job_defaults,
             timezone="UTC",
         )
-
         logger.info("scheduler.initialized")
 
-    @classmethod
-    def start(cls) -> None:
-        if cls._scheduler is None:
+    def start(self) -> None:
+        if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized. Call initialize() first.")
-
-        cls._scheduler.start()
+        self._scheduler.start()
         logger.info("scheduler.started")
 
-    @classmethod
-    def shutdown(cls, wait: bool = True) -> None:
-        if cls._scheduler is not None:
-            cls._scheduler.shutdown(wait=wait)
-            cls._scheduler = None
+    def shutdown(self, wait: bool = True) -> None:
+        if self._scheduler is not None:
+            self._scheduler.shutdown(wait=wait)
+            self._scheduler = None
             logger.info("scheduler.stopped")
 
-    @classmethod
     def add_interval_job(
-        cls,
+        self,
         func: Callable,
         *,
         job_id: str,
@@ -70,7 +63,7 @@ class JobScheduler:
         start_date: datetime | None = None,
         **kwargs: Any,
     ) -> str:
-        if cls._scheduler is None:
+        if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
         trigger_kwargs: dict[str, Any] = {}
@@ -85,7 +78,7 @@ class JobScheduler:
 
         trigger = IntervalTrigger(**trigger_kwargs)
 
-        cls._scheduler.add_job(
+        self._scheduler.add_job(
             func,
             trigger=trigger,
             id=job_id,
@@ -100,12 +93,10 @@ class JobScheduler:
             interval_minutes=minutes,
             interval_hours=hours,
         )
-
         return job_id
 
-    @classmethod
     def add_cron_job(
-        cls,
+        self,
         func: Callable,
         *,
         job_id: str,
@@ -115,7 +106,7 @@ class JobScheduler:
         day_of_week: str | None = None,
         **kwargs: Any,
     ) -> str:
-        if cls._scheduler is None:
+        if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
         if cron_expression:
@@ -134,7 +125,7 @@ class JobScheduler:
                 day_of_week=day_of_week,
             )
 
-        cls._scheduler.add_job(
+        self._scheduler.add_job(
             func,
             trigger=trigger,
             id=job_id,
@@ -149,29 +140,26 @@ class JobScheduler:
             cron_minute=minute,
             cron_day_of_week=day_of_week,
         )
-
         return job_id
 
-    @classmethod
-    def remove_job(cls, job_id: str) -> bool:
-        if cls._scheduler is None:
+    def remove_job(self, job_id: str) -> bool:
+        if self._scheduler is None:
             return False
 
         try:
-            cls._scheduler.remove_job(job_id)
+            self._scheduler.remove_job(job_id)
             logger.info("scheduler.removed_job", job_id=job_id)
             return True
         except JobLookupError:
             logger.warning("scheduler.job_not_found", job_id=job_id)
             return False
 
-    @classmethod
-    def get_jobs(cls) -> list[dict[str, Any]]:
-        if cls._scheduler is None:
+    def get_jobs(self) -> list[dict[str, Any]]:
+        if self._scheduler is None:
             return []
 
         jobs = []
-        for job in cls._scheduler.get_jobs():
+        for job in self._scheduler.get_jobs():
             jobs.append(
                 {
                     "id": job.id,
@@ -180,15 +168,13 @@ class JobScheduler:
                     "trigger": str(job.trigger),
                 }
             )
-
         return jobs
 
-    @classmethod
-    def run_job_now(cls, job_id: str) -> bool:
-        if cls._scheduler is None:
+    def run_job_now(self, job_id: str) -> bool:
+        if self._scheduler is None:
             return False
 
-        job = cls._scheduler.get_job(job_id)
+        job = self._scheduler.get_job(job_id)
         if job:
             job.modify(next_run_time=datetime.now())
             logger.info("scheduler.triggered_job", job_id=job_id)

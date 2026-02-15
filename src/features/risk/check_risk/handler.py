@@ -86,8 +86,7 @@ class RiskCheckHandler:
 
         if current_exposure >= config.max_exposure_percent:
             return False, (
-                f"Max exposure reached: {current_exposure:.1%} >= "
-                f"{config.max_exposure_percent:.1%}"
+                f"Max exposure reached: {current_exposure:.1%} >= {config.max_exposure_percent:.1%}"
             )
 
         return True, ""
@@ -130,12 +129,8 @@ class RiskCheckHandler:
         Returns:
             Risk summary dictionary
         """
-        total_exposure = sum(
-            p.market_value for p in positions if not p.is_closed
-        )
-        exposure_percent = (
-            total_exposure / account.total_equity if account.total_equity > 0 else 0
-        )
+        total_exposure = sum(p.market_value for p in positions if not p.is_closed)
+        exposure_percent = total_exposure / account.total_equity if account.total_equity > 0 else 0
 
         return {
             "total_equity": account.total_equity,

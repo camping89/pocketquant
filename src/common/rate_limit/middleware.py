@@ -6,8 +6,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from src.persistence import Cache
-
 
 class TokenBucket:
     """Token bucket for rate limiting with refill."""
@@ -40,10 +38,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.refill_rate = refill_rate
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        cache = request.app.state.container.cache()
         client_ip = request.client.host if request.client else "unknown"
         bucket_key = f"rate_limit:{client_ip}"
 
-        bucket_data = await Cache.get(bucket_key)
+        bucket_data = await cache.get(bucket_key)
         bucket = TokenBucket(self.capacity, self.refill_rate)
 
         if bucket_data:
@@ -53,7 +52,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not bucket.consume():
             return Response("Rate limit exceeded", status_code=429)
 
-        await Cache.set(
+        await cache.set(
             bucket_key,
             {"tokens": bucket.tokens, "last_refill": bucket.last_refill},
             ttl=60,

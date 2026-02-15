@@ -1,3 +1,7 @@
+"""MongoDB connection manager — instance-based for DI container."""
+
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -11,11 +15,13 @@ logger = get_logger(__name__)
 
 
 class Database:
-    _client: AsyncMongoClient | None = None
-    _database: AsyncDatabase | None = None
+    """MongoDB connection manager. Instance-based, managed by DI container."""
 
-    @classmethod
-    async def connect(cls, settings: Settings) -> None:
+    def __init__(self) -> None:
+        self._client: AsyncMongoClient | None = None
+        self._database: AsyncDatabase | None = None
+
+    async def connect(self, settings: Settings) -> None:
         logger.info("mongodb.connecting", database=settings.mongodb_database)
 
         client = AsyncMongoClient(
@@ -27,37 +33,35 @@ class Database:
 
         try:
             await client.server_info()
-            cls._client = client
-            cls._database = client[settings.mongodb_database]
+            self._client = client
+            self._database = client[settings.mongodb_database]
             logger.info("mongodb.connected", database=settings.mongodb_database)
         except Exception as e:
             logger.error("mongodb.connection_failed", error=str(e))
             await client.close()
             raise
 
-    @classmethod
-    async def disconnect(cls) -> None:
-        if cls._client is not None:
-            await cls._client.close()
-            cls._client = None
-            cls._database = None
+    async def disconnect(self) -> None:
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+            self._database = None
             logger.info("mongodb.disconnected")
 
-    @classmethod
-    def get_database(cls) -> AsyncDatabase:
-        if cls._database is None:
+    def get_database(self) -> AsyncDatabase:
+        if self._database is None:
             raise RuntimeError("Database not connected. Call Database.connect() first.")
-        return cls._database
+        return self._database
 
-    @classmethod
-    def get_collection(cls, name: str):
-        return cls.get_database()[name]
+    def get_collection(self, name: str):
+        return self.get_database()[name]
 
 
 @asynccontextmanager
 async def get_database(settings: Settings) -> AsyncGenerator[AsyncDatabase]:
+    db = Database()
     try:
-        await Database.connect(settings)
-        yield Database.get_database()
+        await db.connect(settings)
+        yield db.get_database()
     finally:
-        await Database.disconnect()
+        await db.disconnect()

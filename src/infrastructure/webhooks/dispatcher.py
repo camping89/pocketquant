@@ -17,9 +17,7 @@ logger = get_logger(__name__)
 class WebhookDispatcher:
     """Dispatch domain events to configured webhook endpoints."""
 
-    def __init__(
-        self, config: WebhookConfig, client: ResilientHttpClient | None = None
-    ):
+    def __init__(self, config: WebhookConfig, client: ResilientHttpClient | None = None):
         self.config = config
         self.client = client or ResilientHttpClient()
 

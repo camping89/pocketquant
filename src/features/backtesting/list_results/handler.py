@@ -10,9 +10,12 @@ from src.persistence.repositories.backtest_repository import BacktestRepository
 class ListBacktestsHandler(Handler[ListBacktestsQuery, list[BacktestResult]]):
     """Handle ListBacktestsQuery - list backtest results for a strategy."""
 
+    def __init__(self, backtest_repository: BacktestRepository):
+        self._backtest_repo = backtest_repository
+
     async def handle(self, request: ListBacktestsQuery) -> list[BacktestResult]:
         """Fetch backtest results from repository."""
-        return await BacktestRepository.list_by_strategy(
+        return await self._backtest_repo.list_by_strategy(
             strategy_id=request.strategy_id,
             limit=request.limit,
             include_failed=request.include_failed,

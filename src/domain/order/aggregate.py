@@ -210,9 +210,7 @@ class OrderAggregate(BaseModel):
 
         allowed = valid_transitions.get(self.status, set())
         if target not in allowed:
-            raise InvalidOrderTransitionError(
-                f"Cannot transition from {self.status} to {target}"
-            )
+            raise InvalidOrderTransitionError(f"Cannot transition from {self.status} to {target}")
 
     def collect_events(self) -> list[DomainEvent]:
         """Collect and clear pending domain events."""

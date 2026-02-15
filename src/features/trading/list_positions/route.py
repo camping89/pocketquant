@@ -12,8 +12,6 @@ router = APIRouter()
 
 
 @router.get("/positions")
-async def list_positions(
-    mediator: Annotated[Mediator, Depends(get_mediator)]
-) -> list[dict]:
+async def list_positions(mediator: Annotated[Mediator, Depends(get_mediator)]) -> list[dict]:
     """Get all open positions."""
     return await mediator.send(ListPositionsQuery())

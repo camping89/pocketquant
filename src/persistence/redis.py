@@ -1,3 +1,7 @@
+"""Redis cache manager — instance-based for DI container."""
+
+from __future__ import annotations
+
 import json
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -13,44 +17,38 @@ logger = get_logger(__name__)
 
 
 class Cache:
-    _client: redis.Redis | None = None
-    _default_ttl: int = 3600
+    """Redis cache manager. Instance-based, managed by DI container."""
 
-    @classmethod
-    async def connect(cls, settings: Settings) -> None:
+    def __init__(self) -> None:
+        self._client: redis.Redis | None = None
+        self._default_ttl: int = 3600
+
+    async def connect(self, settings: Settings) -> None:
         logger.info("redis.connecting")
 
-        cls._client = redis.from_url(
+        self._client = redis.from_url(
             str(settings.redis_url),
             encoding="utf-8",
             decode_responses=True,
         )
-        cls._default_ttl = settings.redis_cache_ttl
-        await cls._client.ping()
+        self._default_ttl = settings.redis_cache_ttl
+        await self._client.ping()
         logger.info("redis.connected")
 
-    @classmethod
-    async def disconnect(cls) -> None:
-        if cls._client is not None:
-            await cls._client.close()
-            cls._client = None
+    async def disconnect(self) -> None:
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
             logger.info("redis.disconnected")
 
-    @classmethod
-    def get_client(cls) -> redis.Redis:
+    def get_client(self) -> redis.Redis:
         """Get Redis client, raising if not connected."""
-        if cls._client is None:
+        if self._client is None:
             raise RuntimeError("Cache not connected. Call Cache.connect() first.")
-        return cls._client
+        return self._client
 
-    @classmethod
-    def _get_client(cls) -> redis.Redis:
-        """Deprecated: Use get_client() instead."""
-        return cls.get_client()
-
-    @classmethod
-    async def get(cls, key: str) -> Any | None:
-        client = cls._get_client()
+    async def get(self, key: str) -> Any | None:
+        client = self.get_client()
         value = await client.get(key)
 
         if value is None:
@@ -61,22 +59,19 @@ class Cache:
         try:
             return json.loads(value)
         except json.JSONDecodeError as e:
-            # NOTE: Re-raising JSON decode errors. Corrupted cache data should
-            # not be silently returned as it could cause downstream failures.
             logger.error("redis.cache_corrupted", key=key, error=str(e))
             raise ValueError(f"Corrupted cache data for key '{key}'") from e
 
-    @classmethod
     async def set(
-        cls,
+        self,
         key: str,
         value: Any,
         ttl: int | timedelta | None = None,
     ) -> None:
-        client = cls._get_client()
+        client = self.get_client()
 
         if ttl is None:
-            ttl = cls._default_ttl
+            ttl = self._default_ttl
         elif isinstance(ttl, timedelta):
             ttl = int(ttl.total_seconds())
 
@@ -88,16 +83,14 @@ class Cache:
         await client.set(key, serialized, ex=ttl)
         logger.debug("redis.cache_set", key=key, ttl_seconds=ttl)
 
-    @classmethod
-    async def delete(cls, key: str) -> bool:
-        client = cls._get_client()
+    async def delete(self, key: str) -> bool:
+        client = self.get_client()
         result = await client.delete(key)
         logger.debug("redis.cache_deleted", key=key, was_present=bool(result))
         return bool(result)
 
-    @classmethod
-    async def delete_pattern(cls, pattern: str) -> int:
-        client = cls._get_client()
+    async def delete_pattern(self, pattern: str) -> int:
+        client = self.get_client()
         keys = []
 
         async for key in client.scan_iter(match=pattern):
@@ -110,31 +103,30 @@ class Cache:
 
         return 0
 
-    @classmethod
-    async def exists(cls, key: str) -> bool:
-        client = cls._get_client()
+    async def exists(self, key: str) -> bool:
+        client = self.get_client()
         return bool(await client.exists(key))
 
-    @classmethod
     async def get_or_set(
-        cls,
+        self,
         key: str,
         factory: Callable,
         ttl: int | timedelta | None = None,
     ) -> Any:
-        value = await cls.get(key)
+        value = await self.get(key)
         if value is not None:
             return value
 
         value = await factory()
-        await cls.set(key, value, ttl)
+        await self.set(key, value, ttl)
         return value
 
 
 @asynccontextmanager
-async def get_cache(settings: Settings) -> AsyncGenerator[type[Cache]]:
+async def get_cache(settings: Settings) -> AsyncGenerator[Cache]:
+    cache = Cache()
     try:
-        await Cache.connect(settings)
-        yield Cache
+        await cache.connect(settings)
+        yield cache
     finally:
-        await Cache.disconnect()
+        await cache.disconnect()

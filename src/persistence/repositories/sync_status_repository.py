@@ -13,8 +13,8 @@ class SyncStatusRepository(BaseRepository):
 
     _collection_name = COLLECTION_SYNC_STATUS
 
-    @staticmethod
     async def upsert(
+        self,
         symbol: str,
         exchange: str,
         interval: Interval,
@@ -24,7 +24,7 @@ class SyncStatusRepository(BaseRepository):
         error_message: str | None = None,
     ) -> None:
         """Upsert sync status for symbol/exchange/interval."""
-        collection = SyncStatusRepository._collection()
+        collection = self._collection()
 
         update_doc: dict = {
             "symbol": symbol.upper(),
@@ -51,19 +51,15 @@ class SyncStatusRepository(BaseRepository):
             upsert=True,
         )
 
-    @staticmethod
-    async def find_all() -> list[SyncStatus]:
+    async def find_all(self) -> list[SyncStatus]:
         """Get all sync statuses."""
-        collection = SyncStatusRepository._collection()
+        collection = self._collection()
         cursor = collection.find()
         return [SyncStatus.from_mongo(doc) async for doc in cursor]
 
-    @staticmethod
-    async def find_one(
-        symbol: str, exchange: str, interval: Interval
-    ) -> SyncStatus | None:
+    async def find_one(self, symbol: str, exchange: str, interval: Interval) -> SyncStatus | None:
         """Get sync status for specific symbol/exchange/interval."""
-        collection = SyncStatusRepository._collection()
+        collection = self._collection()
 
         doc = await collection.find_one(
             {
@@ -75,10 +71,9 @@ class SyncStatusRepository(BaseRepository):
 
         return SyncStatus.from_mongo(doc) if doc else None
 
-    @staticmethod
-    async def ensure_indexes() -> None:
+    async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange, interval)."""
-        collection = SyncStatusRepository._collection()
+        collection = self._collection()
         await collection.create_index(
             [
                 ("symbol", 1),

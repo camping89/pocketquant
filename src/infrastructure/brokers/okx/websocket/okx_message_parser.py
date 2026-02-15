@@ -1,7 +1,6 @@
 """OKX WebSocket message parser - routes messages by channel type."""
 
 
-
 class OkxMessageParser:
     """Parse and route OKX WebSocket messages.
 

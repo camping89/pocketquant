@@ -9,5 +9,8 @@ from src.persistence.repositories.symbol_repository import SymbolRepository
 class ListSymbolsHandler(Handler[ListSymbolsQuery, list[dict]]):
     """Handle listing symbols from database."""
 
+    def __init__(self, symbol_repository: SymbolRepository):
+        self._symbol_repo = symbol_repository
+
     async def handle(self, request: ListSymbolsQuery) -> list[dict]:
-        return await SymbolRepository.find_all(exchange=request.exchange)
+        return await self._symbol_repo.find_all(exchange=request.exchange)

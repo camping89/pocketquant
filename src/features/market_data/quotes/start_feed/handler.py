@@ -2,10 +2,9 @@
 
 import asyncio
 
-from src.application.market_data.quote_service import get_quote_service
+from src.application.market_data.quote_service import QuoteService
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
-from src.config import Settings
 from src.features.market_data.quotes.start_feed.command import StartQuoteFeedCommand
 
 logger = get_logger(__name__)
@@ -15,8 +14,8 @@ logger = get_logger(__name__)
 class StartQuoteFeedHandler(Handler[StartQuoteFeedCommand, dict]):
     """Handle starting the quote feed."""
 
-    def __init__(self, settings: Settings):
-        self.state = get_quote_service(settings)
+    def __init__(self, quote_service: QuoteService):
+        self.state = quote_service
 
     async def handle(self, request: StartQuoteFeedCommand) -> dict:
         if self.state.running:
