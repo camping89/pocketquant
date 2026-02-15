@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
@@ -17,9 +17,5 @@ async def start_strategy(
     mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> dict:
     """Start a loaded strategy."""
-    try:
-        await mediator.send(StartStrategyCommand(strategy_id=strategy_id))
-        return {"strategy_id": strategy_id, "status": "started"}
-
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    await mediator.send(StartStrategyCommand(strategy_id=strategy_id))
+    return {"strategy_id": strategy_id, "status": "started"}

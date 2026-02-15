@@ -14,11 +14,11 @@ from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import clear_simulation_time
 from src.common.uuid import generate_id_str
+from src.domain.ohlcv.entities import Bar
 from src.domain.shared.value_objects import Interval
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
 from src.persistence.repositories.backtest_repository import BacktestRepository
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
-from src.persistence.schemas.ohlcv_schema import OHLCV
 
 if TYPE_CHECKING:
     from src.application.strategy.strategy_engine import StrategyEngine
@@ -152,9 +152,8 @@ class BacktestRunner:
             await self._broker.unsubscribe_order_updates()
             clear_simulation_time()
 
-    async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[OHLCV]:
+    async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[Bar]:
         """Load OHLCV bars from MongoDB for the configured date range."""
-        # Convert date to datetime for MongoDB query
         start_datetime = datetime.combine(config.start_date, datetime.min.time())
         end_datetime = datetime.combine(config.end_date, datetime.max.time())
 
@@ -164,13 +163,12 @@ class BacktestRunner:
             yield bar
 
     async def _wrap_bars_with_price_update(
-        self, config: BacktestConfig, bars: AsyncIterator[OHLCV]
-    ) -> AsyncIterator[OHLCV]:
+        self, config: BacktestConfig, bars: AsyncIterator[Bar]
+    ) -> AsyncIterator[Bar]:
         """Wrap bar iterator to set broker price before each bar.
 
         This ensures market orders fill at bar close price.
         """
         async for bar in bars:
-            # Set current price on broker BEFORE event emission
             self._broker.set_current_price(config.symbol, bar.close)
             yield bar

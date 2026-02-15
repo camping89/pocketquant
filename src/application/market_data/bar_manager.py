@@ -6,11 +6,11 @@ from typing import Any
 
 from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT, build_ohlcv_cache_key
 from src.common.logging import get_logger
+from src.domain.ohlcv.entities import Bar
 from src.domain.ohlcv.services.bar_builder import BarBuilder, get_bar_start
 from src.domain.shared.value_objects import Interval
 from src.persistence.redis import Cache
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
-from src.persistence.schemas.ohlcv_schema import OHLCV
 from src.persistence.schemas.quote_schema import QuoteTick
 
 logger = get_logger(__name__)
@@ -84,8 +84,7 @@ class BarManager:
         if bar.open is None or bar.high is None or bar.low is None or bar.close is None:
             return
 
-        ohlcv = OHLCV(
-            _id=None,
+        domain_bar = Bar(
             symbol=bar.symbol,
             exchange=bar.exchange,
             interval=bar.interval,
@@ -95,9 +94,10 @@ class BarManager:
             low=bar.low,
             close=bar.close,
             volume=bar.volume,
+            tick_count=bar.tick_count,
         )
 
-        await self._ohlcv_repo.upsert_bar(ohlcv)
+        await self._ohlcv_repo.upsert_bar(domain_bar)
 
         cache_key = build_ohlcv_cache_key(bar.symbol, bar.exchange, bar.interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")

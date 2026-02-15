@@ -1,7 +1,8 @@
 """API route for getting the current aggregating bar."""
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
+from src.common.exceptions import NotFoundError
 from src.domain.shared.value_objects import Interval
 
 router = APIRouter()
@@ -18,9 +19,6 @@ async def get_current_bar(
     bar = await quote_service.bar_manager.get_current_bar(symbol, exchange, interval)
 
     if bar is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No current bar for {exchange}:{symbol} at {interval.value}",
-        )
+        raise NotFoundError(f"No current bar for {exchange}:{symbol} at {interval.value}")
 
     return bar

@@ -1,8 +1,7 @@
 """Get position handler."""
 
-from fastapi import HTTPException
-
 from src.application.trading.position_tracker import PositionTracker
+from src.common.exceptions import NotFoundError
 from src.common.mediator import Handler, handles
 from src.features.trading.get_position.query import GetPositionQuery
 
@@ -19,9 +18,6 @@ class GetPositionHandler(Handler[GetPositionQuery, dict]):
         summary = self.position_tracker.get_position_summary(request.strategy_id)
 
         if not summary:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No position for strategy: {request.strategy_id}",
-            )
+            raise NotFoundError(f"No position for strategy: {request.strategy_id}")
 
         return summary

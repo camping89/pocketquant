@@ -1,8 +1,7 @@
 """Get order handler."""
 
-from fastapi import HTTPException
-
 from src.application.trading.order_manager import OrderManager
+from src.common.exceptions import NotFoundError
 from src.common.mediator import Handler, handles
 from src.features.trading.get_order.query import GetOrderQuery
 
@@ -19,7 +18,7 @@ class GetOrderHandler(Handler[GetOrderQuery, dict]):
         order = self.order_manager.get_order(request.order_id)
 
         if not order:
-            raise HTTPException(status_code=404, detail=f"Order not found: {request.order_id}")
+            raise NotFoundError(f"Order not found: {request.order_id}")
 
         return {
             "id": order.id,

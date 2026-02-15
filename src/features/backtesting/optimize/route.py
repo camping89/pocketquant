@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.common.mediator import Mediator
@@ -36,10 +36,7 @@ async def run_optimization(
     Tests all combinations of parameters and returns ranked results.
     Maximum 1000 combinations allowed.
     """
-    try:
-        result = await mediator.send(cmd)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    result = await mediator.send(cmd)
 
     return {
         "id": result.id,

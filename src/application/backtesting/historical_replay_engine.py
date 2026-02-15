@@ -11,7 +11,7 @@ from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import set_simulation_time
 from src.domain.ohlcv import BarCompletedEvent
-from src.persistence.schemas.ohlcv_schema import OHLCV
+from src.domain.ohlcv.entities import Bar
 
 logger = get_logger(__name__)
 
@@ -46,7 +46,7 @@ class HistoricalReplayEngine:
     async def replay(
         self,
         config: BacktestConfig,
-        bars: AsyncIterator[OHLCV],
+        bars: AsyncIterator[Bar],
     ) -> ReplayStats:
         """Replay bars as events, setting simulation time for each.
 

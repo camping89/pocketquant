@@ -1,21 +1,30 @@
 """OHLCV entities."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from src.common.uuid import UUID, generate_id
-from src.domain.ohlcv.value_objects import OHLCV, BarRange
-from src.domain.shared.value_objects import Interval, Symbol
+from src.domain.shared.value_objects import Interval
 
 
 @dataclass(eq=False)
 class Bar:
-    """Entity representing a price bar with identity."""
+    """Entity representing a stored OHLCV price bar with identity.
+
+    Flat structure for direct field access. Used by repositories,
+    handlers, and backtesting engine.
+    """
 
     id: UUID = field(default_factory=generate_id)
-    symbol: Symbol | None = None
+    symbol: str = ""
+    exchange: str = ""
     interval: Interval | None = None
-    time_range: BarRange | None = None
-    ohlcv: OHLCV | None = None
+    datetime: datetime | None = None
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    close: float = 0.0
+    volume: float = 0.0
     tick_count: int = 0
 
     def __eq__(self, other: object) -> bool:
@@ -28,20 +37,34 @@ class Bar:
 
     @property
     def is_complete(self) -> bool:
-        return self.ohlcv is not None and self.tick_count > 0
+        return self.tick_count > 0
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
             "id": str(self.id),
-            "symbol": str(self.symbol) if self.symbol else None,
+            "symbol": self.symbol,
+            "exchange": self.exchange,
             "interval": self.interval.value if self.interval else None,
-            "bar_start": self.time_range.start.isoformat() if self.time_range else None,
-            "bar_end": self.time_range.end.isoformat() if self.time_range else None,
-            "open": self.ohlcv.open if self.ohlcv else None,
-            "high": self.ohlcv.high if self.ohlcv else None,
-            "low": self.ohlcv.low if self.ohlcv else None,
-            "close": self.ohlcv.close if self.ohlcv else None,
-            "volume": self.ohlcv.volume if self.ohlcv else None,
+            "datetime": self.datetime.isoformat() if self.datetime else None,
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
             "tick_count": self.tick_count,
         }
+
+
+@dataclass
+class SyncStatus:
+    """Entity tracking data sync status for a symbol/exchange/interval."""
+
+    symbol: str = ""
+    exchange: str = ""
+    interval: str = ""
+    status: str = "pending"
+    last_sync_at: datetime | None = None
+    last_bar_at: datetime | None = None
+    bar_count: int = 0
+    error_message: str | None = None

@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from src.common.mediator import Mediator
@@ -28,9 +28,5 @@ async def subscribe_to_symbol(
     mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> SubscribeResponse:
     cmd = SubscribeCommand(symbol=request.symbol, exchange=request.exchange)
-
-    try:
-        result = await mediator.send(cmd)
-        return SubscribeResponse(**result)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    result = await mediator.send(cmd)
+    return SubscribeResponse(**result)

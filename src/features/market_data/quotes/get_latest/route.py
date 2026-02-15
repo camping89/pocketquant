@@ -2,9 +2,10 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
 from src.features.market_data.quotes.get_latest.query import GetLatestQuoteQuery
@@ -54,9 +55,8 @@ async def get_latest_quote(
     result = await mediator.send(query)
 
     if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No quote found for {exchange}:{symbol}. Make sure you're subscribed.",
+        raise NotFoundError(
+            f"No quote found for {exchange}:{symbol}. Make sure you're subscribed."
         )
 
     return QuoteResponse.from_result(result)
