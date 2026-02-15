@@ -145,15 +145,6 @@ def handle_startup_failure(error: Exception) -> None:
     os._exit(1)
 
 
-async def shutdown(app: FastAPI, settings) -> None:
-    """Graceful shutdown: stop engine, scheduler, and disconnect stores."""
-    await app.state.strategy_engine.stop()
-    if settings.enable_jobs:
-        JobScheduler.shutdown(wait=True)
-    await Cache.disconnect()
-    await Database.disconnect()
-    logger.info("application_stopped")
-
 
 # ---------------------------------------------------------------------------
 # App factory helpers

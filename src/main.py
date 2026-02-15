@@ -9,13 +9,13 @@ from src.common.logging import get_logger, setup_logging
 from src.common.mediator import Mediator
 from src.common.messaging import EventBus
 from src.config import get_settings
+from src.infrastructure import JobScheduler
 from src.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
     init_trading_subsystem,
     register_routes,
-    shutdown,
     start_background_jobs,
 )
 
@@ -46,6 +46,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("application_stopping")
     await shutdown(app, settings)
 
+
+async def shutdown(app: FastAPI, settings) -> None:
+    """Graceful shutdown: stop engine, scheduler, and disconnect stores."""
+    await app.state.strategy_engine.stop()
+    if settings.enable_jobs:
+        JobScheduler.shutdown(wait=True)
+    await Cache.disconnect()
+    await Database.disconnect()
+    logger.info("application_stopped")
 
 def create_app() -> FastAPI:
     settings = get_settings()
