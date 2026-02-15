@@ -20,7 +20,9 @@ class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
     async def handle(self, request: GetAllQuotesQuery) -> list[QuoteResult]:
         symbol_keys = list(self.state.provider.subscriptions.keys())
         cache_keys = [
-            CACHE_KEY_QUOTE_LATEST.format(exchange=key.split(":", 1)[0], symbol=key.split(":", 1)[1])
+            CACHE_KEY_QUOTE_LATEST.format(
+                exchange=key.split(":", 1)[0], symbol=key.split(":", 1)[1]
+            )
             for key in symbol_keys
         ]
 
