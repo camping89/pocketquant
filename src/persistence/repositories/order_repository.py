@@ -25,16 +25,16 @@ class OrderRepository(BaseRepository):
             return None
         return OrderDocument(**doc).to_aggregate()
 
-    async def find_by_strategy(self, strategy_id: str) -> list[OrderAggregate]:
+    async def find_by_strategy(self, strategy_id: str, limit: int = 1000) -> list[OrderAggregate]:
         """Get all orders for a strategy."""
         collection = self._collection()
-        cursor = collection.find({"strategy_id": strategy_id})
+        cursor = collection.find({"strategy_id": strategy_id}).limit(limit)
         return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
 
-    async def find_pending(self) -> list[OrderAggregate]:
+    async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
         """Get all pending orders."""
         collection = self._collection()
-        cursor = collection.find({"status": {"$in": ["pending", "submitted", "partially_filled"]}})
+        cursor = collection.find({"status": {"$in": ["pending", "submitted", "partially_filled"]}}).limit(limit)
         return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
 
     async def ensure_indexes(self) -> None:

@@ -62,6 +62,14 @@ class Cache:
             logger.error("redis.cache_corrupted", key=key, error=str(e))
             raise ValueError(f"Corrupted cache data for key '{key}'") from e
 
+    async def mget(self, keys: list[str]) -> list[Any]:
+        """Get multiple values by keys. Returns list in same order (None for misses)."""
+        if not keys or self._client is None:
+            return [None] * len(keys)
+        client = self.get_client()
+        raw_values = await client.mget(keys)
+        return [json.loads(v) if v else None for v in raw_values]
+
     async def set(
         self,
         key: str,

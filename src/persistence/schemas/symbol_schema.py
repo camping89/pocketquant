@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.common.uuid import generate_id_str
+
 
 def _utc_now() -> datetime:
     """Return current UTC datetime with timezone info."""
@@ -30,7 +32,12 @@ class Symbol(SymbolBase):
     updated_at: datetime = Field(default_factory=_utc_now)
 
     def to_mongo(self) -> dict[str, Any]:
-        return self.model_dump(exclude={"id"})
+        data = self.model_dump(exclude={"id"})
+        if self.id is None:
+            data["_id"] = generate_id_str()
+        else:
+            data["_id"] = self.id
+        return data
 
     @classmethod
     def from_mongo(cls, doc: dict[str, Any]) -> Symbol:

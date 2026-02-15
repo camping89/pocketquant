@@ -26,20 +26,18 @@ class SyncStatusRepository(BaseRepository):
         """Upsert sync status for symbol/exchange/interval."""
         collection = self._collection()
 
-        update_doc: dict = {
-            "symbol": symbol.upper(),
-            "exchange": exchange.upper(),
-            "interval": interval.value,
-            "status": status,
-            "last_sync_at": datetime.now(UTC),
-        }
+        sync_status = SyncStatus(
+            symbol=symbol.upper(),
+            exchange=exchange.upper(),
+            interval=interval.value,
+            status=status,
+            last_sync_at=datetime.now(UTC),
+            bar_count=bar_count or 0,
+            last_bar_at=last_bar_at,
+            error_message=error_message,
+        )
 
-        if bar_count is not None:
-            update_doc["bar_count"] = bar_count
-        if last_bar_at is not None:
-            update_doc["last_bar_at"] = last_bar_at
-        if error_message is not None:
-            update_doc["error_message"] = error_message
+        update_doc = sync_status.to_mongo()
 
         await collection.update_one(
             {

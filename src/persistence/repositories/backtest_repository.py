@@ -79,4 +79,6 @@ class BacktestRepository(BaseRepository):
         await collection.create_index("status")
         await collection.create_index([("strategy_id", 1), ("started_at", -1)])
         await collection.create_index([("strategy_id", 1), ("metrics.sharpe_ratio", -1)])
+        await collection.create_index([("strategy_id", 1), ("metrics.sortino_ratio", -1)])
+        await collection.create_index([("strategy_id", 1), ("metrics.win_rate", -1)])
         logger.info("backtest_indexes_created")

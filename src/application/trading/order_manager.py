@@ -22,8 +22,9 @@ class OrderManager:
     - Handle order cancellation
     """
 
-    def __init__(self, event_bus: EventBus) -> None:
+    def __init__(self, event_bus: EventBus, order_repository: OrderRepository) -> None:
         self._event_bus = event_bus
+        self._order_repo = order_repository
         self._orders: dict[str, OrderAggregate] = {}
         self._pending: dict[str, OrderAggregate] = {}
         self._broker_map: dict[str, str] = {}  # order_id -> broker_order_id
@@ -43,7 +44,7 @@ class OrderManager:
             self._pending[order.id] = order
 
         # Persist initial order state
-        await OrderRepository.save(order)
+        await self._order_repo.save(order)
 
         try:
             result = await broker.submit_order(order)
@@ -62,7 +63,7 @@ class OrderManager:
                         self._pending.pop(order.id, None)
 
                         # Persist filled order
-                        await OrderRepository.save(order)
+                        await self._order_repo.save(order)
 
                         # Publish fill event
                         await self._event_bus.publish(
@@ -86,7 +87,7 @@ class OrderManager:
                     else:
                         # Update status and persist
                         order.submit(result.broker_order_id)
-                        await OrderRepository.save(order)
+                        await self._order_repo.save(order)
 
                         logger.info(
                             "order_submitted",
@@ -97,7 +98,7 @@ class OrderManager:
                 else:
                     # Mark as rejected and persist
                     order.reject(result.error_message or "Order rejected")
-                    await OrderRepository.save(order)
+                    await self._order_repo.save(order)
 
                     self._pending.pop(order.id, None)
                     logger.warning(
@@ -111,7 +112,7 @@ class OrderManager:
         except Exception as e:
             async with self._lock:
                 order.reject(str(e))
-                await OrderRepository.save(order)
+                await self._order_repo.save(order)
                 self._pending.pop(order.id, None)
 
             logger.error("order_submit_error", order_id=order.id, error=str(e))
@@ -147,7 +148,7 @@ class OrderManager:
                 async with self._lock:
                     if order:
                         order.cancel()
-                        await OrderRepository.save(order)
+                        await self._order_repo.save(order)
                     self._pending.pop(order_id, None)
 
                 logger.info("order_cancelled", order_id=order_id)
@@ -187,7 +188,7 @@ class OrderManager:
 
             if result.status == OrderStatus.FILLED:
                 order.fill(result.filled_quantity, result.filled_price or 0.0)
-                await OrderRepository.save(order)
+                await self._order_repo.save(order)
 
                 self._orders[result.order_id] = order
                 self._pending.pop(result.order_id, None)
@@ -206,12 +207,12 @@ class OrderManager:
 
             elif result.status == OrderStatus.CANCELLED:
                 order.cancel()
-                await OrderRepository.save(order)
+                await self._order_repo.save(order)
                 self._pending.pop(result.order_id, None)
 
     async def load_pending_orders(self) -> None:
         """Load pending orders from database on startup."""
-        pending = await OrderRepository.find_pending()
+        pending = await self._order_repo.find_pending()
         async with self._lock:
             for order in pending:
                 self._pending[order.id] = order
@@ -224,8 +225,8 @@ class OrderManager:
         order = self._orders.get(order_id) or self._pending.get(order_id)
         if order:
             return order
-        return await OrderRepository.get(order_id)
+        return await self._order_repo.get(order_id)
 
     async def get_orders_by_strategy_async(self, strategy_id: str) -> list[OrderAggregate]:
         """Get all orders for a strategy from database."""
-        return await OrderRepository.find_by_strategy(strategy_id)
+        return await self._order_repo.find_by_strategy(strategy_id)

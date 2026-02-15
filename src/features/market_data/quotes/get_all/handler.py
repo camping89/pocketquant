@@ -18,11 +18,16 @@ class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
         self._cache = cache
 
     async def handle(self, request: GetAllQuotesQuery) -> list[QuoteResult]:
+        symbol_keys = list(self.state.provider.subscriptions.keys())
+        cache_keys = [
+            CACHE_KEY_QUOTE_LATEST.format(exchange=key.split(":", 1)[0], symbol=key.split(":", 1)[1])
+            for key in symbol_keys
+        ]
+
+        cached_values = await self._cache.mget(cache_keys)
+
         quotes = []
-        for symbol_key in self.state.provider.subscriptions.keys():
-            exchange, symbol = symbol_key.split(":", 1)
-            cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
-            data = await self._cache.get(cache_key)
+        for data in cached_values:
             if data:
                 quote = Quote.from_cache_dict(data)
                 quotes.append(QuoteResult.from_quote(quote))

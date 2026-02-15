@@ -9,6 +9,8 @@ from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.run.command import RunBacktestCommand
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
+from src.persistence.repositories.backtest_repository import BacktestRepository
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 
 if TYPE_CHECKING:
     from src.application.strategy.strategy_engine import StrategyEngine
@@ -22,9 +24,13 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         self,
         event_bus: EventBus,
         strategy_engine: StrategyEngine,
+        backtest_repository: BacktestRepository,
+        ohlcv_repository: OHLCVRepository,
     ) -> None:
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
+        self._backtest_repo = backtest_repository
+        self._ohlcv_repo = ohlcv_repository
 
     async def handle(self, request: RunBacktestCommand) -> BacktestResult:
         """Execute backtest and return result."""
@@ -51,6 +57,8 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
             event_bus=self._event_bus,
             strategy_engine=self._strategy_engine,
             broker=broker,
+            backtest_repository=self._backtest_repo,
+            ohlcv_repository=self._ohlcv_repo,
         )
 
         return await runner.run(config)

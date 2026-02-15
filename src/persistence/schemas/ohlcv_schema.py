@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.common.uuid import generate_id_str
 from src.domain.shared.value_objects import Interval
 
 
@@ -36,6 +37,10 @@ class OHLCV(OHLCVBase):
     def to_mongo(self) -> dict[str, Any]:
         data = self.model_dump(exclude={"id"})
         data["interval"] = self.interval.value
+        if self.id is None:
+            data["_id"] = generate_id_str()
+        else:
+            data["_id"] = self.id
         return data
 
     @classmethod

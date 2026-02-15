@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from src.common.cache import Cache
+from src.common.constants import build_ohlcv_cache_key
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
@@ -14,6 +15,7 @@ from src.infrastructure.tradingview import TradingViewProvider
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 from src.persistence.repositories.symbol_repository import SymbolRepository
 from src.persistence.repositories.sync_status_repository import SyncStatusRepository
+from src.persistence.schemas.symbol_schema import SymbolCreate
 
 logger = get_logger(__name__)
 
@@ -78,7 +80,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 )
 
             upserted_count = await self._ohlcv_repo.upsert_many(records)
-            await self._symbol_repo.upsert(symbol, exchange)
+            await self._symbol_repo.upsert(SymbolCreate(symbol=symbol, exchange=exchange))
 
             total_bars = await self._ohlcv_repo.count(symbol, exchange, interval)
             latest_bar = await self._ohlcv_repo.get_latest(symbol, exchange, interval)
@@ -92,7 +94,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 last_bar_at=latest_bar.datetime if latest_bar else None,
             )
 
-            cache_key = f"ohlcv:{symbol}:{exchange}:{interval.value}"
+            cache_key = build_ohlcv_cache_key(symbol, exchange, interval.value)
             await self._cache.delete_pattern(f"{cache_key}:*")
 
             aggregate = OHLCVAggregate(symbol=symbol, exchange=exchange)

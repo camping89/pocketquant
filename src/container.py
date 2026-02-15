@@ -95,16 +95,16 @@ async def init_job_scheduler(settings: Settings) -> AsyncIterator[JobScheduler]:
         scheduler.shutdown(wait=True)
 
 
-async def init_order_manager(event_bus: EventBus) -> AsyncIterator[OrderManager]:
+async def init_order_manager(event_bus: EventBus, order_repository: OrderRepository) -> AsyncIterator[OrderManager]:
     """Resource provider: create and load pending orders."""
-    om = OrderManager(event_bus)
+    om = OrderManager(event_bus, order_repository)
     await om.load_pending_orders()
     yield om
 
 
-async def init_position_tracker(event_bus: EventBus) -> AsyncIterator[PositionTracker]:
+async def init_position_tracker(event_bus: EventBus, position_repository: PositionRepository) -> AsyncIterator[PositionTracker]:
     """Resource provider: create and start position tracking."""
-    pt = PositionTracker(event_bus)
+    pt = PositionTracker(event_bus, position_repository)
     await pt.start()
     yield pt
 
@@ -186,8 +186,8 @@ class AppContainer(containers.DeclarativeContainer):
     )
 
     # Application services — async Resource providers
-    order_manager = providers.Resource(init_order_manager, event_bus=event_bus)
-    position_tracker = providers.Resource(init_position_tracker, event_bus=event_bus)
+    order_manager = providers.Resource(init_order_manager, event_bus=event_bus, order_repository=order_repository)
+    position_tracker = providers.Resource(init_position_tracker, event_bus=event_bus, position_repository=position_repository)
     strategy_engine = providers.Resource(
         init_strategy_engine,
         event_bus=event_bus,
@@ -258,12 +258,14 @@ class AppContainer(containers.DeclarativeContainer):
 
     # Backtesting handlers
     run_backtest_handler = providers.Factory(
-        RunBacktestHandler, event_bus=event_bus, strategy_engine=strategy_engine
+        RunBacktestHandler, event_bus=event_bus, strategy_engine=strategy_engine, backtest_repository=backtest_repository, ohlcv_repository=ohlcv_repository
     )
     run_optimization_handler = providers.Factory(
         RunOptimizationHandler,
         event_bus=event_bus,
         strategy_engine=strategy_engine,
+        backtest_repository=backtest_repository,
+        ohlcv_repository=ohlcv_repository,
         optimization_repository=optimization_repository,
     )
     get_backtest_handler = providers.Factory(

@@ -35,10 +35,10 @@ class PositionRepository(BaseRepository):
             return None
         return PositionDocument(**doc).to_aggregate()
 
-    async def find_open(self) -> list[PositionAggregate]:
+    async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
         """Get all open positions."""
         collection = self._collection()
-        cursor = collection.find({"is_closed": False})
+        cursor = collection.find({"is_closed": False}).limit(limit)
         return [PositionDocument(**doc).to_aggregate() async for doc in cursor]
 
     async def ensure_indexes(self) -> None:
