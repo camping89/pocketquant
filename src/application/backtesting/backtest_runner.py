@@ -48,11 +48,15 @@ class BacktestRunner:
         event_bus: EventBus,
         strategy_engine: StrategyEngine,
         broker: PaperBroker,
+        backtest_repository: BacktestRepository,
+        ohlcv_repository: OHLCVRepository,
         persist_results: bool = True,
     ) -> None:
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
         self._broker = broker
+        self._backtest_repo = backtest_repository
+        self._ohlcv_repo = ohlcv_repository
         self._replay_engine = HistoricalReplayEngine(event_bus)
         self._persist_results = persist_results
 
@@ -120,7 +124,7 @@ class BacktestRunner:
 
             # Persist results if enabled
             if self._persist_results:
-                await BacktestRepository.save(result)
+                await self._backtest_repo.save(result)
 
             return result
 
@@ -139,7 +143,7 @@ class BacktestRunner:
 
             # Persist failed result for debugging audit trail (validated requirement)
             if self._persist_results:
-                await BacktestRepository.save(result)
+                await self._backtest_repo.save(result)
 
             return result
 
@@ -154,7 +158,7 @@ class BacktestRunner:
         start_datetime = datetime.combine(config.start_date, datetime.min.time())
         end_datetime = datetime.combine(config.end_date, datetime.max.time())
 
-        async for bar in OHLCVRepository.stream(
+        async for bar in self._ohlcv_repo.stream(
             config.symbol, config.exchange, Interval(config.interval), start_datetime, end_datetime
         ):
             yield bar

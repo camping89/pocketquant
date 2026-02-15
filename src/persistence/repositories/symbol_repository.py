@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from src.common.constants import COLLECTION_SYMBOLS
 from src.persistence.base_repository import BaseRepository
+from src.persistence.schemas.symbol_schema import Symbol, SymbolCreate
 
 
 class SymbolRepository(BaseRepository):
@@ -11,22 +12,29 @@ class SymbolRepository(BaseRepository):
 
     _collection_name = COLLECTION_SYMBOLS
 
-    async def upsert(self, symbol: str, exchange: str) -> None:
+    async def upsert(self, symbol_create: SymbolCreate) -> None:
         """Upsert symbol record."""
         collection = self._collection()
         symbol_doc = {
-            "symbol": symbol,
-            "exchange": exchange,
-            "is_active": True,
+            "symbol": symbol_create.symbol.upper(),
+            "exchange": symbol_create.exchange.upper(),
+            "is_active": symbol_create.is_active,
             "updated_at": datetime.now(UTC),
         }
+        if symbol_create.name:
+            symbol_doc["name"] = symbol_create.name
+        if symbol_create.asset_type:
+            symbol_doc["asset_type"] = symbol_create.asset_type
+        if symbol_create.currency:
+            symbol_doc["currency"] = symbol_create.currency
+
         await collection.update_one(
-            {"symbol": symbol, "exchange": exchange},
+            {"symbol": symbol_create.symbol.upper(), "exchange": symbol_create.exchange.upper()},
             {"$set": symbol_doc, "$setOnInsert": {"created_at": datetime.now(UTC)}},
             upsert=True,
         )
 
-    async def find_all(self, exchange: str | None = None) -> list[dict]:
+    async def find_all(self, exchange: str | None = None) -> list[Symbol]:
         """Get all symbols, optionally filtered by exchange."""
         collection = self._collection()
 
@@ -36,16 +44,7 @@ class SymbolRepository(BaseRepository):
 
         cursor = collection.find(query).sort("symbol", 1)
 
-        return [
-            {
-                "symbol": doc["symbol"],
-                "exchange": doc["exchange"],
-                "name": doc.get("name"),
-                "asset_type": doc.get("asset_type"),
-                "is_active": doc.get("is_active", True),
-            }
-            async for doc in cursor
-        ]
+        return [Symbol.from_mongo(doc) async for doc in cursor]
 
     async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange)."""

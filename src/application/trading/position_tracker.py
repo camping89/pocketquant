@@ -18,8 +18,9 @@ class PositionTracker:
     Subscribes to OrderFilledEvent events to update positions automatically.
     """
 
-    def __init__(self, event_bus: EventBus) -> None:
+    def __init__(self, event_bus: EventBus, position_repository: PositionRepository) -> None:
         self._event_bus = event_bus
+        self._position_repo = position_repository
         self._positions: dict[str, PositionAggregate] = {}
         self._lock = asyncio.Lock()
 
@@ -33,7 +34,7 @@ class PositionTracker:
 
     async def load_open_positions(self) -> None:
         """Load open positions from database on startup."""
-        positions = await PositionRepository.find_open()
+        positions = await self._position_repo.find_open()
         async with self._lock:
             for pos in positions:
                 self._positions[pos.strategy_id] = pos
@@ -65,7 +66,7 @@ class PositionTracker:
                 self._positions[event.strategy_id] = position
 
                 # Persist new position
-                await PositionRepository.save(position)
+                await self._position_repo.save(position)
 
                 await self._event_bus.publish(
                     PositionOpenedEvent(
@@ -98,7 +99,7 @@ class PositionTracker:
                     position.add_quantity(event.filled_quantity, event.filled_price)
 
                     # Persist updated position
-                    await PositionRepository.save(position)
+                    await self._position_repo.save(position)
 
                     logger.info(
                         "position_increased",
@@ -110,7 +111,7 @@ class PositionTracker:
                     position.reduce_quantity(event.filled_quantity, event.filled_price)
 
                     # Persist updated/closed position
-                    await PositionRepository.save(position)
+                    await self._position_repo.save(position)
 
                     if position.is_closed:
                         # Position fully closed
@@ -180,4 +181,4 @@ class PositionTracker:
         position = self._positions.get(strategy_id)
         if position:
             return position
-        return await PositionRepository.get_by_strategy(strategy_id)
+        return await self._position_repo.get_by_strategy(strategy_id)

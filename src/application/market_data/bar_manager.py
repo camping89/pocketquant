@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 from typing import Any
 
-from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT
+from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT, build_ohlcv_cache_key
 from src.common.logging import get_logger
 from src.domain.ohlcv.services.bar_builder import BarBuilder, get_bar_start
 from src.domain.shared.value_objects import Interval
@@ -98,6 +98,9 @@ class BarManager:
         )
 
         await self._ohlcv_repo.upsert_bar(ohlcv)
+
+        cache_key = build_ohlcv_cache_key(bar.symbol, bar.exchange, bar.interval.value)
+        await self._cache.delete_pattern(f"{cache_key}:*")
 
         logger.info(
             "bar_manager.bar_saved",

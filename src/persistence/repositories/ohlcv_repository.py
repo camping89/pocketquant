@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 
 from pymongo import UpdateOne
+from pymongo.errors import BulkWriteError
 
 from src.common.constants import COLLECTION_OHLCV
 from src.common.logging import get_logger
@@ -49,17 +50,25 @@ class OHLCVRepository(BaseRepository):
                 )
             )
 
-        result = await collection.bulk_write(operations, ordered=False)
-        total = result.upserted_count + result.modified_count
+        try:
+            result = await collection.bulk_write(operations, ordered=False)
+            total = result.upserted_count + result.modified_count
 
-        logger.info(
-            "data_sync.upserted",
-            upserted_count=result.upserted_count,
-            modified_count=result.modified_count,
-            total_count=total,
-        )
+            logger.info(
+                "data_sync.upserted",
+                upserted_count=result.upserted_count,
+                modified_count=result.modified_count,
+                total_count=total,
+            )
 
-        return total
+            return total
+        except BulkWriteError as e:
+            logger.error(
+                "ohlcv_bulk_write_partial_failure",
+                write_errors=len(e.details.get("writeErrors", [])),
+                total_ops=len(operations),
+            )
+            raise
 
     async def upsert_bar(self, ohlcv: OHLCV) -> None:
         """Upsert a single OHLCV bar."""
@@ -135,10 +144,11 @@ class OHLCVRepository(BaseRepository):
 
         cursor = collection.find(query).sort("datetime", 1)
 
-        async for doc in cursor:
-            if isinstance(doc.get("interval"), str):
-                doc["interval"] = Interval(doc["interval"])
-            yield OHLCV.from_mongo(doc)
+        try:
+            async for doc in cursor:
+                yield OHLCV.from_mongo(doc)
+        finally:
+            await cursor.close()
 
     async def count(self, symbol: str, exchange: str, interval: Interval) -> int:
         """Count documents for given symbol/exchange/interval."""
@@ -173,5 +183,6 @@ class OHLCVRepository(BaseRepository):
                 ("exchange", 1),
                 ("interval", 1),
                 ("datetime", 1),
-            ]
+            ],
+            unique=True,
         )
