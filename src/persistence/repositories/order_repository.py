@@ -34,7 +34,9 @@ class OrderRepository(BaseRepository):
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
         """Get all pending orders."""
         collection = self._collection()
-        cursor = collection.find({"status": {"$in": ["pending", "submitted", "partially_filled"]}}).limit(limit)
+        cursor = collection.find(
+            {"status": {"$in": ["pending", "submitted", "partially_filled"]}}
+        ).limit(limit)
         return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
 
     async def ensure_indexes(self) -> None:

@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-02-14 | **Version:** 2.0 | **Status:** Clean Architecture Refactor Complete | **Pattern:** DDD + CQRS + Clean Architecture Layers
+**Last Updated:** 2026-02-16 | **Version:** 3.0 | **Status:** DI Container Complete | **Pattern:** DDD + CQRS + Clean Architecture + IoC Container
 
 ## High-Level Architecture
 
@@ -211,7 +211,6 @@ features/
 │   ├── get_optimization/    # Operation: Get optimization result
 │   │   ├── query.py
 │   │   └── handler.py
-│   ├── register.py          # Handler registration (auto-discovery)
 │   └── router.py            # Feature router (aggregates all operations)
 ├── market_data/              # Market data feature (7 nested operations)
 │   ├── sync/                # Nested group
@@ -234,7 +233,6 @@ features/
 │   │   ├── get_quote_service_status/
 │   │   └── router.py
 │   ├── list_symbols/        # Operation: List symbols
-│   ├── register.py
 │   └── router.py
 ├── strategy/                 # Strategy feature (4 operations)
 │   ├── get_all/            # Operation: List strategies
@@ -242,18 +240,15 @@ features/
 │   ├── load/               # Operation: Load strategy YAML
 │   ├── start/              # Operation: Start strategy
 │   ├── stop/               # Operation: Stop strategy
-│   ├── register.py
 │   └── router.py
 ├── trading/                  # Trading feature (3 operations)
 │   ├── list_orders/        # Operation: List orders
 │   ├── get_order/          # Operation: Get order
 │   ├── list_positions/     # Operation: List positions
 │   ├── get_position/       # Operation: Get position
-│   ├── register.py
 │   └── router.py
 ├── risk/                     # Risk feature (1 operation)
 │   ├── check_risk/         # Operation: Pre-trade validation
-│   ├── register.py
 │   └── router.py
 └── __init__.py
 ```
@@ -495,9 +490,9 @@ Route Response
 
 **All repositories:**
 - Inherit from `BaseRepository` (provides `_collection()` helper)
-- Use stateless class methods only (no instance state)
+- Instance-based with `Database` injected via constructor (DI container)
 - Zero direct `Database.get_collection()` calls outside persistence layer
-- Enforce schema validation via MongoDB schemas
+- Enforce schema validation via MongoDB document schemas
 
 ### Recovery on Startup
 
@@ -844,21 +839,47 @@ async with self._lock:
 - Lock ensures atomic read-modify-write
 - No race conditions or data corruption
 
+## Dependency Injection (IoC Container)
+
+All service wiring managed by `AppContainer` in `src/container.py` using [dependency-injector](https://python-dependency-injector.ets-labs.org/).
+
+**Container owns:**
+- **Configuration:** `Settings` (Singleton)
+- **Persistence:** `Database`, `Cache` (Resource — async init/shutdown)
+- **Repositories:** 7 repositories (Singleton, `Database` injected via constructor)
+- **Messaging:** `EventBus`, `Mediator` (Singleton)
+- **Infrastructure:** `JobScheduler` (Resource), `TradingViewProvider`, `BrokerFactory`, `HealthCoordinator` (Singleton)
+- **Application services:** `BarManager`, `QuoteService` (Singleton); `OrderManager`, `PositionTracker`, `StrategyEngine` (Resource — async init/shutdown)
+- **CQRS handlers:** ~27 handlers (Factory — transient, new instance per resolution)
+
+**Provider types:**
+| Type | Lifecycle | Use case |
+|------|-----------|----------|
+| `Singleton` | One shared instance | Repos, messaging, stateless services |
+| `Resource` | Async init/shutdown via generator | DB, Cache, Scheduler, stateful services |
+| `Factory` | New instance per resolution | CQRS handlers (isolation) |
+
+**Handler registration:** `register_all_handlers(container)` in `src/container.py` replaces per-feature `register.py` files. Container is single source of truth.
+
+**FastAPI integration:** `app.state.container` is the only `app.state` attribute. Routes resolve dependencies via `Depends(get_mediator)` which reads from `request.app.state.container.mediator()`.
+
 ## Resource Lifecycle
 
 ### Startup Sequence
 
-1. `get_settings()` + `setup_logging()`
-2. `Database.connect()` → `Cache.connect()` → `JobScheduler.start()`
-3. Create `Mediator` + `EventBus`, register all CQRS handlers
-4. `register_sync_jobs()` for background scheduling
-5. `yield` → serve requests
+1. `AppContainer()` created → `get_settings()` + `setup_logging()`
+2. `container.init_resources()` — initializes in dependency order:
+   `Database` → `Cache` → `JobScheduler` → `OrderManager` → `PositionTracker` → `StrategyEngine`
+3. `ensure_all_indexes(container)` — MongoDB indexes for all repositories
+4. `register_all_handlers(container)` — wire ~27 CQRS handlers to Mediator
+5. `start_background_jobs(container)` — register APScheduler jobs
+6. `yield` → serve requests
 
 ### Graceful Shutdown
 
 1. Stop accepting new requests (Uvicorn)
-2. `strategy_engine.stop()` → `JobScheduler.shutdown(wait=True)`
-3. `Cache.disconnect()` → `Database.disconnect()`
+2. `container.shutdown_resources()` — shuts down in reverse order:
+   `StrategyEngine.stop()` → `PositionTracker` → `OrderManager` → `JobScheduler.shutdown(wait=True)` → `Cache.disconnect()` → `Database.disconnect()`
 
 ## Integration Points
 

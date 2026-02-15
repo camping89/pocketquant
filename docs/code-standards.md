@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-14 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/) | **Architecture:** Clean Architecture + DDD + CQRS
+**Last Updated:** 2026-02-16 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/) | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container
 
 ## Clean Architecture Rules
 
@@ -48,9 +48,9 @@ Operation-First Structure:
 │   ├── handler.py              # CQRS handler (@handles decorator)
 │   ├── route.py                # FastAPI route (optional)
 │   └── __init__.py
-├── register.py                 # Handler registration (auto-discovery)
 ├── router.py                   # Feature router (aggregates all operations)
 └── __init__.py
+# Note: register.py files deleted — handler registration in src/container.py
 
 IMPORTANT: No business logic in features/. All logic in:
 - Application layer (orchestrators, state machines)
@@ -75,8 +75,8 @@ features/backtesting/
 ├── list_results/
 │   ├── query.py
 │   └── handler.py
-├── register.py                 # register_handlers(mediator) auto-discovery
 └── router.py                   # Aggregate all operation routes
+# Handler registration in src/container.py (register.py deleted)
 ```
 
 **Application Layer (Orchestrators):**
@@ -155,116 +155,115 @@ class StrategyEngine:
 - Called by CQRS handlers in features/ layer
 - Often singletons (StrategyEngine, QuoteService) or per-request (DataSyncService)
 
-### 3. Singleton Infrastructure (Class-Method Pattern)
+### 3. Dependency Injection Container (IoC Pattern)
 
-Expensive connections (DB, Cache, JobScheduler) are singletons with class methods:
+All service wiring managed by `AppContainer` in `src/container.py` using [dependency-injector](https://python-dependency-injector.ets-labs.org/). No static singletons — all dependencies injected via constructor.
 
 ```python
-# Database (internal use only - accessed via repositories)
-from src.common.database import Database
-await Database.connect(settings)
-# Note: Access collections via Repository classes, not directly
+# Container owns all providers — resolved at startup or per-request
+from src.container import AppContainer
 
-# Cache
-from src.common.cache import Cache
-value = await Cache.get("key")
-await Cache.set("key", value, ttl=3600)
+container = AppContainer()
+await container.init_resources()  # Initialize DB, Cache, Scheduler, etc.
 
-# Jobs
-from src.common.jobs import JobScheduler
-JobScheduler.add_interval_job(func, interval_seconds)
+# Repositories receive Database via constructor (Singleton providers)
+ohlcv_repo = container.ohlcv_repository()  # OHLCVRepository(database=db)
+order_repo = container.order_repository()   # OrderRepository(database=db)
 
-# Repository access (preferred pattern)
-from src.persistence.repositories import OHLCVRepository, OrderRepository
-bars = await OHLCVRepository.get_bars(symbol, exchange, interval)
-await OrderRepository.save(order)
+# Cache/DB are Resource providers (async init/shutdown lifecycle)
+cache = container.cache()
+db = container.database()
+
+# CQRS handlers are Factory providers (transient, new per resolution)
+handler = container.sync_symbol_handler()  # Fresh instance each time
 ```
 
+**Provider types:**
+- `Singleton` — one shared instance (repos, messaging, stateless services)
+- `Resource` — async init/shutdown via generator (DB, Cache, Scheduler, stateful services)
+- `Factory` — new instance per resolution (CQRS handlers for isolation)
+
 **Rationale:**
-- Single shared connection per resource, initialized once at startup
-- Avoids DI complexity
-- All DB access routed through `src/persistence/` layer for consistency
-- Repositories provide clean, validated data access interface
+- Explicit dependencies — no hidden static calls
+- Testable — inject mocks via constructor
+- Single source of truth — `src/container.py` owns all wiring
+- All DB access routed through `src/persistence/` layer via injected repositories
 
-### 4. Repository Pattern (Stateless Data Access)
+### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through class methods in `src/persistence/repositories/`. No instance state. All repositories inherit from `BaseRepository` for safe collection access.
+All data access through instance methods in `src/persistence/repositories/`. `Database` injected via constructor from DI container. All repositories inherit from `BaseRepository`.
 
 ```python
 # OHLCVRepository (in src/persistence/repositories/)
 class OHLCVRepository(BaseRepository):
-    @classmethod
-    async def upsert_many(cls, records: List[OHLCVCreate]) -> int:
+    def __init__(self, database: Database):
+        super().__init__(database)
+
+    async def upsert_many(self, records: List[OHLCVCreate]) -> int:
+        collection = self._collection()  # BaseRepository helper
         # Bulk insert/update with unique key
-        collection = cls._collection("ohlcv")  # BaseRepository helper
         pass
 
-    @classmethod
     async def get_bars(
-        cls,
+        self,
         symbol: str,
         exchange: str,
         interval: str,
         limit: int = 100
     ):
+        collection = self._collection()
         # Query with filtering and sorting
-        collection = cls._collection("ohlcv")
         pass
 ```
 
 **Centralized Persistence Layer (`src/persistence/`):**
-- Database connections: `mongodb.py`, `redis.py` (singletons)
-- BaseRepository mixin: `_collection(name)` helper for safe access
+- Database connections: `mongodb.py`, `redis.py` (instance-based, managed by container)
+- BaseRepository: `_collection()` helper, `Database` injected via constructor
 - 7 repositories: OHLCVRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
 - MongoDB schemas: Validation for all documents
 
 **Rationale:**
-- Stateless design, easy to test
-- No complex lifecycle management
-- Class methods used directly without instantiation
-- All DB access via persistence layer (zero direct `Database.get_collection()` calls elsewhere)
+- Instance-based design — inject mock Database for testing
+- All repositories registered as Singleton providers in container
+- All DB access via persistence layer (zero static calls)
 
 ### 5. Service Pattern (Business Logic)
 
-Two patterns depending on state requirements:
+All services receive dependencies via constructor, managed by DI container:
 
-#### Per-Request Instantiation (Stateless)
+#### Singleton Provider (Stateful Services)
 
 ```python
-# DataSyncService - injected with Settings
-class DataSyncService:
-    def __init__(self, settings: Settings):
-        self.settings = settings
+# QuoteService - maintained by container as Singleton provider
+class QuoteService:
+    def __init__(self, settings: Settings, cache: Cache, bar_manager: BarManager):
+        self._settings = settings
+        self._cache = cache
+        self._bar_manager = bar_manager
 
-    async def sync_symbol(self, symbol: str, exchange: str, interval: str, n_bars: int):
-        # Fetch, upsert, invalidate cache
+    async def start(self):
+        # Initialize WebSocket
         pass
 ```
 
-Used for: Data sync, calculations, stateless transformations.
-
-#### Singleton (Stateful)
+#### Resource Provider (Async Lifecycle)
 
 ```python
-# QuoteService - maintains WebSocket state
-class QuoteService:
-    _instance: Optional["QuoteService"] = None
-    _running: bool = False
-
-    @classmethod
-    def get_instance(cls) -> "QuoteService":
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    async def start(self):
-        self._running = True
-        # Initialize WebSocket
+# OrderManager - async init (load pending orders), managed by container
+class OrderManager:
+    def __init__(self, event_bus: EventBus, order_repository: OrderRepository):
+        self._event_bus = event_bus
+        self._order_repo = order_repository
 ```
 
-Used for: WebSocket connections, persistent state, event distribution.
+**Container registration:**
+```python
+# In src/container.py
+quote_service = providers.Singleton(QuoteService, settings=settings, cache=cache, bar_manager=bar_manager)
+order_manager = providers.Resource(init_order_manager, event_bus=event_bus, order_repository=order_repository)
+```
 
-**Rationale:** Per-request services are simple and testable. Singleton services for state that must persist across requests.
+**Rationale:** All dependencies explicit in constructor. Container manages lifecycle (Singleton for stateless, Resource for async init/shutdown).
 
 ### 6. Provider Pattern (External Integrations)
 
@@ -389,13 +388,13 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 **Key Rules:**
 - Every handler MUST use `@handles(RequestType)` decorator
 - One handler per command/query (enforced at startup, `DuplicateHandlerError`)
-- Constructor receives dependencies (injected in feature `register.py`)
+- Constructor receives dependencies (injected via DI container Factory providers)
 - `handle()` must be idempotent if possible (for retries)
 - Return DTOs, not domain entities
 - Publish domain events for all state changes
 
 **Registration Pattern:**
-Each feature has a `register.py` with `register_handlers(mediator, **deps)` that uses `HandlerRegistry.register_all()` for auto-discovery. New handlers only need `@handles` + adding to the feature's `register.py`.
+`register_all_handlers(container)` in `src/container.py` resolves all handler Factory providers and registers with Mediator via `HandlerRegistry`. Per-feature `register.py` files are deleted — container is single source of truth. New handlers need `@handles` + Factory provider in container.
 
 ### 9. Strategy Implementation Pattern
 
@@ -897,20 +896,24 @@ All aggregates migrated:
 ❌ Persistence code outside src/persistence/ (all data access centralized there)
 ❌ Direct database calls in handlers (use repositories)
 ❌ Synchronous blocking I/O in async context
-❌ Global mutable state outside singletons
+❌ Global mutable state outside container
 ❌ Bare except clauses
 ❌ String formatting in log calls
 ❌ Service instantiation as global variables
-❌ Database connection per-request (use singleton)
+❌ Database connection per-request (use container Resource)
 ❌ No type hints on public APIs
 ❌ Comments explaining obvious code
 ❌ Circular imports between features
 ❌ Feature-specific configuration in main module
 ❌ Manual event subscription (use @event_handler decorator)
-❌ Manual mediator.register() in main.py (use @handles + register.py)
+❌ Manual mediator.register() in main.py (use @handles + container Factory)
 ❌ Handler classes without @handles decorator
 ❌ UUID4 for aggregates (use UUID7)
 ❌ Old `src/infrastructure/persistence/` path (moved to `src/persistence/`)
+❌ Static class-method singletons for Database/Cache/JobScheduler (use container)
+❌ Per-feature `register.py` files (deleted — use container `register_all_handlers()`)
+❌ Static Repository calls (e.g. `OHLCVRepository.get_bars()`) — use instance via DI
+❌ `app.state.xxx` service locator (only `app.state.container` allowed)
 
 ## Quality Checklist
 

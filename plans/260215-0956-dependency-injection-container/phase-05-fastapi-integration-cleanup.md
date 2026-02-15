@@ -13,7 +13,7 @@
 ## Overview
 
 - **Priority:** P1
-- **Status:** pending
+- **Status:** completed
 - **Effort:** 2h
 - **Description:** Wire FastAPI `Depends()` helpers to resolve from container. Replace all `app.state` usage with DI injection. Refactor `main.py` lifespan to use `container.init_resources()` / `container.shutdown_resources()`. Remove `main_extensions.py` manual wiring. Final cleanup and validation.
 

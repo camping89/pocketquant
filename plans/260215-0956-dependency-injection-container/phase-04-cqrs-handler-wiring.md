@@ -15,7 +15,7 @@
 ## Overview
 
 - **Priority:** P1
-- **Status:** pending
+- **Status:** completed
 - **Effort:** 2h
 - **Description:** Register all ~27 CQRS handlers as Factory (transient) providers in the container. Delete per-feature `register.py` files — container module owns `register_all_handlers()`. Auto-discover `@event_handler` decorated methods. Wire Mediator to use container-provided handlers.
 

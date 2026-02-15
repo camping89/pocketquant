@@ -55,8 +55,6 @@ async def get_latest_quote(
     result = await mediator.send(query)
 
     if result is None:
-        raise NotFoundError(
-            f"No quote found for {exchange}:{symbol}. Make sure you're subscribed."
-        )
+        raise NotFoundError(f"No quote found for {exchange}:{symbol}. Make sure you're subscribed.")
 
     return QuoteResponse.from_result(result)
