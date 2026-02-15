@@ -7,7 +7,6 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from src.common.constants import HEADER_IDEMPOTENCY_KEY
-from src.persistence import Cache
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
@@ -23,8 +22,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not idempotency_key:
             return await call_next(request)
 
+        cache = request.app.state.container.cache()
         cache_key = f"idempotent:{idempotency_key}"
-        cached = await Cache.get(cache_key)
+        cached = await cache.get(cache_key)
 
         if cached:
             return Response(
@@ -41,7 +41,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             async for chunk in body_iter:
                 response_body += chunk
 
-        await Cache.set(
+        await cache.set(
             cache_key,
             {
                 "body": response_body.decode(),

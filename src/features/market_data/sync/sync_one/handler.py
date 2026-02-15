@@ -22,9 +22,21 @@ logger = get_logger(__name__)
 class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     """Handle syncing a single symbol."""
 
-    def __init__(self, provider: TradingViewProvider, event_bus: EventBus):
+    def __init__(
+        self,
+        provider: TradingViewProvider,
+        event_bus: EventBus,
+        cache: Cache,
+        ohlcv_repository: OHLCVRepository,
+        symbol_repository: SymbolRepository,
+        sync_status_repository: SyncStatusRepository,
+    ):
         self.provider = provider
         self.event_bus = event_bus
+        self._cache = cache
+        self._ohlcv_repo = ohlcv_repository
+        self._symbol_repo = symbol_repository
+        self._sync_status_repo = sync_status_repository
 
     async def handle(self, request: SyncSymbolCommand) -> SyncResponse:
         symbol = request.symbol.upper()
@@ -38,7 +50,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             interval=interval.value,
         )
 
-        await SyncStatusRepository.upsert(symbol, exchange, interval, "syncing")
+        await self._sync_status_repo.upsert(symbol, exchange, interval, "syncing")
 
         try:
             records = await self.provider.fetch_ohlcv(
@@ -49,7 +61,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             )
 
             if not records:
-                await SyncStatusRepository.upsert(
+                await self._sync_status_repo.upsert(
                     symbol,
                     exchange,
                     interval,
@@ -65,13 +77,13 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                     bars_synced=0,
                 )
 
-            upserted_count = await OHLCVRepository.upsert_many(records)
-            await SymbolRepository.upsert(symbol, exchange)
+            upserted_count = await self._ohlcv_repo.upsert_many(records)
+            await self._symbol_repo.upsert(symbol, exchange)
 
-            total_bars = await OHLCVRepository.count(symbol, exchange, interval)
-            latest_bar = await OHLCVRepository.get_latest(symbol, exchange, interval)
+            total_bars = await self._ohlcv_repo.count(symbol, exchange, interval)
+            latest_bar = await self._ohlcv_repo.get_latest(symbol, exchange, interval)
 
-            await SyncStatusRepository.upsert(
+            await self._sync_status_repo.upsert(
                 symbol,
                 exchange,
                 interval,
@@ -81,7 +93,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             )
 
             cache_key = f"ohlcv:{symbol}:{exchange}:{interval.value}"
-            await Cache.delete_pattern(f"{cache_key}:*")
+            await self._cache.delete_pattern(f"{cache_key}:*")
 
             aggregate = OHLCVAggregate(symbol=symbol, exchange=exchange)
             aggregate.record_sync(
@@ -119,7 +131,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 error=error_msg,
             )
 
-            await SyncStatusRepository.upsert(
+            await self._sync_status_repo.upsert(
                 symbol, exchange, interval, "error", error_message=error_msg
             )
 

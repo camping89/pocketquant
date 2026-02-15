@@ -21,9 +21,7 @@ async def get_symbol_sync_status(
     mediator: Annotated[Mediator, Depends(get_mediator)],
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
-    query = GetSymbolSyncStatusQuery(
-        symbol=symbol, exchange=exchange, interval=interval.value
-    )
+    query = GetSymbolSyncStatusQuery(symbol=symbol, exchange=exchange, interval=interval.value)
 
     try:
         status = await mediator.send(query)

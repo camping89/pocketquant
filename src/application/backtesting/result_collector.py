@@ -198,9 +198,7 @@ class BacktestResultCollector:
             parameters=self._config.parameters,
         )
 
-    def _calculate_metrics(
-        self, started_at: datetime, completed_at: datetime
-    ) -> BacktestMetrics:
+    def _calculate_metrics(self, started_at: datetime, completed_at: datetime) -> BacktestMetrics:
         """Calculate all performance metrics from collected data."""
         if not self._trades:
             return BacktestMetrics.empty()
@@ -215,8 +213,8 @@ class BacktestResultCollector:
 
         # Extract P&L list from trades
         pnl_list = [t.pnl for t in self._trades]
-        avg_win, avg_loss, winning_trades, losing_trades = (
-            PerformanceCalculator.average_win_loss(pnl_list)
+        avg_win, avg_loss, winning_trades, losing_trades = PerformanceCalculator.average_win_loss(
+            pnl_list
         )
 
         # Gross profit and loss for profit factor
@@ -230,9 +228,7 @@ class BacktestResultCollector:
             total_return=PerformanceCalculator.total_return(
                 self._initial_capital, self._current_equity
             ),
-            cagr=PerformanceCalculator.cagr(
-                self._initial_capital, self._current_equity, days
-            ),
+            cagr=PerformanceCalculator.cagr(self._initial_capital, self._current_equity, days),
             sharpe_ratio=PerformanceCalculator.sharpe_ratio(equity_values),
             sortino_ratio=PerformanceCalculator.sortino_ratio(equity_values),
             max_drawdown=PerformanceCalculator.max_drawdown(equity_values),

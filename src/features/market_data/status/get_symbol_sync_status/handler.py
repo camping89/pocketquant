@@ -10,22 +10,19 @@ from src.persistence.repositories.sync_status_repository import SyncStatusReposi
 
 
 @handles(GetSymbolSyncStatusQuery)
-class GetSymbolSyncStatusHandler(
-    Handler[GetSymbolSyncStatusQuery, SyncStatusResult]
-):
+class GetSymbolSyncStatusHandler(Handler[GetSymbolSyncStatusQuery, SyncStatusResult]):
     """Handle getting sync status for a specific symbol."""
+
+    def __init__(self, sync_status_repository: SyncStatusRepository):
+        self._sync_status_repo = sync_status_repository
 
     async def handle(self, request: GetSymbolSyncStatusQuery) -> SyncStatusResult:
         interval = Interval(request.interval)
 
-        status = await SyncStatusRepository.find_one(
-            request.symbol, request.exchange, interval
-        )
+        status = await self._sync_status_repo.find_one(request.symbol, request.exchange, interval)
 
         if not status:
-            raise ValueError(
-                f"No sync status found for {request.symbol}:{request.exchange}"
-            )
+            raise ValueError(f"No sync status found for {request.symbol}:{request.exchange}")
 
         return SyncStatusResult(
             symbol=status.symbol,

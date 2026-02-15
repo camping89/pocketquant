@@ -222,9 +222,7 @@ class StrategyEngine:
     @event_handler(QuoteReceivedEvent)
     async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
         """Handle quote received event."""
-        strategies = self._find_strategies(
-            event.symbol, event.exchange, trigger="tick"
-        )
+        strategies = self._find_strategies(event.symbol, event.exchange, trigger="tick")
 
         for strategy in strategies:
             try:
@@ -289,9 +287,7 @@ class StrategyEngine:
         position = self._position_tracker.get(strategy.id)
 
         # Risk check
-        valid, reason = self._risk_handler.validate(
-            signal, balance, position, strategy.config.risk
-        )
+        valid, reason = self._risk_handler.validate(signal, balance, position, strategy.config.risk)
         if not valid:
             logger.info(
                 "signal_rejected_by_risk",
@@ -343,9 +339,7 @@ class StrategyEngine:
         side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
 
         order_type = (
-            OrderType.MARKET
-            if strategy.config.orders.entry_type == "market"
-            else OrderType.LIMIT
+            OrderType.MARKET if strategy.config.orders.entry_type == "market" else OrderType.LIMIT
         )
 
         price = signal.entry_price if order_type == OrderType.LIMIT else current_price

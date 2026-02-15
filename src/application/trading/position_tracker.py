@@ -51,11 +51,7 @@ class PositionTracker:
 
             if position is None:
                 # New position
-                side = (
-                    PositionSide.LONG
-                    if event.side == OrderSide.BUY
-                    else PositionSide.SHORT
-                )
+                side = PositionSide.LONG if event.side == OrderSide.BUY else PositionSide.SHORT
 
                 position = PositionAggregate.open(
                     strategy_id=event.strategy_id,
@@ -94,12 +90,8 @@ class PositionTracker:
             else:
                 # Update existing position
                 is_same_side = (
-                    event.side == OrderSide.BUY
-                    and position.side == PositionSide.LONG
-                ) or (
-                    event.side == OrderSide.SELL
-                    and position.side == PositionSide.SHORT
-                )
+                    event.side == OrderSide.BUY and position.side == PositionSide.LONG
+                ) or (event.side == OrderSide.SELL and position.side == PositionSide.SHORT)
 
                 if is_same_side:
                     # Adding to position

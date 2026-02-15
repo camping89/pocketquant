@@ -22,9 +22,11 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
         self,
         event_bus: EventBus,
         strategy_engine: StrategyEngine,
+        optimization_repository: OptimizationRepository,
     ) -> None:
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
+        self._optimization_repo = optimization_repository
 
     async def handle(self, request: RunOptimizationCommand) -> OptimizationResult:
         """Execute optimization and return result."""
@@ -51,6 +53,6 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
         result = await optimizer.optimize(config)
 
         # Persist optimization result
-        await OptimizationRepository.save(result)
+        await self._optimization_repo.save(result)
 
         return result

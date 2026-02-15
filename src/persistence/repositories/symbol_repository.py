@@ -11,10 +11,9 @@ class SymbolRepository(BaseRepository):
 
     _collection_name = COLLECTION_SYMBOLS
 
-    @staticmethod
-    async def upsert(symbol: str, exchange: str) -> None:
+    async def upsert(self, symbol: str, exchange: str) -> None:
         """Upsert symbol record."""
-        collection = SymbolRepository._collection()
+        collection = self._collection()
         symbol_doc = {
             "symbol": symbol,
             "exchange": exchange,
@@ -27,10 +26,9 @@ class SymbolRepository(BaseRepository):
             upsert=True,
         )
 
-    @staticmethod
-    async def find_all(exchange: str | None = None) -> list[dict]:
+    async def find_all(self, exchange: str | None = None) -> list[dict]:
         """Get all symbols, optionally filtered by exchange."""
-        collection = SymbolRepository._collection()
+        collection = self._collection()
 
         query = {}
         if exchange:
@@ -49,10 +47,9 @@ class SymbolRepository(BaseRepository):
             async for doc in cursor
         ]
 
-    @staticmethod
-    async def ensure_indexes() -> None:
+    async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange)."""
-        collection = SymbolRepository._collection()
+        collection = self._collection()
         await collection.create_index(
             [("symbol", 1), ("exchange", 1)],
             unique=True,

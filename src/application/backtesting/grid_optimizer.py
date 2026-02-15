@@ -211,9 +211,7 @@ class GridOptimizer:
 
             return await runner.run(backtest_config)
 
-    def _generate_combinations(
-        self, parameter_grid: dict[str, list[Any]]
-    ) -> list[dict[str, Any]]:
+    def _generate_combinations(self, parameter_grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
         """Generate all parameter combinations from grid."""
         if not parameter_grid:
             return [{}]

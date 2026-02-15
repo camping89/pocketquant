@@ -40,9 +40,7 @@ class BarBuilder:
 
     def __post_init__(self) -> None:
         if self.bar_end is None:
-            self.bar_end = self.bar_start + timedelta(
-                seconds=INTERVAL_SECONDS[self.interval]
-            )
+            self.bar_end = self.bar_start + timedelta(seconds=INTERVAL_SECONDS[self.interval])
 
     def add_tick(self, price: float, volume: float | None, timestamp: datetime) -> bool:
         """Add a tick to the bar. Returns False if tick is outside bar range."""

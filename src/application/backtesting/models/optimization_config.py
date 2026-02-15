@@ -76,8 +76,7 @@ class OptimizationConfig:
         ]
         if self.target_metric not in valid_metrics:
             raise ValueError(
-                f"Invalid target_metric: {self.target_metric}. "
-                f"Valid options: {valid_metrics}"
+                f"Invalid target_metric: {self.target_metric}. Valid options: {valid_metrics}"
             )
 
         if self.max_workers < 1:

@@ -120,9 +120,7 @@ class PaperBroker(IBroker):
     async def get_balance(self) -> AccountBalance:
         """Get current account balance."""
         async with self._lock:
-            unrealized = sum(
-                p.unrealized_pnl for p in self._positions.values() if not p.is_closed
-            )
+            unrealized = sum(p.unrealized_pnl for p in self._positions.values() if not p.is_closed)
             return AccountBalance(
                 total_equity=self._balance + unrealized,
                 available_balance=self._balance,

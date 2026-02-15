@@ -1,20 +1,16 @@
+"""PocketQuant application entry point."""
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.common.cache import Cache
-from src.common.database import Database
 from src.common.logging import get_logger, setup_logging
-from src.common.mediator import Mediator
-from src.common.messaging import EventBus
-from src.config import get_settings
-from src.infrastructure import JobScheduler
+from src.container import AppContainer, register_all_handlers
 from src.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
-    init_trading_subsystem,
     register_routes,
     start_background_jobs,
 )
@@ -24,40 +20,35 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    settings = get_settings()
+    container: AppContainer = app.state.container
+    settings = container.settings()
     logger.info("application_starting", environment=settings.environment)
 
-    mediator = Mediator()
-    event_bus = EventBus(max_history=100)
-    app.state.mediator = mediator
-    app.state.event_bus = event_bus
-
     try:
-        await Database.connect(settings)
-        await Cache.connect(settings)
-        await ensure_all_indexes()
-        start_background_jobs(settings)
-        await init_trading_subsystem(app, mediator, event_bus, settings)
+        # Initialize all Resource providers in dependency order:
+        # database → cache → job_scheduler → order_manager → position_tracker → strategy_engine
+        await container.init_resources()
+
+        # Post-init: indexes, handler registration, background jobs
+        await ensure_all_indexes(container)
+        register_all_handlers(container)
+        start_background_jobs(container)
     except Exception as e:
+        await container.shutdown_resources()
         handle_startup_failure(e)
 
     logger.info("application_started")
     yield
     logger.info("application_stopping")
-    await shutdown(app, settings)
 
-
-async def shutdown(app: FastAPI, settings) -> None:
-    """Graceful shutdown: stop engine, scheduler, and disconnect stores."""
-    await app.state.strategy_engine.stop()
-    if settings.enable_jobs:
-        JobScheduler.shutdown(wait=True)
-    await Cache.disconnect()
-    await Database.disconnect()
+    # Shutdown all Resources in reverse order (strategy_engine → ... → database)
+    await container.shutdown_resources()
     logger.info("application_stopped")
 
+
 def create_app() -> FastAPI:
-    settings = get_settings()
+    container = AppContainer()
+    settings = container.settings()
     setup_logging(settings)
 
     app = FastAPI(
@@ -70,8 +61,9 @@ def create_app() -> FastAPI:
         openapi_url=f"{settings.api_prefix}/openapi.json",
     )
 
+    app.state.container = container
     configure_middleware(app, settings)
-    register_routes(app, settings)
+    register_routes(app, container, settings)
 
     return app
 
@@ -82,10 +74,12 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    settings = get_settings()
+    from src.config import get_settings
+
+    _settings = get_settings()
     uvicorn.run(
         "src.main:app",
-        host=settings.api_host,
-        port=settings.api_port,
-        reload=settings.environment == "development",
+        host=_settings.api_host,
+        port=_settings.api_port,
+        reload=_settings.environment == "development",
     )

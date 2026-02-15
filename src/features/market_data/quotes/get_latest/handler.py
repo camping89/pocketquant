@@ -12,12 +12,15 @@ from src.persistence.schemas.quote_schema import Quote
 class GetLatestQuoteHandler(Handler[GetLatestQuoteQuery, QuoteResult | None]):
     """Handle getting the latest quote for a symbol."""
 
+    def __init__(self, cache: Cache):
+        self._cache = cache
+
     async def handle(self, request: GetLatestQuoteQuery) -> QuoteResult | None:
         cache_key = CACHE_KEY_QUOTE_LATEST.format(
             exchange=request.exchange.upper(), symbol=request.symbol.upper()
         )
 
-        data = await Cache.get(cache_key)
+        data = await self._cache.get(cache_key)
         if data:
             quote = Quote.from_cache_dict(data)
             return QuoteResult.from_quote(quote)

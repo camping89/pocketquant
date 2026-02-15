@@ -32,9 +32,7 @@ class RiskConfig(BaseModel):
     def validate_risk(self) -> RiskConfig:
         """Validate risk parameters."""
         if not 0 < self.risk_per_trade <= 0.10:
-            raise ValueError(
-                f"risk_per_trade must be 0-10%, got {self.risk_per_trade:.1%}"
-            )
+            raise ValueError(f"risk_per_trade must be 0-10%, got {self.risk_per_trade:.1%}")
         if self.max_positions < 1:
             raise ValueError("max_positions must be >= 1")
         if not 0 < self.max_exposure_percent <= 1.0:

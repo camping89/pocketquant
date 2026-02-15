@@ -106,9 +106,7 @@ class BacktestMetrics:
             "avg_win": self.avg_win,
             "avg_loss": self.avg_loss,
             "avg_trade_duration_seconds": (
-                self.avg_trade_duration.total_seconds()
-                if self.avg_trade_duration
-                else None
+                self.avg_trade_duration.total_seconds() if self.avg_trade_duration else None
             ),
             "total_commission": self.total_commission,
         }

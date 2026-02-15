@@ -19,13 +19,12 @@ class OHLCVRepository(BaseRepository):
 
     _collection_name = COLLECTION_OHLCV
 
-    @staticmethod
-    async def upsert_many(records: list[OHLCVCreate]) -> int:
+    async def upsert_many(self, records: list[OHLCVCreate]) -> int:
         """Bulk upsert OHLCV records. Returns count of upserted + modified."""
         if not records:
             return 0
 
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
         operations = []
 
         for record in records:
@@ -62,10 +61,9 @@ class OHLCVRepository(BaseRepository):
 
         return total
 
-    @staticmethod
-    async def upsert_bar(ohlcv: OHLCV) -> None:
+    async def upsert_bar(self, ohlcv: OHLCV) -> None:
         """Upsert a single OHLCV bar."""
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
         doc = ohlcv.to_mongo()
         created_at = doc.pop("created_at", None)
 
@@ -84,8 +82,8 @@ class OHLCVRepository(BaseRepository):
             upsert=True,
         )
 
-    @staticmethod
     async def find(
+        self,
         symbol: str,
         exchange: str,
         interval: Interval,
@@ -94,7 +92,7 @@ class OHLCVRepository(BaseRepository):
         limit: int = 5000,
     ) -> list[OHLCV]:
         """Query OHLCV bars with optional date range. Returns list sorted desc by datetime."""
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
 
         query: dict = {
             "symbol": symbol.upper(),
@@ -117,8 +115,8 @@ class OHLCVRepository(BaseRepository):
 
         return records
 
-    @staticmethod
     async def stream(
+        self,
         symbol: str,
         exchange: str,
         interval: Interval,
@@ -126,7 +124,7 @@ class OHLCVRepository(BaseRepository):
         end_datetime: datetime,
     ) -> AsyncIterator[OHLCV]:
         """Stream OHLCV bars for backtest. Returns async generator sorted asc by datetime."""
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
 
         query = {
             "symbol": symbol.upper(),
@@ -142,10 +140,9 @@ class OHLCVRepository(BaseRepository):
                 doc["interval"] = Interval(doc["interval"])
             yield OHLCV.from_mongo(doc)
 
-    @staticmethod
-    async def count(symbol: str, exchange: str, interval: Interval) -> int:
+    async def count(self, symbol: str, exchange: str, interval: Interval) -> int:
         """Count documents for given symbol/exchange/interval."""
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
         return await collection.count_documents(
             {
                 "symbol": symbol.upper(),
@@ -154,12 +151,9 @@ class OHLCVRepository(BaseRepository):
             }
         )
 
-    @staticmethod
-    async def get_latest(
-        symbol: str, exchange: str, interval: Interval
-    ) -> OHLCV | None:
+    async def get_latest(self, symbol: str, exchange: str, interval: Interval) -> OHLCV | None:
         """Get latest bar for symbol/exchange/interval."""
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
         doc = await collection.find_one(
             {
                 "symbol": symbol.upper(),
@@ -170,10 +164,9 @@ class OHLCVRepository(BaseRepository):
         )
         return OHLCV.from_mongo(doc) if doc else None
 
-    @staticmethod
-    async def ensure_indexes() -> None:
+    async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange, interval, datetime)."""
-        collection = OHLCVRepository._collection()
+        collection = self._collection()
         await collection.create_index(
             [
                 ("symbol", 1),

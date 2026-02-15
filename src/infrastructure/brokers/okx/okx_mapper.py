@@ -65,9 +65,7 @@ def map_order_to_okx_params(order: OrderAggregate, inst_suffix: str = "USDT") ->
     return params
 
 
-def map_okx_position_to_domain(
-    pos_data: dict, strategy_id: str
-) -> PositionAggregate | None:
+def map_okx_position_to_domain(pos_data: dict, strategy_id: str) -> PositionAggregate | None:
     """Map OKX position response to domain PositionAggregate.
 
     Args:

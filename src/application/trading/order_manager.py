@@ -226,8 +226,6 @@ class OrderManager:
             return order
         return await OrderRepository.get(order_id)
 
-    async def get_orders_by_strategy_async(
-        self, strategy_id: str
-    ) -> list[OrderAggregate]:
+    async def get_orders_by_strategy_async(self, strategy_id: str) -> list[OrderAggregate]:
         """Get all orders for a strategy from database."""
         return await OrderRepository.find_by_strategy(strategy_id)

@@ -83,9 +83,7 @@ class MACrossoverStrategy(IStrategy):
         prices = list(self._prices)[-period:]
         return sum(prices) / len(prices)
 
-    def _calculate_ema(
-        self, price: float, period: int, prev_ema: float | None
-    ) -> float:
+    def _calculate_ema(self, price: float, period: int, prev_ema: float | None) -> float:
         """Calculate Exponential Moving Average."""
         multiplier = 2 / (period + 1)
 
@@ -126,9 +124,7 @@ class MACrossoverStrategy(IStrategy):
 
         return None
 
-    def _create_signal(
-        self, direction: Direction, close: float, bar: dict, logic: str
-    ) -> Signal:
+    def _create_signal(self, direction: Direction, close: float, bar: dict, logic: str) -> Signal:
         """Create a trading signal."""
         # Calculate stop loss and take profit
         sl_distance = self.config.orders.stop_loss.distance_percent

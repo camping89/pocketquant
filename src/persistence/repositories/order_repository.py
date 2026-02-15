@@ -11,42 +11,35 @@ class OrderRepository(BaseRepository):
 
     _collection_name = COLLECTION_ORDERS
 
-    @staticmethod
-    async def save(order: OrderAggregate) -> None:
+    async def save(self, order: OrderAggregate) -> None:
         """Save or update order."""
         doc = OrderDocument.from_aggregate(order)
-        collection = OrderRepository._collection()
-        await collection.replace_one(
-            {"_id": order.id}, doc.model_dump(by_alias=True), upsert=True
-        )
+        collection = self._collection()
+        await collection.replace_one({"_id": order.id}, doc.model_dump(by_alias=True), upsert=True)
 
-    @staticmethod
-    async def get(order_id: str) -> OrderAggregate | None:
+    async def get(self, order_id: str) -> OrderAggregate | None:
         """Get order by ID."""
-        collection = OrderRepository._collection()
+        collection = self._collection()
         doc = await collection.find_one({"_id": order_id})
         if not doc:
             return None
         return OrderDocument(**doc).to_aggregate()
 
-    @staticmethod
-    async def find_by_strategy(strategy_id: str) -> list[OrderAggregate]:
+    async def find_by_strategy(self, strategy_id: str) -> list[OrderAggregate]:
         """Get all orders for a strategy."""
-        collection = OrderRepository._collection()
+        collection = self._collection()
         cursor = collection.find({"strategy_id": strategy_id})
         return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
 
-    @staticmethod
-    async def find_pending() -> list[OrderAggregate]:
+    async def find_pending(self) -> list[OrderAggregate]:
         """Get all pending orders."""
-        collection = OrderRepository._collection()
+        collection = self._collection()
         cursor = collection.find({"status": {"$in": ["pending", "submitted", "partially_filled"]}})
         return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
 
-    @staticmethod
-    async def ensure_indexes() -> None:
+    async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""
-        collection = OrderRepository._collection()
+        collection = self._collection()
         await collection.create_index("strategy_id")
         await collection.create_index("status")
         await collection.create_index([("symbol", 1), ("exchange", 1)])

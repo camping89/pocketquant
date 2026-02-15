@@ -10,8 +10,11 @@ from src.persistence.repositories.sync_status_repository import SyncStatusReposi
 class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
     """Handle getting all sync statuses."""
 
+    def __init__(self, sync_status_repository: SyncStatusRepository):
+        self._sync_status_repo = sync_status_repository
+
     async def handle(self, request: GetSyncStatusQuery) -> list[SyncStatusResult]:
-        statuses = await SyncStatusRepository.find_all()
+        statuses = await self._sync_status_repo.find_all()
 
         return [
             SyncStatusResult(

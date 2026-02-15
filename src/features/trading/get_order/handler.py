@@ -19,9 +19,7 @@ class GetOrderHandler(Handler[GetOrderQuery, dict]):
         order = self.order_manager.get_order(request.order_id)
 
         if not order:
-            raise HTTPException(
-                status_code=404, detail=f"Order not found: {request.order_id}"
-            )
+            raise HTTPException(status_code=404, detail=f"Order not found: {request.order_id}")
 
         return {
             "id": order.id,
