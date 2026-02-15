@@ -15,7 +15,7 @@ created: 2026-02-01
 
 4-week structured learning plan for senior C# developers (10+ years) to master Python through hands-on exercises using the PocketQuant production codebase.
 
-**Reference:** [Brainstorm Guide](../reports/brainstorm-260201-1223-python-learning-guide.md)
+**Reference:** (brainstorm guide archived)
 
 ## Learner Profile
 

@@ -1,7 +1,7 @@
 ---
 title: "Dependency Injection Container with dependency-injector"
 description: "Introduce proper IoC via dependency-injector library, replacing manual wiring in main.py"
-status: pending
+status: in-progress
 priority: P1
 effort: 10h
 branch: feat/strategy-init
@@ -34,9 +34,9 @@ Replace manual wiring in `src/main.py` + `src/main_extensions.py` with a single 
 
 | # | Phase | Status | Effort | File |
 |---|-------|--------|--------|------|
-| 1 | Install + container skeleton | pending | 1h | [phase-01](./phase-01-container-skeleton.md) |
-| 2 | Persistence layer instance-based DI | pending | 3h | [phase-02](./phase-02-persistence-layer-di.md) |
-| 3 | Infrastructure + domain services | pending | 2h | [phase-03](./phase-03-infrastructure-services.md) |
+| 1 | Install + container skeleton | completed | 1h | [phase-01](./phase-01-container-skeleton.md) |
+| 2 | Persistence layer instance-based DI | completed | 3h | [phase-02](./phase-02-persistence-layer-di.md) |
+| 3 | Infrastructure + domain services | completed | 2h | [phase-03](./phase-03-infrastructure-services.md) |
 | 4 | CQRS handlers + mediator wiring | pending | 2h | [phase-04](./phase-04-cqrs-handler-wiring.md) |
 | 5 | FastAPI integration + cleanup | pending | 2h | [phase-05](./phase-05-fastapi-integration-cleanup.md) |
 
