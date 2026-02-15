@@ -70,9 +70,7 @@ Two critical infrastructure gaps:
 
 ## Related Files
 
-- Research: `./research/researcher-01-okx-websocket-api.md`
-- Research: `./research/researcher-02-backtest-patterns.md`
-- Brainstorm: `plans/reports/brainstorm-260131-1953-okx-websocket-backtest-integration.md`
+- (research & brainstorm reports archived)
 
 ---
 
