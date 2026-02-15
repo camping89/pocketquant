@@ -10,8 +10,8 @@ from src.domain.strategy.value_objects import StrategyConfig
 logger = structlog.get_logger(__name__)
 
 
-class StrategyLoaderError(Exception):
-    """Raised when strategy loading fails."""
+class StrategyLoaderError(ValueError):
+    """Raised when strategy loading fails (invalid config, missing file, etc)."""
 
 
 class StrategyLoader:

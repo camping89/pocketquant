@@ -2,8 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
+from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
 from src.features.strategy.get_one.query import GetStrategyQuery
@@ -20,6 +21,6 @@ async def get_strategy(
     result = await mediator.send(GetStrategyQuery(strategy_id=strategy_id))
 
     if not result:
-        raise HTTPException(status_code=404, detail=f"Strategy not found: {strategy_id}")
+        raise NotFoundError(f"Strategy not found: {strategy_id}")
 
     return result

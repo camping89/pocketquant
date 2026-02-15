@@ -3,8 +3,22 @@
 from datetime import UTC, datetime
 
 from src.common.constants import COLLECTION_SYMBOLS
+from src.domain.symbol import SymbolAggregate
+from src.domain.symbol.value_objects import SymbolInfo
 from src.persistence.base_repository import BaseRepository
-from src.persistence.schemas.symbol_schema import Symbol, SymbolCreate
+from src.persistence.schemas.symbol_schema import SymbolCreate
+
+
+def _doc_to_aggregate(doc: dict) -> SymbolAggregate:
+    """Convert a MongoDB document to a domain SymbolAggregate."""
+    info = SymbolInfo(
+        code=doc.get("symbol", ""),
+        exchange=doc.get("exchange", ""),
+        name=doc.get("name"),
+        asset_type=doc.get("asset_type"),
+        is_active=doc.get("is_active", True),
+    )
+    return SymbolAggregate(info=info)
 
 
 class SymbolRepository(BaseRepository):
@@ -34,7 +48,7 @@ class SymbolRepository(BaseRepository):
             upsert=True,
         )
 
-    async def find_all(self, exchange: str | None = None) -> list[Symbol]:
+    async def find_all(self, exchange: str | None = None) -> list[SymbolAggregate]:
         """Get all symbols, optionally filtered by exchange."""
         collection = self._collection()
 
@@ -44,7 +58,7 @@ class SymbolRepository(BaseRepository):
 
         cursor = collection.find(query).sort("symbol", 1)
 
-        return [Symbol.from_mongo(doc) async for doc in cursor]
+        return [_doc_to_aggregate(doc) async for doc in cursor]
 
     async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange)."""

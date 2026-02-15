@@ -63,6 +63,28 @@ class SymbolAggregate(BaseModel):
                 is_active=True,
             )
 
+    # -- Convenience properties for flat access --
+
+    @property
+    def symbol(self) -> str:
+        return self.info.code if self.info else ""
+
+    @property
+    def exchange(self) -> str:
+        return self.info.exchange if self.info else ""
+
+    @property
+    def name(self) -> str | None:
+        return self.info.name if self.info else None
+
+    @property
+    def asset_type(self) -> str | None:
+        return self.info.asset_type if self.info else None
+
+    @property
+    def is_active(self) -> bool:
+        return self.info.is_active if self.info else True
+
     def get_uncommitted_events(self) -> list[DomainEvent]:
         return self._events.copy()
 

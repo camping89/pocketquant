@@ -2,8 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
+from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
 from src.features.backtesting.get_optimization.query import GetOptimizationQuery
@@ -24,6 +25,6 @@ async def get_optimization(
     result = await mediator.send(query)
 
     if not result:
-        raise HTTPException(status_code=404, detail=f"Optimization not found: {optimization_id}")
+        raise NotFoundError(f"Optimization not found: {optimization_id}")
 
     return result.to_dict()

@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
@@ -17,9 +17,5 @@ async def stop_strategy(
     mediator: Annotated[Mediator, Depends(get_mediator)],
 ) -> dict:
     """Stop a running strategy."""
-    try:
-        await mediator.send(StopStrategyCommand(strategy_id=strategy_id))
-        return {"strategy_id": strategy_id, "status": "stopped"}
-
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    await mediator.send(StopStrategyCommand(strategy_id=strategy_id))
+    return {"strategy_id": strategy_id, "status": "stopped"}

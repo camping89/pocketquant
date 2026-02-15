@@ -3,6 +3,7 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.common.exceptions import register_exception_handlers
 from src.common.health.checks import check_database, check_redis
 from src.common.idempotency import IdempotencyMiddleware
 from src.common.logging import get_logger
@@ -78,7 +79,9 @@ def handle_startup_failure(error: Exception) -> None:
 
 
 def configure_middleware(app: FastAPI, settings) -> None:
-    """Attach all middleware layers to the application."""
+    """Attach all middleware layers and global exception handlers."""
+    register_exception_handlers(app)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if settings.environment == "development" else [],

@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from src.common.mediator import Mediator
 from src.common.mediator.dependencies import get_mediator
@@ -22,19 +22,15 @@ async def get_symbol_sync_status(
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
     query = GetSymbolSyncStatusQuery(symbol=symbol, exchange=exchange, interval=interval.value)
+    status = await mediator.send(query)
 
-    try:
-        status = await mediator.send(query)
-
-        return {
-            "symbol": status.symbol,
-            "exchange": status.exchange,
-            "interval": status.interval,
-            "status": status.status,
-            "bar_count": status.bar_count,
-            "last_sync_at": status.last_sync_at,
-            "last_bar_at": status.last_bar_at,
-            "error_message": status.error_message,
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    return {
+        "symbol": status.symbol,
+        "exchange": status.exchange,
+        "interval": status.interval,
+        "status": status.status,
+        "bar_count": status.bar_count,
+        "last_sync_at": status.last_sync_at,
+        "last_bar_at": status.last_bar_at,
+        "error_message": status.error_message,
+    }

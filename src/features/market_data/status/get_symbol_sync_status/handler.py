@@ -1,5 +1,6 @@
 """Handler for get symbol sync status query."""
 
+from src.common.exceptions import NotFoundError
 from src.common.mediator import Handler, handles
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.status.dto import SyncStatusResult
@@ -22,7 +23,7 @@ class GetSymbolSyncStatusHandler(Handler[GetSymbolSyncStatusQuery, SyncStatusRes
         status = await self._sync_status_repo.find_one(request.symbol, request.exchange, interval)
 
         if not status:
-            raise ValueError(f"No sync status found for {request.symbol}:{request.exchange}")
+            raise NotFoundError(f"No sync status found for {request.symbol}:{request.exchange}")
 
         return SyncStatusResult(
             symbol=status.symbol,
