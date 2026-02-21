@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-16 | **Coverage:** 213 files, 14,393 LOC (182 Python files in src/) | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container
+**Last Updated:** 2026-02-21 | **Coverage:** 277 Python files, 13,641 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container | **Type Checker:** Pyright
 
 ## Clean Architecture Rules
 
@@ -726,7 +726,7 @@ ruff format .             # Auto-format code
 
 ### Type Checking (Pyright)
 
-We use **Pyright** (via Pylance in VSCode) instead of mypy:
+We use **Pyright** (via Pylance in VSCode), not mypy:
 - **3-5x faster** than mypy for large codebases
 - **Native VSCode integration** via Pylance extension
 - **Better type inference** for complex patterns
@@ -734,7 +734,7 @@ We use **Pyright** (via Pylance in VSCode) instead of mypy:
 
 ```bash
 pyright src/                 # Type check entire source
-pyright src/features/market_data/base/  # Check specific module
+pyright src/features/backtesting/  # Check specific module
 ```
 
 ## Performance Considerations

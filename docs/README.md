@@ -1,6 +1,6 @@
 # PocketQuant Documentation Index
 
-**Last Updated:** 2026-02-13 | **Codebase:** 14,393 LOC (213 files) | **Architecture:** Operation-First Vertical Slices | **Test Coverage:** 78%+
+**Last Updated:** 2026-02-21 | **Codebase:** 13,641 LOC (277 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+
 
 Welcome to PocketQuant documentation. Start below based on your role.
 
@@ -49,7 +49,7 @@ Quick start guide, API examples, setup instructions, development commands.
 
 ---
 
-### [codebase-summary.md](./codebase-summary.md) (420+ LOC)
+### [codebase-summary.md](./codebase-summary.md) (618 LOC)
 **Codebase reference for developers**
 
 Detailed module breakdown, layer responsibilities, data pipelines, patterns, and testing strategy.
@@ -57,50 +57,53 @@ Detailed module breakdown, layer responsibilities, data pipelines, patterns, and
 **Use when:** Understanding project structure, finding modules, implementing new features
 
 **Contains:**
-- Architecture overview (DDD + CQRS + Vertical Slice)
+- Architecture overview (DDD + CQRS + Clean Architecture + IoC Container)
 - Module breakdown by layer:
-  - **src/common** (700 LOC) - Mediator, EventBus, middleware, singletons
-  - **src/domain** (1,674 LOC) - Aggregates, value objects, domain events, services
-  - **src/infrastructure** (3,127 LOC) - Brokers, persistence, providers, scheduling
-  - **src/features** (6,561 LOC) - Feature slices (market_data, backtesting, strategy, trading, risk)
+  - **src/common** (993 LOC, 32 files) - Mediator, EventBus, middleware, singletons
+  - **src/domain** (2,364 LOC, 39 files) - Aggregates, value objects, domain events, services
+  - **src/application** (2,559 LOC, 21 files) - Orchestrators (StrategyEngine, BacktestRunner, etc.)
+  - **src/infrastructure** (2,883 LOC, 28 files) - Brokers, providers, scheduling
+  - **src/persistence** (1,214 LOC, 18 files) - MongoDB, Redis, 7 repositories
+  - **src/features** (3,016 LOC, 134 files) - Feature slices (market_data, backtesting, strategy, trading, risk)
 - CQRS flow and data pipelines
 - Key architectural patterns (value objects, broker abstraction, domain purity)
 - Testing strategy and configuration
 
 **Key Stats:**
-- Total: 14,393 LOC (213 files, 182 Python files in src/)
-- src/common: 700+ LOC (28 files)
-- src/domain: 1,674+ LOC (33 files)
-- src/infrastructure: 3,127+ LOC (32 files)
-- src/features: 6,561+ LOC (85 files)
-- tests/: 843 LOC (17 files)
-- docker/: 401 LOC (5 files)
+- Total: 13,641 LOC (277 files in src/)
+- src/common: 993 LOC (32 files)
+- src/domain: 2,364 LOC (39 files)
+- src/application: 2,559 LOC (21 files)
+- src/infrastructure: 2,883 LOC (28 files)
+- src/persistence: 1,214 LOC (18 files)
+- src/features: 3,016 LOC (134 files)
 
 ---
 
-### [system-architecture.md](./system-architecture.md) (482 LOC)
+### [system-architecture.md](./system-architecture.md) (784 LOC - Needs Trim)
 **Architecture & design documentation**
 
-Infrastructure patterns, data pipelines, concurrency model, deployment considerations.
+Clean architecture layers, CQRS patterns, data pipelines, concurrency model, DI container, deployment considerations.
 
 **Use when:** Understanding how things work, designing new features, troubleshooting
 
 **Contains:**
-- High-level architecture diagram
-- Infrastructure singletons explained
-  - Database lifecycle, API, connection pooling
-  - Cache design, serialization, TTL strategy
-  - Logging pipeline, output formats
-  - Job scheduler configuration
-- Three data pipelines
+- High-level 7-layer architecture diagram
+- Clean architecture layer breakdown (Domain, Application, Features, Infrastructure, Common)
+- Dependency Injection container (dependency-injector) with Singleton/Resource/Factory providers
+- CQRS request/response flow (commands and queries)
+- Handler 5-step pattern (Fetch → Validate → Persist → Invalidate → Publish)
+- Four data pipelines:
   1. Historical sync: REST → MongoDB
   2. Real-time quotes: WebSocket → Aggregator → MongoDB + Redis
-  3. Background jobs: APScheduler → per-symbol sync
-- Concurrency model (event loop, thread pool, locks)
-- Resource lifecycle (startup → shutdown)
-- Integration points (TradingView, MongoDB, Redis)
+  3. Strategy execution: BarCompleted → StrategyEngine → Broker → MongoDB
+  4. Backtesting: Historical bars → BacktestRunner → Metrics → MongoDB
+- Trading persistence: MongoDB collections, recovery on startup, state transitions
+- Broker abstraction layer (IBroker → PaperBroker/OKXBroker)
+- Middleware stack (Correlation ID, Rate Limit, Idempotency)
+- Event Bus pattern (FIFO, bounded history)
+- Concurrency model (event loop, thread pool, asyncio.Lock)
 - Error handling (transient, permanent, silent)
-- Production considerations (monitoring, scaling, security)
 - Performance characteristics (latency, throughput, memory)
 
 **Key Diagrams:**
@@ -110,7 +113,7 @@ Infrastructure patterns, data pipelines, concurrency model, deployment considera
 
 ---
 
-### [code-standards.md](./code-standards.md) (549 LOC)
+### [code-standards.md](./code-standards.md) (933 LOC - Needs Trim)
 **Development guidelines & best practices**
 
 Architecture patterns, code organization, testing, quality standards, performance.
@@ -118,12 +121,17 @@ Architecture patterns, code organization, testing, quality standards, performanc
 **Use when:** Writing code, code review, testing, debugging
 
 **Contains:**
-- 5 architecture patterns (with examples)
-  1. Vertical Slice Architecture
-  2. Singleton Infrastructure (class methods)
-  3. Repository Pattern (stateless)
-  4. Service Pattern (per-request vs singleton)
-  5. Provider Pattern (external APIs)
+- Clean architecture rules (Mandatory dependency direction)
+- 9 architecture patterns (with examples)
+  1. Vertical Slice Architecture (Operation-First)
+  2. Application Layer (Orchestrators & State Machines)
+  3. Dependency Injection Container (IoC Pattern)
+  4. Repository Pattern (Instance-Based Data Access)
+  5. Service Pattern (Business Logic)
+  6. Provider Pattern (External Integrations)
+  7. Event Handler Auto-Discovery Pattern (@event_handler)
+  8. CQRS Handler Pattern (Auto-Discovery with @handles)
+  9. Strategy Implementation Pattern (IStrategy interface)
 - Code organization
   - File naming (kebab-case)
   - Module size (<200 LOC target)
@@ -139,7 +147,7 @@ Architecture patterns, code organization, testing, quality standards, performanc
 - Performance tips (blocking I/O, bulk ops, caching, concurrency)
 - Configuration & secrets (.env usage)
 - Quality checklist (pre-commit validation)
-- Deprecated patterns (5 anti-patterns)
+- Deprecated patterns (15+ anti-patterns)
 
 **File Size Targets:**
 ```
@@ -355,6 +363,7 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
+| 2026-02-21 | Accuracy refresh: Verified all LOC counts (13,641 across 277 files), fixed Motor→PyMongo references, corrected justfile commands (just up/down, not start/stop), fixed mypy→pyright. Updated all doc files with accurate metrics. |
 | 2026-02-13 | Operation-first vertical slice restructure: All features reorganized with operations as primary unit. Updated architecture docs, code standards, feature structure. Each operation folder self-contained. |
 | 2026-02-12 | Updated stats: 213 files, 14,393 LOC. Documented @event_handler decorator & auto-discovery, UUID7 migration, updated_at field rename |
 | 2026-02-01 | AS-IS codebase documentation: 180 files, 12,420 LOC. Added detailed module breakdown, domain services, OKX reconnection handler, GridOptimizer details |
@@ -363,4 +372,4 @@ When you make code changes:
 
 ---
 
-**Last Updated:** 2026-02-13 | **Codebase:** 14,393 LOC (213 files) | **Architecture:** Operation-First Vertical Slices | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01
+**Last Updated:** 2026-02-21 | **Codebase:** 13,641 LOC (277 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01

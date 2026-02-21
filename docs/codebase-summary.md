@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-14 | **Codebase Size:** ~14,393 LOC | **Total Files:** 213 (182 Python files in src/) | **Architecture:** Clean Architecture + DDD + CQRS
+**Last Updated:** 2026-02-21 | **Codebase Size:** 13,641 LOC | **Total Files:** 277 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container
 
 ## Architecture Overview
 
@@ -25,13 +25,13 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 ## Module Breakdown
 
-### src/common (700+ LOC, 28 files)
+### src/common (993 LOC, 32 files)
 
 **Coordinators & Mediator:**
 - **Mediator:** CQRS dispatcher, routes commands/queries to handlers
   - `register(request_type, handler)` - Register handler
   - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
-- **EventBus:** In-memory async event bus (FIFO, 50 event max history)
+- **EventBus:** In-memory async event bus (FIFO, 100 event max history)
   - `subscribe(event_type, handler)` - Register event subscriber
   - `publish(event)` - Notify all subscribers sequentially
   - `publish_all(events)` - Batch publish multiple events
@@ -57,12 +57,13 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
   - Replaces UUID4 for better database performance (chronological sorting)
 
 **Infrastructure Singletons:**
-- **Database** - Async MongoDB singleton (Motor)
+- **Database** - Async MongoDB singleton (PyMongo native async API)
   - `get_collection(name)` - Access collection
-  - `connect(settings)` - Initialize connection pool
+  - `connect(settings)` - Initialize connection pool (5-50 connections)
   - `disconnect()` - Clean shutdown
-- **Cache** - Async Redis singleton
+- **Cache** - Async Redis singleton (redis-py async)
   - `get(key)`, `set(key, value, ttl=None)`, `delete(key)`
+  - `delete_pattern(pattern)` - Pattern-based deletion via SCAN
   - `get_or_set(key, func, ttl)` - Cache-aside pattern
 - **HealthCoordinator** - Parallel health checks (database, redis, jobs)
 - **JobScheduler** - APScheduler wrapper (AsyncIOExecutor)
@@ -72,7 +73,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - `get_correlation_id()` - Thread/async-safe context variable access
 - **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-### src/domain (1,674+ LOC, 33 files) — Pure Business Logic
+### src/domain (2,364 LOC, 39 files) — Pure Business Logic
 
 **Rules:** No I/O imports. No pymongo, redis, aiohttp. Immutable value objects. Domain events. Validation in __post_init__.
 
@@ -120,7 +121,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
   - `calculate_size(account_balance, signal)` - Returns quantity
   - Supports: PERCENT_RISK, KELLY, FIXED
 
-### src/application (2,500+ LOC, 18 files) — Orchestrators
+### src/application (2,559 LOC, 21 files) — Orchestrators
 
 Stateful services that coordinate domain logic + infrastructure:
 - **BacktestRunner:** Execute strategy on historical bars
@@ -134,7 +135,7 @@ Stateful services that coordinate domain logic + infrastructure:
 
 No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 
-### src/infrastructure (3,000+ LOC, 25 files) — External I/O & Brokers
+### src/infrastructure (2,883 LOC, 28 files) — External I/O & Brokers
 
 **Brokers (Pluggable Execution):**
 - **IBroker** - Abstract contract
@@ -192,17 +193,19 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
   - HMAC-SHA256 signing
   - Resilient delivery with retry
 
-### src/persistence (700+ LOC, 18 files) — Data Access Layer
+### src/persistence (1,214 LOC, 18 files) — Data Access Layer
 
-**Database Connections (Singletons):**
-- **MongoDBConnection** - Async MongoDB wrapper
-  - PyMongo native async API
-  - Connection pooling (5-50 connections)
+**Database Connections (Instance-Based via DI):**
+- **Database** - Async MongoDB wrapper
+  - PyMongo native async API (NOT Motor)
+  - Connection pooling (5-50 connections, configurable)
   - Single `get_collection()` entry point
-- **RedisConnection** - Async Redis client
+  - Injected via DI container
+- **Cache** - Async Redis client
   - JSON serialization with custom date handling
   - TTL support (60s quotes, 300s bars, 86400s idempotency)
   - Pattern-based deletion via SCAN
+  - Injected via DI container
 
 **BaseRepository Mixin:**
 - `_collection(name)` - Get MongoDB collection safely
@@ -243,7 +246,7 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 - symbol_schema.py - Symbol metadata (code, exchange, name, description)
 - quote_schema.py - Quote structure (symbol, exchange, price, volume, timestamp)
 
-### src/features (6,561+ LOC, 85 files) — CQRS Operation Routes
+### src/features (3,016 LOC, 134 files) — CQRS Operation Routes
 
 **Vertical Slice Architecture (Operation-First Pattern):**
 Each feature is self-contained. Operations are the primary organizational unit. Routes are thin (parse request, call handler, return response). All business logic delegated to handlers.
@@ -251,7 +254,7 @@ Each feature is self-contained. Operations are the primary organizational unit. 
 **Dependency:** Features depend on Application + Domain + Infrastructure.
 **No reverse dependencies:** Domain never imports from Features.
 
-**backtesting/ (2,259 LOC, 27 files)**
+**backtesting/ (626 LOC, 22 files)**
 
 Structure:
 ```
@@ -290,7 +293,7 @@ Routes:
 - GET `/api/v1/backtest/optimization/{id}` - Optimization results
 - GET `/api/v1/backtest/strategy/{id}` - Strategy results
 
-**market_data/ (2,116 LOC, 31 files)**
+**market_data/ (1,534 LOC, 68 files)**
 
 Structure:
 ```
@@ -351,7 +354,7 @@ Routes:
 - POST `/api/v1/quotes/start` - Start WebSocket
 - POST `/api/v1/quotes/stop` - Stop WebSocket
 
-**strategy/ (1,236 LOC, 18 files)**
+**strategy/ (416 LOC, 22 files)**
 
 Structure:
 ```
@@ -388,7 +391,7 @@ Routes:
 - POST `/api/v1/strategies/start` - Start strategy
 - POST `/api/v1/strategies/stop` - Stop strategy
 
-**trading/ (782 LOC, 12 files)**
+**trading/ (281 LOC, 18 files)**
 
 Structure:
 ```
@@ -419,7 +422,7 @@ Routes:
 - GET `/api/v1/orders/{order_id}` - Get order
 - GET `/api/v1/positions` - List positions
 
-**risk/ (163 LOC, 5 files)**
+**risk/ (158 LOC, 3 files)**
 
 Structure:
 ```
@@ -566,13 +569,16 @@ All settings via environment variables (`.env` file):
 
 - **fastapi** - Web framework
 - **pydantic** - Settings + validation
-- **pymongo** - MongoDB driver (native async API)
-- **redis** - Async Redis client
+- **pymongo** - MongoDB driver (native async API, NOT Motor)
+- **redis** - Async Redis client (redis-py)
 - **structlog** - Structured logging
-- **apscheduler** - Job scheduling
+- **apscheduler** - Job scheduling (APScheduler)
+- **dependency-injector** - IoC container
 - **tvdatafeed** - TradingView data source
 - **aiohttp** - Async HTTP + WebSocket
 - **pytest** - Testing framework
+- **ruff** - Linting & formatting
+- **pyright** - Type checking
 
 ## Entry Points
 
@@ -581,29 +587,26 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
 
-## Recent Changes (2026-02-14)
+## Recent Changes (2026-02-21)
 
-**Persistence Layer Refactor:**
-- Promoted `src/infrastructure/persistence/` → `src/persistence/` (top-level package)
-- Created `BaseRepository` mixin: `_collection(name)` provides safe collection access
-- 7 repositories now centralized: OHLCVRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
-- All MongoDB schemas consolidated in `src/persistence/schemas/`
-- Zero `Database.get_collection()` calls outside persistence layer
-- All data access routed through repository methods for consistency & validation
-- Updated docs: system-architecture.md, codebase-summary.md, code-standards.md
+**Documentation Accuracy Refresh:**
+- Verified all LOC counts (13,641 across 277 files, not 14,393 across 213)
+- Fixed Motor → PyMongo references (using native async API)
+- Corrected EventBus max_history (100 events, not 50)
+- Fixed justfile commands: `just up/down` (not start/stop/logs)
+- Updated type checker reference: pyright (not mypy)
+- Updated all docs: README.md, code-standards.md, codebase-summary.md, system-architecture.md, project-overview-pdr.md
+- Added Application layer to architecture breakdown
+- Added DI container documentation
+- Updated feature LOC breakdown with accurate file counts
 
-**Clean Architecture Refactor Complete (2026-02-14):**
-- Moved core business logic out of features/ into src/domain/
-- Created src/application/ with orchestrators (StrategyEngine, BacktestRunner, BarManager, OrderManager, PositionTracker)
-- Created src/infrastructure/ with brokers, providers, scheduling
-- Features/ now thin CQRS operation layers (routes, commands, queries, handlers only)
-- **Dependency direction:** Features → Application → Domain ← Infrastructure + Persistence
-- **Domain purity enforced:** AST checks prevent I/O imports in domain/
-- **Auto-discovery:** @handles decorator for CQRS handlers, @event_handler for domain events
-- All 5 feature slices now cleanly separated: no circular dependencies
-- Example: backtesting/run/handler.py calls Application-layer BacktestRunner, not business logic
+**Previous Changes (2026-02-14):**
+- Clean Architecture Refactor Complete: Domain → Application → Features, Infrastructure ← Domain
+- Persistence Layer Refactor: `src/persistence/` top-level package with 7 repositories
+- Domain purity enforced via AST checks
+- Auto-discovery: @handles + @event_handler decorators
 
-**Previous Changes (2026-02-12):**
+**Earlier Changes (2026-02-12):**
 - Event handler auto-discovery: `@event_handler` decorator + `EventRegistry`
 - UUID7 migration: All aggregates use time-ordered UUIDs
 - QuoteAggregate field rename: `last_update` → `updated_at`

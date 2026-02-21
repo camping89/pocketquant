@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-02-16 | **Version:** 3.0 | **Status:** DI Container Complete | **Pattern:** DDD + CQRS + Clean Architecture + IoC Container
+**Last Updated:** 2026-02-21 | **Version:** 3.1 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + IoC Container
 
 ## High-Level Architecture
 
@@ -647,7 +647,7 @@ event_bus.subscribe(BarSyncedEvent, on_bar_synced)
 **Characteristics:**
 - In-memory (no persistence)
 - FIFO delivery order
-- Bounded history (50 events)
+- Bounded history (100 events, max_history)
 - Sync + async handlers supported
 
 ## Data Pipelines
@@ -859,9 +859,9 @@ All service wiring managed by `AppContainer` in `src/container.py` using [depend
 | `Resource` | Async init/shutdown via generator | DB, Cache, Scheduler, stateful services |
 | `Factory` | New instance per resolution | CQRS handlers (isolation) |
 
-**Handler registration:** `register_all_handlers(container)` in `src/container.py` replaces per-feature `register.py` files. Container is single source of truth.
+**Handler registration:** `register_all_handlers(container)` in `src/container.py` wires all handlers to Mediator. Container is single source of truth.
 
-**FastAPI integration:** `app.state.container` is the only `app.state` attribute. Routes resolve dependencies via `Depends(get_mediator)` which reads from `request.app.state.container.mediator()`.
+**FastAPI integration:** `app.state.container` is the only `app.state` attribute. Routes resolve dependencies via DI, handlers accessed via Mediator.
 
 ## Resource Lifecycle
 
@@ -911,10 +911,10 @@ All service wiring managed by `AppContainer` in `src/container.py` using [depend
 
 ### MongoDB
 
-- **Driver:** PyMongo (native async API)
+- **Driver:** PyMongo (native async API - NOT Motor)
 - **Pool:** 5-50 connections (configurable)
 - **Operations:** Bulk upserts, aggregation pipelines
-- **Collections:** ohlcv, sync_status, symbols
+- **Collections:** ohlcv, sync_status, symbols, orders, positions, backtests, optimizations
 
 ### Redis
 

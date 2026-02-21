@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-02-13 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** Operation-First Vertical Slices
+**Last Updated:** 2026-02-21 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** DDD + CQRS + Clean Architecture
 
 ## Prerequisites
 
@@ -38,8 +38,11 @@ cp .env.example .env
 # Install dependencies
 just install
 
-# Start services
-just start
+# Start infrastructure (MongoDB 27018 + Redis 6379)
+just up
+
+# Run app (separate terminal)
+uvicorn src.main:app --host 0.0.0.0 --port 8765
 ```
 
 ## Running as Service (systemd)
@@ -55,7 +58,7 @@ After=network.target docker.service
 Type=simple
 User=pocketquant
 WorkingDirectory=/opt/pocketquant
-ExecStart=/opt/pocketquant/.venv/bin/python -m src.main
+ExecStart=/opt/pocketquant/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8765
 Restart=always
 RestartSec=5
 
