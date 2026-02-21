@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     app_name: str
     app_version: str
     environment: Literal["development", "staging", "production"]
-    debug: bool
 
     api_host: str
     api_port: int
