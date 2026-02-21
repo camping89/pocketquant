@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -128,13 +127,3 @@ class Cache:
         value = await factory()
         await self.set(key, value, ttl)
         return value
-
-
-@asynccontextmanager
-async def get_cache(settings: Settings) -> AsyncGenerator[Cache]:
-    cache = Cache()
-    try:
-        await cache.connect(settings)
-        yield cache
-    finally:
-        await cache.disconnect()

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.asynchronous.mongo_client import AsyncMongoClient
 
@@ -68,18 +65,3 @@ class Database:
 
     def get_collection(self, name: str):
         return self.get_database()[name]
-
-
-@asynccontextmanager
-async def get_database(settings: Settings) -> AsyncGenerator[AsyncDatabase]:
-    """Standalone context manager for one-shot usage (scripts, migrations, tests).
-
-    For app runtime, use the DI container (container.py) which manages
-    Database lifecycle across the entire application lifespan.
-    """
-    db = Database()
-    try:
-        await db.connect(settings)
-        yield db.get_database()
-    finally:
-        await db.disconnect()
