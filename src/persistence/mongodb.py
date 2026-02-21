@@ -15,7 +15,20 @@ logger = get_logger(__name__)
 
 
 class Database:
-    """MongoDB connection manager. Instance-based, managed by DI container."""
+    """MongoDB connection manager. Instance-based, managed by DI container.
+
+    Architecture notes:
+    - _client: server-level connection (manages connection pool, auth, network).
+      Kept as private prop for disconnect() — without it we can't call .close()
+      and connections would leak. Although _database.client exists, accessing
+      parent from child is fragile and violates Law of Demeter.
+    - _database: reference to one specific database on the server.
+      Repositories receive this class and call get_collection() — they never
+      see the client, following Principle of Least Privilege.
+
+    Hierarchy: client (server) → database (one DB) → collection (one table)
+    Only collections are used for CRUD; client/database handle lifecycle.
+    """
 
     def __init__(self) -> None:
         self._client: AsyncMongoClient | None = None
@@ -59,6 +72,11 @@ class Database:
 
 @asynccontextmanager
 async def get_database(settings: Settings) -> AsyncGenerator[AsyncDatabase]:
+    """Standalone context manager for one-shot usage (scripts, migrations, tests).
+
+    For app runtime, use the DI container (container.py) which manages
+    Database lifecycle across the entire application lifespan.
+    """
     db = Database()
     try:
         await db.connect(settings)
