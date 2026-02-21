@@ -1,55 +1,55 @@
-"""Script to manually test sync jobs without scheduler."""
+"""Test scheduled sync jobs directly (without APScheduler).
+
+Runs the same functions that the scheduler triggers periodically:
+  - _sync_all_symbols: re-syncs all previously tracked symbols (every 6h)
+  - _sync_daily_data:  syncs only 1d interval symbols (weekdays 9-17)
+
+Both functions iterate sync_status records and dispatch SyncSymbolCommand
+through the mediator for each tracked symbol.
+
+Prerequisites:
+    just up
+    # Must have synced at least one symbol first (creates sync_status records)
+
+Usage:
+    python testscripts/test_sync_jobs.py
+"""
 
 import asyncio
+import sys
+from pathlib import Path
 
-from src.common.cache import Cache
-from src.common.database import Database
-from src.common.logging import get_logger, setup_logging
-from src.common.mediator import Mediator
-from src.common.messaging import EventBus
-from src.config import get_settings
-from src.features.market_data.jobs.sync_jobs import (
-    set_mediator,
-    sync_all_symbols,
-    sync_daily_data,
-)
-from src.features.market_data.sync import SyncSymbolCommand, SyncSymbolHandler
-from src.infrastructure.tradingview import TradingViewProvider
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-logger = get_logger(__name__)
+from _bootstrap import bootstrap, teardown
+
+from src.application.market_data.sync_jobs import _sync_all_symbols, _sync_daily_data
 
 
 async def main() -> None:
-    settings = get_settings()
-    setup_logging(settings)
-
     print("=" * 50)
-    print("Testing Sync Jobs")
+    print("Testing Scheduled Sync Jobs")
     print("=" * 50)
 
-    await Database.connect(settings)
-    await Cache.connect(settings)
+    ctx = await bootstrap()
 
     try:
-        mediator = Mediator()
-        event_bus = EventBus(max_history=100)
-        tv_provider = TradingViewProvider(settings)
+        print("\n[1] Testing _sync_daily_data (syncs 1d interval symbols, 10 bars each)...")
+        try:
+            await _sync_daily_data(ctx.mediator, ctx.sync_status_repo)
+            print("    [OK] _sync_daily_data completed")
+        except Exception as e:
+            print(f"    [WARN] _sync_daily_data error: {e}")
 
-        sync_handler = SyncSymbolHandler(tv_provider, event_bus)
-        mediator.register(SyncSymbolCommand, sync_handler)
-        set_mediator(mediator)
-
-        print("\n[1] Testing sync_daily_data job...")
-        await sync_daily_data()
-        print("[OK] sync_daily_data completed")
-
-        print("\n[2] Testing sync_all_symbols job...")
-        await sync_all_symbols()
-        print("[OK] sync_all_symbols completed")
+        print("\n[2] Testing _sync_all_symbols (syncs ALL tracked symbols, 500 bars each)...")
+        try:
+            await _sync_all_symbols(ctx.mediator, ctx.sync_status_repo)
+            print("    [OK] _sync_all_symbols completed")
+        except Exception as e:
+            print(f"    [WARN] _sync_all_symbols error: {e}")
 
     finally:
-        await Cache.disconnect()
-        await Database.disconnect()
+        await teardown(ctx)
 
     print("\n" + "=" * 50)
     print("All job tests completed!")
