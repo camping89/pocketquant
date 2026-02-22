@@ -1,9 +1,13 @@
-"""Stream real-time quotes from TradingView.
+"""Manual WebSocket quote stream — observe raw TradingView ticks in terminal.
+
+The REST API (POST /quotes/start) only starts the feed service internally;
+this script holds a persistent connection so you can visually verify
+real-time data flow without Swagger/Postman.
 
 Usage:
-    python scripts/stream_quotes.py                     # Default: BTCUSD
-    python scripts/stream_quotes.py AAPL NASDAQ        # Single symbol
-    python scripts/stream_quotes.py BTCUSD,ETHUSD CRYPTO  # Multiple symbols
+    python testscripts/run_stream_quotes.py                      # Default: BTCUSD
+    python testscripts/run_stream_quotes.py AAPL NASDAQ          # Single symbol
+    python testscripts/run_stream_quotes.py BTCUSD,ETHUSD CRYPTO # Multiple symbols
 """
 
 import asyncio
