@@ -1,15 +1,19 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import MongoDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve .env relative to project root (parent of src/)
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
     """Application settings. All values must be provided via .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

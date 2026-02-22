@@ -15,21 +15,25 @@ class Database:
     """MongoDB connection manager. Instance-based, managed by DI container.
 
     Architecture notes:
-    - _client: server-level connection (manages connection pool, auth, network).
+    - __client: server-level connection (manages connection pool, auth, network).
       Kept as private prop for disconnect() — without it we can't call .close()
-      and connections would leak. Although _database.client exists, accessing
+      and connections would leak. Although __database.client exists, accessing
       parent from child is fragile and violates Law of Demeter.
-    - _database: reference to one specific database on the server.
+    - __database: reference to one specific database on the server.
       Repositories receive this class and call get_collection() — they never
       see the client, following Principle of Least Privilege.
+
+    Uses __ (name mangling) to enforce encapsulation — prevents external code
+    from accessing internals. Only public methods (get_database, get_collection)
+    should be used by consumers.
 
     Hierarchy: client (server) → database (one DB) → collection (one table)
     Only collections are used for CRUD; client/database handle lifecycle.
     """
 
     def __init__(self) -> None:
-        self._client: AsyncMongoClient | None = None
-        self._database: AsyncDatabase | None = None
+        self.__client: AsyncMongoClient | None = None
+        self.__database: AsyncDatabase | None = None
 
     async def connect(self, settings: Settings) -> None:
         logger.info("mongodb.connecting", database=settings.mongodb_database)
@@ -43,8 +47,8 @@ class Database:
 
         try:
             await client.server_info()
-            self._client = client
-            self._database = client[settings.mongodb_database]
+            self.__client = client
+            self.__database = client[settings.mongodb_database]
             logger.info("mongodb.connected", database=settings.mongodb_database)
         except Exception as e:
             logger.error("mongodb.connection_failed", error=str(e))
@@ -52,16 +56,16 @@ class Database:
             raise
 
     async def disconnect(self) -> None:
-        if self._client is not None:
-            await self._client.close()
-            self._client = None
-            self._database = None
+        if self.__client is not None:
+            await self.__client.close()
+            self.__client = None
+            self.__database = None
             logger.info("mongodb.disconnected")
 
     def get_database(self) -> AsyncDatabase:
-        if self._database is None:
+        if self.__database is None:
             raise RuntimeError("Database not connected. Call Database.connect() first.")
-        return self._database
+        return self.__database
 
     def get_collection(self, name: str):
         return self.get_database()[name]

@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-02-21 | **Status:** v1.0 Complete | **Codebase:** 277 Python files, 13,641 LOC in src/ | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-02-22 | **Status:** v1.0 Complete | **Codebase:** 277 Python files, 13,637 LOC in src/ | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -484,7 +484,11 @@ Follow conventional commits:
 
 **Development:**
 ```bash
-just start  # Start all services + app
+# 1. Start infrastructure (MongoDB + Redis)
+just up
+
+# 2. Run app (F5 in VS Code for debugging, or terminal)
+uvicorn src.main:app --reload
 ```
 
 **Production:**

@@ -529,126 +529,32 @@ Ready to process market events and recover fills
 
 ## Broker Abstraction Layer
 
-### IBroker Interface
+**IBroker Interface:** `submit_order()`, `cancel_order()`, `get_positions()`, `get_orders()`
 
-All brokers implement consistent contract:
-
-```python
-class IBroker(ABC):
-    async def submit_order(self, order: Order) -> ExecutionResult
-    async def cancel_order(self, order_id: str) -> bool
-    async def get_positions(self) -> List[Position]
-    async def get_orders(self) -> List[Order]
-```
-
-### PaperBroker (Simulation)
-
-In-memory execution without real trades:
-- Configurable slippage (% or fixed points)
-- Configurable fill delay (milliseconds)
-- Position tracking with entry/exit prices
-- P&L calculations
-- No external dependencies
-
-**Use case:** Backtesting, paper trading, development
-
-### OKXBroker (Live Trading)
-
-Live execution via OKX Exchange:
-- HMAC-SHA256 authentication
-- WebSocket connection to OKX
-- Exponential backoff reconnection (1s → 30s max, 10-failure circuit breaker)
-- State reconciliation on reconnect
-- Order submission → fill handling → position update
-- Real-time market data from OKX
-
-**Configuration:**
-- OKX_API_KEY: API key
-- OKX_SECRET_KEY: Secret key
-- OKX_PASSPHRASE: API passphrase
-
-**Reconnection Strategy:**
-```
-Initial failure → 1s delay
-2nd failure → 2s delay
-4th failure → 4s delay
-...
-Max 30s delay
-10 failures → 5-min pause (circuit breaker)
-```
+| Broker | Type | Features |
+|--------|------|----------|
+| **PaperBroker** | Simulation | Slippage, fill delays, P&L calc, no dependencies |
+| **OKXBroker** | Live | HMAC auth, exponential backoff reconnection, circuit breaker (10 failures → 5m pause) |
 
 ## Middleware Stack
 
-**Execution Order:** Request flows through middleware in registration order.
+**Order:** CorrelationId → RateLimit → Idempotency → Route Handler
 
-```
-Request
-  ↓
-CorrelationIdMiddleware
-  - Generate/extract correlation_id
-  - Set in ContextVar for logging
-  ↓
-RateLimitMiddleware
-  - Check token bucket (200 req/10s per IP)
-  - Reject if exceeded (429 Too Many Requests)
-  ↓
-IdempotencyMiddleware
-  - Check idempotency_key header (POST only)
-  - Return cached response if duplicate
-  ↓
-Route Handler
-  - Execute business logic via Mediator
-  ↓
-Response
-```
-
-**Configuration:**
-```python
-# main.py
-app.add_middleware(CorrelationIdMiddleware)
-app.add_middleware(RateLimitMiddleware, capacity=200, refill_rate=20)
-app.add_middleware(IdempotencyMiddleware, ttl_seconds=86400)
-```
+| Middleware | Purpose |
+|------------|---------|
+| CorrelationId | Inject request ID for tracing |
+| RateLimit | Token bucket: 200 req/10s per IP |
+| Idempotency | Cache POST responses (24h TTL) |
 
 ## Event Bus Pattern
 
-**Purpose:** Decouple features via domain events.
-
-**Flow:**
-```
-Handler publishes event
-  ↓
-EventBus.publish(event)
-  ↓
-For each subscriber:
-  - Call handler(event)
-  - Await if coroutine
-  ↓
-Store in history (deque, max 50)
-```
-
-**Example:**
-```python
-# In SyncSymbolHandler
-await self.event_bus.publish(BarSyncedEvent(
-    symbol=symbol,
-    exchange=exchange,
-    bars_count=len(bars)
-))
-
-# In event_handlers.py
-async def on_bar_synced(event: BarSyncedEvent) -> None:
-    logger.info("bars_synced", symbol=event.symbol, count=event.bars_count)
-
-# Register subscriber
-event_bus.subscribe(BarSyncedEvent, on_bar_synced)
-```
+**Purpose:** Decouple features via domain events (in-memory, FIFO, 100 event max history).
 
 **Characteristics:**
-- In-memory (no persistence)
-- FIFO delivery order
-- Bounded history (100 events, max_history)
+- Handlers publish → EventBus.publish(event) → subscribers notified sequentially
+- Bounded history (100 events in container.py, configurable)
 - Sync + async handlers supported
+- No persistence (events lost on restart)
 
 ## Data Pipelines
 
@@ -810,138 +716,58 @@ await Mediator.send(command)
 
 ### Thread Pool (Blocking I/O)
 
-TradingView REST API (tvdatafeed) is blocking:
-
-```python
-# TradingViewProvider
-executor = ThreadPoolExecutor(max_workers=4)
-bars = await loop.run_in_executor(executor, client.get_hist, ...)
-```
-
-**Why:**
-- tvdatafeed has no async support
-- Thread pool prevents event loop blocking
-- Max 4 workers = limit concurrent blocking calls
+TradingView REST API (tvdatafeed) is blocking. ThreadPoolExecutor (max 4 workers) prevents event loop blocking.
 
 ### Asyncio.Lock (Quote Aggregation)
 
-BarManager uses lock for thread-safe bar building:
-
-```python
-async with self._lock:
-    bar_builder.update_ohlc(tick)
-    if bar_complete:
-        await self._save_bar(bar_builder.build())
-```
-
-**Why:**
-- Multiple ticks may arrive while saving bar
-- Lock ensures atomic read-modify-write
-- No race conditions or data corruption
+BarManager uses lock for thread-safe bar building to prevent race conditions during atomic OHLC updates.
 
 ## Dependency Injection (IoC Container)
 
-All service wiring managed by `AppContainer` in `src/container.py` using [dependency-injector](https://python-dependency-injector.ets-labs.org/).
-
-**Container owns:**
-- **Configuration:** `Settings` (Singleton)
-- **Persistence:** `Database`, `Cache` (Resource — async init/shutdown)
-- **Repositories:** 7 repositories (Singleton, `Database` injected via constructor)
-- **Messaging:** `EventBus`, `Mediator` (Singleton)
-- **Infrastructure:** `JobScheduler` (Resource), `TradingViewProvider`, `BrokerFactory`, `HealthCoordinator` (Singleton)
-- **Application services:** `BarManager`, `QuoteService` (Singleton); `OrderManager`, `PositionTracker`, `StrategyEngine` (Resource — async init/shutdown)
-- **CQRS handlers:** ~27 handlers (Factory — transient, new instance per resolution)
+AppContainer in `src/container.py` manages all service wiring using dependency-injector.
 
 **Provider types:**
-| Type | Lifecycle | Use case |
+| Type | Lifecycle | Examples |
 |------|-----------|----------|
-| `Singleton` | One shared instance | Repos, messaging, stateless services |
-| `Resource` | Async init/shutdown via generator | DB, Cache, Scheduler, stateful services |
-| `Factory` | New instance per resolution | CQRS handlers (isolation) |
+| Singleton | One shared instance | Repos, messaging, stateless services |
+| Resource | Async init/shutdown | DB, Cache, Scheduler, stateful services |
+| Factory | New instance per resolution | 27 CQRS handlers (isolation) |
 
-**Handler registration:** `register_all_handlers(container)` in `src/container.py` wires all handlers to Mediator. Container is single source of truth.
-
-**FastAPI integration:** `app.state.container` is the only `app.state` attribute. Routes resolve dependencies via DI, handlers accessed via Mediator.
+**Handler registration:** `register_all_handlers()` wires handlers to Mediator. Container is single source of truth.
 
 ## Resource Lifecycle
 
 ### Startup Sequence
 
-1. `AppContainer()` created → `get_settings()` + `setup_logging()`
-2. `container.init_resources()` — initializes in dependency order:
-   `Database` → `Cache` → `JobScheduler` → `OrderManager` → `PositionTracker` → `StrategyEngine`
-3. `ensure_all_indexes(container)` — MongoDB indexes for all repositories
-4. `register_all_handlers(container)` — wire ~27 CQRS handlers to Mediator
-5. `start_background_jobs(container)` — register APScheduler jobs
-6. `yield` → serve requests
+1. `AppContainer()` created, settings + logging initialized
+2. `container.init_resources()` initializes in dependency order: Database → Cache → JobScheduler → services
+3. `ensure_all_indexes()` creates MongoDB indexes
+4. `register_all_handlers()` wires 27 handlers to Mediator
+5. `start_background_jobs()` registers APScheduler jobs
+6. Server ready to accept requests
 
 ### Graceful Shutdown
 
-1. Stop accepting new requests (Uvicorn)
-2. `container.shutdown_resources()` — shuts down in reverse order:
-   `StrategyEngine.stop()` → `PositionTracker` → `OrderManager` → `JobScheduler.shutdown(wait=True)` → `Cache.disconnect()` → `Database.disconnect()`
+1. Stop accepting new requests
+2. `container.shutdown_resources()` shuts down in reverse order (waits for background jobs)
 
 ## Integration Points
 
-### TradingView REST API
-
-- **Library:** tvdatafeed
-- **Auth:** Optional username/password
-- **Max bars:** 5000 per request
-- **Isolation:** ThreadPoolExecutor (max 4 workers)
-- **Timeout:** Per-request timeout protection
-
-### TradingView WebSocket
-
-- **Protocol:** Binary frames (~m~{length}~m~{json})
-- **Endpoint:** wss://data.tradingview.com/socket.io/websocket
-- **Reconnection:** Exponential backoff (1s → 60s max)
-- **Re-subscription:** Automatic after reconnect
-- **Heartbeat:** Ping/pong handling
-
-### OKX WebSocket
-
-- **Protocol:** JSON messages (native WebSocket)
-- **Endpoint:** wss://ws.okx.com:8443/ws/v5/public (public), /private (authenticated)
-- **Authentication:** HMAC-SHA256 signature (timestamp + body)
-- **Reconnection:** Exponential backoff (1s → 30s max, 10-failure circuit breaker)
-- **Heartbeat:** Server pings every 30s, client must pong
-- **Subscriptions:** Position updates, order updates, trade fills
-- **State Sync:** On reconnect, fetch current orders/positions from REST API
-
-### MongoDB
-
-- **Driver:** PyMongo (native async API - NOT Motor)
-- **Pool:** 5-50 connections (configurable)
-- **Operations:** Bulk upserts, aggregation pipelines
-- **Collections:** ohlcv, sync_status, symbols, orders, positions, backtests, optimizations
-
-### Redis
-
-- **Driver:** redis-py (async)
-- **Serialization:** JSON with custom date handling
-- **TTL:** 60s (quotes), 300s (bars/queries), 86400s (idempotency)
-- **Patterns:** SCAN for pattern-based deletion
+| System | Type | Details |
+|--------|------|---------|
+| **TradingView REST** | HTTP | tvdatafeed library, ThreadPoolExecutor (4 workers), max 5000 bars |
+| **TradingView WS** | Binary | Protocol: ~m~{len}~m~{json}, exponential backoff reconnection |
+| **OKX WS** | JSON + Auth | HMAC-SHA256 auth, 1s-30s backoff, 10-failure circuit breaker |
+| **MongoDB** | Async | PyMongo (not Motor), pool 5-50 connections, 7 collections |
+| **Redis** | Async | redis-py, TTL: 60s quotes, 300s bars, 86400s idempotency |
 
 ## Error Handling
 
-### Transient Errors (Retryable)
-
-- Database connection timeouts → Auto-reconnect
-- Redis connection failures → Auto-reconnect
-- TradingView API temporary unavailable → Exponential backoff
-
-### Permanent Errors (Non-retryable)
-
-- Invalid symbol/exchange → Return 400 Bad Request
-- Authentication failure → Return 401 Unauthorized
-- Handler not found → Return 500 Internal Server Error
-
-### Silent Failures (Logged Only)
-
-- Background job failures → Logged, next run continues
-- Cache invalidation failures → Logged, data stale but functional
-- Event subscriber errors → Logged, other subscribers continue
+| Category | Examples | Strategy |
+|----------|----------|----------|
+| **Transient** | Connection timeouts, API unavailable | Exponential backoff, auto-reconnect |
+| **Permanent** | Invalid symbols, auth failures | Return HTTP errors (4xx/5xx) |
+| **Silent** | Background job/cache failures | Log, continue execution |
 
 ## Performance Characteristics
 

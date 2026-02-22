@@ -6,12 +6,12 @@ Algorithmic trading platform with real-time market data, WebSocket quotes, and a
 
 Install these tools first:
 
-| Tool | Install (macOS) | Install (Linux) |
-|------|-----------------|-----------------|
-| Python 3.14+ | `brew install python@3.14` | `sudo apt install python3.14` |
-| Docker | [Docker Desktop](https://docker.com/products/docker-desktop) | `sudo apt install docker.io` |
-| just | `brew install just` | `sudo apt install just` |
-| uv | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Tool         | Install (macOS)                                              | Install (Linux)                                    |
+|--------------|--------------------------------------------------------------|----------------------------------------------------|
+| Python 3.14+ | `brew install python@3.14`                                   | `sudo apt install python3.14`                      |
+| Docker       | [Docker Desktop](https://docker.com/products/docker-desktop) | `sudo apt install docker.io`                       |
+| just         | `brew install just`                                          | `sudo apt install just`                            |
+| uv           | `brew install uv`                                            | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ uvicorn src.main:app --reload
 
 ## Architecture (DDD + CQRS + Vertical Slice)
 
-**13,641 LOC across 277 Python files in src/:**
+**13,637 LOC across 277 Python files in src/:**
 
 ```
 src/
