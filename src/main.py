@@ -27,14 +27,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         # Initialize all Resource providers in dependency order:
         # database → cache → job_scheduler → order_manager → position_tracker → strategy_engine
-        await container.init_resources()
+        await container.init_resources()  # type: ignore[misc]  # async Resource providers return awaitable at runtime
 
         # Post-init: indexes, handler registration, background jobs
         await ensure_all_indexes(container)
         register_all_handlers(container)
         start_background_jobs(container)
     except Exception as e:
-        await container.shutdown_resources()
+        await container.shutdown_resources()  # type: ignore[misc]
         handle_startup_failure(e)
 
     logger.info("application_started")
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("application_stopping")
 
     # Shutdown all Resources in reverse order (strategy_engine → ... → database)
-    await container.shutdown_resources()
+    await container.shutdown_resources()  # type: ignore[misc]
     logger.info("application_stopped")
 
 
