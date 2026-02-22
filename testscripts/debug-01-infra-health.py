@@ -32,6 +32,7 @@ async def main() -> None:
     print("=" * 50)
 
     # --- 1a: MongoDB ---
+    # connect() calls server_info() internally — if it passes, MongoDB is healthy
     print("\n[1a] Testing MongoDB connection...")
     print(f"     URL: {settings.mongodb_url}")
     print(f"     Database: {settings.mongodb_database}")
@@ -39,17 +40,14 @@ async def main() -> None:
     db = Database()
     try:
         await db.connect(settings)
-        # Ping to verify
-        result = await db._client.admin.command("ping")
-        print(f"     Ping: {result}")
 
-        # List collections
-        collections = await db._db.list_collection_names()
+        # List collections via public API
+        database = db.get_database()
+        collections = await database.list_collection_names()
         print(f"     Collections: {collections}")
 
-        # Count documents in each collection
         for coll_name in sorted(collections):
-            count = await db._db[coll_name].count_documents({})
+            count = await db.get_collection(coll_name).count_documents({})
             print(f"       - {coll_name}: {count} docs")
 
         print("     [OK] MongoDB connected")
@@ -59,24 +57,13 @@ async def main() -> None:
         await db.disconnect()
 
     # --- 1b: Redis ---
+    # connect() calls ping() internally — if it passes, Redis is healthy
     print("\n[1b] Testing Redis connection...")
     print(f"     URL: {settings.redis_url}")
 
     cache = Cache()
     try:
         await cache.connect(settings)
-        # Ping
-        pong = await cache._redis.ping()
-        print(f"     Ping: {pong}")
-
-        # Check info
-        info = await cache._redis.info("server")
-        print(f"     Redis version: {info.get('redis_version', '?')}")
-
-        # Count keys
-        db_size = await cache._redis.dbsize()
-        print(f"     Total keys: {db_size}")
-
         print("     [OK] Redis connected")
     except Exception as e:
         print(f"     [FAIL] Redis: {e}")

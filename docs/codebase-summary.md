@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-21 | **Codebase Size:** 13,641 LOC | **Total Files:** 277 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container
+**Last Updated:** 2026-02-22 | **Codebase Size:** 13,637 LOC | **Total Files:** 277 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container
 
 ## Architecture Overview
 
@@ -31,7 +31,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **Mediator:** CQRS dispatcher, routes commands/queries to handlers
   - `register(request_type, handler)` - Register handler
   - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
-- **EventBus:** In-memory async event bus (FIFO, 100 event max history)
+- **EventBus:** In-memory async event bus (FIFO, 100 event max history, configured in container.py)
   - `subscribe(event_type, handler)` - Register event subscriber
   - `publish(event)` - Notify all subscribers sequentially
   - `publish_all(events)` - Batch publish multiple events

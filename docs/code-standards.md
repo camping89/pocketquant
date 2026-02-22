@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-21 | **Coverage:** 277 Python files, 13,641 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container | **Type Checker:** Pyright
+**Last Updated:** 2026-02-22 | **Coverage:** 277 Python files, 13,637 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container | **Type Checker:** Pyright
 
 ## Clean Architecture Rules
 
@@ -489,163 +489,19 @@ from src.features.market_data.base.models import OHLCV
 
 ## Commenting & Documentation
 
-### Comments (Minimal)
+**Comments:** Write for WHY (non-obvious logic, workarounds, API quirks). Skip WHAT (obvious code is self-documenting).
 
-**DO write comments for:**
-
-- Non-obvious logic or complex algorithms
-- WHY something is done a certain way (not WHAT)
-- Non-obvious constraints or limitations
-- Gotchas or warnings about subtle behavior
-- External API quirks or workarounds
-
-```python
-# Example: WHY comments
-# Run in thread pool to avoid blocking event loop
-bars = await loop.run_in_executor(self.executor, self._fetch_bars)
-
-# tvdatafeed max is 5000 bars per request
-if n_bars > 5000:
-    n_bars = 5000
-```
-
-**DO NOT write comments for:**
-
-- Obvious code operations (e.g., `# Create list`, `# Return result`)
-- Code that restates variable/function names
-- Trivial sections or obvious operations
-- Code that is self-documenting via type hints and naming
-
-```python
-# BAD: This comment adds no value
-# Get the collection
-collection = Database.get_collection("ohlcv")
-
-# GOOD: Self-documenting code
-collection = Database.get_collection("ohlcv")
-```
-
-### Docstrings (Brief)
-
-Keep docstrings minimal. Heavy lifting done by type hints:
-
-```python
-# Good: Type hints + brief description
-async def get_bars(
-    cls,
-    symbol: str,
-    exchange: str,
-    interval: str,
-    limit: int = 100
-) -> List[OHLCV]:
-    """Retrieve OHLCV bars for a symbol."""
-
-# Skip Args/Returns/Raises if types are clear from signature
-```
-
-### Module Docstrings
-
-Brief purpose statement:
-
-```python
-"""
-Quote service for managing TradingView WebSocket subscriptions.
-Handles connection lifecycle, quote caching, and tick distribution.
-"""
-```
+**Docstrings:** Minimal. Use type hints to carry heavy lifting. Module-level: brief purpose statement.
 
 ## Type Hints
 
-Use full type hints everywhere:
-
-```python
-# Function signatures
-async def sync_symbol(
-    self,
-    symbol: str,
-    exchange: str,
-    interval: str,
-    n_bars: int
-) -> Dict[str, Any]:
-    pass
-
-# Class attributes
-_client: pymongo.asynchronous.AsyncMongoClient
-_database: pymongo.asynchronous.AsyncDatabase
-_lock: asyncio.Lock = asyncio.Lock()
-
-# Complex types
-from typing import Optional, List, Dict, Tuple, Union, Callable, Any
-bars: List[OHLCV]
-status: Optional[SyncStatus]
-result: Dict[str, Union[int, str]]
-```
-
-**Tools:**
-- `pyright src/` - Type checking (catches type errors at development time)
-- `ruff check .` - Linting (includes type annotation checks)
+Use full type hints on all public APIs: functions, class attributes, complex types. Tools: `pyright src/` for type checking.
 
 ## Error Handling
 
-### Try-Except Strategy
+**Try-Except:** Catch specific exceptions, never bare `except`. Use structured logging with context.
 
-Catch specific exceptions, never bare `except`:
-
-```python
-# Good: Catch specific exception
-try:
-    bars = await provider.get_bars(symbol)
-except ValueError as e:
-    logger.error("invalid_symbol", symbol=symbol, error=str(e))
-    return {"status": "error", "message": str(e)}
-
-# Bad: Generic exception catching
-try:
-    bars = await provider.get_bars(symbol)
-except Exception:
-    pass
-```
-
-### Error Propagation
-
-- Routes: Catch exceptions, return error responses
-- Services: Catch and log, update status, return error dict
-- Repositories: Let exceptions propagate (caller handles)
-- Providers: Catch specific errors, re-raise as custom exceptions
-
-```python
-# Service (catches and returns error)
-try:
-    bars = await self.provider.get_bars(symbol, exchange, interval, n_bars)
-except Exception as e:
-    status = await OHLCVRepository.update_sync_status(status_id, "error", str(e))
-    return {"status": "error", "error_message": str(e)}
-
-# Route (returns HTTP response)
-result = await service.sync_symbol(...)
-if result["status"] == "error":
-    return JSONResponse(status_code=400, content=result)
-```
-
-### Logging
-
-Use structured logging with context variables:
-
-```python
-from src.common.logging import get_logger
-
-logger = get_logger(__name__)
-
-# Log events with context
-logger.info("sync_started", symbol="AAPL", exchange="NASDAQ", n_bars=500)
-logger.error("sync_failed", symbol="AAPL", error=str(e), traceback=traceback.format_exc())
-logger.warning("slow_query", query_time_ms=1500, threshold_ms=1000)
-```
-
-**Avoid:**
-- String formatting in log calls (`f"User {user_id} created"` → log with context)
-- Generic log messages without context
-- DEBUG level logging for every operation
+**Propagation:** Routes catch/return 4xx-5xx, Services catch/log/return error dicts, Repositories propagate.
 
 ## Testing Standards
 

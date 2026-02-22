@@ -13,13 +13,13 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 ```
 
 ### Key Files for Breakpoints
-| File | Why |
-|------|-----|
-| `src/features/market_data/sync/sync_one/route.py:18` | Request entry |
-| `src/common/mediator/mediator.py:22` | Dispatcher (type→handler mapping) |
-| `src/features/market_data/sync/sync_one/handler.py` | Core business logic |
-| `src/common/messaging/event_bus.py:37` | Event publish |
-| `src/main.py` (lifespan) | Wiring at startup |
+| File                                                 | Why                               |
+|------------------------------------------------------|-----------------------------------|
+| `src/features/market_data/sync/sync_one/route.py:18` | Request entry                     |
+| `src/common/mediator/mediator.py:22`                 | Dispatcher (type→handler mapping) |
+| `src/features/market_data/sync/sync_one/handler.py`  | Core business logic               |
+| `src/common/messaging/event_bus.py:37`               | Event publish                     |
+| `src/main.py` (lifespan)                             | Wiring at startup                 |
 
 ### Exercise Progression (from learning guide)
 - [ ] **Ex 1** (30min): Trace sync request flow, answer: where is command created? how does mediator find handler? what events published? who receives them?
@@ -64,12 +64,12 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 
 ## Pending Plans
 
-| Plan | Priority | Description |
-|------|----------|-------------|
-| `260108-1144-trading-features` | P1 | Backtesting, Portfolio, Risk Management |
-| `260108-1144-vps-deployment` | P1 | Deploy to Vultr Singapore |
-| `260131-2006-okx-websocket-backtest-integration` | P1 | Backtest engine + OKX WebSocket |
-| `260128-1529-job-feature-flag` | P3 | Enable/disable background jobs |
+| Plan                                             | Priority | Description                             |
+|--------------------------------------------------|----------|-----------------------------------------|
+| `260108-1144-trading-features`                   | P1       | Backtesting, Portfolio, Risk Management |
+| `260108-1144-vps-deployment`                     | P1       | Deploy to Vultr Singapore               |
+| `260131-2006-okx-websocket-backtest-integration` | P1       | Backtest engine + OKX WebSocket         |
+| `260128-1529-job-feature-flag`                   | P3       | Enable/disable background jobs          |
 
 ---
 

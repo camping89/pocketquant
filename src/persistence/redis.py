@@ -19,32 +19,32 @@ class Cache:
     """Redis cache manager. Instance-based, managed by DI container."""
 
     def __init__(self) -> None:
-        self._client: redis.Redis | None = None
-        self._default_ttl: int = 3600
+        self.__client: redis.Redis | None = None
+        self.__default_ttl: int = 3600
 
     async def connect(self, settings: Settings) -> None:
         logger.info("redis.connecting")
 
-        self._client = redis.from_url(
+        self.__client = redis.from_url(
             str(settings.redis_url),
             encoding="utf-8",
             decode_responses=True,
         )
-        self._default_ttl = settings.redis_cache_ttl
-        await self._client.ping()
+        self.__default_ttl = settings.redis_cache_ttl
+        await self.__client.ping()
         logger.info("redis.connected")
 
     async def disconnect(self) -> None:
-        if self._client is not None:
-            await self._client.close()
-            self._client = None
+        if self.__client is not None:
+            await self.__client.close()
+            self.__client = None
             logger.info("redis.disconnected")
 
     def get_client(self) -> redis.Redis:
         """Get Redis client, raising if not connected."""
-        if self._client is None:
+        if self.__client is None:
             raise RuntimeError("Cache not connected. Call Cache.connect() first.")
-        return self._client
+        return self.__client
 
     async def get(self, key: str) -> Any | None:
         client = self.get_client()
@@ -63,7 +63,7 @@ class Cache:
 
     async def mget(self, keys: list[str]) -> list[Any]:
         """Get multiple values by keys. Returns list in same order (None for misses)."""
-        if not keys or self._client is None:
+        if not keys or self.__client is None:
             return [None] * len(keys)
         client = self.get_client()
         raw_values = await client.mget(keys)
@@ -78,7 +78,7 @@ class Cache:
         client = self.get_client()
 
         if ttl is None:
-            ttl = self._default_ttl
+            ttl = self.__default_ttl
         elif isinstance(ttl, timedelta):
             ttl = int(ttl.total_seconds())
 
