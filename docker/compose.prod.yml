@@ -14,10 +14,6 @@ services:
       - APP_VERSION=0.1.0
       - ENVIRONMENT=production
       - DEBUG=false
-      # API Server
-      - API_HOST=0.0.0.0
-      - API_PORT=41920
-      - API_PREFIX=/api/v1
       # MongoDB
       - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/pocketquant?authSource=admin
       - MONGODB_DATABASE=pocketquant
