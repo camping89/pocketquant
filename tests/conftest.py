@@ -15,9 +15,6 @@ def settings() -> Settings:
         app_version="0.0.1",
         environment="development",
         debug=True,
-        api_host="127.0.0.1",
-        api_port=8000,
-        api_prefix="/api/v1",
         mongodb_url="mongodb://localhost:27018",  # type: ignore[arg-type]
         mongodb_database="pocketquant_test",
         mongodb_min_pool_size=1,

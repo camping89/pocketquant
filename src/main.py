@@ -69,17 +69,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    from src.config import get_settings
-
-    _settings = get_settings()
-    uvicorn.run(
-        "src.main:app",
-        host=_settings.api_host,
-        port=_settings.api_port,
-        reload=_settings.environment == "development",
-    )

@@ -23,9 +23,7 @@ class Settings(BaseSettings):
     app_version: str
     environment: Literal["development", "staging", "production"]
 
-    api_host: str
-    api_port: int
-    api_prefix: str
+    api_prefix: str = "/api/v1"
 
     mongodb_url: MongoDsn
     mongodb_database: str
