@@ -22,7 +22,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not idempotency_key:
             return await call_next(request)
 
-        cache = request.app.state.container.cache()
+        cache = request.app.state.cache
         cache_key = f"idempotent:{idempotency_key}"
         cached = await cache.get(cache_key)
 

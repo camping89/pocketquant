@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.common.logging import get_logger, setup_logging
-from src.container import AppContainer, register_all_handlers
+from src.container import AppContainer, register_all_handlers, resolve
 from src.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
@@ -29,10 +29,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # database → cache → job_scheduler → order_manager → position_tracker → strategy_engine
         await container.init_resources()  # type: ignore[misc]  # async Resource providers return awaitable at runtime
 
+        # Store resolved resources on app.state for middleware hot-path access
+        app.state.cache = await resolve(container.cache)
+        app.state.database = await resolve(container.database)
+
         # Post-init: indexes, handler registration, background jobs
         await ensure_all_indexes(container)
-        register_all_handlers(container)
-        start_background_jobs(container)
+        await register_all_handlers(container)
+        await start_background_jobs(container)
     except Exception as e:
         await container.shutdown_resources()  # type: ignore[misc]
         handle_startup_failure(e)

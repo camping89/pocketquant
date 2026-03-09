@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Query, Request
 
 from src.common.exceptions import NotFoundError
+from src.container import resolve
 from src.domain.shared.value_objects import Interval
 
 router = APIRouter()
@@ -15,7 +16,7 @@ async def get_current_bar(
     request: Request,
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> dict:
-    quote_service = request.app.state.container.quote_service()
+    quote_service = await resolve(request.app.state.container.quote_service)
     bar = await quote_service.bar_manager.get_current_bar(symbol, exchange, interval)
 
     if bar is None:
