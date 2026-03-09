@@ -28,5 +28,9 @@ class OptimizationRepository(BaseRepository):
     async def ensure_indexes(self) -> None:
         """Create indexes for optimization queries."""
         collection = self._collection()
-        await collection.create_index("strategy_id")
-        await collection.create_index("created_at")
+        await collection.create_index(
+            "strategy_id", name="ix_optimizations_strategy_id"
+        )
+        await collection.create_index(
+            "created_at", name="ix_optimizations_created_at"
+        )
