@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-
-from pydantic import BaseModel, Field, PrivateAttr
+from typing import ClassVar
 
 from src.common.uuid import generate_id_str
 from src.domain.order.order_event import (
@@ -22,7 +22,8 @@ class InvalidOrderTransitionError(Exception):
     """Raised when an invalid state transition is attempted."""
 
 
-class OrderAggregate(BaseModel):
+@dataclass
+class OrderAggregate:
     """Order aggregate root with state machine.
 
     Tracks order lifecycle from creation to terminal state.
@@ -41,9 +42,20 @@ class OrderAggregate(BaseModel):
     filled_quantity: float = 0.0
     filled_price: float | None = None
     broker_order_id: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
+
+    # State machine: valid transitions (class-level, allocated once)
+    _VALID_TRANSITIONS: ClassVar[dict[OrderStatus, frozenset[OrderStatus]]] = {
+        OrderStatus.PENDING: frozenset({OrderStatus.SUBMITTED, OrderStatus.REJECTED}),
+        OrderStatus.SUBMITTED: frozenset(
+            {OrderStatus.PARTIALLY_FILLED, OrderStatus.FILLED, OrderStatus.CANCELLED}
+        ),
+        OrderStatus.PARTIALLY_FILLED: frozenset(
+            {OrderStatus.FILLED, OrderStatus.CANCELLED}
+        ),
+    }
 
     @classmethod
     def create(
@@ -198,17 +210,7 @@ class OrderAggregate(BaseModel):
 
     def _validate_transition(self, target: OrderStatus) -> None:
         """Validate state transition is allowed."""
-        valid_transitions: dict[OrderStatus, set[OrderStatus]] = {
-            OrderStatus.PENDING: {OrderStatus.SUBMITTED, OrderStatus.REJECTED},
-            OrderStatus.SUBMITTED: {
-                OrderStatus.PARTIALLY_FILLED,
-                OrderStatus.FILLED,
-                OrderStatus.CANCELLED,
-            },
-            OrderStatus.PARTIALLY_FILLED: {OrderStatus.FILLED, OrderStatus.CANCELLED},
-        }
-
-        allowed = valid_transitions.get(self.status, set())
+        allowed = self._VALID_TRANSITIONS.get(self.status, frozenset())
         if target not in allowed:
             raise InvalidOrderTransitionError(f"Cannot transition from {self.status} to {target}")
 

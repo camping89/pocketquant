@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-
-from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import generate_id_str
 from src.domain.position.position_event import (
@@ -16,7 +15,8 @@ from src.domain.position.value_objects import PnL, PositionSide
 from src.domain.shared.domain_event import DomainEvent
 
 
-class PositionAggregate(BaseModel):
+@dataclass
+class PositionAggregate:
     """Position aggregate root tracking entry, quantity, and P&L.
 
     Handles position lifecycle from open to close with proper
@@ -33,9 +33,9 @@ class PositionAggregate(BaseModel):
     current_price: float
     realized_pnl: float = 0.0
     is_closed: bool = False
-    opened_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    opened_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     closed_at: datetime | None = None
-    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
+    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
 
     @classmethod
     def open(

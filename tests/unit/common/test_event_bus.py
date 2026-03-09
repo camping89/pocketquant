@@ -1,11 +1,14 @@
 """Tests for EventBus."""
 
+from dataclasses import dataclass
+
 import pytest
 
 from src.common.messaging import EventBus
 from src.domain.shared.domain_event import DomainEvent
 
 
+@dataclass(frozen=True, eq=False)
 class TestEvent(DomainEvent):
     """Test domain event."""
 

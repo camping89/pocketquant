@@ -1,9 +1,12 @@
 """Position domain events."""
 
+from dataclasses import dataclass
+
 from src.domain.position.value_objects import PositionSide
 from src.domain.shared.domain_event import DomainEvent
 
 
+@dataclass(frozen=True, eq=False)
 class PositionOpenedEvent(DomainEvent):
     """Event raised when a new position is opened."""
 
@@ -16,6 +19,7 @@ class PositionOpenedEvent(DomainEvent):
     quantity: float = 0.0
 
 
+@dataclass(frozen=True, eq=False)
 class PositionUpdatedEvent(DomainEvent):
     """Event raised when position quantity or price is updated."""
 
@@ -26,6 +30,7 @@ class PositionUpdatedEvent(DomainEvent):
     unrealized_pnl: float = 0.0
 
 
+@dataclass(frozen=True, eq=False)
 class PositionClosedEvent(DomainEvent):
     """Event raised when a position is fully closed."""
 

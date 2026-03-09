@@ -75,18 +75,18 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 ### src/domain (2,364 LOC, 39 files) — Pure Business Logic
 
-**Rules:** No I/O imports. No pymongo, redis, aiohttp. Immutable value objects. Domain events. Validation in __post_init__.
+**Rules:** No I/O imports. No pymongo, redis, aiohttp. **No Pydantic BaseModel** (use stdlib dataclasses instead). Immutable value objects. Domain events. Validation in `__post_init__`.
 
-**Aggregates (6):**
-- **OHLCVAggregate** - Collection of OHLCV bars with validation
-- **OrderAggregate** - Order lifecycle state machine (UUID7 IDs)
-- **PositionAggregate** - Position tracking with P&L calculations (UUID7 IDs)
-- **QuoteAggregate** - Quote with metadata (field: updated_at)
-- **SymbolAggregate** - Symbol with exchange metadata (UUID7 IDs)
-- **RiskConfigAggregate** - Risk parameters and position sizing (UUID7 IDs)
+**Aggregates (6, Mutable Dataclasses):**
+- **OHLCVAggregate** - Collection of OHLCV bars with validation (mutable @dataclass)
+- **OrderAggregate** - Order lifecycle state machine (UUID7 IDs, mutable @dataclass)
+- **PositionAggregate** - Position tracking with P&L calculations (UUID7 IDs, mutable @dataclass)
+- **QuoteAggregate** - Quote with metadata (field: updated_at, mutable @dataclass)
+- **SymbolAggregate** - Symbol with exchange metadata (UUID7 IDs, mutable @dataclass)
+- **RiskConfigAggregate** - Risk parameters and position sizing (UUID7 IDs, mutable @dataclass)
 
-**Value Objects (Frozen Dataclasses):**
-- **OHLCV** - (open, high, low, close, volume, timestamp)
+**Value Objects (Frozen Dataclasses, @dataclass(frozen=True)):**
+- **OHLCV** - (open, high, low, close, volume, timestamp) with validation in __post_init__
 - **BarRange** - (start_time, end_time) for bar alignment
 - **PnL** - (unrealized, realized, total)
 - **Signal** - Buy/sell signal with quantity
@@ -94,7 +94,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **Price** - Decimal price wrapper
 - **QuoteTick** - Real-time price update
 - **RiskConfig** - Risk model + parameters
-- **Symbol** - (code, exchange) value object
+- **Symbol** - (code, exchange) value object with validation
 
 **Enums:**
 - **OrderType** - MARKET, LIMIT, STOP_LIMIT, STOP_MARKET
@@ -105,12 +105,13 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **RiskModel** - PERCENT_RISK, KELLY, FIXED
 - **Interval** - 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M (13 timeframes)
 
-**Domain Events (13+):**
+**Domain Events (13+, Frozen Dataclasses with @dataclass(frozen=True, eq=False)):**
 - **OHLCV:** HistoricalDataSyncedEvent, BarCompletedEvent
 - **Order:** OrderSubmittedEvent, OrderFilledEvent, OrderPartiallyFilledEvent, OrderCancelledEvent, OrderRejectedEvent
 - **Position:** PositionOpenedEvent, PositionUpdatedEvent, PositionClosedEvent
 - **Quote:** QuoteReceivedEvent, QuoteUpdatedEvent
 - **Strategy:** SignalGeneratedEvent
+- All events extend DomainEvent base (frozen dataclass with custom __eq__ by event_id)
 
 **Domain Services:**
 - **BarBuilder** - Incremental OHLCV bar construction from ticks
@@ -568,7 +569,7 @@ All settings via environment variables (`.env` file):
 ## Dependencies
 
 - **fastapi** - Web framework
-- **pydantic** - Settings + validation
+- **pydantic** - Settings validation + Features layer (commands/queries). Domain layer uses stdlib dataclasses instead.
 - **pymongo** - MongoDB driver (native async API, NOT Motor)
 - **redis** - Async Redis client (redis-py)
 - **structlog** - Structured logging
