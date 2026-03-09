@@ -215,11 +215,7 @@ class OHLCVRepository(BaseRepository):
         """Create compound index on (symbol, exchange, interval, datetime)."""
         collection = self._collection()
         await collection.create_index(
-            [
-                ("symbol", 1),
-                ("exchange", 1),
-                ("interval", 1),
-                ("datetime", 1),
-            ],
+            [("symbol", 1), ("exchange", 1), ("interval", 1), ("datetime", 1)],
             unique=True,
+            name="ix_ohlcv_symbol_exchange_interval_datetime",
         )

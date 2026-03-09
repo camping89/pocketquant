@@ -86,10 +86,7 @@ class SyncStatusRepository(BaseRepository):
         """Create compound index on (symbol, exchange, interval)."""
         collection = self._collection()
         await collection.create_index(
-            [
-                ("symbol", 1),
-                ("exchange", 1),
-                ("interval", 1),
-            ],
+            [("symbol", 1), ("exchange", 1), ("interval", 1)],
             unique=True,
+            name="ix_sync_status_symbol_exchange_interval",
         )

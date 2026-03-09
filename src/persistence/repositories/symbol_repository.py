@@ -66,4 +66,5 @@ class SymbolRepository(BaseRepository):
         await collection.create_index(
             [("symbol", 1), ("exchange", 1)],
             unique=True,
+            name="ix_symbols_symbol_exchange",
         )
