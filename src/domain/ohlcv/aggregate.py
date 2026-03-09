@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
-
-from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
 from src.domain.ohlcv.ohlcv_event import BarCompletedEvent, HistoricalDataSyncedEvent
@@ -12,13 +11,14 @@ from src.domain.shared.domain_event import DomainEvent
 from src.domain.shared.value_objects import Interval
 
 
-class OHLCVAggregate(BaseModel):
+@dataclass(eq=False)
+class OHLCVAggregate:
     """Aggregate root for OHLCV data operations."""
 
-    id: UUID = Field(default_factory=generate_id)
+    id: UUID = field(default_factory=generate_id)
     symbol: str = ""
     exchange: str = ""
-    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
+    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, OHLCVAggregate):

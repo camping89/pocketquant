@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
-
-from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
 from src.domain.quote.quote_event import QuoteReceivedEvent, QuoteUpdatedEvent
 from src.domain.shared.domain_event import DomainEvent
 
 
-class QuoteAggregate(BaseModel):
+@dataclass(eq=False)
+class QuoteAggregate:
     """Aggregate root for real-time quote management."""
 
-    id: UUID = Field(default_factory=generate_id)
+    id: UUID = field(default_factory=generate_id)
     symbol: str = ""
     exchange: str = ""
     last_price: float | None = None
@@ -24,7 +24,7 @@ class QuoteAggregate(BaseModel):
     change: float | None = None
     change_percent: float | None = None
     updated_at: datetime | None = None
-    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
+    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, QuoteAggregate):

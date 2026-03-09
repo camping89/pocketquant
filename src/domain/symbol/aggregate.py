@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, PrivateAttr
+from dataclasses import dataclass, field, replace
 
 from src.common.uuid import UUID, generate_id
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.symbol.value_objects import SymbolInfo
 
 
-class SymbolAggregate(BaseModel):
+@dataclass(eq=False)
+class SymbolAggregate:
     """Aggregate root for symbol management."""
 
-    id: UUID = Field(default_factory=generate_id)
+    id: UUID = field(default_factory=generate_id)
     info: SymbolInfo | None = None
-    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
+    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SymbolAggregate):
@@ -44,24 +45,12 @@ class SymbolAggregate(BaseModel):
     def deactivate(self) -> None:
         """Deactivate the symbol."""
         if self.info:
-            self.info = SymbolInfo(
-                code=self.info.code,
-                exchange=self.info.exchange,
-                name=self.info.name,
-                asset_type=self.info.asset_type,
-                is_active=False,
-            )
+            self.info = replace(self.info, is_active=False)
 
     def activate(self) -> None:
         """Activate the symbol."""
         if self.info:
-            self.info = SymbolInfo(
-                code=self.info.code,
-                exchange=self.info.exchange,
-                name=self.info.name,
-                asset_type=self.info.asset_type,
-                is_active=True,
-            )
+            self.info = replace(self.info, is_active=True)
 
     # -- Convenience properties for flat access --
 

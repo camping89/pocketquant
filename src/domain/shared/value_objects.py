@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
-
-from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Interval(str, Enum):
@@ -25,27 +24,18 @@ class Interval(str, Enum):
     MONTH_1 = "1M"
 
 
-class Symbol(BaseModel):
+@dataclass(frozen=True)
+class Symbol:
     """Value object representing a tradeable symbol."""
-
-    model_config = ConfigDict(frozen=True)
 
     code: str
     exchange: str
 
-    @field_validator("code")
-    @classmethod
-    def validate_code(cls, v: str) -> str:
-        if not v:
+    def __post_init__(self) -> None:
+        if not self.code:
             raise ValueError("Symbol code is required")
-        return v
-
-    @field_validator("exchange")
-    @classmethod
-    def validate_exchange(cls, v: str) -> str:
-        if not v:
+        if not self.exchange:
             raise ValueError("Exchange is required")
-        return v
 
     def __str__(self) -> str:
         return f"{self.exchange}:{self.code}"

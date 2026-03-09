@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, model_validator
 
 from src.domain.shared.value_objects import Interval
 
 
-class OHLCV(BaseModel):
+@dataclass(frozen=True)
+class OHLCV:
     """Immutable OHLCV price bar data."""
-
-    model_config = ConfigDict(frozen=True)
 
     open: float
     high: float
@@ -20,8 +18,7 @@ class OHLCV(BaseModel):
     close: float
     volume: float
 
-    @model_validator(mode="after")
-    def validate_ohlcv(self) -> OHLCV:
+    def __post_init__(self) -> None:
         if self.high < self.low:
             raise ValueError("High must be >= Low")
         if self.open < self.low or self.open > self.high:
@@ -30,22 +27,18 @@ class OHLCV(BaseModel):
             raise ValueError("Close must be between Low and High")
         if self.volume < 0:
             raise ValueError("Volume must be non-negative")
-        return self
 
 
-class BarRange(BaseModel):
+@dataclass(frozen=True)
+class BarRange:
     """Time range for a bar."""
-
-    model_config = ConfigDict(frozen=True)
 
     start: datetime
     end: datetime
 
-    @model_validator(mode="after")
-    def validate_range(self) -> BarRange:
+    def __post_init__(self) -> None:
         if self.end <= self.start:
             raise ValueError("End must be after start")
-        return self
 
     def contains(self, timestamp: datetime) -> bool:
         """Check if timestamp falls within this bar range."""

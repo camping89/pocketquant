@@ -5,8 +5,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
-
 from src.domain.risk import RiskConfig, RiskModel
 
 
@@ -19,13 +17,12 @@ class Direction(Enum):
     FLAT = "flat"
 
 
-class Signal(BaseModel):
+@dataclass(frozen=True)
+class Signal:
     """Immutable trading signal from a strategy.
 
     Represents a trade intention before risk validation and sizing.
     """
-
-    model_config = ConfigDict(frozen=True)
 
     symbol: str
     exchange: str
@@ -38,12 +35,9 @@ class Signal(BaseModel):
     take_profit_price: float | None = None
     entry_logic: str = ""
 
-    @field_validator("confidence")
-    @classmethod
-    def validate_confidence(cls, v: float) -> float:
-        if not 0.0 <= v <= 1.0:
-            raise ValueError(f"Confidence must be 0.0-1.0, got {v}")
-        return v
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"Confidence must be 0.0-1.0, got {self.confidence}")
 
     @property
     def is_entry(self) -> bool:

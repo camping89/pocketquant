@@ -1,19 +1,17 @@
 """Base domain event class."""
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from src.common.uuid import UUID, generate_id
 
 
-class DomainEvent(BaseModel):
+@dataclass(frozen=True, eq=False)
+class DomainEvent:
     """Base class for all domain events."""
 
-    model_config = ConfigDict(frozen=True)
-
-    event_id: UUID = Field(default_factory=generate_id)
-    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    event_id: UUID = field(default_factory=generate_id)
+    occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DomainEvent):

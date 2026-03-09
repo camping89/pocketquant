@@ -107,15 +107,26 @@ domain/
 └── common/                 # Domain utilities (no I/O)
 ```
 
-**Example - Pure Value Object:**
+**Example - Value Object & Event (Dataclasses, Not Pydantic):**
 ```python
 @dataclass(frozen=True)
-class Symbol:
+class Symbol:  # Immutable value object
     code: str
     exchange: str
     def __post_init__(self) -> None:
         if not self.code or not self.exchange:
-            raise ValueError("Symbol requires code and exchange")
+            raise ValueError("Both required")
+
+@dataclass(frozen=True, eq=False)
+class OrderFilledEvent:  # Event: frozen + custom __eq__ by event_id
+    event_id: UUID = field(default_factory=generate_id)
+    order_id: UUID = field(default_factory=generate_id)
+    price: float
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, OrderFilledEvent):
+            return NotImplemented
+        return self.event_id == other.event_id
 ```
 
 **Example - Domain Service (Pure):**
@@ -785,8 +796,5 @@ AppContainer in `src/container.py` manages all service wiring using dependency-i
 | Memory (BarManager) | ~10MB per 10k subscriptions |
 
 ## Security
-
-- **Credentials:** Environment variables only (never committed)
-- **Auth:** MongoDB/Redis via DSN (username/password)
-- **Rate Limiting:** IP-based (200 req/10s)
-- **Idempotency:** Prevent duplicate requests (24h TTL)
+- Credentials: Environment variables only (never committed)
+- Auth: MongoDB/Redis via DSN, rate limiting 200 req/10s, idempotency cache 24h TTL

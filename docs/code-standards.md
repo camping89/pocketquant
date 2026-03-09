@@ -440,6 +440,14 @@ class MACrossoverStrategy(IStrategy):
 - Store state as instance variables
 - No direct broker/database access (StrategyEngine manages execution)
 
+### 10. Domain Layer Patterns (Dataclasses, Not Pydantic)
+
+Domain uses stdlib `dataclasses` (22 domain classes):
+- **Value Objects:** `@dataclass(frozen=True)` with `__post_init__()` validation
+- **Events:** `@dataclass(frozen=True, eq=False)` with custom `__eq__` by event_id
+- **Aggregates:** `@dataclass` (mutable) with `field(init=False, repr=False)` for hidden events
+- **Rules:** No Pydantic BaseModel, use `generate_id()` for UUIDs, immutable for VOs/events
+
 ## Code Organization Guidelines
 
 ### File Naming
@@ -471,6 +479,7 @@ Keep individual files under 200 LOC for optimal context management:
 
 ### Import Organization
 
+**Example (Features layer - Pydantic allowed):**
 ```python
 # 1. Standard library
 import asyncio
@@ -478,13 +487,27 @@ from datetime import datetime
 from typing import Optional, List
 
 # 2. Third-party
-from pydantic import BaseModel
+from pydantic import BaseModel  # OK in Features/Config layers
 import structlog
 
 # 3. Local
 from src.common.database import Database
 from src.common.logging import get_logger
 from src.features.market_data.base.models import OHLCV
+```
+
+**Example (Domain layer - Stdlib dataclasses only):**
+```python
+# 1. Standard library
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional, ClassVar
+
+# 2. Local (no third-party, no I/O)
+from src.domain.shared.domain_event import DomainEvent
+from src.common.uuid import generate_id
+
+# NOTE: No pydantic, pymongo, redis, aiohttp imports in domain/
 ```
 
 ## Commenting & Documentation
@@ -718,9 +741,10 @@ All aggregates migrated:
 
 **Domain Layer:**
 - ❌ No I/O imports (pymongo, redis, aiohttp, http, infrastructure)
-- ✅ Immutable value objects, frozen dataclasses
-- ✅ Domain events for state changes
-- ✅ Validation in __post_init__
+- ❌ No Pydantic BaseModel (use stdlib dataclasses instead)
+- ✅ Immutable value objects, frozen dataclasses with `@dataclass(frozen=True)`
+- ✅ Events as frozen dataclasses: `@dataclass(frozen=True, eq=False)`
+- ✅ Validation in `__post_init__()` method
 - ✅ Pure business logic only
 - Enforced via: `test_domain_purity.py` (AST check)
 
@@ -746,30 +770,13 @@ All aggregates migrated:
 
 ## Deprecated Patterns (Do Not Use)
 
-❌ Business logic in features/ (move to application/)
-❌ Business logic in domain/ with I/O (move to application/)
-❌ Direct `Database.get_collection()` calls (use repositories in src/persistence/)
-❌ Persistence code outside src/persistence/ (all data access centralized there)
-❌ Direct database calls in handlers (use repositories)
-❌ Synchronous blocking I/O in async context
-❌ Global mutable state outside container
-❌ Bare except clauses
-❌ String formatting in log calls
-❌ Service instantiation as global variables
-❌ Database connection per-request (use container Resource)
-❌ No type hints on public APIs
-❌ Comments explaining obvious code
-❌ Circular imports between features
-❌ Feature-specific configuration in main module
-❌ Manual event subscription (use @event_handler decorator)
-❌ Manual mediator.register() in main.py (use @handles + container Factory)
-❌ Handler classes without @handles decorator
-❌ UUID4 for aggregates (use UUID7)
-❌ Old `src/infrastructure/persistence/` path (moved to `src/persistence/`)
-❌ Static class-method singletons for Database/Cache/JobScheduler (use container)
-❌ Per-feature `register.py` files (deleted — use container `register_all_handlers()`)
-❌ Static Repository calls (e.g. `OHLCVRepository.get_bars()`) — use instance via DI
-❌ `app.state.xxx` service locator (only `app.state.container` allowed)
+❌ Business logic in features/ (move to application/) | Pydantic in domain/ (use dataclasses)
+❌ Direct DB calls outside src/persistence/ | Bare except clauses
+❌ Synchronous blocking I/O in async context | Global mutable state outside container
+❌ No type hints on public APIs | String formatting in log calls
+❌ Manual event subscription (use @event_handler) | Manual mediator.register()
+❌ UUID4 for aggregates (use UUID7) | Static service singletons (use container)
+❌ Per-feature `register.py` files (use container) | Static Repository calls (use DI)
 
 ## Quality Checklist
 
