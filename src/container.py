@@ -4,7 +4,9 @@ Single source of truth for all service wiring. Handlers registered here
 replace per-feature register.py files.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 from dependency_injector import containers, providers
 
@@ -62,6 +64,24 @@ from src.persistence.repositories.order_repository import OrderRepository
 from src.persistence.repositories.position_repository import PositionRepository
 from src.persistence.repositories.symbol_repository import SymbolRepository
 from src.persistence.repositories.sync_status_repository import SyncStatusRepository
+
+# ---------------------------------------------------------------------------
+# Async provider resolution helper
+# ---------------------------------------------------------------------------
+
+
+async def resolve(provider: Any) -> Any:
+    """Resolve a dependency-injector provider, awaiting if it returns a Future.
+
+    Factory/Singleton providers return Futures in async contexts when they
+    depend on async Resource providers. This centralises the await-check
+    so callers don't need ``type: ignore[misc]`` everywhere.
+    """
+    result = provider()
+    if hasattr(result, "__await__"):
+        return await result
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Resource provider init/shutdown generators
@@ -253,16 +273,12 @@ class AppContainer(containers.DeclarativeContainer):
     )
     get_position_handler = providers.Factory(GetPositionHandler, position_tracker=position_tracker)
 
-    # Strategy handlers
-    load_strategy_handler = providers.Factory(LoadStrategyHandler, strategy_engine=strategy_engine)
-    start_strategy_handler = providers.Factory(
-        StartStrategyHandler, strategy_engine=strategy_engine
-    )
-    stop_strategy_handler = providers.Factory(StopStrategyHandler, strategy_engine=strategy_engine)
-    get_strategies_handler = providers.Factory(
-        GetStrategiesHandler, strategy_engine=strategy_engine
-    )
-    get_strategy_handler = providers.Factory(GetStrategyHandler, strategy_engine=strategy_engine)
+    # Strategy handlers (handlers use `engine` param name)
+    load_strategy_handler = providers.Factory(LoadStrategyHandler, engine=strategy_engine)
+    start_strategy_handler = providers.Factory(StartStrategyHandler, engine=strategy_engine)
+    stop_strategy_handler = providers.Factory(StopStrategyHandler, engine=strategy_engine)
+    get_strategies_handler = providers.Factory(GetStrategiesHandler, engine=strategy_engine)
+    get_strategy_handler = providers.Factory(GetStrategyHandler, engine=strategy_engine)
 
     # Backtesting handlers
     run_backtest_handler = providers.Factory(
@@ -331,13 +347,17 @@ _HANDLER_PROVIDERS = [
 ]
 
 
-def register_all_handlers(container: AppContainer) -> None:
+async def register_all_handlers(container: AppContainer) -> None:
     """Register all CQRS handlers with mediator from container.
 
     Replaces all per-feature register.py files.
+    Factory providers return Futures when dependencies include async Resources,
+    so each resolution must be awaited.
     """
     mediator = container.mediator()
     registry = HandlerRegistry()
 
-    handlers = [getattr(container, name)() for name in _HANDLER_PROVIDERS]
-    registry.register_all(mediator, handlers)
+    handlers = await asyncio.gather(
+        *(resolve(getattr(container, name)) for name in _HANDLER_PROVIDERS)
+    )
+    registry.register_all(mediator, list(handlers))

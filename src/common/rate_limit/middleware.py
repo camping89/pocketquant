@@ -38,7 +38,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.refill_rate = refill_rate
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        cache = request.app.state.container.cache()
+        cache = request.app.state.cache
         client_ip = request.client.host if request.client else "unknown"
         bucket_key = f"rate_limit:{client_ip}"
 

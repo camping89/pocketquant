@@ -1,5 +1,7 @@
 """Helpers for main.py: middleware, routes, and startup utilities."""
 
+import asyncio
+
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,7 +11,7 @@ from src.common.idempotency import IdempotencyMiddleware
 from src.common.logging import get_logger
 from src.common.rate_limit import RateLimitMiddleware
 from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
-from src.container import AppContainer
+from src.container import AppContainer, resolve
 from src.features.backtesting import backtest_router
 from src.features.market_data.quotes.router import router as quote_router
 from src.features.market_data.router import router as market_data_router
@@ -24,19 +26,27 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
+_REPO_PROVIDERS = [
+    "order_repository",
+    "position_repository",
+    "backtest_repository",
+    "ohlcv_repository",
+    "sync_status_repository",
+    "symbol_repository",
+    "optimization_repository",
+]
+
+
 async def ensure_all_indexes(container: AppContainer) -> None:
     """Ensure MongoDB indexes for all repository collections."""
-    await container.order_repository().ensure_indexes()
-    await container.position_repository().ensure_indexes()
-    await container.backtest_repository().ensure_indexes()
-    await container.ohlcv_repository().ensure_indexes()
-    await container.sync_status_repository().ensure_indexes()
-    await container.symbol_repository().ensure_indexes()
-    await container.optimization_repository().ensure_indexes()
+    repos = await asyncio.gather(
+        *(resolve(getattr(container, name)) for name in _REPO_PROVIDERS)
+    )
+    await asyncio.gather(*(repo.ensure_indexes() for repo in repos))
     logger.info("database_indexes_ensured")
 
 
-def start_background_jobs(container: AppContainer) -> None:
+async def start_background_jobs(container: AppContainer) -> None:
     """Register background sync jobs with the scheduler from container."""
     settings = container.settings()
     if settings.enable_jobs:
@@ -44,8 +54,8 @@ def start_background_jobs(container: AppContainer) -> None:
 
         register_sync_jobs(
             mediator=container.mediator(),
-            job_scheduler=container.job_scheduler(),
-            sync_status_repo=container.sync_status_repository(),
+            job_scheduler=await resolve(container.job_scheduler),
+            sync_status_repo=await resolve(container.sync_status_repository),
         )
         logger.info("background_jobs_enabled")
     else:
@@ -98,9 +108,16 @@ def configure_middleware(app: FastAPI, settings) -> None:
 def register_routes(app: FastAPI, container: AppContainer, settings) -> None:
     """Register health/system endpoints and all feature routers."""
     health_coordinator = container.health_coordinator()
-    # Lazy resolution: container.database()/cache() resolved at check time (after init_resources)
-    health_coordinator.register("database", lambda: check_database(container.database()))
-    health_coordinator.register("redis", lambda: check_redis(container.cache()))
+
+    # Health checks read resolved resources stored on app.state during lifespan
+    async def _check_db() -> dict:
+        return await check_database(app.state.database)
+
+    async def _check_redis() -> dict:
+        return await check_redis(app.state.cache)
+
+    health_coordinator.register("database", _check_db)
+    health_coordinator.register("redis", _check_redis)
 
     @app.get("/health")
     async def health_check() -> dict:
@@ -113,8 +130,8 @@ def register_routes(app: FastAPI, container: AppContainer, settings) -> None:
 
     @api.get("/system/jobs")
     async def list_jobs() -> list[dict]:
-        container: AppContainer = app.state.container
-        return container.job_scheduler().get_jobs()
+        scheduler = await resolve(app.state.container.job_scheduler)
+        return scheduler.get_jobs()
 
     api.include_router(market_data_router)
     api.include_router(quote_router)
