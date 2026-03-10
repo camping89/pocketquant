@@ -7,18 +7,19 @@
 #   3. OHLCV Queries
 #   4. Sync Status & Symbols
 #   5. Quotes — Real-time feed
-#   6. Strategies
+#   6. Strategies — Load, Start, Stop
 #   7. Trading — Orders & Positions
-#   8. Backtesting
+#   8. Backtesting — Run, Optimize, Results
+#   9. Debug Workflow — End-to-end (sync → strategy → backtest)
 #
-# Prerequisites: just up && uvicorn src.main:app --reload
+# Prerequisites: just up && just start (or uvicorn src.main:app --reload)
 
 ### ===========================================
 ### 1. Health & System
 ### ===========================================
 
 # Health Check (DB + Redis + version)
-curl -X GET http://localhost:8765/health
+curl -X GET http://localhost:8000/health
 
 ###
 
@@ -177,33 +178,39 @@ curl -X POST http://localhost:8765/api/v1/quotes/stop
 curl -X GET http://localhost:8765/api/v1/market-data/status
 
 ### ===========================================
-### 6. Strategies
+### 6. Strategies — Load, Start, Stop
 ### ===========================================
 
-# List all strategies
+# List all strategies (empty initially)
 curl -X GET http://localhost:8765/api/v1/strategies/
 
 ###
 
-# Load a strategy from file
+# Load MA Crossover strategy from YAML config
+# Returns strategy_id — save it for subsequent calls
 curl -X POST http://localhost:8765/api/v1/strategies/load \
   -H "Content-Type: application/json" \
-  -d '{"path":"strategies/example_strategy.py"}'
+  -d '{"path":"strategies/examples/ma-crossover-btc-usdt.yaml"}'
 
 ###
 
-# Start a strategy (replace {id} with actual strategy_id)
-curl -X POST http://localhost:8765/api/v1/strategies/{id}/start
+# List strategies again (should show loaded strategy)
+curl -X GET http://localhost:8765/api/v1/strategies/
 
 ###
 
-# Get strategy details
-curl -X GET http://localhost:8765/api/v1/strategies/{id}
+# Get strategy details (replace {strategy_id} with actual ID from load response)
+curl -X GET http://localhost:8765/api/v1/strategies/{strategy_id}
+
+###
+
+# Start a strategy (begins listening for bar events)
+curl -X POST http://localhost:8765/api/v1/strategies/{strategy_id}/start
 
 ###
 
 # Stop a strategy
-curl -X POST http://localhost:8765/api/v1/strategies/{id}/stop
+curl -X POST http://localhost:8765/api/v1/strategies/{strategy_id}/stop
 
 ### ===========================================
 ### 7. Trading — Orders & Positions
@@ -228,37 +235,107 @@ curl -X GET http://localhost:8765/api/v1/trading/positions
 curl -X GET http://localhost:8765/api/v1/trading/positions/{strategy_id}
 
 ### ===========================================
-### 8. Backtesting
+### 8. Backtesting — Run, Optimize, Results
 ### ===========================================
 
-# Run a backtest (requires synced data + loaded strategy)
+# Run a backtest (requires: synced OHLCV data + loaded strategy)
+# Uses paper broker, $10k capital, 10bps slippage
 curl -X POST http://localhost:8765/api/v1/backtest/run \
   -H "Content-Type: application/json" \
-  -d '{"strategy_id":"your-strategy-id","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-01-01","end_date":"2026-01-01"}'
+  -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-01-01","end_date":"2026-01-01","initial_capital":10000,"slippage_bps":10}'
 
 ###
 
-# Get backtest result
+# Get backtest result (replace {run_id} with ID from run response)
 curl -X GET http://localhost:8765/api/v1/backtest/{run_id}
 
 ###
 
-# Get equity curve
+# Get equity curve (for charting)
 curl -X GET http://localhost:8765/api/v1/backtest/{run_id}/equity
 
 ###
 
 # List backtests for a strategy
-curl -X GET "http://localhost:8765/api/v1/backtest/strategy/{strategy_id}?limit=20"
+curl -X GET "http://localhost:8765/api/v1/backtest/strategy/ma-cross-btc-5m?limit=20"
 
 ###
 
-# Run optimization
+# Run grid optimization (tests multiple parameter combos)
 curl -X POST http://localhost:8765/api/v1/backtest/optimize \
   -H "Content-Type: application/json" \
-  -d '{"strategy_id":"your-strategy-id","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-01-01","end_date":"2026-01-01","parameters":{}}'
+  -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-06-01","end_date":"2026-01-01","parameter_grid":{"fast_period":[5,10,20],"slow_period":[20,30,50]}}'
 
 ###
 
 # Get optimization result
 curl -X GET http://localhost:8765/api/v1/backtest/optimization/{optimization_id}
+
+### ===========================================
+### 9. Debug Workflow — End-to-end
+### ===========================================
+#
+# Run these in order to test the full pipeline:
+#
+# Step 1: Check health
+# Step 2: Sync BTC data
+# Step 3: Verify OHLCV data exists
+# Step 4: Load strategy
+# Step 5: Run backtest with synced data
+# Step 6: Check backtest results
+#
+# Breakpoints for debugging:
+#   sync/sync_one/route.py     → Request entry
+#   mediator.py                → Command dispatch
+#   sync/sync_one/handler.py   → Business logic
+#   event_bus.py               → Event publish
+#   container.py               → DI wiring
+#   main.py (lifespan)         → Startup
+
+# --- Step 1: Health ---
+curl -X GET http://localhost:8765/health
+
+###
+
+# --- Step 2: Sync BTC 4H data (100 bars) ---
+curl -X POST http://localhost:8765/api/v1/market-data/sync \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","n_bars":100}'
+
+###
+
+# --- Step 3: Verify data exists ---
+curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=4h&limit=5"
+
+###
+
+# --- Step 4: Load MA Crossover strategy ---
+curl -X POST http://localhost:8765/api/v1/strategies/load \
+  -H "Content-Type: application/json" \
+  -d '{"path":"strategies/examples/ma-crossover-btc-usdt.yaml"}'
+
+###
+
+# --- Step 5: Run backtest ---
+curl -X POST http://localhost:8765/api/v1/backtest/run \
+  -H "Content-Type: application/json" \
+  -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-06-01","end_date":"2026-01-01","initial_capital":10000,"slippage_bps":10}'
+
+###
+
+# --- Step 6: Check results (replace {run_id}) ---
+curl -X GET http://localhost:8765/api/v1/backtest/{run_id}
+
+###
+
+# --- Step 6b: Equity curve ---
+curl -X GET http://localhost:8765/api/v1/backtest/{run_id}/equity
+
+###
+
+# --- Step 7: Check orders and positions generated ---
+curl -X GET http://localhost:8765/api/v1/trading/orders
+
+###
+
+curl -X GET http://localhost:8765/api/v1/trading/positions

@@ -23,7 +23,7 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 
 ### Exercise Progression (from learning guide)
 - [ ] **Ex 1** (30min): Trace sync request flow, answer: where is command created? how does mediator find handler? what events published? who receives them?
-- [ ] **Ex 2** (1hr): Create `GetSymbolStatsQuery` handler (reinforces CQRS)
+- [ ] **Ex 2** (1hr): Create `GetSymbolStatsQuery` handler (reinforces CQRS, see DI wiring in `src/container.py`)
 - [ ] **Ex 3** (45min): Add event subscriber for `HistoricalDataSyncedEvent` (reinforces decoupling)
 - [ ] **Ex 4** (1hr): Write tests with mocked singletons (reinforces pytest)
 
@@ -31,7 +31,7 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 `GET /api/v1/market-data/ohlcv/NASDAQ/AAPL` — no events, just query→handler→MongoDB
 
 ### Learning Materials
-- `plans/reports/brainstorm-260201-1223-python-learning-guide.md` — main guide (C# → Python)
+- `plans/260201-1223-python-learning-plan-csharp-developer/` — main learning plan (C# → Python)
 - `docs/learning/python-asyncio-guide.md` — coroutines, event loop, locks
 - `docs/learning/python-event-patterns-guide.md` — Observer, EventBus, domain events
 - `docs/learning/uuid-versions-guide.md` — UUID7 time-ordered IDs
@@ -64,12 +64,13 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 
 ## Pending Plans
 
-| Plan                                             | Priority | Description                             |
-|--------------------------------------------------|----------|-----------------------------------------|
-| `260108-1144-trading-features`                   | P1       | Backtesting, Portfolio, Risk Management |
-| `260108-1144-vps-deployment`                     | P1       | Deploy to Vultr Singapore               |
-| `260131-2006-okx-websocket-backtest-integration` | P1       | Backtest engine + OKX WebSocket         |
-| `260128-1529-job-feature-flag`                   | P3       | Enable/disable background jobs          |
+| Plan                                             | Priority | Description                                 |
+|--------------------------------------------------|----------|---------------------------------------------|
+| `260108-1144-trading-features`                   | P1       | Backtesting, Portfolio, Risk Management     |
+| `260108-1144-vps-deployment`                     | P1       | Deploy to Vultr Singapore                   |
+| `260131-2006-okx-websocket-backtest-integration` | P1       | Backtest engine + OKX WebSocket             |
+| `20260306-comprehensive-testing-strategy`        | P1       | Comprehensive test suite (unit/integration) |
+| `260128-1529-job-feature-flag`                   | P3       | Enable/disable background jobs              |
 
 ---
 
@@ -83,6 +84,11 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 - UUID v7 Migration
 - Pydantic Everywhere
 - Vertical Slice Restructure (all features → operation-first folder pattern)
+- Dependency Injection Container (`dependency-injector` IoC, `src/container.py`)
+- Domain Dataclass Refactor (Pydantic BaseModel → stdlib dataclasses)
+- Config Centralization (removed hardcoded ports, single `Settings` source)
+- Handler Pipelines Documentation (`docs/handler-pipelines.md`)
+- MongoDB Index Naming (explicit names for all indexes)
 
 ---
 
@@ -105,6 +111,7 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 ---
 
 ## Code Improvements
-- Update to simplify the port, we dont want it to be mentioned in too many places
-- Same for configs
-- All ports, configs, username, pwd should be centralized somewhere
+- ~~Update to simplify the port~~ → Done: `Settings` is single source via `src/config.py`
+- ~~All ports, configs, username, pwd should be centralized~~ → Done: DI container + Settings
+- [ ] Performance Reports — trade logs, equity curves, analytics dashboard
+- [ ] Comprehensive test suite — see `20260306-comprehensive-testing-strategy` plan
