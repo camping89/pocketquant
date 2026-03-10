@@ -32,5 +32,14 @@
 - Tests: pytest + pytest-asyncio
 - Lint: ruff check, Format: ruff format, Types: pyright
 
+### Domain Layer Structure
+- 5 aggregates: Order, Position, Symbol, Quote, OHLCV
+- Some domain files already use dataclasses: `Bar`, `SyncStatus`, `BarBuilder`, `StrategyConfig`, `StopLossConfig`, `TakeProfitConfig`, `OrderConfig`
+- Persistence schemas (Pydantic) map to/from aggregates via `from_aggregate()`/`to_aggregate()` with explicit enum conversion
+- Only `OrderDocument` and `PositionDocument` reference aggregates directly; symbol/quote/ohlcv schemas have own models
+- Domain purity enforced via `test_domain_purity.py` (AST check)
+- Two event collection patterns exist: `collect_events()` vs `get_uncommitted_events()`+`clear_events()`
+
 ### Active Plans
 - DI container refactor: `plans/260215-0956-dependency-injection-container/`
+- Domain Pydantic->dataclass refactor: `plans/260309-0918-domain-pydantic-to-dataclass-refactor/`
