@@ -1,10 +1,13 @@
 """API route for getting the current aggregating bar."""
 
-from fastapi import APIRouter, Query, Request
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, Query, Request
+
+from src.application.market_data.quote_service import QuoteService
 from src.common.exceptions import NotFoundError
-from src.container import resolve
 from src.domain.shared.value_objects import Interval
+from src.features.market_data.quotes.dependencies import get_quote_service
 
 router = APIRouter()
 
@@ -13,10 +16,9 @@ router = APIRouter()
 async def get_current_bar(
     exchange: str,
     symbol: str,
-    request: Request,
+    quote_service: Annotated[QuoteService, Depends(get_quote_service)],
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> dict:
-    quote_service = await resolve(request.app.state.container.quote_service)
     bar = await quote_service.bar_manager.get_current_bar(symbol, exchange, interval)
 
     if bar is None:
