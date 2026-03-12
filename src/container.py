@@ -5,6 +5,7 @@ replace per-feature register.py files.
 """
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -74,11 +75,12 @@ async def resolve(provider: Any) -> Any:
     """Resolve a dependency-injector provider, awaiting if it returns a Future.
 
     Factory/Singleton providers return Futures in async contexts when they
-    depend on async Resource providers. This centralises the await-check
-    so callers don't need ``type: ignore[misc]`` everywhere.
+    depend on async Resource providers.  Uses ``inspect.isawaitable`` —
+    the stdlib check that covers coroutines, Futures, and ``__await__``
+    objects — so callers don't need ``type: ignore[misc]`` everywhere.
     """
     result = provider()
-    if hasattr(result, "__await__"):
+    if inspect.isawaitable(result):
         return await result
     return result
 
