@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.features.backtesting.get_optimization.query import GetOptimizationQuery
 
 router = APIRouter()

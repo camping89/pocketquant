@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.features.market_data.quotes.get_all.query import GetAllQuotesQuery
 from src.features.market_data.quotes.get_latest.route import QuoteResponse
 

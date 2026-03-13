@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-22 | **Coverage:** 277 Python files, 13,637 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container | **Type Checker:** Pyright
+**Last Updated:** 2026-02-22 | **Coverage:** 277 Python files, 13,637 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS | **Type Checker:** Pyright
 
 ## Clean Architecture Rules
 
@@ -50,7 +50,7 @@ Operation-First Structure:
 │   └── __init__.py
 ├── router.py                   # Feature router (aggregates all operations)
 └── __init__.py
-# Note: register.py files deleted — handler registration in src/container.py
+# Note: register.py files deleted — handler registration in src/handler_registration.py
 
 IMPORTANT: No business logic in features/. All logic in:
 - Application layer (orchestrators, state machines)
@@ -76,7 +76,7 @@ features/backtesting/
 │   ├── query.py
 │   └── handler.py
 └── router.py                   # Aggregate all operation routes
-# Handler registration in src/container.py (register.py deleted)
+# Handler registration in src/handler_registration.py (register.py deleted)
 ```
 
 **Application Layer (Orchestrators):**
@@ -155,39 +155,46 @@ class StrategyEngine:
 - Called by CQRS handlers in features/ layer
 - Often singletons (StrategyEngine, QuoteService) or per-request (DataSyncService)
 
-### 3. Dependency Injection Container (IoC Pattern)
+### 3. Services Registry (Plain Python DI)
 
-All service wiring managed by `AppContainer` in `src/container.py` using [dependency-injector](https://python-dependency-injector.ets-labs.org/). No static singletons — all dependencies injected via constructor.
+All service wiring uses plain Python constructors — no DI library. The `Services` frozen dataclass in `src/services.py` holds all initialized service instances. Routes access services via FastAPI `Depends()` functions in `src/dependencies.py`.
 
 ```python
-# Container owns all providers — resolved at startup or per-request
-from src.container import AppContainer
+# Services dataclass — typed, frozen, IDE-friendly
+from src.services import Services
 
-container = AppContainer()
-await container.init_resources()  # Initialize DB, Cache, Scheduler, etc.
+@dataclass(frozen=True)
+class Services:
+    settings: Settings
+    database: Database
+    cache: Cache
+    mediator: Mediator
+    # ... all 22 service fields
 
-# Repositories receive Database via constructor (Singleton providers)
-ohlcv_repo = container.ohlcv_repository()  # OHLCVRepository(database=db)
-order_repo = container.order_repository()   # OrderRepository(database=db)
+# Lifespan builds Services with explicit constructors
+database = Database()
+await database.connect(settings)
+services = Services(database=database, ...)
+app.state.services = services
 
-# Cache/DB are Resource providers (async init/shutdown lifecycle)
-cache = container.cache()
-db = container.database()
-
-# CQRS handlers are Factory providers (transient, new per resolution)
-handler = container.sync_symbol_handler()  # Fresh instance each time
+# Routes use FastAPI Depends() for injection
+from src.dependencies import get_mediator
+@router.post("/sync")
+async def sync(mediator: Annotated[Mediator, Depends(get_mediator)]):
+    return await mediator.send(command)
 ```
 
-**Provider types:**
-- `Singleton` — one shared instance (repos, messaging, stateless services)
-- `Resource` — async init/shutdown via generator (DB, Cache, Scheduler, stateful services)
-- `Factory` — new instance per resolution (CQRS handlers for isolation)
+**Pattern:**
+- `src/services.py` — frozen dataclass holding all service instances
+- `src/dependencies.py` — `Depends()` functions reading from `app.state.services`
+- `src/handler_registration.py` — explicit handler constructor calls
+- `src/main.py` lifespan — explicit init/shutdown in dependency order
 
 **Rationale:**
-- Explicit dependencies — no hidden static calls
+- Fully typed — IDE autocomplete, pyright validation
+- Debuggable — plain constructors, no magic resolution
 - Testable — inject mocks via constructor
-- Single source of truth — `src/container.py` owns all wiring
-- All DB access routed through `src/persistence/` layer via injected repositories
+- Single source of truth — `Services` dataclass + `handler_registration.py`
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
@@ -231,39 +238,32 @@ class OHLCVRepository(BaseRepository):
 
 All services receive dependencies via constructor, managed by DI container:
 
-#### Singleton Provider (Stateful Services)
+#### Stateful Services
 
 ```python
-# QuoteService - maintained by container as Singleton provider
+# QuoteService - constructed in lifespan, stored in Services dataclass
 class QuoteService:
     def __init__(self, settings: Settings, cache: Cache, bar_manager: BarManager):
         self._settings = settings
         self._cache = cache
         self._bar_manager = bar_manager
-
-    async def start(self):
-        # Initialize WebSocket
-        pass
 ```
 
-#### Resource Provider (Async Lifecycle)
+#### Lifecycle-Managed Services (Async Init/Shutdown)
 
 ```python
-# OrderManager - async init (load pending orders), managed by container
+# OrderManager - async init in lifespan, explicit shutdown in finally block
 class OrderManager:
     def __init__(self, event_bus: EventBus, order_repository: OrderRepository):
         self._event_bus = event_bus
         self._order_repo = order_repository
+
+# In lifespan:
+order_manager = OrderManager(event_bus, order_repo)
+await order_manager.load_pending_orders()  # async init
 ```
 
-**Container registration:**
-```python
-# In src/container.py
-quote_service = providers.Singleton(QuoteService, settings=settings, cache=cache, bar_manager=bar_manager)
-order_manager = providers.Resource(init_order_manager, event_bus=event_bus, order_repository=order_repository)
-```
-
-**Rationale:** All dependencies explicit in constructor. Container manages lifecycle (Singleton for stateless, Resource for async init/shutdown).
+**Rationale:** All dependencies explicit in constructor. Lifespan manages lifecycle with try/finally for clean shutdown.
 
 ### 6. Provider Pattern (External Integrations)
 
@@ -388,13 +388,13 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 **Key Rules:**
 - Every handler MUST use `@handles(RequestType)` decorator
 - One handler per command/query (enforced at startup, `DuplicateHandlerError`)
-- Constructor receives dependencies (injected via DI container Factory providers)
+- Constructor receives dependencies (injected via explicit constructors in handler_registration.py)
 - `handle()` must be idempotent if possible (for retries)
 - Return DTOs, not domain entities
 - Publish domain events for all state changes
 
 **Registration Pattern:**
-`register_all_handlers(container)` in `src/container.py` resolves all handler Factory providers and registers with Mediator via `HandlerRegistry`. Per-feature `register.py` files are deleted — container is single source of truth. New handlers need `@handles` + Factory provider in container.
+`register_all_handlers(services)` in `src/handler_registration.py` constructs all handlers with explicit dependencies from Services and registers with Mediator via `HandlerRegistry`. New handlers need `@handles` decorator + constructor entry in `handler_registration.py`.
 
 ### 9. Strategy Implementation Pattern
 
@@ -772,11 +772,12 @@ All aggregates migrated:
 
 ❌ Business logic in features/ (move to application/) | Pydantic in domain/ (use dataclasses)
 ❌ Direct DB calls outside src/persistence/ | Bare except clauses
-❌ Synchronous blocking I/O in async context | Global mutable state outside container
+❌ Synchronous blocking I/O in async context | Global mutable state outside Services
 ❌ No type hints on public APIs | String formatting in log calls
 ❌ Manual event subscription (use @event_handler) | Manual mediator.register()
-❌ UUID4 for aggregates (use UUID7) | Static service singletons (use container)
-❌ Per-feature `register.py` files (use container) | Static Repository calls (use DI)
+❌ UUID4 for aggregates (use UUID7) | Static service singletons (use Services dataclass)
+❌ Per-feature `register.py` files (use handler_registration.py) | Static Repository calls (use DI)
+❌ dependency-injector library (use plain Python constructors) | app.state.container (use app.state.services)
 
 ## Quality Checklist
 

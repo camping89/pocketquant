@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-22 | **Codebase Size:** 13,637 LOC | **Total Files:** 277 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS + IoC Container
+**Last Updated:** 2026-02-22 | **Codebase Size:** 13,637 LOC | **Total Files:** 277 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS
 
 ## Architecture Overview
 
@@ -31,7 +31,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **Mediator:** CQRS dispatcher, routes commands/queries to handlers
   - `register(request_type, handler)` - Register handler
   - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
-- **EventBus:** In-memory async event bus (FIFO, 100 event max history, configured in container.py)
+- **EventBus:** In-memory async event bus (FIFO, 100 event max history)
   - `subscribe(event_type, handler)` - Register event subscriber
   - `publish(event)` - Notify all subscribers sequentially
   - `publish_all(events)` - Batch publish multiple events
@@ -201,12 +201,12 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
   - PyMongo native async API (NOT Motor)
   - Connection pooling (5-50 connections, configurable)
   - Single `get_collection()` entry point
-  - Injected via DI container
+  - Constructed in lifespan, stored in Services dataclass
 - **Cache** - Async Redis client
   - JSON serialization with custom date handling
   - TTL support (60s quotes, 300s bars, 86400s idempotency)
   - Pattern-based deletion via SCAN
-  - Injected via DI container
+  - Constructed in lifespan, stored in Services dataclass
 
 **BaseRepository Mixin:**
 - `_collection(name)` - Get MongoDB collection safely
@@ -574,7 +574,6 @@ All settings via environment variables (`.env` file):
 - **redis** - Async Redis client (redis-py)
 - **structlog** - Structured logging
 - **apscheduler** - Job scheduling (APScheduler)
-- **dependency-injector** - IoC container
 - **tvdatafeed** - TradingView data source
 - **aiohttp** - Async HTTP + WebSocket
 - **pytest** - Testing framework

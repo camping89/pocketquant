@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from src.application.strategy.yaml_strategy_loader import StrategyLoader
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.features.strategy.load.command import LoadStrategyCommand
 
 router = APIRouter()

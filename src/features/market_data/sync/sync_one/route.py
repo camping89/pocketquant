@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from src.common.logging import get_logger
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
 

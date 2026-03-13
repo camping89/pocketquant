@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
