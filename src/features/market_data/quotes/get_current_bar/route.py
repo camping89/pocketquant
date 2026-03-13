@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from src.application.market_data.quote_service import QuoteService
 from src.common.exceptions import NotFoundError
 from src.domain.shared.value_objects import Interval
-from src.features.market_data.quotes.dependencies import get_quote_service
+from src.dependencies import get_quote_service
 
 router = APIRouter()
 

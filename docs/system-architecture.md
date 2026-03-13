@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-02-21 | **Version:** 3.1 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + IoC Container
+**Last Updated:** 2026-02-21 | **Version:** 3.1 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture
 
 ## High-Level Architecture
 
@@ -501,7 +501,7 @@ Route Response
 
 **All repositories:**
 - Inherit from `BaseRepository` (provides `_collection()` helper)
-- Instance-based with `Database` injected via constructor (DI container)
+- Instance-based with `Database` injected via constructor
 - Zero direct `Database.get_collection()` calls outside persistence layer
 - Enforce schema validation via MongoDB document schemas
 
@@ -733,34 +733,39 @@ TradingView REST API (tvdatafeed) is blocking. ThreadPoolExecutor (max 4 workers
 
 BarManager uses lock for thread-safe bar building to prevent race conditions during atomic OHLC updates.
 
-## Dependency Injection (IoC Container)
+## Dependency Injection (Plain Python)
 
-AppContainer in `src/container.py` manages all service wiring using dependency-injector.
+`Services` frozen dataclass in `src/services.py` holds all initialized service instances. No DI library — plain constructors in lifespan + FastAPI `Depends()` for routes.
 
-**Provider types:**
-| Type | Lifecycle | Examples |
-|------|-----------|----------|
-| Singleton | One shared instance | Repos, messaging, stateless services |
-| Resource | Async init/shutdown | DB, Cache, Scheduler, stateful services |
-| Factory | New instance per resolution | 27 CQRS handlers (isolation) |
+**Key files:**
+| File | Purpose |
+|------|---------|
+| `src/services.py` | Frozen dataclass with all 22 service fields |
+| `src/dependencies.py` | `Depends()` functions for route injection |
+| `src/handler_registration.py` | Explicit handler construction (27 handlers) |
 
-**Handler registration:** `register_all_handlers()` wires handlers to Mediator. Container is single source of truth.
+**Handler registration:** `register_all_handlers(services)` constructs handlers with explicit dependencies and registers with Mediator.
 
 ## Resource Lifecycle
 
 ### Startup Sequence
 
-1. `AppContainer()` created, settings + logging initialized
-2. `container.init_resources()` initializes in dependency order: Database → Cache → JobScheduler → services
-3. `ensure_all_indexes()` creates MongoDB indexes
-4. `register_all_handlers()` wires 27 handlers to Mediator
-5. `start_background_jobs()` registers APScheduler jobs
-6. Server ready to accept requests
+1. `get_settings()` loads config, logging initialized
+2. Lifespan constructs services in dependency order: Database → Cache → Repos → Messaging → Infrastructure → Market Data → Trading
+3. `Services` dataclass built and stored on `app.state.services`
+4. `ensure_all_indexes()` creates MongoDB indexes
+5. `register_all_handlers()` wires 27 handlers to Mediator
+6. `register_health_checks()` registers DB/Redis health probes
+7. `start_background_jobs()` registers APScheduler jobs
+8. Server ready to accept requests
 
-### Graceful Shutdown
+### Graceful Shutdown (try/finally in lifespan)
 
 1. Stop accepting new requests
-2. `container.shutdown_resources()` shuts down in reverse order (waits for background jobs)
+2. `strategy_engine.stop()` — stop strategy engine
+3. `job_scheduler.shutdown(wait=True)` — stop background jobs
+4. `cache.disconnect()` — close Redis
+5. `database.disconnect()` — close MongoDB
 
 ## Integration Points
 

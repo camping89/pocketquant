@@ -2,7 +2,7 @@
 
 import asyncio
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.common.exceptions import register_exception_handlers
@@ -11,12 +11,12 @@ from src.common.idempotency import IdempotencyMiddleware
 from src.common.logging import get_logger
 from src.common.rate_limit import RateLimitMiddleware
 from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
-from src.container import AppContainer, resolve
 from src.features.backtesting import backtest_router
 from src.features.market_data.quotes.router import router as quote_router
 from src.features.market_data.router import router as market_data_router
 from src.features.strategy import strategy_router
 from src.features.trading import trading_router
+from src.services import Services
 
 logger = get_logger(__name__)
 
@@ -26,36 +26,30 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
-_REPO_PROVIDERS = [
-    "order_repository",
-    "position_repository",
-    "backtest_repository",
-    "ohlcv_repository",
-    "sync_status_repository",
-    "symbol_repository",
-    "optimization_repository",
-]
-
-
-async def ensure_all_indexes(container: AppContainer) -> None:
+async def ensure_all_indexes(services: Services) -> None:
     """Ensure MongoDB indexes for all repository collections."""
-    repos = await asyncio.gather(
-        *(resolve(getattr(container, name)) for name in _REPO_PROVIDERS)
-    )
+    repos = [
+        services.order_repository,
+        services.position_repository,
+        services.backtest_repository,
+        services.ohlcv_repository,
+        services.sync_status_repository,
+        services.symbol_repository,
+        services.optimization_repository,
+    ]
     await asyncio.gather(*(repo.ensure_indexes() for repo in repos))
     logger.info("database_indexes_ensured")
 
 
-async def start_background_jobs(container: AppContainer) -> None:
-    """Register background sync jobs with the scheduler from container."""
-    settings = container.settings()
-    if settings.enable_jobs:
+async def start_background_jobs(services: Services) -> None:
+    """Register background sync jobs with the scheduler."""
+    if services.settings.enable_jobs:
         from src.application.market_data.sync_jobs import register_sync_jobs
 
         register_sync_jobs(
-            mediator=container.mediator(),
-            job_scheduler=await resolve(container.job_scheduler),
-            sync_status_repo=await resolve(container.sync_status_repository),
+            mediator=services.mediator,
+            job_scheduler=services.job_scheduler,
+            sync_status_repo=services.sync_status_repository,
         )
         logger.info("background_jobs_enabled")
     else:
@@ -105,23 +99,30 @@ def configure_middleware(app: FastAPI, settings) -> None:
     app.add_middleware(CorrelationIDMiddleware)
 
 
-def register_routes(app: FastAPI, container: AppContainer, settings) -> None:
-    """Register health/system endpoints and all feature routers."""
-    health_coordinator = container.health_coordinator()
+def register_health_checks(services: Services, app: FastAPI) -> None:
+    """Register health check functions with the coordinator.
 
-    # Health checks read resolved resources stored on app.state during lifespan
+    Called from lifespan after Services is built, so all dependencies are available.
+    """
+    hc = services.health_coordinator
+
     async def _check_db() -> dict:
         return await check_database(app.state.database)
 
     async def _check_redis() -> dict:
         return await check_redis(app.state.cache)
 
-    health_coordinator.register("database", _check_db)
-    health_coordinator.register("redis", _check_redis)
+    hc.register("database", _check_db)
+    hc.register("redis", _check_redis)
+
+
+def register_routes(app: FastAPI, settings) -> None:
+    """Register health/system endpoints and all feature routers."""
 
     @app.get("/health")
-    async def health_check() -> dict:
-        result = await health_coordinator.check_all()
+    async def health_check(request: Request) -> dict:
+        services: Services = request.app.state.services
+        result = await services.health_coordinator.check_all()
         result["version"] = settings.app_version
         result["environment"] = settings.environment
         return result
@@ -129,9 +130,8 @@ def register_routes(app: FastAPI, container: AppContainer, settings) -> None:
     api = APIRouter(prefix=settings.api_prefix)
 
     @api.get("/system/jobs")
-    async def list_jobs() -> list[dict]:
-        scheduler = await resolve(app.state.container.job_scheduler)
-        return scheduler.get_jobs()
+    async def list_jobs(request: Request) -> list[dict]:
+        return request.app.state.services.job_scheduler.get_jobs()
 
     api.include_router(market_data_router)
     api.include_router(quote_router)

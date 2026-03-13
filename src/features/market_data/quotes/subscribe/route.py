@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.features.market_data.quotes.subscribe.command import SubscribeCommand
 
 router = APIRouter()

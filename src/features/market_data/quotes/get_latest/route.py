@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
-from src.common.mediator.dependencies import get_mediator
+from src.dependencies import get_mediator
 from src.features.market_data.quotes.get_latest.query import GetLatestQuoteQuery
 
 router = APIRouter()
