@@ -1,24 +1,23 @@
 """Route for getting sync status for a specific symbol."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter, Query
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/sync-status/{exchange}/{symbol}")
 async def get_symbol_sync_status(
     exchange: str,
     symbol: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
     query = GetSymbolSyncStatusQuery(symbol=symbol, exchange=exchange, interval=interval.value)

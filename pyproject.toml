@@ -13,32 +13,26 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
-
     # Database
     "pymongo>=4.16.0",        # MongoDB driver (native async API)
-
     # Cache
     "redis>=5.0.0",
-
     # Background Jobs
     "apscheduler>=3.10.0",    # For scheduled jobs
-
     # Data Providers
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",  # TradingView historical data
     "websockets>=12.0",       # WebSocket client for real-time quotes
     "pandas>=2.1.0",
     "numpy>=1.26.0",
-
     # Brokers
     "python-okx>=0.4.1",      # OKX exchange API
     "pyyaml>=6.0",            # YAML strategy configs
-
     # Logging
     "structlog>=24.1.0",      # Structured logging
-
     # Utils
     "httpx>=0.26.0",          # Async HTTP client
     "rich>=13.0.0",           # Rich console output for error messages
+    "dishka[fastapi]>=1.9.1",
 ]
 
 [project.optional-dependencies]

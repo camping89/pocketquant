@@ -27,10 +27,12 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 ### src/common (993 LOC, 32 files)
 
-**Coordinators & Mediator:**
+**CQRS & Mediator:**
 - **Mediator:** CQRS dispatcher, routes commands/queries to handlers
   - `register(request_type, handler)` - Register handler
   - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
+- **HandlerRegistry** - Batch register multiple handlers
+  - `register_all(mediator, handlers)` - Register handler list at startup
 - **EventBus:** In-memory async event bus (FIFO, 100 event max history)
   - `subscribe(event_type, handler)` - Register event subscriber
   - `publish(event)` - Notify all subscribers sequentially
@@ -60,13 +62,15 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **Database** - Async MongoDB singleton (PyMongo native async API)
   - `get_collection(name)` - Access collection
   - `connect(settings)` - Initialize connection pool (5-50 connections)
-  - `disconnect()` - Clean shutdown
+  - `disconnect()` - Clean shutdown (called by dishka provider cleanup)
 - **Cache** - Async Redis singleton (redis-py async)
   - `get(key)`, `set(key, value, ttl=None)`, `delete(key)`
   - `delete_pattern(pattern)` - Pattern-based deletion via SCAN
   - `get_or_set(key, func, ttl)` - Cache-aside pattern
+  - `disconnect()` - Clean shutdown (called by dishka provider cleanup)
 - **HealthCoordinator** - Parallel health checks (database, redis, jobs)
 - **JobScheduler** - APScheduler wrapper (AsyncIOExecutor)
+  - `shutdown(wait=True)` - Clean shutdown (called by dishka provider cleanup)
 
 **Logging & Constants:**
 - `setup_logging()` - structlog with JSON/console output
@@ -438,22 +442,78 @@ risk/
 Routes:
 - POST `/api/v1/risk/check` - Pre-trade validation
 
+## Dependency Injection (Dishka)
+
+### 6 Providers (src/providers/)
+
+**CoreProvider** - App-level singletons
+- Settings (from config)
+- EventBus (max_history=100)
+- Mediator
+
+**PersistenceProvider** - Data access layer
+- Database (MongoDB, PyMongo native async)
+- Cache (Redis, redis-py)
+- 7 Repositories (OHLCV, Order, Position, Backtest, Optimization, Symbol, SyncStatus)
+
+**InfrastructureProvider** - External integrations
+- IBroker implementations (PaperBroker, OKXBroker)
+- BrokerFactory (creates broker by type)
+- TradingViewProvider (REST data fetching)
+- TradingViewWebSocketProvider (WebSocket quotes)
+- OkxWebSocketClient + OkxReconnectionHandler (OKX integration)
+- HTTP client (generic async HTTP)
+- WebhookDispatcher
+
+**MarketDataProvider** - Real-time data services
+- BarManager (multi-interval aggregation)
+- QuoteService (WebSocket lifecycle)
+- Sync background jobs (APScheduler registration)
+
+**TradingProvider** - Order/position management
+- OrderManager (order state machine)
+- PositionTracker (position tracking + P&L)
+
+**HandlerProvider** - All 27 CQRS handlers
+- Market data handlers (13): SyncSymbolHandler, GetOHLCVHandler, etc.
+- Trading handlers (4): ListOrdersHandler, GetOrderHandler, etc.
+- Strategy handlers (5): LoadStrategyHandler, StartStrategyHandler, etc.
+- Backtesting handlers (5): RunBacktestHandler, GetBacktestHandler, etc.
+
+### Container Factory
+
+**src/container.py:**
+- `PROVIDERS` list defines initialization order (CoreProvider → ... → HandlerProvider)
+- `create_container()` - Returns AsyncContainer with all providers combined
+- `register_handlers(container)` - Resolves all handlers, registers with Mediator
+
+### Route Integration
+
+```python
+# Routes use FromDishka for injection (via setup_dishka)
+from dishka.integrations.fastapi import FromDishka
+
+@router.post("/sync")
+async def sync_route(mediator: FromDishka[Mediator], command: SyncSymbolCommand):
+    return await mediator.send(command)
+```
+
 ## CQRS Flow
 
 ```
-1. Route receives HTTP request
+1. Route receives HTTP request (with FromDishka[T] dependency)
    ↓
 2. Route builds Command/Query object
    ↓
 3. Route calls Mediator.send(request)
    ↓
-4. Mediator dispatches to registered Handler
+4. Mediator dispatches to registered Handler (from HandlerProvider)
    ↓
 5. Handler executes business logic:
-   - Fetch data from Infrastructure
+   - Fetch data from Infrastructure (from PersistenceProvider)
    - Process via Domain layer
    - Save results via Infrastructure
-   - Publish DomainEvents to EventBus
+   - Publish DomainEvents to EventBus (from CoreProvider)
    ↓
 6. Handler returns DTO
    ↓
@@ -587,18 +647,18 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
 
-## Recent Changes (2026-02-21)
+## Recent Changes (2026-03-13)
 
-**Documentation Accuracy Refresh:**
-- Verified all LOC counts (13,641 across 277 files, not 14,393 across 213)
-- Fixed Motor → PyMongo references (using native async API)
-- Corrected EventBus max_history (100 events, not 50)
-- Fixed justfile commands: `just up/down` (not start/stop/logs)
-- Updated type checker reference: pyright (not mypy)
-- Updated all docs: README.md, code-standards.md, codebase-summary.md, system-architecture.md, project-overview-pdr.md
-- Added Application layer to architecture breakdown
-- Added DI container documentation
-- Updated feature LOC breakdown with accurate file counts
+**Dishka DI Migration:**
+- Replaced plain Python constructors + Services dataclass with dishka library
+- Created 6 providers: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider
+- Removed src/services.py, src/dependencies.py, src/handler_registration.py
+- Added src/container.py factory function
+- Added src/providers/ directory with 6 provider classes
+- Lifespan now uses `create_container()` and `setup_dishka(container, app)`
+- Routes use FromDishka[T] instead of Depends(get_service)
+- Handler registration via `register_handlers(container)` + ALL_HANDLER_TYPES list
+- Updated system-architecture.md, code-standards.md, codebase-summary.md with dishka patterns
 
 **Previous Changes (2026-02-14):**
 - Clean Architecture Refactor Complete: Domain → Application → Features, Infrastructure ← Domain

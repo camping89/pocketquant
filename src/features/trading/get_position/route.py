@@ -1,19 +1,18 @@
 """Get position route."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.trading.get_position.query import GetPositionQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/positions/{strategy_id}")
 async def get_position(
-    strategy_id: str, mediator: Annotated[Mediator, Depends(get_mediator)]
+    strategy_id: str, mediator: FromDishka[Mediator]
 ) -> dict:
     """Get position for a specific strategy."""
     return await mediator.send(GetPositionQuery(strategy_id=strategy_id))

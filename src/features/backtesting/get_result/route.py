@@ -1,21 +1,20 @@
 """API routes for getting backtest results."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.backtesting.get_result.query import GetBacktestQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/{run_id}")
 async def get_backtest(
     run_id: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     """Get a specific backtest result by ID.
 
@@ -33,7 +32,7 @@ async def get_backtest(
 @router.get("/{run_id}/equity")
 async def get_backtest_equity(
     run_id: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     """Get equity curve data for a backtest.
 

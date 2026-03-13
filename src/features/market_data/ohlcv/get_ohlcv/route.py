@@ -1,25 +1,24 @@
 """Route for getting OHLCV data."""
 
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter, Query
 
 from src.common.constants import LIMIT_OHLCV_QUERY_MAX
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
 from src.persistence.schemas.ohlcv_schema import OHLCVResponse
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/ohlcv/{exchange}/{symbol}", response_model=OHLCVResponse)
 async def get_ohlcv(
     exchange: str,
     symbol: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
     interval: Interval = Query(default=Interval.DAY_1),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),

@@ -1,19 +1,18 @@
 """API route for stopping the quote feed."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.quotes.stop_feed.command import StopQuoteFeedCommand
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.post("/stop")
 async def stop_quote_service(
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     cmd = StopQuoteFeedCommand()
     return await mediator.send(cmd)

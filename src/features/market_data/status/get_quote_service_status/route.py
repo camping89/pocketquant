@@ -1,12 +1,11 @@
 """Route for getting quote service status."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.status.get_quote_service_status.query import (
     GetQuoteServiceStatusQuery,
 )
@@ -18,12 +17,12 @@ class QuoteServiceStatus(BaseModel):
     active_symbols: list[str]
 
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/status", response_model=QuoteServiceStatus)
 async def get_quote_service_status(
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> QuoteServiceStatus:
     query = GetQuoteServiceStatusQuery()
     result = await mediator.send(query)

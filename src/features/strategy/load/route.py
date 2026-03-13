@@ -1,17 +1,16 @@
 """Load strategy API route."""
 
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from src.application.strategy.yaml_strategy_loader import StrategyLoader
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.strategy.load.command import LoadStrategyCommand
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 class LoadStrategyRequest(BaseModel):
@@ -23,7 +22,7 @@ class LoadStrategyRequest(BaseModel):
 @router.post("/load")
 async def load_strategy(
     body: LoadStrategyRequest,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     """Load a strategy from YAML file."""
     path = Path(body.path)

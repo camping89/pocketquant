@@ -1,24 +1,50 @@
 """Helpers for main.py: middleware, routes, and startup utilities."""
 
 import asyncio
+from functools import partial
 
-from fastapi import APIRouter, FastAPI, Request
+from dishka import AsyncContainer
+from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.common.exceptions import register_exception_handlers
+from src.common.health import HealthCoordinator
 from src.common.health.checks import check_database, check_redis
 from src.common.idempotency import IdempotencyMiddleware
 from src.common.logging import get_logger
+from src.common.mediator.mediator import Mediator
 from src.common.rate_limit import RateLimitMiddleware
 from src.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
+from src.config import Settings
 from src.features.backtesting import backtest_router
 from src.features.market_data.quotes.router import router as quote_router
 from src.features.market_data.router import router as market_data_router
 from src.features.strategy import strategy_router
 from src.features.trading import trading_router
-from src.services import Services
+from src.infrastructure.scheduling.scheduler import JobScheduler
+from src.persistence.repositories.backtest_repository import BacktestRepository
+from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.optimization_repository import (
+    OptimizationRepository,
+)
+from src.persistence.repositories.order_repository import OrderRepository
+from src.persistence.repositories.position_repository import PositionRepository
+from src.persistence.repositories.symbol_repository import SymbolRepository
+from src.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
+
+# All repository types that need MongoDB indexes on startup
+_REPO_TYPES: list[type] = [
+    OrderRepository,
+    PositionRepository,
+    BacktestRepository,
+    OHLCVRepository,
+    SyncStatusRepository,
+    SymbolRepository,
+    OptimizationRepository,
+]
 
 
 # ---------------------------------------------------------------------------
@@ -26,34 +52,37 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
-async def ensure_all_indexes(services: Services) -> None:
+async def ensure_all_indexes(container: AsyncContainer) -> None:
     """Ensure MongoDB indexes for all repository collections."""
-    repos = [
-        services.order_repository,
-        services.position_repository,
-        services.backtest_repository,
-        services.ohlcv_repository,
-        services.sync_status_repository,
-        services.symbol_repository,
-        services.optimization_repository,
-    ]
+    repos = [await container.get(rt) for rt in _REPO_TYPES]
     await asyncio.gather(*(repo.ensure_indexes() for repo in repos))
     logger.info("database_indexes_ensured")
 
 
-async def start_background_jobs(services: Services) -> None:
+async def start_background_jobs(container: AsyncContainer) -> None:
     """Register background sync jobs with the scheduler."""
-    if services.settings.enable_jobs:
-        from src.application.market_data.sync_jobs import register_sync_jobs
-
-        register_sync_jobs(
-            mediator=services.mediator,
-            job_scheduler=services.job_scheduler,
-            sync_status_repo=services.sync_status_repository,
-        )
-        logger.info("background_jobs_enabled")
-    else:
+    settings = await container.get(Settings)
+    if not settings.enable_jobs:
         logger.info("background_jobs_disabled")
+        return
+
+    from src.application.market_data.sync_jobs import register_sync_jobs
+
+    register_sync_jobs(
+        mediator=await container.get(Mediator),
+        job_scheduler=await container.get(JobScheduler),
+        sync_status_repo=await container.get(SyncStatusRepository),
+    )
+    logger.info("background_jobs_enabled")
+
+
+async def register_health_checks(
+    container: AsyncContainer, app: FastAPI
+) -> None:
+    """Register health check functions with the coordinator."""
+    hc = await container.get(HealthCoordinator)
+    hc.register("database", partial(check_database, app.state.database))
+    hc.register("redis", partial(check_redis, app.state.cache))
 
 
 def handle_startup_failure(error: Exception) -> None:
@@ -72,8 +101,8 @@ def handle_startup_failure(error: Exception) -> None:
         )
     )
     console.print("\n[dim]Your code:[/]")
-    console.print("  → [cyan]src/main.py[/] in lifespan")
-    console.print("  → [cyan]src/common/database/connection.py[/] in connect")
+    console.print("  -> [cyan]src/main.py[/] in lifespan")
+    console.print("  -> [cyan]src/common/database/connection.py[/] in connect")
     os._exit(1)
 
 
@@ -99,39 +128,24 @@ def configure_middleware(app: FastAPI, settings) -> None:
     app.add_middleware(CorrelationIDMiddleware)
 
 
-def register_health_checks(services: Services, app: FastAPI) -> None:
-    """Register health check functions with the coordinator.
-
-    Called from lifespan after Services is built, so all dependencies are available.
-    """
-    hc = services.health_coordinator
-
-    async def _check_db() -> dict:
-        return await check_database(app.state.database)
-
-    async def _check_redis() -> dict:
-        return await check_redis(app.state.cache)
-
-    hc.register("database", _check_db)
-    hc.register("redis", _check_redis)
-
-
 def register_routes(app: FastAPI, settings) -> None:
     """Register health/system endpoints and all feature routers."""
 
     @app.get("/health")
-    async def health_check(request: Request) -> dict:
-        services: Services = request.app.state.services
-        result = await services.health_coordinator.check_all()
+    @inject
+    async def health_check(
+        health_coordinator: FromDishka[HealthCoordinator],
+    ) -> dict:
+        result = await health_coordinator.check_all()
         result["version"] = settings.app_version
         result["environment"] = settings.environment
         return result
 
-    api = APIRouter(prefix=settings.api_prefix)
+    api = APIRouter(prefix=settings.api_prefix, route_class=DishkaRoute)
 
     @api.get("/system/jobs")
-    async def list_jobs(request: Request) -> list[dict]:
-        return request.app.state.services.job_scheduler.get_jobs()
+    async def list_jobs(job_scheduler: FromDishka[JobScheduler]) -> list[dict]:
+        return job_scheduler.get_jobs()
 
     api.include_router(market_data_router)
     api.include_router(quote_router)

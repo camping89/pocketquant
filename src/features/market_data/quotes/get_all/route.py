@@ -1,20 +1,19 @@
 """API route for getting all active quotes."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.quotes.get_all.query import GetAllQuotesQuery
 from src.features.market_data.quotes.get_latest.route import QuoteResponse
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/all", response_model=list[QuoteResponse])
 async def get_all_quotes(
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> list[QuoteResponse]:
     query = GetAllQuotesQuery()
     results = await mediator.send(query)

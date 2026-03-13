@@ -1,15 +1,14 @@
 """API routes for running a backtest."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.backtesting.run.command import RunBacktestCommand
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 class BacktestMetricsResponse(BaseModel):
@@ -39,7 +38,7 @@ class RunBacktestResponse(BaseModel):
 @router.post("/run", response_model=RunBacktestResponse)
 async def run_backtest(
     cmd: RunBacktestCommand,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     """Execute a single backtest run.
 

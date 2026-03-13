@@ -1,16 +1,15 @@
 """API route for getting the latest quote."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.quotes.get_latest.query import GetLatestQuoteQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 class QuoteResponse(BaseModel):
@@ -49,7 +48,7 @@ class QuoteResponse(BaseModel):
 async def get_latest_quote(
     exchange: str,
     symbol: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> QuoteResponse:
     query = GetLatestQuoteQuery(symbol=symbol, exchange=exchange)
     result = await mediator.send(query)
