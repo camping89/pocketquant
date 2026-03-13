@@ -62,9 +62,13 @@ src/common/          # Cross-cutting: mediator, messaging, logging, cache (re-ex
 - Linting: ruff (42 issues, 41 auto-fixable -- mostly import sorting)
 - Tests: pytest + pytest-asyncio (60 tests passing)
 
+### DI Pattern (updated 2026-03-13)
+- [project_dishka_di.md](project_dishka_di.md) -- dishka provider structure, DishkaRoute propagation gotcha
+
 ### Review Reports
 - `plans/reports/code-review-260214-persistence-layer.md` - Persistence layer extraction review
 - `plans/reports/code-review-260214-clean-architecture-refactor.md` - Full clean arch refactor review
 - `plans/reports/code-reviewer-260214-1331-mediator-auto-discovery.md` - Mediator decorator review
 - `plans/reports/code-reviewer-260213-0127-vertical-slice-review.md` - Vertical slice review
 - `plans/reports/code-reviewer-260215-1908-database-layer-review.md` - Database layer deep dive (12 categories)
+- `plans/reports/code-review-260313-1243-dishka-migration.md` - Dishka DI migration review (critical DishkaRoute bug)
