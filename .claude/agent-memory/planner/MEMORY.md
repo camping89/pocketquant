@@ -12,8 +12,8 @@
 - CQRS: `@handles` decorator + `HandlerRegistry.register_all()` in per-feature `register.py`
 - Events: `@event_handler` decorator + `EventBus` (in-memory FIFO)
 - Repos: 7 repositories in `src/persistence/repositories/`, all inherit `BaseRepository`
-- Static singletons: Database, Cache, JobScheduler use class-method pattern (being migrated to DI)
-- Routes use `Depends(get_mediator)` via `src/common/mediator/dependencies.py`
+- DI: plain Python constructors + frozen `Services` dataclass (migrating to dishka)
+- Routes use `Depends(get_mediator)` via `src/dependencies.py` (migrating to `FromDishka[]`)
 - Re-exports: `src/common/database/` -> `src/persistence/`, `src/common/cache/` -> `src/persistence/`
 
 ### File Conventions
@@ -41,5 +41,8 @@
 - Two event collection patterns exist: `collect_events()` vs `get_uncommitted_events()`+`clear_events()`
 
 ### Active Plans
-- DI container refactor: `plans/260215-0956-dependency-injection-container/`
+- Dishka DI migration: `plans/260313-1212-dishka-di-refactor/`
 - Domain Pydantic->dataclass refactor: `plans/260309-0918-domain-pydantic-to-dataclass-refactor/`
+
+### Memory Files
+- [feedback_dishka_di.md](feedback_dishka_di.md) — replace Services god container with dishka for auto-wiring DI
