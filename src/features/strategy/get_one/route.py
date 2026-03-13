@@ -1,21 +1,20 @@
 """Get strategy API route."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.strategy.get_one.query import GetStrategyQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/{strategy_id}")
 async def get_strategy(
     strategy_id: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     """Get a specific strategy by ID."""
     result = await mediator.send(GetStrategyQuery(strategy_id=strategy_id))

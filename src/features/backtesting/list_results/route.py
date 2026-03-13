@@ -1,20 +1,19 @@
 """API routes for listing backtests."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.backtesting.list_results.query import ListBacktestsQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/strategy/{strategy_id}")
 async def list_backtests(
     strategy_id: str,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
     limit: int = 20,
     include_failed: bool = False,
 ) -> list[dict]:

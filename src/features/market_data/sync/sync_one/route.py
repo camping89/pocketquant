@@ -1,24 +1,23 @@
 """Route for syncing a single symbol."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter, BackgroundTasks
 
 from src.common.logging import get_logger
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
 
 logger = get_logger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.post("/sync", response_model=SyncResponse)
 async def sync_symbol(
     cmd: SyncSymbolCommand,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> SyncResponse:
     logger.info(
         "api.sync_requested",
@@ -33,7 +32,7 @@ async def sync_symbol(
 async def sync_symbol_background(
     cmd: SyncSymbolCommand,
     background_tasks: BackgroundTasks,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     async def run_sync() -> None:
         await mediator.send(cmd)

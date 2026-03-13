@@ -1,12 +1,9 @@
 """Stop strategy command handler."""
 
-from typing import TYPE_CHECKING
 
+from src.application.strategy.strategy_engine import StrategyEngine
 from src.common.mediator import Handler, handles
 from src.features.strategy.stop.command import StopStrategyCommand
-
-if TYPE_CHECKING:
-    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 @handles(StopStrategyCommand)

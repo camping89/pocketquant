@@ -1,19 +1,18 @@
 """Route for getting all sync statuses."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.status.get_sync_status.query import GetSyncStatusQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/sync-status")
 async def get_sync_statuses(
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> list[dict]:
     query = GetSyncStatusQuery()
     statuses = await mediator.send(query)

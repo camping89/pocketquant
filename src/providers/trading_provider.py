@@ -1,0 +1,67 @@
+"""Trading service providers with async lifecycle.
+
+OrderManager and PositionTracker need async post-init (load state from DB).
+StrategyEngine uses a generator factory for start/stop lifecycle.
+"""
+
+from collections.abc import AsyncIterator
+
+from dishka import Provider, Scope, provide
+
+from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.trading.order_manager import OrderManager
+from src.application.trading.position_tracker import PositionTracker
+from src.common.messaging import EventBus
+from src.config import Settings
+from src.features.risk.check_risk.handler import RiskCheckHandler
+from src.infrastructure.brokers import BrokerFactory
+from src.persistence.repositories.order_repository import OrderRepository
+from src.persistence.repositories.position_repository import PositionRepository
+
+
+class TradingProvider(Provider):
+    @provide(scope=Scope.APP)
+    async def get_order_manager(
+        self, event_bus: EventBus, order_repository: OrderRepository
+    ) -> OrderManager:
+        manager = OrderManager(event_bus, order_repository)
+        await manager.load_pending_orders()
+        return manager
+
+    @provide(scope=Scope.APP)
+    async def get_position_tracker(
+        self, event_bus: EventBus, position_repository: PositionRepository
+    ) -> PositionTracker:
+        tracker = PositionTracker(event_bus, position_repository)
+        await tracker.start()
+        return tracker
+
+    @provide(scope=Scope.APP)
+    async def get_strategy_engine(
+        self,
+        event_bus: EventBus,
+        broker_factory: BrokerFactory,
+        order_manager: OrderManager,
+        position_tracker: PositionTracker,
+        risk_handler: RiskCheckHandler,
+        settings: Settings,
+    ) -> AsyncIterator[StrategyEngine]:
+        """Create, start, and yield StrategyEngine. Stop on app shutdown."""
+        engine = StrategyEngine(
+            event_bus=event_bus,
+            broker_factory=broker_factory,
+            order_manager=order_manager,
+            position_tracker=position_tracker,
+            risk_handler=risk_handler,
+            default_broker_config={
+                "initial_balance": settings.paper_initial_balance,
+                "slippage_percent": settings.paper_slippage_percent,
+                "api_key": settings.okx_api_key,
+                "api_secret": settings.okx_api_secret,
+                "passphrase": settings.okx_passphrase,
+                "demo": settings.okx_demo_mode,
+            },
+        )
+        await engine.start()
+        yield engine
+        await engine.stop()

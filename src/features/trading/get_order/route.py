@@ -1,17 +1,16 @@
 """Get order route."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.trading.get_order.query import GetOrderQuery
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 @router.get("/orders/{order_id}")
-async def get_order(order_id: str, mediator: Annotated[Mediator, Depends(get_mediator)]) -> dict:
+async def get_order(order_id: str, mediator: FromDishka[Mediator]) -> dict:
     """Get a specific order."""
     return await mediator.send(GetOrderQuery(order_id=order_id))

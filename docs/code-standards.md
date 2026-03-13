@@ -155,46 +155,52 @@ class StrategyEngine:
 - Called by CQRS handlers in features/ layer
 - Often singletons (StrategyEngine, QuoteService) or per-request (DataSyncService)
 
-### 3. Services Registry (Plain Python DI)
+### 3. Services Registry (Dishka DI)
 
-All service wiring uses plain Python constructors — no DI library. The `Services` frozen dataclass in `src/services.py` holds all initialized service instances. Routes access services via FastAPI `Depends()` functions in `src/dependencies.py`.
+All service wiring uses **dishka** — Python DI library with type-hint-based auto-resolution. 6 providers organize services by domain concern. Container resolves dependencies from type hints automatically.
 
 ```python
-# Services dataclass — typed, frozen, IDE-friendly
-from src.services import Services
+# Define services in provider classes (@provide decorator)
+from dishka import Provider, Scope, provide
 
-@dataclass(frozen=True)
-class Services:
-    settings: Settings
-    database: Database
-    cache: Cache
-    mediator: Mediator
-    # ... all 22 service fields
+class CoreProvider(Provider):
+    @provide(scope=Scope.APP)
+    def get_mediator(self) -> Mediator:
+        return Mediator()
 
-# Lifespan builds Services with explicit constructors
-database = Database()
-await database.connect(settings)
-services = Services(database=database, ...)
-app.state.services = services
+    @provide(scope=Scope.APP)
+    def get_event_bus(self) -> EventBus:
+        return EventBus(max_history=100)
 
-# Routes use FastAPI Depends() for injection
-from src.dependencies import get_mediator
+# Container auto-resolves via type hints
+container = create_container()  # 6 providers combined
+mediator = await container.get(Mediator)
+
+# Routes use dishka FastAPI integration (FromDishka[T] + DishkaRoute)
+from dishka.integrations.fastapi import FromDishka
+
 @router.post("/sync")
-async def sync(mediator: Annotated[Mediator, Depends(get_mediator)]):
+async def sync(mediator: FromDishka[Mediator]):
     return await mediator.send(command)
 ```
 
 **Pattern:**
-- `src/services.py` — frozen dataclass holding all service instances
-- `src/dependencies.py` — `Depends()` functions reading from `app.state.services`
-- `src/handler_registration.py` — explicit handler constructor calls
-- `src/main.py` lifespan — explicit init/shutdown in dependency order
+- `src/container.py` — factory (`create_container()`) + handler registration
+- `src/providers/` — 6 Provider classes:
+  - CoreProvider: Settings, EventBus, Mediator
+  - PersistenceProvider: Database, Cache, 7 repositories
+  - InfrastructureProvider: Brokers, TradingView, JobScheduler
+  - MarketDataProvider: BarManager, QuoteService, sync jobs
+  - TradingProvider: OrderManager, PositionTracker
+  - HandlerProvider: All 27 CQRS handlers
+- `src/main.py` lifespan — setup_dishka(container, app) for route integration
 
 **Rationale:**
-- Fully typed — IDE autocomplete, pyright validation
-- Debuggable — plain constructors, no magic resolution
-- Testable — inject mocks via constructor
-- Single source of truth — `Services` dataclass + `handler_registration.py`
+- **Auto-resolution** — dependencies matched by type hint (cleaner than manual wiring)
+- **Scoped lifecycle** — Scope.APP singletons auto-cleaned on container.close()
+- **Type-safe** — full IDE autocomplete, pyright validation
+- **Modular providers** — organize services by domain (CoreProvider, PersistenceProvider, etc.)
+- **Single source of truth** — container.py PROVIDERS list controls initialization order
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
@@ -394,7 +400,11 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 - Publish domain events for all state changes
 
 **Registration Pattern:**
-`register_all_handlers(services)` in `src/handler_registration.py` constructs all handlers with explicit dependencies from Services and registers with Mediator via `HandlerRegistry`. New handlers need `@handles` decorator + constructor entry in `handler_registration.py`.
+`register_handlers(container)` in `src/container.py` resolves all handler types from container and registers with Mediator. New handlers need:
+1. Implement handler with `@handles(RequestType)` decorator
+2. Add to HandlerProvider in `src/providers/handler_provider.py` via `provide(HandlerClass, scope=Scope.APP)`
+3. Add to ALL_HANDLER_TYPES list in HandlerProvider
+4. Handler dependencies resolved by dishka via __init__ type hints
 
 ### 9. Strategy Implementation Pattern
 
@@ -772,12 +782,12 @@ All aggregates migrated:
 
 ❌ Business logic in features/ (move to application/) | Pydantic in domain/ (use dataclasses)
 ❌ Direct DB calls outside src/persistence/ | Bare except clauses
-❌ Synchronous blocking I/O in async context | Global mutable state outside Services
+❌ Synchronous blocking I/O in async context | Global mutable state outside container
 ❌ No type hints on public APIs | String formatting in log calls
 ❌ Manual event subscription (use @event_handler) | Manual mediator.register()
-❌ UUID4 for aggregates (use UUID7) | Static service singletons (use Services dataclass)
-❌ Per-feature `register.py` files (use handler_registration.py) | Static Repository calls (use DI)
-❌ dependency-injector library (use plain Python constructors) | app.state.container (use app.state.services)
+❌ UUID4 for aggregates (use UUID7) | Handwritten DI wiring (use dishka providers)
+❌ Per-feature `register.py` files (use HandlerProvider) | Static Repository calls (use DI)
+❌ dependency-injector library (use dishka) | Depends() in routes (use FromDishka + DishkaRoute)
 
 ## Quality Checklist
 

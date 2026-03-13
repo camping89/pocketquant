@@ -1,15 +1,15 @@
 """API routes for running optimization."""
 
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.backtesting.optimize.command import RunOptimizationCommand
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 class OptimizationSummaryResponse(BaseModel):
@@ -29,7 +29,7 @@ class OptimizationSummaryResponse(BaseModel):
 @router.post("/optimize", response_model=OptimizationSummaryResponse)
 async def run_optimization(
     cmd: RunOptimizationCommand,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     """Run grid optimization across parameter combinations.
 

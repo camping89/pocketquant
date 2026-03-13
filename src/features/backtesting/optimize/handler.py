@@ -1,19 +1,16 @@
 """Handler for running optimization."""
 
-from typing import TYPE_CHECKING
 
 from src.application.backtesting.grid_optimizer import GridOptimizer
 from src.application.backtesting.models.optimization_config import OptimizationConfig
 from src.application.backtesting.models.optimization_result import OptimizationResult
+from src.application.strategy.strategy_engine import StrategyEngine
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.optimize.command import RunOptimizationCommand
 from src.persistence.repositories.backtest_repository import BacktestRepository
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 from src.persistence.repositories.optimization_repository import OptimizationRepository
-
-if TYPE_CHECKING:
-    from src.application.strategy.strategy_engine import StrategyEngine
 
 
 @handles(RunOptimizationCommand)

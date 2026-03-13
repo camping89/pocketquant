@@ -1,15 +1,14 @@
 """API route for unsubscribing from a symbol."""
 
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from src.common.mediator import Mediator
-from src.dependencies import get_mediator
 from src.features.market_data.quotes.unsubscribe.command import UnsubscribeCommand
 
-router = APIRouter()
+router = APIRouter(route_class=DishkaRoute)
 
 
 class UnsubscribeRequest(BaseModel):
@@ -20,7 +19,7 @@ class UnsubscribeRequest(BaseModel):
 @router.post("/unsubscribe")
 async def unsubscribe_from_symbol(
     request: UnsubscribeRequest,
-    mediator: Annotated[Mediator, Depends(get_mediator)],
+    mediator: FromDishka[Mediator],
 ) -> dict:
     cmd = UnsubscribeCommand(symbol=request.symbol, exchange=request.exchange)
     return await mediator.send(cmd)

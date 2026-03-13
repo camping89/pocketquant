@@ -733,39 +733,49 @@ TradingView REST API (tvdatafeed) is blocking. ThreadPoolExecutor (max 4 workers
 
 BarManager uses lock for thread-safe bar building to prevent race conditions during atomic OHLC updates.
 
-## Dependency Injection (Plain Python)
+## Dependency Injection (Dishka DI)
 
-`Services` frozen dataclass in `src/services.py` holds all initialized service instances. No DI library — plain constructors in lifespan + FastAPI `Depends()` for routes.
+dishka library with 6 providers + auto-resolution via type hints. Cleaner than plain constructors — dependencies resolved by matching `__init__` parameter types.
 
 **Key files:**
 | File | Purpose |
 |------|---------|
-| `src/services.py` | Frozen dataclass with all 22 service fields |
-| `src/dependencies.py` | `Depends()` functions for route injection |
-| `src/handler_registration.py` | Explicit handler construction (27 handlers) |
+| `src/container.py` | Factory: `create_container()`, handler registration |
+| `src/providers/` | 6 Provider classes: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider |
+| `src/main.py` | Lifespan: create container, get DB/Cache, register handlers, setup_dishka |
 
-**Handler registration:** `register_all_handlers(services)` constructs handlers with explicit dependencies and registers with Mediator.
+**Provider breakdown:**
+- **CoreProvider** - Settings, EventBus, Mediator (app-scoped singletons)
+- **PersistenceProvider** - Database, Cache, all 7 repositories
+- **InfrastructureProvider** - Brokers, TradingView provider, JobScheduler, HTTP client
+- **MarketDataProvider** - BarManager, QuoteService, sync jobs
+- **TradingProvider** - OrderManager, PositionTracker
+- **HandlerProvider** - All 27 CQRS handlers (auto-discovered via ALL_HANDLER_TYPES list)
+
+**Handler registration:** `register_handlers(container)` resolves all handler types from container and registers with Mediator.
 
 ## Resource Lifecycle
 
 ### Startup Sequence
 
 1. `get_settings()` loads config, logging initialized
-2. Lifespan constructs services in dependency order: Database → Cache → Repos → Messaging → Infrastructure → Market Data → Trading
-3. `Services` dataclass built and stored on `app.state.services`
-4. `ensure_all_indexes()` creates MongoDB indexes
-5. `register_all_handlers()` wires 27 handlers to Mediator
+2. Create dishka AsyncContainer with 6 providers
+3. Get Database and Cache from container, store on `app.state` for middleware hot-path
+4. `register_handlers(container)` resolves all 27 handlers and registers with Mediator
+5. `ensure_all_indexes()` creates MongoDB indexes
 6. `register_health_checks()` registers DB/Redis health probes
 7. `start_background_jobs()` registers APScheduler jobs
-8. Server ready to accept requests
+8. `setup_dishka(container, app)` integrates dishka with FastAPI routes
+9. Server ready to accept requests
 
-### Graceful Shutdown (try/finally in lifespan)
+### Graceful Shutdown (container.close() in finally)
 
 1. Stop accepting new requests
-2. `strategy_engine.stop()` — stop strategy engine
-3. `job_scheduler.shutdown(wait=True)` — stop background jobs
-4. `cache.disconnect()` — close Redis
-5. `database.disconnect()` — close MongoDB
+2. `container.close()` runs all provider cleanups in reverse order:
+   - StrategyEngine.stop() — stop strategy engine
+   - JobScheduler.shutdown(wait=True) — stop background jobs
+   - Cache.disconnect() — close Redis
+   - Database.disconnect() — close MongoDB
 
 ## Integration Points
 
