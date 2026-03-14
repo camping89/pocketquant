@@ -24,10 +24,6 @@ class OHLCVBase(BaseModel):
     volume: float = Field(..., description="Trading volume")
 
 
-class OHLCVCreate(OHLCVBase):
-    pass
-
-
 class OHLCV(OHLCVBase):
     model_config = ConfigDict(populate_by_name=True)
 
