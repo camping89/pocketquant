@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from websockets import State
 
-from src.infrastructure.tradingview.websocket import (
-    TradingViewWebSocketProvider,
+from src.infrastructure.tradingview.tradingview_websocket_client import (
+    TradingViewWebSocketClient,
     _create_message,
     _generate_session_id,
     _parse_messages,
@@ -99,12 +99,12 @@ class TestHelperFunctions:
         assert messages == []
 
 
-class TestTradingViewWebSocketProvider:
-    """Tests for TradingViewWebSocketProvider class."""
+class TestTradingViewWebSocketClient:
+    """Tests for TradingViewWebSocketClient class."""
 
     def test_init_defaults(self):
         """Provider initializes with correct defaults."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
 
         assert provider._auth_token is None
         assert provider._ws is None
@@ -116,17 +116,17 @@ class TestTradingViewWebSocketProvider:
 
     def test_init_with_auth_token(self):
         """Auth token should be stored."""
-        provider = TradingViewWebSocketProvider(auth_token="test_token")
+        provider = TradingViewWebSocketClient(auth_token="test_token")
         assert provider._auth_token == "test_token"
 
     def test_is_connected_false_when_no_ws(self):
         """is_connected returns False when ws is None."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         assert provider.is_connected() is False
 
     def test_is_connected_false_when_ws_closed(self):
         """is_connected returns False when ws state is not OPEN."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = MagicMock()
         provider._ws.state = State.CLOSED
 
@@ -134,7 +134,7 @@ class TestTradingViewWebSocketProvider:
 
     def test_is_connected_true_when_ws_open(self):
         """is_connected returns True when ws state is OPEN."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = MagicMock()
         provider._ws.state = State.OPEN
 
@@ -142,7 +142,7 @@ class TestTradingViewWebSocketProvider:
 
     def test_subscription_count(self):
         """subscription_count returns number of subscriptions."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
 
         assert provider.subscription_count == 0
 
@@ -155,14 +155,14 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_connect_creates_session(self):
         """connect() should establish connection and create session."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
 
         mock_ws = AsyncMock()
 
         async def mock_connect(*args, **kwargs):
             return mock_ws
 
-        with patch("src.infrastructure.tradingview.websocket.websockets.connect", side_effect=mock_connect):
+        with patch("src.infrastructure.tradingview.tradingview_websocket_client.websockets.connect", side_effect=mock_connect):
             await provider.connect()
 
         assert provider._ws == mock_ws
@@ -175,7 +175,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_disconnect_closes_connection(self):
         """disconnect() should close ws and reset state."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = AsyncMock()
         provider._running = True
 
@@ -187,7 +187,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_subscribe_without_connection_raises(self):
         """subscribe() without connection should raise RuntimeError."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
 
         with pytest.raises(RuntimeError, match="WebSocket not connected"):
             await provider.subscribe("AAPL", "NASDAQ", lambda x: None)
@@ -195,7 +195,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_subscribe_adds_to_subscriptions(self):
         """subscribe() should add callback and send message."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = AsyncMock()
         provider._session_id = "test_session"
 
@@ -209,7 +209,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_subscribe_uppercase_symbol_key(self):
         """Symbol key should be uppercase."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = AsyncMock()
         provider._session_id = "test_session"
 
@@ -220,7 +220,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_unsubscribe_removes_subscription(self):
         """unsubscribe() should remove from dict and send message."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = AsyncMock()
         provider._session_id = "test_session"
         provider._subscriptions["NASDAQ:AAPL"] = lambda x: None
@@ -233,7 +233,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_unsubscribe_nonexistent_does_nothing(self):
         """unsubscribe() for non-existent symbol does nothing."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = AsyncMock()
 
         await provider.unsubscribe("AAPL", "NASDAQ")
@@ -243,7 +243,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_unsubscribe_without_connection_returns(self):
         """unsubscribe() without connection should return silently."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
 
         # Should not raise
         await provider.unsubscribe("AAPL", "NASDAQ")
@@ -251,7 +251,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_handle_quote_update_calls_callback(self):
         """Quote update should trigger callback with mapped data."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._session_id = "test_session"
 
         received = []
@@ -280,7 +280,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_handle_quote_update_async_callback(self):
         """Async callbacks should be awaited."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._session_id = "test_session"
 
         received = []
@@ -302,7 +302,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_handle_quote_update_wrong_session_ignored(self):
         """Quote updates for wrong session should be ignored."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._session_id = "my_session"
 
         received = []
@@ -320,7 +320,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_handle_quote_update_callback_exception_logged(self):
         """Callback exceptions are logged and re-raised (critical for strategies)."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._session_id = "test_session"
 
         def bad_callback(_data):
@@ -340,7 +340,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_send_heartbeat(self):
         """Heartbeat should send ~h~1."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
         provider._ws = AsyncMock()
 
         await provider._send_heartbeat()
@@ -350,7 +350,7 @@ class TestTradingViewWebSocketProvider:
     @pytest.mark.asyncio
     async def test_send_heartbeat_no_connection(self):
         """Heartbeat without connection should do nothing."""
-        provider = TradingViewWebSocketProvider()
+        provider = TradingViewWebSocketClient()
 
         # Should not raise
         await provider._send_heartbeat()

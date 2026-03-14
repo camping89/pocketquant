@@ -1,8 +1,8 @@
 """Backtesting feature module - historical replay and optimization."""
 
-from src.application.backtesting.backtest_runner import BacktestRunner
-from src.application.backtesting.grid_optimizer import GridOptimizer
-from src.application.backtesting.historical_replay_engine import HistoricalReplayEngine
+from src.application.backtesting.backtest_app_service import BacktestAppService
+from src.application.backtesting.grid_optimization_app_service import GridOptimizationAppService
+from src.application.backtesting.historical_replay_app_service import HistoricalReplayAppService
 from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.application.backtesting.models.backtest_result import BacktestMetrics, BacktestResult
 from src.application.backtesting.models.optimization_config import OptimizationConfig
@@ -34,10 +34,10 @@ __all__ = [
     # Router
     "backtest_router",
     # Engine
-    "BacktestRunner",
-    "HistoricalReplayEngine",
+    "BacktestAppService",
+    "HistoricalReplayAppService",
     # Optimizer
-    "GridOptimizer",
+    "GridOptimizationAppService",
     # Models
     "BacktestConfig",
     "BacktestResult",

@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.infrastructure.tradingview.websocket import TradingViewWebSocketProvider
+from src.infrastructure.tradingview.tradingview_websocket_client import TradingViewWebSocketClient
 
 
 @pytest.mark.integration
@@ -15,7 +15,7 @@ async def test_real_connection_and_subscribe():
     This test connects to TradingView WebSocket, subscribes to BTCUSD,
     and waits for real quote data.
     """
-    provider = TradingViewWebSocketProvider()
+    provider = TradingViewWebSocketClient()
     received_quotes = []
 
     def on_quote(data):
@@ -68,7 +68,7 @@ async def test_real_connection_and_subscribe():
 @pytest.mark.asyncio
 async def test_multiple_symbols():
     """Test subscribing to multiple symbols."""
-    provider = TradingViewWebSocketProvider()
+    provider = TradingViewWebSocketClient()
     received = {"CRYPTO:BTCUSD": [], "CRYPTO:ETHUSD": []}
 
     def make_callback(symbol):
@@ -114,7 +114,7 @@ async def test_multiple_symbols():
 @pytest.mark.asyncio
 async def test_unsubscribe():
     """Test unsubscribing from a symbol."""
-    provider = TradingViewWebSocketProvider()
+    provider = TradingViewWebSocketClient()
 
     try:
         await provider.connect()

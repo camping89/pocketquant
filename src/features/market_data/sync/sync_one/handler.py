@@ -11,7 +11,7 @@ from src.domain.ohlcv import OHLCVAggregate
 from src.domain.shared.value_objects import Interval as DomainInterval
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
-from src.infrastructure.tradingview import TradingViewProvider
+from src.infrastructure.tradingview import TradingViewClient
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 from src.persistence.repositories.symbol_repository import SymbolRepository
 from src.persistence.repositories.sync_status_repository import SyncStatusRepository
@@ -26,7 +26,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
 
     def __init__(
         self,
-        provider: TradingViewProvider,
+        provider: TradingViewClient,
         event_bus: EventBus,
         cache: Cache,
         ohlcv_repository: OHLCVRepository,

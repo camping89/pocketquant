@@ -12,7 +12,7 @@ from src.config import Settings
 from src.features.risk.check_risk.handler import RiskCheckHandler
 from src.infrastructure.brokers import BrokerFactory
 from src.infrastructure.scheduling.scheduler import JobScheduler
-from src.infrastructure.tradingview import TradingViewProvider
+from src.infrastructure.tradingview import TradingViewClient
 
 
 class InfrastructureProvider(Provider):
@@ -30,8 +30,8 @@ class InfrastructureProvider(Provider):
             scheduler.shutdown(wait=True)
 
     @provide(scope=Scope.APP)
-    def get_tv_provider(self, settings: Settings) -> TradingViewProvider:
-        return TradingViewProvider(settings=settings)
+    def get_tv_client(self, settings: Settings) -> TradingViewClient:
+        return TradingViewClient(settings=settings)
 
     broker_factory = provide(BrokerFactory, scope=Scope.APP)
     risk_handler = provide(RiskCheckHandler, scope=Scope.APP)

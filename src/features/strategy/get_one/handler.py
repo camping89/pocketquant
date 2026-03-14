@@ -1,7 +1,7 @@
 """Get strategy query handler."""
 
 
-from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.strategy.strategy_app_service import StrategyAppService
 from src.common.mediator import Handler, handles
 from src.features.strategy.get_one.query import GetStrategyQuery
 
@@ -10,7 +10,7 @@ from src.features.strategy.get_one.query import GetStrategyQuery
 class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
     """Handle GetStrategyQuery."""
 
-    def __init__(self, engine: StrategyEngine) -> None:
+    def __init__(self, engine: StrategyAppService) -> None:
         self._engine = engine
 
     async def handle(self, request: GetStrategyQuery) -> dict | None:

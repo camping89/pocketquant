@@ -1,6 +1,6 @@
 """Handler for get quote service status query."""
 
-from src.application.market_data.quote_service import QuoteService
+from src.application.market_data.quote_app_service import QuoteAppService
 from src.common.mediator import Handler, handles
 from src.features.market_data.status.dto import StatusResult
 from src.features.market_data.status.get_quote_service_status.query import (
@@ -12,7 +12,7 @@ from src.features.market_data.status.get_quote_service_status.query import (
 class GetQuoteServiceStatusHandler(Handler[GetQuoteServiceStatusQuery, StatusResult]):
     """Handle getting quote service status."""
 
-    def __init__(self, quote_service: QuoteService):
+    def __init__(self, quote_service: QuoteAppService):
         self.state = quote_service
 
     async def handle(self, request: GetQuoteServiceStatusQuery) -> StatusResult:

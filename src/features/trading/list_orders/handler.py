@@ -1,6 +1,6 @@
 """List orders handler."""
 
-from src.application.trading.order_manager import OrderManager
+from src.application.trading.order_app_service import OrderAppService
 from src.common.mediator import Handler, handles
 from src.features.trading.list_orders.query import ListOrdersQuery
 
@@ -9,7 +9,7 @@ from src.features.trading.list_orders.query import ListOrdersQuery
 class ListOrdersHandler(Handler[ListOrdersQuery, list[dict]]):
     """Handler to list all orders."""
 
-    def __init__(self, order_manager: OrderManager):
+    def __init__(self, order_manager: OrderAppService):
         self.order_manager = order_manager
 
     async def handle(self, request: ListOrdersQuery) -> list[dict]:

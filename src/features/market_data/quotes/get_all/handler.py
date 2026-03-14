@@ -1,6 +1,6 @@
 """Handler for getting all active quotes."""
 
-from src.application.market_data.quote_service import QuoteService
+from src.application.market_data.quote_app_service import QuoteAppService
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
 from src.common.mediator import Handler, handles
 from src.features.market_data.quotes.dto import QuoteResult
@@ -13,7 +13,7 @@ from src.persistence.schemas.quote_schema import Quote
 class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
     """Handle getting all active quotes."""
 
-    def __init__(self, quote_service: QuoteService, cache: Cache):
+    def __init__(self, quote_service: QuoteAppService, cache: Cache):
         self.state = quote_service
         self._cache = cache
 

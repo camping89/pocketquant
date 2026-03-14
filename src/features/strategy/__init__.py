@@ -1,6 +1,6 @@
 """Strategy feature - trading strategy management and execution."""
 
-from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.strategy.strategy_app_service import StrategyAppService
 from src.application.strategy.yaml_strategy_loader import StrategyLoader
 from src.domain.strategy.interfaces import IStrategy
 from src.domain.strategy.strategies.ma_crossover import MACrossoverStrategy
@@ -18,7 +18,7 @@ __all__ = [
     "OrderConfig",
     "StrategyConfig",
     # Engine
-    "StrategyEngine",
+    "StrategyAppService",
     # Examples
     "MACrossoverStrategy",
     # Loader

@@ -1,10 +1,10 @@
 """Handler for running a backtest."""
 
 
-from src.application.backtesting.backtest_runner import BacktestRunner
+from src.application.backtesting.backtest_app_service import BacktestAppService
 from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.application.backtesting.models.backtest_result import BacktestResult
-from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.strategy.strategy_app_service import StrategyAppService
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.run.command import RunBacktestCommand
@@ -20,7 +20,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyEngine,
+        strategy_engine: StrategyAppService,
         backtest_repository: BacktestRepository,
         ohlcv_repository: OHLCVRepository,
     ) -> None:
@@ -50,7 +50,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
             slippage_percent=config.slippage_percent,
         )
 
-        runner = BacktestRunner(
+        runner = BacktestAppService(
             event_bus=self._event_bus,
             strategy_engine=self._strategy_engine,
             broker=broker,

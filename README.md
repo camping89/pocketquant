@@ -61,14 +61,14 @@ uvicorn src.main:app --reload
 src/
 ├── common/              (993 LOC, 32 files)  - Mediator, EventBus, @event_handler, UUID7, singletons
 ├── domain/              (2,364 LOC, 39 files)- Pure business logic (zero I/O), all UUID7 IDs
-├── application/         (2,559 LOC, 21 files)- Orchestrators: StrategyEngine, BacktestRunner, etc.
-├── infrastructure/      (2,883 LOC, 28 files)- Brokers, providers, scheduling, HTTP
+├── application/         (2,559 LOC, 21 files)- Orchestrators: StrategyAppService, BacktestAppService, etc.
+├── infrastructure/      (2,883 LOC, 28 files)- Brokers, clients, scheduling, HTTP
 ├── persistence/         (1,214 LOC, 18 files)- MongoDB, Redis, 7 repositories
 └── features/            (3,016 LOC, 134 files)- Vertical slices: market_data, backtesting, strategy, trading, risk
-    ├── backtesting/     (626 LOC, 22 files)  - BacktestRunner, GridOptimizer operations
-    ├── market_data/     (1,534 LOC, 68 files)- BarManager, sync, quotes operations
-    ├── strategy/        (416 LOC, 22 files)  - StrategyEngine, IStrategy operations
-    ├── trading/         (281 LOC, 18 files)  - OrderManager, PositionTracker operations
+    ├── backtesting/     (626 LOC, 22 files)  - BacktestAppService, GridOptimizationAppService operations
+    ├── market_data/     (1,534 LOC, 68 files)- BarAppService, sync, quotes operations
+    ├── strategy/        (416 LOC, 22 files)  - StrategyAppService, IStrategy operations
+    ├── trading/         (281 LOC, 18 files)  - OrderAppService, PositionAppService operations
     └── risk/            (158 LOC, 3 files)   - RiskCheckHandler operation
 ```
 

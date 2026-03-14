@@ -4,8 +4,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from src.application.backtesting.historical_replay_engine import (
-    HistoricalReplayEngine,
+from src.application.backtesting.historical_replay_app_service import (
+    HistoricalReplayAppService,
 )
 from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.application.backtesting.models.backtest_result import BacktestResult
@@ -21,12 +21,12 @@ from src.persistence.repositories.backtest_repository import BacktestRepository
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 
 if TYPE_CHECKING:
-    from src.application.strategy.strategy_engine import StrategyEngine
+    from src.application.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 
 
-class BacktestRunner:
+class BacktestAppService:
     """Orchestrates a single backtest run with metrics collection and persistence.
 
     Responsibilities:
@@ -34,19 +34,19 @@ class BacktestRunner:
     - Set up result collector for metrics tracking
     - Load OHLCV data from MongoDB
     - Set current price on broker before each bar
-    - Execute replay through HistoricalReplayEngine
+    - Execute replay through HistoricalReplayAppService
     - Calculate metrics and persist results
     - Clean up simulation time after run
 
     Usage:
-        runner = BacktestRunner(event_bus, strategy_engine, paper_broker)
+        runner = BacktestAppService(event_bus, strategy_engine, paper_broker)
         result = await runner.run(config)
     """
 
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyEngine,
+        strategy_engine: StrategyAppService,
         broker: PaperBroker,
         backtest_repository: BacktestRepository,
         ohlcv_repository: OHLCVRepository,
@@ -57,7 +57,7 @@ class BacktestRunner:
         self._broker = broker
         self._backtest_repo = backtest_repository
         self._ohlcv_repo = ohlcv_repository
-        self._replay_engine = HistoricalReplayEngine(event_bus)
+        self._replay_engine = HistoricalReplayAppService(event_bus)
         self._persist_results = persist_results
 
     async def run(self, config: BacktestConfig) -> BacktestResult:

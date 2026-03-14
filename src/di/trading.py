@@ -1,16 +1,16 @@
 """Trading service providers with async lifecycle.
 
-OrderManager and PositionTracker need async post-init (load state from DB).
-StrategyEngine uses a generator factory for start/stop lifecycle.
+OrderAppService and PositionAppService need async post-init (load state from DB).
+StrategyAppService uses a generator factory for start/stop lifecycle.
 """
 
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 
-from src.application.strategy.strategy_engine import StrategyEngine
-from src.application.trading.order_manager import OrderManager
-from src.application.trading.position_tracker import PositionTracker
+from src.application.strategy.strategy_app_service import StrategyAppService
+from src.application.trading.order_app_service import OrderAppService
+from src.application.trading.position_app_service import PositionAppService
 from src.common.messaging import EventBus
 from src.config import Settings
 from src.features.risk.check_risk.handler import RiskCheckHandler
@@ -23,16 +23,16 @@ class TradingProvider(Provider):
     @provide(scope=Scope.APP)
     async def get_order_manager(
         self, event_bus: EventBus, order_repository: OrderRepository
-    ) -> OrderManager:
-        manager = OrderManager(event_bus, order_repository)
+    ) -> OrderAppService:
+        manager = OrderAppService(event_bus, order_repository)
         await manager.load_pending_orders()
         return manager
 
     @provide(scope=Scope.APP)
     async def get_position_tracker(
         self, event_bus: EventBus, position_repository: PositionRepository
-    ) -> PositionTracker:
-        tracker = PositionTracker(event_bus, position_repository)
+    ) -> PositionAppService:
+        tracker = PositionAppService(event_bus, position_repository)
         await tracker.start()
         return tracker
 
@@ -41,13 +41,13 @@ class TradingProvider(Provider):
         self,
         event_bus: EventBus,
         broker_factory: BrokerFactory,
-        order_manager: OrderManager,
-        position_tracker: PositionTracker,
+        order_manager: OrderAppService,
+        position_tracker: PositionAppService,
         risk_handler: RiskCheckHandler,
         settings: Settings,
-    ) -> AsyncIterator[StrategyEngine]:
-        """Create, start, and yield StrategyEngine. Stop on app shutdown."""
-        engine = StrategyEngine(
+    ) -> AsyncIterator[StrategyAppService]:
+        """Create, start, and yield StrategyAppService. Stop on app shutdown."""
+        engine = StrategyAppService(
             event_bus=event_bus,
             broker_factory=broker_factory,
             order_manager=order_manager,

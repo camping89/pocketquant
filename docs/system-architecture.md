@@ -25,11 +25,11 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 ┌──────────────────────────┐   ┌──────────────────────────┐
 │  Application Layer       │   │   Domain Layer           │
 │  (Orchestrators)         │◄──┤   (Pure Logic)           │
-│  ├─ StrategyEngine       │   │   ├─ Aggregates         │
-│  ├─ BacktestRunner       │   │   ├─ Value Objects      │
-│  ├─ BarManager           │   │   ├─ Domain Events      │
-│  ├─ OrderManager         │   │   ├─ Interfaces         │
-│  └─ PositionTracker      │   │   └─ Domain Services    │
+│  ├─ StrategyAppService       │   │   ├─ Aggregates         │
+│  ├─ BacktestAppService       │   │   ├─ Value Objects      │
+│  ├─ BarAppService           │   │   ├─ Domain Events      │
+│  ├─ OrderAppService         │   │   ├─ Interfaces         │
+│  └─ PositionAppService      │   │   └─ Domain Services    │
 └──────────┬───────────────┘   └──────────────────────────┘
            │                            │
            │    ┌───────────────────────┘
@@ -151,36 +151,36 @@ class BarBuilder:
 ```
 application/
 ├── backtesting/              # Backtest orchestration
-│   ├── backtest_runner.py   # BacktestRunner engine (execute backtest)
-│   ├── grid_optimizer.py    # GridOptimizer (parameter optimization)
-│   ├── historical_replay_engine.py  # Inject historical bars chronologically
+│   ├── backtest_app_service.py   # BacktestAppService engine (execute backtest)
+│   ├── grid_optimization_app_service.py    # GridOptimizationAppService (parameter optimization)
+│   ├── historical_replay_app_service.py  # Inject historical bars chronologically
 │   ├── result_collector.py  # Collect fills, calculate P&L
 │   └── models/              # PerformanceCalculator, DTOs
 ├── market_data/              # Data sync orchestration
-│   ├── bar_manager.py       # BarManager (real-time multi-interval aggregation)
-│   ├── quote_service.py     # QuoteService (WebSocket lifecycle, tick distribution)
+│   ├── bar_app_service.py       # BarAppService (real-time multi-interval aggregation)
+│   ├── quote_app_service.py     # QuoteAppService (WebSocket lifecycle, tick distribution)
 │   ├── sync_jobs.py         # Background sync jobs (APScheduler tasks)
 │   └── models/              # DTOs for market data
 ├── strategy/                 # Strategy orchestration
-│   ├── strategy_engine.py   # StrategyEngine (on_bar/on_tick dispatch, signal handling)
+│   ├── strategy_app_service.py   # StrategyAppService (on_bar/on_tick dispatch, signal handling)
 │   └── yaml_strategy_loader.py  # StrategyLoader (YAML → IStrategy instances)
 ├── trading/                  # Trading orchestration
-│   ├── order_manager.py     # OrderManager (order state, recovery)
-│   └── position_tracker.py  # PositionTracker (position state, P&L aggregation)
+│   ├── order_app_service.py     # OrderAppService (order state, recovery)
+│   └── position_app_service.py  # PositionAppService (position state, P&L aggregation)
 └── __init__.py
 ```
 
 **Example - Application Service:**
 ```python
-# StrategyEngine - orchestrates domain strategy + infrastructure execution
-class StrategyEngine:
+# StrategyAppService - orchestrates domain strategy + infrastructure execution
+class StrategyAppService:
     def __init__(self, broker: IBroker, event_bus: EventBus):
         self.broker = broker
         self.event_bus = event_bus
         self.strategy: Optional[IStrategy] = None
 
     async def on_bar(self, bar: OHLCVBar) -> None:
-        """Called by BarManager when new bar completes."""
+        """Called by BarAppService when new bar completes."""
         # 1. Domain: Get strategy signal
         signal = await self.strategy.on_bar(bar)
 
@@ -207,11 +207,11 @@ features/
 ├── backtesting/              # Backtest feature (5 operations)
 │   ├── run/                 # Operation: Execute backtest
 │   │   ├── command.py       # RunBacktestCommand
-│   │   ├── handler.py       # RunBacktestHandler → BacktestRunner.run()
+│   │   ├── handler.py       # RunBacktestHandler → BacktestAppService.run()
 │   │   └── route.py         # POST /api/v1/backtest/run
 │   ├── optimize/            # Operation: Optimize parameters
 │   │   ├── command.py       # OptimizeCommand
-│   │   ├── handler.py       # OptimizeHandler → GridOptimizer.optimize()
+│   │   ├── handler.py       # OptimizeHandler → GridOptimizationAppService.optimize()
 │   │   └── route.py         # POST /api/v1/backtest/optimize
 │   ├── get_result/          # Operation: Get backtest result
 │   │   ├── query.py
@@ -287,8 +287,8 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         # 2. Fetch historical bars from infrastructure
         bars = await OHLCVRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
 
-        # 3. Execute domain logic via BacktestRunner
-        results = BacktestRunner.run(strategy, bars, self.broker)
+        # 3. Execute domain logic via BacktestAppService
+        results = BacktestAppService.run(strategy, bars, self.broker)
 
         # 4. Persist to MongoDB
         await BacktestRepository.save(results)
@@ -325,8 +325,8 @@ infrastructure/                        # External I/O (brokers, providers, sched
 │           ├── okx_position_mapper.py    # Position state mapping
 │           └── okx_reconnection_handler.py  # Resilient connection
 ├── tradingview/              # TradingView integration
-│   ├── provider.py          # TradingViewProvider (REST via tvdatafeed)
-│   └── websocket.py         # TradingViewWebSocketProvider (binary frames)
+│   ├── provider.py          # TradingViewClient (REST via tvdatafeed)
+│   └── websocket.py         # TradingViewWebSocketClient (binary frames)
 ├── http_client/              # Generic HTTP utilities
 │   └── client.py            # Async HTTP client (aiohttp wrapper)
 ├── scheduling/               # Job scheduling (APScheduler)
@@ -361,8 +361,8 @@ persistence/                           # Data access (MongoDB, Redis, repositori
 | **RedisConnection** | JSON serialization, pattern deletion, TTL support |
 | **PaperBroker** | In-memory simulation, configurable slippage/delay |
 | **OKXBroker** | Live trading, HMAC auth, exponential backoff reconnection |
-| **TradingViewProvider** | REST API via ThreadPoolExecutor (max 4 workers) |
-| **TradingViewWebSocketProvider** | Binary frame parsing (~m~{len}~m~{json}) |
+| **TradingViewClient** | REST API via ThreadPoolExecutor (max 4 workers) |
+| **TradingViewWebSocketClient** | Binary frame parsing (~m~{len}~m~{json}) |
 | **JobScheduler** | APScheduler wrapper, async job execution |
 
 ### Layer 5: Common (Cross-Cutting) — src/common/
@@ -437,7 +437,7 @@ Mediator (common/mediator/mediator.py)
   └─ Call handler.handle(command)
   ↓
 Handler (features/market_data/sync/sync_one/handler.py)
-  ├─ [1] Fetch: TradingViewProvider.fetch_ohlcv()  [infrastructure]
+  ├─ [1] Fetch: TradingViewClient.fetch_ohlcv()  [infrastructure]
   ├─ [2] Validate: OHLCVAggregate(bars)             [domain]
   ├─ [3] Persist: OHLCVRepository.upsert_many()     [infrastructure]
   ├─ [4] Invalidate: Cache.delete_pattern()         [infrastructure]
@@ -513,11 +513,11 @@ Application Startup
 OrderRepository.ensure_indexes() - Create MongoDB indexes
 PositionRepository.ensure_indexes()
   ↓
-OrderManager.load_pending_orders()
+OrderAppService.load_pending_orders()
   └─> Load orders with status: pending, submitted, partially_filled
       └─> Restore in-memory state + broker_order_id mapping
   ↓
-PositionTracker.start()
+PositionAppService.start()
   └─> PositionRepository.find_open()
       └─> Load all is_closed=false positions
       └─> Restore in-memory position state
@@ -577,7 +577,7 @@ POST /market-data/sync
 Route → SyncSymbolCommand → Mediator
   ↓
 SyncSymbolHandler
-  ├─> TradingViewProvider.fetch_ohlcv
+  ├─> TradingViewClient.fetch_ohlcv
   │   ├─> ThreadPoolExecutor (blocking I/O isolation)
   │   ├─> tvdatafeed.get_hist(symbol, exchange, interval, n_bars)
   │   └─> Return list[OHLCVBar]
@@ -600,12 +600,12 @@ TradingView WebSocket
   ↓
 Binary Frame: ~m~{length}~m~{json}
   ↓
-TradingViewWebSocketProvider.parse_frame
+TradingViewWebSocketClient.parse_frame
   ↓
-QuoteService._on_quote_update
+QuoteAppService._on_quote_update
   ├─> Redis.set(f"quote:latest:{exchange}:{symbol}", quote, ttl=60)
   │
-  ├─> BarManager.process_tick(quote)
+  ├─> BarAppService.process_tick(quote)
   │   ├─> For each interval (1m, 5m, 15m, ...)
   │   │   ├─> Get/create BarBuilder
   │   │   ├─> Update OHLC (asyncio.Lock for safety)
@@ -624,7 +624,7 @@ QuoteService._on_quote_update
 ```
 Market Data Event (BarCompletedEvent or QuoteReceivedEvent)
   ↓
-StrategyEngine._on_market_event
+StrategyAppService._on_market_event
   ├─> Validate strategy is running
   │
   ├─> Call strategy.on_bar(bar) or on_tick(quote)
@@ -642,7 +642,7 @@ StrategyEngine._on_market_event
   │   └─> EventBus.publish(OrderSubmittedEvent(...))
   │
   └─> On fill event:
-      ├─> PositionTracker._on_order_filled
+      ├─> PositionAppService._on_order_filled
       │   ├─> Create/update position
       │   ├─> PositionRepository.save(position) - MongoDB persistence
       │   └─> EventBus.publish(PositionOpenedEvent/PositionUpdatedEvent)
@@ -663,17 +663,17 @@ BacktestHandler
   ├─> Fetch historical bars from MongoDB
   │   └─> Sorted by timestamp (ascending)
   │
-  ├─> BacktestRunner.run()
+  ├─> BacktestAppService.run()
   │   ├─> Initialize PaperBroker
-  │   ├─> Initialize StrategyEngine
+  │   ├─> Initialize StrategyAppService
   │   │
   │   └─> For each bar (chronological):
-  │       ├─> Inject bar to StrategyEngine
+  │       ├─> Inject bar to StrategyAppService
   │       ├─> Strategy.on_bar(bar) → signal
   │       ├─> RiskCheckHandler.check_signal()
   │       ├─> PaperBroker.submit_order()
   │       ├─> Simulate fill with slippage/delay
-  │       ├─> Update PositionTracker
+  │       ├─> Update PositionAppService
   │       └─> Collect fill events
   │
   ├─> ResultCollector.finalize()
@@ -697,7 +697,7 @@ POST /backtest/optimize
 OptimizationCommand → Mediator
   ↓
 OptimizationHandler
-  ├─> GridOptimizer.optimize()
+  ├─> GridOptimizationAppService.optimize()
   │   ├─> Generate parameter combinations
   │   │
   │   ├─> For each combo (parallel via multiprocessing):
@@ -731,7 +731,7 @@ TradingView REST API (tvdatafeed) is blocking. ThreadPoolExecutor (max 4 workers
 
 ### Asyncio.Lock (Quote Aggregation)
 
-BarManager uses lock for thread-safe bar building to prevent race conditions during atomic OHLC updates.
+BarAppService uses lock for thread-safe bar building to prevent race conditions during atomic OHLC updates.
 
 ## Dependency Injection (Dishka DI)
 
@@ -741,15 +741,15 @@ dishka library with 6 providers + auto-resolution via type hints. Cleaner than p
 | File | Purpose |
 |------|---------|
 | `src/container.py` | Factory: `create_container()`, handler registration |
-| `src/providers/` | 6 Provider classes: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider |
+| `src/di/` | 6 Provider classes: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider |
 | `src/main.py` | Lifespan: create container, get DB/Cache, register handlers, setup_dishka |
 
 **Provider breakdown:**
 - **CoreProvider** - Settings, EventBus, Mediator (app-scoped singletons)
 - **PersistenceProvider** - Database, Cache, all 7 repositories
 - **InfrastructureProvider** - Brokers, TradingView provider, JobScheduler, HTTP client
-- **MarketDataProvider** - BarManager, QuoteService, sync jobs
-- **TradingProvider** - OrderManager, PositionTracker
+- **MarketDataProvider** - BarAppService, QuoteAppService, sync jobs
+- **TradingProvider** - OrderAppService, PositionAppService
 - **HandlerProvider** - All 27 CQRS handlers (auto-discovered via ALL_HANDLER_TYPES list)
 
 **Handler registration:** `register_handlers(container)` resolves all handler types from container and registers with Mediator.
@@ -772,7 +772,7 @@ dishka library with 6 providers + auto-resolution via type hints. Cleaner than p
 
 1. Stop accepting new requests
 2. `container.close()` runs all provider cleanups in reverse order:
-   - StrategyEngine.stop() — stop strategy engine
+   - StrategyAppService.stop() — stop strategy engine
    - JobScheduler.shutdown(wait=True) — stop background jobs
    - Cache.disconnect() — close Redis
    - Database.disconnect() — close MongoDB
@@ -808,7 +808,7 @@ dishka library with 6 providers + auto-resolution via type hints. Cleaner than p
 | Quote Throughput | 1000+ ticks/sec |
 | Rate Limit | 200 req/10s per IP |
 | Memory (MongoDB Pool) | ~10-20MB per connection |
-| Memory (BarManager) | ~10MB per 10k subscriptions |
+| Memory (BarAppService) | ~10MB per 10k subscriptions |
 
 ## Security
 - Credentials: Environment variables only (never committed)

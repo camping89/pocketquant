@@ -1,6 +1,6 @@
 """Handler for unsubscribing from a symbol."""
 
-from src.application.market_data.quote_service import QuoteService
+from src.application.market_data.quote_app_service import QuoteAppService
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 class UnsubscribeHandler(Handler[UnsubscribeCommand, dict]):
     """Handle unsubscribing from a symbol."""
 
-    def __init__(self, quote_service: QuoteService, cache: Cache):
+    def __init__(self, quote_service: QuoteAppService, cache: Cache):
         self.state = quote_service
         self._cache = cache
 

@@ -5,7 +5,7 @@ import itertools
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.application.backtesting.backtest_runner import BacktestRunner
+from src.application.backtesting.backtest_app_service import BacktestAppService
 from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.application.backtesting.models.backtest_result import BacktestMetrics, BacktestResult
 from src.application.backtesting.models.optimization_config import OptimizationConfig
@@ -21,12 +21,12 @@ from src.persistence.repositories.backtest_repository import BacktestRepository
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 
 if TYPE_CHECKING:
-    from src.application.strategy.strategy_engine import StrategyEngine
+    from src.application.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 
 
-class GridOptimizer:
+class GridOptimizationAppService:
     """Grid search optimizer for strategy parameter tuning.
 
     Runs multiple backtests in parallel with different parameter combinations,
@@ -39,14 +39,14 @@ class GridOptimizer:
     - Memory efficient - doesn't store full equity curves in optimization result
 
     Usage:
-        optimizer = GridOptimizer(event_bus, strategy_engine)
+        optimizer = GridOptimizationAppService(event_bus, strategy_engine)
         result = await optimizer.optimize(config)
     """
 
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyEngine,
+        strategy_engine: StrategyAppService,
         backtest_repository: BacktestRepository,
         ohlcv_repository: OHLCVRepository,
     ) -> None:
@@ -208,7 +208,7 @@ class GridOptimizer:
             )
 
             # Create runner (don't persist individual results during optimization)
-            runner = BacktestRunner(
+            runner = BacktestAppService(
                 event_bus=self._event_bus,
                 strategy_engine=self._strategy_engine,
                 broker=broker,

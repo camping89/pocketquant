@@ -27,7 +27,7 @@ class ReplayStats:
     last_bar_time: datetime | None
 
 
-class HistoricalReplayEngine:
+class HistoricalReplayAppService:
     """Replays historical OHLCV bars as BarCompletedEvent for backtesting.
 
     Features:

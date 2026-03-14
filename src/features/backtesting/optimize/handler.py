@@ -1,10 +1,10 @@
 """Handler for running optimization."""
 
 
-from src.application.backtesting.grid_optimizer import GridOptimizer
+from src.application.backtesting.grid_optimization_app_service import GridOptimizationAppService
 from src.application.backtesting.models.optimization_config import OptimizationConfig
 from src.application.backtesting.models.optimization_result import OptimizationResult
-from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.strategy.strategy_app_service import StrategyAppService
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.optimize.command import RunOptimizationCommand
@@ -20,7 +20,7 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyEngine,
+        strategy_engine: StrategyAppService,
         backtest_repository: BacktestRepository,
         ohlcv_repository: OHLCVRepository,
         optimization_repository: OptimizationRepository,
@@ -48,7 +48,7 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
             max_workers=request.max_workers,
         )
 
-        optimizer = GridOptimizer(
+        optimizer = GridOptimizationAppService(
             event_bus=self._event_bus,
             strategy_engine=self._strategy_engine,
             backtest_repository=self._backtest_repo,

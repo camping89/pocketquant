@@ -66,7 +66,7 @@ def _parse_messages(raw_data: str) -> list[dict[str, Any]]:
     return messages
 
 
-class TradingViewWebSocketProvider:
+class TradingViewWebSocketClient:
     def __init__(self, auth_token: str | None = None):
         self._auth_token = auth_token
         self._ws: ClientConnection | None = None

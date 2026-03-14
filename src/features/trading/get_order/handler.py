@@ -1,6 +1,6 @@
 """Get order handler."""
 
-from src.application.trading.order_manager import OrderManager
+from src.application.trading.order_app_service import OrderAppService
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Handler, handles
 from src.features.trading.get_order.query import GetOrderQuery
@@ -10,7 +10,7 @@ from src.features.trading.get_order.query import GetOrderQuery
 class GetOrderHandler(Handler[GetOrderQuery, dict]):
     """Handler to get a specific order."""
 
-    def __init__(self, order_manager: OrderManager):
+    def __init__(self, order_manager: OrderAppService):
         self.order_manager = order_manager
 
     async def handle(self, request: GetOrderQuery) -> dict:

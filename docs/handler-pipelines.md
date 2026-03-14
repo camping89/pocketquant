@@ -24,7 +24,7 @@ Route receives SyncSymbolCommand(symbol, exchange, interval, n_bars)
 Mediator dispatches to SyncSymbolHandler
   ↓
 Handler.handle(command):
-  1. Fetch: TradingViewProvider.fetch_ohlcv(symbol, exchange, interval, n_bars)
+  1. Fetch: TradingViewClient.fetch_ohlcv(symbol, exchange, interval, n_bars)
      └─ ThreadPoolExecutor (max 4 workers) → tvdatafeed.get_hist() sync call
   ↓
   2. Validate: OHLCVAggregate validates bar structure (immutable frozen dataclass)
@@ -105,13 +105,13 @@ Response: BarsDTO (never return domain entities)
 StartQuoteFeedCommand()
   ↓
 Handler.handle():
-  1. Connect: TradingViewWebSocketProvider.connect()
+  1. Connect: TradingViewWebSocketClient.connect()
      └─ wss://data.tradingview.com/socket.io/websocket
   ↓
   2. Start async task: asyncio.create_task(provider.listen())
      └─ Background loop receives frames
   ↓
-  3. Set flag: QuoteService.is_running = True
+  3. Set flag: QuoteAppService.is_running = True
   ↓
 Response: QuoteServiceStatus(status='connected')
 ```
@@ -131,11 +131,11 @@ StopQuoteFeedCommand()
 Handler.handle():
   1. Cancel task: asyncio.Task.cancel()
   ↓
-  2. Disconnect: TradingViewWebSocketProvider.disconnect()
+  2. Disconnect: TradingViewWebSocketClient.disconnect()
   ↓
-  3. Clear subscriptions: QuoteService._subscriptions.clear()
+  3. Clear subscriptions: QuoteAppService._subscriptions.clear()
   ↓
-  4. Set flag: QuoteService.is_running = False
+  4. Set flag: QuoteAppService.is_running = False
   ↓
 Response: QuoteServiceStatus(status='disconnected')
 ```
@@ -155,7 +155,7 @@ Validate feed running (if not, return error)
 Provider.subscribe(symbol, exchange, callback=on_quote_update)
   └─ Registers callback for this symbol
   ↓
-Cache subscription: QuoteService._subscriptions[key] = True
+Cache subscription: QuoteAppService._subscriptions[key] = True
   ↓
 Response: SubscriptionStatus(symbol, exchange, subscribed=True)
 ```
@@ -205,7 +205,7 @@ Response: QuoteDTO
 ```
 GetAllQuotesQuery()
   ↓
-Query all subscriptions: QuoteService._subscriptions.keys()
+Query all subscriptions: QuoteAppService._subscriptions.keys()
   ↓
 For each subscription:
   └─ Cache.get(f"QUOTE_LATEST:{exchange}:{symbol}")
@@ -274,9 +274,9 @@ Response: SyncStatusDTO
 ```
 GetQuoteServiceStatusQuery()
   ↓
-Check QuoteService.is_running
+Check QuoteAppService.is_running
   ↓
-Count subscriptions: len(QuoteService._subscriptions)
+Count subscriptions: len(QuoteAppService._subscriptions)
   ↓
 Response: QuoteServiceStatusDTO(is_running, subscription_count)
 ```
@@ -300,14 +300,14 @@ Handler.handle():
   2. Fetch bars: OHLCVRepository.get_bars(symbol, start_date, end_date)
      └─ MongoDB, sorted ascending by timestamp
   ↓
-  3. Run backtest: BacktestRunner.run(strategy, bars, PaperBroker)
+  3. Run backtest: BacktestAppService.run(strategy, bars, PaperBroker)
      ├─ Initialize PaperBroker with 100k starting capital
      ├─ For each bar (chronological):
-     │   ├─ StrategyEngine.on_bar(bar)
+     │   ├─ StrategyAppService.on_bar(bar)
      │   ├─ Strategy.on_bar(bar) → Signal(BUY/SELL/HOLD, qty)
      │   ├─ RiskCheckHandler.check_signal() → approved?
      │   ├─ PaperBroker.submit_order() → instant fill with slippage
-     │   ├─ PositionTracker.update() → P&L calculation
+     │   ├─ PositionAppService.update() → P&L calculation
      │   └─ Collect OrderFilledEvent
      └─ Return filled trades + final positions
   ↓
@@ -339,10 +339,10 @@ Response: BacktestResultDTO(run_id, sharpe, drawdown, trades)
 RunOptimizationCommand(strategy_name, param_grid, symbol, date_range)
   ↓
 Handler.handle():
-  1. GridOptimizer.optimize(param_grid)
+  1. GridOptimizationAppService.optimize(param_grid)
      ├─ Generate parameter combinations: [(p1=1, p2=2), (p1=1, p2=3), ...]
      ├─ For each combo (parallel via multiprocessing):
-     │   └─ Run BacktestRunner with params
+     │   └─ Run BacktestAppService with params
      ├─ Collect results: {combo: (sharpe, trades, metrics)}
      └─ Rank by metric (e.g., Sharpe)
   ↓
@@ -423,7 +423,7 @@ Handler.handle():
      └─ Scan for @event_handler decorated methods
      └─ Subscribe strategy.on_order_filled, etc. to EventBus
   ↓
-  4. Store in StrategyEngine: StrategyEngine.load_strategy(strategy_id, strategy)
+  4. Store in StrategyAppService: StrategyAppService.load_strategy(strategy_id, strategy)
   ↓
 Response: LoadStrategyResponse(strategy_id, name, status='loaded')
 ```
@@ -439,7 +439,7 @@ Response: LoadStrategyResponse(strategy_id, name, status='loaded')
 StartStrategyCommand(strategy_id)
   ↓
 Handler.handle():
-  1. Fetch: StrategyEngine.get_strategy(strategy_id)
+  1. Fetch: StrategyAppService.get_strategy(strategy_id)
   ↓
   2. Connect broker: IBroker.connect()
      └─ OKXBroker or PaperBroker
@@ -447,7 +447,7 @@ Handler.handle():
   3. Initialize: await strategy.on_start()
      └─ Strategy can subscribe to quotes, set initial state
   ↓
-  4. Set running: StrategyEngine.set_running(strategy_id, True)
+  4. Set running: StrategyAppService.set_running(strategy_id, True)
   ↓
   5. Start listening: Subscribe to BarCompletedEvent, QuoteReceivedEvent
   ↓
@@ -472,7 +472,7 @@ Handler.handle():
   ↓
   3. Unsubscribe: Remove BarCompletedEvent subscriber
   ↓
-  4. Set running: StrategyEngine.set_running(strategy_id, False)
+  4. Set running: StrategyAppService.set_running(strategy_id, False)
   ↓
 Response: StrategyStatusDTO(status='stopped')
 ```
@@ -487,7 +487,7 @@ Response: StrategyStatusDTO(status='stopped')
 ```
 GetOneStrategyQuery(strategy_id)
   ↓
-Fetch: StrategyEngine.get_strategy(strategy_id)
+Fetch: StrategyAppService.get_strategy(strategy_id)
   └─ In-memory lookup by ID
   ↓
 Response: StrategyDTO(id, name, status, config)
@@ -503,7 +503,7 @@ Response: StrategyDTO(id, name, status, config)
 ```
 GetAllStrategiesQuery()
   ↓
-Fetch: StrategyEngine.list_all()
+Fetch: StrategyAppService.list_all()
   └─ In-memory loaded strategies
   ↓
 Serialize: List[StrategyDTO](id, name, status)
@@ -517,14 +517,14 @@ Response: StrategiesDTO
 
 ### 24-27. Order & Position Handlers
 
-Simple in-memory reads from `OrderManager` and `PositionTracker`.
+Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 
 **Pipelines:**
 ```
-24. ListOrdersHandler:    OrderManager.list_all() → List[OrderDTO]
-25. GetOrderHandler:      OrderManager.get_by_id(order_id) → OrderDTO
-26. ListPositionsHandler: PositionTracker.list_all() → List[PositionDTO]
-27. GetPositionHandler:   PositionTracker.get_by_id(position_id) → PositionDTO
+24. ListOrdersHandler:    OrderAppService.list_all() → List[OrderDTO]
+25. GetOrderHandler:      OrderAppService.get_by_id(order_id) → OrderDTO
+26. ListPositionsHandler: PositionAppService.list_all() → List[PositionDTO]
+27. GetPositionHandler:   PositionAppService.get_by_id(position_id) → PositionDTO
 ```
 
 ---
@@ -536,11 +536,11 @@ Simple in-memory reads from `OrderManager` and `PositionTracker`.
 ```
 WebSocket tick from TradingView
   ↓
-TradingViewWebSocketProvider.parse_frame()
+TradingViewWebSocketClient.parse_frame()
   ↓
-QuoteService._on_quote_update(quote)
+QuoteAppService._on_quote_update(quote)
   ├─ Cache.set(f"QUOTE_LATEST:{exchange}:{symbol}", quote, ttl=5)
-  └─ BarManager.add_tick(quote)
+  └─ BarAppService.add_tick(quote)
       ├─ For each interval (1m, 5m, ..., 1M):
       │   └─ Update BarBuilder[interval]
       ├─ Detect bar boundary crossed
@@ -548,10 +548,10 @@ QuoteService._on_quote_update(quote)
   ↓
 EventBus.publish(BarCompletedEvent)
   ↓
-StrategyEngine._on_bar(bar)
+StrategyAppService._on_bar(bar)
   ├─ strategy.on_bar(bar) → Signal
   ├─ RiskCheckHandler.check_signal(signal) → approved?
-  ├─ OrderManager.submit_order(order, broker)
+  ├─ OrderAppService.submit_order(order, broker)
   │   └─ OKXBroker.submit_order() or PaperBroker.submit_order()
   └─ Publish OrderSubmittedEvent
   ↓
@@ -559,7 +559,7 @@ Broker processes order → fill/reject
   ↓
 OrderFilledEvent published
   ↓
-PositionTracker._on_order_filled()
+PositionAppService._on_order_filled()
   ├─ Update position: entry/exit/quantity
   ├─ Calculate P&L
   ├─ Publish PositionOpenedEvent / PositionUpdatedEvent
@@ -569,14 +569,14 @@ PositionTracker._on_order_filled()
 ### Backtesting: Historical Replay
 
 ```
-BacktestRunner receives bars (sorted chronologically)
+BacktestAppService receives bars (sorted chronologically)
   ↓
 For each bar:
-  1. Inject to StrategyEngine
+  1. Inject to StrategyAppService
   2. strategy.on_bar(bar) → Signal
   3. RiskCheckHandler validates
   4. PaperBroker fills instantly (with slippage)
-  5. PositionTracker updates
+  5. PositionAppService updates
   6. Collect fill event
   ↓
 After all bars:
@@ -615,6 +615,6 @@ register_all_handlers(container)  # Wires all @handles decorators to Mediator
 | **GetOHLCVHandler** | <5ms | Redis cache hit, <100ms miss |
 | **GetLatestQuoteHandler** | <5ms | Redis in-memory |
 | **RunBacktestHandler** | 10s-2min | Depends on bar count, strategy complexity |
-| **StrategyEngine.on_bar()** | <1ms | In-memory strategy execution |
+| **StrategyAppService.on_bar()** | <1ms | In-memory strategy execution |
 | **RiskCheckHandler** | <0.1ms | Memory checks only |
 
