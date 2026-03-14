@@ -12,7 +12,7 @@ from src.common.logging import get_logger
 from src.domain.ohlcv.entities import Bar
 from src.domain.shared.value_objects import Interval
 from src.persistence.base_repository import BaseRepository
-from src.persistence.schemas.ohlcv_schema import OHLCV, OHLCVCreate
+from src.persistence.schemas.ohlcv_schema import OHLCV, OHLCVBase
 
 logger = get_logger(__name__)
 
@@ -45,7 +45,7 @@ class OHLCVRepository(BaseRepository):
 
     _collection_name = COLLECTION_OHLCV
 
-    async def upsert_many(self, records: list[OHLCVCreate]) -> int:
+    async def upsert_many(self, records: list[OHLCVBase]) -> int:
         """Bulk upsert OHLCV records. Returns count of upserted + modified."""
         if not records:
             return 0

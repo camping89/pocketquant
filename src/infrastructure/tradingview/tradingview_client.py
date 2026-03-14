@@ -11,7 +11,7 @@ from src.config import Settings
 from src.domain.ohlcv import INTERVAL_TO_TVDATAFEED
 from src.domain.shared.value_objects import Interval
 from src.infrastructure.tradingview.base import IDataProvider
-from src.persistence.schemas.ohlcv_schema import OHLCVCreate
+from src.persistence.schemas.ohlcv_schema import OHLCVBase
 
 logger = get_logger(__name__)
 
@@ -77,7 +77,7 @@ class TradingViewClient(IDataProvider):
         exchange: str,
         interval: Interval,
         n_bars: int = 1000,
-    ) -> list[OHLCVCreate]:
+    ) -> list[OHLCVBase]:
         logger.info(
             "tradingview.fetch_started",
             symbol=symbol,
@@ -105,13 +105,13 @@ class TradingViewClient(IDataProvider):
             )
             return []
 
-        records: list[OHLCVCreate] = []
+        records: list[OHLCVBase] = []
 
         for idx, row in df.iterrows():
             bar_datetime = idx if isinstance(idx, datetime) else pd.to_datetime(idx).to_pydatetime()  # type: ignore[arg-type, union-attr]
 
             records.append(
-                OHLCVCreate(
+                OHLCVBase(
                     symbol=symbol.upper(),
                     exchange=exchange.upper(),
                     interval=interval,

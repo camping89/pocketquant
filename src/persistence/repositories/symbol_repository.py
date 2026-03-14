@@ -6,7 +6,7 @@ from src.common.constants import COLLECTION_SYMBOLS
 from src.domain.symbol import SymbolAggregate
 from src.domain.symbol.value_objects import SymbolInfo
 from src.persistence.base_repository import BaseRepository
-from src.persistence.schemas.symbol_schema import SymbolCreate
+from src.persistence.schemas.symbol_schema import SymbolBase
 
 
 def _doc_to_aggregate(doc: dict) -> SymbolAggregate:
@@ -26,7 +26,7 @@ class SymbolRepository(BaseRepository):
 
     _collection_name = COLLECTION_SYMBOLS
 
-    async def upsert(self, symbol_create: SymbolCreate) -> None:
+    async def upsert(self, symbol_create: SymbolBase) -> None:
         """Upsert symbol record."""
         collection = self._collection()
         symbol_doc = {
