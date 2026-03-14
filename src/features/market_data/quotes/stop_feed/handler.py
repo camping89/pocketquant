@@ -27,13 +27,7 @@ class StopQuoteFeedHandler(Handler[StopQuoteFeedCommand, dict]):
 
         self.state.running = False
         await self.state.provider.disconnect()
-
-        if self.state.ws_task:
-            self.state.ws_task.cancel()
-            try:
-                await self.state.ws_task
-            except asyncio.CancelledError:
-                pass
+        await self._cancel_ws_task()
 
         logger.info("quote_service.stopped")
         return {
@@ -41,3 +35,12 @@ class StopQuoteFeedHandler(Handler[StopQuoteFeedCommand, dict]):
             "message": "Quote service stopped",
             "bars_saved": saved_count,
         }
+
+    async def _cancel_ws_task(self) -> None:
+        if not self.state.ws_task:
+            return
+        self.state.ws_task.cancel()
+        try:
+            await self.state.ws_task
+        except asyncio.CancelledError:
+            pass
