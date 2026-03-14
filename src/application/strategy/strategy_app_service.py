@@ -15,14 +15,14 @@ from src.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 from src.infrastructure.brokers import BrokerFactory, IBroker
 
 if TYPE_CHECKING:
-    from src.application.trading.order_manager import OrderManager
-    from src.application.trading.position_tracker import PositionTracker
+    from src.application.trading.order_app_service import OrderAppService
+    from src.application.trading.position_app_service import PositionAppService
     from src.features.risk.check_risk.handler import RiskCheckHandler
 
 logger = structlog.get_logger(__name__)
 
 
-class StrategyEngine:
+class StrategyAppService:
     """Engine for managing and executing trading strategies.
 
     Subscribes to market events and dispatches to registered strategies.
@@ -33,8 +33,8 @@ class StrategyEngine:
         self,
         event_bus: EventBus,
         broker_factory: BrokerFactory,
-        order_manager: OrderManager,
-        position_tracker: PositionTracker,
+        order_manager: OrderAppService,
+        position_tracker: PositionAppService,
         risk_handler: RiskCheckHandler,
         default_broker_config: dict | None = None,
     ) -> None:

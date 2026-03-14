@@ -12,7 +12,7 @@ from src.persistence.repositories.order_repository import OrderRepository
 logger = structlog.get_logger(__name__)
 
 
-class OrderManager:
+class OrderAppService:
     """Manages order lifecycle from creation to completion.
 
     Responsibilities:

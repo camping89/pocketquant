@@ -10,7 +10,7 @@ class IStrategy(ABC):
     """Abstract base class for trading strategies.
 
     Strategies implement trading logic and generate signals based on
-    market data. The StrategyEngine calls hooks based on the trigger type.
+    market data. The StrategyAppService calls hooks based on the trigger type.
 
     Lifecycle:
         1. __init__(config) - Initialize with configuration

@@ -61,7 +61,7 @@ Detailed module breakdown, layer responsibilities, data pipelines, patterns, and
 - Module breakdown by layer:
   - **src/common** (993 LOC, 32 files) - Mediator, EventBus, middleware, singletons
   - **src/domain** (2,364 LOC, 39 files) - Aggregates, value objects, domain events, services
-  - **src/application** (2,559 LOC, 21 files) - Orchestrators (StrategyEngine, BacktestRunner, etc.)
+  - **src/application** (2,559 LOC, 21 files) - Orchestrators (StrategyAppService, BacktestAppService, etc.)
   - **src/infrastructure** (2,883 LOC, 28 files) - Brokers, providers, scheduling
   - **src/persistence** (1,214 LOC, 18 files) - MongoDB, Redis, 7 repositories
   - **src/features** (3,016 LOC, 134 files) - Feature slices (market_data, backtesting, strategy, trading, risk)
@@ -96,8 +96,8 @@ Clean architecture layers, CQRS patterns, data pipelines, concurrency model, DI 
 - Four data pipelines:
   1. Historical sync: REST → MongoDB
   2. Real-time quotes: WebSocket → Aggregator → MongoDB + Redis
-  3. Strategy execution: BarCompleted → StrategyEngine → Broker → MongoDB
-  4. Backtesting: Historical bars → BacktestRunner → Metrics → MongoDB
+  3. Strategy execution: BarCompleted → StrategyAppService → Broker → MongoDB
+  4. Backtesting: Historical bars → BacktestAppService → Metrics → MongoDB
 - Trading persistence: MongoDB collections, recovery on startup, state transitions
 - Broker abstraction layer (IBroker → PaperBroker/OKXBroker)
 - Middleware stack (Correlation ID, Rate Limit, Idempotency)
@@ -153,7 +153,7 @@ Architecture patterns, code organization, testing, quality standards, performanc
 ```
 quote_aggregator.py:     368 LOC  ✅ (algorithm exception)
 routes.py:               472 LOC  ⚠️  (split candidate)
-quote_service.py:        236 LOC  ✅
+quote_app_service.py:        236 LOC  ✅
 data_sync_service.py:    244 LOC  ✅
 ```
 
@@ -293,7 +293,7 @@ A: Create command/query class, handler class (extends Handler base), register wi
 A: Implement IStrategy interface (on_bar method), return StrategySignal on trading conditions. See code-standards.md "Strategy Implementation Pattern".
 
 **Q: How do I run a backtest?**
-A: POST /backtest/run with strategy name and date range. GridOptimizer handles parameter optimization. See deployment-guide.md.
+A: POST /backtest/run with strategy name and date range. GridOptimizationAppService handles parameter optimization. See deployment-guide.md.
 
 **Q: How do I set up live trading with OKX?**
 A: Add OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE to .env. See deployment-guide.md "OKX Setup".
@@ -366,7 +366,7 @@ When you make code changes:
 | 2026-02-21 | Accuracy refresh: Verified all LOC counts (13,641 across 277 files), fixed Motor→PyMongo references, corrected justfile commands (just up/down, not start/stop), fixed mypy→pyright. Updated all doc files with accurate metrics. |
 | 2026-02-13 | Operation-first vertical slice restructure: All features reorganized with operations as primary unit. Updated architecture docs, code standards, feature structure. Each operation folder self-contained. |
 | 2026-02-12 | Updated stats: 213 files, 14,393 LOC. Documented @event_handler decorator & auto-discovery, UUID7 migration, updated_at field rename |
-| 2026-02-01 | AS-IS codebase documentation: 180 files, 12,420 LOC. Added detailed module breakdown, domain services, OKX reconnection handler, GridOptimizer details |
+| 2026-02-01 | AS-IS codebase documentation: 180 files, 12,420 LOC. Added detailed module breakdown, domain services, OKX reconnection handler, GridOptimizationAppService details |
 | 2026-01-28 | Codebase growth: 4,200 → 12,377 LOC (65 → 180 files) |
 | 2026-01-21 | Initial documentation suite (5 docs, 2,324 LOC) |
 

@@ -4,7 +4,7 @@
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
 
-from src.application.market_data.quote_service import QuoteService
+from src.application.market_data.quote_app_service import QuoteAppService
 from src.common.exceptions import NotFoundError
 from src.domain.shared.value_objects import Interval
 
@@ -15,7 +15,7 @@ router = APIRouter(route_class=DishkaRoute)
 async def get_current_bar(
     exchange: str,
     symbol: str,
-    quote_service: FromDishka[QuoteService],
+    quote_service: FromDishka[QuoteAppService],
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> dict:
     bar = await quote_service.bar_manager.get_current_bar(symbol, exchange, interval)

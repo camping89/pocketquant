@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 _executor = ThreadPoolExecutor(max_workers=4)
 
 
-class TradingViewProvider(IDataProvider):
+class TradingViewClient(IDataProvider):
     def __init__(self, settings: Settings):
         self._settings = settings
         self._client: TvDatafeed | None = None

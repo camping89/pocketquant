@@ -9,7 +9,7 @@
 sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
   → mediator.py:22 → looks up handler by type(request)
     → sync/sync_one/handler.py → SyncSymbolHandler.handle()
-      → TradingViewProvider.fetch_ohlcv() → DB insert → EventBus.publish()
+      → TradingViewClient.fetch_ohlcv() → DB insert → EventBus.publish()
 ```
 
 ### Key Files for Breakpoints
@@ -97,7 +97,7 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 ### Priority 1: Core Trading Engine
 - [x] Strategy Framework - Base class, YAML loader, MA crossover example
 - [x] Backtesting Engine - Run/optimize strategies against historical OHLCV data
-- [x] Portfolio Tracker - Position tracking via PositionTracker + MongoDB persistence
+- [x] Portfolio Tracker - Position tracking via PositionAppService + MongoDB persistence
 
 ### Priority 2: Simulation & Analysis
 - [x] Forward Testing - Paper broker with simulated fills
@@ -106,7 +106,7 @@ sync/sync_one/route.py:18 → SyncSymbolCommand → mediator.send()
 
 ### Priority 3: Live Trading
 - [x] Broker Integration - OKX (live + demo), Paper broker via BrokerFactory
-- [x] Order Management - OrderManager with MongoDB persistence, event-driven fills
+- [x] Order Management - OrderAppService with MongoDB persistence, event-driven fills
 
 ---
 

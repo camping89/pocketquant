@@ -9,7 +9,7 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 ```
 Features (Routes, Commands, Queries, Handlers)
   ↓ depends on
-Application (Orchestrators: StrategyEngine, BacktestRunner, BarManager)
+Application (Orchestrators: StrategyAppService, BacktestAppService, BarAppService)
   ↓ depends on
 Domain (Pure business logic: Aggregates, Value Objects, Events)
   ↑ depended on by
@@ -18,7 +18,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 **Key Characteristics:**
 - **Domain Layer:** Pure business logic with ZERO I/O dependencies (enforced via AST checks)
-- **Application Layer:** Stateful orchestrators (StrategyEngine, BacktestRunner, BarManager, etc.)
+- **Application Layer:** Stateful orchestrators (StrategyAppService, BacktestAppService, BarAppService, etc.)
 - **Features Layer:** Thin CQRS operation routes (routes → commands/queries → handlers)
 - **Infrastructure Layer:** All external I/O (brokers, providers, database, cache, scheduling)
 - **Common Layer:** Shared utilities (Mediator, EventBus, middleware, health checks)
@@ -129,13 +129,13 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 ### src/application (2,559 LOC, 21 files) — Orchestrators
 
 Stateful services that coordinate domain logic + infrastructure:
-- **BacktestRunner:** Execute strategy on historical bars
-- **GridOptimizer:** Parameter optimization (multiprocessing)
-- **BarManager:** Real-time multi-interval bar aggregation
-- **QuoteService:** WebSocket lifecycle, tick distribution
-- **StrategyEngine:** Strategy dispatch (on_bar, on_tick, on_fill)
-- **OrderManager:** Order state machine + recovery
-- **PositionTracker:** Position state, P&L calculation
+- **BacktestAppService:** Execute strategy on historical bars
+- **GridOptimizationAppService:** Parameter optimization (multiprocessing)
+- **BarAppService:** Real-time multi-interval bar aggregation
+- **QuoteAppService:** WebSocket lifecycle, tick distribution
+- **StrategyAppService:** Strategy dispatch (on_bar, on_tick, on_fill)
+- **OrderAppService:** Order state machine + recovery
+- **PositionAppService:** Position state, P&L calculation
 - **StrategyLoader:** YAML → IStrategy instantiation
 
 No CQRS in this layer. These are business orchestrators called by CQRS handlers.
@@ -175,10 +175,10 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 - **Mappers:** OkxOrderMapper, OkxPositionMapper for state translation
 
 **Data Providers:**
-- **TradingViewProvider** - REST API (tvdatafeed)
+- **TradingViewClient** - REST API (tvdatafeed)
   - ThreadPoolExecutor (max 4 workers) for blocking I/O
   - `fetch_ohlcv(symbol, exchange, interval, n_bars)` - Fetch historical bars
-- **TradingViewWebSocketProvider** - Binary WebSocket protocol
+- **TradingViewWebSocketClient** - Binary WebSocket protocol
   - Custom frame format parsing (~m~{len}~m~{json})
   - Quote streaming
   - Auto-reconnection
@@ -265,10 +265,10 @@ Structure:
 ```
 backtesting/
 ├── base/                 # Shared infrastructure
-│   ├── engine/          # BacktestRunner, HistoricalReplayEngine
+│   ├── engine/          # BacktestAppService, HistoricalReplayAppService
 │   ├── metrics/         # PerformanceCalculator
 │   ├── models/          # DTOs
-│   ├── optimizer/       # GridOptimizer
+│   ├── optimizer/       # GridOptimizationAppService
 │   └── repository/      # BacktestRepository
 ├── run/                 # Operation: Execute backtest
 │   ├── command.py
@@ -305,7 +305,7 @@ Structure:
 market_data/
 ├── base/                # Shared infrastructure
 │   ├── jobs/           # Background job definitions
-│   ├── managers/       # BarManager
+│   ├── managers/       # BarAppService
 │   ├── models/         # DTOs
 │   ├── providers/      # Data providers
 │   └── services/       # Sync service
@@ -365,7 +365,7 @@ Structure:
 ```
 strategy/
 ├── base/                # Shared infrastructure
-│   ├── engine/         # StrategyEngine
+│   ├── engine/         # StrategyAppService
 │   ├── interfaces/     # IStrategy interface
 │   └── loader/         # YAML loader
 ├── get_all/            # Operation: List strategies
@@ -402,7 +402,7 @@ Structure:
 ```
 trading/
 ├── base/                # Shared infrastructure
-│   ├── managers/       # OrderManager, PositionTracker
+│   ├── managers/       # OrderAppService, PositionAppService
 │   ├── models/         # DTOs
 │   └── repositories/   # OrderRepository, PositionRepository
 ├── list_orders/        # Operation: List orders
@@ -444,7 +444,7 @@ Routes:
 
 ## Dependency Injection (Dishka)
 
-### 6 Providers (src/providers/)
+### 6 Providers (src/di/)
 
 **CoreProvider** - App-level singletons
 - Settings (from config)
@@ -459,20 +459,20 @@ Routes:
 **InfrastructureProvider** - External integrations
 - IBroker implementations (PaperBroker, OKXBroker)
 - BrokerFactory (creates broker by type)
-- TradingViewProvider (REST data fetching)
-- TradingViewWebSocketProvider (WebSocket quotes)
+- TradingViewClient (REST data fetching)
+- TradingViewWebSocketClient (WebSocket quotes)
 - OkxWebSocketClient + OkxReconnectionHandler (OKX integration)
 - HTTP client (generic async HTTP)
 - WebhookDispatcher
 
 **MarketDataProvider** - Real-time data services
-- BarManager (multi-interval aggregation)
-- QuoteService (WebSocket lifecycle)
+- BarAppService (multi-interval aggregation)
+- QuoteAppService (WebSocket lifecycle)
 - Sync background jobs (APScheduler registration)
 
 **TradingProvider** - Order/position management
-- OrderManager (order state machine)
-- PositionTracker (position tracking + P&L)
+- OrderAppService (order state machine)
+- PositionAppService (position tracking + P&L)
 
 **HandlerProvider** - All 27 CQRS handlers
 - Market data handlers (13): SyncSymbolHandler, GetOHLCVHandler, etc.
@@ -528,7 +528,7 @@ async def sync_route(mediator: FromDishka[Mediator], command: SyncSymbolCommand)
 POST /market-data/sync
     ↓
 SyncSymbolCommand → Mediator → SyncSymbolHandler
-    ├─> TradingViewProvider.fetch_ohlcv (thread pool)
+    ├─> TradingViewClient.fetch_ohlcv (thread pool)
     ├─> Domain validation via OHLCVAggregate
     ├─> MongoDB bulk_write (upsert)
     ├─> Redis cache invalidation (pattern delete)
@@ -538,11 +538,11 @@ SyncSymbolCommand → Mediator → SyncSymbolHandler
 ### Real-time Quote Pipeline
 
 ```
-TradingView WebSocket → TradingViewWebSocketProvider
+TradingView WebSocket → TradingViewWebSocketClient
     ↓
-Parse binary frame → QuoteService._on_quote_update
+Parse binary frame → QuoteAppService._on_quote_update
     ├─> Redis cache (60s TTL)
-    ├─> BarManager.process_tick (multi-interval aggregation)
+    ├─> BarAppService.process_tick (multi-interval aggregation)
     │   ├─> Build OHLCV bars (1m, 5m, 15m, ..., 1M)
     │   ├─> Detect bar completion
     │   └─> MongoDB save on complete
@@ -555,7 +555,7 @@ Parse binary frame → QuoteService._on_quote_update
 APScheduler triggers job (6-hourly or market hours)
     ↓
 sync_all_symbols job (each symbol independently)
-    ├─> TradingViewProvider.fetch_ohlcv
+    ├─> TradingViewClient.fetch_ohlcv
     ├─> OHLCVRepository.upsert_many
     └─> Error logging per symbol (don't break loop)
 ```
@@ -590,7 +590,7 @@ sync_all_symbols job (each symbol independently)
 - IBroker interface for order execution
 - PaperBroker: in-memory simulation with slippage/delays
 - OKXBroker: live trading via OKX WebSocket
-- StrategyEngine routes signals to broker
+- StrategyAppService routes signals to broker
 
 **Domain Purity:** Zero I/O in domain layer
 - Domain layer contains only business rules
@@ -654,7 +654,7 @@ All settings via environment variables (`.env` file):
 - Created 6 providers: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider
 - Removed src/services.py, src/dependencies.py, src/handler_registration.py
 - Added src/container.py factory function
-- Added src/providers/ directory with 6 provider classes
+- Added src/di/ directory with 6 provider classes
 - Lifespan now uses `create_container()` and `setup_dishka(container, app)`
 - Routes use FromDishka[T] instead of Depends(get_service)
 - Handler registration via `register_handlers(container)` + ALL_HANDLER_TYPES list

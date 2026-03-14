@@ -1,6 +1,6 @@
 """Get position handler."""
 
-from src.application.trading.position_tracker import PositionTracker
+from src.application.trading.position_app_service import PositionAppService
 from src.common.exceptions import NotFoundError
 from src.common.mediator import Handler, handles
 from src.features.trading.get_position.query import GetPositionQuery
@@ -10,7 +10,7 @@ from src.features.trading.get_position.query import GetPositionQuery
 class GetPositionHandler(Handler[GetPositionQuery, dict]):
     """Handler to get a specific position."""
 
-    def __init__(self, position_tracker: PositionTracker):
+    def __init__(self, position_tracker: PositionAppService):
         self.position_tracker = position_tracker
 
     async def handle(self, request: GetPositionQuery) -> dict:

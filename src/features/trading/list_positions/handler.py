@@ -1,6 +1,6 @@
 """List positions handler."""
 
-from src.application.trading.position_tracker import PositionTracker
+from src.application.trading.position_app_service import PositionAppService
 from src.common.mediator import Handler, handles
 from src.features.trading.list_positions.query import ListPositionsQuery
 
@@ -9,7 +9,7 @@ from src.features.trading.list_positions.query import ListPositionsQuery
 class ListPositionsHandler(Handler[ListPositionsQuery, list[dict]]):
     """Handler to list all positions."""
 
-    def __init__(self, position_tracker: PositionTracker):
+    def __init__(self, position_tracker: PositionAppService):
         self.position_tracker = position_tracker
 
     async def handle(self, request: ListPositionsQuery) -> list[dict]:

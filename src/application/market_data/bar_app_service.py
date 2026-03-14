@@ -1,4 +1,4 @@
-"""BarManager aggregates real-time ticks into OHLCV bars at multiple intervals."""
+"""BarAppService aggregates real-time ticks into OHLCV bars at multiple intervals."""
 
 import asyncio
 from collections import defaultdict
@@ -16,7 +16,7 @@ from src.persistence.schemas.quote_schema import QuoteTick
 logger = get_logger(__name__)
 
 
-class BarManager:
+class BarAppService:
     """Aggregates real-time ticks into OHLCV bars at multiple intervals."""
 
     def __init__(

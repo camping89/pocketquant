@@ -1,16 +1,16 @@
 """Dishka DI container factory and handler registration.
 
 Adding a new provider:
-  1. Create a Provider subclass in src/providers/
+  1. Create a Provider subclass in src/di/
   2. Import and add it to PROVIDERS below
-  3. Add it to src/providers/__init__.py exports
+  3. Add it to src/di/__init__.py exports
 """
 
 from dishka import AsyncContainer, make_async_container
 
 from src.common.mediator.handler_registry import HandlerRegistry
 from src.common.mediator.mediator import Mediator
-from src.providers import (
+from src.di import (
     CoreProvider,
     HandlerProvider,
     InfrastructureProvider,
@@ -18,7 +18,7 @@ from src.providers import (
     PersistenceProvider,
     TradingProvider,
 )
-from src.providers.handler_provider import ALL_HANDLER_TYPES
+from src.di.handlers import ALL_HANDLER_TYPES
 
 # Order matters: later providers may depend on earlier ones.
 PROVIDERS = [

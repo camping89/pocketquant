@@ -10,12 +10,12 @@ Adding a new CQRS handler:
   2. Add a `provide(YourHandler, scope=Scope.APP)` line in HandlerProvider
 """
 
-from src.providers.core_provider import CoreProvider
-from src.providers.handler_provider import HandlerProvider
-from src.providers.infrastructure_provider import InfrastructureProvider
-from src.providers.market_data_provider import MarketDataProvider
-from src.providers.persistence_provider import PersistenceProvider
-from src.providers.trading_provider import TradingProvider
+from src.di.core import CoreProvider
+from src.di.handlers import HandlerProvider
+from src.di.infrastructure import InfrastructureProvider
+from src.di.market_data import MarketDataProvider
+from src.di.persistence import PersistenceProvider
+from src.di.trading import TradingProvider
 
 __all__ = [
     "CoreProvider",

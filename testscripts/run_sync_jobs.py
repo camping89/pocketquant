@@ -21,7 +21,7 @@ from src.application.market_data.sync_jobs import _sync_all_symbols, _sync_daily
 from src.common.mediator.mediator import Mediator
 from src.common.messaging import EventBus
 from src.config import get_settings
-from src.infrastructure.tradingview import TradingViewProvider
+from src.infrastructure.tradingview import TradingViewClient
 from src.persistence.mongodb import Database
 from src.persistence.redis import Cache
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
@@ -56,11 +56,11 @@ async def main() -> None:
         event_bus = EventBus(max_history=100)
 
         # Build minimal Services (only fields needed for sync handlers)
-        from src.application.market_data.bar_manager import BarManager
-        from src.application.market_data.quote_service import QuoteService
-        from src.application.strategy.strategy_engine import StrategyEngine
-        from src.application.trading.order_manager import OrderManager
-        from src.application.trading.position_tracker import PositionTracker
+        from src.application.market_data.bar_app_service import BarAppService
+        from src.application.market_data.quote_app_service import QuoteAppService
+        from src.application.strategy.strategy_app_service import StrategyAppService
+        from src.application.trading.order_app_service import OrderAppService
+        from src.application.trading.position_app_service import PositionAppService
         from src.common.health import HealthCoordinator
         from src.features.risk.check_risk.handler import RiskCheckHandler
         from src.infrastructure.brokers import BrokerFactory
@@ -78,8 +78,8 @@ async def main() -> None:
 
         order_repo = OrderRepository(database=database)
         position_repo = PositionRepository(database=database)
-        order_manager = OrderManager(event_bus, order_repo)
-        position_tracker = PositionTracker(event_bus, position_repo)
+        order_manager = OrderAppService(event_bus, order_repo)
+        position_tracker = PositionAppService(event_bus, position_repo)
 
         services = Services(
             settings=settings,
@@ -95,19 +95,19 @@ async def main() -> None:
             event_bus=event_bus,
             mediator=mediator,
             job_scheduler=JobScheduler(),
-            tv_provider=TradingViewProvider(settings=settings),
+            tv_provider=TradingViewClient(settings=settings),
             broker_factory=BrokerFactory(),
             risk_handler=RiskCheckHandler(),
             health_coordinator=HealthCoordinator(timeout=5.0),
-            bar_manager=BarManager(cache=cache, ohlcv_repository=ohlcv_repo),
-            quote_service=QuoteService(
+            bar_manager=BarAppService(cache=cache, ohlcv_repository=ohlcv_repo),
+            quote_service=QuoteAppService(
                 settings=settings,
                 cache=cache,
-                bar_manager=BarManager(cache=cache, ohlcv_repository=ohlcv_repo),
+                bar_manager=BarAppService(cache=cache, ohlcv_repository=ohlcv_repo),
             ),
             order_manager=order_manager,
             position_tracker=position_tracker,
-            strategy_engine=StrategyEngine(
+            strategy_engine=StrategyAppService(
                 event_bus=event_bus,
                 broker_factory=BrokerFactory(),
                 order_manager=order_manager,

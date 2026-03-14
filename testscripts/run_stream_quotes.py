@@ -15,7 +15,7 @@ import signal
 import sys
 from datetime import datetime
 
-from src.infrastructure.tradingview.websocket import TradingViewWebSocketProvider
+from src.infrastructure.tradingview.tradingview_websocket_client import TradingViewWebSocketClient
 
 
 def on_quote(data: dict) -> None:
@@ -37,7 +37,7 @@ def on_quote(data: dict) -> None:
 
 
 async def main(symbols: list[str], exchange: str, duration: int | None = None):
-    provider = TradingViewWebSocketProvider()
+    provider = TradingViewWebSocketClient()
 
     # Handle Ctrl+C
     stop_event = asyncio.Event()

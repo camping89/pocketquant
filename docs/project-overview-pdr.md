@@ -77,7 +77,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Concurrent tick processing with lock protection
 
 **Data Flow:**
-- TradingView tick → QuoteService → QuoteAggregator → MongoDB + Redis
+- TradingView tick → QuoteAppService → QuoteAggregator → MongoDB + Redis
 
 ### F4: Data Retrieval
 
@@ -146,7 +146,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 **Sub-requirements:**
 - Backtest runner with historical bar replay
-- GridOptimizer for parallel parameter searches
+- GridOptimizationAppService for parallel parameter searches
 - Performance metrics (Sharpe, Sortino, max drawdown, win rate)
 - Results storage in MongoDB
 - Parameter optimization support
@@ -320,11 +320,11 @@ src/domain/             (2,364 LOC, 39 files)
 └── Immutable frozen dataclasses with validation in __post_init__
 
 src/application/        (2,559 LOC, 21 files)
-├── Orchestrators: StrategyEngine, BacktestRunner, BarManager
-├── Order Management: OrderManager (state machine + recovery)
-├── Position Management: PositionTracker (P&L calculation)
-├── Market Data: QuoteService, HistoricalReplayEngine
-├── Optimization: GridOptimizer (parameter search)
+├── Orchestrators: StrategyAppService, BacktestAppService, BarAppService
+├── Order Management: OrderAppService (state machine + recovery)
+├── Position Management: PositionAppService (P&L calculation)
+├── Market Data: QuoteAppService, HistoricalReplayAppService
+├── Optimization: GridOptimizationAppService (parameter search)
 ├── Strategy: StrategyLoader (YAML → IStrategy)
 └── Result Collectors: ResultCollector (metrics aggregation)
 
@@ -378,7 +378,7 @@ Total: 13,641 LOC (277 Python files in src/)
 
 **Extended Features (F7-F10):**
 - [x] Strategy Engine with YAML loader and IStrategy interface
-- [x] Backtesting Engine with historical replay and GridOptimizer
+- [x] Backtesting Engine with historical replay and GridOptimizationAppService
 - [x] Order & Position Management with MongoDB persistence
 - [x] Live Trading via OKX WebSocket (HMAC-SHA256, reconnection, circuit breaker)
 

@@ -12,7 +12,7 @@ from src.persistence.repositories.position_repository import PositionRepository
 logger = structlog.get_logger(__name__)
 
 
-class PositionTracker:
+class PositionAppService:
     """Tracks positions per strategy with P&L calculation.
 
     Subscribes to OrderFilledEvent events to update positions automatically.

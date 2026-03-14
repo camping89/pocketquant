@@ -8,7 +8,7 @@
 ```
 Features (routes, commands, queries, handlers)
   ↓ imports
-Application (orchestrators: StrategyEngine, BacktestRunner, etc.)
+Application (orchestrators: StrategyAppService, BacktestAppService, etc.)
   ↓ imports
 Domain (aggregates, value objects, events)
   ↑ imports ← Infrastructure (brokers, providers, persistence)
@@ -63,11 +63,11 @@ Clean Architecture Example (backtesting):
 features/backtesting/
 ├── run/                        # Operation: Execute backtest
 │   ├── command.py              # RunBacktestCommand
-│   ├── handler.py              # RunBacktestHandler (calls Application-layer BacktestRunner)
+│   ├── handler.py              # RunBacktestHandler (calls Application-layer BacktestAppService)
 │   └── route.py                # POST /api/v1/backtest/run
 ├── optimize/                   # Operation: Optimize parameters
 │   ├── command.py
-│   ├── handler.py              # Calls Application-layer GridOptimizer
+│   ├── handler.py              # Calls Application-layer GridOptimizationAppService
 │   └── route.py
 ├── get_result/
 │   ├── query.py
@@ -82,9 +82,9 @@ features/backtesting/
 **Application Layer (Orchestrators):**
 ```
 application/backtesting/
-├── backtest_runner.py          # BacktestRunner (engine, execute backtest)
-├── grid_optimizer.py           # GridOptimizer (parameter search)
-├── historical_replay_engine.py # HistoricalReplayEngine (inject bars)
+├── backtest_app_service.py          # BacktestAppService (engine, execute backtest)
+├── grid_optimization_app_service.py           # GridOptimizationAppService (parameter search)
+├── historical_replay_app_service.py # HistoricalReplayAppService (inject bars)
 ├── result_collector.py         # ResultCollector (collect fills, metrics)
 └── models/                     # DTOs, config models
 ```
@@ -96,7 +96,7 @@ domain/backtest/
     └── performance_calculator.py  # Calculate Sharpe, Sortino, max drawdown (pure, no I/O)
 ```
 
-**Key:** Handler in features/ calls BacktestRunner in application/, which uses PerformanceCalculator from domain/. PerformanceCalculator has ZERO I/O imports.
+**Key:** Handler in features/ calls BacktestAppService in application/, which uses PerformanceCalculator from domain/. PerformanceCalculator has ZERO I/O imports.
 
 **Key Rules:**
 1. Each operation is a folder (command/query.py + handler.py + optional route.py)
@@ -118,17 +118,17 @@ domain/backtest/
 Business logic that coordinates Domain + Infrastructure. Unlike Domain (pure logic), Application can call Infrastructure for I/O.
 
 **Examples:**
-- **StrategyEngine:** Listen to market events (bars, ticks), call strategy.on_bar(), check risk, submit orders via broker
-- **BacktestRunner:** Load strategy, inject historical bars, collect fills, calculate metrics
-- **BarManager:** Aggregate incoming ticks into OHLCV bars at multiple intervals
-- **OrderManager:** Order state machine, recovery on startup
-- **PositionTracker:** Track open/closed positions, calculate P&L
+- **StrategyAppService:** Listen to market events (bars, ticks), call strategy.on_bar(), check risk, submit orders via broker
+- **BacktestAppService:** Load strategy, inject historical bars, collect fills, calculate metrics
+- **BarAppService:** Aggregate incoming ticks into OHLCV bars at multiple intervals
+- **OrderAppService:** Order state machine, recovery on startup
+- **PositionAppService:** Track open/closed positions, calculate P&L
 
 **No CQRS in this layer.** These are business orchestrators called by CQRS handlers.
 
 ```python
 # Application-layer service (orchestrates domain + infrastructure)
-class StrategyEngine:
+class StrategyAppService:
     def __init__(self, broker: IBroker, event_bus: EventBus):
         self.broker = broker
         self.event_bus = event_bus
@@ -153,7 +153,7 @@ class StrategyEngine:
 - No CQRS decorators (@handles, @event_handler)
 - Stateful (maintains runtime state)
 - Called by CQRS handlers in features/ layer
-- Often singletons (StrategyEngine, QuoteService) or per-request (DataSyncService)
+- Often singletons (StrategyAppService, QuoteAppService) or per-request (DataSyncService)
 
 ### 3. Services Registry (Dishka DI)
 
@@ -186,12 +186,12 @@ async def sync(mediator: FromDishka[Mediator]):
 
 **Pattern:**
 - `src/container.py` — factory (`create_container()`) + handler registration
-- `src/providers/` — 6 Provider classes:
+- `src/di/` — 6 Provider classes:
   - CoreProvider: Settings, EventBus, Mediator
   - PersistenceProvider: Database, Cache, 7 repositories
   - InfrastructureProvider: Brokers, TradingView, JobScheduler
-  - MarketDataProvider: BarManager, QuoteService, sync jobs
-  - TradingProvider: OrderManager, PositionTracker
+  - MarketDataProvider: BarAppService, QuoteAppService, sync jobs
+  - TradingProvider: OrderAppService, PositionAppService
   - HandlerProvider: All 27 CQRS handlers
 - `src/main.py` lifespan — setup_dishka(container, app) for route integration
 
@@ -247,9 +247,9 @@ All services receive dependencies via constructor, managed by DI container:
 #### Stateful Services
 
 ```python
-# QuoteService - constructed in lifespan, stored in Services dataclass
-class QuoteService:
-    def __init__(self, settings: Settings, cache: Cache, bar_manager: BarManager):
+# QuoteAppService - constructed in lifespan, stored in Services dataclass
+class QuoteAppService:
+    def __init__(self, settings: Settings, cache: Cache, bar_manager: BarAppService):
         self._settings = settings
         self._cache = cache
         self._bar_manager = bar_manager
@@ -258,14 +258,14 @@ class QuoteService:
 #### Lifecycle-Managed Services (Async Init/Shutdown)
 
 ```python
-# OrderManager - async init in lifespan, explicit shutdown in finally block
-class OrderManager:
+# OrderAppService - async init in lifespan, explicit shutdown in finally block
+class OrderAppService:
     def __init__(self, event_bus: EventBus, order_repository: OrderRepository):
         self._event_bus = event_bus
         self._order_repo = order_repository
 
 # In lifespan:
-order_manager = OrderManager(event_bus, order_repo)
+order_manager = OrderAppService(event_bus, order_repo)
 await order_manager.load_pending_orders()  # async init
 ```
 
@@ -276,8 +276,8 @@ await order_manager.load_pending_orders()  # async init
 Encapsulate external API calls with clean interface:
 
 ```python
-# TradingViewProvider
-class TradingViewProvider:
+# TradingViewClient
+class TradingViewClient:
     def __init__(self, username: Optional[str], password: Optional[str]):
         self.executor = ThreadPoolExecutor(max_workers=4)
 
@@ -296,7 +296,7 @@ Register event subscribers automatically using the `@event_handler` decorator:
 ```python
 from src.common.messaging.event_registry import event_handler
 
-class PositionTracker:
+class PositionAppService:
     @event_handler(OrderFilledEvent)
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Called when order is filled (auto-registered)."""
@@ -402,7 +402,7 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 **Registration Pattern:**
 `register_handlers(container)` in `src/container.py` resolves all handler types from container and registers with Mediator. New handlers need:
 1. Implement handler with `@handles(RequestType)` decorator
-2. Add to HandlerProvider in `src/providers/handler_provider.py` via `provide(HandlerClass, scope=Scope.APP)`
+2. Add to HandlerProvider in `src/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
 3. Add to ALL_HANDLER_TYPES list in HandlerProvider
 4. Handler dependencies resolved by dishka via __init__ type hints
 
@@ -448,7 +448,7 @@ class MACrossoverStrategy(IStrategy):
 - Return StrategySignal or None
 - Keep logic pure (use domain layer for calculations)
 - Store state as instance variables
-- No direct broker/database access (StrategyEngine manages execution)
+- No direct broker/database access (StrategyAppService manages execution)
 
 ### 10. Domain Layer Patterns (Dataclasses, Not Pydantic)
 
@@ -466,11 +466,11 @@ Use kebab-case with descriptive names that indicate purpose:
 
 ```
 quote_routes.py           # FastAPI routes for quotes
-quote_service.py          # QuoteService business logic
+quote_app_service.py          # QuoteAppService business logic
 quote_aggregator.py       # QuoteAggregator bar building
 ohlcv_repository.py       # OHLCVRepository data access
-tradingview.py            # TradingViewProvider for REST API
-tradingview_ws.py         # TradingViewWebSocketProvider for WebSocket
+tradingview.py            # TradingViewClient for REST API
+tradingview_ws.py         # TradingViewWebSocketClient for WebSocket
 ```
 
 ### Module Size
@@ -717,7 +717,7 @@ TRADINGVIEW_USERNAME=username_placeholder
 | Component | Current | Target |
 |-----------|---------|--------|
 | quote_aggregator.py | 368 LOC | <400 (complex algorithm exception) |
-| quote_service.py | 236 LOC | <200 (consider split if modified) |
+| quote_app_service.py | 236 LOC | <200 (consider split if modified) |
 | data_sync_service.py | 244 LOC | <200 |
 | handler.py (operation) | <150 LOC | <200 (single operation per file) |
 | router.py (feature) | <300 LOC | <400 (all operations for one feature) |
@@ -762,7 +762,7 @@ All aggregates migrated:
 - ❌ No CQRS decorators (@handles, @event_handler)
 - ✅ Can import Domain and Infrastructure
 - ✅ Orchestrate domain + infrastructure
-- ✅ Stateful services (StrategyEngine, BarManager)
+- ✅ Stateful services (StrategyAppService, BarAppService)
 - ✅ Called by CQRS handlers in features/
 
 **Features Layer:**

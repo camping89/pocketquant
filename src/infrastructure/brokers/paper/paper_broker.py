@@ -167,7 +167,7 @@ class PaperBroker(IBroker):
                 return pos.current_price
 
         # No price available - this shouldn't happen in normal flow
-        # The StrategyEngine should always provide price context
+        # The StrategyAppService should always provide price context
         raise ValueError(
             f"No market price available for {order.symbol}. "
             "Market orders require price context from strategy signal."

@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         handle_startup_failure(e)
     finally:
         # container.close() runs generator cleanup in reverse order:
-        # StrategyEngine.stop → JobScheduler.shutdown → Cache/Database.disconnect
+        # StrategyAppService.stop → JobScheduler.shutdown → Cache/Database.disconnect
         await container.close()
         logger.info("application_stopped")
 

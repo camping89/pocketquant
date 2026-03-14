@@ -1,7 +1,7 @@
 """Load strategy command handler."""
 
 
-from src.application.strategy.strategy_engine import StrategyEngine
+from src.application.strategy.strategy_app_service import StrategyAppService
 from src.application.strategy.yaml_strategy_loader import StrategyLoader
 from src.common.mediator import Handler, handles
 from src.features.strategy.load.command import LoadStrategyCommand
@@ -11,7 +11,7 @@ from src.features.strategy.load.command import LoadStrategyCommand
 class LoadStrategyHandler(Handler[LoadStrategyCommand, str]):
     """Handle LoadStrategyCommand."""
 
-    def __init__(self, engine: StrategyEngine) -> None:
+    def __init__(self, engine: StrategyAppService) -> None:
         self._engine = engine
 
     async def handle(self, request: LoadStrategyCommand) -> str:
