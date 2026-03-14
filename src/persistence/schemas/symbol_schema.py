@@ -20,10 +20,6 @@ class SymbolBase(BaseModel):
     is_active: bool = Field(default=True, description="Whether symbol is actively traded")
 
 
-class SymbolCreate(SymbolBase):
-    pass
-
-
 class Symbol(SymbolBase):
     model_config = ConfigDict(populate_by_name=True)
 
