@@ -12,10 +12,12 @@ from src.domain.shared.value_objects import Interval as DomainInterval
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
 from src.infrastructure.tradingview import TradingViewClient
+from src.domain.ohlcv.entities import Bar
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 from src.persistence.repositories.symbol_repository import SymbolRepository
 from src.persistence.repositories.sync_status_repository import SyncStatusRepository
-from src.persistence.schemas.symbol_schema import SymbolCreate
+from src.persistence.schemas.ohlcv_schema import OHLCVBase
+from src.persistence.schemas.symbol_schema import SymbolBase
 
 logger = get_logger(__name__)
 
@@ -43,7 +45,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     async def handle(self, request: SyncSymbolCommand) -> SyncResponse:
         symbol = request.symbol.upper()
         exchange = request.exchange.upper()
-        interval = request.interval  # Already Interval enum from Pydantic
+        interval = request.interval
 
         logger.info(
             "market_data.sync.started",
@@ -55,64 +57,23 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         await self._sync_status_repo.upsert(symbol, exchange, interval, "syncing")
 
         try:
-            records = await self.provider.fetch_ohlcv(
-                symbol=symbol,
-                exchange=exchange,
-                interval=interval,
-                n_bars=request.n_bars,
-            )
-
+            records = await self._fetch_bars(symbol, exchange, interval, request.n_bars)
             if not records:
-                await self._sync_status_repo.upsert(
-                    symbol,
-                    exchange,
-                    interval,
-                    "error",
-                    error_message="No data returned from provider",
-                )
-                return SyncResponse(
-                    symbol=symbol,
-                    exchange=exchange,
-                    interval=interval.value,
-                    status="error",
-                    message="No data returned from provider",
-                    bars_synced=0,
+                return await self._fail(
+                    symbol, exchange, interval, "No data returned from provider"
                 )
 
-            upserted_count = await self._ohlcv_repo.upsert_many(records)
-            await self._symbol_repo.upsert(SymbolCreate(symbol=symbol, exchange=exchange))
-
-            total_bars = await self._ohlcv_repo.count(symbol, exchange, interval)
-            latest_bar = await self._ohlcv_repo.get_latest(symbol, exchange, interval)
-
-            await self._sync_status_repo.upsert(
-                symbol,
-                exchange,
-                interval,
-                "completed",
-                bar_count=total_bars,
-                last_bar_at=latest_bar.datetime if latest_bar else None,
+            upserted_count = await self._persist_bars(symbol, exchange, records)
+            total_bars, latest_bar = await self._get_bar_stats(
+                symbol, exchange, interval
             )
 
-            cache_key = build_ohlcv_cache_key(symbol, exchange, interval.value)
-            await self._cache.delete_pattern(f"{cache_key}:*")
-
-            aggregate = OHLCVAggregate(symbol=symbol, exchange=exchange)
-            aggregate.record_sync(
-                interval=DomainInterval(interval.value),
-                bars_count=upserted_count,
-                last_bar_at=latest_bar.datetime if latest_bar else datetime.now(UTC),
+            await self._mark_completed(
+                symbol, exchange, interval, total_bars, latest_bar
             )
-            await self.event_bus.publish_all(aggregate.get_uncommitted_events())
-
-            result = SyncResponse(
-                symbol=symbol,
-                exchange=exchange,
-                interval=interval.value,
-                status="completed",
-                bars_synced=upserted_count,
-                total_bars=total_bars,
-                last_bar_at=latest_bar.datetime.isoformat() if latest_bar else None,
+            await self._invalidate_cache(symbol, exchange, interval)
+            await self._publish_sync_event(
+                symbol, exchange, interval, upserted_count, latest_bar
             )
 
             logger.info(
@@ -121,27 +82,116 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 exchange=exchange,
                 bars_synced=upserted_count,
             )
-            return result
+            return self._success(
+                symbol, exchange, interval, upserted_count, total_bars, latest_bar
+            )
 
         except Exception as e:
-            error_msg = str(e)
             logger.error(
                 "market_data.sync.failed",
                 symbol=symbol,
                 exchange=exchange,
                 interval=interval.value,
-                error=error_msg,
+                error=str(e),
             )
+            return await self._fail(symbol, exchange, interval, str(e))
 
-            await self._sync_status_repo.upsert(
-                symbol, exchange, interval, "error", error_message=error_msg
-            )
+    # -- Private helpers (each does one thing) --
 
-            return SyncResponse(
-                symbol=symbol,
-                exchange=exchange,
-                interval=interval.value,
-                status="error",
-                message=error_msg,
-                bars_synced=0,
-            )
+    async def _fetch_bars(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: DomainInterval,
+        n_bars: int,
+    ) -> list[OHLCVBase]:
+        return await self.provider.fetch_ohlcv(
+            symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars
+        )
+
+    async def _persist_bars(
+        self, symbol: str, exchange: str, records: list[OHLCVBase]
+    ) -> int:
+        upserted_count = await self._ohlcv_repo.upsert_many(records)
+        await self._symbol_repo.upsert(SymbolBase(symbol=symbol, exchange=exchange))
+        return upserted_count
+
+    async def _get_bar_stats(
+        self, symbol: str, exchange: str, interval: DomainInterval
+    ) -> tuple[int, Bar | None]:
+        total_bars = await self._ohlcv_repo.count(symbol, exchange, interval)
+        latest_bar = await self._ohlcv_repo.get_latest(symbol, exchange, interval)
+        return total_bars, latest_bar
+
+    async def _mark_completed(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: DomainInterval,
+        bar_count: int,
+        latest_bar: Bar | None,
+    ) -> None:
+        await self._sync_status_repo.upsert(
+            symbol,
+            exchange,
+            interval,
+            "completed",
+            bar_count=bar_count,
+            last_bar_at=latest_bar.datetime if latest_bar else None,
+        )
+
+    async def _invalidate_cache(
+        self, symbol: str, exchange: str, interval: DomainInterval
+    ) -> None:
+        cache_key = build_ohlcv_cache_key(symbol, exchange, interval.value)
+        await self._cache.delete_pattern(f"{cache_key}:*")
+
+    async def _publish_sync_event(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: DomainInterval,
+        bars_count: int,
+        latest_bar: Bar | None,
+    ) -> None:
+        aggregate = OHLCVAggregate(symbol=symbol, exchange=exchange)
+        aggregate.record_sync(
+            interval=DomainInterval(interval.value),
+            bars_count=bars_count,
+            last_bar_at=latest_bar.datetime if latest_bar else datetime.now(UTC),
+        )
+        await self.event_bus.publish_all(aggregate.get_uncommitted_events())
+
+    def _success(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: DomainInterval,
+        bars_synced: int,
+        total_bars: int,
+        latest_bar: Bar | None,
+    ) -> SyncResponse:
+        return SyncResponse(
+            symbol=symbol,
+            exchange=exchange,
+            interval=interval.value,
+            status="completed",
+            bars_synced=bars_synced,
+            total_bars=total_bars,
+            last_bar_at=latest_bar.datetime.isoformat() if latest_bar else None,
+        )
+
+    async def _fail(
+        self, symbol: str, exchange: str, interval: DomainInterval, message: str
+    ) -> SyncResponse:
+        await self._sync_status_repo.upsert(
+            symbol, exchange, interval, "error", error_message=message
+        )
+        return SyncResponse(
+            symbol=symbol,
+            exchange=exchange,
+            interval=interval.value,
+            status="error",
+            message=message,
+            bars_synced=0,
+        )

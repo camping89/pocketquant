@@ -21,13 +21,7 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         exchange = request.exchange.upper()
         interval = Interval(request.interval)
 
-        cache_key = CACHE_KEY_OHLCV.format(
-            symbol=symbol, exchange=exchange, interval=interval.value, limit=request.limit
-        )
-        if request.start_date:
-            cache_key += f":from:{request.start_date.isoformat()}"
-        if request.end_date:
-            cache_key += f":to:{request.end_date.isoformat()}"
+        cache_key = self._build_cache_key(symbol, exchange, interval, request)
 
         cached = await self._cache.get(cache_key)
         if cached:
@@ -52,3 +46,16 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         await self._cache.set(cache_key, result, ttl=TTL_OHLCV_QUERY)
 
         return result
+
+    @staticmethod
+    def _build_cache_key(
+        symbol: str, exchange: str, interval: Interval, request: GetOHLCVQuery
+    ) -> str:
+        key = CACHE_KEY_OHLCV.format(
+            symbol=symbol, exchange=exchange, interval=interval.value, limit=request.limit
+        )
+        if request.start_date:
+            key += f":from:{request.start_date.isoformat()}"
+        if request.end_date:
+            key += f":to:{request.end_date.isoformat()}"
+        return key
