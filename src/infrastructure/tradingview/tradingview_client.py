@@ -8,12 +8,28 @@ from tvDatafeed import TvDatafeed
 
 from src.common.logging import get_logger
 from src.config import Settings
-from src.domain.ohlcv import INTERVAL_TO_TVDATAFEED
-from src.domain.ohlcv.entities import Bar
-from src.domain.shared.value_objects import Interval
+from src.domain.bar.entities import Bar
+from src.domain.shared.enums import Interval
 from src.infrastructure.tradingview.base import IDataProvider
 
 logger = get_logger(__name__)
+
+# Maps domain Interval enum to TvDatafeed interval attribute names
+INTERVAL_TO_TVDATAFEED = {
+    Interval.MINUTE_1: "in_1_minute",
+    Interval.MINUTE_3: "in_3_minute",
+    Interval.MINUTE_5: "in_5_minute",
+    Interval.MINUTE_15: "in_15_minute",
+    Interval.MINUTE_30: "in_30_minute",
+    Interval.MINUTE_45: "in_45_minute",
+    Interval.HOUR_1: "in_1_hour",
+    Interval.HOUR_2: "in_2_hour",
+    Interval.HOUR_3: "in_3_hour",
+    Interval.HOUR_4: "in_4_hour",
+    Interval.DAY_1: "in_daily",
+    Interval.WEEK_1: "in_weekly",
+    Interval.MONTH_1: "in_monthly",
+}
 
 _executor = ThreadPoolExecutor(max_workers=4)
 

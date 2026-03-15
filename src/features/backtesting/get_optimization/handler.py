@@ -1,6 +1,6 @@
 """Handler for getting optimization result."""
 
-from src.application.backtesting.models.optimization_result import OptimizationResult
+from src.domain.backtest import OptimizationResult
 from src.common.mediator import Handler, handles
 from src.features.backtesting.get_optimization.query import GetOptimizationQuery
 from src.persistence.repositories.optimization_repository import OptimizationRepository

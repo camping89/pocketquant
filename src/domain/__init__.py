@@ -1,6 +1,9 @@
 """Domain layer - Pure business logic with zero I/O imports."""
 
-# Order domain
+# Bar domain (collection-backed)
+from src.domain.bar import Bar, BarCompletedEvent
+
+# Order domain (collection-backed)
 from src.domain.order import (
     InvalidOrderTransitionError,
     OrderAggregate,
@@ -8,39 +11,50 @@ from src.domain.order import (
     OrderFilledEvent,
     OrderPartiallyFilledEvent,
     OrderRejectedEvent,
-    OrderSide,
-    OrderStatus,
     OrderSubmittedEvent,
-    OrderType,
 )
+from src.domain.order.enums import OrderSide, OrderStatus, OrderType
 
-# Position domain
+# Position domain (collection-backed)
 from src.domain.position import (
-    PnL,
     PositionAggregate,
     PositionClosedEvent,
     PositionOpenedEvent,
-    PositionSide,
     PositionUpdatedEvent,
 )
+from src.domain.position.enums import PositionSide
+from src.domain.position.value_objects import PnL
 
-# Risk domain
-from src.domain.risk import PositionSizer, RiskConfig, RiskModel
-from src.domain.shared.domain_event import DomainEvent
-from src.domain.shared.value_objects import Interval, Symbol
+# Sync status domain (collection-backed)
+from src.domain.sync_status import SyncStatus
 
-# Strategy domain
-from src.domain.strategy import Direction, Signal, SignalGeneratedEvent
+# Backtest domain (collection-backed)
+from src.domain.backtest import BacktestResult, OptimizationResult
+
+# Concepts - Risk
+from src.domain.concepts.risk import PositionSizer, RiskConfig
+from src.domain.concepts.risk.enums import RiskModel
+
+# Concepts - Strategy
+from src.domain.concepts.strategy import SignalGeneratedEvent
+from src.domain.concepts.strategy.enums import Direction
+from src.domain.concepts.strategy.value_objects import Signal
+
+# Symbol domain (collection-backed)
+from src.domain.symbol import Symbol
+
+# Shared
+from src.domain.shared.events import DomainEvent
+from src.domain.shared.enums import Interval
 
 __all__ = [
     # Shared
     "DomainEvent",
     "Interval",
     "Symbol",
-    # Strategy
-    "Direction",
-    "Signal",
-    "SignalGeneratedEvent",
+    # Bar
+    "Bar",
+    "BarCompletedEvent",
     # Order
     "InvalidOrderTransitionError",
     "OrderAggregate",
@@ -59,8 +73,17 @@ __all__ = [
     "PositionOpenedEvent",
     "PositionSide",
     "PositionUpdatedEvent",
+    # Sync status
+    "SyncStatus",
+    # Backtest
+    "BacktestResult",
+    "OptimizationResult",
     # Risk
     "PositionSizer",
     "RiskConfig",
     "RiskModel",
+    # Strategy
+    "Direction",
+    "Signal",
+    "SignalGeneratedEvent",
 ]

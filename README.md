@@ -2,6 +2,8 @@
 
 Algorithmic trading platform with real-time market data, WebSocket quotes, and automated bar aggregation.
 
+**Latest:** DDD refactoring complete (2026-03-15) — aggregates cleaned, domain entities with persistence, bars collection standardized.
+
 ## Prerequisites
 
 Install these tools first:
@@ -41,29 +43,29 @@ uvicorn src.main:app --reload
 
 ## Features
 
-- **Historical Data**: Pull OHLCV data from TradingView (up to 5000 bars)
+- **Historical Data**: Pull bar data from TradingView (up to 5000 bars)
 - **Real-time Quotes**: WebSocket connection for live price updates
-- **Auto-Aggregation**: Real-time ticks aggregated into OHLCV bars (1m to 1M)
+- **Auto-Aggregation**: Real-time ticks aggregated into bars (1m to 1M)
 - **Strategy Engine**: Load and run trading strategies with broker abstraction
 - **Backtesting**: Full backtest engine with historical replay and parameter optimization
 - **Paper Trading**: Simulate trades with PaperBroker (slippage, fill delays)
 - **Live Trading**: OKX WebSocket integration with order/position management
-- **MongoDB Storage**: Efficient time-series data persistence
-- **Redis Cache**: High-performance caching
+- **MongoDB Storage**: Efficient time-series data persistence with bar, order, position collections
+- **Redis Cache**: High-performance caching with TTL management
 - **Background Jobs**: Scheduled data sync (6-hourly + market hours)
 - **Structured Logging**: JSON logs for Datadog, Splunk, ELK, etc.
 
 ## Architecture (DDD + CQRS + Vertical Slice)
 
-**13,637 LOC across 277 Python files in src/:**
+**13,555 LOC across 278 Python files in src/:**
 
 ```
 src/
 ├── common/              (993 LOC, 32 files)  - Mediator, EventBus, @event_handler, UUID7, singletons
-├── domain/              (2,364 LOC, 39 files)- Pure business logic (zero I/O), all UUID7 IDs
+├── domain/              (2,364 LOC, 39 files)- Aggregates (Order, Position), Entities (Bar, Symbol, etc.), to_mongo/from_mongo
 ├── application/         (2,559 LOC, 21 files)- Orchestrators: StrategyAppService, BacktestAppService, etc.
 ├── infrastructure/      (2,883 LOC, 28 files)- Brokers, clients, scheduling, HTTP
-├── persistence/         (1,214 LOC, 18 files)- MongoDB, Redis, 7 repositories
+├── persistence/         (1,214 LOC, 18 files)- MongoDB (bars, orders, positions, symbols, sync_status), Redis, 7 repositories
 └── features/            (3,016 LOC, 134 files)- Vertical slices: market_data, backtesting, strategy, trading, risk
     ├── backtesting/     (626 LOC, 22 files)  - BacktestAppService, GridOptimizationAppService operations
     ├── market_data/     (1,534 LOC, 68 files)- BarAppService, sync, quotes operations
@@ -98,8 +100,8 @@ curl -X POST http://localhost:8765/api/v1/strategies/load \
 # Trading - Get open orders
 curl http://localhost:8765/api/v1/orders
 
-# Query historical data
-curl "http://localhost:8765/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=100"
+# Query historical bar data
+curl "http://localhost:8765/api/v1/market-data/bar/NASDAQ/AAPL?interval=1d&limit=100"
 ```
 
 **Full API Docs:** `http://localhost:8765/api/v1/docs`
@@ -145,6 +147,8 @@ pyright src/                # Type check
 - **[Code Standards](./docs/code-standards.md)** - Patterns, testing, code quality
 - **[Codebase Summary](./docs/codebase-summary.md)** - Module breakdown, key decisions
 - **[Project Overview](./docs/project-overview-pdr.md)** - Vision, requirements, status
+
+<!-- TODO: Revisit tick-triggered strategy support (QuoteReceivedEvent wiring) when needed -->
 
 ## License
 

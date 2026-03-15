@@ -1,20 +1,16 @@
 """Handler for sync symbol command."""
 
-from datetime import UTC, datetime
-
 from src.common.cache import Cache
-from src.common.constants import build_ohlcv_cache_key
+from src.common.constants import build_bar_cache_key
 from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
-from src.common.messaging import EventBus
-from src.domain.ohlcv import OHLCVAggregate
-from src.domain.ohlcv.entities import Bar
+from src.domain.bar.entities import Bar
 from src.domain.shared.value_objects import Interval as DomainInterval
-from src.domain.symbol import SymbolAggregate
+from src.domain.symbol import Symbol
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
 from src.infrastructure.tradingview import TradingViewClient
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 from src.persistence.repositories.symbol_repository import SymbolRepository
 from src.persistence.repositories.sync_status_repository import SyncStatusRepository
 
@@ -28,16 +24,14 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     def __init__(
         self,
         provider: TradingViewClient,
-        event_bus: EventBus,
         cache: Cache,
-        ohlcv_repository: OHLCVRepository,
+        bar_repository: BarRepository,
         symbol_repository: SymbolRepository,
         sync_status_repository: SyncStatusRepository,
     ):
         self.provider = provider
-        self.event_bus = event_bus
         self._cache = cache
-        self._ohlcv_repo = ohlcv_repository
+        self._bar_repo = bar_repository
         self._symbol_repo = symbol_repository
         self._sync_status_repo = sync_status_repository
 
@@ -71,9 +65,6 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 symbol, exchange, interval, total_bars, latest_bar
             )
             await self._invalidate_cache(symbol, exchange, interval)
-            await self._publish_sync_event(
-                symbol, exchange, interval, upserted_count, latest_bar
-            )
 
             logger.info(
                 "market_data.sync.completed",
@@ -111,15 +102,15 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     async def _persist_bars(
         self, symbol: str, exchange: str, records: list[Bar]
     ) -> int:
-        upserted_count = await self._ohlcv_repo.upsert_many(records)
-        await self._symbol_repo.upsert(SymbolAggregate.create(code=symbol, exchange=exchange))
+        upserted_count = await self._bar_repo.upsert_many(records)
+        await self._symbol_repo.upsert(Symbol.create(code=symbol, exchange=exchange))
         return upserted_count
 
     async def _get_bar_stats(
         self, symbol: str, exchange: str, interval: DomainInterval
     ) -> tuple[int, Bar | None]:
-        total_bars = await self._ohlcv_repo.count(symbol, exchange, interval)
-        latest_bar = await self._ohlcv_repo.get_latest(symbol, exchange, interval)
+        total_bars = await self._bar_repo.count(symbol, exchange, interval)
+        latest_bar = await self._bar_repo.get_latest(symbol, exchange, interval)
         return total_bars, latest_bar
 
     async def _mark_completed(
@@ -142,24 +133,8 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     async def _invalidate_cache(
         self, symbol: str, exchange: str, interval: DomainInterval
     ) -> None:
-        cache_key = build_ohlcv_cache_key(symbol, exchange, interval.value)
+        cache_key = build_bar_cache_key(symbol, exchange, interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")
-
-    async def _publish_sync_event(
-        self,
-        symbol: str,
-        exchange: str,
-        interval: DomainInterval,
-        bars_count: int,
-        latest_bar: Bar | None,
-    ) -> None:
-        aggregate = OHLCVAggregate(symbol=symbol, exchange=exchange)
-        aggregate.record_sync(
-            interval=DomainInterval(interval.value),
-            bars_count=bars_count,
-            last_bar_at=latest_bar.datetime if latest_bar else datetime.now(UTC),
-        )
-        await self.event_bus.publish_all(aggregate.get_uncommitted_events())
 
     def _success(
         self,

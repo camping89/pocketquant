@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-02-22 | **Codebase Size:** 13,637 LOC | **Total Files:** 277 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS
+**Last Updated:** 2026-03-15 | **Codebase Size:** 13,381 LOC | **Total Files:** 278 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka
 
 ## Architecture Overview
 
@@ -39,11 +39,11 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
   - `publish_all(events)` - Batch publish multiple events
 
 **Event Handling & Auto-Discovery:**
-- **@event_handler decorator** - Mark methods as event subscribers (86 LOC)
+- **@event_handler decorator** - Mark methods as event subscribers
 - **EventRegistry** - Auto-discover and bind decorated handlers
   - `register_instance(obj, event_bus)` - Scan obj for decorated methods, subscribe all
   - Supports single or multiple event types per handler
-  - Returns count of registered handlers for verification
+- **EventBus** - In-memory FIFO with 50 event max history (was 100)
 
 **Tracing & Middleware:**
 - **CorrelationIDMiddleware** - Inject correlation_id into context for request tracking
@@ -77,28 +77,38 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - `get_correlation_id()` - Thread/async-safe context variable access
 - **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-### src/domain (2,364 LOC, 39 files) — Pure Business Logic
+### src/domain (2,364 LOC, 39 files) — Pure Business Logic + Persistence
 
-**Rules:** No I/O imports. No pymongo, redis, aiohttp. **No Pydantic BaseModel** (use stdlib dataclasses instead). Immutable value objects. Domain events. Validation in `__post_init__`.
+**Rules:** No I/O imports (pymongo, redis, aiohttp). **Pydantic BaseModel with MongoDB persistence.** Aggregates have `to_mongo()` and `from_mongo()` methods. Immutable value objects. Domain events. Validation in `__post_init__`.
 
-**Aggregates (6, Mutable Dataclasses):**
-- **OHLCVAggregate** - Collection of OHLCV bars with validation (mutable @dataclass)
-- **OrderAggregate** - Order lifecycle state machine (UUID7 IDs, mutable @dataclass)
-- **PositionAggregate** - Position tracking with P&L calculations (UUID7 IDs, mutable @dataclass)
-- **QuoteAggregate** - Quote with metadata (field: updated_at, mutable @dataclass)
-- **SymbolAggregate** - Symbol with exchange metadata (UUID7 IDs, mutable @dataclass)
-- **RiskConfigAggregate** - Risk parameters and position sizing (UUID7 IDs, mutable @dataclass)
+**Domain Structure (Three-Tier DDD):**
+- **Top-level** (collection-backed): bar/, order/, position/, symbol/, sync_status/, backtest/
+- **concepts/** (non-persisted): quote/, risk/, strategy/
+- **shared/** (cross-cutting): enums.py, events.py, value_objects.py
+
+**Aggregates (2, Pydantic + MongoDB):**
+- **OrderAggregate** - Order state machine with `to_mongo()` / `from_mongo()`
+- **PositionAggregate** - Position tracking + P&L with `to_mongo()` / `from_mongo()`
+
+**Entities (5, Pydantic + MongoDB):**
+- **Bar** - OHLCV price bar (in src/domain/bar/, renamed from OHLCVAggregate)
+- **Symbol** - Tradeable instruments (flattened from SymbolAggregate)
+- **SyncStatus** - Data sync progress tracking
+- **BacktestResult** - Backtest run results
+- **OptimizationResult** - Parameter optimization results
+
+**Deleted (Dead Code, 2026-03-15):**
+- OHLCVAggregate, QuoteAggregate, SymbolAggregate (no state/invariants)
+- src/persistence/schemas/ directory (logic moved to entities)
 
 **Value Objects (Frozen Dataclasses, @dataclass(frozen=True)):**
 - **OHLCV** - (open, high, low, close, volume, timestamp) with validation in __post_init__
 - **BarRange** - (start_time, end_time) for bar alignment
 - **PnL** - (unrealized, realized, total)
 - **Signal** - Buy/sell signal with quantity
-- **SymbolInfo** - (code, exchange, name, description)
 - **Price** - Decimal price wrapper
 - **QuoteTick** - Real-time price update
 - **RiskConfig** - Risk model + parameters
-- **Symbol** - (code, exchange) value object with validation
 
 **Enums:**
 - **OrderType** - MARKET, LIMIT, STOP_LIMIT, STOP_MARKET
@@ -109,11 +119,11 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **RiskModel** - PERCENT_RISK, KELLY, FIXED
 - **Interval** - 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M (13 timeframes)
 
-**Domain Events (13+, Frozen Dataclasses with @dataclass(frozen=True, eq=False)):**
-- **OHLCV:** HistoricalDataSyncedEvent, BarCompletedEvent
+**Domain Events (11, Frozen Dataclasses with @dataclass(frozen=True, eq=False)):**
+- **Bar:** HistoricalDataSyncedEvent, BarCompletedEvent (emitted from live BarAppService._save_completed_bar())
 - **Order:** OrderSubmittedEvent, OrderFilledEvent, OrderPartiallyFilledEvent, OrderCancelledEvent, OrderRejectedEvent
 - **Position:** PositionOpenedEvent, PositionUpdatedEvent, PositionClosedEvent
-- **Quote:** QuoteReceivedEvent, QuoteUpdatedEvent
+- **Quote:** QuoteReceivedEvent
 - **Strategy:** SignalGeneratedEvent
 - All events extend DomainEvent base (frozen dataclass with custom __eq__ by event_id)
 
@@ -217,15 +227,16 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 - Ensures all repositories use connection pooling
 - Zero direct `Database.get_collection()` calls outside persistence/
 
-**Repositories (7 stateless data access layers):**
-1. **OHLCVRepository** - Market bar persistence
+**Repositories (7, instance-based via DI):**
+1. **BarRepository** - Market bar persistence (renamed from OHLCVRepository)
+   - Uses `Bar.to_mongo()` / `Bar.from_mongo()` for serialization
    - `get_bars(symbol, exchange, interval, limit)` - Query bars
    - `upsert_many(records)` - Bulk insert/update (unique on timestamp)
-2. **OrderRepository** - Order lifecycle
+2. **OrderRepository** - Order lifecycle with OrderAggregate persistence
    - `save(order)` - Persist order state
    - `find_pending()` - Recover non-terminal orders on startup
    - `get_by_id(order_id)` - Fetch single order
-3. **PositionRepository** - Position tracking
+3. **PositionRepository** - Position tracking with PositionAggregate persistence
    - `save(position)` - Persist position state
    - `find_open()` - Recover open positions on startup
    - `get_by_id(position_id)` - Fetch single position
@@ -236,20 +247,20 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 5. **OptimizationRepository** - Parameter optimization results
    - `save(result)` - Store optimization result
    - `find_by_id(optimization_id)` - Retrieve result
-6. **SymbolRepository** - Symbol metadata
+6. **SymbolRepository** - Symbol metadata with Symbol entity persistence
    - `find_by_code(code, exchange)` - Lookup symbol
-   - `list_all()` - Get all symbols
+   - `find_all()` - Get all symbols
 7. **SyncStatusRepository** - Data sync progress tracking
    - `save(status)` - Record sync status
    - `find_by_symbol(symbol, exchange)` - Get last sync
    - `update_status(status_id, progress, error)` - Update progress
 
-**MongoDB Schemas (Document validation):**
-- ohlcv_schema.py - Bar structure (open, high, low, close, volume, timestamp)
-- order_schema.py - Order fields (status, symbol, exchange, quantity, price, etc.)
-- position_schema.py - Position fields (symbol, exchange, side, quantity, entry_price, etc.)
-- symbol_schema.py - Symbol metadata (code, exchange, name, description)
-- quote_schema.py - Quote structure (symbol, exchange, price, volume, timestamp)
+**Persistence Consolidation (2026-03-15):**
+- `src/persistence/schemas/` directory DELETED
+- All persistence logic consolidated into domain entities via `to_mongo()` / `from_mongo()`
+- Repositories import domain entities directly: `from src.domain.bar.entities import Bar`
+- Result: Single source of truth (entities), no schema duplication
+- Database uses PyMongo (native async), NOT Motor
 
 ### src/features (3,016 LOC, 134 files) — CQRS Operation Routes
 
@@ -320,8 +331,8 @@ market_data/
 │   │   └── route.py
 │   ├── dto.py
 │   └── router.py
-├── ohlcv/               # OHLCV feature (nested)
-│   ├── get_ohlcv/      # Operation: Get bars
+├── bar/                 # Bar feature (nested) - renamed from ohlcv/
+│   ├── get_bars/       # Operation: Get bars
 │   │   ├── query.py
 │   │   ├── handler.py
 │   │   └── route.py
@@ -345,7 +356,7 @@ market_data/
 │   ├── handler.py
 │   └── route.py
 ├── repositories/        # Data access
-│   ├── ohlcv_repository.py
+│   ├── bar_repository.py
 │   ├── symbol_repository.py
 │   └── sync_status_repository.py
 └── router.py            # Main feature router
@@ -354,7 +365,7 @@ market_data/
 Routes:
 - POST `/api/v1/market-data/sync` - Single symbol sync
 - POST `/api/v1/market-data/sync/bulk` - Bulk sync
-- GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Query bars
+- GET `/api/v1/market-data/bar/{exchange}/{symbol}` - Query bars (path renamed from ohlcv)
 - GET `/api/v1/market-data/symbols` - List symbols
 - POST `/api/v1/quotes/start` - Start WebSocket
 - POST `/api/v1/quotes/stop` - Stop WebSocket
@@ -454,7 +465,7 @@ Routes:
 **PersistenceProvider** - Data access layer
 - Database (MongoDB, PyMongo native async)
 - Cache (Redis, redis-py)
-- 7 Repositories (OHLCV, Order, Position, Backtest, Optimization, Symbol, SyncStatus)
+- 7 Repositories (Bar, Order, Position, Backtest, Optimization, Symbol, SyncStatus)
 
 **InfrastructureProvider** - External integrations
 - IBroker implementations (PaperBroker, OKXBroker)
@@ -501,23 +512,22 @@ async def sync_route(mediator: FromDishka[Mediator], command: SyncSymbolCommand)
 ## CQRS Flow
 
 ```
-1. Route receives HTTP request (with FromDishka[T] dependency)
-   ↓
-2. Route builds Command/Query object
-   ↓
-3. Route calls Mediator.send(request)
-   ↓
-4. Mediator dispatches to registered Handler (from HandlerProvider)
-   ↓
-5. Handler executes business logic:
-   - Fetch data from Infrastructure (from PersistenceProvider)
-   - Process via Domain layer
-   - Save results via Infrastructure
-   - Publish DomainEvents to EventBus (from CoreProvider)
-   ↓
-6. Handler returns DTO
-   ↓
-7. Route converts DTO to HTTP response
+HTTP Request → Route (DishkaRoute + FromDishka[Mediator])
+  ↓
+Build Command/Query
+  ↓
+Mediator.send(request)
+  ↓
+Handler.handle() (from HandlerProvider)
+  - Fetch: Infrastructure (TradingView, Database, Cache)
+  - Validate: Domain layer (Bar.from_mongo())
+  - Persist: Infrastructure (BarRepository.upsert_many())
+  - Invalidate: Cache.delete_pattern()
+  - Publish: EventBus.publish(event)
+  ↓
+Handler returns DTO (never entities)
+  ↓
+Route → HTTP Response (JSON)
 ```
 
 ## Data Pipelines
@@ -529,23 +539,26 @@ POST /market-data/sync
     ↓
 SyncSymbolCommand → Mediator → SyncSymbolHandler
     ├─> TradingViewClient.fetch_ohlcv (thread pool)
-    ├─> Domain validation via OHLCVAggregate
-    ├─> MongoDB bulk_write (upsert)
-    ├─> Redis cache invalidation (pattern delete)
+    ├─> Domain validation via Bar.from_mongo()
+    ├─> BarRepository.upsert_many() (MongoDB bulk_write)
+    ├─> Cache.delete_pattern("bar:SYMBOL:*")
     └─> EventBus.publish(HistoricalDataSyncedEvent)
 ```
 
 ### Real-time Quote Pipeline
 
 ```
-TradingView WebSocket → TradingViewWebSocketClient
+TradingView WebSocket → TradingViewWebSocketClient (binary frame parsing)
     ↓
-Parse binary frame → QuoteAppService._on_quote_update
-    ├─> Redis cache (60s TTL)
-    ├─> BarAppService.process_tick (multi-interval aggregation)
-    │   ├─> Build OHLCV bars (1m, 5m, 15m, ..., 1M)
-    │   ├─> Detect bar completion
-    │   └─> MongoDB save on complete
+QuoteAppService._on_quote_update
+    ├─> Redis cache quote (60s TTL)
+    ├─> BarAppService.process_tick (13 intervals: 1m-1M)
+    │   ├─> Update OHLCV atomically (asyncio.Lock)
+    │   ├─> Detect bar completion (time boundary)
+    │   └─> _save_completed_bar()
+    │       ├─> MongoDB: Bar.to_mongo()
+    │       ├─> Redis: bar:current:{exchange}:{symbol}:{interval}
+    │       └─> EventBus.publish(BarCompletedEvent)
     └─> EventBus.publish(QuoteReceivedEvent)
 ```
 
@@ -575,9 +588,9 @@ sync_all_symbols job (each symbol independently)
 - No direct coupling between features
 
 **Value Objects:** Immutable domain primitives
-- Symbol, Interval, OHLCVBar, QuoteTick, Price
+- Interval, OHLCV, BarRange, QuoteTick, Price, Signal
 - Frozen dataclasses for immutability
-- Validation in __post_init__
+- Validation in `__post_init__`
 - 20+ immutable value objects in codebase
 
 **Mediator Pattern:** Single entry point for all requests
@@ -647,9 +660,39 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
 - **Health Check:** `http://localhost:$API_PORT/health`
 
-## Recent Changes (2026-03-13)
+## Recent Changes (2026-03-15)
 
-**Dishka DI Migration:**
+**CRITICAL: DDD Aggregate Cleanup Refactoring**
+- `src/domain/ohlcv/` renamed to `src/domain/bar/` (consolidated naming: bar = OHLCV)
+- `OHLCVRepository` renamed to `BarRepository` (file: `bar_repository.py`)
+- `SymbolAggregate` flattened to `Symbol` entity in `src/domain/symbol/entities.py`
+- `SymbolInfo` VO deleted (consolidated into Symbol)
+- `OHLCVAggregate` and `QuoteAggregate` deleted (dead code - not referenced anywhere)
+- `BarCompletedEvent` now emitted from live `BarAppService._save_completed_bar()` (more accurate source)
+- `QuoteAppService` DI fixed - `TradingViewWebSocketClient` now injected via constructor
+- `SyncStatus` aggregate now has UUID `_id` field for consistency
+- `build_ohlcv_cache_key()` renamed to `build_bar_cache_key()` in utils
+- `COLLECTION_OHLCV` constant renamed to `COLLECTION_BARS` in constants
+- `testscripts/run_sync_jobs.py` deleted (broken test script)
+
+**CRITICAL: Domain Persistence Consolidation (2026-03-15)**
+- `src/persistence/schemas/` directory DELETED (5 schema files removed)
+- All MongoDB persistence logic moved into domain entities (Pydantic BaseModel)
+- Each aggregate now has `to_mongo()` → dict and `@classmethod from_mongo(doc)` → entity
+- Repositories import directly from domain: `from src.domain.bar.entities import Bar`
+- Result: Domain entities are now complete, self-contained units with built-in persistence
+
+**Handler Extract-Method Pattern:**
+- Complex handlers use private helpers (_fetch_bars, _persist_bars, _fail, _success, etc.)
+- SyncSymbolHandler: 8 private helpers, GetOHLCVHandler: _build_cache_key, StopQuoteFeedHandler: _cancel_ws_task
+- Guideline: Extract when handle() exceeds ~30 lines with 8+ operations
+
+**Naming Standardization (2026-03-14):**
+- DI providers consistently named (CoreProvider, PersistenceProvider, etc.)
+- Application services standardized across layer
+- Infrastructure clients follow unified naming pattern
+
+**Dishka DI Migration (2026-03-13):**
 - Replaced plain Python constructors + Services dataclass with dishka library
 - Created 6 providers: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider
 - Removed src/services.py, src/dependencies.py, src/handler_registration.py
@@ -658,7 +701,6 @@ All settings via environment variables (`.env` file):
 - Lifespan now uses `create_container()` and `setup_dishka(container, app)`
 - Routes use FromDishka[T] instead of Depends(get_service)
 - Handler registration via `register_handlers(container)` + ALL_HANDLER_TYPES list
-- Updated system-architecture.md, code-standards.md, codebase-summary.md with dishka patterns
 
 **Previous Changes (2026-02-14):**
 - Clean Architecture Refactor Complete: Domain → Application → Features, Infrastructure ← Domain

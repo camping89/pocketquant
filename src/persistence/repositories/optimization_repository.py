@@ -1,6 +1,6 @@
 """Optimization repository for MongoDB persistence."""
 
-from src.application.backtesting.models.optimization_result import OptimizationResult
+from src.domain.backtest import OptimizationResult
 from src.common.constants import COLLECTION_OPTIMIZATION_RUNS
 from src.persistence.base_repository import BaseRepository
 
@@ -13,7 +13,7 @@ class OptimizationRepository(BaseRepository):
     async def save(self, result: OptimizationResult) -> None:
         """Save or update optimization result."""
         collection = self._collection()
-        await collection.replace_one({"_id": result.id}, result.to_dict(), upsert=True)
+        await collection.replace_one({"_id": result.id}, result.to_mongo(), upsert=True)
 
     async def get(self, optimization_id: str) -> OptimizationResult | None:
         """Get optimization result by ID."""
@@ -23,7 +23,7 @@ class OptimizationRepository(BaseRepository):
         if not doc:
             return None
 
-        return OptimizationResult.from_dict(doc)
+        return OptimizationResult.from_mongo(doc)
 
     async def ensure_indexes(self) -> None:
         """Create indexes for optimization queries."""

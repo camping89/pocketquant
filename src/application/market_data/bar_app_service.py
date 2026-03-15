@@ -1,32 +1,36 @@
-"""BarAppService aggregates real-time ticks into OHLCV bars at multiple intervals."""
+"""BarAppService aggregates real-time ticks into bars at multiple intervals."""
 
 import asyncio
 from collections import defaultdict
 from typing import Any
 
 from src.application.market_data.quote_dto import QuoteTick
-from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT, build_ohlcv_cache_key
+from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT, build_bar_cache_key
 from src.common.logging import get_logger
-from src.domain.ohlcv.entities import Bar
-from src.domain.ohlcv.services.bar_builder import BarBuilder, get_bar_start
+from src.common.messaging import EventBus
+from src.domain.bar.events import BarCompletedEvent
+from src.domain.bar.entities import Bar
+from src.domain.bar.services.bar_builder import BarBuilder, get_bar_start
 from src.domain.shared.value_objects import Interval
 from src.persistence.redis import Cache
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
 
 
 class BarAppService:
-    """Aggregates real-time ticks into OHLCV bars at multiple intervals."""
+    """Aggregates real-time ticks into bars at multiple intervals."""
 
     def __init__(
         self,
         cache: Cache,
-        ohlcv_repository: OHLCVRepository,
+        bar_repository: BarRepository,
+        event_bus: EventBus,
         intervals: list[Interval] | None = None,
     ):
         self._cache = cache
-        self._ohlcv_repo = ohlcv_repository
+        self._bar_repo = bar_repository
+        self._event_bus = event_bus
         self._intervals = intervals or [
             Interval.MINUTE_1,
             Interval.MINUTE_5,
@@ -97,9 +101,24 @@ class BarAppService:
             tick_count=bar.tick_count,
         )
 
-        await self._ohlcv_repo.upsert_bar(domain_bar)
+        await self._bar_repo.upsert_bar(domain_bar)
 
-        cache_key = build_ohlcv_cache_key(bar.symbol, bar.exchange, bar.interval.value)
+        # Emit BarCompletedEvent for live strategy execution
+        event = BarCompletedEvent(
+            symbol=bar.symbol,
+            exchange=bar.exchange,
+            interval=bar.interval.value,
+            bar_start=bar.bar_start,
+            open=bar.open,
+            high=bar.high,
+            low=bar.low,
+            close=bar.close,
+            volume=bar.volume,
+            tick_count=bar.tick_count,
+        )
+        await self._event_bus.publish(event)
+
+        cache_key = build_bar_cache_key(bar.symbol, bar.exchange, bar.interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")
 
         logger.info(

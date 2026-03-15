@@ -24,7 +24,7 @@ from src.features.strategy import strategy_router
 from src.features.trading import trading_router
 from src.infrastructure.scheduling.scheduler import JobScheduler
 from src.persistence.repositories.backtest_repository import BacktestRepository
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 from src.persistence.repositories.optimization_repository import (
     OptimizationRepository,
 )
@@ -40,7 +40,7 @@ _REPO_TYPES: list[type] = [
     OrderRepository,
     PositionRepository,
     BacktestRepository,
-    OHLCVRepository,
+    BarRepository,
     SyncStatusRepository,
     SymbolRepository,
     OptimizationRepository,

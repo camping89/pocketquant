@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from src.domain.strategy.value_objects import StrategyConfig
+from src.domain.concepts.strategy.value_objects import StrategyConfig
 
 
 class LoadStrategyCommand(BaseModel):

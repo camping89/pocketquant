@@ -18,10 +18,16 @@ logger = get_logger(__name__)
 class QuoteAppService:
     """Manages quote WebSocket feed, subscriptions, and tick processing."""
 
-    def __init__(self, settings: Settings, cache: Cache, bar_manager: BarAppService):
+    def __init__(
+        self,
+        settings: Settings,
+        cache: Cache,
+        bar_manager: BarAppService,
+        provider: TradingViewWebSocketClient,
+    ):
         self.settings = settings
         self._cache = cache
-        self.provider = TradingViewWebSocketClient()
+        self.provider = provider
         self.bar_manager = bar_manager
         self.running = False
         self.ws_task: asyncio.Task | None = None

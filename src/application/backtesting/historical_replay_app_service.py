@@ -10,8 +10,8 @@ from src.application.backtesting.models.backtest_config import BacktestConfig
 from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import set_simulation_time
-from src.domain.ohlcv import BarCompletedEvent
-from src.domain.ohlcv.entities import Bar
+from src.domain.bar import BarCompletedEvent
+from src.domain.bar.entities import Bar
 
 logger = get_logger(__name__)
 

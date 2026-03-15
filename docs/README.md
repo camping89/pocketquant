@@ -1,8 +1,8 @@
 # PocketQuant Documentation Index
 
-**Last Updated:** 2026-02-21 | **Codebase:** 13,641 LOC (277 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+
+**Last Updated:** 2026-03-15 | **Codebase:** 13,555 LOC (278 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+
 
-Welcome to PocketQuant documentation. Start below based on your role.
+Welcome to PocketQuant documentation. Start below based on your role. **Last Update (2026-03-15):** Refactored to three-tier DDD structure with Dishka DI. domain/ohlcv/ → domain/bar/, deleted dead code (OHLCVAggregate, QuoteAggregate, SymbolAggregate), consolidated persistence to entities.
 
 ## Quick Navigation
 
@@ -49,7 +49,7 @@ Quick start guide, API examples, setup instructions, development commands.
 
 ---
 
-### [codebase-summary.md](./codebase-summary.md) (618 LOC)
+### [codebase-summary.md](./codebase-summary.md) (714 LOC)
 **Codebase reference for developers**
 
 Detailed module breakdown, layer responsibilities, data pipelines, patterns, and testing strategy.
@@ -57,26 +57,29 @@ Detailed module breakdown, layer responsibilities, data pipelines, patterns, and
 **Use when:** Understanding project structure, finding modules, implementing new features
 
 **Contains:**
-- Architecture overview (DDD + CQRS + Clean Architecture + IoC Container)
+- Architecture overview (DDD + CQRS + Clean Architecture + Dishka DI)
+- Three-tier domain structure: top-level (bar, order, position, symbol, sync_status, backtest), concepts (quote, risk, strategy), shared
 - Module breakdown by layer:
   - **src/common** (993 LOC, 32 files) - Mediator, EventBus, middleware, singletons
-  - **src/domain** (2,364 LOC, 39 files) - Aggregates, value objects, domain events, services
+  - **src/domain** (2,364 LOC, 39 files) - 2 Aggregates (Order, Position), 5 Entities (Bar, Symbol, SyncStatus, Backtest), concepts (Quote, Risk, Strategy), value objects, domain events, services
   - **src/application** (2,559 LOC, 21 files) - Orchestrators (StrategyAppService, BacktestAppService, etc.)
   - **src/infrastructure** (2,883 LOC, 28 files) - Brokers, providers, scheduling
-  - **src/persistence** (1,214 LOC, 18 files) - MongoDB, Redis, 7 repositories
+  - **src/persistence** (1,214 LOC, 18 files) - MongoDB (PyMongo, NOT Motor), Redis, 7 repositories (BarRepository, OrderRepository, etc.)
   - **src/features** (3,016 LOC, 134 files) - Feature slices (market_data, backtesting, strategy, trading, risk)
 - CQRS flow and data pipelines
 - Key architectural patterns (value objects, broker abstraction, domain purity)
+- MongoDB persistence: `to_mongo()`/`from_mongo()` methods on all entities
 - Testing strategy and configuration
 
 **Key Stats:**
-- Total: 13,641 LOC (277 files in src/)
+- Total: 13,381 LOC (278 files in src/)
 - src/common: 993 LOC (32 files)
 - src/domain: 2,364 LOC (39 files)
 - src/application: 2,559 LOC (21 files)
 - src/infrastructure: 2,883 LOC (28 files)
 - src/persistence: 1,214 LOC (18 files)
 - src/features: 3,016 LOC (134 files)
+- Collections: bars (renamed from ohlcv), orders, positions, symbols, backtest_results, sync_status, optimization_results
 
 ---
 
@@ -229,12 +232,14 @@ Product goals, requirements (functional & non-functional), implementation status
 | Document | Purpose | Audience | LOC |
 |----------|---------|----------|-----|
 | README.md | Quick start | All | 177 |
-| codebase-summary.md | Reference | Developers | 420+ |
-| code-standards.md | Guidelines | Developers, Reviewers | 650+ |
-| system-architecture.md | Design | Architects, Developers | 480+ |
-| project-overview-pdr.md | Requirements | All | 473 |
-| deployment-guide.md | Production setup | DevOps | 200 |
-| **Total** | | | **2,400+** |
+| codebase-summary.md | Reference | Developers | 618 |
+| code-standards.md | Guidelines | Developers, Reviewers | 933 |
+| system-architecture.md | Design | Architects, Developers | 784 |
+| project-overview-pdr.md | Requirements | All | 509 |
+| handler-pipelines.md | Handler details | Developers | 661 |
+| deployment-guide.md | Production setup | DevOps | 204 |
+| ddd-strategic-map.md | DDD structure | Architects | 132 |
+| **Total** | | | **4,018** |
 
 ---
 
@@ -363,6 +368,7 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
+| 2026-03-15 | DDD aggregate cleanup: Deleted OHLCVAggregate, QuoteAggregate, SymbolAggregate. Renamed domain/ohlcv/→domain/bar/, OHLCVRepository→BarRepository, collection ohlcv→bars. Symbol flattened to entity. Schemas deleted. All entities have to_mongo()/from_mongo(). Updated all doc files with refactoring status. |
 | 2026-02-21 | Accuracy refresh: Verified all LOC counts (13,641 across 277 files), fixed Motor→PyMongo references, corrected justfile commands (just up/down, not start/stop), fixed mypy→pyright. Updated all doc files with accurate metrics. |
 | 2026-02-13 | Operation-first vertical slice restructure: All features reorganized with operations as primary unit. Updated architecture docs, code standards, feature structure. Each operation folder self-contained. |
 | 2026-02-12 | Updated stats: 213 files, 14,393 LOC. Documented @event_handler decorator & auto-discovery, UUID7 migration, updated_at field rename |
@@ -372,4 +378,4 @@ When you make code changes:
 
 ---
 
-**Last Updated:** 2026-02-21 | **Codebase:** 13,641 LOC (277 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01
+**Last Updated:** 2026-03-15 | **Codebase:** 13,555 LOC (278 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01

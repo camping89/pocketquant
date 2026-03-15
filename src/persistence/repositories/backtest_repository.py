@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from src.application.backtesting.models.backtest_result import BacktestResult
+from src.domain.backtest import BacktestResult
 from src.common.constants import COLLECTION_BACKTEST_RUNS
 from src.common.logging import get_logger
 from src.persistence.base_repository import BaseRepository
@@ -18,7 +18,7 @@ class BacktestRepository(BaseRepository):
     async def save(self, result: BacktestResult) -> str:
         """Save or update a backtest result. Returns the result ID."""
         collection = self._collection()
-        doc = result.to_dict()
+        doc = result.to_mongo()
         await collection.replace_one({"_id": result.id}, doc, upsert=True)
         logger.debug("backtest_result_saved", run_id=result.id, strategy_id=result.strategy_id)
         return result.id
@@ -29,7 +29,7 @@ class BacktestRepository(BaseRepository):
         doc = await collection.find_one({"_id": run_id})
         if not doc:
             return None
-        return BacktestResult.from_dict(doc)
+        return BacktestResult.from_mongo(doc)
 
     async def list_by_strategy(
         self, strategy_id: str, limit: int = 20, include_failed: bool = False
@@ -45,7 +45,7 @@ class BacktestRepository(BaseRepository):
 
         results = []
         async for doc in cursor:
-            results.append(BacktestResult.from_dict(doc))
+            results.append(BacktestResult.from_mongo(doc))
         return results
 
     async def get_best_by_metric(
@@ -62,7 +62,7 @@ class BacktestRepository(BaseRepository):
 
         results = []
         async for doc in cursor:
-            results.append(BacktestResult.from_dict(doc))
+            results.append(BacktestResult.from_mongo(doc))
         return results
 
     async def delete(self, run_id: str) -> bool:

@@ -13,7 +13,7 @@ from src.config import Settings
 from src.persistence.mongodb import Database
 from src.persistence.redis import Cache
 from src.persistence.repositories.backtest_repository import BacktestRepository
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 from src.persistence.repositories.optimization_repository import (
     OptimizationRepository,
 )
@@ -41,7 +41,7 @@ class PersistenceProvider(Provider):
         await cache.disconnect()
 
     # Repositories — auto-resolved via BaseRepository.__init__(database: Database)
-    ohlcv_repository = provide(OHLCVRepository, scope=Scope.APP)
+    bar_repository = provide(BarRepository, scope=Scope.APP)
     order_repository = provide(OrderRepository, scope=Scope.APP)
     position_repository = provide(PositionRepository, scope=Scope.APP)
     backtest_repository = provide(BacktestRepository, scope=Scope.APP)

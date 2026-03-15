@@ -3,8 +3,8 @@
 import structlog
 
 from src.domain.position import PositionAggregate
-from src.domain.risk import RiskConfig
-from src.domain.strategy import Direction, Signal
+from src.domain.concepts.risk import RiskConfig
+from src.domain.concepts.strategy import Direction, Signal
 from src.infrastructure.brokers import AccountBalance
 
 logger = structlog.get_logger(__name__)

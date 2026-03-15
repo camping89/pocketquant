@@ -4,9 +4,8 @@ from src.application.backtesting.backtest_app_service import BacktestAppService
 from src.application.backtesting.grid_optimization_app_service import GridOptimizationAppService
 from src.application.backtesting.historical_replay_app_service import HistoricalReplayAppService
 from src.application.backtesting.models.backtest_config import BacktestConfig
-from src.application.backtesting.models.backtest_result import BacktestMetrics, BacktestResult
 from src.application.backtesting.models.optimization_config import OptimizationConfig
-from src.application.backtesting.models.optimization_result import OptimizationResult
+from src.domain.backtest import BacktestMetrics, BacktestResult, OptimizationResult
 from src.features.backtesting.get_optimization import (
     GetOptimizationHandler,
     GetOptimizationQuery,
