@@ -7,12 +7,8 @@
 ## Context
 - `src/domain/quote/aggregate.py` — `QuoteAggregate` (Pydantic, in-memory only)
 - **Zero instantiations** in entire codebase — dead code
-- `Quote` DTO in `src/application/market_data/quote_dto.py` does all real work
-- `QuoteReceivedEvent` and `QuoteUpdatedEvent` are consumed by `StrategyAppService` but never published (real-time gap — addressed in Phase 4)
-
-## Key Check Before Delete
-- `QuoteReceivedEvent` and `QuoteUpdatedEvent` — keep the event classes (they're consumed)
-- Only delete the aggregate that was supposed to emit them
+- `QuoteReceivedEvent` and `QuoteUpdatedEvent` — keep dead (not wired). App focuses on bar-completed processing.
+- `StrategyAppService._on_quote_received()` handler — keep dead (trigger="tick" path preserved for future use)
 
 ## Files to Modify
 
@@ -40,16 +36,24 @@ Should only find: `aggregate.py` itself and `__init__.py` export.
 
 ### 3. Delete `src/domain/quote/aggregate.py`
 
-### 4. Verify no broken imports
+### 4. Add TODO to README
+Add note under Features or a TODO section:
+```
+<!-- TODO: Revisit tick-triggered strategy support (QuoteReceivedEvent wiring) when needed -->
+```
+
+### 5. Verify no broken imports
 ```bash
 rg "QuoteAggregate" src/
 ```
 
-### 5. Compile check + test
+### 6. Compile check + test
 
 ## Success Criteria
 
 - [ ] `QuoteAggregate` class deleted
 - [ ] No imports referencing `QuoteAggregate` anywhere
 - [ ] `QuoteReceivedEvent` and `QuoteUpdatedEvent` still importable (kept in `quote_event.py`)
+- [ ] `StrategyAppService._on_quote_received()` handler preserved (dead but intact)
+- [ ] TODO added to README for future tick-triggered strategy revision
 - [ ] All tests pass
