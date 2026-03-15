@@ -1,15 +1,24 @@
 """Route for getting OHLCV data."""
 
 from datetime import datetime
+from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
 from src.common.constants import LIMIT_OHLCV_QUERY_MAX
 from src.common.mediator import Mediator
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
-from src.persistence.schemas.ohlcv_schema import OHLCVResponse
+
+
+class OHLCVResponse(BaseModel):
+    symbol: str
+    exchange: str
+    interval: str
+    data: list[dict[str, Any]]
+    count: int
 
 router = APIRouter(route_class=DishkaRoute)
 

@@ -1,10 +1,9 @@
-"""Order aggregate with state machine for order lifecycle."""
+"""Order aggregate with state machine for order lifecycle — Pydantic model."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import ClassVar
+from typing import Any, ClassVar
+
+from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import generate_id_str
 from src.domain.order.order_event import (
@@ -18,12 +17,15 @@ from src.domain.order.value_objects import OrderSide, OrderStatus, OrderType
 from src.domain.shared.domain_event import DomainEvent
 
 
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
 class InvalidOrderTransitionError(Exception):
     """Raised when an invalid state transition is attempted."""
 
 
-@dataclass
-class OrderAggregate:
+class OrderAggregate(BaseModel):
     """Order aggregate root with state machine.
 
     Tracks order lifecycle from creation to terminal state.
@@ -42,9 +44,9 @@ class OrderAggregate:
     filled_quantity: float = 0.0
     filled_price: float | None = None
     broker_order_id: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
+    created_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=_utc_now)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     # State machine: valid transitions (class-level, allocated once)
     _VALID_TRANSITIONS: ClassVar[dict[OrderStatus, frozenset[OrderStatus]]] = {
@@ -224,3 +226,44 @@ class OrderAggregate:
     def remaining_quantity(self) -> float:
         """Get unfilled quantity."""
         return self.quantity - self.filled_quantity
+
+    def to_mongo(self) -> dict[str, Any]:
+        """Serialize to MongoDB document."""
+        return {
+            "_id": self.id,
+            "strategy_id": self.strategy_id,
+            "symbol": self.symbol,
+            "exchange": self.exchange,
+            "side": self.side.value,
+            "order_type": self.order_type.value,
+            "quantity": self.quantity,
+            "price": self.price,
+            "stop_price": self.stop_price,
+            "status": self.status.value,
+            "filled_quantity": self.filled_quantity,
+            "filled_price": self.filled_price,
+            "broker_order_id": self.broker_order_id,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_mongo(cls, doc: dict[str, Any]) -> OrderAggregate:
+        """Reconstruct from MongoDB document."""
+        return cls(
+            id=doc["_id"],
+            strategy_id=doc["strategy_id"],
+            symbol=doc["symbol"],
+            exchange=doc["exchange"],
+            side=OrderSide(doc["side"]),
+            order_type=OrderType(doc["order_type"]),
+            quantity=doc["quantity"],
+            price=doc.get("price"),
+            stop_price=doc.get("stop_price"),
+            status=OrderStatus(doc["status"]),
+            filled_quantity=doc.get("filled_quantity", 0.0),
+            filled_price=doc.get("filled_price"),
+            broker_order_id=doc.get("broker_order_id"),
+            created_at=doc["created_at"],
+            updated_at=doc["updated_at"],
+        )

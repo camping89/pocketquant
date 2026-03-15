@@ -3,7 +3,6 @@
 from src.common.constants import COLLECTION_ORDERS
 from src.domain.order import OrderAggregate
 from src.persistence.base_repository import BaseRepository
-from src.persistence.schemas.order_schema import OrderDocument
 
 
 class OrderRepository(BaseRepository):
@@ -13,9 +12,8 @@ class OrderRepository(BaseRepository):
 
     async def save(self, order: OrderAggregate) -> None:
         """Save or update order."""
-        doc = OrderDocument.from_aggregate(order)
         collection = self._collection()
-        await collection.replace_one({"_id": order.id}, doc.model_dump(by_alias=True), upsert=True)
+        await collection.replace_one({"_id": order.id}, order.to_mongo(), upsert=True)
 
     async def get(self, order_id: str) -> OrderAggregate | None:
         """Get order by ID."""
@@ -23,13 +21,13 @@ class OrderRepository(BaseRepository):
         doc = await collection.find_one({"_id": order_id})
         if not doc:
             return None
-        return OrderDocument(**doc).to_aggregate()
+        return OrderAggregate.from_mongo(doc)
 
     async def find_by_strategy(self, strategy_id: str, limit: int = 1000) -> list[OrderAggregate]:
         """Get all orders for a strategy."""
         collection = self._collection()
         cursor = collection.find({"strategy_id": strategy_id}).limit(limit)
-        return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
+        return [OrderAggregate.from_mongo(doc) async for doc in cursor]
 
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
         """Get all pending orders."""
@@ -37,7 +35,7 @@ class OrderRepository(BaseRepository):
         cursor = collection.find(
             {"status": {"$in": ["pending", "submitted", "partially_filled"]}}
         ).limit(limit)
-        return [OrderDocument(**doc).to_aggregate() async for doc in cursor]
+        return [OrderAggregate.from_mongo(doc) async for doc in cursor]
 
     async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""

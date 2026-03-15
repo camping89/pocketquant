@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from src.persistence.schemas.quote_schema import Quote
+from src.application.market_data.quote_dto import Quote
 
 
 @dataclass
