@@ -1,7 +1,8 @@
 ---
 title: "Refactor Domain Layer from Pydantic to Dataclasses"
 description: "Replace Pydantic BaseModel with Python dataclasses in domain aggregates, value objects, and events for a purer domain layer."
-status: completed
+status: superseded
+superseded_by: [260315-0037-persistence-schema-consolidation]
 priority: P2
 effort: 3h
 branch: feat/strategy-init
