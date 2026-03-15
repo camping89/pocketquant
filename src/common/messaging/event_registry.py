@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar
 
-from src.domain.shared.domain_event import DomainEvent
+from src.domain.shared.events import DomainEvent
 
 if TYPE_CHECKING:
     from src.common.messaging.event_bus import EventBus

@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 import structlog
 
 from src.common.messaging import EventBus, event_handler, get_event_registry
-from src.domain.ohlcv.ohlcv_event import BarCompletedEvent
+from src.domain.bar.events import BarCompletedEvent
 from src.domain.order import OrderAggregate, OrderSide, OrderType
-from src.domain.quote.quote_event import QuoteReceivedEvent
-from src.domain.risk import PositionSizer
-from src.domain.strategy.interfaces import IStrategy
-from src.domain.strategy.value_objects import Direction, Signal, StrategyConfig
+from src.domain.concepts.quote.events import QuoteReceivedEvent
+from src.domain.concepts.risk import PositionSizer
+from src.domain.concepts.strategy.interfaces import IStrategy
+from src.domain.concepts.strategy.value_objects import Direction, Signal, StrategyConfig
 from src.infrastructure.brokers import BrokerFactory, IBroker
 
 if TYPE_CHECKING:

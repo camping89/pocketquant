@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.domain.ohlcv.entities import Bar
+from src.domain.bar.entities import Bar
 from src.domain.shared.value_objects import Interval
 
 

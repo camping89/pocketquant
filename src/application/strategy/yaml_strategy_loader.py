@@ -5,7 +5,7 @@ from pathlib import Path
 import structlog
 import yaml
 
-from src.domain.strategy.value_objects import StrategyConfig
+from src.domain.concepts.strategy.value_objects import StrategyConfig
 
 logger = structlog.get_logger(__name__)
 

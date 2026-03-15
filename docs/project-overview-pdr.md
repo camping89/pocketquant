@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-02-22 | **Status:** v1.0 Complete | **Codebase:** 277 Python files, 13,637 LOC in src/ | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-03-15 | **Status:** v1.0 Complete | **Codebase:** 278 Python files, 13,381 LOC in src/ | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -8,17 +8,17 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ## Product Goals
 
-1. **Data Reliability:** Efficient historical OHLCV sync from TradingView with MongoDB persistence
+1. **Data Reliability:** Efficient historical bar sync from TradingView with MongoDB persistence
 2. **Real-time Processing:** Live quote streaming with automatic aggregation into multiple timeframe bars
 3. **Developer Experience:** Clean REST API with OpenAPI documentation, minimal setup friction
 4. **Production Ready:** Structured logging, error handling, graceful degradation
-5. **Extensibility:** Vertical slice architecture for adding new data sources and features
+5. **Extensibility:** DDD + CQRS architecture with vertical slice features and clean separation of concerns
 
 ## Functional Requirements
 
 ### F1: Historical Data Synchronization
 
-**Requirement:** Fetch OHLCV data from TradingView and persist to MongoDB.
+**Requirement:** Fetch bar data from TradingView and persist to MongoDB.
 
 **Sub-requirements:**
 - Sync single symbol with configurable interval and bar count
@@ -81,7 +81,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F4: Data Retrieval
 
-**Requirement:** Query historical OHLCV data with filtering and caching.
+**Requirement:** Query historical bar data with filtering and caching.
 
 **Sub-requirements:**
 - Retrieve bars by symbol, exchange, interval
@@ -92,7 +92,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Support flexible time ranges
 
 **API Endpoints:**
-- GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Bars with query params
+- GET `/api/v1/market-data/bar/{exchange}/{symbol}` - Bars with query params
 
 ### F5: Symbol Registry
 
@@ -294,6 +294,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 | Backtesting (F8) | ✅ Complete | Yes | Yes | 78%+ |
 | Order/Position Mgmt (F9) | ✅ Complete | Yes | Yes | 82%+ |
 | Live Trading/OKX (F10) | ✅ Complete | Yes | Yes | 76%+ |
+| DDD Refactoring | ✅ Complete | N/A | Yes | 78%+ |
 | Structured Logging | ✅ Complete | N/A | N/A | 100% |
 | Docker Setup | ✅ Complete | N/A | N/A | N/A |
 
@@ -305,18 +306,21 @@ src/common/             (993 LOC, 32 files)
 ├── Event Handler Auto-Discovery (@event_handler, EventRegistry)
 ├── CQRS Handler Auto-Discovery (@handles decorator, HandlerRegistry)
 ├── UUID Utilities (UUID7 generation - time-ordered IDs)
-├── DI Container Integration - dependency-injector setup
+├── DI Container Integration - dishka dependency-injector setup
 ├── Middleware (correlation ID, rate limit, idempotency)
 ├── Logging (structlog) - Structured JSON logs
 ├── Health Coordinator - Infrastructure health checks
 └── Job Scheduler (APScheduler)
 
 src/domain/             (2,364 LOC, 39 files)
-├── Aggregates: OHLCV, Order, Position, Quote, Symbol, Risk (all with UUID7)
-├── Value Objects: Price, Signal, BarRange, PnL, SymbolInfo, etc.
-├── Domain Events (13+ event types: OrderSubmitted, BarCompleted, etc.)
+├── Entities (6): Bar (renamed from ohlcv/), Symbol (flat), Order, Position, Backtest, Strategy
+├── Aggregates (2): OrderAggregate, PositionAggregate (state machines with events)
+├── Deleted: OHLCVAggregate, QuoteAggregate, SymbolAggregate, SymbolInfo VO
+├── Value Objects: Price, Signal, BarRange, PnL, Interval, Direction, etc.
+├── Domain Events (13 event types: BarCompletedEvent, OrderSubmitted, OrderFilled, etc.)
 ├── Domain Services: BarBuilder, PositionSizer (pure logic, zero I/O)
 ├── Enums: OrderType, OrderStatus, OrderSide, Direction, Interval, etc.
+├── MongoDB Persistence: `to_mongo()`/`from_mongo()` methods on all entities
 └── Immutable frozen dataclasses with validation in __post_init__
 
 src/application/        (2,559 LOC, 21 files)
@@ -340,15 +344,16 @@ src/persistence/        (1,214 LOC, 18 files)
 ├── Database: MongoDB async client (PyMongo native async API)
 ├── Cache: Redis async client (redis-py)
 ├── BaseRepository: Mixin with _collection() helper
-├── Repositories (7): OHLCV, Order, Position, Backtest, Optimization, Symbol, SyncStatus
-└── MongoDB Schemas: Document validation
+├── Repositories (7): BarRepository (renamed from OHLCVRepository), OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
+├── Collections: bars (renamed from ohlcv), orders, positions, backtest_results, optimization_results, symbols, sync_status
+└── Direct domain entity serialization: `entity.to_mongo()` / `Entity.from_mongo(doc)`
 
 src/features/           (3,016 LOC, 134 files) - Operation-First Vertical Slices
 ├── backtesting/        (626 LOC, 22 files)
 │   ├── run/ optimize/ get_result/ get_optimization/ list_results/
 ├── market_data/        (1,534 LOC, 68 files)
-│   ├── sync/sync_one/ sync/sync_bulk/ ohlcv/get_ohlcv/ quotes/
-│   ├── status/ list_symbols/
+│   ├── sync/sync_one/ sync/sync_bulk/ bar/get_bars/ (renamed from ohlcv/)
+│   ├── quotes/ status/ list_symbols/
 ├── strategy/           (416 LOC, 22 files)
 │   ├── get_all/ get_one/ load/ start/ stop/
 ├── trading/            (281 LOC, 18 files)

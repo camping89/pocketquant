@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from src.common.constants import COLLECTION_SYMBOLS
-from src.domain.symbol import SymbolAggregate
+from src.domain.symbol import Symbol
 from src.persistence.base_repository import BaseRepository
 
 
@@ -12,7 +12,7 @@ class SymbolRepository(BaseRepository):
 
     _collection_name = COLLECTION_SYMBOLS
 
-    async def upsert(self, symbol: SymbolAggregate) -> None:
+    async def upsert(self, symbol: Symbol) -> None:
         """Upsert symbol record."""
         collection = self._collection()
         doc = symbol.to_mongo()
@@ -24,7 +24,7 @@ class SymbolRepository(BaseRepository):
             upsert=True,
         )
 
-    async def find_all(self, exchange: str | None = None) -> list[SymbolAggregate]:
+    async def find_all(self, exchange: str | None = None) -> list[Symbol]:
         """Get all symbols, optionally filtered by exchange."""
         collection = self._collection()
 
@@ -34,7 +34,7 @@ class SymbolRepository(BaseRepository):
 
         cursor = collection.find(query).sort("symbol", 1)
 
-        return [SymbolAggregate.from_mongo(doc) async for doc in cursor]
+        return [Symbol.from_mongo(doc) async for doc in cursor]
 
     async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange)."""

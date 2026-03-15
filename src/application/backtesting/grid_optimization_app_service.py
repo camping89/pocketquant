@@ -7,9 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 from src.application.backtesting.backtest_app_service import BacktestAppService
 from src.application.backtesting.models.backtest_config import BacktestConfig
-from src.application.backtesting.models.backtest_result import BacktestMetrics, BacktestResult
 from src.application.backtesting.models.optimization_config import OptimizationConfig
-from src.application.backtesting.models.optimization_result import (
+from src.domain.backtest import (
+    BacktestMetrics,
+    BacktestResult,
     OptimizationResult,
     OptimizationResultEntry,
 )
@@ -18,7 +19,7 @@ from src.common.messaging import EventBus
 from src.common.uuid import generate_id_str
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
 from src.persistence.repositories.backtest_repository import BacktestRepository
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 
 if TYPE_CHECKING:
     from src.application.strategy.strategy_app_service import StrategyAppService
@@ -48,12 +49,12 @@ class GridOptimizationAppService:
         event_bus: EventBus,
         strategy_engine: StrategyAppService,
         backtest_repository: BacktestRepository,
-        ohlcv_repository: OHLCVRepository,
+        bar_repository: BarRepository,
     ) -> None:
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
         self._backtest_repo = backtest_repository
-        self._ohlcv_repo = ohlcv_repository
+        self._bar_repo = bar_repository
 
     async def optimize(self, config: OptimizationConfig) -> OptimizationResult:
         """Run grid optimization across all parameter combinations.
@@ -213,7 +214,7 @@ class GridOptimizationAppService:
                 strategy_engine=self._strategy_engine,
                 broker=broker,
                 backtest_repository=self._backtest_repo,
-                ohlcv_repository=self._ohlcv_repo,
+                bar_repository=self._bar_repo,
                 persist_results=False,  # Optimization persists summary only
             )
 

@@ -1,6 +1,6 @@
 """Shared domain primitives."""
 
-from src.domain.shared.domain_event import DomainEvent
-from src.domain.shared.value_objects import Interval, Symbol
+from src.domain.shared.events import DomainEvent
+from src.domain.shared.enums import Interval
 
-__all__ = ["DomainEvent", "Interval", "Symbol"]
+__all__ = ["DomainEvent", "Interval"]

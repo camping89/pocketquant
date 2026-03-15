@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from src.common.constants import COLLECTION_SYNC_STATUS
-from src.domain.ohlcv.entities import SyncStatus
+from src.domain.sync_status import SyncStatus
 from src.domain.shared.value_objects import Interval
 from src.persistence.base_repository import BaseRepository
 

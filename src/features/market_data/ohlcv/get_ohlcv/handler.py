@@ -5,16 +5,16 @@ from src.common.constants import CACHE_KEY_OHLCV, TTL_OHLCV_QUERY
 from src.common.mediator import Handler, handles
 from src.domain.shared.value_objects import Interval
 from src.features.market_data.ohlcv.get_ohlcv.query import GetOHLCVQuery
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 
 
 @handles(GetOHLCVQuery)
 class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
     """Handle OHLCV data retrieval."""
 
-    def __init__(self, cache: Cache, ohlcv_repository: OHLCVRepository):
+    def __init__(self, cache: Cache, bar_repository: BarRepository):
         self._cache = cache
-        self._ohlcv_repo = ohlcv_repository
+        self._bar_repo = bar_repository
 
     async def handle(self, request: GetOHLCVQuery) -> list[dict]:
         symbol = request.symbol.upper()
@@ -27,7 +27,7 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         if cached:
             return cached
 
-        bars = await self._ohlcv_repo.find(
+        bars = await self._bar_repo.find(
             symbol, exchange, interval, request.start_date, request.end_date, request.limit
         )
 

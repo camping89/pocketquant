@@ -1,6 +1,5 @@
 """Symbol domain."""
 
-from src.domain.symbol.aggregate import SymbolAggregate
-from src.domain.symbol.value_objects import SymbolInfo
+from src.domain.symbol.entities import Symbol
 
-__all__ = ["SymbolAggregate", "SymbolInfo"]
+__all__ = ["Symbol"]

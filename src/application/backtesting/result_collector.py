@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import numpy as np
 
 from src.application.backtesting.models.backtest_config import BacktestConfig
-from src.application.backtesting.models.backtest_result import (
+from src.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
     EquityPoint,

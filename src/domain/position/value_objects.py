@@ -1,14 +1,6 @@
-"""Position value objects - PnL and PositionSide."""
+"""Position value objects - PnL."""
 
 from dataclasses import dataclass
-from enum import Enum
-
-
-class PositionSide(Enum):
-    """Position direction."""
-
-    LONG = "long"
-    SHORT = "short"
 
 
 @dataclass(frozen=True)

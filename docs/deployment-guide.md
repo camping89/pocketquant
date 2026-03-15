@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-02-22 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** DDD + CQRS + Clean Architecture
+**Last Updated:** 2026-03-15 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** DDD + CQRS + Dishka | **Database:** PyMongo (NOT Motor)
 
 ## Prerequisites
 
@@ -156,7 +156,7 @@ Initialize MongoDB collections on first startup:
 # Optional: Pre-create with indexes for performance
 
 # Market data indexes
-db.ohlcv.createIndex({ "symbol": 1, "exchange": 1, "interval": 1, "timestamp": 1 }, { unique: true })
+db.bars.createIndex({ "symbol": 1, "exchange": 1, "interval": 1, "timestamp": 1 }, { unique: true })
 db.symbols.createIndex({ "code": 1, "exchange": 1 }, { unique: true })
 
 # Trading indexes

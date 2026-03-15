@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-02-21 | **Version:** 3.1 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture
+**Last Updated:** 2026-03-15 | **Version:** 3.2 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture
 
 ## High-Level Architecture
 
@@ -73,75 +73,56 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 domain/
 ├── backtest/               # Backtesting domain
 │   └── services/performance_calculator.py
-├── ohlcv/                  # Market data aggregates
-│   ├── aggregate.py        # OHLCVAggregate (bar collection)
-│   ├── entities.py         # Entities
-│   ├── value_objects.py    # OHLCV, BarRange, immutable bar
-│   ├── ohlcv_event.py      # HistoricalDataSyncedEvent, BarCompletedEvent
-│   └── services/bar_builder.py  # BarBuilder service (incremental bar construction)
-├── order/                  # Order lifecycle domain
-│   ├── aggregate.py        # OrderAggregate
-│   ├── value_objects.py    # Order, OrderStatus, OrderType, OrderSide enums
-│   └── order_event.py      # OrderSubmittedEvent, OrderFilledEvent, etc.
-├── position/               # Position tracking domain
-│   ├── aggregate.py        # PositionAggregate
-│   ├── value_objects.py    # Position, PositionSide, PnL
-│   └── position_event.py   # PositionOpenedEvent, PositionClosedEvent
-├── quote/                  # Real-time quote domain
-│   ├── aggregate.py        # QuoteAggregate
-│   ├── value_objects.py    # QuoteTick (price, volume, timestamp)
-│   └── quote_event.py      # QuoteReceivedEvent
-├── risk/                   # Risk management domain
-│   ├── aggregate.py        # RiskConfigAggregate
-│   ├── value_objects.py    # RiskConfig, RiskModel enum
-│   └── services/position_sizer.py  # Position sizing calculations
-├── strategy/               # Strategy domain
-│   ├── interfaces.py       # IStrategy interface (on_bar, on_tick, on_fill)
-│   ├── value_objects.py    # StrategyConfig, StrategySignal
-│   ├── strategy_event.py   # SignalGeneratedEvent
-│   └── strategies/         # Concrete strategies
-│       └── ma_crossover_strategy.py  # MACrossoverStrategy
-├── shared/                 # Shared domain concepts
-│   ├── value_objects.py    # Symbol, Interval, Price enums/dataclasses
-│   └── events.py           # DomainEvent base class
-└── common/                 # Domain utilities (no I/O)
+├── bar/                    # TOP-LEVEL: Market bars (renamed from ohlcv/)
+│   ├── entities.py         # Bar entity with to_mongo/from_mongo
+│   ├── events.py           # BarCompletedEvent, HistoricalDataSyncedEvent
+│   ├── value_objects.py    # OHLCV, BarRange
+│   └── services/bar_builder.py  # BarBuilder service
+├── order/                  # TOP-LEVEL: Order lifecycle
+│   ├── entities.py         # OrderAggregate with to_mongo/from_mongo
+│   ├── enums.py            # OrderType, OrderSide, OrderStatus
+│   └── events.py           # Order events
+├── position/               # TOP-LEVEL: Position tracking
+│   ├── entities.py         # PositionAggregate with to_mongo/from_mongo
+│   ├── enums.py            # PositionSide
+│   ├── events.py           # Position events
+│   └── value_objects.py    # PnL
+├── symbol/                 # TOP-LEVEL: Tradeable instruments
+│   └── entities.py         # Symbol (flattened from SymbolAggregate)
+├── sync_status/            # TOP-LEVEL: Sync tracking
+│   └── entities.py         # SyncStatus
+├── backtest/               # TOP-LEVEL: Backtest results
+│   ├── entities.py         # BacktestResult, OptimizationResult
+│   ├── value_objects.py    # TradeRecord, EquityPoint, BacktestMetrics
+│   └── services/performance_calculator.py  # NumPy metrics
+├── concepts/               # NON-PERSISTED logic
+│   ├── quote/
+│   │   ├── events.py       # QuoteReceivedEvent, QuoteUpdatedEvent
+│   │   └── value_objects.py  # Price, QuoteTick
+│   ├── risk/
+│   │   ├── enums.py        # RiskModel enum
+│   │   ├── value_objects.py  # RiskConfig
+│   │   └── services/position_sizer.py  # PositionSizer (pure calc)
+│   └── strategy/
+│       ├── enums.py        # Direction enum
+│       ├── events.py       # SignalGeneratedEvent
+│       ├── interfaces.py   # IStrategy ABC
+│       ├── value_objects.py  # Signal, StrategyConfig, OrderConfig, StopLossConfig, TakeProfitConfig
+│       └── services/ma_crossover.py  # MACrossoverStrategy
+└── shared/                 # Cross-cutting
+    ├── enums.py            # Interval enum
+    ├── events.py           # DomainEvent base (was domain_event.py)
+    └── value_objects.py    # INTERVAL_SECONDS mapping
 ```
 
-**Example - Value Object & Event (Dataclasses, Not Pydantic):**
-```python
-@dataclass(frozen=True)
-class Symbol:  # Immutable value object
-    code: str
-    exchange: str
-    def __post_init__(self) -> None:
-        if not self.code or not self.exchange:
-            raise ValueError("Both required")
+**Example - Bar Entity with MongoDB Persistence:**
+All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mongo()` for persistence.
 
-@dataclass(frozen=True, eq=False)
-class OrderFilledEvent:  # Event: frozen + custom __eq__ by event_id
-    event_id: UUID = field(default_factory=generate_id)
-    order_id: UUID = field(default_factory=generate_id)
-    price: float
+**Example - Symbol Entity (Flattened from SymbolAggregate):**
+Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, OrderFilledEvent):
-            return NotImplemented
-        return self.event_id == other.event_id
-```
-
-**Example - Domain Service (Pure):**
-```python
-class BarBuilder:
-    """Incremental OHLCV construction. Zero I/O."""
-    def add_tick(self, price: float, volume: float) -> None:
-        self.high = max(self.high, price)
-        self.low = min(self.low, price)
-        self.close = price
-        self.volume += volume
-
-    def is_complete(self) -> bool:
-        return time.time() >= self.bar_close_time
-```
+**Example - Domain Service (Pure Logic):**
+BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
 
 ### Layer 2: Application (Orchestrators) — src/application/
 
@@ -151,40 +132,38 @@ class BarBuilder:
 ```
 application/
 ├── backtesting/              # Backtest orchestration
-│   ├── backtest_app_service.py   # BacktestAppService engine (execute backtest)
-│   ├── grid_optimization_app_service.py    # GridOptimizationAppService (parameter optimization)
-│   ├── historical_replay_app_service.py  # Inject historical bars chronologically
-│   ├── result_collector.py  # Collect fills, calculate P&L
-│   └── models/              # PerformanceCalculator, DTOs
+│   ├── backtest_app_service.py       # BacktestAppService (execute backtest)
+│   ├── grid_optimization_app_service.py  # GridOptimizationAppService (parameter search)
+│   ├── historical_replay_app_service.py  # HistoricalReplayAppService (inject bars)
+│   ├── result_collector.py           # ResultCollector (collect fills, metrics)
+│   └── models/                       # DTOs, performance calculator
 ├── market_data/              # Data sync orchestration
-│   ├── bar_app_service.py       # BarAppService (real-time multi-interval aggregation)
-│   ├── quote_app_service.py     # QuoteAppService (WebSocket lifecycle, tick distribution)
-│   ├── sync_jobs.py         # Background sync jobs (APScheduler tasks)
-│   └── models/              # DTOs for market data
+│   ├── bar_app_service.py          # BarAppService (multi-interval aggregation)
+│   ├── quote_app_service.py        # QuoteAppService (WebSocket lifecycle)
+│   └── models/                     # DTOs for market data
 ├── strategy/                 # Strategy orchestration
-│   ├── strategy_app_service.py   # StrategyAppService (on_bar/on_tick dispatch, signal handling)
-│   └── yaml_strategy_loader.py  # StrategyLoader (YAML → IStrategy instances)
+│   └── strategy_app_service.py     # StrategyAppService (dispatch, signal handling)
 ├── trading/                  # Trading orchestration
-│   ├── order_app_service.py     # OrderAppService (order state, recovery)
-│   └── position_app_service.py  # PositionAppService (position state, P&L aggregation)
+│   ├── order_app_service.py        # OrderAppService (order state, recovery)
+│   └── position_app_service.py     # PositionAppService (position tracking, P&L)
 └── __init__.py
 ```
 
 **Example - Application Service:**
 ```python
-# StrategyAppService - orchestrates domain strategy + infrastructure execution
+# StrategyAppService - orchestrates domain + infrastructure
 class StrategyAppService:
     def __init__(self, broker: IBroker, event_bus: EventBus):
         self.broker = broker
         self.event_bus = event_bus
         self.strategy: Optional[IStrategy] = None
 
-    async def on_bar(self, bar: OHLCVBar) -> None:
-        """Called by BarAppService when new bar completes."""
+    async def on_bar(self, bar: Bar) -> None:
+        """Called when bar completes."""
         # 1. Domain: Get strategy signal
         signal = await self.strategy.on_bar(bar)
 
-        # 2. Domain: Check risk
+        # 2. Infrastructure: Check risk
         approved = await risk_check(signal)
 
         # 3. Infrastructure: Execute via broker
@@ -223,25 +202,22 @@ features/
 │   │   ├── query.py
 │   │   └── handler.py
 │   └── router.py            # Feature router (aggregates all operations)
-├── market_data/              # Market data feature (7 nested operations)
+├── market_data/              # Market data feature
 │   ├── sync/                # Nested group
 │   │   ├── sync_one/       # Operation: Sync single symbol
 │   │   ├── sync_bulk/      # Operation: Sync multiple symbols
-│   │   ├── dto.py
 │   │   └── router.py
-│   ├── ohlcv/               # Nested group
-│   │   ├── get_ohlcv/      # Operation: Get bars
+│   ├── bar/                 # Nested group (renamed from ohlcv/)
+│   │   ├── get_bars/       # Operation: Get bars
 │   │   └── router.py
 │   ├── quotes/              # Nested group
 │   │   ├── start_feed/     # Operation: Start WebSocket
 │   │   ├── stop_feed/      # Operation: Stop WebSocket
-│   │   ├── subscribe/      # Operation: Subscribe symbol
+│   │   ├── subscribe/      # Operation: Subscribe
 │   │   ├── get_all/        # Operation: Get all quotes
-│   │   ├── get_latest/     # Operation: Get latest quote
 │   │   └── router.py
 │   ├── status/              # Nested group
 │   │   ├── get_sync_status/
-│   │   ├── get_quote_service_status/
 │   │   └── router.py
 │   ├── list_symbols/        # Operation: List symbols
 │   └── router.py
@@ -337,20 +313,16 @@ persistence/                           # Data access (MongoDB, Redis, repositori
 ├── mongodb.py               # MongoDB async singleton (PyMongo)
 ├── redis.py                 # Redis async singleton (redis-py)
 ├── base_repository.py       # BaseRepository mixin (_collection() helper)
-├── repositories/            # Data access layers (stateless class methods)
-│   ├── ohlcv_repository.py     # OHLCV bar data access
-│   ├── order_repository.py     # Order persistence
-│   ├── position_repository.py  # Position tracking
-│   ├── backtest_repository.py  # Backtest results
-│   ├── optimization_repository.py  # Parameter optimization results
-│   ├── symbol_repository.py    # Symbol metadata
-│   └── sync_status_repository.py   # Data sync status
-└── schemas/                 # MongoDB document schemas
-    ├── ohlcv_schema.py
-    ├── order_schema.py
-    ├── position_schema.py
-    ├── symbol_schema.py
-    └── quote_schema.py
+└── repositories/            # Data access layers (instance methods via DI)
+    ├── bar_repository.py       # Bar persistence (renamed from ohlcv_repository.py)
+    ├── order_repository.py     # Order persistence
+    ├── position_repository.py  # Position tracking
+    ├── backtest_repository.py  # Backtest results
+    ├── optimization_repository.py  # Parameter optimization
+    ├── symbol_repository.py    # Symbol metadata
+    └── sync_status_repository.py   # Data sync status
+# NOTE: schemas/ directory deleted (2026-03-15)
+# Persistence logic consolidated into domain entities via to_mongo()/from_mongo()
 ```
 
 **Key Services:**
@@ -438,9 +410,9 @@ Mediator (common/mediator/mediator.py)
   ↓
 Handler (features/market_data/sync/sync_one/handler.py)
   ├─ [1] Fetch: TradingViewClient.fetch_ohlcv()  [infrastructure]
-  ├─ [2] Validate: OHLCVAggregate(bars)             [domain]
-  ├─ [3] Persist: OHLCVRepository.upsert_many()     [infrastructure]
-  ├─ [4] Invalidate: Cache.delete_pattern()         [infrastructure]
+  ├─ [2] Validate: Bar.from_mongo()                [domain]
+  ├─ [3] Persist: BarRepository.upsert_many()      [infrastructure]
+  ├─ [4] Invalidate: Cache.delete_pattern()        [infrastructure]
   └─ [5] Publish: EventBus.publish(HistoricalDataSyncedEvent)
   ↓
 Route Response
@@ -457,25 +429,25 @@ Route Response
 ### Query Flow (Read-Only)
 
 ```
-HTTP Request (GET /market-data/ohlcv/{exchange}/{symbol}?interval=1d&limit=100)
+HTTP Request (GET /market-data/bar/{exchange}/{symbol}?interval=1d&limit=100)
   ↓
 Middleware Stack
   ├─ CorrelationIdMiddleware → inject correlation_id
   ├─ RateLimitMiddleware → check token bucket
   └─ (No idempotency for GET)
   ↓
-Route (features/market_data/ohlcv/get_ohlcv/route.py)
+Route (features/market_data/bar/get_bars/route.py)
   ├─ Parse query params
-  ├─ Build GetOHLCVQuery
+  ├─ Build GetBarsQuery
   └─ Call Mediator.send(query)
   ↓
 Mediator (common/mediator/mediator.py)
-  ├─ Lookup handler via @handles(GetOHLCVQuery)
+  ├─ Lookup handler via @handles(GetBarsQuery)
   └─ Call handler.handle(query)
   ↓
-Handler (features/market_data/ohlcv/get_ohlcv/handler.py)
-  ├─ [1] Fetch: Cache.get(key) or OHLCVRepository.get_bars()
-  ├─ [2] Validate: OHLCVBar value objects
+Handler (features/market_data/bar/get_bars/handler.py)
+  ├─ [1] Fetch: Cache.get(key) or BarRepository.get_bars()
+  ├─ [2] Validate: Bar value objects
   ├─ [3] Cache: Cache.set(key, result, ttl=300)
   └─ [4] Return: BarsDTO (never return entities)
   ↓
@@ -487,17 +459,17 @@ Route Response
 
 ### MongoDB Collections & Repository Access
 
-**Collections available via Persistence Layer:**
+**Collections (MongoDB, accessed via Repositories):**
 
-| Collection | Purpose | Repository | Key Methods |
-|-----------|---------|-----------|------------|
-| `ohlcv` | Market bars (OHLCV data) | OHLCVRepository | `get_bars()`, `upsert_many()` |
-| `orders` | Order lifecycle | OrderRepository | `save()`, `find_pending()`, `get_by_id()` |
-| `positions` | Position tracking | PositionRepository | `save()`, `find_open()`, `get_by_id()` |
-| `backtests` | Backtest results | BacktestRepository | `save()`, `find_by_id()`, `list_by_strategy()` |
-| `optimizations` | Parameter optimization results | OptimizationRepository | `save()`, `find_by_id()` |
-| `symbols` | Symbol metadata | SymbolRepository | `find_by_code()`, `list_all()` |
-| `sync_status` | Data sync progress | SyncStatusRepository | `save()`, `find_by_symbol()`, `update_status()` |
+| Collection | Repository | Purpose |
+|-----------|-----------|---------|
+| `bars` | BarRepository | Market OHLCV bars |
+| `orders` | OrderRepository | Order lifecycle |
+| `positions` | PositionRepository | Position tracking |
+| `backtests` | BacktestRepository | Backtest results |
+| `optimizations` | OptimizationRepository | Parameter optimization |
+| `symbols` | SymbolRepository | Symbol metadata |
+| `sync_status` | SyncStatusRepository | Data sync progress |
 
 **All repositories:**
 - Inherit from `BaseRepository` (provides `_collection()` helper)
@@ -559,11 +531,11 @@ Ready to process market events and recover fills
 
 ## Event Bus Pattern
 
-**Purpose:** Decouple features via domain events (in-memory, FIFO, 100 event max history).
+**Purpose:** Decouple features via domain events (in-memory, FIFO, 50 event max history).
 
 **Characteristics:**
 - Handlers publish → EventBus.publish(event) → subscribers notified sequentially
-- Bounded history (100 events in container.py, configurable)
+- Bounded history (50 events max, configurable via EventBus(max_history=50))
 - Sync + async handlers supported
 - No persistence (events lost on restart)
 
@@ -580,15 +552,16 @@ SyncSymbolHandler
   ├─> TradingViewClient.fetch_ohlcv
   │   ├─> ThreadPoolExecutor (blocking I/O isolation)
   │   ├─> tvdatafeed.get_hist(symbol, exchange, interval, n_bars)
-  │   └─> Return list[OHLCVBar]
+  │   └─> Return list[Bar]
   │
-  ├─> OHLCVAggregate(bars)  # Domain validation
+  ├─> Domain validation via Bar.from_mongo()
   │
   ├─> MongoDB.bulk_write (upsert on timestamp)
+  │   └─> Uses COLLECTION_BARS (renamed from COLLECTION_OHLCV)
   │
-  ├─> Redis.delete_pattern(f"ohlcv:{symbol}:*")  # Cache invalidation
+  ├─> Redis.delete_pattern(f"bar:{symbol}:*")  # Cache invalidation
   │
-  └─> EventBus.publish(BarSyncedEvent(...))
+  └─> EventBus.publish(HistoricalDataSyncedEvent(...))
 
 Response: {bars_synced: 100, status: "completed"}
 ```
@@ -600,7 +573,7 @@ TradingView WebSocket
   ↓
 Binary Frame: ~m~{length}~m~{json}
   ↓
-TradingViewWebSocketClient.parse_frame
+TradingViewWebSocketClient.parse_frame (injected via QuoteAppService constructor)
   ↓
 QuoteAppService._on_quote_update
   ├─> Redis.set(f"quote:latest:{exchange}:{symbol}", quote, ttl=60)
@@ -612,9 +585,11 @@ QuoteAppService._on_quote_update
   │   │   └─> Check time boundary
   │   │
   │   └─> On bar complete:
-  │       ├─> MongoDB.insert_one(bar)
-  │       ├─> Redis.set(f"bar:current:{exchange}:{symbol}:{interval}", bar)
-  │       └─> EventBus.publish(BarCompletedEvent(...))
+  │       ├─> BarAppService._save_completed_bar()
+  │       │   ├─> MongoDB.insert_one(bar)
+  │       │   ├─> Redis.set(f"bar:current:{exchange}:{symbol}:{interval}", bar)
+  │       │   └─> EventBus.publish(BarCompletedEvent(...)) [SOURCE: _save_completed_bar()]
+  │       └─> build_bar_cache_key() [renamed from build_ohlcv_cache_key()]
   │
   └─> EventBus.publish(QuoteReceivedEvent(...))
 ```
@@ -714,28 +689,13 @@ OptimizationHandler
 
 ## Concurrency Model
 
-### Event Loop (FastAPI/Uvicorn)
+- **Event Loop:** All async code on single event loop (FastAPI/Uvicorn)
+- **Thread Pool:** TradingView REST (tvdatafeed) uses ThreadPoolExecutor (4 workers) to prevent blocking
+- **Asyncio.Lock:** BarAppService uses lock for thread-safe OHLC atomic updates
 
-All async code runs on single event loop.
+## Dependency Injection (Dishka)
 
-**Proper async:**
-```python
-await Database.get_collection("ohlcv").find_one()
-await Cache.set("key", value)
-await Mediator.send(command)
-```
-
-### Thread Pool (Blocking I/O)
-
-TradingView REST API (tvdatafeed) is blocking. ThreadPoolExecutor (max 4 workers) prevents event loop blocking.
-
-### Asyncio.Lock (Quote Aggregation)
-
-BarAppService uses lock for thread-safe bar building to prevent race conditions during atomic OHLC updates.
-
-## Dependency Injection (Dishka DI)
-
-dishka library with 6 providers + auto-resolution via type hints. Cleaner than plain constructors — dependencies resolved by matching `__init__` parameter types.
+**dishka** library with 6 providers + auto-resolution via type hints. Dependencies resolved automatically by matching `__init__` parameter types.
 
 **Key files:**
 | File | Purpose |
@@ -744,15 +704,15 @@ dishka library with 6 providers + auto-resolution via type hints. Cleaner than p
 | `src/di/` | 6 Provider classes: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider |
 | `src/main.py` | Lifespan: create container, get DB/Cache, register handlers, setup_dishka |
 
-**Provider breakdown:**
-- **CoreProvider** - Settings, EventBus, Mediator (app-scoped singletons)
-- **PersistenceProvider** - Database, Cache, all 7 repositories
-- **InfrastructureProvider** - Brokers, TradingView provider, JobScheduler, HTTP client
-- **MarketDataProvider** - BarAppService, QuoteAppService, sync jobs
-- **TradingProvider** - OrderAppService, PositionAppService
-- **HandlerProvider** - All 27 CQRS handlers (auto-discovered via ALL_HANDLER_TYPES list)
+**6 Providers (src/di/):**
+- **CoreProvider** - Settings, EventBus (max_history=50), Mediator
+- **PersistenceProvider** - Database (PyMongo), Cache (Redis), 7 repositories
+- **InfrastructureProvider** - Brokers (Paper, OKX), TradingViewClient, JobScheduler
+- **MarketDataProvider** - BarAppService, QuoteAppService, sync background jobs
+- **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
+- **HandlerProvider** - All 27 CQRS handlers (via @handles decorator)
 
-**Handler registration:** `register_handlers(container)` resolves all handler types from container and registers with Mediator.
+**Handler Registration:** `register_handlers(container)` in `src/container.py` resolves all 27 handler types and registers with Mediator.
 
 ## Resource Lifecycle
 
@@ -781,35 +741,21 @@ dishka library with 6 providers + auto-resolution via type hints. Cleaner than p
 
 | System | Type | Details |
 |--------|------|---------|
-| **TradingView REST** | HTTP | tvdatafeed library, ThreadPoolExecutor (4 workers), max 5000 bars |
-| **TradingView WS** | Binary | Protocol: ~m~{len}~m~{json}, exponential backoff reconnection |
-| **OKX WS** | JSON + Auth | HMAC-SHA256 auth, 1s-30s backoff, 10-failure circuit breaker |
-| **MongoDB** | Async | PyMongo (not Motor), pool 5-50 connections, 7 collections |
+| **TradingView** | HTTP + WS | ThreadPoolExecutor (4 workers), binary frames, exponential backoff |
+| **OKX** | WS + Auth | HMAC-SHA256, 1s-30s backoff, 10-fail circuit breaker |
+| **MongoDB** | Async | PyMongo, pool 5-50 connections, 7 collections |
 | **Redis** | Async | redis-py, TTL: 60s quotes, 300s bars, 86400s idempotency |
 
 ## Error Handling
 
-| Category | Examples | Strategy |
-|----------|----------|----------|
-| **Transient** | Connection timeouts, API unavailable | Exponential backoff, auto-reconnect |
-| **Permanent** | Invalid symbols, auth failures | Return HTTP errors (4xx/5xx) |
-| **Silent** | Background job/cache failures | Log, continue execution |
+| Category | Strategy |
+|----------|----------|
+| **Transient** | Exponential backoff, auto-reconnect |
+| **Permanent** | HTTP errors (4xx/5xx) |
+| **Silent** | Log, continue execution |
 
-## Performance Characteristics
+## Performance & Security
 
-| Metric | Value |
-|--------|-------|
-| Historical Sync | 1-5s per 5000 bars |
-| WebSocket Quote | <100ms TradingView→handler |
-| Bar Aggregation | <1ms per tick (in-memory) |
-| Cache Lookup | <5ms (Redis) |
-| Mediator Dispatch | <0.1ms (dict lookup) |
-| Concurrent Syncs | 4 workers (ThreadPoolExecutor) |
-| Quote Throughput | 1000+ ticks/sec |
-| Rate Limit | 200 req/10s per IP |
-| Memory (MongoDB Pool) | ~10-20MB per connection |
-| Memory (BarAppService) | ~10MB per 10k subscriptions |
+**Characteristics:** Sync 1-5s per 5k bars | Quote <100ms | Bar aggregation <1ms/tick | Mediator <0.1ms | Quote throughput 1000+/sec
 
-## Security
-- Credentials: Environment variables only (never committed)
-- Auth: MongoDB/Redis via DSN, rate limiting 200 req/10s, idempotency cache 24h TTL
+**Security:** Credentials via env vars only | Rate limit 200 req/10s per IP | Idempotency cache 24h TTL | MongoDB/Redis auth via DSN

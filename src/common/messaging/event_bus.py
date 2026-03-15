@@ -5,7 +5,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
-from src.domain.shared.domain_event import DomainEvent
+from src.domain.shared.events import DomainEvent
 
 TEvent = TypeVar("TEvent", bound=DomainEvent)
 

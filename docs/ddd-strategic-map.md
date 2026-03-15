@@ -9,15 +9,15 @@ Data ingestion, storage, and real-time streaming.
 
 | Type | Name | Persisted | Status |
 |------|------|-----------|--------|
-| Entity | `Bar` | MongoDB | Active — OHLCV price bar with `to_mongo()`/`from_mongo()` |
-| Model | `SyncStatus` | MongoDB | Active — tracks sync progress per symbol/interval |
+| Entity | `Bar` | MongoDB (bars) | Active — bar price data with `to_mongo()`/`from_mongo()`, `symbol_key`, interval |
+| Model | `SyncStatus` | MongoDB (sync_status) | Active — tracks sync progress per symbol/interval |
 | VO | `Interval`, `OHLCV`, `BarRange`, `Price` | — | Active |
 | Service | `BarBuilder` | — | Active — aggregates ticks into bars |
 | DTO | `Quote`, `QuoteTick`, `AggregatedBar`, `QuoteSubscription` | Redis | Active — application-layer cache DTOs |
-| Event | `BarCompletedEvent` | — | Active (backtest only, not wired for real-time) |
+| Event | `BarCompletedEvent` | — | Active (backtesting via HistoricalReplay, real-time: TODO) |
 | Event | `HistoricalDataSyncedEvent` | — | Active (fired after historical sync) |
-| ~~Aggregate~~ | ~~`OHLCVAggregate`~~ | No | **Dead weight** — event factory shell, no state, no invariants |
-| ~~Aggregate~~ | ~~`QuoteAggregate`~~ | No | **Dead code** — zero instantiations anywhere |
+| ~~Aggregate~~ | ~~`OHLCVAggregate`~~ | No | **DELETED 2026-03-15** — was event factory shell, no state, no invariants |
+| ~~Aggregate~~ | ~~`QuoteAggregate`~~ | No | **DELETED 2026-03-15** — zero instantiations, dead code |
 
 ### Trading
 Order execution and position lifecycle management.
@@ -55,10 +55,9 @@ Tradeable asset metadata.
 
 | Type | Name | Persisted | Status |
 |------|------|-----------|--------|
-| Aggregate | `SymbolAggregate` | MongoDB | **Borderline** — has `activate()`/`deactivate()` behavior |
-| VO | `SymbolInfo` | — | Active — frozen dataclass extending `Symbol` |
-
-Note: `SymbolAggregate._events` exists but zero events are ever defined or appended. Dead event infrastructure.
+| Entity | `Symbol` | MongoDB (symbols) | Active (FLATTENED 2026-03-15) — flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active`, `create()`, `symbol_key`, `to_mongo()`/`from_mongo()` |
+| ~~Aggregate~~ | ~~`SymbolAggregate`~~ | No | **DELETED 2026-03-15** — flattened to Symbol entity, no aggregate needed |
+| ~~VO~~ | ~~`SymbolInfo`~~ | — | **DELETED 2026-03-15** — wrapped by SymbolAggregate, no longer needed |
 
 ### Backtest
 Historical replay and performance analysis.
@@ -74,34 +73,36 @@ Historical replay and performance analysis.
 
 ```
 Historical Sync:
-  TradingView API → Bar entities → MongoDB
+  TradingView API → Bar entities → MongoDB bars collection
   → HistoricalDataSyncedEvent (inline in sync handler)
 
-Backtesting:
-  MongoDB → Bar stream → HistoricalReplayAppService
+Backtesting (Events Fully Wired):
+  MongoDB bars → Bar stream → HistoricalReplayAppService
   → BarCompletedEvent → StrategyAppService._on_bar_completed()
   → Strategy.on_bar() → Signal → RiskCheck → OrderAggregate
   → OrderFilledEvent → PositionAppService → PositionAggregate
 
-Order→Position:
+Order→Position (Events Fully Wired):
   OrderAggregate state transitions
   → OrderFilledEvent → PositionAppService._on_order_filled()
   → PositionAggregate.open() / add_quantity() / reduce_quantity()
 ```
 
-### Not Yet Wired (Real-Time Gap)
+### In Progress (Real-Time Wiring: Phase 5)
 
 ```
-Real-time bars:
-  QuoteTick → BarBuilder → Bar saved to MongoDB
-  ╳ BarCompletedEvent NOT emitted → strategies don't fire
+Real-time bars (IMPLEMENTATION READY, EMISSION PENDING):
+  QuoteTick → BarBuilder → Bar saved to MongoDB bars collection
+  → BarCompletedEvent emission site ready in _save_completed_bar()
+  ⟳ Real-time wiring: awaiting BarCompletedEvent emission for live strategies
 
-Real-time quotes:
+Real-time quotes (IMPLEMENTATION READY, EMISSION PENDING):
   WebSocket → Quote DTO cached in Redis
-  ╳ QuoteReceivedEvent NOT emitted → tick strategies don't fire
+  → QuoteReceivedEvent emission site ready in _on_quote_update()
+  ⟳ Real-time wiring: awaiting QuoteReceivedEvent emission for tick strategies
 ```
 
-**Impact:** Real-time strategy execution does not work via events. Only backtesting replays trigger strategies. When live trading ships, `BarAppService._save_completed_bar()` and `QuoteAppService.on_quote_update()` need to emit events.
+**Status:** Backtesting strategy execution is fully wired and working. Real-time event emission infrastructure is in place (`_save_completed_bar()`, `_on_quote_update()`). Live trading event wiring scheduled for Phase 5 (scheduled 2026-Q2).
 
 ## DDD Classification Guide
 
@@ -123,10 +124,19 @@ Real-time quotes:
 3. Value objects stay as frozen dataclasses — simple, immutable, no persistence
 4. DTOs live in application layer — they're infrastructure concerns, not domain
 
+## Resolved Items (2026-03-15 Refactoring)
+
+1. ✅ **OHLCVAggregate deleted** — Event factory shell with no state/invariants, removed dead code
+2. ✅ **QuoteAggregate deleted** — Zero instantiations, never used
+3. ✅ **SymbolAggregate flattened to Symbol entity** — Reduced indirection, removed SymbolInfo VO
+4. ✅ **domain/ohlcv/ → domain/bar/** — Clearer naming, better semantics
+5. ✅ **OHLCVRepository → BarRepository** — Consistent naming with domain
+6. ✅ **MongoDB collection ohlcv → bars** — Aligns with domain entity names
+7. ✅ **Schemas directory deleted** — Domain entities now handle MongoDB persistence directly via `to_mongo()`/`from_mongo()`
+
 ## Open Questions
 
-1. **SyncStatus identity**: Should `SyncStatus` get a proper `_id`? Currently has no identity field — the repo upserts by `(symbol, exchange, interval)` compound key. Works but differs from other entities.
-2. **SymbolAggregate vs flat entity**: Is the `SymbolInfo` VO wrapping worth the indirection? The aggregate has real behavior (`activate`/`deactivate`) but the VO adds a layer for 5 flat fields.
-3. **Real-time event wiring priority**: When should `BarCompletedEvent` and `QuoteReceivedEvent` be wired for live trading? This is the critical gap between backtest-works and live-works.
-4. **Event sourcing depth**: Current events are fire-and-forget via EventBus. If the project scales, should events be persisted (event store) for audit/replay?
-5. **Multi-strategy broker isolation**: Each strategy gets its own broker instance. At scale (50+ strategies), is this sustainable or should there be a shared order router?
+1. **Real-time event wiring timeline** (Phase 5): When to prioritize `BarCompletedEvent` and `QuoteReceivedEvent` emission for live trading strategies?
+2. **Event sourcing depth**: Current events are fire-and-forget via EventBus. If project scales, should events be persisted (event store) for audit/replay?
+3. **Multi-strategy broker isolation**: Each strategy gets own broker instance. At scale (50+ strategies), is this sustainable or should there be a shared order router?
+4. **SyncStatus compound key**: Currently upserts by `(symbol, exchange, interval)`. Should it get a dedicated `_id` UUID field for consistency with other repositories?

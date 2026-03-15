@@ -3,14 +3,14 @@
 
 from src.application.backtesting.backtest_app_service import BacktestAppService
 from src.application.backtesting.models.backtest_config import BacktestConfig
-from src.application.backtesting.models.backtest_result import BacktestResult
+from src.domain.backtest import BacktestResult
 from src.application.strategy.strategy_app_service import StrategyAppService
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.features.backtesting.run.command import RunBacktestCommand
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
 from src.persistence.repositories.backtest_repository import BacktestRepository
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 
 
 @handles(RunBacktestCommand)
@@ -22,12 +22,12 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         event_bus: EventBus,
         strategy_engine: StrategyAppService,
         backtest_repository: BacktestRepository,
-        ohlcv_repository: OHLCVRepository,
+        bar_repository: BarRepository,
     ) -> None:
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
         self._backtest_repo = backtest_repository
-        self._ohlcv_repo = ohlcv_repository
+        self._bar_repo = bar_repository
 
     async def handle(self, request: RunBacktestCommand) -> BacktestResult:
         """Execute backtest and return result."""
@@ -55,7 +55,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
             strategy_engine=self._strategy_engine,
             broker=broker,
             backtest_repository=self._backtest_repo,
-            ohlcv_repository=self._ohlcv_repo,
+            bar_repository=self._bar_repo,
         )
 
         return await runner.run(config)

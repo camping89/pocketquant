@@ -1,8 +1,110 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-03-14 | **Purpose:** Living visual reference for codebase navigation
+**Last Updated:** 2026-03-15 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared)
 
-## 1. Layer Map — What Lives Where
+## 1. ASCII Layer Relation Map
+
+```
+  ┌──────────────────────────┐
+  │     External Clients     │
+  │   (REST API / WebSocket) │
+  └────────────┬─────────────┘
+               │
+  ┌────────────┴─────────────────────────────────┐
+  │         FastAPI + Middleware Stack            │
+  │  CorrelationId → RateLimit → Idempotency     │
+  └────────────┬─────────────────────────────────┘
+               │
+  ╔════════════╧═════════════════════════════════════════════╗
+  ║  FEATURES  (src/features/)  27 CQRS Handlers            ║
+  ║  market_data(13) backtesting(5) strategy(5) trading(4)  ║
+  ║  risk(1)                                                 ║
+  ║  Route → Command/Query → Mediator.send() → Handler      ║
+  ╚════════════╤═════════════════════════════════════════════╝
+               │
+  ┌────────────┴────────────┐
+  │   Mediator (CQRS Hub)   │
+  │  @handles → dispatch    │
+  └────────────┬────────────┘
+               │
+    ┌──────────┼──────────────────────┐
+    │          │                      │
+    ▼          ▼                      ▼
+  ╔═══════════════╗  ╔═══════════════╗  ╔═══════════════════╗
+  ║  APPLICATION  ║  ║    DOMAIN     ║  ║  INFRASTRUCTURE   ║
+  ║ (Orchestrate) ║  ║ (Pure Logic)  ║  ║  (External I/O)   ║
+  ║               ║  ║               ║  ║                   ║
+  ║ BacktestApp   ║  ║ TOP-LEVEL:    ║  ║ Brokers           ║
+  ║ GridOptimize  ║  ║  Bar  Symbol  ║  ║  PaperBroker      ║
+  ║ HistReplay    ║  ║  OrderAgg     ║  ║  OKXBroker        ║
+  ║ BarApp        ║  ║  PositionAgg  ║  ║ Data Providers    ║
+  ║ QuoteApp      ║  ║  SyncStatus   ║  ║  TVClient(REST)   ║
+  ║ StrategyApp   ║  ║  BacktestRes  ║  ║  TVWebSocket      ║
+  ║ OrderApp      ║  ║               ║  ║ Scheduling        ║
+  ║ PositionApp   ║  ║ CONCEPTS:     ║  ║  APScheduler      ║
+  ║ YamlLoader    ║  ║  Quote (VO)   ║  ║ Webhooks          ║
+  ╚═══════╤═══════╝  ║  Risk (Sizer) ║  ║  Dispatcher       ║
+          │          ║  Strategy     ║  ╚═════════╤═════════╝
+          │          ║   IStrategy   ║            │
+          │          ║   MACrossover ║            │
+          │          ║               ║            │
+          │          ║ SHARED:       ║            │
+          │          ║  DomainEvent  ║            │
+          │          ║  Interval     ║            │
+          │          ║  ValueObjects ║            │
+          │          ╚═══════╤═══════╝            │
+          │                  │                    │
+          └──────────────────┼────────────────────┘
+                             │
+  ╔══════════════════════════╧════════════════════════════╗
+  ║  PERSISTENCE  (src/persistence/)                      ║
+  ║  Database(MongoDB)  Cache(Redis)  7 Repositories     ║
+  ║  Bar · Order · Position · Backtest · Optimization    ║
+  ║  Symbol · SyncStatus                                  ║
+  ╚══════════╤══════════════════╤═════════════════════════╝
+             │                  │
+             ▼                  ▼
+       MongoDB:27018      Redis:6379
+
+  ╔══════════════════════════════════════════════════════╗
+  ║  COMMON  (src/common/)  Cross-Cutting, ALL layers   ║
+  ║  Mediator · EventBus · Middleware(3) · Health(3)    ║
+  ║  Logging(structlog) · UUID7 · Constants · Tracing   ║
+  ╚══════════════════════════════════════════════════════╝
+
+  DEPENDENCY DIRECTION (strict, unidirectional):
+    Features ──► Application ──► Domain ◄── Infrastructure
+                                   ▲
+                              Persistence
+  Domain has ZERO I/O imports (enforced by AST test)
+```
+
+## 2. Domain Three-Tier Structure
+
+```
+  src/domain/
+  │
+  ├── TOP-LEVEL (collection-backed, to_mongo/from_mongo)
+  │   ├── bar/            Bar entity, BarCompletedEvent, OHLCV VO, BarBuilder
+  │   ├── order/          OrderAggregate, OrderStatus/Type/Side enums, 5 events
+  │   ├── position/       PositionAggregate, PositionSide enum, PnL VO, 3 events
+  │   ├── symbol/         Symbol entity (flattened)
+  │   ├── sync_status/    SyncStatus entity
+  │   └── backtest/       BacktestResult, OptimizationResult entities
+  │
+  ├── concepts/ (non-persisted logic, no MongoDB collection)
+  │   ├── quote/          QuoteTick VO, QuoteReceivedEvent
+  │   ├── risk/           RiskConfig VO, RiskModel enum, PositionSizer service
+  │   └── strategy/       IStrategy interface, Signal VO, Direction enum
+  │                        MACrossover impl, SignalGeneratedEvent
+  │
+  └── shared/ (cross-cutting, used by all domain folders)
+      ├── events.py       DomainEvent base class
+      ├── enums.py        Interval enum (1m..1M)
+      └── value_objects.py  Shared VOs
+```
+
+## 3. Layer Map (Mermaid)
 
 ```mermaid
 graph TB
@@ -12,64 +114,56 @@ graph TB
 
     subgraph CQRS["CQRS Layer"]
         Commands["Commands/Queries<br/><code>src/features/*/command.py|query.py</code>"]
-        Mediator["Mediator<br/><code>src/common/mediator/</code>"]
+        Med["Mediator<br/><code>src/common/mediator/</code>"]
         Handlers["27 Handlers<br/><code>src/features/*/handler.py</code>"]
     end
 
     subgraph APP["Application Layer — Orchestrators"]
-        StrategyAppService["StrategyAppService<br/><code>src/application/strategy/</code>"]
-        OrderAppService["OrderAppService<br/><code>src/application/trading/</code>"]
-        PositionAppService["PositionAppService<br/><code>src/application/trading/</code>"]
-        QuoteAppService["QuoteAppService<br/><code>src/application/market_data/</code>"]
-        BarAppService["BarAppService<br/><code>src/application/market_data/</code>"]
-        BacktestAppService["BacktestAppService<br/><code>src/application/backtesting/</code>"]
+        StrategyAppService["StrategyAppService"]
+        OrderAppService["OrderAppService"]
+        PositionAppService["PositionAppService"]
+        QuoteAppService["QuoteAppService"]
+        BarAppService["BarAppService"]
+        BacktestAppService["BacktestAppService"]
     end
 
     subgraph DOMAIN["Domain Layer — Pure Logic, No I/O"]
-        Aggregates["Aggregates<br/>Order, Position, OHLCV, Quote"]
-        ValueObjects["Value Objects<br/>Symbol, Interval, Price"]
-        DomainEvents["Domain Events<br/>OrderFilled, BarCompleted"]
-        Strategies["IStrategy<br/>MACrossover, etc."]
+        subgraph TOPLEVEL["Top-Level (collection-backed)"]
+            BarEnt["Bar · Symbol · SyncStatus · BacktestResult"]
+            Aggregates["OrderAggregate · PositionAggregate"]
+        end
+        subgraph CONCEPTS["Concepts (non-persisted)"]
+            QuoteVO["Quote (VO)"]
+            RiskSvc["Risk (Sizer)"]
+            StrategySvc["Strategy (IStrategy, MACrossover)"]
+        end
+        subgraph SHARED["Shared"]
+            SharedBase["DomainEvent · Interval · ValueObjects"]
+        end
     end
 
     subgraph INFRA["Infrastructure Layer — External I/O"]
-        Brokers["Brokers<br/>PaperBroker, OKXBroker"]
-        TVClient["TradingViewClient<br/>(data source)"]
-        TVWebSocket["TradingViewWebSocket<br/>(real-time feed)"]
-        Scheduler["JobScheduler<br/>(APScheduler)"]
+        Brokers["Brokers (Paper, OKX)"]
+        TVClient["TradingViewClient"]
+        TVWebSocket["TradingViewWebSocket"]
+        Scheduler["JobScheduler (APScheduler)"]
     end
 
     subgraph PERSIST["Persistence Layer"]
-        DB["Database<br/>(MongoDB)"]
-        Cache["Cache<br/>(Redis)"]
-        Repos["7 Repositories<br/>OHLCV, Order, Position, ..."]
+        DB["Database (MongoDB)"]
+        Cache["Cache (Redis)"]
+        Repos["7 Repositories"]
     end
 
-    subgraph DI["DI Wiring — src/di/"]
-        CoreP["CoreProvider"]
-        PersistP["PersistenceProvider"]
-        InfraP["InfrastructureProvider"]
-        MktP["MarketDataProvider"]
-        TradingP["TradingProvider"]
-        HandlerP["HandlerProvider"]
-    end
-
-    Routes --> Commands --> Mediator --> Handlers
+    Routes --> Commands --> Med --> Handlers
     Handlers --> APP
     APP --> DOMAIN
     APP --> INFRA
     APP --> PERSIST
-    INFRA --> DB
-    INFRA --> Cache
     Repos --> DB
-
-    DI -.->|"wires"| APP
-    DI -.->|"wires"| INFRA
-    DI -.->|"wires"| PERSIST
-    DI -.->|"wires"| Handlers
 ```
 
-## 2. Request Flow — POST /strategies/load
+## 4. Request Flow — POST /strategies/load
 
 ```mermaid
 sequenceDiagram
@@ -97,7 +191,7 @@ sequenceDiagram
     Route-->>Client: {strategy_id, status: "loaded"}
 ```
 
-## 3. DI Resolution Graph — What Depends on What
+## 5. DI Resolution Graph
 
 ```mermaid
 graph LR
@@ -110,7 +204,7 @@ graph LR
     subgraph PersistenceProvider
         Database
         Cache
-        OHLCVRepo["OHLCVRepository"]
+        BarRepo["BarRepository"]
         OrderRepo["OrderRepository"]
         PositionRepo["PositionRepository"]
         BacktestRepo["BacktestRepository"]
@@ -123,7 +217,6 @@ graph LR
         JobScheduler
         TVProvider["TradingViewClient"]
         BrokerFactory
-        RiskHandler["RiskCheckHandler"]
         HealthCoord["HealthCoordinator"]
     end
 
@@ -145,7 +238,7 @@ graph LR
     Settings --> QuoteAppService
     Settings --> StrategyAppService
 
-    Database --> OHLCVRepo
+    Database --> BarRepo
     Database --> OrderRepo
     Database --> PositionRepo
     Database --> BacktestRepo
@@ -154,8 +247,7 @@ graph LR
     Database --> OptRepo
 
     Cache --> BarAppService
-    OHLCVRepo --> BarAppService
-
+    BarRepo --> BarAppService
     Settings --> BarAppService
     Cache --> QuoteAppService
     BarAppService --> QuoteAppService
@@ -170,24 +262,23 @@ graph LR
     BrokerFactory --> StrategyAppService
     OrderAppService --> StrategyAppService
     PositionAppService --> StrategyAppService
-    RiskHandler --> StrategyAppService
 ```
 
-## 4. Real-Time Data Flow — WebSocket → Strategy
+## 6. Real-Time Data Flow — WebSocket to Strategy
 
 ```mermaid
 flowchart LR
-    TV["TradingView<br/>WebSocket"] -->|binary frames| TVWS["TradingViewWebSocket<br/>(parse)"]
+    TV["TradingView<br/>WebSocket"] -->|binary frames| TVWS["TVWebSocketClient<br/>(parse)"]
     TVWS -->|QuoteTick| QS["QuoteAppService"]
-    QS -->|tick| Redis["Redis<br/>(latest quote)"]
+    QS -->|tick| Redis["Redis<br/>(latest quote, 60s TTL)"]
     QS -->|tick| BM["BarAppService"]
     BM -->|build bar| BM
-    BM -->|bar complete| Mongo["MongoDB<br/>(persist bar)"]
+    BM -->|bar complete| Mongo["MongoDB bars"]
     BM -->|BarCompletedEvent| EB["EventBus"]
     QS -->|QuoteReceivedEvent| EB
     EB -->|on_bar| SE["StrategyAppService"]
-    SE -->|signal| Risk["RiskCheckHandler"]
-    Risk -->|approved| SE
+    SE -->|signal| Risk["PositionSizer"]
+    Risk -->|sized order| SE
     SE -->|submit order| Broker["IBroker<br/>(Paper/OKX)"]
     Broker -->|fill| OM["OrderAppService"]
     OM -->|OrderFilledEvent| EB
@@ -195,7 +286,92 @@ flowchart LR
     PT -->|save| Mongo
 ```
 
-## 5. Naming Glossary
+## 7. C4 System Context (Level 1)
+
+```
+    ┌──────────┐          ┌──────────────────────────────┐
+    │  Trader  │─────────>│       PocketQuant            │
+    │  (User)  │  REST    │  Algorithmic Trading Platform │
+    │          │<─────────│  DDD + CQRS + Clean Arch     │
+    └──────────┘  JSON    └──────┬───────┬───────┬───────┘
+                                 │       │       │
+                    ┌────────────┘       │       └────────────┐
+                    v                    v                    v
+           ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+           │ TradingView  │    │     OKX      │    │  Webhook     │
+           │ Data Provider│    │   Exchange   │    │  Consumers   │
+           │ REST + WS    │    │  REST + WS   │    │  HTTP POST   │
+           └──────────────┘    └──────────────┘    └──────────────┘
+```
+
+## 8. C4 Container (Level 2)
+
+```
+    ┌──────────┐
+    │  Trader  │
+    └────┬─────┘
+         │ HTTP/JSON
+         v
+┌────────────────────────────────────────────────────────────┐
+│                 PocketQuant Platform                        │
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │          FastAPI Web Server (Uvicorn)                 │  │
+│  │  Port 8765 · /api/v1/* · Middleware · Dishka DI      │  │
+│  └──────────────────────┬───────────────────────────────┘  │
+│                          │                                  │
+│     ┌────────────────────┼────────────────────┐             │
+│     v                    v                    v             │
+│  ┌─────────┐      ┌──────────┐      ┌────────────────┐    │
+│  │  CQRS   │      │ Domain   │      │ Background     │    │
+│  │ Handlers│─────>│ Engine   │      │ Jobs           │    │
+│  │ (27)    │      │ (Pure)   │      │ (APScheduler)  │    │
+│  └─────────┘      └──────────┘      └────────────────┘    │
+│       │                                     │              │
+│       v                                     v              │
+│  ┌─────────┐ ┌─────────┐ ┌────────┐ ┌──────────┐         │
+│  │ App     │ │ Broker  │ │ Event  │ │ Data     │         │
+│  │Services │ │ Layer   │ │ Bus    │ │ Sync     │         │
+│  │ (8 svc) │ │Paper/OKX│ │(in-mem)│ │ Jobs     │         │
+│  └─────────┘ └─────────┘ └────────┘ └──────────┘         │
+└──────────┬──────────────────────┬─────────────────────────┘
+           │                      │
+           v                      v
+    ┌──────────────┐       ┌──────────────┐
+    │   MongoDB    │       │    Redis     │
+    │  Port 27018  │       │  Port 6379   │
+    │ 7 collections│       │  TTL cache   │
+    │ bars,orders  │       │ quote,bar    │
+    │ positions,...│       │ idempot,rate │
+    └──────────────┘       └──────────────┘
+```
+
+## 9. DI Container Wiring Order
+
+```
+  CoreProvider ──> PersistenceProvider ──> InfrastructureProvider
+       │                                         │
+       v                                         v
+  MarketDataProvider ──> TradingProvider ──> HandlerProvider
+
+  Container creates all 27 handlers + registers with Mediator
+```
+
+## 10. Event Flow
+
+```
+  Handler ──publish──> EventBus ──notify──> Subscribers
+                         │
+       ┌─────────────────┼─────────────────┐
+       v                 v                 v
+  BarCompleted      QuoteReceived     OrderFilled
+  │                 │                 │
+  v                 v                 v
+  StrategyApp       BarApp            PositionApp
+  .on_bar()         .process_tick()   ._on_fill()
+```
+
+## 11. Naming Glossary
 
 | Suffix | Layer | Purpose | Count |
 |--------|-------|---------|-------|
@@ -206,21 +382,29 @@ flowchart LR
 | `Factory` | Infrastructure | Object creation | 1 |
 | `Provider` | DI | Dishka dependency provider | 6 |
 
-## 6. File Navigation Cheat Sheet
+## 12. File Navigation Cheat Sheet
+
+**Standard DDD File Names (per folder):**
+- `entities.py` — Pydantic BaseModel with to_mongo/from_mongo
+- `events.py` — Frozen dataclass domain events
+- `value_objects.py` — Frozen dataclass immutable values
+- `enums.py` — String enums
+- `interfaces.py` — ABC base classes
+- `services/` — Pure domain services
 
 **"I need to..."**
 
 | Task | Go to |
 |------|-------|
-| Add a new API endpoint | `src/features/{domain}/{operation}/route.py` |
-| Add business logic for that endpoint | `src/features/{domain}/{operation}/handler.py` |
-| Define the request shape | `src/features/{domain}/{operation}/command.py` or `query.py` |
-| Wire the handler into DI | `src/di/handlers.py` |
-| Add a new application service | `src/application/{domain}/` |
-| Wire that service into DI | `src/di/{domain}_provider.py` |
-| Add a new repository | `src/persistence/repositories/` + wire in `src/di/persistence.py` |
-| Add a domain model | `src/domain/{domain}/` |
-| Add a domain event | `src/domain/{domain}/{domain}_event.py` |
-| Change startup/shutdown | `src/main.py` (lifespan) |
-| Change DI container | `src/container.py` |
+| Add API endpoint | `src/features/{domain}/{operation}/route.py` |
+| Implement business logic | `src/features/{domain}/{operation}/handler.py` |
+| Define request/response | `src/features/{domain}/{operation}/command.py\|query.py` |
+| Add application service | `src/application/{domain}/` |
+| Add domain entity (persisted) | `src/domain/{name}/entities.py` |
+| Add domain concept (non-persisted) | `src/domain/concepts/{name}/` |
+| Add domain event | `src/domain/{name}/events.py` |
+| Add shared enum/VO | `src/domain/shared/enums.py\|value_objects.py` |
+| Add repository | `src/persistence/repositories/` |
+| Change startup | `src/main.py` (lifespan function) |
+| Configure DI | `src/container.py` + `src/di/` (6 provider files) |
 | Add middleware | `src/common/middleware/` + `src/main_extensions.py` |

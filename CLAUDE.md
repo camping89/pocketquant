@@ -1,14 +1,23 @@
 # CLAUDE.md — PocketQuant
 
-**Last Updated:** 2026-03-15 | **Status:** v1.0 production | **Critical Architecture Change:** Schemas deleted, persistence in domain
+**Last Updated:** 2026-03-15 | **Status:** v1.0 production | **Critical Architecture Change:** DDD three-tier domain structure
+
+## Domain Structure (Three-Tier DDD)
+
+`src/domain/` is organized into three tiers:
+- **Top-level** (collection-backed): `bar/`, `order/`, `position/`, `symbol/`, `sync_status/`, `backtest/`
+- **`concepts/`** (non-persisted logic): `concepts/quote/`, `concepts/risk/`, `concepts/strategy/`
+- **`shared/`** (cross-cutting): `enums.py`, `events.py`, `value_objects.py`
+
+Standard file names per folder: `entities.py`, `events.py`, `value_objects.py`, `enums.py`, `interfaces.py`, `services/`
 
 ## Domain Entities (Pydantic BaseModel with MongoDB Persistence)
 
-All domain entities (Bar, OrderAggregate, PositionAggregate, etc.) are **Pydantic BaseModel** with built-in MongoDB persistence:
-- `to_mongo()` → dict for storage
-- `@classmethod from_mongo(doc)` → entity reconstruction
-- No separate schemas/ directory (deleted 2026-03-15)
-- Repositories import directly from domain: `from src.domain.ohlcv.entities import Bar`
+All domain entities (Bar, Symbol, OrderAggregate, PositionAggregate, BacktestResult, etc.) use `to_mongo()`/`from_mongo()`:
+- Repositories import directly from domain: `from src.domain.bar.entities import Bar`
+- Backtest results: `from src.domain.backtest import BacktestResult, OptimizationResult`
+- No separate schemas/ directory
+- `INTERVAL_TO_TVDATAFEED` lives in `infrastructure/tradingview/tradingview_client.py` (not domain)
 
 ## Handler Extract-Method Pattern
 

@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-02-22 | **Coverage:** 277 Python files, 13,637 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS | **Type Checker:** Pyright
+**Last Updated:** 2026-03-15 | **Coverage:** 278 Python files, 13,381 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright
 
 ## Clean Architecture Rules
 
@@ -50,7 +50,7 @@ Operation-First Structure:
 │   └── __init__.py
 ├── router.py                   # Feature router (aggregates all operations)
 └── __init__.py
-# Note: register.py files deleted — handler registration in src/handler_registration.py
+# Note: Handler registration in src/container.py via register_handlers(container)
 
 IMPORTANT: No business logic in features/. All logic in:
 - Application layer (orchestrators, state machines)
@@ -155,28 +155,12 @@ class StrategyAppService:
 - Called by CQRS handlers in features/ layer
 - Often singletons (StrategyAppService, QuoteAppService) or per-request (DataSyncService)
 
-### 3. Services Registry (Dishka DI)
+### 3. Dependency Injection (Dishka)
 
-All service wiring uses **dishka** — Python DI library with type-hint-based auto-resolution. 6 providers organize services by domain concern. Container resolves dependencies from type hints automatically.
+**dishka** library with 6 providers + type-hint-based auto-resolution. Container resolves all dependencies automatically.
 
 ```python
-# Define services in provider classes (@provide decorator)
-from dishka import Provider, Scope, provide
-
-class CoreProvider(Provider):
-    @provide(scope=Scope.APP)
-    def get_mediator(self) -> Mediator:
-        return Mediator()
-
-    @provide(scope=Scope.APP)
-    def get_event_bus(self) -> EventBus:
-        return EventBus(max_history=100)
-
-# Container auto-resolves via type hints
-container = create_container()  # 6 providers combined
-mediator = await container.get(Mediator)
-
-# Routes use dishka FastAPI integration (FromDishka[T] + DishkaRoute)
+# Routes use dishka FastAPI integration
 from dishka.integrations.fastapi import FromDishka
 
 @router.post("/sync")
@@ -184,61 +168,40 @@ async def sync(mediator: FromDishka[Mediator]):
     return await mediator.send(command)
 ```
 
-**Pattern:**
-- `src/container.py` — factory (`create_container()`) + handler registration
-- `src/di/` — 6 Provider classes:
-  - CoreProvider: Settings, EventBus, Mediator
-  - PersistenceProvider: Database, Cache, 7 repositories
-  - InfrastructureProvider: Brokers, TradingView, JobScheduler
-  - MarketDataProvider: BarAppService, QuoteAppService, sync jobs
-  - TradingProvider: OrderAppService, PositionAppService
-  - HandlerProvider: All 27 CQRS handlers
-- `src/main.py` lifespan — setup_dishka(container, app) for route integration
+**Key Files:**
+- `src/container.py` — Factory: `create_container()`, handler registration
+- `src/di/` — 6 Provider classes (CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider)
+- `src/main.py` — Lifespan: setup_dishka(container, app)
 
-**Rationale:**
-- **Auto-resolution** — dependencies matched by type hint (cleaner than manual wiring)
-- **Scoped lifecycle** — Scope.APP singletons auto-cleaned on container.close()
-- **Type-safe** — full IDE autocomplete, pyright validation
-- **Modular providers** — organize services by domain (CoreProvider, PersistenceProvider, etc.)
-- **Single source of truth** — container.py PROVIDERS list controls initialization order
+**Benefits:**
+- Auto-resolution by type hint (no manual wiring)
+- Scoped lifecycle (Scope.APP for singletons)
+- Type-safe (IDE autocomplete, pyright validation)
+- Centralized configuration via PROVIDERS list
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through instance methods in `src/persistence/repositories/`. `Database` injected via constructor from DI container. All repositories inherit from `BaseRepository`.
+All data access through instance methods in `src/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
 
+**7 Repositories:** BarRepository (renamed from OHLCVRepository), OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
+
+**Key Pattern:**
 ```python
-# OHLCVRepository (in src/persistence/repositories/)
-class OHLCVRepository(BaseRepository):
-    def __init__(self, database: Database):
-        super().__init__(database)
-
-    async def upsert_many(self, records: List[OHLCVCreate]) -> int:
-        collection = self._collection()  # BaseRepository helper
-        # Bulk insert/update with unique key
-        pass
-
-    async def get_bars(
-        self,
-        symbol: str,
-        exchange: str,
-        interval: str,
-        limit: int = 100
-    ):
-        collection = self._collection()
-        # Query with filtering and sorting
-        pass
+class BarRepository(BaseRepository):
+    async def upsert_many(self, records: List[Bar]) -> int:
+        collection = self._collection("bars")
+        docs = [bar.to_mongo() for bar in records]  # Entity serialization
+        # bulk upsert...
+        return len(records)
 ```
 
-**Centralized Persistence Layer (`src/persistence/`):**
-- Database connections: `mongodb.py`, `redis.py` (instance-based, managed by container)
-- BaseRepository: `_collection()` helper, `Database` injected via constructor
-- 7 repositories: OHLCVRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
-- MongoDB schemas: Validation for all documents
+**Centralized Persistence (`src/persistence/`):**
+- Database (PyMongo, NOT Motor) and Cache (Redis) managed by dishka
+- BaseRepository: `_collection()` helper, `Database` injected
+- Domain entities handle serialization via `to_mongo()` / `from_mongo()`
+- No schemas/ directory (deleted 2026-03-15)
 
-**Rationale:**
-- Instance-based design — inject mock Database for testing
-- All repositories registered as Singleton providers in container
-- All DB access via persistence layer (zero static calls)
+**Benefits:** Instance-based design, easy to test, domain purity, single source of truth
 
 ### 5. Service Pattern (Business Logic)
 
@@ -335,8 +298,9 @@ from src.common.mediator import Handler, handles
 # Command Handler (mutates state)
 @handles(SyncSymbolCommand)
 class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
-    def __init__(self, provider: IDataProvider):
+    def __init__(self, provider: IDataProvider, bar_repo: BarRepository):
         self.provider = provider
+        self.bar_repo = bar_repo
 
     async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
         # 1. Fetch from infrastructure
@@ -344,12 +308,11 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
             cmd.symbol, cmd.exchange, cmd.interval, cmd.n_bars
         )
 
-        # 2. Validate via domain
-        aggregate = OHLCVAggregate(bars)
+        # 2. Validate via domain (Bar.from_mongo)
+        validated_bars = [Bar.from_mongo(bar.to_mongo()) for bar in bars]
 
         # 3. Persist via infrastructure
-        collection = Database.get_collection("ohlcv")
-        await collection.bulk_write([...])
+        await self.bar_repo.upsert_many(validated_bars)
 
         # 4. Publish domain events
         await EventBus.publish(HistoricalDataSyncedEvent(...))
@@ -360,24 +323,26 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
 # Query Handler (read-only)
 @handles(GetBarsQuery)
 class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
+    def __init__(self, bar_repo: BarRepository, cache: Cache):
+        self.bar_repo = bar_repo
+        self.cache = cache
+
     async def handle(self, query: GetBarsQuery) -> BarsDTO:
-        cache_key = f"ohlcv:{query.symbol}:{query.interval}"
+        cache_key = f"bar:{query.symbol}:{query.interval}"
 
         # 1. Check cache first
-        cached = await Cache.get(cache_key)
+        cached = await self.cache.get(cache_key)
         if cached:
             return cached
 
         # 2. Query database
-        collection = Database.get_collection("ohlcv")
-        bars = await collection.find({
-            "symbol": query.symbol,
-            "interval": query.interval
-        }).to_list(query.limit)
+        bars = await self.bar_repo.get_bars(
+            query.symbol, query.exchange, query.interval, query.limit
+        )
 
         # 3. Cache result (300s TTL)
         result = BarsDTO(bars=bars, count=len(bars))
-        await Cache.set(cache_key, result, ttl=300)
+        await self.cache.set(cache_key, result, ttl=300)
 
         # 4. Return DTO
         return result
@@ -406,21 +371,45 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 3. Add to ALL_HANDLER_TYPES list in HandlerProvider
 4. Handler dependencies resolved by dishka via __init__ type hints
 
-### 9. Strategy Implementation Pattern
+### 9. Handler Extract-Method Pattern
+
+For complex handlers exceeding ~30 lines with 8+ operations, extract private helper methods. Simple handlers (1-3 ops) should NOT extract methods.
+
+**Guideline:** Extract when handle() becomes unreadable. Each helper does ONE logical operation. Reference: `SyncSymbolHandler` has 8 private helpers (_fetch_bars, _persist_bars, _fail, _success, etc.). See `docs/handler-pipelines.md` for full examples.
+
+**Key Rules:**
+- Prefix with `_` (private) to indicate internal use
+- Keep `handle()` as readable checklist (no detailed logic)
+- Each helper: single-responsibility, async or sync as needed
+- Improves testability: easier to test 8 focused helpers than one giant method
+
+### 10. Schema Consolidation (Use Base Classes)
+
+Eliminate redundant empty Create subclasses. Use base classes directly for repository operations.
+
+**Rule:** One schema definition per domain concept (OHLCV, Symbol, Order, etc.). No Create subclasses.
+
+**Applied Changes (2026-03-15):**
+- Schemas directory deleted — repositories use domain entities directly
+- All entities have `to_mongo()` / `from_mongo()` for MongoDB persistence
+- Factory methods: `Symbol.create()`, `OrderAggregate.create()`, `PositionAggregate.open()`
+
+**Benefits:** Single schema (easier maintenance), simpler type hints, no duplication.
+
+### 11. Strategy Implementation Pattern
 
 Implement IStrategy interface for custom trading strategies:
 
 ```python
-from src.domain.strategy.base import IStrategy
+from src.domain.concepts.strategy.interfaces import IStrategy
 
 class MACrossoverStrategy(IStrategy):
-    def __init__(self, fast_period: int = 10, slow_period: int = 20):
-        self.fast_period = fast_period
-        self.slow_period = slow_period
-        self.fast_ma = None
-        self.slow_ma = None
+    def __init__(self, config: StrategyConfig):
+        super().__init__(config)
+        self.fast_period = self.get_parameter("fast_period", 10)
+        self.slow_period = self.get_parameter("slow_period", 20)
 
-    async def on_bar(self, bar: OHLCVBar) -> Optional[StrategySignal]:
+    async def on_bar(self, bar: dict) -> Signal | None:
         """Called on each new bar."""
         # Update moving averages
         self.fast_ma = calculate_ma(self.recent_bars, self.fast_period)
@@ -450,13 +439,18 @@ class MACrossoverStrategy(IStrategy):
 - Store state as instance variables
 - No direct broker/database access (StrategyAppService manages execution)
 
-### 10. Domain Layer Patterns (Dataclasses, Not Pydantic)
+### 12. Domain Layer Patterns (Pydantic BaseModel + MongoDB Persistence)
 
-Domain uses stdlib `dataclasses` (22 domain classes):
-- **Value Objects:** `@dataclass(frozen=True)` with `__post_init__()` validation
+Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in MongoDB persistence:
+- **Entities (5):** `Bar`, `OrderAggregate`, `PositionAggregate`, `Symbol` (flattened), `SyncStatus`
+- **Deleted Aggregates (Dead Code):** `OHLCVAggregate`, `QuoteAggregate`, `SymbolAggregate`, `SymbolInfo` VO
+- **Pattern:** Each aggregate has `to_mongo()` → dict and `@classmethod from_mongo(doc)` → entity
+- **Benefits:** Validation, serialization, schema evolution via Pydantic
+- **Value Objects:** Frozen via `field(frozen=True)` or `@dataclass(frozen=True)`
 - **Events:** `@dataclass(frozen=True, eq=False)` with custom `__eq__` by event_id
-- **Aggregates:** `@dataclass` (mutable) with `field(init=False, repr=False)` for hidden events
-- **Rules:** No Pydantic BaseModel, use `generate_id()` for UUIDs, immutable for VOs/events
+- **Rules:** Use `generate_id()` (UUID7), immutable VOs/events, all aggregates extend BaseModel
+- **Cache Keys:** Use `build_bar_cache_key()` (renamed from `build_ohlcv_cache_key()`)
+- **Collections:** Use `COLLECTION_BARS` (renamed from `COLLECTION_OHLCV`)
 
 ## Code Organization Guidelines
 
@@ -647,11 +641,11 @@ Use bulk upserts instead of individual inserts:
 
 ```python
 # Good: Single bulk operation
-await OHLCVRepository.upsert_many(records)  # One round trip to DB
+await BarRepository.upsert_many(records)  # One round trip to DB
 
 # Bad: Loop of individual inserts
 for record in records:
-    await OHLCVRepository.insert_one(record)  # N round trips!
+    await BarRepository.insert_one(record)  # N round trips!
 ```
 
 ### Cache Invalidation
@@ -660,10 +654,10 @@ Use pattern-based deletion for correctness (vs selective):
 
 ```python
 # Good: Pattern-based deletion (simple, correct)
-await Cache.delete_pattern("ohlcv:AAPL:*")
+await Cache.delete_pattern("bar:AAPL:*")
 
 # Bad: Selective deletion (easy to miss keys)
-await Cache.delete(f"ohlcv:AAPL:NYSE:1d:100")
+await Cache.delete(f"bar:AAPL:NYSE:1d:100")
 ```
 
 ### Concurrency
@@ -749,59 +743,21 @@ All aggregates migrated:
 
 ## Clean Architecture Rules (MANDATORY)
 
-**Domain Layer:**
-- ❌ No I/O imports (pymongo, redis, aiohttp, http, infrastructure)
-- ❌ No Pydantic BaseModel (use stdlib dataclasses instead)
-- ✅ Immutable value objects, frozen dataclasses with `@dataclass(frozen=True)`
-- ✅ Events as frozen dataclasses: `@dataclass(frozen=True, eq=False)`
-- ✅ Validation in `__post_init__()` method
-- ✅ Pure business logic only
-- Enforced via: `test_domain_purity.py` (AST check)
+| Layer | Rules |
+|-------|-------|
+| **Domain** | ❌ No I/O imports (pymongo, redis, aiohttp) ✅ Pydantic BaseModel with to_mongo/from_mongo ✅ Validation in __post_init__ ✅ Pure logic only |
+| **Application** | ❌ No CQRS decorators ✅ Orchestrate domain + infrastructure ✅ Stateful services ✅ Called by feature handlers |
+| **Features** | ❌ No business logic ✅ Thin routes ✅ @handles decorator ✅ Call Application services |
+| **Infrastructure** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
 
-**Application Layer:**
-- ❌ No CQRS decorators (@handles, @event_handler)
-- ✅ Can import Domain and Infrastructure
-- ✅ Orchestrate domain + infrastructure
-- ✅ Stateful services (StrategyAppService, BarAppService)
-- ✅ Called by CQRS handlers in features/
+## Deprecated Patterns
 
-**Features Layer:**
-- ❌ No business logic (all in Application or Domain)
-- ✅ Thin routes (parse, delegate, respond)
-- ✅ Commands and Queries (Pydantic models)
-- ✅ CQRS handlers with @handles decorator
-- ✅ Call Application-layer services
-
-**Infrastructure Layer:**
-- ❌ Never imported by Domain
-- ✅ Can import Domain
-- ✅ Brokers, providers, persistence, scheduling
-- ✅ All external I/O
-
-## Deprecated Patterns (Do Not Use)
-
-❌ Business logic in features/ (move to application/) | Pydantic in domain/ (use dataclasses)
-❌ Direct DB calls outside src/persistence/ | Bare except clauses
-❌ Synchronous blocking I/O in async context | Global mutable state outside container
-❌ No type hints on public APIs | String formatting in log calls
-❌ Manual event subscription (use @event_handler) | Manual mediator.register()
-❌ UUID4 for aggregates (use UUID7) | Handwritten DI wiring (use dishka providers)
-❌ Per-feature `register.py` files (use HandlerProvider) | Static Repository calls (use DI)
-❌ dependency-injector library (use dishka) | Depends() in routes (use FromDishka + DishkaRoute)
+❌ Business logic in features/ ❌ Direct DB calls outside persistence/ ❌ Pydantic in domain/ (use BaseModel with to_mongo/from_mongo) ❌ Bare except clauses ❌ Synchronous blocking I/O in async ❌ UUID4 for aggregates ❌ Handwritten DI wiring (use dishka)
 
 ## Quality Checklist
 
-Before committing:
-
-- [ ] All type hints present on public APIs
-- [ ] No syntax errors (ruff check passes)
-- [ ] Code formatted (ruff format run)
-- [ ] Type checking passes (pyright)
-- [ ] Tests pass (pytest)
-- [ ] Test coverage ≥80%
-- [ ] Comments only for non-obvious logic
-- [ ] No blocking I/O in async functions
-- [ ] Error paths tested
-- [ ] Environment variables used (not hardcoded)
-- [ ] Log statements have context
-- [ ] No secrets in code or config
+- [ ] All type hints present | [ ] No syntax errors (ruff check passes)
+- [ ] Code formatted (ruff format) | [ ] Type checking passes (pyright)
+- [ ] Tests pass (pytest) | [ ] Coverage ≥80%
+- [ ] No blocking I/O in async | [ ] Error paths tested
+- [ ] Environment variables used | [ ] No secrets in code/config

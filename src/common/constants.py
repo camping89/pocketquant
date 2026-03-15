@@ -1,15 +1,15 @@
 """Centralized constants with prefixed sections for discoverability."""
 
 
-def build_ohlcv_cache_key(symbol: str, exchange: str, interval: str) -> str:
-    """Build base OHLCV cache key for pattern matching."""
+def build_bar_cache_key(symbol: str, exchange: str, interval: str) -> str:
+    """Build base bar cache key for pattern matching."""
     return f"ohlcv:{symbol.upper()}:{exchange.upper()}:{interval}"
 
 
 # ============================================================
 # COLLECTIONS - MongoDB collection names
 # ============================================================
-COLLECTION_OHLCV = "ohlcv"
+COLLECTION_BARS = "bars"
 COLLECTION_SYNC_STATUS = "sync_status"
 COLLECTION_SYMBOLS = "symbols"
 COLLECTION_ORDERS = "orders"

@@ -1,6 +1,6 @@
 """Handler for getting backtest result."""
 
-from src.application.backtesting.models.backtest_result import BacktestResult
+from src.domain.backtest import BacktestResult
 from src.common.mediator import Handler, handles
 from src.features.backtesting.get_result.query import GetBacktestQuery
 from src.persistence.repositories.backtest_repository import BacktestRepository

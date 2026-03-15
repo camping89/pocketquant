@@ -16,7 +16,7 @@ class ListSymbolsHandler(Handler[ListSymbolsQuery, list[dict]]):
         symbols = await self._symbol_repo.find_all(exchange=request.exchange)
         return [
             {
-                "symbol": s.symbol,
+                "symbol": s.code,
                 "exchange": s.exchange,
                 "name": s.name,
                 "asset_type": s.asset_type,

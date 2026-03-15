@@ -8,17 +8,17 @@ from src.application.backtesting.historical_replay_app_service import (
     HistoricalReplayAppService,
 )
 from src.application.backtesting.models.backtest_config import BacktestConfig
-from src.application.backtesting.models.backtest_result import BacktestResult
+from src.domain.backtest import BacktestResult
 from src.application.backtesting.result_collector import BacktestResultCollector
 from src.common.logging import get_logger
 from src.common.messaging import EventBus
 from src.common.time.simulation import clear_simulation_time
 from src.common.uuid import generate_id_str
-from src.domain.ohlcv.entities import Bar
+from src.domain.bar.entities import Bar
 from src.domain.shared.value_objects import Interval
 from src.infrastructure.brokers.paper.paper_broker import PaperBroker
 from src.persistence.repositories.backtest_repository import BacktestRepository
-from src.persistence.repositories.ohlcv_repository import OHLCVRepository
+from src.persistence.repositories.bar_repository import BarRepository
 
 if TYPE_CHECKING:
     from src.application.strategy.strategy_app_service import StrategyAppService
@@ -49,14 +49,14 @@ class BacktestAppService:
         strategy_engine: StrategyAppService,
         broker: PaperBroker,
         backtest_repository: BacktestRepository,
-        ohlcv_repository: OHLCVRepository,
+        bar_repository: BarRepository,
         persist_results: bool = True,
     ) -> None:
         self._event_bus = event_bus
         self._strategy_engine = strategy_engine
         self._broker = broker
         self._backtest_repo = backtest_repository
-        self._ohlcv_repo = ohlcv_repository
+        self._bar_repo = bar_repository
         self._replay_engine = HistoricalReplayAppService(event_bus)
         self._persist_results = persist_results
 
@@ -157,7 +157,7 @@ class BacktestAppService:
         start_datetime = datetime.combine(config.start_date, datetime.min.time())
         end_datetime = datetime.combine(config.end_date, datetime.max.time())
 
-        async for bar in self._ohlcv_repo.stream(
+        async for bar in self._bar_repo.stream(
             config.symbol, config.exchange, Interval(config.interval), start_datetime, end_datetime
         ):
             yield bar

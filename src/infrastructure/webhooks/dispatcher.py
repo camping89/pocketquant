@@ -7,7 +7,7 @@ from dataclasses import asdict
 from typing import Any
 
 from src.common.logging import get_logger
-from src.domain.shared.domain_event import DomainEvent
+from src.domain.shared.events import DomainEvent
 from src.infrastructure.http_client.client import ResilientHttpClient
 from src.infrastructure.webhooks.config import WebhookConfig
 
