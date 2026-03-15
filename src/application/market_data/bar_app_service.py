@@ -4,6 +4,7 @@ import asyncio
 from collections import defaultdict
 from typing import Any
 
+from src.application.market_data.quote_dto import QuoteTick
 from src.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT, build_ohlcv_cache_key
 from src.common.logging import get_logger
 from src.domain.ohlcv.entities import Bar
@@ -11,7 +12,6 @@ from src.domain.ohlcv.services.bar_builder import BarBuilder, get_bar_start
 from src.domain.shared.value_objects import Interval
 from src.persistence.redis import Cache
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
-from src.persistence.schemas.quote_schema import QuoteTick
 
 logger = get_logger(__name__)
 

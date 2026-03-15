@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
+from src.domain.ohlcv.entities import Bar
 from src.domain.shared.value_objects import Interval
-from src.persistence.schemas.ohlcv_schema import OHLCVBase
 
 
 class IDataProvider(ABC):
@@ -14,7 +14,7 @@ class IDataProvider(ABC):
         exchange: str,
         interval: Interval,
         n_bars: int = 1000,
-    ) -> list[OHLCVBase]:
+    ) -> list[Bar]:
         """Fetch OHLCV bars from data provider."""
         ...
 

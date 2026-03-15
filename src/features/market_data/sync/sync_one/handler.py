@@ -8,16 +8,15 @@ from src.common.logging import get_logger
 from src.common.mediator import Handler, handles
 from src.common.messaging import EventBus
 from src.domain.ohlcv import OHLCVAggregate
+from src.domain.ohlcv.entities import Bar
 from src.domain.shared.value_objects import Interval as DomainInterval
+from src.domain.symbol import SymbolAggregate
 from src.features.market_data.sync.dto import SyncResponse
 from src.features.market_data.sync.sync_one.command import SyncSymbolCommand
 from src.infrastructure.tradingview import TradingViewClient
-from src.domain.ohlcv.entities import Bar
 from src.persistence.repositories.ohlcv_repository import OHLCVRepository
 from src.persistence.repositories.symbol_repository import SymbolRepository
 from src.persistence.repositories.sync_status_repository import SyncStatusRepository
-from src.persistence.schemas.ohlcv_schema import OHLCVBase
-from src.persistence.schemas.symbol_schema import SymbolBase
 
 logger = get_logger(__name__)
 
@@ -104,16 +103,16 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         exchange: str,
         interval: DomainInterval,
         n_bars: int,
-    ) -> list[OHLCVBase]:
+    ) -> list[Bar]:
         return await self.provider.fetch_ohlcv(
             symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars
         )
 
     async def _persist_bars(
-        self, symbol: str, exchange: str, records: list[OHLCVBase]
+        self, symbol: str, exchange: str, records: list[Bar]
     ) -> int:
         upserted_count = await self._ohlcv_repo.upsert_many(records)
-        await self._symbol_repo.upsert(SymbolBase(symbol=symbol, exchange=exchange))
+        await self._symbol_repo.upsert(SymbolAggregate.create(code=symbol, exchange=exchange))
         return upserted_count
 
     async def _get_bar_stats(

@@ -1,3 +1,5 @@
+"""Quote DTOs — application-layer models for Redis cache and tick processing."""
+
 from datetime import UTC
 from datetime import datetime as dt
 from typing import Any

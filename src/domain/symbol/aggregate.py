@@ -1,21 +1,29 @@
-"""Symbol aggregate root."""
+"""Symbol aggregate root — Pydantic model with MongoDB persistence."""
 
-from __future__ import annotations
+from dataclasses import replace
+from datetime import UTC, datetime
+from typing import Any
 
-from dataclasses import dataclass, field, replace
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
 from src.domain.shared.domain_event import DomainEvent
 from src.domain.symbol.value_objects import SymbolInfo
 
 
-@dataclass(eq=False)
-class SymbolAggregate:
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+class SymbolAggregate(BaseModel):
     """Aggregate root for symbol management."""
 
-    id: UUID = field(default_factory=generate_id)
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID = Field(default_factory=generate_id)
     info: SymbolInfo | None = None
-    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
+    created_at: datetime = Field(default_factory=_utc_now)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SymbolAggregate):
@@ -73,6 +81,35 @@ class SymbolAggregate:
     @property
     def is_active(self) -> bool:
         return self.info.is_active if self.info else True
+
+    def to_mongo(self) -> dict[str, Any]:
+        """Serialize to MongoDB document."""
+        return {
+            "_id": str(self.id),
+            "symbol": self.info.code.upper() if self.info else "",
+            "exchange": self.info.exchange.upper() if self.info else "",
+            "name": self.info.name if self.info else None,
+            "asset_type": self.info.asset_type if self.info else None,
+            "is_active": self.info.is_active if self.info else True,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_mongo(cls, doc: dict[str, Any]) -> SymbolAggregate:
+        """Reconstruct from MongoDB document."""
+        info = SymbolInfo(
+            code=doc.get("symbol", ""),
+            exchange=doc.get("exchange", ""),
+            name=doc.get("name"),
+            asset_type=doc.get("asset_type"),
+            is_active=doc.get("is_active", True),
+        )
+        raw_id = doc.get("_id", "")
+        return cls(
+            id=UUID(str(raw_id)) if raw_id else generate_id(),
+            info=info,
+            created_at=doc.get("created_at", _utc_now()),
+        )
 
     def get_uncommitted_events(self) -> list[DomainEvent]:
         return self._events.copy()

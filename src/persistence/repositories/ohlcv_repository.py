@@ -1,8 +1,7 @@
 """OHLCV repository for MongoDB persistence."""
 
 from collections.abc import AsyncIterator
-from datetime import datetime
-from uuid import UUID
+from datetime import UTC, datetime
 
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
@@ -12,32 +11,8 @@ from src.common.logging import get_logger
 from src.domain.ohlcv.entities import Bar
 from src.domain.shared.value_objects import Interval
 from src.persistence.base_repository import BaseRepository
-from src.persistence.schemas.ohlcv_schema import OHLCV, OHLCVBase
 
 logger = get_logger(__name__)
-
-
-def _doc_to_bar(doc: dict) -> Bar:
-    """Convert a MongoDB document to a domain Bar entity."""
-    interval_val = doc.get("interval")
-    if isinstance(interval_val, str):
-        interval_val = Interval(interval_val)
-
-    raw_id = doc.get("_id", "")
-    bar_id = UUID(str(raw_id)) if raw_id else None
-
-    return Bar(
-        **({"id": bar_id} if bar_id else {}),
-        symbol=doc.get("symbol", ""),
-        exchange=doc.get("exchange", ""),
-        interval=interval_val,
-        datetime=doc.get("datetime"),
-        open=doc.get("open", 0.0),
-        high=doc.get("high", 0.0),
-        low=doc.get("low", 0.0),
-        close=doc.get("close", 0.0),
-        volume=doc.get("volume", 0.0),
-    )
 
 
 class OHLCVRepository(BaseRepository):
@@ -45,19 +20,19 @@ class OHLCVRepository(BaseRepository):
 
     _collection_name = COLLECTION_OHLCV
 
-    async def upsert_many(self, records: list[OHLCVBase]) -> int:
-        """Bulk upsert OHLCV records. Returns count of upserted + modified."""
+    async def upsert_many(self, records: list[Bar]) -> int:
+        """Bulk upsert OHLCV bars. Returns count of upserted + modified."""
         if not records:
             return 0
 
         collection = self._collection()
         operations = []
 
-        for record in records:
-            ohlcv = OHLCV(**record.model_dump())
-            doc = ohlcv.to_mongo()
+        for bar in records:
+            doc = bar.to_mongo()
             created_at = doc.pop("created_at", None)
 
+            doc["updated_at"] = datetime.now(UTC)
             update_ops: dict = {"$set": doc}
             if created_at:
                 update_ops["$setOnInsert"] = {"created_at": created_at}
@@ -99,19 +74,9 @@ class OHLCVRepository(BaseRepository):
         """Upsert a single OHLCV bar from a domain Bar entity."""
         collection = self._collection()
 
-        ohlcv = OHLCV(
-            symbol=bar.symbol,
-            exchange=bar.exchange,
-            interval=bar.interval,
-            datetime=bar.datetime,
-            open=bar.open,
-            high=bar.high,
-            low=bar.low,
-            close=bar.close,
-            volume=bar.volume,
-        )
-        doc = ohlcv.to_mongo()
+        doc = bar.to_mongo()
         created_at = doc.pop("created_at", None)
+        doc["updated_at"] = datetime.now(UTC)
 
         update_ops: dict = {"$set": doc}
         if created_at:
@@ -157,7 +122,7 @@ class OHLCVRepository(BaseRepository):
 
         records = []
         async for doc in cursor:
-            records.append(_doc_to_bar(doc))
+            records.append(Bar.from_mongo(doc))
 
         return records
 
@@ -183,7 +148,7 @@ class OHLCVRepository(BaseRepository):
 
         try:
             async for doc in cursor:
-                yield _doc_to_bar(doc)
+                yield Bar.from_mongo(doc)
         finally:
             await cursor.close()
 
@@ -209,7 +174,7 @@ class OHLCVRepository(BaseRepository):
             },
             sort=[("datetime", -1)],
         )
-        return _doc_to_bar(doc) if doc else None
+        return Bar.from_mongo(doc) if doc else None
 
     async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange, interval, datetime)."""

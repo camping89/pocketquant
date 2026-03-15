@@ -1,12 +1,12 @@
 """Handler for getting all active quotes."""
 
 from src.application.market_data.quote_app_service import QuoteAppService
+from src.application.market_data.quote_dto import Quote
 from src.common.constants import CACHE_KEY_QUOTE_LATEST
 from src.common.mediator import Handler, handles
 from src.features.market_data.quotes.dto import QuoteResult
 from src.features.market_data.quotes.get_all.query import GetAllQuotesQuery
 from src.persistence.redis import Cache
-from src.persistence.schemas.quote_schema import Quote
 
 
 @handles(GetAllQuotesQuery)

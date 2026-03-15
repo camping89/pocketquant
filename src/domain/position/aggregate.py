@@ -1,9 +1,9 @@
-"""Position aggregate for tracking open positions and P&L."""
+"""Position aggregate for tracking open positions and P&L — Pydantic model."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
+
+from pydantic import BaseModel, Field, PrivateAttr
 
 from src.common.uuid import generate_id_str
 from src.domain.position.position_event import (
@@ -15,8 +15,11 @@ from src.domain.position.value_objects import PnL, PositionSide
 from src.domain.shared.domain_event import DomainEvent
 
 
-@dataclass
-class PositionAggregate:
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+class PositionAggregate(BaseModel):
     """Position aggregate root tracking entry, quantity, and P&L.
 
     Handles position lifecycle from open to close with proper
@@ -33,9 +36,9 @@ class PositionAggregate:
     current_price: float
     realized_pnl: float = 0.0
     is_closed: bool = False
-    opened_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    opened_at: datetime = Field(default_factory=_utc_now)
     closed_at: datetime | None = None
-    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     @classmethod
     def open(
@@ -198,3 +201,38 @@ class PositionAggregate:
         events = self._events.copy()
         self._events.clear()
         return events
+
+    def to_mongo(self) -> dict[str, Any]:
+        """Serialize to MongoDB document."""
+        return {
+            "_id": self.id,
+            "strategy_id": self.strategy_id,
+            "symbol": self.symbol,
+            "exchange": self.exchange,
+            "side": self.side.value,
+            "entry_price": self.entry_price,
+            "quantity": self.quantity,
+            "current_price": self.current_price,
+            "realized_pnl": self.realized_pnl,
+            "is_closed": self.is_closed,
+            "opened_at": self.opened_at,
+            "closed_at": self.closed_at,
+        }
+
+    @classmethod
+    def from_mongo(cls, doc: dict[str, Any]) -> PositionAggregate:
+        """Reconstruct from MongoDB document."""
+        return cls(
+            id=doc["_id"],
+            strategy_id=doc["strategy_id"],
+            symbol=doc["symbol"],
+            exchange=doc["exchange"],
+            side=PositionSide(doc["side"]),
+            entry_price=doc["entry_price"],
+            quantity=doc["quantity"],
+            current_price=doc["current_price"],
+            realized_pnl=doc.get("realized_pnl", 0.0),
+            is_closed=doc.get("is_closed", False),
+            opened_at=doc["opened_at"],
+            closed_at=doc.get("closed_at"),
+        )

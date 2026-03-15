@@ -1,4 +1,4 @@
-"""Persistence layer - Database, Cache, repositories, schemas."""
+"""Persistence layer - Database, Cache, and repositories."""
 
 from src.persistence.mongodb import Database
 from src.persistence.redis import Cache

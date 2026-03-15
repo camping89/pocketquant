@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.application.market_data.bar_app_service import BarAppService
+from src.application.market_data.quote_dto import Quote, QuoteTick
 from src.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from src.common.logging import get_logger
 from src.config import Settings
 from src.infrastructure.tradingview import TradingViewWebSocketClient
 from src.persistence.redis import Cache
-from src.persistence.schemas.quote_schema import Quote, QuoteTick
 
 logger = get_logger(__name__)
 

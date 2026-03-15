@@ -1,9 +1,8 @@
-"""OHLCV aggregate root."""
+"""OHLCV aggregate root — Pydantic model (in-memory only, not persisted)."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass, field
 from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from src.common.uuid import UUID, generate_id
 from src.domain.ohlcv.ohlcv_event import BarCompletedEvent, HistoricalDataSyncedEvent
@@ -11,14 +10,15 @@ from src.domain.shared.domain_event import DomainEvent
 from src.domain.shared.value_objects import Interval
 
 
-@dataclass(eq=False)
-class OHLCVAggregate:
+class OHLCVAggregate(BaseModel):
     """Aggregate root for OHLCV data operations."""
 
-    id: UUID = field(default_factory=generate_id)
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID = Field(default_factory=generate_id)
     symbol: str = ""
     exchange: str = ""
-    _events: list[DomainEvent] = field(default_factory=list, init=False, repr=False)
+    _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, OHLCVAggregate):
