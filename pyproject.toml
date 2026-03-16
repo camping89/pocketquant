@@ -32,7 +32,7 @@ dependencies = [
     # Utils
     "httpx>=0.26.0",          # Async HTTP client
     "rich>=13.0.0",           # Rich console output for error messages
-    "dishka[fastapi]>=1.9.1",
+    "dishka>=1.9.1",          # FastAPI integration included in base package
 ]
 
 [project.optional-dependencies]

@@ -3,6 +3,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     logger.info("application_starting", environment=settings.environment)
 
-    container = create_container()
+    container: AsyncContainer = app.state.dishka_container
 
     try:
         # Expose DB/Cache on app.state for middleware hot-path access
@@ -39,8 +40,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await ensure_all_indexes(container)
         await register_health_checks(container, app)
         await start_background_jobs(container)
-
-        setup_dishka(container, app)
 
         logger.info("application_started")
         yield
@@ -67,6 +66,10 @@ def create_app() -> FastAPI:
         redoc_url=f"{settings.api_prefix}/redoc",
         openapi_url=f"{settings.api_prefix}/openapi.json",
     )
+
+    # setup_dishka must be called before app starts (adds middleware)
+    container = create_container()
+    setup_dishka(container, app)
 
     configure_middleware(app, settings)
     register_routes(app, settings)

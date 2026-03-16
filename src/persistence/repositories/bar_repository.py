@@ -3,7 +3,6 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
 from src.common.constants import COLLECTION_BARS
@@ -20,61 +19,50 @@ class BarRepository(BaseRepository):
 
     _collection_name = COLLECTION_BARS
 
-    async def upsert_many(self, records: list[Bar]) -> int:
-        """Bulk upsert OHLCV bars. Returns count of upserted + modified."""
+    async def insert_many(self, records: list[Bar]) -> int:
+        """Bulk insert OHLCV bars, skipping duplicates. Returns count of newly inserted."""
         if not records:
             return 0
 
         collection = self._collection()
-        operations = []
-
+        now = datetime.now(UTC)
+        docs = []
         for bar in records:
             doc = bar.to_mongo()
-            created_at = doc.pop("created_at", None)
-
-            doc["updated_at"] = datetime.now(UTC)
-            update_ops: dict = {"$set": doc}
-            if created_at:
-                update_ops["$setOnInsert"] = {"created_at": created_at}
-
-            operations.append(
-                UpdateOne(
-                    {
-                        "symbol": doc["symbol"],
-                        "exchange": doc["exchange"],
-                        "interval": doc["interval"],
-                        "datetime": doc["datetime"],
-                    },
-                    update_ops,
-                    upsert=True,
-                )
-            )
+            doc.pop("_id", None)
+            doc["created_at"] = now
+            doc["updated_at"] = now
+            docs.append(doc)
 
         try:
-            result = await collection.bulk_write(operations, ordered=False)
-            total = result.upserted_count + result.modified_count
-
+            # ordered=False: continues past duplicate key errors,
+            # inserts all non-duplicate docs, skips existing ones
+            result = await collection.insert_many(docs, ordered=False)
+            inserted = len(result.inserted_ids)
             logger.info(
-                "data_sync.upserted",
-                upserted_count=result.upserted_count,
-                modified_count=result.modified_count,
-                total_count=total,
+                "data_sync.inserted",
+                inserted_count=inserted,
+                total_submitted=len(docs),
             )
-
-            return total
+            return inserted
         except BulkWriteError as e:
-            logger.error(
-                "ohlcv_bulk_write_partial_failure",
-                write_errors=len(e.details.get("writeErrors", [])),
-                total_ops=len(operations),
+            # BulkWriteError is raised even for partial success with ordered=False.
+            # nInserted tells us how many actually made it in.
+            inserted = e.details.get("nInserted", 0)
+            skipped = len(docs) - inserted
+            logger.info(
+                "data_sync.inserted_with_skips",
+                inserted_count=inserted,
+                skipped_duplicates=skipped,
             )
-            raise
+            return inserted
 
     async def upsert_bar(self, bar: Bar) -> None:
         """Upsert a single OHLCV bar from a domain Bar entity."""
         collection = self._collection()
 
         doc = bar.to_mongo()
+        doc.pop("_id", None)
         created_at = doc.pop("created_at", None)
         doc["updated_at"] = datetime.now(UTC)
 

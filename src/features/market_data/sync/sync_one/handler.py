@@ -56,7 +56,10 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                     symbol, exchange, interval, "No data returned from provider"
                 )
 
-            upserted_count = await self._persist_bars(symbol, exchange, records)
+            # Filter out bars we already have (keep only newer than latest - 3 bar buffer)
+            records = await self._filter_new_bars(records, symbol, exchange, interval)
+
+            inserted_count = await self._persist_bars(symbol, exchange, records)
             total_bars, latest_bar = await self._get_bar_stats(
                 symbol, exchange, interval
             )
@@ -70,10 +73,10 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 "market_data.sync.completed",
                 symbol=symbol,
                 exchange=exchange,
-                bars_synced=upserted_count,
+                bars_inserted=inserted_count,
             )
             return self._success(
-                symbol, exchange, interval, upserted_count, total_bars, latest_bar
+                symbol, exchange, interval, inserted_count, total_bars, latest_bar
             )
 
         except Exception as e:
@@ -99,12 +102,52 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars
         )
 
+    async def _filter_new_bars(
+        self,
+        records: list[Bar],
+        symbol: str,
+        exchange: str,
+        interval: DomainInterval,
+    ) -> list[Bar]:
+        """Filter fetched bars to only those newer than DB latest - 3 bar overlap buffer.
+
+        On first sync (no existing data), returns all records unchanged.
+        The 3-bar overlap ensures we don't miss bars near the boundary;
+        insert_many(ordered=False) will skip any duplicates.
+        """
+        latest = await self._bar_repo.get_latest(symbol, exchange, interval)
+        if not latest or not latest.datetime:
+            return records
+
+        # Keep bars from (latest - 3 intervals) onwards
+        overlap_buffer = 3
+        cutoff_bars = sorted(
+            [r for r in records if r.datetime and r.datetime <= latest.datetime],
+            key=lambda b: b.datetime,  # type: ignore[arg-type]
+        )
+        # Find the cutoff: 3 bars before the latest existing bar
+        if len(cutoff_bars) > overlap_buffer:
+            cutoff_dt = cutoff_bars[-overlap_buffer].datetime
+        else:
+            cutoff_dt = cutoff_bars[0].datetime if cutoff_bars else latest.datetime
+
+        filtered = [r for r in records if r.datetime and r.datetime >= cutoff_dt]
+        skipped = len(records) - len(filtered)
+        if skipped > 0:
+            logger.info(
+                "market_data.sync.filtered_existing",
+                kept=len(filtered),
+                skipped=skipped,
+                cutoff=str(cutoff_dt),
+            )
+        return filtered
+
     async def _persist_bars(
         self, symbol: str, exchange: str, records: list[Bar]
     ) -> int:
-        upserted_count = await self._bar_repo.upsert_many(records)
+        inserted_count = await self._bar_repo.insert_many(records)
         await self._symbol_repo.upsert(Symbol.create(code=symbol, exchange=exchange))
-        return upserted_count
+        return inserted_count
 
     async def _get_bar_stats(
         self, symbol: str, exchange: str, interval: DomainInterval
