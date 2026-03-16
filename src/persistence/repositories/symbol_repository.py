@@ -16,6 +16,7 @@ class SymbolRepository(BaseRepository):
         """Upsert symbol record."""
         collection = self._collection()
         doc = symbol.to_mongo()
+        doc.pop("_id", None)
         created_at = doc.pop("created_at", None)
 
         await collection.update_one(
