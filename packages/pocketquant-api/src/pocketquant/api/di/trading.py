@@ -15,8 +15,8 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
 from pocketquant.api.di.broker_factory import BrokerFactory
-from pocketquant.core.persistence.repositories.order_repository import OrderRepository
-from pocketquant.core.persistence.repositories.position_repository import PositionRepository
+from pocketquant.trading.persistence.order_repository import OrderRepository
+from pocketquant.trading.persistence.position_repository import PositionRepository
 
 
 class TradingProvider(Provider):
