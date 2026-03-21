@@ -5,9 +5,9 @@ this script holds a persistent connection so you can visually verify
 real-time data flow without Swagger/Postman.
 
 Usage:
-    python testscripts/run_stream_quotes.py                      # Default: BTCUSD
-    python testscripts/run_stream_quotes.py AAPL NASDAQ          # Single symbol
-    python testscripts/run_stream_quotes.py BTCUSD,ETHUSD CRYPTO # Multiple symbols
+    python tests/manual/run_stream_quotes.py                      # Default: BTCUSD
+    python tests/manual/run_stream_quotes.py AAPL NASDAQ          # Single symbol
+    python tests/manual/run_stream_quotes.py BTCUSD,ETHUSD CRYPTO # Multiple symbols
 """
 
 import asyncio
@@ -15,7 +15,9 @@ import signal
 import sys
 from datetime import datetime
 
-from src.infrastructure.tradingview.tradingview_websocket_client import TradingViewWebSocketClient
+from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client import (
+    TradingViewWebSocketClient,
+)
 
 
 def on_quote(data: dict) -> None:
@@ -63,7 +65,7 @@ async def main(symbols: list[str], exchange: str, duration: int | None = None):
             key = await provider.subscribe(symbol, exchange, on_quote)
             print(f"Subscribed: {key}")
 
-        print(f"\nStreaming quotes... (Ctrl+C to stop)\n")
+        print("\nStreaming quotes... (Ctrl+C to stop)\n")
 
         # Run with optional duration
         async def run_stream():
@@ -73,7 +75,7 @@ async def main(symbols: list[str], exchange: str, duration: int | None = None):
                     await asyncio.wait_for(stop_event.wait(), timeout=duration)
                 else:
                     await stop_event.wait()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             finally:
                 provider._running = False

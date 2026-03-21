@@ -1,9 +1,9 @@
 """Handler for listing backtests."""
 
 from pocketquant.backtest.domain import BacktestResult
-from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.backtest.handlers.list_results.query import ListBacktestsQuery
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.core.common.mediator import Handler, handles
 
 
 @handles(ListBacktestsQuery)

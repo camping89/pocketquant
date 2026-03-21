@@ -5,7 +5,6 @@ from datetime import datetime
 
 from pocketquant.core.domain.shared.events import DomainEvent
 
-
 # TODO: Wire HistoricalDataSyncedEvent for UI sync notifications when needed
 # @dataclass(frozen=True, eq=False)
 # class HistoricalDataSyncedEvent(DomainEvent):

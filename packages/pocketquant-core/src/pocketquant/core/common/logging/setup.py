@@ -3,9 +3,8 @@ import sys
 from typing import Any
 
 import structlog
-from structlog.types import Processor
-
 from pocketquant.core.config import Settings
+from structlog.types import Processor
 
 
 def add_correlation_id(

@@ -1,11 +1,9 @@
 """API routes for listing backtests."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.backtest.handlers.list_results.query import ListBacktestsQuery
+from pocketquant.core.common.mediator import Mediator
 
 router = APIRouter(route_class=DishkaRoute)
 

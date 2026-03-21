@@ -1,9 +1,8 @@
 """Sync symbol command for market data operations."""
 
-from pydantic import BaseModel, Field
-
 from pocketquant.core.common.constants import LIMIT_TVDATAFEED_MAX_BARS
 from pocketquant.core.domain.shared.value_objects import Interval
+from pydantic import BaseModel, Field
 
 
 class SyncSymbolCommand(BaseModel):

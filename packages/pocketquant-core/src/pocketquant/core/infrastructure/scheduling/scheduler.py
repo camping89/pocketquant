@@ -10,7 +10,6 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 

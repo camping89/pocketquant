@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-
 from pocketquant.core.common.constants import HEADER_CORRELATION_ID
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.tracing import get_correlation_id

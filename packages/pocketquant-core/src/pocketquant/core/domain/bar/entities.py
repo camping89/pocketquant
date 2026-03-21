@@ -4,10 +4,9 @@ from datetime import UTC
 from datetime import datetime as dt
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from pocketquant.core.common.uuid import UUID, generate_id
 from pocketquant.core.domain.shared.enums import Interval
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _utc_now() -> dt:

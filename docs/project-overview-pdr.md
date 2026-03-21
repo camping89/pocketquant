@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-03-15 | **Status:** v1.0 Complete | **Codebase:** 278 Python files, 13,381 LOC in src/ | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-03-21 | **Status:** v1.0 Complete | **Codebase:** 278 Python files, 13,381 LOC in packages/ | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4-package uv workspace monorepo | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -301,70 +301,59 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 ### Module Breakdown (Clean Architecture + DDD + CQRS)
 
 ```
-src/common/             (993 LOC, 32 files)
-├── Mediator & EventBus - CQRS dispatcher & event pub/sub (max 100 event history)
-├── Event Handler Auto-Discovery (@event_handler, EventRegistry)
-├── CQRS Handler Auto-Discovery (@handles decorator, HandlerRegistry)
-├── UUID Utilities (UUID7 generation - time-ordered IDs)
-├── DI Container Integration - dishka dependency-injector setup
-├── Middleware (correlation ID, rate limit, idempotency)
-├── Logging (structlog) - Structured JSON logs
-├── Health Coordinator - Infrastructure health checks
-└── Job Scheduler (APScheduler)
+packages/pocketquant-core/
+├── domain/             (2,364 LOC, 39 files)
+│   ├── Entities (6): Bar, Symbol, Order, Position, Backtest, SyncStatus
+│   ├── Aggregates (2): OrderAggregate, PositionAggregate
+│   ├── Value Objects, Events, Services (pure logic, zero I/O)
+│   └── MongoDB Persistence: `to_mongo()`/`from_mongo()` methods
+├── common/             (993 LOC, 32 files)
+│   ├── Mediator & EventBus, CQRS/Event handler auto-discovery
+│   ├── UUID Utilities (UUID7), DI Container Integration
+│   └── Middleware, Logging (structlog), Health Checks
+├── infrastructure/     (2,883 LOC, 28 files)
+│   ├── Brokers (IBroker, PaperBroker, OKXBroker)
+│   ├── Data Providers (TradingView REST/WebSocket)
+│   ├── OKX WebSocket with HMAC-SHA256 auth
+│   ├── Job Scheduling (APScheduler)
+│   └── HTTP Client & Webhooks
+└── persistence/        (1,214 LOC, 18 files)
+    ├── Database (MongoDB, PyMongo async)
+    ├── Cache (Redis async)
+    └── Repositories (7): Bar, Order, Position, Backtest, Optimization, Symbol, SyncStatus
 
-src/domain/             (2,364 LOC, 39 files)
-├── Entities (6): Bar (renamed from ohlcv/), Symbol (flat), Order, Position, Backtest, Strategy
-├── Aggregates (2): OrderAggregate, PositionAggregate (state machines with events)
-├── Deleted: OHLCVAggregate, QuoteAggregate, SymbolAggregate, SymbolInfo VO
-├── Value Objects: Price, Signal, BarRange, PnL, Interval, Direction, etc.
-├── Domain Events (13 event types: BarCompletedEvent, OrderSubmitted, OrderFilled, etc.)
-├── Domain Services: BarBuilder, PositionSizer (pure logic, zero I/O)
-├── Enums: OrderType, OrderStatus, OrderSide, Direction, Interval, etc.
-├── MongoDB Persistence: `to_mongo()`/`from_mongo()` methods on all entities
-└── Immutable frozen dataclasses with validation in __post_init__
+packages/pocketquant-backtest/
+├── engine/
+│   ├── BacktestAppService (execute strategy on historical bars)
+│   ├── GridOptimizationAppService (parameter search)
+│   └── HistoricalReplayAppService (bar injection)
+├── domain/
+│   └── BacktestResult, OptimizationResult entities
+└── persistence/
+    └── BacktestRepository, OptimizationRepository
 
-src/application/        (2,559 LOC, 21 files)
-├── Orchestrators: StrategyAppService, BacktestAppService, BarAppService
-├── Order Management: OrderAppService (state machine + recovery)
-├── Position Management: PositionAppService (P&L calculation)
-├── Market Data: QuoteAppService, HistoricalReplayAppService
-├── Optimization: GridOptimizationAppService (parameter search)
-├── Strategy: StrategyLoader (YAML → IStrategy)
-└── Result Collectors: ResultCollector (metrics aggregation)
+packages/pocketquant-trading/
+├── app_services/
+│   ├── OrderAppService (order state machine + recovery)
+│   └── PositionAppService (P&L calculation)
+├── brokers/
+│   └── OKX broker implementation (live trading)
+└── persistence/
+    └── Order/Position repositories
 
-src/infrastructure/     (2,883 LOC, 28 files)
-├── Brokers: IBroker interface, PaperBroker, OKXBroker, BrokerFactory
-├── OKX WebSocket: Client, ReconnectionHandler, Mappers, Auth (HMAC-SHA256)
-├── TradingView: REST Provider (tvdatafeed), WebSocket Provider
-├── Scheduling: JobScheduler (APScheduler wrapper)
-├── HTTP & Webhooks: AsyncHTTPClient, WebhookDispatcher
-└── (Database & Cache moved to src/persistence/)
+packages/pocketquant-api/        (3,016 LOC, 134 files)
+├── features/           - Operation-First Vertical Slices
+│   ├── backtesting/    - Run, optimize, retrieve backtests
+│   ├── market_data/    - Sync, bar queries, quotes, symbols
+│   ├── strategy/       - Load, start, stop strategies
+│   ├── trading/        - Orders, positions
+│   └── risk/           - Risk checks
+├── di/                 - Dishka dependency injection
+│   ├── container.py    - Factory + handler registration
+│   └── 6 Provider classes
+└── main.py            - FastAPI app + lifespan setup
 
-src/persistence/        (1,214 LOC, 18 files)
-├── Database: MongoDB async client (PyMongo native async API)
-├── Cache: Redis async client (redis-py)
-├── BaseRepository: Mixin with _collection() helper
-├── Repositories (7): BarRepository (renamed from OHLCVRepository), OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
-├── Collections: bars (renamed from ohlcv), orders, positions, backtest_results, optimization_results, symbols, sync_status
-└── Direct domain entity serialization: `entity.to_mongo()` / `Entity.from_mongo(doc)`
-
-src/features/           (3,016 LOC, 134 files) - Operation-First Vertical Slices
-├── backtesting/        (626 LOC, 22 files)
-│   ├── run/ optimize/ get_result/ get_optimization/ list_results/
-├── market_data/        (1,534 LOC, 68 files)
-│   ├── sync/sync_one/ sync/sync_bulk/ bar/get_bars/ (renamed from ohlcv/)
-│   ├── quotes/ status/ list_symbols/
-├── strategy/           (416 LOC, 22 files)
-│   ├── get_all/ get_one/ load/ start/ stop/
-├── trading/            (281 LOC, 18 files)
-│   ├── list_orders/ get_order/ list_positions/ get_position/
-└── risk/               (158 LOC, 3 files)
-    └── check_risk/
-
-tests/                  (902 LOC, 17 files)
-docker/                 (401 LOC, 5 files)
-
-Total: 13,641 LOC (277 Python files in src/)
+Total: 13,641 LOC (278 Python files in packages/)
 ```
 
 **Operation-First Pattern:** Each feature contains self-contained operations (folders). Each operation is a complete use case: command/query definition, handler logic, optional route. Shared infrastructure within a feature is in base/.
@@ -489,17 +478,20 @@ Follow conventional commits:
 
 **Development:**
 ```bash
-# 1. Start infrastructure (MongoDB + Redis)
-just up
+# 1. Install dependencies (uv workspace)
+uv sync
 
-# 2. Run app (F5 in VS Code for debugging, or terminal)
-uvicorn src.main:app --reload
+# 2. Start infrastructure (MongoDB + Redis)
+docker compose -f docker/compose.yml up -d
+
+# 3. Run app (F5 in VS Code for debugging, or terminal)
+uvicorn pocketquant.api.main:app --reload --port 41920
 ```
 
 **Production:**
 ```bash
 docker compose -f docker/compose.yml up -d
-python -m src.main  # Config via .env (API_PORT, MONGODB_URL, etc.)
+uv run uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920
 ```
 
 ## Contact & Support

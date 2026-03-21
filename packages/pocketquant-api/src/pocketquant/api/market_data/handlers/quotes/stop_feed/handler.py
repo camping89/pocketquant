@@ -3,9 +3,9 @@
 import asyncio
 
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.api.market_data.handlers.quotes.stop_feed.command import StopQuoteFeedCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.api.market_data.handlers.quotes.stop_feed.command import StopQuoteFeedCommand
 
 logger = get_logger(__name__)
 

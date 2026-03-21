@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-03-15 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** DDD + CQRS + Dishka | **Database:** PyMongo (NOT Motor)
+**Last Updated:** 2026-03-21 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** DDD + CQRS + Dishka | **Database:** PyMongo (NOT Motor) | **Structure:** 4-package uv workspace monorepo
 
 ## Prerequisites
 
@@ -36,13 +36,13 @@ cp .env.example .env
 # Edit .env: set MONGODB_URL, REDIS_URL, API_PORT, etc.
 
 # Install dependencies
-just install
+uv sync
 
 # Start infrastructure (MongoDB 27018 + Redis 6379)
-just up
+docker compose -f docker/compose.yml up -d
 
 # Run app (separate terminal)
-uvicorn src.main:app --host 0.0.0.0 --port 8765
+uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920
 ```
 
 ## Running as Service (systemd)
@@ -58,7 +58,7 @@ After=network.target docker.service
 Type=simple
 User=pocketquant
 WorkingDirectory=/opt/pocketquant
-ExecStart=/opt/pocketquant/.venv/bin/uvicorn src.main:app --host 0.0.0.0 --port 8765
+ExecStart=/opt/pocketquant/.venv/bin/uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920
 Restart=always
 RestartSec=5
 
@@ -131,7 +131,7 @@ risk:
 Load strategy via API:
 
 ```bash
-curl -X POST http://localhost:8765/api/v1/strategies/load \
+curl -X POST http://localhost:41920/api/v1/strategies/load \
   -H "Content-Type: application/json" \
   -d '{
     "name": "ma_crossover",
@@ -142,7 +142,7 @@ curl -X POST http://localhost:8765/api/v1/strategies/load \
 Start strategy:
 
 ```bash
-curl -X POST http://localhost:8765/api/v1/strategies/start \
+curl -X POST http://localhost:41920/api/v1/strategies/start \
   -H "Content-Type: application/json" \
   -d '{"strategy_name": "ma_crossover"}'
 ```

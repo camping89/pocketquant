@@ -4,14 +4,13 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from websockets import State
-
 from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client import (
     TradingViewWebSocketClient,
     _create_message,
     _generate_session_id,
     _parse_messages,
 )
+from websockets import State
 
 
 class TestHelperFunctions:
@@ -162,7 +161,8 @@ class TestTradingViewWebSocketClient:
         async def mock_connect(*args, **kwargs):
             return mock_ws
 
-        with patch("pocketquant.core.infrastructure.tradingview.tradingview_websocket_client.websockets.connect", side_effect=mock_connect):
+        ws_mod = "pocketquant.core.infrastructure.tradingview.tradingview_websocket_client"
+        with patch(f"{ws_mod}.websockets.connect", side_effect=mock_connect):
             await provider.connect()
 
         assert provider._ws == mock_ws
@@ -199,7 +199,9 @@ class TestTradingViewWebSocketClient:
         provider._ws = AsyncMock()
         provider._session_id = "test_session"
 
-        callback = lambda x: None
+        def callback(x):
+            return None
+
         symbol_key = await provider.subscribe("AAPL", "NASDAQ", callback)
 
         assert symbol_key == "NASDAQ:AAPL"

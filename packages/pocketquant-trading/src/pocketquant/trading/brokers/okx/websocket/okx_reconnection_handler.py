@@ -4,7 +4,6 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 import structlog
-
 from pocketquant.trading.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
 
 if TYPE_CHECKING:

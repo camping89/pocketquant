@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-
 from pocketquant.core.domain.order import OrderAggregate, OrderStatus
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.infrastructure.brokers.interface import IBroker, OrderCallback

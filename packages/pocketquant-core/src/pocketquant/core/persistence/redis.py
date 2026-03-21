@@ -8,7 +8,6 @@ from datetime import timedelta
 from typing import Any
 
 import redis.asyncio as redis
-
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 

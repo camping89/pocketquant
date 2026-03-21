@@ -3,7 +3,6 @@
 import asyncio
 
 import structlog
-
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.order import OrderAggregate, OrderFilledEvent, OrderStatus
 from pocketquant.core.infrastructure.brokers.interface import IBroker

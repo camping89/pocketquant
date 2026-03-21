@@ -10,9 +10,8 @@ console = Console(force_terminal=True, legacy_windows=False)
 
 async def check_mongodb() -> bool:
     """Verify MongoDB is reachable with configured credentials."""
+    from pocketquant.core.config import get_settings
     from pymongo.asynchronous.mongo_client import AsyncMongoClient
-
-    from src.config import get_settings
 
     settings = get_settings()
     try:
@@ -29,8 +28,7 @@ async def check_mongodb() -> bool:
 async def check_redis() -> bool:
     """Verify Redis is reachable."""
     import redis.asyncio as redis
-
-    from src.config import get_settings
+    from pocketquant.core.config import get_settings
 
     settings = get_settings()
     try:

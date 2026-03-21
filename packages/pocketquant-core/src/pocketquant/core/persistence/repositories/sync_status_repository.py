@@ -3,8 +3,8 @@
 from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_SYNC_STATUS
-from pocketquant.core.domain.sync_status import SyncStatus
 from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.sync_status import SyncStatus
 from pocketquant.core.persistence.base_repository import BaseRepository
 
 

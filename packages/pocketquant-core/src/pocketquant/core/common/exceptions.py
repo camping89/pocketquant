@@ -7,7 +7,6 @@ Routes no longer need manual try/except → HTTPException conversion.
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-
 from pocketquant.core.common.logging import get_logger
 
 logger = get_logger(__name__)

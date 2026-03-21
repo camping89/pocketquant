@@ -1,9 +1,9 @@
 """Handler for subscribing to a symbol."""
 
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.api.market_data.handlers.quotes.subscribe.command import SubscribeCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.api.market_data.handlers.quotes.subscribe.command import SubscribeCommand
 
 logger = get_logger(__name__)
 
@@ -16,7 +16,8 @@ class SubscribeHandler(Handler[SubscribeCommand, dict]):
         self._quote_app_service = quote_app_service
 
     async def handle(self, request: SubscribeCommand) -> dict:
-        if not self._quote_app_service.running or not self._quote_app_service.provider.is_connected():
+        svc = self._quote_app_service
+        if not svc.running or not svc.provider.is_connected():
             raise ValueError("Quote service not running. Start it first via StartQuoteFeedCommand")
 
         symbol = request.symbol.upper()

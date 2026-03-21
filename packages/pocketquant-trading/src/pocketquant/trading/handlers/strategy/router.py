@@ -1,7 +1,6 @@
 """Strategy API routes aggregator."""
 
 from fastapi import APIRouter
-
 from pocketquant.trading.handlers.strategy.get_all.route import router as get_strategies_router
 from pocketquant.trading.handlers.strategy.get_one.route import router as get_strategy_router
 from pocketquant.trading.handlers.strategy.load.route import router as load_strategy_router

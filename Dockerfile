@@ -13,13 +13,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files and README (required by pyproject.toml)
+# Copy workspace definition + lock first (cache layer)
 COPY pyproject.toml uv.lock README.md ./
 
-# Create venv and install deps (locked for reproducibility)
-RUN uv venv /opt/venv && \
-    . /opt/venv/bin/activate && \
-    uv pip install --no-cache -e .
+# Copy all package pyproject.toml files (needed for dependency resolution)
+COPY packages/pocketquant-core/pyproject.toml packages/pocketquant-core/
+COPY packages/pocketquant-backtest/pyproject.toml packages/pocketquant-backtest/
+COPY packages/pocketquant-trading/pyproject.toml packages/pocketquant-trading/
+COPY packages/pocketquant-api/pyproject.toml packages/pocketquant-api/
+
+# Copy all package source code
+COPY packages/ packages/
+
+# Install all workspace packages (locked, no dev deps)
+RUN uv sync --frozen --no-dev
 
 # ============================================
 # Stage 2: Runtime
@@ -35,14 +42,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 appuser
 
-# Copy venv from builder
-COPY --from=builder /opt/venv /opt/venv
-
-# Copy source code
-COPY src/ src/
+# Copy venv from builder (uv sync creates .venv in workdir)
+COPY --from=builder /app/.venv /app/.venv
 
 # Set environment
-ENV PATH="/opt/venv/bin:$PATH" \
+ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
@@ -55,4 +59,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 41920
 
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "41920"]
+CMD ["uvicorn", "pocketquant.api.main:app", "--host", "0.0.0.0", "--port", "41920"]

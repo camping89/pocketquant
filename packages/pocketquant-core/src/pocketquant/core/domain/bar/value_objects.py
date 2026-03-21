@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
-
 @dataclass(frozen=True)
 class OHLCV:
     """Immutable OHLCV price bar data."""
@@ -46,5 +45,3 @@ class BarRange:
     @property
     def duration_seconds(self) -> int:
         return int((self.end - self.start).total_seconds())
-
-

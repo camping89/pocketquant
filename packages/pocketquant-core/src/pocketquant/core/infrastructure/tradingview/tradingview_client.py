@@ -3,14 +3,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import pandas as pd
-from tvDatafeed import Interval as TVInterval
-from tvDatafeed import TvDatafeed
-
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.tradingview.base import IDataProvider
+from tvDatafeed import Interval as TVInterval
+from tvDatafeed import TvDatafeed
 
 logger = get_logger(__name__)
 

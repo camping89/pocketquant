@@ -1,7 +1,6 @@
 """Status sub-feature router - aggregates status operation routes."""
 
 from fastapi import APIRouter
-
 from pocketquant.api.market_data.handlers.status.get_quote_service_status.route import (
     router as quote_service_status_router,
 )

@@ -3,17 +3,16 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, PrivateAttr
-
 from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.core.domain.position.events import (
     PositionClosedEvent,
     PositionOpenedEvent,
     PositionUpdatedEvent,
 )
-from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.core.domain.position.value_objects import PnL
 from pocketquant.core.domain.shared.events import DomainEvent
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 def _utc_now() -> datetime:

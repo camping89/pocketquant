@@ -1,7 +1,6 @@
 """Pytest configuration and fixtures."""
 
 import pytest
-
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings

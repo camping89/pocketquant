@@ -1,13 +1,11 @@
 """Route for syncing a single symbol."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, BackgroundTasks
-
-from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.sync.dto import SyncResponse
 from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
+from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.mediator import Mediator
 
 logger = get_logger(__name__)
 

@@ -1,9 +1,7 @@
 """Get strategy API route."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.trading.handlers.strategy.get_one.query import GetStrategyQuery

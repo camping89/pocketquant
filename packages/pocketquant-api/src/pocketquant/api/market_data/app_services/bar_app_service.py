@@ -5,11 +5,15 @@ from collections import defaultdict
 from typing import Any
 
 from pocketquant.api.market_data.app_services.quote_dto import QuoteTick
-from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT, TTL_BAR_CURRENT, build_bar_cache_key
+from pocketquant.core.common.constants import (
+    CACHE_KEY_BAR_CURRENT,
+    TTL_BAR_CURRENT,
+    build_bar_cache_key,
+)
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.services.bar_builder import BarBuilder, get_bar_start
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.persistence.redis import Cache

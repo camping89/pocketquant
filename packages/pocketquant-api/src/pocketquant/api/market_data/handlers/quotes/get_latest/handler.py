@@ -1,11 +1,11 @@
 """Handler for getting the latest quote."""
 
 from pocketquant.api.market_data.app_services.quote_dto import Quote
+from pocketquant.api.market_data.handlers.quotes.dto import QuoteResult
+from pocketquant.api.market_data.handlers.quotes.get_latest.query import GetLatestQuoteQuery
 from pocketquant.core.common.cache import Cache
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.api.market_data.handlers.quotes.dto import QuoteResult
-from pocketquant.api.market_data.handlers.quotes.get_latest.query import GetLatestQuoteQuery
 
 
 @handles(GetLatestQuoteQuery)

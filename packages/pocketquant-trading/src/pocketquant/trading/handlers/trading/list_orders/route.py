@@ -1,9 +1,7 @@
 """List orders route."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.trading.handlers.trading.list_orders.query import ListOrdersQuery
 

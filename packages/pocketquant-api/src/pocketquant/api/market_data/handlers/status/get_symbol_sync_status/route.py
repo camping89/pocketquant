@@ -1,14 +1,12 @@
 """Route for getting sync status for a specific symbol."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
-
-from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.api.market_data.handlers.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )
+from pocketquant.core.common.mediator import Mediator
+from pocketquant.core.domain.shared.value_objects import Interval
 
 router = APIRouter(route_class=DishkaRoute)
 

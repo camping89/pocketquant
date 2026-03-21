@@ -1,7 +1,6 @@
 """Market data service providers."""
 
 from dishka import Provider, Scope, provide
-
 from pocketquant.api.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
 from pocketquant.core.common.messaging import EventBus

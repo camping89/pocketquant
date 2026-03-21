@@ -1,9 +1,7 @@
 """API route for getting the current aggregating bar."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
-
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.shared.value_objects import Interval

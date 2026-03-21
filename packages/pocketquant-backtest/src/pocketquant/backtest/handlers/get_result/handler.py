@@ -1,9 +1,9 @@
 """Handler for getting backtest result."""
 
 from pocketquant.backtest.domain import BacktestResult
-from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.backtest.handlers.get_result.query import GetBacktestQuery
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.core.common.mediator import Handler, handles
 
 
 @handles(GetBacktestQuery)

@@ -3,13 +3,12 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from pymongo.errors import BulkWriteError
-
 from pocketquant.core.common.constants import COLLECTION_BARS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.persistence.base_repository import BaseRepository
+from pymongo.errors import BulkWriteError
 
 logger = get_logger(__name__)
 

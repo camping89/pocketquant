@@ -3,9 +3,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from pocketquant.core.common.uuid import UUID, generate_id
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _utc_now() -> datetime:
@@ -40,7 +39,7 @@ class Symbol(BaseModel):
         exchange: str,
         name: str | None = None,
         asset_type: str | None = None,
-    ) -> "Symbol":
+    ) -> Symbol:
         """Factory method to create a new symbol."""
         return cls(code=code.upper(), exchange=exchange.upper(), name=name, asset_type=asset_type)
 
@@ -68,7 +67,7 @@ class Symbol(BaseModel):
         }
 
     @classmethod
-    def from_mongo(cls, doc: dict[str, Any]) -> "Symbol":
+    def from_mongo(cls, doc: dict[str, Any]) -> Symbol:
         """Reconstruct from MongoDB document."""
         raw_id = doc.get("_id", "")
         return cls(

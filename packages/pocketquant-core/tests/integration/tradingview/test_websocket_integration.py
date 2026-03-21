@@ -3,8 +3,9 @@
 import asyncio
 
 import pytest
-
-from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client import TradingViewWebSocketClient
+from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client import (
+    TradingViewWebSocketClient,
+)
 
 
 @pytest.mark.integration
@@ -74,6 +75,7 @@ async def test_multiple_symbols():
     def make_callback(symbol):
         def on_quote(data):
             received[symbol].append(data)
+
         return on_quote
 
     try:
@@ -130,5 +132,5 @@ async def test_unsubscribe():
 
 
 if __name__ == "__main__":
-    # Run manually: python -m pytest tests/integration/tradingview/test_websocket_integration.py -v -s
+    # Run: python -m pytest tests/integration/tradingview/test_websocket_integration.py -v -s
     asyncio.run(test_real_connection_and_subscribe())

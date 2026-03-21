@@ -1,7 +1,7 @@
 """List positions handler."""
 
-from pocketquant.trading.app_services.position_app_service import PositionAppService
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.trading.app_services.position_app_service import PositionAppService
 from pocketquant.trading.handlers.trading.list_positions.query import ListPositionsQuery
 
 

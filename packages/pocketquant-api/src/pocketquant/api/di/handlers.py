@@ -1,16 +1,10 @@
 """CQRS handler providers — all 27 handlers as APP-scoped singletons.
 
 Handlers are resolved by dishka via __init__ type hints and registered
-with Mediator in src/container.py:register_handlers().
+with Mediator in pocketquant.api.di.container:register_handlers().
 """
 
 from dishka import Provider, Scope, provide
-
-from pocketquant.backtest.handlers.get_optimization.handler import GetOptimizationHandler
-from pocketquant.backtest.handlers.get_result.handler import GetBacktestHandler
-from pocketquant.backtest.handlers.list_results.handler import ListBacktestsHandler
-from pocketquant.backtest.handlers.optimize.handler import RunOptimizationHandler
-from pocketquant.backtest.handlers.run.handler import RunBacktestHandler
 from pocketquant.api.market_data.handlers.list_symbols.handler import ListSymbolsHandler
 from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.handler import GetOHLCVHandler
 from pocketquant.api.market_data.handlers.quotes.get_all.handler import GetAllQuotesHandler
@@ -30,6 +24,11 @@ from pocketquant.api.market_data.handlers.status.get_sync_status.handler import 
 )
 from pocketquant.api.market_data.handlers.sync.sync_bulk.handler import BulkSyncHandler
 from pocketquant.api.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
+from pocketquant.backtest.handlers.get_optimization.handler import GetOptimizationHandler
+from pocketquant.backtest.handlers.get_result.handler import GetBacktestHandler
+from pocketquant.backtest.handlers.list_results.handler import ListBacktestsHandler
+from pocketquant.backtest.handlers.optimize.handler import RunOptimizationHandler
+from pocketquant.backtest.handlers.run.handler import RunBacktestHandler
 from pocketquant.trading.handlers.strategy.get_all.handler import GetStrategiesHandler
 from pocketquant.trading.handlers.strategy.get_one.handler import GetStrategyHandler
 from pocketquant.trading.handlers.strategy.load.handler import LoadStrategyHandler
@@ -53,12 +52,8 @@ class HandlerProvider(Provider):
     get_latest_quote_handler = provide(GetLatestQuoteHandler, scope=Scope.APP)
     get_all_quotes_handler = provide(GetAllQuotesHandler, scope=Scope.APP)
     get_sync_status_handler = provide(GetSyncStatusHandler, scope=Scope.APP)
-    get_symbol_sync_status_handler = provide(
-        GetSymbolSyncStatusHandler, scope=Scope.APP
-    )
-    get_quote_service_status_handler = provide(
-        GetQuoteServiceStatusHandler, scope=Scope.APP
-    )
+    get_symbol_sync_status_handler = provide(GetSymbolSyncStatusHandler, scope=Scope.APP)
+    get_quote_service_status_handler = provide(GetQuoteServiceStatusHandler, scope=Scope.APP)
     list_symbols_handler = provide(ListSymbolsHandler, scope=Scope.APP)
 
     # Trading (4)
@@ -82,7 +77,7 @@ class HandlerProvider(Provider):
     list_backtests_handler = provide(ListBacktestsHandler, scope=Scope.APP)
 
 
-# All handler types — used by register_handlers() in src/container.py
+# All handler types — used by register_handlers() in pocketquant.api.di.container
 ALL_HANDLER_TYPES: list[type] = [
     SyncSymbolHandler,
     BulkSyncHandler,

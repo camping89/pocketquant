@@ -3,9 +3,8 @@
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, PrivateAttr
-
 from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.order.events import (
     OrderCancelledEvent,
     OrderFilledEvent,
@@ -13,8 +12,8 @@ from pocketquant.core.domain.order.events import (
     OrderRejectedEvent,
     OrderSubmittedEvent,
 )
-from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.shared.events import DomainEvent
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 def _utc_now() -> datetime:
@@ -54,9 +53,7 @@ class OrderAggregate(BaseModel):
         OrderStatus.SUBMITTED: frozenset(
             {OrderStatus.PARTIALLY_FILLED, OrderStatus.FILLED, OrderStatus.CANCELLED}
         ),
-        OrderStatus.PARTIALLY_FILLED: frozenset(
-            {OrderStatus.FILLED, OrderStatus.CANCELLED}
-        ),
+        OrderStatus.PARTIALLY_FILLED: frozenset({OrderStatus.FILLED, OrderStatus.CANCELLED}),
     }
 
     @classmethod

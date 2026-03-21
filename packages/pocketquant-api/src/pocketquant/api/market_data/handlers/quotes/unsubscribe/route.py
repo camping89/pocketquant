@@ -1,12 +1,10 @@
 """API route for unsubscribing from a symbol."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.quotes.unsubscribe.command import UnsubscribeCommand
+from pocketquant.core.common.mediator import Mediator
+from pydantic import BaseModel, Field
 
 router = APIRouter(route_class=DishkaRoute)
 

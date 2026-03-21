@@ -1,21 +1,18 @@
 # PocketQuant Development Tasks
 # Requires: just, docker, uv (https://docs.astral.sh/uv/)
 
-# Set shell for Windows
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-# Cross-platform python path
 python := if os() == "windows" { ".venv/Scripts/python.exe" } else { ".venv/bin/python" }
 
 default:
     @just --list
 
-# Setup: create venv and install dependencies
+# Setup: create venv and install all workspace packages
 install:
-    uv venv --allow-existing
-    uv pip install -e ".[dev]"
+    uv sync
 
-# Start infrastructure (MongoDB + Redis) - run app via VS Code F5
+# Start infrastructure (MongoDB + Redis)
 up:
     docker compose -f docker/compose.yml up -d
 
@@ -27,7 +24,33 @@ down:
 reset:
     docker compose -f docker/compose.yml down -v
 
-# Check development environment (docker, mongodb, redis, auth)
+# Check development environment (docker, mongodb, redis)
 check:
     {{python}} scripts/check_env.py
-    {{python}} scripts/test_mongodb_auth.py
+
+# Run all tests
+test:
+    {{python}} -m pytest
+
+# Run tests for a specific package (core, backtest, trading, api)
+test-pkg pkg:
+    {{python}} -m pytest packages/pocketquant-{{pkg}}/tests/
+
+# Lint check
+lint:
+    ruff check .
+
+# Format code
+fmt:
+    ruff format .
+
+# Type check
+types:
+    pyright
+
+# Run lint + format + type check
+qa: lint fmt types
+
+# Start dev server with hot reload
+dev:
+    uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920

@@ -50,7 +50,7 @@ Operation-First Structure:
 │   └── __init__.py
 ├── router.py                   # Feature router (aggregates all operations)
 └── __init__.py
-# Note: Handler registration in src/container.py via register_handlers(container)
+# Note: Handler registration in pocketquant/api/di/container.py via register_handlers(container)
 
 IMPORTANT: No business logic in features/. All logic in:
 - Application layer (orchestrators, state machines)
@@ -76,7 +76,7 @@ features/backtesting/
 │   ├── query.py
 │   └── handler.py
 └── router.py                   # Aggregate all operation routes
-# Handler registration in src/handler_registration.py (register.py deleted)
+# Handler registration in pocketquant/api/di/ (no separate register.py file)
 ```
 
 **Application Layer (Orchestrators):**
@@ -169,9 +169,9 @@ async def sync(mediator: FromDishka[Mediator]):
 ```
 
 **Key Files:**
-- `src/container.py` — Factory: `create_container()`, handler registration
-- `src/di/` — 6 Provider classes (CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider)
-- `src/main.py` — Lifespan: setup_dishka(container, app)
+- `packages/pocketquant-api/src/pocketquant/api/di/container.py` — Factory: `create_container()`, handler registration
+- `packages/pocketquant-api/src/pocketquant/api/di/` — 6 Provider classes (CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider)
+- `packages/pocketquant-api/src/pocketquant/api/main.py` — Lifespan: setup_dishka(container, app)
 
 **Benefits:**
 - Auto-resolution by type hint (no manual wiring)
@@ -181,7 +181,7 @@ async def sync(mediator: FromDishka[Mediator]):
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through instance methods in `src/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
+All data access through instance methods in `packages/pocketquant-core/src/pocketquant/core/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
 
 **7 Repositories:** BarRepository (renamed from OHLCVRepository), OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
 
@@ -195,7 +195,7 @@ class BarRepository(BaseRepository):
         return len(records)
 ```
 
-**Centralized Persistence (`src/persistence/`):**
+**Centralized Persistence (in `pocketquant-core`):**
 - Database (PyMongo, NOT Motor) and Cache (Redis) managed by dishka
 - BaseRepository: `_collection()` helper, `Database` injected
 - Domain entities handle serialization via `to_mongo()` / `from_mongo()`
@@ -257,7 +257,7 @@ class TradingViewClient:
 Register event subscribers automatically using the `@event_handler` decorator:
 
 ```python
-from src.common.messaging.event_registry import event_handler
+from pocketquant.core.common.messaging.event_registry import event_handler
 
 class PositionAppService:
     @event_handler(OrderFilledEvent)
@@ -273,7 +273,7 @@ class PositionAppService:
 
 Auto-registration during startup:
 ```python
-from src.common.messaging.event_registry import get_event_registry
+from pocketquant.core.common.messaging.event_registry import get_event_registry
 
 registry = get_event_registry()
 count = registry.register_instance(position_tracker, event_bus)
@@ -293,7 +293,7 @@ Separate request handlers for commands (mutate state) and queries (read-only). A
 **Rule: One handler per command/query.** `DuplicateHandlerError` thrown at startup if two handlers claim the same request type.
 
 ```python
-from src.common.mediator import Handler, handles
+from pocketquant.core.common.mediator import Handler, handles
 
 # Command Handler (mutates state)
 @handles(SyncSymbolCommand)
@@ -365,9 +365,9 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 - Publish domain events for all state changes
 
 **Registration Pattern:**
-`register_handlers(container)` in `src/container.py` resolves all handler types from container and registers with Mediator. New handlers need:
+`register_handlers(container)` in `packages/pocketquant-api/src/pocketquant/api/di/container.py` resolves all handler types from container and registers with Mediator. New handlers need:
 1. Implement handler with `@handles(RequestType)` decorator
-2. Add to HandlerProvider in `src/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
+2. Add to HandlerProvider in `packages/pocketquant-api/src/pocketquant/api/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
 3. Add to ALL_HANDLER_TYPES list in HandlerProvider
 4. Handler dependencies resolved by dishka via __init__ type hints
 
@@ -401,7 +401,7 @@ Eliminate redundant empty Create subclasses. Use base classes directly for repos
 Implement IStrategy interface for custom trading strategies:
 
 ```python
-from src.domain.concepts.strategy.interfaces import IStrategy
+from pocketquant.core.domain.concepts.strategy.interfaces import IStrategy
 
 class MACrossoverStrategy(IStrategy):
     def __init__(self, config: StrategyConfig):
@@ -495,9 +495,9 @@ from pydantic import BaseModel  # OK in Features/Config layers
 import structlog
 
 # 3. Local
-from src.common.database import Database
-from src.common.logging import get_logger
-from src.features.market_data.base.models import OHLCV
+from pocketquant.core.common.database import Database
+from pocketquant.core.common.logging import get_logger
+from pocketquant.api.features.market_data.base.models import OHLCV
 ```
 
 **Example (Domain layer - Stdlib dataclasses only):**
@@ -508,8 +508,8 @@ from datetime import datetime
 from typing import Optional, ClassVar
 
 # 2. Local (no third-party, no I/O)
-from src.domain.shared.domain_event import DomainEvent
-from src.common.uuid import generate_id
+from pocketquant.core.domain.shared.domain_event import DomainEvent
+from pocketquant.core.common.uuid import generate_id
 
 # NOTE: No pydantic, pymongo, redis, aiohttp imports in domain/
 ```
@@ -522,7 +522,7 @@ from src.common.uuid import generate_id
 
 ## Type Hints
 
-Use full type hints on all public APIs: functions, class attributes, complex types. Tools: `pyright src/` for type checking.
+Use full type hints on all public APIs: functions, class attributes, complex types. Tools: `pyright packages/` for type checking.
 
 ## Error Handling
 
@@ -616,8 +616,8 @@ We use **Pyright** (via Pylance in VSCode), not mypy:
 - **Pydantic v2 native support** (no plugin needed)
 
 ```bash
-pyright src/                 # Type check entire source
-pyright src/features/backtesting/  # Check specific module
+pyright packages/                 # Type check entire packages
+pyright packages/pocketquant-api/src/pocketquant/api/features/backtesting/  # Check specific module
 ```
 
 ## Performance Considerations
@@ -680,7 +680,7 @@ self._bar_builders[interval].update_ohlc(tick)
 Never hardcode configuration. Use `.env` for local development:
 
 ```python
-# In src/config.py
+# In packages/pocketquant-core/src/pocketquant/core/config.py
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -725,7 +725,7 @@ TRADINGVIEW_USERNAME=username_placeholder
 All aggregates use UUID7 (time-ordered) for better database indexing:
 
 ```python
-from src.common.uuid import generate_id, generate_id_str
+from pocketquant.core.common.uuid import generate_id, generate_id_str
 
 # Generate UUID v7 (timestamp-based, sortable)
 order_id = generate_id()        # UUID object

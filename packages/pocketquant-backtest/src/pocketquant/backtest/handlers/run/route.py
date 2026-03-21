@@ -1,12 +1,10 @@
 """API routes for running a backtest."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
+from pocketquant.core.common.mediator import Mediator
+from pydantic import BaseModel
 
 router = APIRouter(route_class=DishkaRoute)
 

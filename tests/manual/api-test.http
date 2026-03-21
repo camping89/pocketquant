@@ -1,5 +1,5 @@
 # PocketQuant API Testing
-# Base URL: http://localhost:8765/api/v1
+# Base URL: http://localhost:41920/api/v1
 #
 # Sections:
 #   1. Health & System
@@ -12,61 +12,61 @@
 #   8. Backtesting — Run, Optimize, Results
 #   9. Debug Workflow — End-to-end (sync → strategy → backtest)
 #
-# Prerequisites: just up && just start (or uvicorn src.main:app --reload)
+# Prerequisites: just up && just start (or just dev)
 
 ### ===========================================
 ### 1. Health & System
 ### ===========================================
 
 # Health Check (DB + Redis + version)
-curl -X GET http://localhost:8765/health
+curl -X GET http://localhost:41920/health
 
 ###
 
 # List Scheduled Background Jobs
-curl -X GET http://localhost:8765/api/v1/system/jobs
+curl -X GET http://localhost:41920/api/v1/system/jobs
 
 ### ===========================================
 ### 2. Sync — Single, Background, Bulk
 ### ===========================================
 
 # *** BTC 4H — Main debug target ***
-curl -X POST http://localhost:8765/api/v1/market-data/sync \
+curl -X POST http://localhost:41920/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","n_bars":100}'
 
 ###
 
 # BTC Daily
-curl -X POST http://localhost:8765/api/v1/market-data/sync \
+curl -X POST http://localhost:41920/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSD","exchange":"BINANCE","interval":"1d","n_bars":100}'
 
 ###
 
 # ETH 1H
-curl -X POST http://localhost:8765/api/v1/market-data/sync \
+curl -X POST http://localhost:41920/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"ETHUSD","exchange":"BINANCE","interval":"1h","n_bars":100}'
 
 ###
 
 # Stock (AAPL)
-curl -X POST http://localhost:8765/api/v1/market-data/sync \
+curl -X POST http://localhost:41920/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"AAPL","exchange":"NASDAQ","interval":"1d","n_bars":50}'
 
 ###
 
 # Background Sync (non-blocking — returns immediately)
-curl -X POST http://localhost:8765/api/v1/market-data/sync/background \
+curl -X POST http://localhost:41920/api/v1/market-data/sync/background \
   -H "Content-Type: application/json" \
   -d '{"symbol":"SOLUSD","exchange":"BINANCE","interval":"1d","n_bars":30}'
 
 ###
 
 # Bulk Sync (multiple symbols at once)
-curl -X POST http://localhost:8765/api/v1/market-data/sync/bulk \
+curl -X POST http://localhost:41920/api/v1/market-data/sync/bulk \
   -H "Content-Type: application/json" \
   -d '{"symbols":[{"symbol":"BTCUSD","exchange":"BINANCE"},{"symbol":"ETHUSD","exchange":"BINANCE"},{"symbol":"AAPL","exchange":"NASDAQ"}],"interval":"1d","n_bars":50}'
 
@@ -75,164 +75,164 @@ curl -X POST http://localhost:8765/api/v1/market-data/sync/bulk \
 ### ===========================================
 
 # BTC 4H bars (after syncing with section 2)
-curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=4h&limit=10"
+curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=4h&limit=10"
 
 ###
 
 # BTC Daily with date range
-curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1d&start_date=2026-01-01&end_date=2026-02-01&limit=100"
+curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1d&start_date=2026-01-01&end_date=2026-02-01&limit=100"
 
 ###
 
 # BTC Hourly (last 24 bars)
-curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1h&limit=24"
+curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=1h&limit=24"
 
 ###
 
 # ETH Daily
-curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/ETHUSD?interval=1d&limit=10"
+curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/ETHUSD?interval=1d&limit=10"
 
 ###
 
 # Stock OHLCV
-curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=20"
+curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/NASDAQ/AAPL?interval=1d&limit=20"
 
 ### ===========================================
 ### 4. Sync Status & Symbols
 ### ===========================================
 
 # All Synced Symbols
-curl -X GET http://localhost:8765/api/v1/market-data/symbols
+curl -X GET http://localhost:41920/api/v1/market-data/symbols
 
 ###
 
 # Filter by Exchange
-curl -X GET "http://localhost:8765/api/v1/market-data/symbols?exchange=BINANCE"
+curl -X GET "http://localhost:41920/api/v1/market-data/symbols?exchange=BINANCE"
 
 ###
 
 # All Sync Statuses
-curl -X GET http://localhost:8765/api/v1/market-data/sync-status
+curl -X GET http://localhost:41920/api/v1/market-data/sync-status
 
 ###
 
 # Specific Symbol Sync Status (BTC 4H)
-curl -X GET "http://localhost:8765/api/v1/market-data/sync-status/BINANCE/BTCUSD?interval=4h"
+curl -X GET "http://localhost:41920/api/v1/market-data/sync-status/BINANCE/BTCUSD?interval=4h"
 
 ###
 
 # Stock Sync Status
-curl -X GET "http://localhost:8765/api/v1/market-data/sync-status/NASDAQ/AAPL?interval=1d"
+curl -X GET "http://localhost:41920/api/v1/market-data/sync-status/NASDAQ/AAPL?interval=1d"
 
 ### ===========================================
 ### 5. Quotes — Real-time Feed
 ### ===========================================
 
 # Start WebSocket quote feed (must call first)
-curl -X POST http://localhost:8765/api/v1/quotes/start
+curl -X POST http://localhost:41920/api/v1/quotes/start
 
 ###
 
 # Subscribe to BTC quotes
-curl -X POST http://localhost:8765/api/v1/quotes/subscribe \
+curl -X POST http://localhost:41920/api/v1/quotes/subscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSD","exchange":"CRYPTO"}'
 
 ###
 
 # Subscribe to ETH quotes
-curl -X POST http://localhost:8765/api/v1/quotes/subscribe \
+curl -X POST http://localhost:41920/api/v1/quotes/subscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol":"ETHUSD","exchange":"CRYPTO"}'
 
 ###
 
 # Get latest BTC quote (after subscribing)
-curl -X GET http://localhost:8765/api/v1/quotes/latest/CRYPTO/BTCUSD
+curl -X GET http://localhost:41920/api/v1/quotes/latest/CRYPTO/BTCUSD
 
 ###
 
 # Get all latest quotes
-curl -X GET http://localhost:8765/api/v1/quotes/all
+curl -X GET http://localhost:41920/api/v1/quotes/all
 
 ###
 
 # Get current in-progress bar (1m default)
-curl -X GET "http://localhost:8765/api/v1/quotes/current-bar/CRYPTO/BTCUSD?interval=1m"
+curl -X GET "http://localhost:41920/api/v1/quotes/current-bar/CRYPTO/BTCUSD?interval=1m"
 
 ###
 
 # Unsubscribe from ETH
-curl -X POST http://localhost:8765/api/v1/quotes/unsubscribe \
+curl -X POST http://localhost:41920/api/v1/quotes/unsubscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol":"ETHUSD","exchange":"CRYPTO"}'
 
 ###
 
 # Stop WebSocket feed
-curl -X POST http://localhost:8765/api/v1/quotes/stop
+curl -X POST http://localhost:41920/api/v1/quotes/stop
 
 ###
 
 # Quote service status
-curl -X GET http://localhost:8765/api/v1/market-data/status
+curl -X GET http://localhost:41920/api/v1/market-data/status
 
 ### ===========================================
 ### 6. Strategies — Load, Start, Stop
 ### ===========================================
 
 # List all strategies (empty initially)
-curl -X GET http://localhost:8765/api/v1/strategies/
+curl -X GET http://localhost:41920/api/v1/strategies/
 
 ###
 
 # Load MA Crossover strategy from YAML config
 # Returns strategy_id — save it for subsequent calls
-curl -X POST http://localhost:8765/api/v1/strategies/load \
+curl -X POST http://localhost:41920/api/v1/strategies/load \
   -H "Content-Type: application/json" \
   -d '{"path":"strategies/examples/ma-crossover-btc-usdt.yaml"}'
 
 ###
 
 # List strategies again (should show loaded strategy)
-curl -X GET http://localhost:8765/api/v1/strategies/
+curl -X GET http://localhost:41920/api/v1/strategies/
 
 ###
 
 # Get strategy details (replace {strategy_id} with actual ID from load response)
-curl -X GET http://localhost:8765/api/v1/strategies/{strategy_id}
+curl -X GET http://localhost:41920/api/v1/strategies/{strategy_id}
 
 ###
 
 # Start a strategy (begins listening for bar events)
-curl -X POST http://localhost:8765/api/v1/strategies/{strategy_id}/start
+curl -X POST http://localhost:41920/api/v1/strategies/{strategy_id}/start
 
 ###
 
 # Stop a strategy
-curl -X POST http://localhost:8765/api/v1/strategies/{strategy_id}/stop
+curl -X POST http://localhost:41920/api/v1/strategies/{strategy_id}/stop
 
 ### ===========================================
 ### 7. Trading — Orders & Positions
 ### ===========================================
 
 # List all orders
-curl -X GET http://localhost:8765/api/v1/trading/orders
+curl -X GET http://localhost:41920/api/v1/trading/orders
 
 ###
 
 # Get specific order
-curl -X GET http://localhost:8765/api/v1/trading/orders/{order_id}
+curl -X GET http://localhost:41920/api/v1/trading/orders/{order_id}
 
 ###
 
 # List all positions
-curl -X GET http://localhost:8765/api/v1/trading/positions
+curl -X GET http://localhost:41920/api/v1/trading/positions
 
 ###
 
 # Get position by strategy
-curl -X GET http://localhost:8765/api/v1/trading/positions/{strategy_id}
+curl -X GET http://localhost:41920/api/v1/trading/positions/{strategy_id}
 
 ### ===========================================
 ### 8. Backtesting — Run, Optimize, Results
@@ -240,36 +240,36 @@ curl -X GET http://localhost:8765/api/v1/trading/positions/{strategy_id}
 
 # Run a backtest (requires: synced OHLCV data + loaded strategy)
 # Uses paper broker, $10k capital, 10bps slippage
-curl -X POST http://localhost:8765/api/v1/backtest/run \
+curl -X POST http://localhost:41920/api/v1/backtest/run \
   -H "Content-Type: application/json" \
   -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-01-01","end_date":"2026-01-01","initial_capital":10000,"slippage_bps":10}'
 
 ###
 
 # Get backtest result (replace {run_id} with ID from run response)
-curl -X GET http://localhost:8765/api/v1/backtest/{run_id}
+curl -X GET http://localhost:41920/api/v1/backtest/{run_id}
 
 ###
 
 # Get equity curve (for charting)
-curl -X GET http://localhost:8765/api/v1/backtest/{run_id}/equity
+curl -X GET http://localhost:41920/api/v1/backtest/{run_id}/equity
 
 ###
 
 # List backtests for a strategy
-curl -X GET "http://localhost:8765/api/v1/backtest/strategy/ma-cross-btc-5m?limit=20"
+curl -X GET "http://localhost:41920/api/v1/backtest/strategy/ma-cross-btc-5m?limit=20"
 
 ###
 
 # Run grid optimization (tests multiple parameter combos)
-curl -X POST http://localhost:8765/api/v1/backtest/optimize \
+curl -X POST http://localhost:41920/api/v1/backtest/optimize \
   -H "Content-Type: application/json" \
   -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-06-01","end_date":"2026-01-01","parameter_grid":{"fast_period":[5,10,20],"slow_period":[20,30,50]}}'
 
 ###
 
 # Get optimization result
-curl -X GET http://localhost:8765/api/v1/backtest/optimization/{optimization_id}
+curl -X GET http://localhost:41920/api/v1/backtest/optimization/{optimization_id}
 
 ### ===========================================
 ### 9. Debug Workflow — End-to-end
@@ -293,49 +293,49 @@ curl -X GET http://localhost:8765/api/v1/backtest/optimization/{optimization_id}
 #   main.py (lifespan)         → Startup
 
 # --- Step 1: Health ---
-curl -X GET http://localhost:8765/health
+curl -X GET http://localhost:41920/health
 
 ###
 
 # --- Step 2: Sync BTC 4H data (100 bars) ---
-curl -X POST http://localhost:8765/api/v1/market-data/sync \
+curl -X POST http://localhost:41920/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","n_bars":100}'
 
 ###
 
 # --- Step 3: Verify data exists ---
-curl -X GET "http://localhost:8765/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=4h&limit=5"
+curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=4h&limit=5"
 
 ###
 
 # --- Step 4: Load MA Crossover strategy ---
-curl -X POST http://localhost:8765/api/v1/strategies/load \
+curl -X POST http://localhost:41920/api/v1/strategies/load \
   -H "Content-Type: application/json" \
   -d '{"path":"strategies/examples/ma-crossover-btc-usdt.yaml"}'
 
 ###
 
 # --- Step 5: Run backtest ---
-curl -X POST http://localhost:8765/api/v1/backtest/run \
+curl -X POST http://localhost:41920/api/v1/backtest/run \
   -H "Content-Type: application/json" \
   -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-06-01","end_date":"2026-01-01","initial_capital":10000,"slippage_bps":10}'
 
 ###
 
 # --- Step 6: Check results (replace {run_id}) ---
-curl -X GET http://localhost:8765/api/v1/backtest/{run_id}
+curl -X GET http://localhost:41920/api/v1/backtest/{run_id}
 
 ###
 
 # --- Step 6b: Equity curve ---
-curl -X GET http://localhost:8765/api/v1/backtest/{run_id}/equity
+curl -X GET http://localhost:41920/api/v1/backtest/{run_id}/equity
 
 ###
 
 # --- Step 7: Check orders and positions generated ---
-curl -X GET http://localhost:8765/api/v1/trading/orders
+curl -X GET http://localhost:41920/api/v1/trading/orders
 
 ###
 
-curl -X GET http://localhost:8765/api/v1/trading/positions
+curl -X GET http://localhost:41920/api/v1/trading/positions

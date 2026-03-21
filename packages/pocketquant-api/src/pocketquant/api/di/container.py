@@ -1,9 +1,6 @@
 """Dishka DI container factory and handler registration."""
 
 from dishka import AsyncContainer, make_async_container
-
-from pocketquant.core.common.mediator.handler_registry import HandlerRegistry
-from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.api.di import (
     CoreProvider,
     HandlerProvider,
@@ -13,6 +10,8 @@ from pocketquant.api.di import (
     TradingProvider,
 )
 from pocketquant.api.di.handlers import ALL_HANDLER_TYPES
+from pocketquant.core.common.mediator.handler_registry import HandlerRegistry
+from pocketquant.core.common.mediator.mediator import Mediator
 
 PROVIDERS = [
     CoreProvider(),

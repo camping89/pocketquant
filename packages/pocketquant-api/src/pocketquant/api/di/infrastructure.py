@@ -6,20 +6,17 @@ JobScheduler uses a generator factory for start/shutdown lifecycle.
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
-
+from pocketquant.api.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
-from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
-from pocketquant.api.di.broker_factory import BrokerFactory
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.infrastructure.tradingview import TradingViewClient
+from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
 
 
 class InfrastructureProvider(Provider):
     @provide(scope=Scope.APP)
-    async def get_job_scheduler(
-        self, settings: Settings
-    ) -> AsyncIterator[JobScheduler]:
+    async def get_job_scheduler(self, settings: Settings) -> AsyncIterator[JobScheduler]:
         """Initialize and start scheduler. Shutdown on app exit."""
         scheduler = JobScheduler()
         if settings.enable_jobs:

@@ -1,14 +1,13 @@
 """Handler for running a backtest."""
 
-
-from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.domain import BacktestResult
+from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
+from pocketquant.backtest.handlers.run.command import RunBacktestCommand
+from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.backtest.handlers.run.command import RunBacktestCommand
 from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
 

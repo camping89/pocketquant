@@ -2,9 +2,8 @@
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
+from pydantic import BaseModel, Field
 
 
 class LoadStrategyCommand(BaseModel):
