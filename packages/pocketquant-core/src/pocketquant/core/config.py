@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -5,17 +6,34 @@ from typing import Literal
 from pydantic import MongoDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve .env relative to project root
-# config.py is at packages/pocketquant-core/src/pocketquant/core/config.py
-# Project root is 5 levels up
-_ENV_FILE = Path(__file__).resolve().parents[5] / ".env"
+
+def _find_project_root() -> Path:
+    """Find workspace root by walking up to pyproject.toml with [tool.uv.workspace]."""
+    if root := os.environ.get("POCKETQUANT_ROOT"):
+        return Path(root)
+    current = Path.cwd()
+    for parent in [current, *current.parents]:
+        pyproject = parent / "pyproject.toml"
+        if pyproject.exists() and "[tool.uv.workspace]" in pyproject.read_text():
+            return parent
+    raise FileNotFoundError(
+        "Cannot find project root. Set POCKETQUANT_ROOT env var or run from workspace."
+    )
+
+
+def _resolve_env_file() -> str:
+    """Lazily resolve .env path — tolerates missing root (returns empty string)."""
+    try:
+        return str(_find_project_root() / ".env")
+    except FileNotFoundError:
+        return ""
 
 
 class Settings(BaseSettings):
     """Application settings. All values must be provided via .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=str(_ENV_FILE),
+        env_file=_resolve_env_file(),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
