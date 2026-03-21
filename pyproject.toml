@@ -1,59 +1,29 @@
 [project]
-name = "pocketquant"
+name = "pocketquant-workspace"
 version = "0.1.0"
-description = "Algorithmic trading platform with backtesting and forward testing capabilities"
+description = "PocketQuant monorepo workspace"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "PocketQuant Team" }]
 
-dependencies = [
-    # Web Framework
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0",
-    # Database
-    "pymongo>=4.16.0",        # MongoDB driver (native async API)
-    # Cache
-    "redis>=5.0.0",
-    # Background Jobs
-    "apscheduler>=3.10.0",    # For scheduled jobs
-    # Data Providers
-    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",  # TradingView historical data
-    "websockets>=12.0",       # WebSocket client for real-time quotes
-    "pandas>=2.1.0",
-    "numpy>=1.26.0",
-    # Brokers
-    "python-okx>=0.4.1",      # OKX exchange API
-    "pyyaml>=6.0",            # YAML strategy configs
-    # Logging
-    "structlog>=24.1.0",      # Structured logging
-    # Utils
-    "httpx>=0.26.0",          # Async HTTP client
-    "rich>=13.0.0",           # Rich console output for error messages
-    "dishka>=1.9.1",          # FastAPI integration included in base package
-]
+[tool.uv.workspace]
+members = ["packages/*"]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "pocketquant-api",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "pyright>=1.1.350",
     "pre-commit>=3.6.0",
+    "import-linter>=2.11",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
+[tool.uv.sources]
+pocketquant-api = { workspace = true }
 
 [tool.ruff]
 target-version = "py314"
@@ -70,3 +40,30 @@ testpaths = ["tests"]
 markers = [
     "integration: marks tests as integration tests (require network)",
 ]
+
+[tool.importlinter]
+root_packages = ["pocketquant"]
+
+[[tool.importlinter.contracts]]
+name = "Core has zero sibling dependencies"
+type = "forbidden"
+source_modules = ["pocketquant.core"]
+forbidden_modules = ["pocketquant.backtest", "pocketquant.trading", "pocketquant.api"]
+
+[[tool.importlinter.contracts]]
+name = "Backtest depends only on Core"
+type = "forbidden"
+source_modules = ["pocketquant.backtest"]
+forbidden_modules = ["pocketquant.trading", "pocketquant.api"]
+ignore_imports = [
+    "pocketquant.backtest.engine.backtest_app_service -> pocketquant.trading.app_services.strategy_app_service",
+    "pocketquant.backtest.optimization.grid_optimization_app_service -> pocketquant.trading.app_services.strategy_app_service",
+    "pocketquant.backtest.handlers.run.handler -> pocketquant.trading.app_services.strategy_app_service",
+    "pocketquant.backtest.handlers.optimize.handler -> pocketquant.trading.app_services.strategy_app_service",
+]
+
+[[tool.importlinter.contracts]]
+name = "Trading depends only on Core"
+type = "forbidden"
+source_modules = ["pocketquant.trading"]
+forbidden_modules = ["pocketquant.backtest", "pocketquant.api"]

@@ -1,0 +1,63 @@
+"""Handler for running optimization."""
+
+
+from pocketquant.backtest.optimization.grid_optimization_app_service import GridOptimizationAppService
+from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
+from pocketquant.backtest.domain import OptimizationResult
+from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.common.messaging import EventBus
+from pocketquant.backtest.handlers.optimize.command import RunOptimizationCommand
+from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.backtest.persistence.optimization_repository import OptimizationRepository
+
+
+@handles(RunOptimizationCommand)
+class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]):
+    """Handle RunOptimizationCommand - execute grid optimization."""
+
+    def __init__(
+        self,
+        event_bus: EventBus,
+        strategy_engine: StrategyAppService,
+        backtest_repository: BacktestRepository,
+        bar_repository: BarRepository,
+        optimization_repository: OptimizationRepository,
+    ) -> None:
+        self._event_bus = event_bus
+        self._strategy_engine = strategy_engine
+        self._backtest_repo = backtest_repository
+        self._bar_repo = bar_repository
+        self._optimization_repo = optimization_repository
+
+    async def handle(self, request: RunOptimizationCommand) -> OptimizationResult:
+        """Execute optimization and return result."""
+        config = OptimizationConfig(
+            strategy_id=request.strategy_id,
+            symbol=request.symbol,
+            exchange=request.exchange,
+            interval=request.interval,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            parameter_grid=request.parameter_grid,
+            initial_capital=request.initial_capital,
+            slippage_bps=request.slippage_bps,
+            commission_bps=request.commission_bps,
+            target_metric=request.target_metric,
+            max_workers=request.max_workers,
+        )
+
+        optimizer = GridOptimizationAppService(
+            event_bus=self._event_bus,
+            strategy_engine=self._strategy_engine,
+            backtest_repository=self._backtest_repo,
+            bar_repository=self._bar_repo,
+        )
+
+        result = await optimizer.optimize(config)
+
+        # Persist optimization result
+        await self._optimization_repo.save(result)
+
+        return result
