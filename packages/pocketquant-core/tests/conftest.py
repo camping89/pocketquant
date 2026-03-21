@@ -14,7 +14,6 @@ def settings() -> Settings:
         app_name="pocketquant-test",
         app_version="0.0.1",
         environment="development",
-        debug=True,
         mongodb_url="mongodb://localhost:27018",  # type: ignore[arg-type]
         mongodb_database="pocketquant_test",
         mongodb_min_pool_size=1,

@@ -9,18 +9,19 @@ FORBIDDEN_IMPORTS = [
     "aiohttp",
     "httpx",
     "fastapi",
-    "src.infrastructure",
-    "src.application",
-    "src.features",
-    "src.common.database",
-    "src.common.cache",
-    "src.common.jobs",
+    "pocketquant.core.infrastructure",
+    "pocketquant.core.persistence",
+    "pocketquant.trading",
+    "pocketquant.backtest",
+    "pocketquant.api",
 ]
 
 
 def test_domain_has_no_io_imports():
     """Verify domain layer has no external I/O dependencies."""
-    domain_path = "src/domain"
+    domain_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "src", "pocketquant", "core", "domain"
+    )
     violations = []
 
     for root, _dirs, files in os.walk(domain_path):
