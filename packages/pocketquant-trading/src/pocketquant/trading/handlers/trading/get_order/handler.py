@@ -10,12 +10,12 @@ from pocketquant.trading.handlers.trading.get_order.query import GetOrderQuery
 class GetOrderHandler(Handler[GetOrderQuery, dict]):
     """Handler to get a specific order."""
 
-    def __init__(self, order_manager: OrderAppService):
-        self.order_manager = order_manager
+    def __init__(self, order_app_service: OrderAppService):
+        self._order_app_service = order_app_service
 
     async def handle(self, request: GetOrderQuery) -> dict:
         """Get order by ID."""
-        order = self.order_manager.get_order(request.order_id)
+        order = self._order_app_service.get_order(request.order_id)
 
         if not order:
             raise NotFoundError(f"Order not found: {request.order_id}")

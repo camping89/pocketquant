@@ -14,15 +14,15 @@ logger = get_logger(__name__)
 class UnsubscribeHandler(Handler[UnsubscribeCommand, dict]):
     """Handle unsubscribing from a symbol."""
 
-    def __init__(self, quote_service: QuoteAppService, cache: Cache):
-        self.state = quote_service
+    def __init__(self, quote_app_service: QuoteAppService, cache: Cache):
+        self._quote_app_service = quote_app_service
         self._cache = cache
 
     async def handle(self, request: UnsubscribeCommand) -> dict:
         symbol = request.symbol.upper()
         exchange = request.exchange.upper()
 
-        await self.state.provider.unsubscribe(symbol, exchange)
+        await self._quote_app_service.provider.unsubscribe(symbol, exchange)
         cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
         await self._cache.delete(cache_key)
 

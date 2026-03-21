@@ -10,9 +10,9 @@ from pocketquant.trading.handlers.strategy.get_all.query import GetStrategiesQue
 class GetStrategiesHandler(Handler[GetStrategiesQuery, list]):
     """Handle GetStrategiesQuery."""
 
-    def __init__(self, engine: StrategyAppService) -> None:
-        self._engine = engine
+    def __init__(self, strategy_app_service: StrategyAppService) -> None:
+        self._strategy_app_service = strategy_app_service
 
     async def handle(self, request: GetStrategiesQuery) -> list:
         """Get all loaded strategies."""
-        return self._engine.get_strategies()
+        return self._strategy_app_service.get_strategies()

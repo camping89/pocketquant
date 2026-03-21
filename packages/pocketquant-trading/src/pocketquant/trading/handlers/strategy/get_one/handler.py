@@ -10,12 +10,12 @@ from pocketquant.trading.handlers.strategy.get_one.query import GetStrategyQuery
 class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
     """Handle GetStrategyQuery."""
 
-    def __init__(self, engine: StrategyAppService) -> None:
-        self._engine = engine
+    def __init__(self, strategy_app_service: StrategyAppService) -> None:
+        self._strategy_app_service = strategy_app_service
 
     async def handle(self, request: GetStrategyQuery) -> dict | None:
         """Get a specific strategy by ID."""
-        strategy = self._engine.get_strategy(request.strategy_id)
+        strategy = self._strategy_app_service.get_strategy(request.strategy_id)
         if not strategy:
             return None
 

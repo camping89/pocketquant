@@ -1,7 +1,7 @@
 """Tests for domain value objects."""
 
-from src.domain.shared.enums import Interval
-from src.domain.shared.value_objects import INTERVAL_SECONDS
+from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 
 
 class TestInterval:

@@ -11,8 +11,8 @@ from pocketquant.api.market_data.handlers.sync.sync_one.handler import SyncSymbo
 class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ignore[type-arg]
     """Handle syncing multiple symbols."""
 
-    def __init__(self, sync_handler: SyncSymbolHandler):
-        self.sync_handler = sync_handler
+    def __init__(self, sync_symbol_handler: SyncSymbolHandler):
+        self._sync_symbol_handler = sync_symbol_handler
 
     async def handle(self, request: BulkSyncCommand) -> list[SyncResponse]:
         results = []
@@ -23,6 +23,6 @@ class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ig
                 interval=request.interval,
                 n_bars=request.n_bars,
             )
-            result = await self.sync_handler.handle(sync_cmd)
+            result = await self._sync_symbol_handler.handle(sync_cmd)
             results.append(result)
         return results

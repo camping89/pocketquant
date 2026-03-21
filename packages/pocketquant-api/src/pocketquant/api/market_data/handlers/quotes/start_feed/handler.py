@@ -14,11 +14,11 @@ logger = get_logger(__name__)
 class StartQuoteFeedHandler(Handler[StartQuoteFeedCommand, dict]):
     """Handle starting the quote feed."""
 
-    def __init__(self, quote_service: QuoteAppService):
-        self.state = quote_service
+    def __init__(self, quote_app_service: QuoteAppService):
+        self._quote_app_service = quote_app_service
 
     async def handle(self, request: StartQuoteFeedCommand) -> dict:
-        if self.state.running:
+        if self._quote_app_service.running:
             logger.warning("quote_service.already_running")
             return {
                 "status": "already_running",
@@ -26,9 +26,9 @@ class StartQuoteFeedHandler(Handler[StartQuoteFeedCommand, dict]):
             }
 
         logger.info("quote_service.starting")
-        await self.state.provider.connect()
-        self.state.running = True
-        self.state.ws_task = asyncio.create_task(self.state.provider.run_forever())
+        await self._quote_app_service.provider.connect()
+        self._quote_app_service.running = True
+        self._quote_app_service.ws_task = asyncio.create_task(self._quote_app_service.provider.run_forever())
 
         logger.info("quote_service.started")
         return {"status": "started", "message": "Quote service started"}

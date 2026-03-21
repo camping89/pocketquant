@@ -9,13 +9,13 @@ from pocketquant.trading.handlers.trading.list_orders.query import ListOrdersQue
 class ListOrdersHandler(Handler[ListOrdersQuery, list[dict]]):
     """Handler to list all orders."""
 
-    def __init__(self, order_manager: OrderAppService):
-        self.order_manager = order_manager
+    def __init__(self, order_app_service: OrderAppService):
+        self._order_app_service = order_app_service
 
     async def handle(self, request: ListOrdersQuery) -> list[dict]:
         """Get all orders (pending + filled)."""
-        pending = self.order_manager.get_pending_orders()
-        filled = self.order_manager.get_filled_orders()
+        pending = self._order_app_service.get_pending_orders()
+        filled = self._order_app_service.get_filled_orders()
 
         return [
             {

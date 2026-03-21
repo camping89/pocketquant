@@ -33,16 +33,16 @@ class StrategyAppService:
         self,
         event_bus: EventBus,
         broker_factory: IBrokerFactory,
-        order_manager: OrderAppService,
-        position_tracker: PositionAppService,
-        risk_handler: RiskCheckHandler,
+        order_app_service: OrderAppService,
+        position_app_service: PositionAppService,
+        risk_check_handler: RiskCheckHandler,
         default_broker_config: dict | None = None,
     ) -> None:
         self._event_bus = event_bus
         self._broker_factory = broker_factory
-        self._order_manager = order_manager
-        self._position_tracker = position_tracker
-        self._risk_handler = risk_handler
+        self._order_app_service = order_app_service
+        self._position_app_service = position_app_service
+        self._risk_check_handler = risk_check_handler
         self._default_broker_config = default_broker_config or {}
 
         self._strategies: dict[str, IStrategy] = {}
@@ -239,7 +239,7 @@ class StrategyAppService:
                 if order:
                     broker = self._brokers.get(strategy.id)
                     if broker:
-                        await self._order_manager.submit(order, broker)
+                        await self._order_app_service.submit(order, broker)
 
             except Exception as e:
                 logger.error(
@@ -284,10 +284,10 @@ class StrategyAppService:
         balance = await broker.get_balance()
 
         # Get current position
-        position = self._position_tracker.get(strategy.id)
+        position = self._position_app_service.get(strategy.id)
 
         # Risk check
-        valid, reason = self._risk_handler.validate(signal, balance, position, strategy.config.risk)
+        valid, reason = self._risk_check_handler.validate(signal, balance, position, strategy.config.risk)
         if not valid:
             logger.info(
                 "signal_rejected_by_risk",
@@ -318,7 +318,7 @@ class StrategyAppService:
         order = self._create_order(strategy, signal, size, current_price)
 
         # Submit order
-        result = await self._order_manager.submit(order, broker)
+        result = await self._order_app_service.submit(order, broker)
 
         logger.info(
             "signal_processed",

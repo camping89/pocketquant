@@ -10,10 +10,10 @@ from pocketquant.trading.handlers.strategy.start.command import StartStrategyCom
 class StartStrategyHandler(Handler[StartStrategyCommand, bool]):
     """Handle StartStrategyCommand."""
 
-    def __init__(self, engine: StrategyAppService) -> None:
-        self._engine = engine
+    def __init__(self, strategy_app_service: StrategyAppService) -> None:
+        self._strategy_app_service = strategy_app_service
 
     async def handle(self, request: StartStrategyCommand) -> bool:
         """Start a loaded strategy."""
-        await self._engine.start_strategy(request.strategy_id)
+        await self._strategy_app_service.start_strategy(request.strategy_id)
         return True

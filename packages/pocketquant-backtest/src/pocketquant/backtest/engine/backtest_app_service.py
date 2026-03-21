@@ -39,21 +39,21 @@ class BacktestAppService:
     - Clean up simulation time after run
 
     Usage:
-        runner = BacktestAppService(event_bus, strategy_engine, paper_broker)
+        runner = BacktestAppService(event_bus, strategy_app_service, paper_broker)
         result = await runner.run(config)
     """
 
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyAppService,
+        strategy_app_service: StrategyAppService,
         broker: PaperBroker,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         persist_results: bool = True,
     ) -> None:
         self._event_bus = event_bus
-        self._strategy_engine = strategy_engine
+        self._strategy_app_service = strategy_app_service
         self._broker = broker
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository
