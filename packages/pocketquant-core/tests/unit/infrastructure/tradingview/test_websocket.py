@@ -162,7 +162,7 @@ class TestTradingViewWebSocketClient:
         async def mock_connect(*args, **kwargs):
             return mock_ws
 
-        with patch("src.infrastructure.tradingview.tradingview_websocket_client.websockets.connect", side_effect=mock_connect):
+        with patch("pocketquant.core.infrastructure.tradingview.tradingview_websocket_client.websockets.connect", side_effect=mock_connect):
             await provider.connect()
 
         assert provider._ws == mock_ws
