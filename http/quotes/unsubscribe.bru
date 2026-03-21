@@ -1,0 +1,17 @@
+meta {
+  name: Unsubscribe Symbol
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{api}}/quotes/unsubscribe
+  body: json
+}
+
+body:json {
+  {
+    "exchange": "HOSE",
+    "symbol": "VNM"
+  }
+}

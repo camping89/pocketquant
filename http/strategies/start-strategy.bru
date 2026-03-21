@@ -1,0 +1,14 @@
+meta {
+  name: Start Strategy
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{api}}/strategies/:strategy_id/start
+  body: none
+}
+
+params:path {
+  strategy_id: my-strategy
+}

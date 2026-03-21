@@ -1,0 +1,21 @@
+meta {
+  name: Get OHLCV
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{api}}/market-data/ohlcv/:exchange/:symbol
+  body: none
+}
+
+params:path {
+  exchange: HOSE
+  symbol: VNM
+}
+
+params:query {
+  ~interval: 1d
+  ~start_date: 2026-01-01
+  ~end_date: 2026-03-21
+}

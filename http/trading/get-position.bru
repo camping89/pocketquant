@@ -1,0 +1,14 @@
+meta {
+  name: Get Position
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{api}}/trading/positions/:strategy_id
+  body: none
+}
+
+params:path {
+  strategy_id: my-strategy
+}

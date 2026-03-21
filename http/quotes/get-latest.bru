@@ -1,0 +1,15 @@
+meta {
+  name: Get Latest Quote
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{api}}/quotes/latest/:exchange/:symbol
+  body: none
+}
+
+params:path {
+  exchange: HOSE
+  symbol: VNM
+}

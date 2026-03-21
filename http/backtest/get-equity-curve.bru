@@ -1,0 +1,14 @@
+meta {
+  name: Get Equity Curve
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{api}}/backtest/:run_id/equity
+  body: none
+}
+
+params:path {
+  run_id: 000000000000000000000000
+}

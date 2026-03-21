@@ -1,0 +1,16 @@
+meta {
+  name: Load Strategy
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{api}}/strategies/load
+  body: json
+}
+
+body:json {
+  {
+    "file_path": "strategies/sma_crossover.yaml"
+  }
+}
