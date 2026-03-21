@@ -1,0 +1,15 @@
+meta {
+  name: Get Symbol Sync Status
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{api}}/market-data/sync-status/:exchange/:symbol
+  body: none
+}
+
+params:path {
+  exchange: HOSE
+  symbol: VNM
+}

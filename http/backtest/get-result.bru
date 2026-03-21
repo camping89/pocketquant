@@ -1,0 +1,14 @@
+meta {
+  name: Get Backtest Result
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{api}}/backtest/:run_id
+  body: none
+}
+
+params:path {
+  run_id: 000000000000000000000000
+}

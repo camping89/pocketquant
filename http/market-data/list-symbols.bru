@@ -1,0 +1,14 @@
+meta {
+  name: List Symbols
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{api}}/market-data/symbols
+  body: none
+}
+
+params:query {
+  ~exchange: HOSE
+}

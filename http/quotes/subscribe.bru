@@ -1,0 +1,17 @@
+meta {
+  name: Subscribe Symbol
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{api}}/quotes/subscribe
+  body: json
+}
+
+body:json {
+  {
+    "exchange": "HOSE",
+    "symbol": "VNM"
+  }
+}

@@ -1,0 +1,20 @@
+meta {
+  name: Sync Bulk
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{api}}/market-data/sync/bulk
+  body: json
+}
+
+body:json {
+  {
+    "symbols": [
+      {"exchange": "HOSE", "symbol": "VNM"},
+      {"exchange": "HOSE", "symbol": "FPT"}
+    ],
+    "interval": "1d"
+  }
+}

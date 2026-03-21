@@ -1,0 +1,22 @@
+meta {
+  name: Run Backtest
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{api}}/backtest/run
+  body: json
+}
+
+body:json {
+  {
+    "strategy_id": "sma-crossover",
+    "exchange": "HOSE",
+    "symbol": "VNM",
+    "interval": "1d",
+    "start_date": "2025-01-01",
+    "end_date": "2026-03-01",
+    "initial_capital": 100000000
+  }
+}

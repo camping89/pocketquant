@@ -1,0 +1,14 @@
+meta {
+  name: List Strategy Results
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{api}}/backtest/strategy/:strategy_id
+  body: none
+}
+
+params:path {
+  strategy_id: sma-crossover
+}

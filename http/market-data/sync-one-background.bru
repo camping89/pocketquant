@@ -1,0 +1,18 @@
+meta {
+  name: Sync One (Background)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{api}}/market-data/sync/background
+  body: json
+}
+
+body:json {
+  {
+    "exchange": "HOSE",
+    "symbol": "VNM",
+    "interval": "1d"
+  }
+}

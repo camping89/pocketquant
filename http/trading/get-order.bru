@@ -1,0 +1,14 @@
+meta {
+  name: Get Order
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{api}}/trading/orders/:order_id
+  body: none
+}
+
+params:path {
+  order_id: 000000000000000000000000
+}
