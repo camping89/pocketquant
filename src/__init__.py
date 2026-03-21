@@ -1,1 +1,0 @@
-"""PocketQuant - Algorithmic Trading Platform."""
