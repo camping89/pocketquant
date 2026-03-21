@@ -14,19 +14,19 @@ logger = get_logger(__name__)
 class StopQuoteFeedHandler(Handler[StopQuoteFeedCommand, dict]):
     """Handle stopping the quote feed."""
 
-    def __init__(self, quote_service: QuoteAppService):
-        self.state = quote_service
+    def __init__(self, quote_app_service: QuoteAppService):
+        self._quote_app_service = quote_app_service
 
     async def handle(self, request: StopQuoteFeedCommand) -> dict:
-        if not self.state.running:
+        if not self._quote_app_service.running:
             return {"status": "not_running", "message": "Quote service is not running"}
 
         logger.info("quote_service.stopping")
 
-        saved_count = await self.state.bar_manager.flush_all_bars()
+        saved_count = await self._quote_app_service.bar_manager.flush_all_bars()
 
-        self.state.running = False
-        await self.state.provider.disconnect()
+        self._quote_app_service.running = False
+        await self._quote_app_service.provider.disconnect()
         await self._cancel_ws_task()
 
         logger.info("quote_service.stopped")
@@ -37,10 +37,10 @@ class StopQuoteFeedHandler(Handler[StopQuoteFeedCommand, dict]):
         }
 
     async def _cancel_ws_task(self) -> None:
-        if not self.state.ws_task:
+        if not self._quote_app_service.ws_task:
             return
-        self.state.ws_task.cancel()
+        self._quote_app_service.ws_task.cancel()
         try:
-            await self.state.ws_task
+            await self._quote_app_service.ws_task
         except asyncio.CancelledError:
             pass

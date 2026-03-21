@@ -12,12 +12,12 @@ from pocketquant.api.market_data.handlers.status.get_quote_service_status.query 
 class GetQuoteServiceStatusHandler(Handler[GetQuoteServiceStatusQuery, StatusResult]):
     """Handle getting quote service status."""
 
-    def __init__(self, quote_service: QuoteAppService):
-        self.state = quote_service
+    def __init__(self, quote_app_service: QuoteAppService):
+        self._quote_app_service = quote_app_service
 
     async def handle(self, request: GetQuoteServiceStatusQuery) -> StatusResult:
         return StatusResult(
-            running=self.state.running and self.state.provider.is_connected(),
-            subscription_count=self.state.provider.subscription_count,
-            active_symbols=self.state.bar_manager.active_symbols,
+            running=self._quote_app_service.running and self._quote_app_service.provider.is_connected(),
+            subscription_count=self._quote_app_service.provider.subscription_count,
+            active_symbols=self._quote_app_service.bar_manager.active_symbols,
         )

@@ -41,18 +41,18 @@ class TradingProvider(Provider):
         self,
         event_bus: EventBus,
         broker_factory: BrokerFactory,
-        order_manager: OrderAppService,
-        position_tracker: PositionAppService,
-        risk_handler: RiskCheckHandler,
+        order_app_service: OrderAppService,
+        position_app_service: PositionAppService,
+        risk_check_handler: RiskCheckHandler,
         settings: Settings,
     ) -> AsyncIterator[StrategyAppService]:
         """Create, start, and yield StrategyAppService. Stop on app shutdown."""
         engine = StrategyAppService(
             event_bus=event_bus,
             broker_factory=broker_factory,
-            order_manager=order_manager,
-            position_tracker=position_tracker,
-            risk_handler=risk_handler,
+            order_app_service=order_app_service,
+            position_app_service=position_app_service,
+            risk_check_handler=risk_check_handler,
             default_broker_config={
                 "initial_balance": settings.paper_initial_balance,
                 "slippage_percent": settings.paper_slippage_percent,

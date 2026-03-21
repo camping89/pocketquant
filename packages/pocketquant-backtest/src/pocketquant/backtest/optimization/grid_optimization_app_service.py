@@ -40,19 +40,19 @@ class GridOptimizationAppService:
     - Memory efficient - doesn't store full equity curves in optimization result
 
     Usage:
-        optimizer = GridOptimizationAppService(event_bus, strategy_engine)
+        optimizer = GridOptimizationAppService(event_bus, strategy_app_service)
         result = await optimizer.optimize(config)
     """
 
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyAppService,
+        strategy_app_service: StrategyAppService,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
     ) -> None:
         self._event_bus = event_bus
-        self._strategy_engine = strategy_engine
+        self._strategy_app_service = strategy_app_service
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository
 
@@ -211,7 +211,7 @@ class GridOptimizationAppService:
             # Create runner (don't persist individual results during optimization)
             runner = BacktestAppService(
                 event_bus=self._event_bus,
-                strategy_engine=self._strategy_engine,
+                strategy_app_service=self._strategy_app_service,
                 broker=broker,
                 backtest_repository=self._backtest_repo,
                 bar_repository=self._bar_repo,

@@ -20,13 +20,13 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_engine: StrategyAppService,
+        strategy_app_service: StrategyAppService,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         optimization_repository: OptimizationRepository,
     ) -> None:
         self._event_bus = event_bus
-        self._strategy_engine = strategy_engine
+        self._strategy_app_service = strategy_app_service
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository
         self._optimization_repo = optimization_repository
@@ -50,7 +50,7 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
 
         optimizer = GridOptimizationAppService(
             event_bus=self._event_bus,
-            strategy_engine=self._strategy_engine,
+            strategy_app_service=self._strategy_app_service,
             backtest_repository=self._backtest_repo,
             bar_repository=self._bar_repo,
         )

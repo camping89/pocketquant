@@ -12,20 +12,20 @@ logger = get_logger(__name__)
 class SubscribeHandler(Handler[SubscribeCommand, dict]):
     """Handle subscribing to a symbol."""
 
-    def __init__(self, quote_service: QuoteAppService):
-        self.state = quote_service
+    def __init__(self, quote_app_service: QuoteAppService):
+        self._quote_app_service = quote_app_service
 
     async def handle(self, request: SubscribeCommand) -> dict:
-        if not self.state.running or not self.state.provider.is_connected():
+        if not self._quote_app_service.running or not self._quote_app_service.provider.is_connected():
             raise ValueError("Quote service not running. Start it first via StartQuoteFeedCommand")
 
         symbol = request.symbol.upper()
         exchange = request.exchange.upper()
 
-        key = await self.state.provider.subscribe(
+        key = await self._quote_app_service.provider.subscribe(
             symbol=symbol,
             exchange=exchange,
-            callback=self.state.on_quote_update,
+            callback=self._quote_app_service.on_quote_update,
         )
 
         logger.info("quote_service.subscribed", symbol=symbol, exchange=exchange)

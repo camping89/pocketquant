@@ -2,9 +2,9 @@
 
 import pytest
 
-from src.common.mediator import Mediator
-from src.common.messaging import EventBus
-from src.config import Settings
+from pocketquant.core.common.mediator import Mediator
+from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.config import Settings
 
 
 @pytest.fixture

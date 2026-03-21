@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.infrastructure.tradingview.tradingview_websocket_client import TradingViewWebSocketClient
+from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client import TradingViewWebSocketClient
 
 
 @pytest.mark.integration

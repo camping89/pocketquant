@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from websockets import State
 
-from src.infrastructure.tradingview.tradingview_websocket_client import (
+from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client import (
     TradingViewWebSocketClient,
     _create_message,
     _generate_session_id,

@@ -13,12 +13,12 @@ from pocketquant.core.persistence.redis import Cache
 class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
     """Handle getting all active quotes."""
 
-    def __init__(self, quote_service: QuoteAppService, cache: Cache):
-        self.state = quote_service
+    def __init__(self, quote_app_service: QuoteAppService, cache: Cache):
+        self._quote_app_service = quote_app_service
         self._cache = cache
 
     async def handle(self, request: GetAllQuotesQuery) -> list[QuoteResult]:
-        symbol_keys = list(self.state.provider.subscriptions.keys())
+        symbol_keys = list(self._quote_app_service.provider.subscriptions.keys())
         cache_keys = [
             CACHE_KEY_QUOTE_LATEST.format(
                 exchange=key.split(":", 1)[0], symbol=key.split(":", 1)[1]

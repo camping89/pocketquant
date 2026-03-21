@@ -11,8 +11,8 @@ from pocketquant.trading.handlers.strategy.load.command import LoadStrategyComma
 class LoadStrategyHandler(Handler[LoadStrategyCommand, str]):
     """Handle LoadStrategyCommand."""
 
-    def __init__(self, engine: StrategyAppService) -> None:
-        self._engine = engine
+    def __init__(self, strategy_app_service: StrategyAppService) -> None:
+        self._strategy_app_service = strategy_app_service
 
     async def handle(self, request: LoadStrategyCommand) -> str:
         """Load strategy from config or path."""
@@ -23,4 +23,4 @@ class LoadStrategyHandler(Handler[LoadStrategyCommand, str]):
         else:
             raise ValueError("Either config or path must be provided")
 
-        return await self._engine.load_strategy(config)
+        return await self._strategy_app_service.load_strategy(config)

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.common.mediator import (
+from pocketquant.core.common.mediator import (
     DuplicateHandlerError,
     Handler,
     HandlerNotFoundError,

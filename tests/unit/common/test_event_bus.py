@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from src.common.messaging import EventBus
-from src.domain.shared.events import DomainEvent
+from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.domain.shared.events import DomainEvent
 
 
 @dataclass(frozen=True, eq=False)
