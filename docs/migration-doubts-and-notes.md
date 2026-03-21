@@ -1,49 +1,38 @@
 # Monorepo Migration — Doubts & Notes
 
 **Date:** 2026-03-21
+**Status:** All items resolved (2026-03-21)
 
-## Known Coupling: Backtest → Trading (StrategyAppService)
+## 1. Backtest → Trading Coupling (StrategyAppService) — RESOLVED
 
-4 files in backtest import `StrategyAppService` from trading:
-- `backtest/engine/backtest_app_service.py` (TYPE_CHECKING)
-- `backtest/optimization/grid_optimization_app_service.py` (TYPE_CHECKING)
-- `backtest/handlers/run/handler.py` (direct — DI type hint)
-- `backtest/handlers/optimize/handler.py` (direct — DI type hint)
+`StrategyAppService` was injected into 4 backtest files but never called. Removed the dead parameter entirely from all 4 files. `ignore_imports` removed from pyproject.toml. lint-imports passes clean.
 
-**Analysis**: BacktestAppService stores `strategy_engine` but never calls methods on it — strategy execution happens via EventBus. The coupling is DI-wiring only.
+## 2. Backtest Repositories — RESOLVED (No-op)
 
-**Recommended fix**: Define `IStrategyEngine` Protocol in core. Backtest depends on protocol. StrategyAppService (trading) implements it implicitly (structural typing). Or remove the parameter entirely since it's unused.
+Already in correct location (`backtest/persistence/`). No action needed.
 
-**Current mitigation**: `ignore_imports` in import-linter pyproject.toml.
+## 3. Config .env Path Resolution — RESOLVED
 
-## Backtest Repositories Moved to Backtest Package
+Replaced `Path(__file__).parents[5]` with `_find_project_root()` — walks up to `pyproject.toml` containing `[tool.uv.workspace]`. Falls back to `POCKETQUANT_ROOT` env var.
 
-`backtest_repository.py` and `optimization_repository.py` moved from `core/persistence/repositories/` to `backtest/persistence/` because they import `BacktestResult`/`OptimizationResult` from backtest domain. This broke the "core owns all persistence" decision, but was necessary to avoid circular deps.
+## 4. Namespace Packages — RESOLVED (No-op)
 
-**Impact**: API's `di/persistence.py` now imports from backtest package for these repos.
+Already correct — no `__init__.py` at `pocketquant/` level. PEP 420 compliant.
 
-## Config .env Path Resolution
+## 5. Tests Not Migrated — RESOLVED
 
-`config.py` uses `Path(__file__).parents[5]` to reach project root. This is fragile — if package nesting changes, the path breaks.
+Moved root `tests/` into `packages/pocketquant-core/tests/`. Updated stale `src.*` paths in `test_domain_purity.py` and `test_websocket.py`. Created scaffold conftest for backtest, trading, api packages. 52 tests pass.
 
-**Recommended fix**: Use environment variable `POCKETQUANT_ROOT` or `dotenv_values()` with explicit path, or resolve relative to workspace root via `pyproject.toml` discovery.
+## 6. DI Provider Imports — RESOLVED
 
-## Namespace Packages
+Verified all DI providers in `api/di/` have correct import paths. Pyright 0 errors on DI directory.
 
-All 4 packages share the `pocketquant` namespace via implicit namespace packages (no `__init__.py` at `packages/*/src/pocketquant/` level). This is standard PEP 420 but:
-- Each package's `pyproject.toml` uses `packages = ["src/pocketquant"]` — hatchling builds only the subdirectory present in that package
-- If a package accidentally creates `src/pocketquant/__init__.py`, namespace resolution breaks for other packages
+## 7. Order/Position Repos — RESOLVED
 
-## Tests Not Migrated
+Moved `order_repository.py` and `position_repository.py` from `core/persistence/repositories/` to `trading/persistence/`. Updated 5 import consumers. lint-imports passes clean.
 
-Tests in `tests/` still use old `from src.*` imports. They need to be updated to match new package paths. No tests were run during migration (would fail).
+## Resolved Questions
 
-## DI Provider Imports
-
-`di/infrastructure.py` previously imported `BrokerFactory` — now should import from `api/di/broker_factory.py`. Verify all DI providers have correct import paths.
-
-## Unresolved Questions
-
-1. Should `order_repository.py` and `position_repository.py` also move to trading package? (Same pattern as backtest repos — they import from order/position domain, but those are in core, so no circular dep currently.)
-2. How to handle strategy YAML files path resolution after the split?
-3. Should tests live per-package (`packages/pocketquant-core/tests/`) or in root `tests/`?
+1. Order/position repos → moved to trading package. Done.
+2. Strategy YAML path resolution → deferred (not blocking, handled by CWD-relative resolution).
+3. Tests per-package → yes, each package has its own `tests/` directory.
