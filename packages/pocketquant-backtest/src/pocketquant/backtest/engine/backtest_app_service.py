@@ -2,7 +2,6 @@
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 from pocketquant.backtest.engine.historical_replay_app_service import (
     HistoricalReplayAppService,
@@ -20,9 +19,6 @@ from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBrok
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
-if TYPE_CHECKING:
-    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-
 logger = get_logger(__name__)
 
 
@@ -39,21 +35,19 @@ class BacktestAppService:
     - Clean up simulation time after run
 
     Usage:
-        runner = BacktestAppService(event_bus, strategy_app_service, paper_broker)
+        runner = BacktestAppService(event_bus, paper_broker)
         result = await runner.run(config)
     """
 
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_app_service: StrategyAppService,
         broker: PaperBroker,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         persist_results: bool = True,
     ) -> None:
         self._event_bus = event_bus
-        self._strategy_app_service = strategy_app_service
         self._broker = broker
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository

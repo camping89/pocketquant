@@ -36,7 +36,12 @@ typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = [
+    "packages/pocketquant-core/tests",
+    "packages/pocketquant-backtest/tests",
+    "packages/pocketquant-trading/tests",
+    "packages/pocketquant-api/tests",
+]
 markers = [
     "integration: marks tests as integration tests (require network)",
 ]
@@ -55,12 +60,6 @@ name = "Backtest depends only on Core"
 type = "forbidden"
 source_modules = ["pocketquant.backtest"]
 forbidden_modules = ["pocketquant.trading", "pocketquant.api"]
-ignore_imports = [
-    "pocketquant.backtest.engine.backtest_app_service -> pocketquant.trading.app_services.strategy_app_service",
-    "pocketquant.backtest.optimization.grid_optimization_app_service -> pocketquant.trading.app_services.strategy_app_service",
-    "pocketquant.backtest.handlers.run.handler -> pocketquant.trading.app_services.strategy_app_service",
-    "pocketquant.backtest.handlers.optimize.handler -> pocketquant.trading.app_services.strategy_app_service",
-]
 
 [[tool.importlinter.contracts]]
 name = "Trading depends only on Core"
