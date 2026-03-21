@@ -4,7 +4,6 @@
 from pocketquant.backtest.optimization.grid_optimization_app_service import GridOptimizationAppService
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
 from pocketquant.backtest.domain import OptimizationResult
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.backtest.handlers.optimize.command import RunOptimizationCommand
@@ -20,13 +19,11 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
     def __init__(
         self,
         event_bus: EventBus,
-        strategy_app_service: StrategyAppService,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         optimization_repository: OptimizationRepository,
     ) -> None:
         self._event_bus = event_bus
-        self._strategy_app_service = strategy_app_service
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository
         self._optimization_repo = optimization_repository
@@ -50,7 +47,6 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
 
         optimizer = GridOptimizationAppService(
             event_bus=self._event_bus,
-            strategy_app_service=self._strategy_app_service,
             backtest_repository=self._backtest_repo,
             bar_repository=self._bar_repo,
         )
