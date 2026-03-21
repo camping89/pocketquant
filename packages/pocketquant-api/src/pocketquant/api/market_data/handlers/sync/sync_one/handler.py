@@ -1,5 +1,7 @@
 """Handler for sync symbol command."""
 
+from pocketquant.api.market_data.handlers.sync.dto import SyncResponse
+from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pocketquant.core.common.cache import Cache
 from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
@@ -7,8 +9,6 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
-from pocketquant.api.market_data.handlers.sync.dto import SyncResponse
-from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pocketquant.core.infrastructure.tradingview import TradingViewClient
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
@@ -60,13 +60,9 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             records = await self._filter_new_bars(records, symbol, exchange, interval)
 
             inserted_count = await self._persist_bars(symbol, exchange, records)
-            total_bars, latest_bar = await self._get_bar_stats(
-                symbol, exchange, interval
-            )
+            total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
 
-            await self._mark_completed(
-                symbol, exchange, interval, total_bars, latest_bar
-            )
+            await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
             await self._invalidate_cache(symbol, exchange, interval)
 
             logger.info(
@@ -75,9 +71,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 exchange=exchange,
                 bars_inserted=inserted_count,
             )
-            return self._success(
-                symbol, exchange, interval, inserted_count, total_bars, latest_bar
-            )
+            return self._success(symbol, exchange, interval, inserted_count, total_bars, latest_bar)
 
         except Exception as e:
             logger.error(
@@ -142,9 +136,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             )
         return filtered
 
-    async def _persist_bars(
-        self, symbol: str, exchange: str, records: list[Bar]
-    ) -> int:
+    async def _persist_bars(self, symbol: str, exchange: str, records: list[Bar]) -> int:
         inserted_count = await self._bar_repo.insert_many(records)
         await self._symbol_repo.upsert(Symbol.create(code=symbol, exchange=exchange))
         return inserted_count
@@ -173,9 +165,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             last_bar_at=latest_bar.datetime if latest_bar else None,
         )
 
-    async def _invalidate_cache(
-        self, symbol: str, exchange: str, interval: DomainInterval
-    ) -> None:
+    async def _invalidate_cache(self, symbol: str, exchange: str, interval: DomainInterval) -> None:
         cache_key = build_bar_cache_key(symbol, exchange, interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")
 

@@ -1,9 +1,8 @@
 """Load strategy command handler."""
 
-
+from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.app_services.yaml_strategy_loader import StrategyLoader
-from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.trading.handlers.strategy.load.command import LoadStrategyCommand
 
 

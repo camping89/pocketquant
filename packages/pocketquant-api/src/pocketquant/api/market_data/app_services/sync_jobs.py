@@ -1,9 +1,9 @@
 """Background sync jobs for market data — receives dependencies via params."""
 
+from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.shared.value_objects import Interval
-from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
 

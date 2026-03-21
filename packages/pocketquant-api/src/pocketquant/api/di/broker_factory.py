@@ -1,8 +1,8 @@
 """Broker factory for creating broker instances."""
 
 from pocketquant.core.infrastructure.brokers.interface import IBroker
-from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
 from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
 
 
 class BrokerFactory:

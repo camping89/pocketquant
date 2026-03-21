@@ -1,8 +1,8 @@
 """Get position handler."""
 
-from pocketquant.trading.app_services.position_app_service import PositionAppService
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.trading.app_services.position_app_service import PositionAppService
 from pocketquant.trading.handlers.trading.get_position.query import GetPositionQuery
 
 

@@ -1,12 +1,11 @@
 """Correlation ID middleware for request tracing."""
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
-
 from pocketquant.core.common.constants import HEADER_CORRELATION_ID
 from pocketquant.core.common.tracing.context import request_id_contextvar
 from pocketquant.core.common.uuid import generate_id_str
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 
 class CorrelationIDMiddleware(BaseHTTPMiddleware):

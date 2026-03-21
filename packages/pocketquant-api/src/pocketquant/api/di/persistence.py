@@ -8,19 +8,18 @@ via BaseRepository.__init__(database: Database) type hint.
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
-
-from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.redis import Cache
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.backtest.persistence.optimization_repository import (
     OptimizationRepository,
 )
-from pocketquant.trading.persistence.order_repository import OrderRepository
-from pocketquant.trading.persistence.position_repository import PositionRepository
+from pocketquant.core.config import Settings
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
+from pocketquant.trading.persistence.order_repository import OrderRepository
+from pocketquant.trading.persistence.position_repository import PositionRepository
 
 
 class PersistenceProvider(Provider):

@@ -4,11 +4,10 @@ from pathlib import Path
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
-
-from pocketquant.trading.app_services.yaml_strategy_loader import StrategyLoader
 from pocketquant.core.common.mediator import Mediator
+from pocketquant.trading.app_services.yaml_strategy_loader import StrategyLoader
 from pocketquant.trading.handlers.strategy.load.command import LoadStrategyCommand
+from pydantic import BaseModel, Field
 
 router = APIRouter(route_class=DishkaRoute)
 

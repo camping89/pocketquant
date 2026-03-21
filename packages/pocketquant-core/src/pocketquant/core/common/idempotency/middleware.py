@@ -2,11 +2,10 @@
 
 from typing import Any
 
+from pocketquant.core.common.constants import HEADER_IDEMPOTENCY_KEY
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
-from pocketquant.core.common.constants import HEADER_IDEMPOTENCY_KEY
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):

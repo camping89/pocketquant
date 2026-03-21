@@ -1,8 +1,8 @@
 """Handler for get sync status query."""
 
-from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.api.market_data.handlers.status.dto import SyncStatusResult
 from pocketquant.api.market_data.handlers.status.get_sync_status.query import GetSyncStatusQuery
+from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 

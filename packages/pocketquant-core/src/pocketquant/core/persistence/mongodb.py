@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from pymongo.asynchronous.database import AsyncDatabase
-from pymongo.asynchronous.mongo_client import AsyncMongoClient
-
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
+from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.asynchronous.mongo_client import AsyncMongoClient
 
 logger = get_logger(__name__)
 

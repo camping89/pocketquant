@@ -121,9 +121,7 @@ class OptimizationResult:
             total_combinations=data["total_combinations"],
             completed_combinations=data["completed_combinations"],
             failed_combinations=data["failed_combinations"],
-            results=[
-                OptimizationResultEntry.from_mongo(r) for r in data.get("results", [])
-            ],
+            results=[OptimizationResultEntry.from_mongo(r) for r in data.get("results", [])],
             best_parameters=data["best_parameters"],
             best_metrics=BacktestMetrics.from_mongo(data["best_metrics"]),
             started_at=data["started_at"],

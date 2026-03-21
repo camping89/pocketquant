@@ -1,11 +1,9 @@
 """API route for starting the quote feed."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.quotes.start_feed.command import StartQuoteFeedCommand
+from pocketquant.core.common.mediator import Mediator
 
 router = APIRouter(route_class=DishkaRoute)
 

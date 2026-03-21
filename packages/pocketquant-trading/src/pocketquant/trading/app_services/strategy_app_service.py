@@ -4,14 +4,13 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import structlog
-
 from pocketquant.core.common.messaging import EventBus, event_handler, get_event_registry
-from pocketquant.core.domain.bar.events import BarCompletedEvent
-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.concepts.quote.events import QuoteReceivedEvent
 from pocketquant.core.concepts.risk import PositionSizer
 from pocketquant.core.concepts.strategy.interfaces import IStrategy
 from pocketquant.core.concepts.strategy.value_objects import Direction, Signal, StrategyConfig
+from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.infrastructure.brokers.interface import IBroker, IBrokerFactory
 
 if TYPE_CHECKING:
@@ -287,7 +286,12 @@ class StrategyAppService:
         position = self._position_app_service.get(strategy.id)
 
         # Risk check
-        valid, reason = self._risk_check_handler.validate(signal, balance, position, strategy.config.risk)
+        valid, reason = self._risk_check_handler.validate(
+            signal,
+            balance,
+            position,
+            strategy.config.risk,
+        )
         if not valid:
             logger.info(
                 "signal_rejected_by_risk",

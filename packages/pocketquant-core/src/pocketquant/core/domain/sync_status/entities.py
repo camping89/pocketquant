@@ -3,9 +3,8 @@
 from datetime import datetime as dt
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from pocketquant.core.common.uuid import UUID, generate_id
+from pydantic import BaseModel, Field
 
 
 class SyncStatus(BaseModel):
@@ -36,7 +35,7 @@ class SyncStatus(BaseModel):
         }
 
     @classmethod
-    def from_mongo(cls, doc: dict[str, Any]) -> "SyncStatus":
+    def from_mongo(cls, doc: dict[str, Any]) -> SyncStatus:
         """Reconstruct from MongoDB document."""
         raw_id = doc.get("_id", "")
         return cls(

@@ -6,9 +6,6 @@ from contextlib import asynccontextmanager
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
-
-from pocketquant.core.common.logging import get_logger, setup_logging
-from pocketquant.core.config import get_settings
 from pocketquant.api.di.container import create_container, register_handlers
 from pocketquant.api.main_extensions import (
     configure_middleware,
@@ -18,6 +15,8 @@ from pocketquant.api.main_extensions import (
     register_routes,
     start_background_jobs,
 )
+from pocketquant.core.common.logging import get_logger, setup_logging
+from pocketquant.core.config import get_settings
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.redis import Cache
 
@@ -78,3 +77,10 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def run() -> None:
+    """CLI entrypoint for `pocketquant` command."""
+    import uvicorn
+
+    uvicorn.run("pocketquant.api.main:app", host="0.0.0.0", port=41920)

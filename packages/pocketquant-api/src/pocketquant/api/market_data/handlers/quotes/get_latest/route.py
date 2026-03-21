@@ -1,13 +1,11 @@
 """API route for getting the latest quote."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel
-
+from pocketquant.api.market_data.handlers.quotes.get_latest.query import GetLatestQuoteQuery
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Mediator
-from pocketquant.api.market_data.handlers.quotes.get_latest.query import GetLatestQuoteQuery
+from pydantic import BaseModel
 
 router = APIRouter(route_class=DishkaRoute)
 

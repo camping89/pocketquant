@@ -1,10 +1,10 @@
 """Handler for bulk sync command."""
 
-from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.api.market_data.handlers.sync.dto import SyncResponse
 from pocketquant.api.market_data.handlers.sync.sync_bulk.command import BulkSyncCommand
 from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pocketquant.api.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
+from pocketquant.core.common.mediator import Handler, handles
 
 
 @handles(BulkSyncCommand)

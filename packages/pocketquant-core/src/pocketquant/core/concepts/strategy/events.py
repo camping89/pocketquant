@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from pocketquant.core.domain.shared.events import DomainEvent
 from pocketquant.core.concepts.strategy.enums import Direction
+from pocketquant.core.domain.shared.events import DomainEvent
 
 
 @dataclass(frozen=True, eq=False)

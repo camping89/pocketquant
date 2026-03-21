@@ -1,12 +1,10 @@
 """API route for subscribing to a symbol."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.quotes.subscribe.command import SubscribeCommand
+from pocketquant.core.common.mediator import Mediator
+from pydantic import BaseModel, Field
 
 router = APIRouter(route_class=DishkaRoute)
 

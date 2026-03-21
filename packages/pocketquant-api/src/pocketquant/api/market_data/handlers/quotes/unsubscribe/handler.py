@@ -1,10 +1,10 @@
 """Handler for unsubscribing from a symbol."""
 
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.api.market_data.handlers.quotes.unsubscribe.command import UnsubscribeCommand
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.api.market_data.handlers.quotes.unsubscribe.command import UnsubscribeCommand
 from pocketquant.core.persistence.redis import Cache
 
 logger = get_logger(__name__)

@@ -4,7 +4,6 @@ from pathlib import Path
 
 import structlog
 import yaml
-
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 
 logger = structlog.get_logger(__name__)

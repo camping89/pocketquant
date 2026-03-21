@@ -47,6 +47,4 @@ def test_domain_has_no_io_imports():
                     ):
                         violations.append(f"{filepath}: from {node.module}")
 
-    assert (
-        not violations
-    ), f"Domain layer has forbidden I/O imports:\n" + "\n".join(violations)
+    assert not violations, "Domain layer has forbidden I/O imports:\n" + "\n".join(violations)

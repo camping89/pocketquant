@@ -1,10 +1,10 @@
 """Handler for OHLCV query."""
 
+from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
 from pocketquant.core.common.cache import Cache
 from pocketquant.core.common.constants import CACHE_KEY_OHLCV, TTL_OHLCV_QUERY
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.shared.value_objects import Interval
-from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
 

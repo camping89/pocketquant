@@ -5,7 +5,6 @@ created once at startup and live for the entire app lifetime.
 """
 
 from dishka import Provider, Scope, provide
-
 from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings, get_settings

@@ -1,6 +1,8 @@
 """Shared value objects for the domain layer."""
 
-from pocketquant.core.domain.shared.enums import Interval  # noqa: F401 (re-export for backward compat)
+from pocketquant.core.domain.shared.enums import (
+    Interval,  # noqa: F401 (re-export for backward compat)
+)
 
 INTERVAL_SECONDS = {
     Interval.MINUTE_1: 60,

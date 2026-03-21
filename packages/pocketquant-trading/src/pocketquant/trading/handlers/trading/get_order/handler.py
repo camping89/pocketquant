@@ -1,8 +1,8 @@
 """Get order handler."""
 
-from pocketquant.trading.app_services.order_app_service import OrderAppService
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.trading.app_services.order_app_service import OrderAppService
 from pocketquant.trading.handlers.trading.get_order.query import GetOrderQuery
 
 

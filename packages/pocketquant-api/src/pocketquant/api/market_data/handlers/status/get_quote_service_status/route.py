@@ -1,14 +1,12 @@
 """Route for getting quote service status."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.status.get_quote_service_status.query import (
     GetQuoteServiceStatusQuery,
 )
+from pocketquant.core.common.mediator import Mediator
+from pydantic import BaseModel
 
 
 class QuoteServiceStatus(BaseModel):

@@ -3,16 +3,15 @@
 from datetime import datetime, timedelta
 
 import numpy as np
-
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.domain import (
     BacktestMetrics,
     BacktestResult,
     EquityPoint,
     TradeRecord,
 )
-from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.backtest.domain.services.performance_calculator import PerformanceCalculator
+from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.infrastructure.brokers.models import OrderResult
 
 

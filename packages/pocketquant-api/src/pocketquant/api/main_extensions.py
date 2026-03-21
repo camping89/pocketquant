@@ -7,7 +7,13 @@ from dishka import AsyncContainer
 from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from pocketquant.api.market_data.handlers.quotes.router import router as quote_router
+from pocketquant.api.market_data.handlers.router import router as market_data_router
+from pocketquant.backtest.handlers import backtest_router
+from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.backtest.persistence.optimization_repository import (
+    OptimizationRepository,
+)
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.health.checks import check_database, check_redis
@@ -17,21 +23,14 @@ from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
-from pocketquant.backtest.handlers import backtest_router
-from pocketquant.api.market_data.handlers.quotes.router import router as quote_router
-from pocketquant.api.market_data.handlers.router import router as market_data_router
-from pocketquant.trading.handlers.strategy import strategy_router
-from pocketquant.trading.handlers.trading import trading_router
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.backtest.persistence.optimization_repository import (
-    OptimizationRepository,
-)
-from pocketquant.trading.persistence.order_repository import OrderRepository
-from pocketquant.trading.persistence.position_repository import PositionRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
+from pocketquant.trading.handlers.strategy import strategy_router
+from pocketquant.trading.handlers.trading import trading_router
+from pocketquant.trading.persistence.order_repository import OrderRepository
+from pocketquant.trading.persistence.position_repository import PositionRepository
 
 logger = get_logger(__name__)
 
@@ -76,9 +75,7 @@ async def start_background_jobs(container: AsyncContainer) -> None:
     logger.info("background_jobs_enabled")
 
 
-async def register_health_checks(
-    container: AsyncContainer, app: FastAPI
-) -> None:
+async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
     """Register health check functions with the coordinator."""
     hc = await container.get(HealthCoordinator)
     hc.register("database", partial(check_database, app.state.database))
@@ -101,8 +98,8 @@ def handle_startup_failure(error: Exception) -> None:
         )
     )
     console.print("\n[dim]Your code:[/]")
-    console.print("  -> [cyan]src/main.py[/] in lifespan")
-    console.print("  -> [cyan]src/common/database/connection.py[/] in connect")
+    console.print("  -> [cyan]pocketquant.api.main[/] in lifespan")
+    console.print("  -> [cyan]pocketquant.core.persistence.mongodb[/] in connect")
     os._exit(1)
 
 

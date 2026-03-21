@@ -5,12 +5,11 @@ from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
-
+from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
 from pocketquant.core.common.constants import LIMIT_OHLCV_QUERY_MAX
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.shared.value_objects import Interval
-from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
+from pydantic import BaseModel
 
 
 class OHLCVResponse(BaseModel):
@@ -19,6 +18,7 @@ class OHLCVResponse(BaseModel):
     interval: str
     data: list[dict[str, Any]]
     count: int
+
 
 router = APIRouter(route_class=DishkaRoute)
 

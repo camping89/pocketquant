@@ -1,11 +1,9 @@
 """Route for listing symbols."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.list_symbols.query import ListSymbolsQuery
+from pocketquant.core.common.mediator import Mediator
 
 router = APIRouter(route_class=DishkaRoute)
 

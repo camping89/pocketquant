@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-03-15 | **Codebase Size:** 13,381 LOC | **Total Files:** 278 Python files in src/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka
+**Last Updated:** 2026-03-15 | **Codebase Size:** 13,381 LOC | **Total Files:** 278 Python files in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Structure:** 4-package uv workspace monorepo
 
 ## Architecture Overview
 
@@ -25,7 +25,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 ## Module Breakdown
 
-### src/common (993 LOC, 32 files)
+### pocketquant.core.common (993 LOC, 32 files)
 
 **CQRS & Mediator:**
 - **Mediator:** CQRS dispatcher, routes commands/queries to handlers
@@ -77,7 +77,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - `get_correlation_id()` - Thread/async-safe context variable access
 - **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-### src/domain (2,364 LOC, 39 files) — Pure Business Logic + Persistence
+### pocketquant.core.domain (2,364 LOC, 39 files) — Pure Business Logic + Persistence
 
 **Rules:** No I/O imports (pymongo, redis, aiohttp). **Pydantic BaseModel with MongoDB persistence.** Aggregates have `to_mongo()` and `from_mongo()` methods. Immutable value objects. Domain events. Validation in `__post_init__`.
 
@@ -91,7 +91,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **PositionAggregate** - Position tracking + P&L with `to_mongo()` / `from_mongo()`
 
 **Entities (5, Pydantic + MongoDB):**
-- **Bar** - OHLCV price bar (in src/domain/bar/, renamed from OHLCVAggregate)
+- **Bar** - OHLCV price bar (renamed from OHLCVAggregate)
 - **Symbol** - Tradeable instruments (flattened from SymbolAggregate)
 - **SyncStatus** - Data sync progress tracking
 - **BacktestResult** - Backtest run results
@@ -99,7 +99,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 **Deleted (Dead Code, 2026-03-15):**
 - OHLCVAggregate, QuoteAggregate, SymbolAggregate (no state/invariants)
-- src/persistence/schemas/ directory (logic moved to entities)
+- persistence/schemas/ directory (logic moved to entities)
 
 **Value Objects (Frozen Dataclasses, @dataclass(frozen=True)):**
 - **OHLCV** - (open, high, low, close, volume, timestamp) with validation in __post_init__
@@ -136,7 +136,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
   - `calculate_size(account_balance, signal)` - Returns quantity
   - Supports: PERCENT_RISK, KELLY, FIXED
 
-### src/application (2,559 LOC, 21 files) — Orchestrators
+### pocketquant.backtest (submodule) + pocketquant.trading (submodule) (2,559 LOC, 21 files) — Orchestrators
 
 Stateful services that coordinate domain logic + infrastructure:
 - **BacktestAppService:** Execute strategy on historical bars
@@ -150,7 +150,7 @@ Stateful services that coordinate domain logic + infrastructure:
 
 No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 
-### src/infrastructure (2,883 LOC, 28 files) — External I/O & Brokers
+### pocketquant.core.infrastructure (2,883 LOC, 28 files) — External I/O & Brokers
 
 **Brokers (Pluggable Execution):**
 - **IBroker** - Abstract contract
@@ -208,7 +208,7 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
   - HMAC-SHA256 signing
   - Resilient delivery with retry
 
-### src/persistence (1,214 LOC, 18 files) — Data Access Layer
+### pocketquant.core.persistence (1,214 LOC, 18 files) — Data Access Layer
 
 **Database Connections (Instance-Based via DI):**
 - **Database** - Async MongoDB wrapper
@@ -256,13 +256,13 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
    - `update_status(status_id, progress, error)` - Update progress
 
 **Persistence Consolidation (2026-03-15):**
-- `src/persistence/schemas/` directory DELETED
+- `persistence/schemas/` directory DELETED
 - All persistence logic consolidated into domain entities via `to_mongo()` / `from_mongo()`
-- Repositories import domain entities directly: `from src.domain.bar.entities import Bar`
+- Repositories import domain entities directly: `from pocketquant.core.domain.bar.entities import Bar`
 - Result: Single source of truth (entities), no schema duplication
 - Database uses PyMongo (native async), NOT Motor
 
-### src/features (3,016 LOC, 134 files) — CQRS Operation Routes
+### pocketquant.api.features (3,016 LOC, 134 files) — CQRS Operation Routes
 
 **Vertical Slice Architecture (Operation-First Pattern):**
 Each feature is self-contained. Operations are the primary organizational unit. Routes are thin (parse request, call handler, return response). All business logic delegated to handlers.
@@ -455,7 +455,7 @@ Routes:
 
 ## Dependency Injection (Dishka)
 
-### 6 Providers (src/di/)
+### 6 Providers (pocketquant.api.di)
 
 **CoreProvider** - App-level singletons
 - Settings (from config)
@@ -493,7 +493,7 @@ Routes:
 
 ### Container Factory
 
-**src/container.py:**
+**pocketquant.api.di.container:**
 - `PROVIDERS` list defines initialization order (CoreProvider → ... → HandlerProvider)
 - `create_container()` - Returns AsyncContainer with all providers combined
 - `register_handlers(container)` - Resolves all handlers, registers with Mediator
@@ -503,6 +503,7 @@ Routes:
 ```python
 # Routes use FromDishka for injection (via setup_dishka)
 from dishka.integrations.fastapi import FromDishka
+from pocketquant.core.common.mediator import Mediator
 
 @router.post("/sync")
 async def sync_route(mediator: FromDishka[Mediator], command: SyncSymbolCommand):
@@ -619,7 +620,7 @@ sync_all_symbols job (each symbol independently)
 - `tests/unit/features/` - Handler tests with mocks
 
 **Domain Purity Test:**
-- AST parser checks for forbidden imports in `src/domain/`
+- AST parser checks for forbidden imports in `pocketquant.core.domain`
 - Forbidden: pymongo, redis, aiohttp, src.infrastructure imports
 - Ensures domain layer has zero I/O dependencies
 
@@ -663,23 +664,19 @@ All settings via environment variables (`.env` file):
 ## Recent Changes (2026-03-15)
 
 **CRITICAL: DDD Aggregate Cleanup Refactoring**
-- `src/domain/ohlcv/` renamed to `src/domain/bar/` (consolidated naming: bar = OHLCV)
-- `OHLCVRepository` renamed to `BarRepository` (file: `bar_repository.py`)
-- `SymbolAggregate` flattened to `Symbol` entity in `src/domain/symbol/entities.py`
+- Domain entities renamed consistently across monorepo packages
+- `OHLCVRepository` renamed to `BarRepository` (consolidated naming)
+- `SymbolAggregate` flattened to `Symbol` entity
 - `SymbolInfo` VO deleted (consolidated into Symbol)
-- `OHLCVAggregate` and `QuoteAggregate` deleted (dead code - not referenced anywhere)
-- `BarCompletedEvent` now emitted from live `BarAppService._save_completed_bar()` (more accurate source)
-- `QuoteAppService` DI fixed - `TradingViewWebSocketClient` now injected via constructor
-- `SyncStatus` aggregate now has UUID `_id` field for consistency
-- `build_ohlcv_cache_key()` renamed to `build_bar_cache_key()` in utils
-- `COLLECTION_OHLCV` constant renamed to `COLLECTION_BARS` in constants
-- `testscripts/run_sync_jobs.py` deleted (broken test script)
+- `OHLCVAggregate` and `QuoteAggregate` deleted (dead code)
+- `BarCompletedEvent` properly emitted from live `BarAppService._save_completed_bar()`
+- UUID7 time-ordered IDs throughout (better for B-tree indexing)
 
 **CRITICAL: Domain Persistence Consolidation (2026-03-15)**
-- `src/persistence/schemas/` directory DELETED (5 schema files removed)
+- `persistence/schemas/` directory DELETED
 - All MongoDB persistence logic moved into domain entities (Pydantic BaseModel)
 - Each aggregate now has `to_mongo()` → dict and `@classmethod from_mongo(doc)` → entity
-- Repositories import directly from domain: `from src.domain.bar.entities import Bar`
+- Repositories import directly from domain: `from pocketquant.core.domain.bar.entities import Bar`
 - Result: Domain entities are now complete, self-contained units with built-in persistence
 
 **Handler Extract-Method Pattern:**
@@ -695,16 +692,13 @@ All settings via environment variables (`.env` file):
 **Dishka DI Migration (2026-03-13):**
 - Replaced plain Python constructors + Services dataclass with dishka library
 - Created 6 providers: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider
-- Removed src/services.py, src/dependencies.py, src/handler_registration.py
-- Added src/container.py factory function
-- Added src/di/ directory with 6 provider classes
-- Lifespan now uses `create_container()` and `setup_dishka(container, app)`
-- Routes use FromDishka[T] instead of Depends(get_service)
-- Handler registration via `register_handlers(container)` + ALL_HANDLER_TYPES list
+- Lifespan now uses `create_container()` and `setup_dishka(container, app)` in pocketquant.api.main
+- Routes use FromDishka[T] for injection
+- Handler registration via `register_handlers(container)` in pocketquant.api.di.container
 
 **Previous Changes (2026-02-14):**
 - Clean Architecture Refactor Complete: Domain → Application → Features, Infrastructure ← Domain
-- Persistence Layer Refactor: `src/persistence/` top-level package with 7 repositories
+- Persistence Layer Refactor: `pocketquant.core.persistence` package with 7 repositories
 - Domain purity enforced via AST checks
 - Auto-discovery: @handles + @event_handler decorators
 

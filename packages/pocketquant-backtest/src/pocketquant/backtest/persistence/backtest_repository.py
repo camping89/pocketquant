@@ -74,12 +74,8 @@ class BacktestRepository(BaseRepository):
     async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""
         collection = self._collection()
-        await collection.create_index(
-            "strategy_id", name="ix_backtests_strategy_id"
-        )
-        await collection.create_index(
-            "started_at", name="ix_backtests_started_at"
-        )
+        await collection.create_index("strategy_id", name="ix_backtests_strategy_id")
+        await collection.create_index("started_at", name="ix_backtests_started_at")
         await collection.create_index("status", name="ix_backtests_status")
         await collection.create_index(
             [("strategy_id", 1), ("started_at", -1)],

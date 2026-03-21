@@ -1,11 +1,9 @@
 """Route for getting all sync statuses."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.api.market_data.handlers.status.get_sync_status.query import GetSyncStatusQuery
+from pocketquant.core.common.mediator import Mediator
 
 router = APIRouter(route_class=DishkaRoute)
 

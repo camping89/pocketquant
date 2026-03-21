@@ -1,12 +1,12 @@
 """Handler for get symbol sync status query."""
 
-from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.api.market_data.handlers.status.dto import SyncStatusResult
 from pocketquant.api.market_data.handlers.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )
+from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 

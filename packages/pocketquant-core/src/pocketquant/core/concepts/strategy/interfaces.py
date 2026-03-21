@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.concepts.strategy.value_objects import Signal, StrategyConfig
+from pocketquant.core.domain.order import OrderAggregate
 
 
 class IStrategy(ABC):

@@ -9,10 +9,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 import websockets
+from pocketquant.core.common.logging import get_logger
 from websockets import State
 from websockets.asyncio.client import ClientConnection
-
-from pocketquant.core.common.logging import get_logger
 
 logger = get_logger(__name__)
 

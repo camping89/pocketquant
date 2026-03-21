@@ -1,7 +1,6 @@
 """Tests for CQRS Mediator."""
 
 import pytest
-
 from pocketquant.core.common.mediator import (
     DuplicateHandlerError,
     Handler,

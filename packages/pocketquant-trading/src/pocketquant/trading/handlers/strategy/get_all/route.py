@@ -1,12 +1,10 @@
 """Get strategies API route."""
 
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pydantic import BaseModel
-
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.trading.handlers.strategy.get_all.query import GetStrategiesQuery
+from pydantic import BaseModel
 
 router = APIRouter(route_class=DishkaRoute)
 
