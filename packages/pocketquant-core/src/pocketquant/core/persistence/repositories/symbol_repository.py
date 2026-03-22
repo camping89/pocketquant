@@ -16,12 +16,18 @@ class SymbolRepository(BaseRepository):
         """Upsert symbol record."""
         collection = self._collection()
         doc = symbol.to_mongo()
-        doc.pop("_id", None)
+        symbol_id = doc.pop("_id", None)
         created_at = doc.pop("created_at", None)
+
+        set_on_insert: dict = {}
+        if created_at:
+            set_on_insert["created_at"] = created_at
+        if symbol_id:
+            set_on_insert["_id"] = symbol_id
 
         await collection.update_one(
             {"symbol": doc["symbol"], "exchange": doc["exchange"]},
-            {"$set": doc, "$setOnInsert": {"created_at": created_at or datetime.now(UTC)}},
+            {"$set": doc, "$setOnInsert": set_on_insert or {"created_at": datetime.now(UTC)}},
             upsert=True,
         )
 

@@ -30,8 +30,12 @@ target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+select = ["E", "F", "I", "N", "W", "UP", "TID"]
 ignore = ["UP046"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"bson".msg = "Use pocketquant.core.common.uuid (UUID7) — ObjectId is banned"
+"bson.ObjectId".msg = "Use pocketquant.core.common.uuid (UUID7) — ObjectId is banned"
 
 [tool.pyright]
 pythonVersion = "3.14"
@@ -69,3 +73,9 @@ name = "Trading depends only on Core"
 type = "forbidden"
 source_modules = ["pocketquant.trading"]
 forbidden_modules = ["pocketquant.backtest", "pocketquant.api"]
+
+[[tool.importlinter.contracts]]
+name = "No bson/ObjectId usage — UUID7 only"
+type = "forbidden"
+source_modules = ["pocketquant"]
+forbidden_modules = ["bson"]
