@@ -39,6 +39,7 @@ source .venv/bin/activate
 
 just up                        # 4. Start MongoDB + Redis
 just dev                       # 5. Run dev server with hot reload
+(Or can hit F5 to debug the api app - aka entry point of the whole application)
 # API docs → http://localhost:41920/api/v1/docs
 ```
 
@@ -71,24 +72,9 @@ just qa            lint + format + types
 - **Background Jobs** — Scheduled data sync (6-hourly + market hours)
 - **DI Container** — Dishka with 6 providers, CQRS via Mediator
 
-## API Examples
+## API
 
-```bash
-# Sync historical data
-curl -X POST http://localhost:41920/api/v1/market-data/sync \
-  -H "Content-Type: application/json" \
-  -d '{"symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","n_bars":100}'
-
-# Query OHLCV
-curl "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSD?interval=4h&limit=10"
-
-# Run backtest
-curl -X POST http://localhost:41920/api/v1/backtest/run \
-  -H "Content-Type: application/json" \
-  -d '{"strategy_id":"ma-cross-btc-5m","symbol":"BTCUSD","exchange":"BINANCE","interval":"4h","start_date":"2025-01-01","end_date":"2026-01-01","initial_capital":10000}'
-```
-
-Full API collection: `tests/http/` (Bruno)
+Swagger docs: `http://localhost:41920/api/v1/docs` — HTTP collection: `tests/http/` (Bruno)
 
 ## Configuration
 
