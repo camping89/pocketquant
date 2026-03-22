@@ -1,102 +1,104 @@
 """Health check script for development environment."""
 
 import asyncio
+import json
+import subprocess
 import sys
 
 from rich.console import Console
+from rich.table import Table
 
 console = Console(force_terminal=True, legacy_windows=False)
 
 
-async def check_mongodb() -> bool:
-    """Verify MongoDB is reachable with configured credentials."""
+async def check_mongodb() -> tuple[bool, str]:
     from pocketquant.core.config import get_settings
     from pymongo.asynchronous.mongo_client import AsyncMongoClient
 
     settings = get_settings()
+    url = str(settings.mongodb_url)
+    host = f"{url.split('@')[-1].split('/')[0]}" if "@" in url else url.split("//")[-1].split("/")[0]
     try:
-        client = AsyncMongoClient(str(settings.mongodb_url), serverSelectionTimeoutMS=2000)
-        await client.server_info()
+        client = AsyncMongoClient(url, serverSelectionTimeoutMS=2000)
+        info = await client.server_info()
         await client.close()
-        console.print("  [green]OK[/] MongoDB connected")
-        return True
+        return True, f"v{info.get('version', '?')} @ {host}"
     except Exception as e:
-        console.print(f"  [red]FAIL[/] MongoDB: {e}")
-        return False
+        return False, str(e)
 
 
-async def check_redis() -> bool:
-    """Verify Redis is reachable."""
+async def check_redis() -> tuple[bool, str]:
     import redis.asyncio as redis
     from pocketquant.core.config import get_settings
 
     settings = get_settings()
+    url = str(settings.redis_url)
+    host = url.split("//")[-1].split("/")[0]
     try:
-        client = redis.from_url(str(settings.redis_url), socket_timeout=2)
-        await client.ping()
+        client = redis.from_url(url, socket_timeout=2)
+        info = await client.info("server")
         await client.aclose()
-        console.print("  [green]OK[/] Redis connected")
-        return True
+        return True, f"v{info.get('redis_version', '?')} @ {host}"
     except Exception as e:
-        console.print(f"  [red]FAIL[/] Redis: {e}")
-        return False
+        return False, str(e)
 
 
-def check_docker_containers() -> bool:
-    """Check if required Docker containers are healthy."""
-    import subprocess
-
+def check_docker_containers() -> list[tuple[str, bool, str]]:
+    results = []
     try:
-        result = subprocess.run(
+        proc = subprocess.run(
             ["docker", "compose", "-f", "docker/compose.yml", "ps", "--format", "json"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+            capture_output=True, text=True, timeout=5,
         )
-        if result.returncode != 0:
-            console.print("  [red]FAIL[/] Docker compose not available")
-            return False
+        if proc.returncode != 0:
+            return [("docker-compose", False, proc.stderr.strip() or "compose command failed")]
 
-        import json
-
-        containers = [json.loads(line) for line in result.stdout.strip().split("\n") if line]
-        all_healthy = True
-
-        for c in containers:
+        for line in proc.stdout.strip().split("\n"):
+            if not line:
+                continue
+            c = json.loads(line)
             name = c.get("Name", "unknown")
-            status = c.get("Health", c.get("State", "unknown"))
-            if status == "healthy" or (status == "" and c.get("State") == "running"):
-                console.print(f"  [green]OK[/] {name}: running")
-            else:
-                console.print(f"  [red]FAIL[/] {name}: {status}")
-                all_healthy = False
-
-        return all_healthy
+            health = c.get("Health", "")
+            state = c.get("State", "unknown")
+            ports = c.get("Publishers", [])
+            port_str = ", ".join(f":{p['PublishedPort']}" for p in ports if p.get("PublishedPort")) if ports else ""
+            ok = health == "healthy" or (health == "" and state == "running")
+            detail = f"{state}{f' ({health})' if health else ''}{f' [{port_str}]' if port_str else ''}"
+            results.append((name, ok, detail))
     except FileNotFoundError:
-        console.print("  [red]FAIL[/] Docker not installed")
-        return False
+        results.append(("docker", False, "not installed"))
     except Exception as e:
-        console.print(f"  [red]FAIL[/] Docker check failed: {e}")
-        return False
+        results.append(("docker", False, str(e)))
+    return results
 
 
 async def main() -> int:
-    console.print("\n[bold]Checking development environment...[/]\n")
+    console.print("\n[bold]PocketQuant Environment Check[/]\n")
 
-    console.print("[cyan]Docker Containers:[/]")
-    docker_ok = check_docker_containers()
+    table = Table(show_header=True, header_style="bold cyan", padding=(0, 1))
+    table.add_column("Status", width=4, justify="center")
+    table.add_column("Check", min_width=20)
+    table.add_column("Details")
 
-    console.print("\n[cyan]Service Connections:[/]")
-    mongo_ok = await check_mongodb()
-    redis_ok = await check_redis()
+    all_ok = True
 
-    console.print()
-    if docker_ok and mongo_ok and redis_ok:
-        console.print("[bold green]OK All checks passed[/]\n")
-        return 0
-    else:
-        console.print("[bold red]FAIL Some checks failed[/]\n")
-        return 1
+    for name, ok, detail in check_docker_containers():
+        table.add_row("✓" if ok else "✗", f"[white]{name}[/]", detail)
+        all_ok &= ok
+
+    table.add_section()
+
+    mongo_ok, mongo_detail = await check_mongodb()
+    table.add_row("✓" if mongo_ok else "✗", "[white]MongoDB[/]", mongo_detail)
+    all_ok &= mongo_ok
+
+    redis_ok, redis_detail = await check_redis()
+    table.add_row("✓" if redis_ok else "✗", "[white]Redis[/]", redis_detail)
+    all_ok &= redis_ok
+
+    console.print(table)
+    console.print(f"\n[bold {'green' if all_ok else 'red'}]{'All checks passed' if all_ok else 'Some checks failed'}[/]\n")
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":
