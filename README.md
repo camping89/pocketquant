@@ -29,9 +29,16 @@ Each package has its own `pyproject.toml`, `src/pocketquant/<name>/`, and `tests
 
 ```bash
 cp .env.example .env          # 1. Configure environment
-just install                   # 2. Install all packages (uv sync)
-just up                        # 3. Start MongoDB + Redis
-just dev                       # 4. Run dev server with hot reload
+just install                   # 2. Install all packages (uv sync → creates .venv)
+
+# 3. Activate virtual environment
+# Unix/macOS:
+source .venv/bin/activate
+# Windows:
+# .venv\Scripts\activate
+
+just up                        # 4. Start MongoDB + Redis
+just dev                       # 5. Run dev server with hot reload
 # API docs → http://localhost:41920/api/v1/docs
 ```
 
