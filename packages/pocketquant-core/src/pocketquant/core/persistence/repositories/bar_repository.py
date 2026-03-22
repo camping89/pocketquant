@@ -28,7 +28,6 @@ class BarRepository(BaseRepository):
         docs = []
         for bar in records:
             doc = bar.to_mongo()
-            doc.pop("_id", None)
             doc["created_at"] = now
             doc["updated_at"] = now
             docs.append(doc)
@@ -61,13 +60,18 @@ class BarRepository(BaseRepository):
         collection = self._collection()
 
         doc = bar.to_mongo()
-        doc.pop("_id", None)
+        bar_id = doc.pop("_id", None)
         created_at = doc.pop("created_at", None)
         doc["updated_at"] = datetime.now(UTC)
 
         update_ops: dict = {"$set": doc}
+        set_on_insert: dict = {}
         if created_at:
-            update_ops["$setOnInsert"] = {"created_at": created_at}
+            set_on_insert["created_at"] = created_at
+        if bar_id:
+            set_on_insert["_id"] = bar_id
+        if set_on_insert:
+            update_ops["$setOnInsert"] = set_on_insert
 
         await collection.update_one(
             {

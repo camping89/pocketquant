@@ -7,12 +7,13 @@ meta {
 post {
   url: {{api}}/market-data/sync
   body: json
+  auth: none
 }
 
 body:json {
   {
-    "exchange": "HOSE",
-    "symbol": "VNM",
+    "exchange": "BINANCE",
+    "symbol": "BTCUSDT",
     "interval": "1d"
   }
 }
