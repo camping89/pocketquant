@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-03-15 | **Version:** 3.2 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture
+**Last Updated:** 2026-03-22 | **Version:** 3.3 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Port:** 41920
 
 ## High-Level Architecture
 
@@ -57,7 +57,7 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 
 ## Clean Architecture Layer Breakdown
 
-### Layer 1: Domain (Pure Business Logic) — src/domain/
+### Layer 1: Domain (Pure Business Logic) — packages/pocketquant-core/src/pocketquant/core/domain/
 
 **Purpose:** Core business rules with ZERO external dependencies. Reusable domain concepts.
 
@@ -124,7 +124,7 @@ Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`
 **Example - Domain Service (Pure Logic):**
 BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
 
-### Layer 2: Application (Orchestrators) — src/application/
+### Layer 2: Application (Orchestrators) — packages/{backtest, trading}/src/pocketquant/
 
 **Purpose:** Orchestrate domain logic + infrastructure I/O to fulfill business use cases. Stateful services and engines that coordinate between layers.
 
@@ -174,7 +174,7 @@ class StrategyAppService:
         await self.event_bus.publish(SignalGeneratedEvent(...))
 ```
 
-### Layer 3: Features (CQRS Operation Routes) — src/features/
+### Layer 3: Features (CQRS Operation Routes) — packages/pocketquant-api/src/pocketquant/api/features/
 
 **Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to handlers, return responses.
 
@@ -277,7 +277,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         )
 ```
 
-### Layer 4: Infrastructure (External I/O) — src/infrastructure/ + src/persistence/
+### Layer 4: Infrastructure (External I/O) — packages/pocketquant-core/src/pocketquant/core/infrastructure/ + persistence/
 
 **Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP.
 
@@ -337,7 +337,7 @@ persistence/                           # Data access (MongoDB, Redis, repositori
 | **TradingViewWebSocketClient** | Binary frame parsing (~m~{len}~m~{json}) |
 | **JobScheduler** | APScheduler wrapper, async job execution |
 
-### Layer 5: Common (Cross-Cutting) — src/common/
+### Layer 5: Common (Cross-Cutting) — packages/pocketquant-core/src/pocketquant/core/common/
 
 **Purpose:** Shared utilities: CQRS mediator, event bus, middleware, tracing, health checks.
 
@@ -531,11 +531,11 @@ Ready to process market events and recover fills
 
 ## Event Bus Pattern
 
-**Purpose:** Decouple features via domain events (in-memory, FIFO, 50 event max history).
+**Purpose:** Decouple features via domain events (in-memory, FIFO, 100 event max history).
 
 **Characteristics:**
 - Handlers publish → EventBus.publish(event) → subscribers notified sequentially
-- Bounded history (50 events max, configurable via EventBus(max_history=50))
+- Bounded history (**100 events max**, hardcoded in CoreProvider)
 - Sync + async handlers supported
 - No persistence (events lost on restart)
 
@@ -700,33 +700,34 @@ OptimizationHandler
 **Key files:**
 | File | Purpose |
 |------|---------|
-| `src/container.py` | Factory: `create_container()`, handler registration |
-| `src/di/` | 6 Provider classes: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider |
-| `src/main.py` | Lifespan: create container, get DB/Cache, register handlers, setup_dishka |
+| `packages/pocketquant-api/src/pocketquant/api/di/container.py` | Factory: `create_container()`, handler registration |
+| `packages/pocketquant-api/src/pocketquant/api/di/` | 6 Provider classes |
+| `packages/pocketquant-api/src/pocketquant/api/main.py` | Lifespan: create container, setup_dishka |
 
-**6 Providers (src/di/):**
-- **CoreProvider** - Settings, EventBus (max_history=50), Mediator
+**6 Providers:**
+- **CoreProvider** - Settings, EventBus (max_history=**100**), Mediator
 - **PersistenceProvider** - Database (PyMongo), Cache (Redis), 7 repositories
 - **InfrastructureProvider** - Brokers (Paper, OKX), TradingViewClient, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, sync background jobs
 - **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
 - **HandlerProvider** - All 27 CQRS handlers (via @handles decorator)
 
-**Handler Registration:** `register_handlers(container)` in `src/container.py` resolves all 27 handler types and registers with Mediator.
+**Handler Registration:** `register_handlers(container)` resolves all 27 handler types and registers with Mediator.
 
 ## Resource Lifecycle
 
 ### Startup Sequence
 
-1. `get_settings()` loads config, logging initialized
-2. Create dishka AsyncContainer with 6 providers
-3. Get Database and Cache from container, store on `app.state` for middleware hot-path
-4. `register_handlers(container)` resolves all 27 handlers and registers with Mediator
-5. `ensure_all_indexes()` creates MongoDB indexes
-6. `register_health_checks()` registers DB/Redis health probes
-7. `start_background_jobs()` registers APScheduler jobs
-8. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-9. Server ready to accept requests
+1. FastAPI lifespan async context manager started
+2. Load settings from .env via pydantic-settings
+3. Setup structured logging (structlog)
+4. Create dishka AsyncContainer with 6 providers (initialization order: Core → Persistence → Infrastructure → MarketData → Trading → Handler)
+5. `register_handlers(container)` resolves all 27 handlers, registers with Mediator
+6. `ensure_all_indexes()` creates MongoDB indexes
+7. `register_health_checks()` registers DB/Redis/job health probes
+8. `start_background_jobs()` registers APScheduler sync jobs
+9. `setup_dishka(container, app)` integrates dishka with FastAPI routes
+10. Server ready on port 41920
 
 ### Graceful Shutdown (container.close() in finally)
 

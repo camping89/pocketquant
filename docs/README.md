@@ -1,8 +1,8 @@
 # PocketQuant Documentation Index
 
-**Last Updated:** 2026-03-15 | **Codebase:** 13,555 LOC (278 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+
+**Last Updated:** 2026-03-22 | **Codebase:** 13,641 LOC (278 files, 4-package monorepo) | **Architecture:** DDD + CQRS + Clean Architecture + Dishka DI | **Structure:** packages/{core, backtest, trading, api} | **Test Coverage:** 78%+
 
-Welcome to PocketQuant documentation. Start below based on your role. **Last Update (2026-03-15):** Refactored to three-tier DDD structure with Dishka DI. domain/ohlcv/ → domain/bar/, deleted dead code (OHLCVAggregate, QuoteAggregate, SymbolAggregate), consolidated persistence to entities.
+Welcome to PocketQuant documentation. Start below based on your role. **Latest (2026-03-22):** Complete 4-package monorepo restructuring. Dishka DI integration complete. All domain entities with MongoDB persistence (to_mongo/from_mongo). Port: 41920.
 
 ## Quick Navigation
 
@@ -32,7 +32,7 @@ Welcome to PocketQuant documentation. Start below based on your role. **Last Upd
 
 ## Document Guide
 
-### [README.md](../README.md) (199 LOC)
+### [README.md](../README.md) (Root project README)
 **User-facing entry point**
 
 Quick start guide, API examples, setup instructions, development commands.
@@ -49,7 +49,7 @@ Quick start guide, API examples, setup instructions, development commands.
 
 ---
 
-### [codebase-summary.md](./codebase-summary.md) (714 LOC)
+### [codebase-summary.md](./codebase-summary.md) (717 LOC)
 **Codebase reference for developers**
 
 Detailed module breakdown, layer responsibilities, data pipelines, patterns, and testing strategy.
@@ -57,57 +57,47 @@ Detailed module breakdown, layer responsibilities, data pipelines, patterns, and
 **Use when:** Understanding project structure, finding modules, implementing new features
 
 **Contains:**
-- Architecture overview (DDD + CQRS + Clean Architecture + Dishka DI)
+- Architecture overview (DDD + CQRS + Clean Architecture + Dishka DI in 4-package monorepo)
 - Three-tier domain structure: top-level (bar, order, position, symbol, sync_status, backtest), concepts (quote, risk, strategy), shared
-- Module breakdown by layer:
-  - **src/common** (993 LOC, 32 files) - Mediator, EventBus, middleware, singletons
-  - **src/domain** (2,364 LOC, 39 files) - 2 Aggregates (Order, Position), 5 Entities (Bar, Symbol, SyncStatus, Backtest), concepts (Quote, Risk, Strategy), value objects, domain events, services
-  - **src/application** (2,559 LOC, 21 files) - Orchestrators (StrategyAppService, BacktestAppService, etc.)
-  - **src/infrastructure** (2,883 LOC, 28 files) - Brokers, providers, scheduling
-  - **src/persistence** (1,214 LOC, 18 files) - MongoDB (PyMongo, NOT Motor), Redis, 7 repositories (BarRepository, OrderRepository, etc.)
-  - **src/features** (3,016 LOC, 134 files) - Feature slices (market_data, backtesting, strategy, trading, risk)
+- Package breakdown:
+  - **pocketquant-core** (97 files, 5,609 LOC): domain, common, infrastructure, persistence
+  - **pocketquant-backtest** (40 files): BacktestAppService, GridOptimizationAppService, repositories
+  - **pocketquant-trading** (65 files): OrderAppService, PositionAppService, OKXBroker
+  - **pocketquant-api** (86 files, ~2,738 LOC): Dishka DI, 27 CQRS handlers, 26 API endpoints, FastAPI composition root
 - CQRS flow and data pipelines
 - Key architectural patterns (value objects, broker abstraction, domain purity)
 - MongoDB persistence: `to_mongo()`/`from_mongo()` methods on all entities
 - Testing strategy and configuration
 
 **Key Stats:**
-- Total: 13,381 LOC (278 files in src/)
-- src/common: 993 LOC (32 files)
-- src/domain: 2,364 LOC (39 files)
-- src/application: 2,559 LOC (21 files)
-- src/infrastructure: 2,883 LOC (28 files)
-- src/persistence: 1,214 LOC (18 files)
-- src/features: 3,016 LOC (134 files)
-- Collections: bars (renamed from ohlcv), orders, positions, symbols, backtest_results, sync_status, optimization_results
+- Total: 13,641 LOC (278 Python files across 4 packages)
+- Core domain: 2,364 LOC (Bar, OrderAggregate, PositionAggregate, Symbol, SyncStatus entities)
+- Common/DI: 993 LOC (Mediator, EventBus, Dishka providers, middleware)
+- Infrastructure: 2,883 LOC (Brokers, TradingView, OKX WebSocket, APScheduler)
+- Persistence: 1,214 LOC (MongoDB, Redis, 7 repositories)
+- Collections: bars, orders, positions, symbols, backtest_results, sync_status, optimization_results
 
 ---
 
-### [system-architecture.md](./system-architecture.md) (784 LOC - Needs Trim)
+### [system-architecture.md](./system-architecture.md) (761 LOC)
 **Architecture & design documentation**
 
-Clean architecture layers, CQRS patterns, data pipelines, concurrency model, DI container, deployment considerations.
+Clean architecture layers, CQRS patterns, data pipelines, DI container, deployment considerations.
 
 **Use when:** Understanding how things work, designing new features, troubleshooting
 
 **Contains:**
-- High-level 7-layer architecture diagram
+- High-level architecture diagram (Features → Application → Domain, Infrastructure)
 - Clean architecture layer breakdown (Domain, Application, Features, Infrastructure, Common)
-- Dependency Injection container (dependency-injector) with Singleton/Resource/Factory providers
+- Dependency Injection container (Dishka) with 6 providers
 - CQRS request/response flow (commands and queries)
 - Handler 5-step pattern (Fetch → Validate → Persist → Invalidate → Publish)
-- Four data pipelines:
-  1. Historical sync: REST → MongoDB
-  2. Real-time quotes: WebSocket → Aggregator → MongoDB + Redis
-  3. Strategy execution: BarCompleted → StrategyAppService → Broker → MongoDB
-  4. Backtesting: Historical bars → BacktestAppService → Metrics → MongoDB
-- Trading persistence: MongoDB collections, recovery on startup, state transitions
-- Broker abstraction layer (IBroker → PaperBroker/OKXBroker)
+- Data pipelines: historical sync, real-time quotes, strategy execution, backtesting
+- Broker abstraction (IBroker → PaperBroker/OKXBroker with exponential backoff)
 - Middleware stack (Correlation ID, Rate Limit, Idempotency)
-- Event Bus pattern (FIFO, bounded history)
-- Concurrency model (event loop, thread pool, asyncio.Lock)
-- Error handling (transient, permanent, silent)
-- Performance characteristics (latency, throughput, memory)
+- Event Bus pattern (FIFO, bounded history at 100 events)
+- Resource lifecycle (startup sequence, graceful shutdown)
+- Integration points (TradingView, OKX, MongoDB, Redis)
 
 **Key Diagrams:**
 - 7-layer architecture overview
@@ -116,7 +106,7 @@ Clean architecture layers, CQRS patterns, data pipelines, concurrency model, DI 
 
 ---
 
-### [code-standards.md](./code-standards.md) (933 LOC - Needs Trim)
+### [code-standards.md](./code-standards.md) (763 LOC)
 **Development guidelines & best practices**
 
 Architecture patterns, code organization, testing, quality standards, performance.
@@ -124,33 +114,16 @@ Architecture patterns, code organization, testing, quality standards, performanc
 **Use when:** Writing code, code review, testing, debugging
 
 **Contains:**
-- Clean architecture rules (Mandatory dependency direction)
-- 9 architecture patterns (with examples)
-  1. Vertical Slice Architecture (Operation-First)
-  2. Application Layer (Orchestrators & State Machines)
-  3. Dependency Injection Container (IoC Pattern)
-  4. Repository Pattern (Instance-Based Data Access)
-  5. Service Pattern (Business Logic)
-  6. Provider Pattern (External Integrations)
-  7. Event Handler Auto-Discovery Pattern (@event_handler)
-  8. CQRS Handler Pattern (Auto-Discovery with @handles)
-  9. Strategy Implementation Pattern (IStrategy interface)
-- Code organization
-  - File naming (kebab-case)
-  - Module size (<200 LOC target)
-  - Import organization
-- Commenting standards (DO/DO NOT)
-  - DO: WHY, constraints, gotchas, algorithms
-  - DO NOT: Obvious code, variable restating
-- Type hints (pyright compliance)
-- Error handling (try-except, propagation)
-- Logging with structlog (context variables)
+- Clean architecture rules (Mandatory dependency direction: Features → Application → Domain, Infrastructure ← Domain)
+- 12 architecture patterns: vertical slice, application layer, DI (Dishka), repository, service, provider, event handlers, CQRS, extract-method, schema consolidation, strategy impl, domain patterns
+- Code organization (file naming, module size <200 LOC, imports)
+- Commenting, type hints, error handling, logging
 - Testing standards (fixtures, mocking, 80% coverage)
 - Code quality tools (ruff, pyright, pytest)
-- Performance tips (blocking I/O, bulk ops, caching, concurrency)
-- Configuration & secrets (.env usage)
-- Quality checklist (pre-commit validation)
-- Deprecated patterns (15+ anti-patterns)
+- Performance (blocking I/O, bulk ops, caching, concurrency)
+- Configuration & secrets (.env)
+- UUID7 (time-ordered IDs)
+- Deprecated patterns (DO NOT list)
 
 **File Size Targets:**
 ```
@@ -162,7 +135,7 @@ data_sync_service.py:    244 LOC  ✅
 
 ---
 
-### [project-overview-pdr.md](./project-overview-pdr.md) (450+ LOC)
+### [project-overview-pdr.md](./project-overview-pdr.md) (505 LOC)
 **Project vision, requirements, and status**
 
 Product goals, requirements (functional & non-functional), implementation status, roadmap preview.
@@ -231,15 +204,15 @@ Product goals, requirements (functional & non-functional), implementation status
 
 | Document | Purpose | Audience | LOC |
 |----------|---------|----------|-----|
-| README.md | Quick start | All | 177 |
-| codebase-summary.md | Reference | Developers | 618 |
-| code-standards.md | Guidelines | Developers, Reviewers | 933 |
-| system-architecture.md | Design | Architects, Developers | 784 |
-| project-overview-pdr.md | Requirements | All | 509 |
-| handler-pipelines.md | Handler details | Developers | 661 |
+| README.md | Quick start | All | 381 |
+| codebase-summary.md | Reference | Developers | 717 |
+| code-standards.md | Guidelines | Developers, Reviewers | 763 |
+| system-architecture.md | Design | Architects, Developers | 761 |
+| project-overview-pdr.md | Requirements | All | 505 |
+| handler-pipelines.md | Handler details | Developers | 663 |
 | deployment-guide.md | Production setup | DevOps | 204 |
-| ddd-strategic-map.md | DDD structure | Architects | 132 |
-| **Total** | | | **4,018** |
+| ddd-strategic-map.md | DDD structure | Architects | 142 |
+| **Total** | | | **4,136** |
 
 ---
 
@@ -312,11 +285,11 @@ A: See [deployment-guide.md](./deployment-guide.md). Covers systemd, env vars, h
 **Q: How do I handle errors?**
 A: See code-standards.md "Error Handling". Be specific with exceptions, log with context variables.
 
-**Q: Should I use DI or singletons?**
-A: Routes use FastAPI Depends(). Infrastructure (DB/Cache) uses class-method singletons. See system-architecture.md.
+**Q: What's the Dishka DI structure?**
+A: 6 providers (Core, Persistence, Infrastructure, MarketData, Trading, Handler) in `packages/pocketquant-api/src/pocketquant/api/di/`. Routes use `FromDishka[Mediator]`. See code-standards.md.
 
-**Q: How do I cache data?**
-A: Use `Cache.set/get/delete_pattern()`. See system-architecture.md "Cache" section.
+**Q: What's the EventBus max history?**
+A: **100 events** (hardcoded in CoreProvider). See codebase-summary.md "EventBus".
 
 ### Troubleshooting
 
@@ -368,7 +341,8 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
-| 2026-03-15 | DDD aggregate cleanup: Deleted OHLCVAggregate, QuoteAggregate, SymbolAggregate. Renamed domain/ohlcv/→domain/bar/, OHLCVRepository→BarRepository, collection ohlcv→bars. Symbol flattened to entity. Schemas deleted. All entities have to_mongo()/from_mongo(). Updated all doc files with refactoring status. |
+| 2026-03-22 | Monorepo restructuring complete: 4-package uv workspace (core, backtest, trading, api). Dishka DI integration. All domain entities with MongoDB persistence. Port: 41920. Updated all docs. |
+| 2026-03-15 | DDD aggregate cleanup: Deleted OHLCVAggregate, QuoteAggregate, SymbolAggregate. Renamed domain/ohlcv/→domain/bar/, OHLCVRepository→BarRepository, collection ohlcv→bars. Symbol flattened to entity. Schemas deleted. |
 | 2026-02-21 | Accuracy refresh: Verified all LOC counts (13,641 across 277 files), fixed Motor→PyMongo references, corrected justfile commands (just up/down, not start/stop), fixed mypy→pyright. Updated all doc files with accurate metrics. |
 | 2026-02-13 | Operation-first vertical slice restructure: All features reorganized with operations as primary unit. Updated architecture docs, code standards, feature structure. Each operation folder self-contained. |
 | 2026-02-12 | Updated stats: 213 files, 14,393 LOC. Documented @event_handler decorator & auto-discovery, UUID7 migration, updated_at field rename |
@@ -378,4 +352,4 @@ When you make code changes:
 
 ---
 
-**Last Updated:** 2026-03-15 | **Codebase:** 13,555 LOC (278 files) | **Architecture:** DDD + CQRS + Clean Architecture + IoC Container | **Test Coverage:** 78%+ | **Next Review:** 2026-03-01
+**Last Updated:** 2026-03-22 | **Codebase:** 13,641 LOC (278 files, 4-package monorepo) | **Architecture:** DDD + CQRS + Clean Architecture + Dishka DI | **Test Coverage:** 78%+ | **Next Review:** 2026-04-01
