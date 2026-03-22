@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-03-21 | **Status:** v1.0 Complete | **Codebase:** 278 Python files, 13,381 LOC in packages/ | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4-package uv workspace monorepo | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-03-22 | **Status:** v1.0 Complete | **Codebase:** 278 Python files, 13,641 LOC in packages/ | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4-package uv workspace monorepo | **Port:** 41920 | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -353,7 +353,11 @@ packages/pocketquant-api/        (3,016 LOC, 134 files)
 │   └── 6 Provider classes
 └── main.py            - FastAPI app + lifespan setup
 
-Total: 13,641 LOC (278 Python files in packages/)
+**Total: 13,641 LOC (278 Python files)**
+- pocketquant-core: 97 files, 5,609 LOC
+- pocketquant-backtest: 40 files
+- pocketquant-trading: 65 files
+- pocketquant-api: 86 files, ~2,738 LOC
 ```
 
 **Operation-First Pattern:** Each feature contains self-contained operations (folders). Each operation is a complete use case: command/query definition, handler logic, optional route. Shared infrastructure within a feature is in base/.
@@ -491,7 +495,8 @@ uvicorn pocketquant.api.main:app --reload --port 41920
 **Production:**
 ```bash
 docker compose -f docker/compose.yml up -d
-uv run uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920
+uv sync
+uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920 --workers 4
 ```
 
 ## Contact & Support

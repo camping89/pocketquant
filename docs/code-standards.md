@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-03-15 | **Coverage:** 278 Python files, 13,381 LOC in src/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright
+**Last Updated:** 2026-03-22 | **Coverage:** 278 Python files, 13,641 LOC in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Port:** 41920
 
 ## Clean Architecture Rules
 
@@ -157,27 +157,36 @@ class StrategyAppService:
 
 ### 3. Dependency Injection (Dishka)
 
-**dishka** library with 6 providers + type-hint-based auto-resolution. Container resolves all dependencies automatically.
+**dishka** library with 6 providers + type-hint-based auto-resolution. Container resolves all dependencies automatically by matching `__init__` parameter types.
 
 ```python
 # Routes use dishka FastAPI integration
 from dishka.integrations.fastapi import FromDishka
+from pocketquant.core.common.mediator import Mediator
 
 @router.post("/sync")
-async def sync(mediator: FromDishka[Mediator]):
-    return await mediator.send(command)
+async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
+    return await mediator.send(cmd)
 ```
 
 **Key Files:**
-- `packages/pocketquant-api/src/pocketquant/api/di/container.py` — Factory: `create_container()`, handler registration
-- `packages/pocketquant-api/src/pocketquant/api/di/` — 6 Provider classes (CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider)
-- `packages/pocketquant-api/src/pocketquant/api/main.py` — Lifespan: setup_dishka(container, app)
+- `packages/pocketquant-api/src/pocketquant/api/di/container.py` — `create_container()`, handler registration
+- `packages/pocketquant-api/src/pocketquant/api/di/providers/` — 6 Provider classes
+- `packages/pocketquant-api/src/pocketquant/api/main.py` — Lifespan: create container, `setup_dishka()`
+
+**6 Providers (initialization order):**
+1. **CoreProvider** - Settings, EventBus (max_history=100), Mediator
+2. **PersistenceProvider** - Database, Cache, 7 repositories
+3. **InfrastructureProvider** - Brokers, TradingView, Scheduler
+4. **MarketDataProvider** - BarAppService, QuoteAppService
+5. **TradingProvider** - OrderAppService, PositionAppService
+6. **HandlerProvider** - All 27 CQRS handlers
 
 **Benefits:**
 - Auto-resolution by type hint (no manual wiring)
-- Scoped lifecycle (Scope.APP for singletons)
+- Scoped lifecycle (Scope.APP for singletons, Scope.REQUEST for per-request)
 - Type-safe (IDE autocomplete, pyright validation)
-- Centralized configuration via PROVIDERS list
+- Centralized initialization order via PROVIDERS list
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
@@ -358,18 +367,18 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 
 **Key Rules:**
 - Every handler MUST use `@handles(RequestType)` decorator
-- One handler per command/query (enforced at startup, `DuplicateHandlerError`)
-- Constructor receives dependencies (injected via explicit constructors in handler_registration.py)
-- `handle()` must be idempotent if possible (for retries)
-- Return DTOs, not domain entities
+- One handler per command/query (enforced at startup via `DuplicateHandlerError`)
+- Constructor receives dependencies (dishka auto-wires via type hints)
+- `handle()` method must be async or sync as needed
+- Return DTOs, never domain entities
 - Publish domain events for all state changes
 
 **Registration Pattern:**
-`register_handlers(container)` in `packages/pocketquant-api/src/pocketquant/api/di/container.py` resolves all handler types from container and registers with Mediator. New handlers need:
+Handlers auto-discovered at container build time:
 1. Implement handler with `@handles(RequestType)` decorator
 2. Add to HandlerProvider in `packages/pocketquant-api/src/pocketquant/api/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
-3. Add to ALL_HANDLER_TYPES list in HandlerProvider
-4. Handler dependencies resolved by dishka via __init__ type hints
+3. `register_handlers(container)` in container.py resolves all handlers and registers with Mediator at startup
+4. Dependencies resolved by dishka via __init__ type hints (no manual injection)
 
 ### 9. Handler Extract-Method Pattern
 
@@ -750,9 +759,17 @@ All aggregates migrated:
 | **Features** | ❌ No business logic ✅ Thin routes ✅ @handles decorator ✅ Call Application services |
 | **Infrastructure** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
 
-## Deprecated Patterns
+## Deprecated Patterns (DO NOT USE)
 
-❌ Business logic in features/ ❌ Direct DB calls outside persistence/ ❌ Pydantic in domain/ (use BaseModel with to_mongo/from_mongo) ❌ Bare except clauses ❌ Synchronous blocking I/O in async ❌ UUID4 for aggregates ❌ Handwritten DI wiring (use dishka)
+- Business logic in features/ → move to Application layer
+- Direct DB calls outside persistence/ → use repository pattern
+- Pydantic BaseModel in domain/ → use stdlib dataclasses (domain must be zero I/O)
+- Bare `except:` clauses → catch specific exceptions
+- Synchronous blocking I/O in async code → use ThreadPoolExecutor
+- UUID4 for IDs → use UUID7 (time-ordered, B-tree friendly)
+- Manual DI wiring → use Dishka providers
+- Direct Database.get_collection() outside persistence/ → use BaseRepository._collection()
+- Handwritten schema classes → use domain entities with to_mongo/from_mongo
 
 ## Quality Checklist
 

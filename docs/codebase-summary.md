@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-03-15 | **Codebase Size:** 13,381 LOC | **Total Files:** 278 Python files in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Structure:** 4-package uv workspace monorepo
+**Last Updated:** 2026-03-22 | **Codebase Size:** 13,641 LOC | **Total Files:** 278 Python files in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Structure:** 4-package uv workspace monorepo | **Port:** 41920
 
 ## Architecture Overview
 
@@ -33,7 +33,7 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
   - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
 - **HandlerRegistry** - Batch register multiple handlers
   - `register_all(mediator, handlers)` - Register handler list at startup
-- **EventBus:** In-memory async event bus (FIFO, 100 event max history)
+- **EventBus:** In-memory async event bus (FIFO, **100 event max history**)
   - `subscribe(event_type, handler)` - Register event subscriber
   - `publish(event)` - Notify all subscribers sequentially
   - `publish_all(events)` - Batch publish multiple events
@@ -43,7 +43,6 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **EventRegistry** - Auto-discover and bind decorated handlers
   - `register_instance(obj, event_bus)` - Scan obj for decorated methods, subscribe all
   - Supports single or multiple event types per handler
-- **EventBus** - In-memory FIFO with 50 event max history (was 100)
 
 **Tracing & Middleware:**
 - **CorrelationIDMiddleware** - Inject correlation_id into context for request tracking
@@ -455,17 +454,17 @@ Routes:
 
 ## Dependency Injection (Dishka)
 
-### 6 Providers (pocketquant.api.di)
+### 6 Providers (packages/pocketquant-api/src/pocketquant/api/di/)
 
 **CoreProvider** - App-level singletons
 - Settings (from config)
-- EventBus (max_history=100)
+- EventBus (max_history=**100**)
 - Mediator
 
 **PersistenceProvider** - Data access layer
 - Database (MongoDB, PyMongo native async)
 - Cache (Redis, redis-py)
-- 7 Repositories (Bar, Order, Position, Backtest, Optimization, Symbol, SyncStatus)
+- 7 Repositories (BarRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository)
 
 **InfrastructureProvider** - External integrations
 - IBroker implementations (PaperBroker, OKXBroker)
@@ -486,14 +485,14 @@ Routes:
 - PositionAppService (position tracking + P&L)
 
 **HandlerProvider** - All 27 CQRS handlers
-- Market data handlers (13): SyncSymbolHandler, GetOHLCVHandler, etc.
-- Trading handlers (4): ListOrdersHandler, GetOrderHandler, etc.
-- Strategy handlers (5): LoadStrategyHandler, StartStrategyHandler, etc.
-- Backtesting handlers (5): RunBacktestHandler, GetBacktestHandler, etc.
+- Market data handlers (13): SyncSymbolHandler, GetBarsHandler, etc.
+- Trading handlers (4): ListOrdersHandler, GetOrderHandler, ListPositionsHandler, GetPositionHandler
+- Strategy handlers (5): LoadStrategyHandler, StartStrategyHandler, StopStrategyHandler, GetOneHandler, GetAllHandler
+- Backtesting handlers (5): RunBacktestHandler, OptimizeHandler, GetResultHandler, GetOptimizationHandler, ListResultsHandler
 
 ### Container Factory
 
-**pocketquant.api.di.container:**
+**packages/pocketquant-api/src/pocketquant/api/di/container.py:**
 - `PROVIDERS` list defines initialization order (CoreProvider → ... → HandlerProvider)
 - `create_container()` - Returns AsyncContainer with all providers combined
 - `register_handlers(container)` - Resolves all handlers, registers with Mediator
@@ -585,7 +584,7 @@ sync_all_symbols job (each symbol independently)
 **Event Bus Pattern:** Decoupled domain events
 - Handlers publish domain events to EventBus
 - Subscribers react asynchronously (FIFO order)
-- In-memory with bounded history (50 events)
+- In-memory with bounded history (**100 events**)
 - No direct coupling between features
 
 **Value Objects:** Immutable domain primitives
@@ -638,7 +637,7 @@ All settings via environment variables (`.env` file):
 - `TRADINGVIEW_USERNAME` - Optional TradingView auth
 - `TRADINGVIEW_PASSWORD` - Optional TradingView auth
 - `ENVIRONMENT` - "development" or "production"
-- `API_PORT` - API server port (default: 8765)
+- `API_PORT` - API server port (default: **41920**)
 
 ## Dependencies
 
@@ -656,21 +655,23 @@ All settings via environment variables (`.env` file):
 
 ## Entry Points
 
-- **Development:** `python -m src.main` (config via `.env`)
-- **Production:** `python -m src.main` with `ENVIRONMENT=production`
-- **API Documentation:** `http://localhost:$API_PORT/api/v1/docs`
-- **Health Check:** `http://localhost:$API_PORT/health`
+- **Development:** `uvicorn pocketquant.api.main:app --reload --port 41920`
+- **Production:** `uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920` with `ENVIRONMENT=production`
+- **API Documentation:** `http://localhost:41920/api/v1/docs`
+- **Health Check:** `http://localhost:41920/health`
 
 ## Recent Changes (2026-03-15)
 
-**CRITICAL: DDD Aggregate Cleanup Refactoring**
-- Domain entities renamed consistently across monorepo packages
-- `OHLCVRepository` renamed to `BarRepository` (consolidated naming)
+**4-Package Monorepo Restructuring (2026-03-21)**
+- Reorganized codebase: packages/{core, backtest, trading, api} using uv workspace
+- Dependency graph enforced: core ← {backtest, trading} ← api
+- Namespace packages (PEP 420): no __init__.py at pocketquant/ level
+
+**DDD Aggregate Cleanup (2026-03-15)**
+- `OHLCVRepository` → `BarRepository` (consistent naming)
 - `SymbolAggregate` flattened to `Symbol` entity
-- `SymbolInfo` VO deleted (consolidated into Symbol)
-- `OHLCVAggregate` and `QuoteAggregate` deleted (dead code)
-- `BarCompletedEvent` properly emitted from live `BarAppService._save_completed_bar()`
-- UUID7 time-ordered IDs throughout (better for B-tree indexing)
+- `OHLCVAggregate`, `QuoteAggregate` deleted (dead code)
+- UUID7 time-ordered IDs throughout (B-tree friendly)
 
 **CRITICAL: Domain Persistence Consolidation (2026-03-15)**
 - `persistence/schemas/` directory DELETED

@@ -1,6 +1,6 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-03-15 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared)
+**Last Updated:** 2026-03-22 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Port:** 41920 | **Structure:** 4-package monorepo
 
 ## 1. ASCII Layer Relation Map
 
@@ -82,18 +82,18 @@
 ## 2. Domain Three-Tier Structure
 
 ```
-  src/domain/
+  packages/pocketquant-core/src/pocketquant/core/domain/
   │
   ├── TOP-LEVEL (collection-backed, to_mongo/from_mongo)
-  │   ├── bar/            Bar entity, BarCompletedEvent, OHLCV VO, BarBuilder
+  │   ├── bar/            Bar entity, BarCompletedEvent✅, OHLCV VO, BarBuilder
   │   ├── order/          OrderAggregate, OrderStatus/Type/Side enums, 5 events
   │   ├── position/       PositionAggregate, PositionSide enum, PnL VO, 3 events
-  │   ├── symbol/         Symbol entity (flattened)
+  │   ├── symbol/         Symbol entity (flattened from SymbolAggregate)
   │   ├── sync_status/    SyncStatus entity
   │   └── backtest/       BacktestResult, OptimizationResult entities
   │
   ├── concepts/ (non-persisted logic, no MongoDB collection)
-  │   ├── quote/          QuoteTick VO, QuoteReceivedEvent
+  │   ├── quote/          QuoteTick VO, QuoteReceivedEvent✅
   │   ├── risk/           RiskConfig VO, RiskModel enum, PositionSizer service
   │   └── strategy/       IStrategy interface, Signal VO, Direction enum
   │                        MACrossover impl, SignalGeneratedEvent
@@ -101,7 +101,7 @@
   └── shared/ (cross-cutting, used by all domain folders)
       ├── events.py       DomainEvent base class
       ├── enums.py        Interval enum (1m..1M)
-      └── value_objects.py  Shared VOs
+      └── value_objects.py  Shared VOs (Price, Signal, etc)
 ```
 
 ## 3. Layer Map (Mermaid)

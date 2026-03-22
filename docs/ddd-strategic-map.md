@@ -1,6 +1,6 @@
 # DDD Strategic Map
 
-**Last Updated:** 2026-03-15 | **Status:** Living Document
+**Last Updated:** 2026-03-22 | **Status:** v1.0 Complete | **Bounded Contexts:** 6 (Market Data, Trading, Strategy, Risk, Symbol, Backtest)
 
 ## Bounded Contexts
 
@@ -88,21 +88,21 @@ Order→Position (Events Fully Wired):
   → PositionAggregate.open() / add_quantity() / reduce_quantity()
 ```
 
-### In Progress (Real-Time Wiring: Phase 5)
+### Fully Wired (All Events Complete)
 
 ```
-Real-time bars (IMPLEMENTATION READY, EMISSION PENDING):
+Real-time bars (IMPLEMENTED ✅):
   QuoteTick → BarBuilder → Bar saved to MongoDB bars collection
-  → BarCompletedEvent emission site ready in _save_completed_bar()
-  ⟳ Real-time wiring: awaiting BarCompletedEvent emission for live strategies
+  → BarCompletedEvent emitted from _save_completed_bar()
+  → StrategyAppService._on_bar_completed() → live strategy execution
 
-Real-time quotes (IMPLEMENTATION READY, EMISSION PENDING):
+Real-time quotes (IMPLEMENTED ✅):
   WebSocket → Quote DTO cached in Redis
-  → QuoteReceivedEvent emission site ready in _on_quote_update()
-  ⟳ Real-time wiring: awaiting QuoteReceivedEvent emission for tick strategies
+  → QuoteReceivedEvent emitted from _on_quote_update()
+  → StrategyAppService._on_quote_received() → tick handlers
 ```
 
-**Status:** Backtesting strategy execution is fully wired and working. Real-time event emission infrastructure is in place (`_save_completed_bar()`, `_on_quote_update()`). Live trading event wiring scheduled for Phase 5 (scheduled 2026-Q2).
+**Status:** All event wiring complete. Backtesting fully functional. Real-time event streams implemented (BarCompletedEvent, QuoteReceivedEvent). Live trading event infrastructure production-ready.
 
 ## DDD Classification Guide
 
@@ -134,9 +134,15 @@ Real-time quotes (IMPLEMENTATION READY, EMISSION PENDING):
 6. ✅ **MongoDB collection ohlcv → bars** — Aligns with domain entity names
 7. ✅ **Schemas directory deleted** — Domain entities now handle MongoDB persistence directly via `to_mongo()`/`from_mongo()`
 
-## Open Questions
+## Resolved Questions (2026-03-22)
 
-1. **Real-time event wiring timeline** (Phase 5): When to prioritize `BarCompletedEvent` and `QuoteReceivedEvent` emission for live trading strategies?
-2. **Event sourcing depth**: Current events are fire-and-forget via EventBus. If project scales, should events be persisted (event store) for audit/replay?
-3. **Multi-strategy broker isolation**: Each strategy gets own broker instance. At scale (50+ strategies), is this sustainable or should there be a shared order router?
-4. **SyncStatus compound key**: Currently upserts by `(symbol, exchange, interval)`. Should it get a dedicated `_id` UUID field for consistency with other repositories?
+1. ✅ **Real-time event wiring**: BarCompletedEvent and QuoteReceivedEvent emission now implemented in live trading pipeline
+2. ✅ **4-package monorepo**: Restructured with clean dependency graph (core ← {backtest, trading} ← api)
+3. ✅ **Dishka DI integration**: All 6 providers configured, handler registration automated
+
+## Open Questions (Future Phases)
+
+1. **Event sourcing**: Current events are fire-and-forget via EventBus. If scaling, should events be persisted (event store) for audit/replay?
+2. **Multi-strategy broker isolation**: Each strategy gets own broker instance. At scale (50+ strategies), should there be a shared order router?
+3. **SyncStatus compound key**: Currently upserts by `(symbol, exchange, interval)`. Should get dedicated `_id` UUID for consistency?
+4. **Distributed job scheduling**: APScheduler is in-memory. For multiple workers, should use distributed scheduler (Celery, etc.)?
