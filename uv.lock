@@ -792,11 +792,13 @@ requires-dist = [
 name = "pocketquant-workspace"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "pocketquant-api" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "import-linter" },
-    { name = "pocketquant-api" },
     { name = "pre-commit" },
     { name = "pyright" },
     { name = "pytest" },
@@ -806,11 +808,11 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "pocketquant-api", editable = "packages/pocketquant-api" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "import-linter", specifier = ">=2.11" },
-    { name = "pocketquant-api", editable = "packages/pocketquant-api" },
     { name = "pre-commit", specifier = ">=3.6.0" },
     { name = "pyright", specifier = ">=1.1.350" },
     { name = "pytest", specifier = ">=7.4.0" },

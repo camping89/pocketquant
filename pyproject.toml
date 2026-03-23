@@ -6,13 +6,15 @@ readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "PocketQuant Team" }]
+dependencies = [
+    "pocketquant-api",
+]
 
 [tool.uv.workspace]
 members = ["packages/*"]
 
 [dependency-groups]
 dev = [
-    "pocketquant-api",
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
