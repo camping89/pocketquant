@@ -98,6 +98,10 @@ just qa                              # Lint + format + type check
 - [Deployment Guide](./docs/deployment-guide.md)
 - [Project Overview](./docs/project-overview-pdr.md)
 
+## Deployment
+
+See [Deployment Guide](./docs/deployment-guide.md) for VPS setup, CI/CD, and port configuration.
+
 ## License
 
 MIT
