@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-03-22 | **Version:** 3.3 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Port:** 41920
+**Last Updated:** 2026-03-23 | **Version:** 3.3 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka
 
 ## High-Level Architecture
 
@@ -727,7 +727,7 @@ OptimizationHandler
 7. `register_health_checks()` registers DB/Redis/job health probes
 8. `start_background_jobs()` registers APScheduler sync jobs
 9. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-10. Server ready on port 41920
+10. Server ready on port 41920 (internal; host port via `APP_PORT` env var)
 
 ### Graceful Shutdown (container.close() in finally)
 

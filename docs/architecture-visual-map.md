@@ -1,6 +1,6 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-03-22 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Port:** 41920 | **Structure:** 4-package monorepo
+**Last Updated:** 2026-03-23 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4-package monorepo
 
 ## 1. ASCII Layer Relation Map
 
@@ -64,7 +64,7 @@
   ╚══════════╤══════════════════╤═════════════════════════╝
              │                  │
              ▼                  ▼
-       MongoDB:27018      Redis:6379
+       MongoDB:$MONGO_PORT   Redis:$REDIS_PORT
 
   ╔══════════════════════════════════════════════════════╗
   ║  COMMON  (src/common/)  Cross-Cutting, ALL layers   ║
@@ -339,7 +339,7 @@ flowchart LR
            v                      v
     ┌──────────────┐       ┌──────────────┐
     │   MongoDB    │       │    Redis     │
-    │  Port 27018  │       │  Port 6379   │
+    │  $MONGO_PORT │       │ $REDIS_PORT  │
     │ 7 collections│       │  TTL cache   │
     │ bars,orders  │       │ quote,bar    │
     │ positions,...│       │ idempot,rate │

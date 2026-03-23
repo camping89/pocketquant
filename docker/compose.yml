@@ -6,7 +6,7 @@ services:
     container_name: pocketquant-mongodb
     restart: unless-stopped
     ports:
-      - "27018:27017"
+      - "${MONGO_PORT:-52017}:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: pocketquant
       MONGO_INITDB_ROOT_PASSWORD: pocketquant_dev
@@ -25,7 +25,7 @@ services:
     container_name: pocketquant-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-53679}:6379"
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -41,7 +41,7 @@ services:
     container_name: pocketquant-mongo-express
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - "${MONGOEXPRESS_PORT:-58081}:8081"
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: pocketquant
       ME_CONFIG_MONGODB_ADMINPASSWORD: pocketquant_dev
