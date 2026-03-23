@@ -26,7 +26,7 @@ COPY packages/pocketquant-api/pyproject.toml packages/pocketquant-api/
 COPY packages/ packages/
 
 # Install all workspace packages (locked, no dev deps)
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-editable
 
 # ============================================
 # Stage 2: Runtime
