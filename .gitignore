@@ -95,3 +95,5 @@ dmypy.json
 
 # Generated artifacts
 repomix-output.xml
+
+.env.test
