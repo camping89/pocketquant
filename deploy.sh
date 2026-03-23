@@ -5,7 +5,7 @@ set -euo pipefail
 # Handles first-time setup + subsequent deploys in one script.
 #
 # First time:
-#   scp deploy.sh docker/compose.prod.yml docker/mongo-init.js .env to VPS
+#   scp deploy.sh docker/compose.prod.yml .env to VPS
 #   ssh vps "cd /opt/pocketquant && bash deploy.sh"
 #
 # Update:

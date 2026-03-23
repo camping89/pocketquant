@@ -87,7 +87,7 @@ OKX_DEMO_MODE=false
 ```bash
 ssh -i $KEY $VPS "mkdir -p /opt/pocketquant/docker"
 scp -i $KEY deploy.sh ${VPS}:/opt/pocketquant/
-scp -i $KEY docker/compose.prod.yml docker/mongo-init.js ${VPS}:/opt/pocketquant/docker/
+scp -i $KEY docker/compose.prod.yml ${VPS}:/opt/pocketquant/docker/
 scp -i $KEY .env ${VPS}:/opt/pocketquant/docker/.env
 ```
 
@@ -138,10 +138,10 @@ After pushing code (CI triggers on `master` and `feat/strategy-init`):
 ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
 
-If compose file or mongo-init.js changed, re-scp them first:
+If compose file changed, re-scp it first:
 
 ```bash
-scp -i $KEY docker/compose.prod.yml docker/mongo-init.js ${VPS}:/opt/pocketquant/docker/
+scp -i $KEY docker/compose.prod.yml ${VPS}:/opt/pocketquant/docker/
 ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
 
