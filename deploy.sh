@@ -2,18 +2,48 @@
 set -euo pipefail
 
 # PocketQuant VPS Deploy Script
-# Usage: scp to VPS, then: bash deploy.sh
-# Requires: docker/.env with GITHUB_USER, GHCR_TOKEN, MONGO_PASSWORD set
+# Handles first-time setup + subsequent deploys in one script.
+#
+# First time:
+#   scp deploy.sh docker/compose.prod.yml docker/mongo-init.js .env to VPS
+#   ssh vps "cd /opt/pocketquant && bash deploy.sh"
+#
+# Update:
+#   ssh vps "cd /opt/pocketquant && bash deploy.sh"
 
 cd "$(dirname "$0")"
 
+# ─── Setup (runs only if needed) ──────────────────────────────
+
+if ! command -v docker &>/dev/null; then
+  echo "=== Installing Docker ==="
+  curl -fsSL https://get.docker.com | sh
+  sudo usermod -aG docker "$USER"
+  echo "Docker installed. Log out and back in, then re-run this script."
+  exit 0
+fi
+
+if [ ! -f docker/.env ]; then
+  echo "ERROR: docker/.env not found. Copy .env.example, fill prod values, place at docker/.env"
+  exit 1
+fi
+
+# ─── Validate required env vars ───────────────────────────────
+
 set -a && source docker/.env && set +a
 
-echo "=== Logging in to GHCR ==="
-echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+REQUIRED_VARS="DOCKERHUB_USERNAME MONGO_PASSWORD APP_PORT MONGO_PORT REDIS_PORT PORTAINER_PORT"
+for var in $REQUIRED_VARS; do
+  if [ -z "${!var:-}" ]; then
+    echo "ERROR: $var not set in docker/.env"
+    exit 1
+  fi
+done
+
+# ─── Deploy ───────────────────────────────────────────────────
 
 echo "=== Pulling latest image ==="
-docker pull "ghcr.io/${GITHUB_USER}/pocketquant:${IMAGE_TAG:-latest}"
+docker pull "${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}"
 
 echo "=== Starting services ==="
 docker compose -f docker/compose.prod.yml --env-file docker/.env up -d --remove-orphans
