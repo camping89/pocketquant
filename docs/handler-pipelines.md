@@ -1,6 +1,6 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-03-22 | **Total Handlers:** 27 CQRS handlers across 4 domains | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Port:** 41920
+**Last Updated:** 2026-03-23 | **Total Handlers:** 27 CQRS handlers across 4 domains | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka
 
 This document details the complete pipeline for each of the 27 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
 

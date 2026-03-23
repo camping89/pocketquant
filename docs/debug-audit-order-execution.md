@@ -299,7 +299,7 @@ When an order is filled (either immediately for market orders or via WebSocket f
 At this point the order has been placed, filled, and a position created. Three things should be in MongoDB:
 
 ```bash
-mongosh "mongodb://localhost:27018"
+mongosh "mongodb://localhost:52017"
 
 # The order (should be FILLED)
 db.orders.find({strategy_id: "test-ma-crossover"}).sort({created_at: -1}).limit(5)
@@ -324,7 +324,7 @@ KEYS bar:*       # Current incomplete bars being built
 
 | # | Step | What to Verify |
 |---|------|----------------|
-| 1 | Infra | Docker up: MongoDB on 27018, Redis on 6379 |
+| 1 | Infra | Docker up: MongoDB on $MONGO_PORT (default 52017), Redis on $REDIS_PORT (default 53679) |
 | 2 | Infra | App starts, `GET /health` returns OK |
 | 3 | Load | POST /strategy/load — YAML parsed, no errors |
 | 4 | Load | Strategy stored in memory (check "strategy_loaded" log) |

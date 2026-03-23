@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-22 | **Codebase:** 13,641 LOC (278 files, 4-package monorepo) | **Architecture:** DDD + CQRS + Clean Architecture + Dishka DI | **Structure:** packages/{core, backtest, trading, api} | **Test Coverage:** 78%+
 
-Welcome to PocketQuant documentation. Start below based on your role. **Latest (2026-03-22):** Complete 4-package monorepo restructuring. Dishka DI integration complete. All domain entities with MongoDB persistence (to_mongo/from_mongo). Port: 41920.
+Welcome to PocketQuant documentation. Start below based on your role. **Latest (2026-03-23):** Complete 4-package monorepo restructuring. Dishka DI integration complete. All domain entities with MongoDB persistence (to_mongo/from_mongo). Ports env-var driven.
 
 ## Quick Navigation
 
@@ -341,7 +341,8 @@ When you make code changes:
 
 | Date | Updates |
 |------|---------|
-| 2026-03-22 | Monorepo restructuring complete: 4-package uv workspace (core, backtest, trading, api). Dishka DI integration. All domain entities with MongoDB persistence. Port: 41920. Updated all docs. |
+| 2026-03-23 | Port hardening: all service ports env-var driven with obscure defaults (52017, 53679, 58081, 54900). |
+| 2026-03-22 | Monorepo restructuring complete: 4-package uv workspace (core, backtest, trading, api). Dishka DI integration. All domain entities with MongoDB persistence. Updated all docs. |
 | 2026-03-15 | DDD aggregate cleanup: Deleted OHLCVAggregate, QuoteAggregate, SymbolAggregate. Renamed domain/ohlcv/→domain/bar/, OHLCVRepository→BarRepository, collection ohlcv→bars. Symbol flattened to entity. Schemas deleted. |
 | 2026-02-21 | Accuracy refresh: Verified all LOC counts (13,641 across 277 files), fixed Motor→PyMongo references, corrected justfile commands (just up/down, not start/stop), fixed mypy→pyright. Updated all doc files with accurate metrics. |
 | 2026-02-13 | Operation-first vertical slice restructure: All features reorganized with operations as primary unit. Updated architecture docs, code standards, feature structure. Each operation folder self-contained. |

@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-03-22 | **Codebase Size:** 13,641 LOC | **Total Files:** 278 Python files in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Structure:** 4-package uv workspace monorepo | **Port:** 41920
+**Last Updated:** 2026-03-23 | **Codebase Size:** 13,641 LOC | **Total Files:** 278 Python files in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Structure:** 4-package uv workspace monorepo
 
 ## Architecture Overview
 
@@ -637,7 +637,7 @@ All settings via environment variables (`.env` file):
 - `TRADINGVIEW_USERNAME` - Optional TradingView auth
 - `TRADINGVIEW_PASSWORD` - Optional TradingView auth
 - `ENVIRONMENT` - "development" or "production"
-- `API_PORT` - API server port (default: **41920**)
+- `APP_PORT` - Host-mapped API port (default: **58921**, container always 41920)
 
 ## Dependencies
 
@@ -655,10 +655,10 @@ All settings via environment variables (`.env` file):
 
 ## Entry Points
 
-- **Development:** `uvicorn pocketquant.api.main:app --reload --port 41920`
-- **Production:** `uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920` with `ENVIRONMENT=production`
-- **API Documentation:** `http://localhost:41920/api/v1/docs`
-- **Health Check:** `http://localhost:41920/health`
+- **Development:** `just dev` (uvicorn on port 41920, local)
+- **Production:** Docker compose with `APP_PORT` env var mapping to container port 41920
+- **API Documentation:** `http://localhost:41920/api/v1/docs` (local dev)
+- **Health Check:** `http://localhost:41920/health` (local dev)
 
 ## Recent Changes (2026-03-15)
 

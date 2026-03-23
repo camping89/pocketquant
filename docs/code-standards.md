@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-03-22 | **Coverage:** 278 Python files, 13,641 LOC in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Port:** 41920
+**Last Updated:** 2026-03-23 | **Coverage:** 278 Python files, 13,641 LOC in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright
 
 ## Clean Architecture Rules
 
@@ -711,7 +711,7 @@ class Settings(BaseSettings):
 
 ```bash
 # .env.example (dummy values)
-MONGODB_URL=mongodb://localhost:27018
+MONGODB_URL=mongodb://localhost:52017
 TRADINGVIEW_USERNAME=username_placeholder
 ```
 

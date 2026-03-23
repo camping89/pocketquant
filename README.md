@@ -40,14 +40,14 @@ source .venv/bin/activate
 just up                        # 4. Start MongoDB + Redis
 just dev                       # 5. Run dev server with hot reload
 (Or can hit F5 to debug the api app - aka entry point of the whole application)
-# API docs → http://localhost:41920/api/v1/docs
+# API docs → http://localhost:41920/api/v1/docs (local dev)
 ```
 
 ## Commands
 
 ```
 just install       Create .venv + install all workspace packages
-just up            Start Docker (MongoDB 27018 + Redis 6379)
+just up            Start Docker (MongoDB $MONGO_PORT + Redis $REDIS_PORT)
 just down          Stop containers
 just reset         Stop + delete volumes
 just check         Verify environment (Docker, MongoDB, Redis)
