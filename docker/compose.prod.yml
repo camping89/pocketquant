@@ -1,36 +1,36 @@
 name: pocketquant-prod
 
 services:
-  # ===========================================
-  # APPLICATION
-  # ===========================================
   app:
-    image: ghcr.io/${GITHUB_USER}/pocketquant:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}
     container_name: pocketquant-app
     restart: unless-stopped
+    ports:
+      - "${APP_PORT}:41920"
     environment:
-      # Application
       - APP_NAME=PocketQuant
       - APP_VERSION=0.1.0
       - ENVIRONMENT=production
       - DEBUG=false
-      # MongoDB
-      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/pocketquant?authSource=admin
+      - MONGODB_URL=mongodb://${MONGO_USER:-pocketquant}:${MONGO_PASSWORD}@mongodb:27017/pocketquant?authSource=admin
       - MONGODB_DATABASE=pocketquant
       - MONGODB_MIN_POOL_SIZE=5
       - MONGODB_MAX_POOL_SIZE=50
-      # Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_CACHE_TTL=3600
-      # TradingView
       - TRADINGVIEW_USERNAME=${TRADINGVIEW_USERNAME:-}
       - TRADINGVIEW_PASSWORD=${TRADINGVIEW_PASSWORD:-}
-      # Logging
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
-      # Background Jobs
       - JOB_WORKER_COUNT=4
       - ENABLE_JOBS=${ENABLE_JOBS:-true}
+      - DEFAULT_BROKER=${DEFAULT_BROKER:-paper}
+      - PAPER_INITIAL_BALANCE=${PAPER_INITIAL_BALANCE:-100000}
+      - PAPER_SLIPPAGE_PERCENT=${PAPER_SLIPPAGE_PERCENT:-0.001}
+      - OKX_API_KEY=${OKX_API_KEY:-}
+      - OKX_API_SECRET=${OKX_API_SECRET:-}
+      - OKX_PASSPHRASE=${OKX_PASSPHRASE:-}
+      - OKX_DEMO_MODE=${OKX_DEMO_MODE:-true}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -42,32 +42,20 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-        tag: "{{.Name}}"
-    labels:
-      - "app=pocketquant"
-    networks:
-      - pocketquant-net
 
-  # ===========================================
-  # DATABASE
-  # ===========================================
   mongodb:
     image: mongo:7.0
     container_name: pocketquant-mongodb
     restart: unless-stopped
+    ports:
+      - "${MONGO_PORT}:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-pocketquant}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: pocketquant
     volumes:
@@ -78,51 +66,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
-    networks:
-      - pocketquant-net
 
-  mongo-express:
-    image: mongo-express:1.0.2
-    container_name: pocketquant-mongo-express
-    restart: unless-stopped
-    environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_USER}
-      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_PASSWORD}
-      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/
-      ME_CONFIG_BASICAUTH: "true"
-      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USER:-admin}
-      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD}
-      ME_CONFIG_SITE_BASEURL: /mongo/
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    networks:
-      - pocketquant-net
-    profiles:
-      - admin
-
-  # ===========================================
-  # CACHE
-  # ===========================================
   redis:
     image: redis:7.2-alpine
     container_name: pocketquant-redis
     restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
     command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -131,138 +81,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-        reservations:
-          memory: 64M
-    networks:
-      - pocketquant-net
 
-  # ===========================================
-  # LOGGING (Loki + Promtail)
-  # ===========================================
-  loki:
-    image: grafana/loki:3.0.0
-    container_name: pocketquant-loki
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - loki_data:/loki
-      - ./loki-config.yml:/etc/loki/local-config.yaml:ro
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
-    networks:
-      - pocketquant-net
-    profiles:
-      - monitoring
-
-  promtail:
-    image: grafana/promtail:3.0.0
-    container_name: pocketquant-promtail
-    restart: unless-stopped
-    volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./promtail-config.yml:/etc/promtail/config.yml:ro
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-    networks:
-      - pocketquant-net
-    profiles:
-      - monitoring
-
-  # ===========================================
-  # MONITORING (Grafana)
-  # ===========================================
-  grafana:
-    image: grafana/grafana:10.2.0
-    container_name: pocketquant-grafana
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
-      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000/grafana}
-      - GF_SERVER_SERVE_FROM_SUB_PATH=true
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
-    depends_on:
-      - loki
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
-    networks:
-      - pocketquant-net
-    profiles:
-      - monitoring
-
-  # ===========================================
-  # MANAGEMENT (Portainer)
-  # ===========================================
   portainer:
     image: portainer/portainer-ce:latest
     container_name: pocketquant-portainer
     restart: unless-stopped
-    command: --base-url /portainer
+    ports:
+      - "${PORTAINER_PORT}:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - portainer_data:/data
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    networks:
-      - pocketquant-net
-    profiles:
-      - admin
-
-  # ===========================================
-  # REVERSE PROXY (Caddy)
-  # ===========================================
-  caddy:
-    image: caddy:2-alpine
-    container_name: pocketquant-caddy
-    restart: unless-stopped
-    ports:
-      - "${CADDY_HTTP_PORT:-51080}:80"
-      - "${CADDY_HTTPS_PORT:-51443}:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-    networks:
-      - pocketquant-net
-
-# ===========================================
-# NETWORKS & VOLUMES
-# ===========================================
-networks:
-  pocketquant-net:
-    driver: bridge
 
 volumes:
   mongodb_data:
   redis_data:
-  loki_data:
-  grafana_data:
   portainer_data:
-  caddy_data:
-  caddy_config:
