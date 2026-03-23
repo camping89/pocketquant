@@ -13,7 +13,6 @@ services:
       MONGO_INITDB_DATABASE: pocketquant
     volumes:
       - mongodb_data:/data/db
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     healthcheck:
       test: ["CMD", "mongosh", "--username", "pocketquant", "--password", "pocketquant_dev", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
