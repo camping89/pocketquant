@@ -86,7 +86,7 @@ OKX_DEMO_MODE=false
 
 ```bash
 ssh -i $KEY $VPS "mkdir -p /opt/pocketquant/docker"
-scp -i $KEY deploy.sh ${VPS}:/opt/pocketquant/
+scp -i $KEY deploy.sh verify.sh ${VPS}:/opt/pocketquant/
 scp -i $KEY docker/compose.prod.yml ${VPS}:/opt/pocketquant/docker/
 scp -i $KEY .env ${VPS}:/opt/pocketquant/docker/.env
 ```
@@ -113,24 +113,25 @@ ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy.sh"
 ### Step 4: Verify
 
 ```bash
-ssh -i $KEY $VPS "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash verify.sh"
 ```
 
-Expected: 4 containers running (app, mongodb, redis, portainer).
+Runs 15 checks (containers, health, HTTP, MongoDB, Redis, disk, memory, ports, image, logs) and outputs a markdown report to `reports/verify-<UTC-timestamp>.md` on the VPS.
+
+Quick check without full report:
 
 ```bash
-# Health check
+ssh -i $KEY $VPS "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
 ssh -i $KEY $VPS "curl -s http://localhost:\$APP_PORT/health"
-
-# Portainer UI
-open http://vps-ip:$PORTAINER_PORT
 ```
+
+Portainer UI: `http://vps-ip:$PORTAINER_PORT`
 
 ---
 
 ## Updating (2nd+ Deploy)
 
-After pushing code (CI triggers on `master` and `feat/strategy-init`):
+After pushing code (CI triggers on `master` and `develop`):
 
 ```bash
 # 1. CI builds + pushes image automatically (check GitHub Actions tab)
