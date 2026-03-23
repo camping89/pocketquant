@@ -1,204 +1,202 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-03-21 | **Version:** 1.0 | **Min Python:** 3.14+ | **Architecture:** DDD + CQRS + Dishka | **Database:** PyMongo (NOT Motor) | **Structure:** 4-package uv workspace monorepo
+**Last Updated:** 2026-03-23 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via deploy.sh
+
+## Architecture
+
+4 Docker containers on a disposable VPS. CI builds image, you pull manually.
+
+```
+GitHub push → CI builds Docker image → Docker Hub
+VPS: deploy.sh pulls image → docker compose up (app + mongodb + redis + portainer)
+```
 
 ## Prerequisites
 
-Same as development requirements:
-- Python 3.14+
-- Docker & Docker Compose
-- [just](https://github.com/casey/just)
-- [uv](https://docs.astral.sh/uv/)
+**One-time GitHub setup:**
 
-## Ubuntu/Debian
+1. Create Docker Hub access token: hub.docker.com → Account Settings → Security → New Access Token
+2. Add GitHub repo secrets (Settings → Secrets and variables → Actions):
+   - `DOCKERHUB_USERNAME` — your Docker Hub username
+   - `DOCKERHUB_TOKEN` — the access token from step 1
 
-```bash
-# Python
-sudo apt install python3.14
+## Port Map
 
-# Docker
-sudo apt install docker.io docker-compose-v2
-sudo usermod -aG docker $USER  # Add user to docker group (logout/login required)
+| Service | Env Var | Container Port |
+|---------|---------|----------------|
+| App API | `APP_PORT` | 41920 |
+| MongoDB | `MONGO_PORT` | 27017 |
+| Redis | `REDIS_PORT` | 6379 |
+| Portainer | `PORTAINER_PORT` | 9000 |
 
-# uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
+No default ports — you MUST set them in `.env`. Pick obscure values to avoid scanning.
 
-# just
-sudo apt install just  # Or: cargo install just
-```
+---
 
-## Deploy
+## First Deploy
 
-```bash
-# Clone and configure
-git clone <repo> && cd pocketquant
-cp .env.example .env
-# Edit .env: set MONGODB_URL, REDIS_URL, API_PORT, etc.
-
-# Install dependencies
-uv sync
-
-# Start infrastructure (MongoDB 27018 + Redis 6379)
-docker compose -f docker/compose.yml up -d
-
-# Run app (separate terminal)
-uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920
-```
-
-## Running as Service (systemd)
-
-Create `/etc/systemd/system/pocketquant.service`:
-
-```ini
-[Unit]
-Description=PocketQuant Trading Platform
-After=network.target docker.service
-
-[Service]
-Type=simple
-User=pocketquant
-WorkingDirectory=/opt/pocketquant
-ExecStart=/opt/pocketquant/.venv/bin/uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
+### Step 1: Prepare .env
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable pocketquant
-sudo systemctl start pocketquant
+cp .env.example .env.prod
 ```
 
-## Environment Variables
+Edit `.env.prod` — uncomment and fill the production infrastructure section:
 
-See `.env.example` for all options. Key production settings:
+```env
+# Change these from dev defaults:
+ENVIRONMENT=production
+LOG_FORMAT=json
 
-| Variable | Production Value | Purpose |
-|----------|------------------|---------|
-| `ENVIRONMENT` | `production` | Enables production mode |
-| `LOG_FORMAT` | `json` | Structured JSON logs for log aggregators |
-| `LOG_LEVEL` | `info` | Reduce noise (use `debug` for troubleshooting) |
-| `MONGODB_URL` | Your MongoDB URL | Database connection |
-| `REDIS_URL` | Your Redis URL | Cache connection |
-| `OKX_API_KEY` | Your API key | OKX live trading |
-| `OKX_API_SECRET` | Your secret key | OKX live trading |
-| `OKX_PASSPHRASE` | Your passphrase | OKX live trading |
-| `TRADINGVIEW_USERNAME` | Optional | TradingView auth |
-| `TRADINGVIEW_PASSWORD` | Optional | TradingView auth |
+# Uncomment and fill these:
+DOCKERHUB_USERNAME=your-dockerhub-username
+IMAGE_TAG=latest
+MONGO_USER=pocketquant
+MONGO_PASSWORD=your_strong_random_password
+APP_PORT=58921
+MONGO_PORT=52017
+REDIS_PORT=53679
+PORTAINER_PORT=54900
 
-## OKX Setup
-
-For live trading via OKX:
-
-1. Create OKX account at https://www.okx.com/
-2. Generate API credentials:
-   - Log in → Account → API
-   - Create new key with trading permissions
-   - Save: API Key, Secret Key, Passphrase
-3. Add to `.env`:
-   ```env
-   OKX_API_KEY=your_api_key
-   OKX_SECRET_KEY=your_secret_key
-   OKX_PASSPHRASE=your_passphrase
-   ```
-4. Set broker in strategy config (see below)
-
-## Strategy Configuration
-
-Create strategy YAML file (e.g., `strategies/ma_crossover.yaml`):
-
-```yaml
-name: ma_crossover
-description: Simple MA crossover strategy
-symbol: BTCUSDT
-exchange: OKX
-broker: okx  # or 'paper' for simulation
-parameters:
-  fast_period: 10
-  slow_period: 20
-  quantity: 0.1
-risk:
-  max_position_size: 1.0
-  stop_loss_percent: 2.0
-  take_profit_percent: 5.0
+# Optional — fill if using:
+TRADINGVIEW_USERNAME=your_username
+TRADINGVIEW_PASSWORD=your_password
+OKX_API_KEY=your_key
+OKX_API_SECRET=your_secret
+OKX_PASSPHRASE=your_passphrase
+OKX_DEMO_MODE=false
 ```
 
-Load strategy via API:
+### Step 2: Copy files to VPS
 
 ```bash
-curl -X POST http://localhost:41920/api/v1/strategies/load \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "ma_crossover",
-    "config_path": "strategies/ma_crossover.yaml"
-  }'
+ssh vps "mkdir -p /opt/pocketquant/docker"
+scp deploy.sh vps:/opt/pocketquant/
+scp docker/compose.prod.yml docker/mongo-init.js vps:/opt/pocketquant/docker/
+scp .env.prod vps:/opt/pocketquant/docker/.env
 ```
 
-Start strategy:
+### Step 3: Run deploy
 
 ```bash
-curl -X POST http://localhost:41920/api/v1/strategies/start \
-  -H "Content-Type: application/json" \
-  -d '{"strategy_name": "ma_crossover"}'
+ssh vps "cd /opt/pocketquant && bash deploy.sh"
 ```
 
-## Database Initialization
+`deploy.sh` will:
+- Install Docker if missing (then exit — re-run after logging back in)
+- Validate all required env vars
+- Pull image from Docker Hub
+- Start all 4 services
+- Prune old images
 
-Initialize MongoDB collections on first startup:
+### Step 4: Verify
 
 ```bash
-# Collections auto-created on first write
-# Optional: Pre-create with indexes for performance
-
-# Market data indexes
-db.bars.createIndex({ "symbol": 1, "exchange": 1, "interval": 1, "timestamp": 1 }, { unique: true })
-db.symbols.createIndex({ "code": 1, "exchange": 1 }, { unique: true })
-
-# Trading indexes
-db.orders.createIndex({ "order_id": 1 }, { unique: true })
-db.positions.createIndex({ "symbol": 1, "exchange": 1 }, { unique: true })
-
-# Backtesting indexes
-db.backtest_results.createIndex({ "run_id": 1 }, { unique: true })
-db.optimization_results.createIndex({ "optimization_id": 1 }, { unique: true })
+ssh vps "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
 ```
+
+Expected: 4 containers running (app, mongodb, redis, portainer).
+
+```bash
+# Health check
+ssh vps "curl -s http://localhost:\$APP_PORT/health"
+
+# Portainer UI
+open http://vps-ip:$PORTAINER_PORT
+```
+
+---
+
+## Updating (2nd+ Deploy)
+
+After pushing code to master:
+
+```bash
+# 1. CI builds + pushes image automatically (check GitHub Actions tab)
+# 2. Pull and restart on VPS:
+ssh vps "cd /opt/pocketquant && bash deploy.sh"
+```
+
+If compose file or mongo-init.js changed, re-scp them first:
+
+```bash
+scp docker/compose.prod.yml docker/mongo-init.js vps:/opt/pocketquant/docker/
+ssh vps "cd /opt/pocketquant && bash deploy.sh"
+```
+
+If .env changed:
+
+```bash
+scp .env.prod vps:/opt/pocketquant/docker/.env
+ssh vps "cd /opt/pocketquant && bash deploy.sh"
+```
+
+---
+
+## Connecting from Local Machine
+
+| Tool | Connection |
+|------|------------|
+| Swagger | `http://vps-ip:$APP_PORT/api/v1/docs` |
+| DataGrip | `mongodb://pocketquant:PASSWORD@vps-ip:$MONGO_PORT/pocketquant?authSource=admin` |
+| RedisInsight | `vps-ip:$REDIS_PORT` |
+| Portainer | `http://vps-ip:$PORTAINER_PORT` |
+
+Replace `$VAR` with your actual port values from `.env`.
+
+### SSH Tunnel (if firewall blocks DB ports)
+
+```bash
+ssh -L 52017:localhost:52017 -L 53679:localhost:53679 vps
+# Then connect DataGrip to localhost:52017
+```
+
+---
+
+## Firewall (Recommended)
+
+```bash
+sudo ufw allow 22                 # SSH
+sudo ufw allow <APP_PORT>         # App API
+sudo ufw allow <PORTAINER_PORT>   # Portainer
+sudo ufw deny <MONGO_PORT>        # Block external MongoDB
+sudo ufw deny <REDIS_PORT>        # Block external Redis
+sudo ufw enable
+```
+
+---
 
 ## Troubleshooting
 
-**OKX Connection Issues:**
-- Check API credentials in .env
-- Verify API key has trading permissions
-- Check IP whitelist (OKX security)
-- Watch logs: `docker logs pocketquant-app`
-
-**Strategy Not Starting:**
-- Check strategy YAML syntax
-- Verify symbol/exchange exists
-- Check broker configuration
-- Review logs for errors
-
-**MongoDB Connection Failed:**
-- Verify MONGODB_URL is correct
-- Check MongoDB is running: `docker ps`
-- Try connecting manually: `mongosh $MONGODB_URL`
-
-**Strategy Not Trading:**
-- Verify market data is flowing (check quotes endpoint)
-- Check risk limits aren't blocking orders
-- Review strategy logs for signals
-- Try backtest first to validate logic
-
-## Health Checks
-
 ```bash
-# API health
-curl http://localhost:$API_PORT/health
-
 # Container status
-docker compose -f docker/compose.yml ps
+ssh vps "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
+
+# App logs (last 50 lines)
+ssh vps "docker logs pocketquant-app --tail 50"
+
+# Health check
+ssh vps "docker exec pocketquant-app curl -s http://localhost:41920/health"
+
+# Restart all services
+ssh vps "cd /opt/pocketquant && docker compose -f docker/compose.prod.yml --env-file docker/.env restart"
+
+# Wipe everything and redeploy (destroys database)
+ssh vps "cd /opt/pocketquant && docker compose -f docker/compose.prod.yml --env-file docker/.env down -v && bash deploy.sh"
 ```
+
+---
+
+## VPS Migration
+
+VPS is disposable. To move to a new VPS, repeat "First Deploy" steps. Database will be fresh — everything can be re-synced.
+
+## Post-Migration Cleanup (GitHub)
+
+After migrating from the old GHCR-based setup, delete unused GitHub repo settings:
+
+**Delete secrets:** DEPLOY_SSH_KEY, GHCR_TOKEN, MONGO_PASSWORD, MONGO_EXPRESS_PASSWORD, GRAFANA_PASSWORD, TRADINGVIEW_USERNAME, TRADINGVIEW_PASSWORD, OKX_API_KEY, OKX_API_SECRET, OKX_PASSPHRASE
+
+**Delete vars:** DEPLOY_HOST, DEPLOY_SSH_PORT, DEPLOY_USER
+
+**Keep secrets:** DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
