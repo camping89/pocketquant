@@ -20,6 +20,21 @@ VPS: deploy.sh pulls image → docker compose up (app + mongodb + redis + portai
    - `DOCKERHUB_USERNAME` — your Docker Hub username
    - `DOCKERHUB_TOKEN` — the access token from step 1
 
+## SSH Session Variables
+
+Set these in each terminal session before running deploy commands:
+
+```powershell
+$KEY = "path\to\your\vps-private-key"
+$VPS = "root@<vps-ip>"
+
+# Example:
+# $KEY = "C:\w\_me\pocketquant-config\sandbox\vultr"
+# $VPS = "root@207.148.79.60"
+```
+
+All commands below use `ssh -i $KEY $VPS` pattern.
+
 ## Port Map
 
 | Service | Env Var | Container Port |
@@ -70,16 +85,16 @@ OKX_DEMO_MODE=false
 ### Step 2: Copy files to VPS
 
 ```bash
-ssh vps "mkdir -p /opt/pocketquant/docker"
-scp deploy.sh vps:/opt/pocketquant/
-scp docker/compose.prod.yml docker/mongo-init.js vps:/opt/pocketquant/docker/
-scp .env.prod vps:/opt/pocketquant/docker/.env
+ssh -i $KEY $VPS "mkdir -p /opt/pocketquant/docker"
+scp -i $KEY deploy.sh ${VPS}:/opt/pocketquant/
+scp -i $KEY docker/compose.prod.yml docker/mongo-init.js ${VPS}:/opt/pocketquant/docker/
+scp -i $KEY .env ${VPS}:/opt/pocketquant/docker/.env
 ```
 
 ### Step 3: Run deploy
 
 ```bash
-ssh vps "cd /opt/pocketquant && bash deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
 
 `deploy.sh` will:
@@ -89,17 +104,23 @@ ssh vps "cd /opt/pocketquant && bash deploy.sh"
 - Start all 4 services
 - Prune old images
 
+**Windows users:** If deploy.sh fails with `invalid option`, fix CRLF line endings first:
+
+```bash
+ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy.sh"
+```
+
 ### Step 4: Verify
 
 ```bash
-ssh vps "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
+ssh -i $KEY $VPS "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
 ```
 
 Expected: 4 containers running (app, mongodb, redis, portainer).
 
 ```bash
 # Health check
-ssh vps "curl -s http://localhost:\$APP_PORT/health"
+ssh -i $KEY $VPS "curl -s http://localhost:\$APP_PORT/health"
 
 # Portainer UI
 open http://vps-ip:$PORTAINER_PORT
@@ -109,26 +130,26 @@ open http://vps-ip:$PORTAINER_PORT
 
 ## Updating (2nd+ Deploy)
 
-After pushing code to master:
+After pushing code (CI triggers on `master` and `feat/strategy-init`):
 
 ```bash
 # 1. CI builds + pushes image automatically (check GitHub Actions tab)
 # 2. Pull and restart on VPS:
-ssh vps "cd /opt/pocketquant && bash deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
 
 If compose file or mongo-init.js changed, re-scp them first:
 
 ```bash
-scp docker/compose.prod.yml docker/mongo-init.js vps:/opt/pocketquant/docker/
-ssh vps "cd /opt/pocketquant && bash deploy.sh"
+scp -i $KEY docker/compose.prod.yml docker/mongo-init.js ${VPS}:/opt/pocketquant/docker/
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
 
 If .env changed:
 
 ```bash
-scp .env.prod vps:/opt/pocketquant/docker/.env
-ssh vps "cd /opt/pocketquant && bash deploy.sh"
+scp -i $KEY .env ${VPS}:/opt/pocketquant/docker/.env
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
 
 ---
@@ -147,7 +168,7 @@ Replace `$VAR` with your actual port values from `.env`.
 ### SSH Tunnel (if firewall blocks DB ports)
 
 ```bash
-ssh -L 52017:localhost:52017 -L 53679:localhost:53679 vps
+ssh -i $KEY -L 52017:localhost:52017 -L 53679:localhost:53679 $VPS
 # Then connect DataGrip to localhost:52017
 ```
 
@@ -170,19 +191,19 @@ sudo ufw enable
 
 ```bash
 # Container status
-ssh vps "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
+ssh -i $KEY $VPS "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
 
 # App logs (last 50 lines)
-ssh vps "docker logs pocketquant-app --tail 50"
+ssh -i $KEY $VPS "docker logs pocketquant-app --tail 50"
 
 # Health check
-ssh vps "docker exec pocketquant-app curl -s http://localhost:41920/health"
+ssh -i $KEY $VPS "docker exec pocketquant-app curl -s http://localhost:41920/health"
 
 # Restart all services
-ssh vps "cd /opt/pocketquant && docker compose -f docker/compose.prod.yml --env-file docker/.env restart"
+ssh -i $KEY $VPS "cd /opt/pocketquant && docker compose -f docker/compose.prod.yml --env-file docker/.env restart"
 
 # Wipe everything and redeploy (destroys database)
-ssh vps "cd /opt/pocketquant && docker compose -f docker/compose.prod.yml --env-file docker/.env down -v && bash deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && docker compose -f docker/compose.prod.yml --env-file docker/.env down -v && bash deploy.sh"
 ```
 
 ---
