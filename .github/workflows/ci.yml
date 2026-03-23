@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, feat/strategy-init]
+    branches: [master, develop]
   workflow_dispatch:
 
 env:
