@@ -47,3 +47,26 @@ jobs:
           echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/  - /'
           echo ""
           echo "Verify at: https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/pocketquant/tags"
+
+      - name: Prune old Docker Hub tags (keep latest 7)
+        run: |
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST -d "{\"username\":\"${{ env.DOCKERHUB_USERNAME }}\",\"password\":\"${{ secrets.DOCKERHUB_TOKEN }}\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "Warning: Could not authenticate for tag cleanup. Ensure DOCKERHUB_TOKEN has delete scope."
+            exit 0
+          fi
+
+          curl -s -H "Authorization: JWT $TOKEN" \
+            "https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_USERNAME }}/pocketquant/tags/?page_size=100&ordering=-last_updated" \
+            | jq -r '.results[] | select(.name | startswith("sha-")) | .name' \
+            | tail -n +8 \
+            | while read tag; do
+                curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+                  "https://hub.docker.com/v2/repositories/${{ env.DOCKERHUB_USERNAME }}/pocketquant/tags/$tag/"
+                echo "Deleted: $tag"
+              done
+
+          echo "Tag cleanup complete. Kept: latest + 7 most recent sha-* tags."
