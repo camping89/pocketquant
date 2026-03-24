@@ -35,9 +35,8 @@ FROM python:3.14-rc-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime deps (git needed for tvdatafeed)
+# Install runtime deps (curl needed for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 appuser
