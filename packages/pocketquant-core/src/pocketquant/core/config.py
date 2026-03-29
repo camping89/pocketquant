@@ -59,7 +59,6 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     log_format: Literal["json", "console"]
 
-    job_worker_count: int
     enable_jobs: bool = True
 
     # OKX Broker (optional, for live trading)
