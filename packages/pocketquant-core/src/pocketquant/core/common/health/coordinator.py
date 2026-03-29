@@ -12,16 +12,17 @@ class HealthCoordinator:
         self._checks: dict[str, Callable] = {}
         self._timeout: float = timeout
 
-    def register(self, name: str, check_fn: Callable) -> None:
+    def register(self, name: str, check_function: Callable) -> None:
         """Register a health check function."""
-        self._checks[name] = check_fn
+        self._checks[name] = check_function
 
     async def check_all(self) -> dict[str, Any]:
         """Run all health checks in parallel and aggregate results."""
-        results = await asyncio.gather(
-            *[self._run_check(name, fn) for name, fn in self._checks.items()],
-            return_exceptions=False,
-        )
+        checks = [
+            self._run_check(name, check_function)
+            for name, check_function in self._checks.items()
+        ]
+        results = await asyncio.gather(*checks, return_exceptions=False)
 
         dependencies = dict(zip(self._checks.keys(), results))
         overall = (
@@ -32,10 +33,10 @@ class HealthCoordinator:
 
         return {"status": overall, "dependencies": dependencies}
 
-    async def _run_check(self, name: str, fn: Callable) -> dict[str, Any]:
+    async def _run_check(self, name: str, check_function: Callable) -> dict[str, Any]:
         """Run a single health check with timeout."""
         try:
-            result = await asyncio.wait_for(fn(), timeout=self._timeout)
+            result = await asyncio.wait_for(check_function(), timeout=self._timeout)
             return {"status": "healthy", **result}
         except TimeoutError:
             return {"status": "unhealthy", "error": "timeout"}

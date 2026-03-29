@@ -37,6 +37,7 @@ class TradingViewClient(IDataProvider):
     def __init__(self, settings: Settings):
         self._settings = settings
         self._client: TvDatafeed | None = None
+        self._semaphore = asyncio.Semaphore(2)
 
     def _get_client(self) -> TvDatafeed:
         if self._client is None:
@@ -69,13 +70,13 @@ class TradingViewClient(IDataProvider):
         tv_interval = self._get_tv_interval(interval)
 
         try:
-            df = client.get_hist(
+            dataframe = client.get_hist(
                 symbol=symbol,
                 exchange=exchange,
                 interval=tv_interval,
                 n_bars=min(n_bars, 5000),
             )
-            return df
+            return dataframe
         except Exception as e:
             logger.error(
                 "tradingview.fetch_failed",
@@ -93,61 +94,65 @@ class TradingViewClient(IDataProvider):
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        logger.info(
-            "tradingview.fetch_started",
-            symbol=symbol,
-            exchange=exchange,
-            interval=interval.value,
-            n_bars=n_bars,
-        )
-
-        loop = asyncio.get_running_loop()
-        df = await loop.run_in_executor(
-            _executor,
-            self._fetch_data_sync,
-            symbol,
-            exchange,
-            interval,
-            n_bars,
-        )
-
-        if df is None or df.empty:
-            logger.warning(
-                "tradingview.no_data",
+        async with self._semaphore:
+            logger.info(
+                "tradingview.fetch_started",
                 symbol=symbol,
                 exchange=exchange,
                 interval=interval.value,
+                n_bars=n_bars,
             )
-            return []
 
-        records: list[Bar] = []
+            loop = asyncio.get_running_loop()
+            dataframe = await loop.run_in_executor(
+                _executor,
+                self._fetch_data_sync,
+                symbol,
+                exchange,
+                interval,
+                n_bars,
+            )
 
-        for idx, row in df.iterrows():
-            bar_datetime = idx if isinstance(idx, datetime) else pd.to_datetime(idx).to_pydatetime()  # type: ignore[arg-type, union-attr]
-
-            records.append(
-                Bar(
-                    symbol=symbol.upper(),
-                    exchange=exchange.upper(),
-                    interval=interval,
-                    datetime=bar_datetime,
-                    open=float(row["open"]),  # type: ignore[arg-type]
-                    high=float(row["high"]),  # type: ignore[arg-type]
-                    low=float(row["low"]),  # type: ignore[arg-type]
-                    close=float(row["close"]),  # type: ignore[arg-type]
-                    volume=float(row["volume"]),  # type: ignore[arg-type]
+            if dataframe is None or dataframe.empty:
+                logger.warning(
+                    "tradingview.no_data",
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=interval.value,
                 )
+                return []
+
+            records: list[Bar] = []
+
+            for row_index, row in dataframe.iterrows():
+                bar_datetime = (
+                    row_index if isinstance(row_index, datetime)
+                    else pd.to_datetime(row_index).to_pydatetime()  # type: ignore[arg-type]
+                )
+
+                records.append(
+                    Bar(
+                        symbol=symbol.upper(),
+                        exchange=exchange.upper(),
+                        interval=interval,
+                        datetime=bar_datetime,
+                        open=float(row["open"]),  # type: ignore[arg-type]
+                        high=float(row["high"]),  # type: ignore[arg-type]
+                        low=float(row["low"]),  # type: ignore[arg-type]
+                        close=float(row["close"]),  # type: ignore[arg-type]
+                        volume=float(row["volume"]),  # type: ignore[arg-type]
+                    )
+                )
+
+            logger.info(
+                "tradingview.fetch_completed",
+                symbol=symbol,
+                exchange=exchange,
+                interval=interval.value,
+                record_count=len(records),
             )
 
-        logger.info(
-            "tradingview.fetch_completed",
-            symbol=symbol,
-            exchange=exchange,
-            interval=interval.value,
-            record_count=len(records),
-        )
-
-        return records
+            return records
 
     async def search_symbols(self, query: str, exchange: str | None = None) -> list[dict]:
         logger.warning("tradingview.search_not_implemented")
