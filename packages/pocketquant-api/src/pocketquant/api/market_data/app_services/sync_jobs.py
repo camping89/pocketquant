@@ -72,9 +72,12 @@ def register_sync_jobs(
     job_scheduler: JobScheduler,
     sync_status_repo: SyncStatusRepository,
 ) -> None:
-    """Register 5 tiered background sync jobs with the scheduler."""
-    async def sync_fast():
-        await _sync_by_intervals([Interval.MINUTE_5, Interval.MINUTE_15], 30, "sync_fast", mediator, sync_status_repo)
+    """Register 6 tiered background sync jobs with the scheduler."""
+    async def sync_5m():
+        await _sync_by_intervals([Interval.MINUTE_5], 30, "sync_5m", mediator, sync_status_repo)
+
+    async def sync_15m():
+        await _sync_by_intervals([Interval.MINUTE_15], 30, "sync_15m", mediator, sync_status_repo)
 
     async def sync_hourly():
         await _sync_by_intervals([Interval.HOUR_1], 10, "sync_hourly", mediator, sync_status_repo)
@@ -88,10 +91,11 @@ def register_sync_jobs(
     async def sync_backfill():
         await _sync_by_intervals(SYNC_INTERVALS, 5000, "sync_backfill", mediator, sync_status_repo)
 
-    job_scheduler.add_interval_job(sync_fast, job_id="sync_fast", minutes=15)
+    job_scheduler.add_interval_job(sync_5m, job_id="sync_5m", minutes=5)
+    job_scheduler.add_interval_job(sync_15m, job_id="sync_15m", minutes=15)
     job_scheduler.add_interval_job(sync_hourly, job_id="sync_hourly", hours=1)
     job_scheduler.add_interval_job(sync_swing, job_id="sync_swing", hours=4)
     job_scheduler.add_cron_job(sync_daily, job_id="sync_daily", hour=0, minute=30)
     job_scheduler.add_cron_job(sync_backfill, job_id="sync_backfill", hour=3, minute=0)
 
-    logger.info("market_data.registered_sync_jobs", job_count=5)
+    logger.info("market_data.registered_sync_jobs", job_count=6)
