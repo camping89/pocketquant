@@ -1,102 +1,70 @@
-"""Background sync jobs for market data — receives dependencies via params."""
+"""Background sync jobs for market data — tiered by timeframe cadence."""
 
 from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
 
+# Canonical timeframes synced across all tracked symbols
+SYNC_INTERVALS = [
+    Interval.MINUTE_5,
+    Interval.MINUTE_15,
+    Interval.HOUR_1,
+    Interval.HOUR_4,
+    Interval.DAY_1,
+]
 
-async def _sync_all_symbols(mediator: Mediator, sync_status_repo: SyncStatusRepository) -> None:
-    logger.info("market_data.sync_all.started")
+
+async def _sync_by_intervals(
+    intervals: list[Interval],
+    n_bars: int,
+    job_name: str,
+    mediator: Mediator,
+    sync_status_repo: SyncStatusRepository,
+) -> None:
+    """Generic sync: for each tracked symbol, sync the given intervals."""
+    logger.info(f"market_data.{job_name}.started")
 
     statuses = await sync_status_repo.find_all()
+    symbols = list({(s.symbol, s.exchange) for s in statuses})
 
-    if not statuses:
-        logger.info("market_data.sync_all.skipped", reason="no_tracked_symbols")
+    if not symbols:
+        logger.info(f"market_data.{job_name}.skipped", reason="no_tracked_symbols")
         return
 
-    synced_count = 0
-    error_count = 0
-    errors: list[Exception] = []
+    synced = 0
+    errors = 0
+    first_error: Exception | None = None
 
-    for status in statuses:
-        try:
-            cmd = SyncSymbolCommand(
-                symbol=status.symbol,
-                exchange=status.exchange,
-                interval=Interval(status.interval),
-                n_bars=500,
-            )
-            result = await mediator.send(cmd)
+    for symbol, exchange in symbols:
+        for interval in intervals:
+            try:
+                command = SyncSymbolCommand(
+                    symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars,
+                )
+                result = await mediator.send(command)
+                if result.status == "completed":
+                    synced += 1
+                else:
+                    errors += 1
+            except Exception as e:
+                logger.error(
+                    f"market_data.{job_name}.symbol_failed",
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=interval.value,
+                    error=str(e),
+                )
+                errors += 1
+                first_error = first_error or e
 
-            if result.status == "completed":
-                synced_count += 1
-            else:
-                error_count += 1
-
-        except Exception as e:
-            logger.error(
-                "market_data.sync_all.symbol_failed",
-                symbol=status.symbol,
-                exchange=status.exchange,
-                error=str(e),
-            )
-            error_count += 1
-            errors.append(e)
-
-    logger.info(
-        "market_data.sync_all.completed",
-        synced_count=synced_count,
-        error_count=error_count,
-        total_symbols=len(statuses),
-    )
-
-    if errors:
-        raise errors[0]
-
-
-async def _sync_daily_data(mediator: Mediator, sync_status_repo: SyncStatusRepository) -> None:
-    logger.info("market_data.sync_daily.started")
-
-    statuses = await sync_status_repo.find_all()
-    daily_statuses = [s for s in statuses if s.interval == Interval.DAY_1.value]
-
-    synced_count = 0
-    error_count = 0
-    errors: list[Exception] = []
-
-    for status in daily_statuses:
-        try:
-            cmd = SyncSymbolCommand(
-                symbol=status.symbol,
-                exchange=status.exchange,
-                interval=Interval.DAY_1,
-                n_bars=10,
-            )
-            await mediator.send(cmd)
-            synced_count += 1
-        except Exception as e:
-            logger.error(
-                "market_data.sync_daily.symbol_failed",
-                symbol=status.symbol,
-                exchange=status.exchange,
-                error=str(e),
-            )
-            error_count += 1
-            errors.append(e)
-
-    logger.info(
-        "market_data.sync_daily.completed",
-        synced_count=synced_count,
-        error_count=error_count,
-    )
-
-    if errors:
-        raise errors[0]
+    logger.info(f"market_data.{job_name}.completed", synced_count=synced, error_count=errors)
+    if first_error:
+        raise first_error
 
 
 def register_sync_jobs(
@@ -104,23 +72,26 @@ def register_sync_jobs(
     job_scheduler: JobScheduler,
     sync_status_repo: SyncStatusRepository,
 ) -> None:
-    """Register background sync jobs with the scheduler."""
-    job_scheduler.add_interval_job(
-        _sync_all_symbols,
-        job_id="market_data_sync_all",
-        hours=6,
-        mediator=mediator,
-        sync_status_repo=sync_status_repo,
-    )
+    """Register 5 tiered background sync jobs with the scheduler."""
+    async def sync_fast():
+        await _sync_by_intervals([Interval.MINUTE_5, Interval.MINUTE_15], 30, "sync_fast", mediator, sync_status_repo)
 
-    job_scheduler.add_cron_job(
-        _sync_daily_data,
-        job_id="market_data_sync_daily",
-        hour="9-17",
-        minute="0",
-        day_of_week="mon-fri",
-        mediator=mediator,
-        sync_status_repo=sync_status_repo,
-    )
+    async def sync_hourly():
+        await _sync_by_intervals([Interval.HOUR_1], 10, "sync_hourly", mediator, sync_status_repo)
 
-    logger.info("market_data.registered_sync_jobs")
+    async def sync_swing():
+        await _sync_by_intervals([Interval.HOUR_4], 6, "sync_swing", mediator, sync_status_repo)
+
+    async def sync_daily():
+        await _sync_by_intervals([Interval.DAY_1], 7, "sync_daily", mediator, sync_status_repo)
+
+    async def sync_backfill():
+        await _sync_by_intervals(SYNC_INTERVALS, 5000, "sync_backfill", mediator, sync_status_repo)
+
+    job_scheduler.add_interval_job(sync_fast, job_id="sync_fast", minutes=15)
+    job_scheduler.add_interval_job(sync_hourly, job_id="sync_hourly", hours=1)
+    job_scheduler.add_interval_job(sync_swing, job_id="sync_swing", hours=4)
+    job_scheduler.add_cron_job(sync_daily, job_id="sync_daily", hour=0, minute=30)
+    job_scheduler.add_cron_job(sync_backfill, job_id="sync_backfill", hour=3, minute=0)
+
+    logger.info("market_data.registered_sync_jobs", job_count=5)

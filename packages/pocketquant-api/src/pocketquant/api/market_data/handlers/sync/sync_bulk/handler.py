@@ -16,10 +16,10 @@ class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ig
 
     async def handle(self, request: BulkSyncCommand) -> list[SyncResponse]:
         results = []
-        for sym in request.symbols:
+        for symbol_entry in request.symbols:
             sync_cmd = SyncSymbolCommand(
-                symbol=sym["symbol"],
-                exchange=sym["exchange"],
+                symbol=symbol_entry["symbol"],
+                exchange=symbol_entry["exchange"],
                 interval=request.interval,
                 n_bars=request.n_bars,
             )
