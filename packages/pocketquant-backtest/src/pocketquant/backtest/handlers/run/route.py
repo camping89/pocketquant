@@ -1,5 +1,7 @@
 """API routes for running a backtest."""
 
+from datetime import datetime
+
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
@@ -25,12 +27,24 @@ class BacktestMetricsResponse(BaseModel):
     total_commission: float
 
 
+class TradeResponse(BaseModel):
+    """Single trade from backtest."""
+
+    side: str
+    price: float
+    quantity: float
+    pnl: float
+    commission: float
+    timestamp: datetime
+
+
 class RunBacktestResponse(BaseModel):
     """Response after submitting backtest."""
 
     run_id: str
     status: str
     metrics: BacktestMetricsResponse | None = None
+    trades: list[TradeResponse] = []
 
 
 @router.post("/run", response_model=RunBacktestResponse)
@@ -44,8 +58,21 @@ async def run_backtest(
     """
     result = await mediator.send(cmd)
 
+    trades = [
+        {
+            "side": t.side,
+            "price": t.price,
+            "quantity": t.quantity,
+            "pnl": t.pnl,
+            "commission": t.commission,
+            "timestamp": t.timestamp,
+        }
+        for t in result.trades
+    ] if result.status == "completed" else []
+
     return {
         "run_id": result.id,
         "status": result.status,
         "metrics": result.metrics.to_dict() if result.status == "completed" else None,
+        "trades": trades,
     }

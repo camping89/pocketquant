@@ -97,3 +97,7 @@ dmypy.json
 repomix-output.xml
 
 .env.test
+
+.claude/session-state/archive/
+
+.claude/session-state/

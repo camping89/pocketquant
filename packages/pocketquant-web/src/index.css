@@ -1,0 +1,231 @@
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --text-primary: #d1d4dc;
+  --text-secondary: #8b8b9a;
+  --border-color: #2b2b43;
+  --accent: #26a69a;
+  --up-color: #26a69a;
+  --down-color: #ef5350;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, select {
+  font-family: inherit;
+}
+
+/* Layout */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chart-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Symbol selector */
+.symbol-btn {
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 140px;
+  text-align: left;
+}
+.symbol-btn:hover {
+  border-color: var(--accent);
+}
+
+.symbol-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-top: 4px;
+  min-width: 260px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.symbol-search {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.symbol-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.symbol-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+.symbol-option:hover,
+.symbol-option.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+.symbol-code {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 110px;
+}
+.symbol-name {
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Interval selector */
+.interval-group {
+  display: flex;
+  gap: 2px;
+}
+
+.interval-btn {
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+}
+.interval-btn:first-child { border-radius: 4px 0 0 4px; }
+.interval-btn:last-child { border-radius: 0 4px 4px 0; }
+.interval-btn:hover {
+  color: var(--text-primary);
+}
+.interval-btn.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+/* Indicator toggles */
+.indicator-group {
+  display: flex;
+  gap: 4px;
+}
+
+.indicator-btn {
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.indicator-btn:hover {
+  color: var(--text-primary);
+}
+.indicator-btn.active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Scrollbar */
+.symbol-list::-webkit-scrollbar {
+  width: 6px;
+}
+.symbol-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+/* Strategy selector */
+.strategy-select {
+  padding: 5px 8px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+.strategy-select:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.strategy-select:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Chart overlay (loading/error) */
+.chart-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 10;
+}
+.chart-error {
+  color: var(--down-color);
+}
