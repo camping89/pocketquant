@@ -11,6 +11,8 @@ from starlette.responses import Response
 logger = get_logger(__name__)
 
 SKIP_PATHS = {"/health", "/favicon.ico"}
+# SSE endpoints must not have their body_iterator consumed — skip logging body for these
+SKIP_BODY_PREFIXES = ("/api/v1/market-data/bars/stream",)
 MAX_BODY_LOG_SIZE = 10_000
 
 
@@ -44,25 +46,26 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start_time) * 1000
 
+        # SSE and other streaming responses must not have body_iterator consumed
+        is_streaming = path.startswith(SKIP_BODY_PREFIXES)
+
         response_body = None
-        if hasattr(response, "body"):
-            response_body = response.body[:MAX_BODY_LOG_SIZE].decode(errors="replace")
-        else:
-            body_chunks = []
-            async for chunk in response.body_iterator:
-                body_chunks.append(chunk)
-            response_body_bytes = b"".join(body_chunks)
-            response_body = response_body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
+        if not is_streaming:
+            if hasattr(response, "body"):
+                response_body = response.body[:MAX_BODY_LOG_SIZE].decode(errors="replace")
+            else:
+                body_chunks = []
+                async for chunk in response.body_iterator:
+                    body_chunks.append(chunk)
+                response_body_bytes = b"".join(body_chunks)
+                response_body = response_body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
 
-            async def new_body_iterator():
-                yield response_body_bytes
-
-            response = Response(
-                content=response_body_bytes,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.media_type,
-            )
+                response = Response(
+                    content=response_body_bytes,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type=response.media_type,
+                )
 
         logger.info(
             "http.response",

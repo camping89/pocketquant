@@ -12,6 +12,7 @@ dependencies = [
 
 [tool.uv.workspace]
 members = ["packages/*"]
+exclude = ["packages/pocketquant-web"]
 
 [dependency-groups]
 dev = [
