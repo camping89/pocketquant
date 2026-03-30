@@ -1,7 +1,7 @@
 """Pure domain service for building bars from ticks."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pocketquant.core.domain.shared.enums import Interval
@@ -15,7 +15,7 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     if interval == Interval.DAY_1:
         return timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    epoch = datetime(1970, 1, 1)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC) if timestamp.tzinfo else datetime(1970, 1, 1)
     total_seconds = (timestamp - epoch).total_seconds()
     aligned_seconds = (total_seconds // seconds) * seconds
 

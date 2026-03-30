@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-03-23 | **Codebase Size:** 13,641 LOC | **Total Files:** 278 Python files in packages/ | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Structure:** 4-package uv workspace monorepo
+**Last Updated:** 2026-03-30 | **Codebase Size:** ~14,000+ LOC | **Total Files:** 278 Python + 25 TypeScript | **Architecture:** Clean Architecture + DDD + CQRS + Dishka (backend); React 19 SPA (frontend) | **Structure:** 5-package monorepo (uv workspace + npm)
 
 ## Architecture Overview
 
@@ -24,6 +24,29 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - **Common Layer:** Shared utilities (Mediator, EventBus, middleware, health checks)
 
 ## Module Breakdown
+
+### pocketquant-web (TypeScript, 25 files, ~1.2 KB LOC) — React SPA
+
+**Purpose:** Real-time charting UI for market data visualization with technical indicators.
+
+**Tech Stack:** Vite 8, React 19, TypeScript 5.9, Lightweight Charts 5.1, TanStack Query 5.x
+
+**Components:**
+- **TradingChart:** Candlestick + volume + 5 indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
+- **SymbolSelector:** Dropdown for instrument selection
+- **IntervalSelector:** Timeframe picker (1m, 5m, 15m, ..., 1M)
+- **IndicatorToggles:** Show/hide overlay indicators
+- **AppHeader:** Navigation and branding
+
+**Hooks:**
+- `useOHLCV()` - Fetch historical bars via TanStack Query
+- `useRealtimeBar()` - Poll API for latest bar (5-10s interval)
+- `useSymbols()` - Symbol registry
+- `useIndicators()` - Calculate indicator values from bars
+
+**API Layer:** `api-client.ts` wraps fetch + error handling; proxies `/api/*` to `:41920`.
+
+**Deployment:** Vite builds to `dist/`, served as static assets via FastAPI.
 
 ### pocketquant.core.common (993 LOC, 32 files)
 

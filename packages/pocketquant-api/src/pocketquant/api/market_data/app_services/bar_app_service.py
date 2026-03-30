@@ -155,7 +155,31 @@ class BarAppService:
         cache_key = CACHE_KEY_BAR_CURRENT.format(
             exchange=exchange.upper(), symbol=symbol.upper(), interval=interval.value
         )
-        return await self._cache.get(cache_key)
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Fallback: no live feed — return latest bar from DB as current bar
+        try:
+            bar = await self._bar_repo.get_latest(symbol, exchange, interval)
+        except Exception as exc:
+            logger.error("bar_manager.get_latest_failed", error=str(exc))
+            return None
+        if bar is None:
+            return None
+
+        return {
+            "symbol": bar.symbol,
+            "exchange": bar.exchange,
+            "interval": interval.value,
+            "bar_start": bar.datetime.isoformat(),
+            "open": bar.open,
+            "high": bar.high,
+            "low": bar.low,
+            "close": bar.close,
+            "volume": bar.volume,
+            "tick_count": 0,
+        }
 
     async def flush_all_bars(self) -> int:
         saved_count = 0

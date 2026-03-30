@@ -4,9 +4,16 @@
 
 ## High-Level Architecture
 
-PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependency flow: Features → Application → Domain, Infrastructure → Domain.
+PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependency flow: Features → Application → Domain, Infrastructure → Domain. A modern React 19 SPA frontend consumes the REST API.
 
 ```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Client Layer (Browser)                       │
+│  pocketquant-web: React 19 + Vite + Lightweight Charts         │
+│  Candlestick chart, 5 indicators, symbol/interval selectors     │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │ HTTP/REST (proxy to :41920)
+                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                         External Services                        │
 │     TradingView (REST + WS)  │  OKX (REST + WS)  │  Scheduler   │
@@ -386,6 +393,59 @@ common/
 | **Database** | MongoDB async singleton |
 | **Cache** | Redis async singleton |
 | **JobScheduler** | APScheduler async wrapper |
+
+### Layer 6: Presentation (Web UI) — packages/pocketquant-web/ (React SPA)
+
+**Purpose:** TradingView-like charting interface for real-time market visualization and indicator analysis.
+
+**Tech Stack:**
+- **Vite 8** - Build tool with HMR
+- **React 19** - UI framework with Hooks
+- **TypeScript 5.9** - Type safety
+- **Lightweight Charts 5.1** - High-performance candlestick rendering
+- **TanStack Query 5.x** - Server state management, real-time polling
+
+**Structure:**
+```
+src/
+├── api/                  # REST client layer
+│   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41920)
+│   └── market-data-api.ts  # Market data queries
+├── components/
+│   ├── chart/           # Charting components
+│   │   ├── trading-chart.tsx  # Candlestick + volume + indicators
+│   │   ├── use-chart.ts       # Lightweight Charts initialization
+│   │   └── indicator-series.ts  # SMA, EMA, RSI, MACD, Bollinger
+│   ├── controls/        # User controls
+│   │   ├── symbol-selector.tsx   # Symbol dropdown
+│   │   ├── interval-selector.tsx  # Timeframe picker (1m-1M)
+│   │   └── indicator-toggles.tsx  # Show/hide indicators
+│   └── layout/
+│       └── app-header.tsx  # Navigation + branding
+├── hooks/               # React custom hooks
+│   ├── use-ohlcv.ts     # Fetch historical bars
+│   ├── use-realtime-bar.ts  # Real-time polling (TanStack Query)
+│   ├── use-symbols.ts   # Fetch symbol list
+│   └── use-indicators.ts  # Indicator calculation
+├── lib/
+│   └── indicators/      # Pure indicator algorithms
+│       ├── moving-average.ts  # SMA, EMA
+│       ├── rsi.ts             # Relative Strength Index
+│       ├── macd.ts            # MACD + signal line
+│       └── bollinger-bands.ts # Upper, middle, lower bands
+├── App.tsx              # Root component
+└── main.tsx             # Vite entry point
+```
+
+**Key Features:**
+- **Candlestick Chart:** Real-time OHLCV visualization via Lightweight Charts
+- **Volume Overlay:** Trading volume as histogram below price
+- **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2)
+- **Symbol/Interval Selectors:** Switch data without page reload
+- **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
+- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41920`
+
+**Deployment:** Vite `dist/` served as static assets behind FastAPI (no separate server).
 
 ## Clean Architecture Request Flow
 

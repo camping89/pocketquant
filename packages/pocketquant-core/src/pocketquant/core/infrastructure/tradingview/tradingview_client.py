@@ -1,6 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime, timezone, timedelta
 
 import pandas as pd
 from pocketquant.core.common.logging import get_logger
@@ -129,6 +129,11 @@ class TradingViewClient(IDataProvider):
                     row_index if isinstance(row_index, datetime)
                     else pd.to_datetime(row_index).to_pydatetime()  # type: ignore[arg-type]
                 )
+                # TvDatafeed returns naive datetimes in server local timezone.
+                # Convert to UTC by attaching local timezone then converting.
+                if bar_datetime.tzinfo is None:
+                    local_tz = datetime.now(UTC).astimezone().tzinfo
+                    bar_datetime = bar_datetime.replace(tzinfo=local_tz).astimezone(UTC)
 
                 records.append(
                     Bar(
