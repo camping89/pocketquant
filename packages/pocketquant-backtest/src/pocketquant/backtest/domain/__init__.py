@@ -5,6 +5,7 @@ from pocketquant.backtest.domain.value_objects import (
     BacktestMetrics,
     EquityPoint,
     OptimizationResultEntry,
+    PositionRecord,
     TradeRecord,
 )
 
@@ -14,5 +15,6 @@ __all__ = [
     "EquityPoint",
     "OptimizationResult",
     "OptimizationResultEntry",
+    "PositionRecord",
     "TradeRecord",
 ]

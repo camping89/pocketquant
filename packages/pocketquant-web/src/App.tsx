@@ -80,7 +80,7 @@ function ChartApp() {
           symbol={symbol.symbol}
           interval={interval}
           indicators={indicators}
-          trades={backtest.data?.trades}
+          positions={backtest.data?.positions}
         />
       </main>
     </div>

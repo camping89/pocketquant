@@ -27,15 +27,18 @@ class BacktestMetricsResponse(BaseModel):
     total_commission: float
 
 
-class TradeResponse(BaseModel):
-    """Single trade from backtest."""
+class PositionResponse(BaseModel):
+    """Paired entry+exit position from backtest."""
 
-    side: str
-    price: float
+    entry_price: float
+    entry_time: datetime
+    exit_price: float | None = None
+    exit_time: datetime | None = None
     quantity: float
+    sl_price: float | None = None
+    tp_price: float | None = None
     pnl: float
     commission: float
-    timestamp: datetime
 
 
 class RunBacktestResponse(BaseModel):
@@ -44,7 +47,7 @@ class RunBacktestResponse(BaseModel):
     run_id: str
     status: str
     metrics: BacktestMetricsResponse | None = None
-    trades: list[TradeResponse] = []
+    positions: list[PositionResponse] = []
 
 
 @router.post("/run", response_model=RunBacktestResponse)
@@ -58,21 +61,24 @@ async def run_backtest(
     """
     result = await mediator.send(cmd)
 
-    trades = [
+    positions = [
         {
-            "side": t.side,
-            "price": t.price,
-            "quantity": t.quantity,
-            "pnl": t.pnl,
-            "commission": t.commission,
-            "timestamp": t.timestamp,
+            "entry_price": p.entry_price,
+            "entry_time": p.entry_time,
+            "exit_price": p.exit_price,
+            "exit_time": p.exit_time,
+            "quantity": p.quantity,
+            "sl_price": p.sl_price,
+            "tp_price": p.tp_price,
+            "pnl": p.pnl,
+            "commission": p.commission,
         }
-        for t in result.trades
+        for p in result.positions
     ] if result.status == "completed" else []
 
     return {
         "run_id": result.id,
         "status": result.status,
         "metrics": result.metrics.to_dict() if result.status == "completed" else None,
-        "trades": trades,
+        "positions": positions,
     }

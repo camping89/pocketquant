@@ -2,11 +2,13 @@
 
 import asyncio
 from functools import partial
+from pathlib import Path
 
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pocketquant.api.market_data.handlers.quotes.router import router as quote_router
 from pocketquant.api.market_data.handlers.router import router as market_data_router
 from pocketquant.backtest.handlers import backtest_router
@@ -151,3 +153,20 @@ def register_routes(app: FastAPI, settings) -> None:
     api.include_router(backtest_router)
 
     app.include_router(api)
+
+    # Serve frontend SPA from pocketquant-web dist/ (must be after API routes)
+    web_dist = Path(__file__).resolve().parent.parent.parent.parent.parent / "pocketquant-web" / "dist"
+    if web_dist.is_dir():
+        from fastapi.responses import FileResponse
+
+        app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="static-assets")
+
+        @app.get("/{path:path}")
+        async def spa_fallback(path: str) -> FileResponse:
+            """Serve index.html for all non-API routes (SPA fallback)."""
+            file = web_dist / path
+            if file.is_file():
+                return FileResponse(file)
+            return FileResponse(web_dist / "index.html")
+
+        logger.info("spa_mounted", path=str(web_dist))

@@ -7,6 +7,7 @@ from pocketquant.backtest.domain import (
     BacktestMetrics,
     BacktestResult,
     EquityPoint,
+    PositionRecord,
     TradeRecord,
 )
 from pocketquant.backtest.domain.services.performance_calculator import PerformanceCalculator
@@ -75,6 +76,7 @@ class BacktestResultCollector:
         self._total_commission += commission
 
         # Calculate P&L based on position direction
+        is_buy = self._is_buy_order(result)
         pnl = self._calculate_trade_pnl(result, fill_price, fill_qty)
 
         # Update equity (subtract commission from equity)
@@ -93,12 +95,15 @@ class BacktestResultCollector:
             TradeRecord(
                 order_id=result.order_id,
                 symbol=self._config.symbol,
-                side="BUY" if self._is_buy_order(result) else "SELL",
+                side="BUY" if is_buy else "SELL",
                 quantity=fill_qty,
                 price=fill_price,
                 commission=commission,
                 pnl=pnl,
                 timestamp=timestamp,
+                # SL/TP only set on entry (BUY) trades from signal metadata
+                sl_price=result.sl_price if is_buy else None,
+                tp_price=result.tp_price if is_buy else None,
             )
         )
 
@@ -112,10 +117,12 @@ class BacktestResultCollector:
         )
 
     def _is_buy_order(self, result: OrderResult) -> bool:
-        """Determine if order was a buy based on order_id prefix or result."""
-        # In real implementation, we'd check order side from the order aggregate
-        # For now, infer from position changes (positive qty change = buy)
-        return "BUY" in result.order_id.upper() or self._position_qty >= 0
+        """Determine if order opens (BUY) or closes (SELL) based on current position.
+
+        Long-only assumption: flat/empty position → opening BUY, existing position → closing SELL.
+        Checked before _calculate_trade_pnl updates _position_qty.
+        """
+        return self._position_qty <= 0
 
     def _calculate_trade_pnl(
         self, result: OrderResult, fill_price: float, fill_qty: float
@@ -168,6 +175,7 @@ class BacktestResultCollector:
             Complete BacktestResult with metrics.
         """
         metrics = self._calculate_metrics(started_at, completed_at)
+        positions = self._build_positions()
 
         # Serialize config for storage
         config_snapshot = {
@@ -190,12 +198,54 @@ class BacktestResultCollector:
             metrics=metrics,
             equity_curve=self._equity_curve,
             trades=self._trades,
+            positions=positions,
             started_at=started_at,
             completed_at=completed_at,
             status=status,
             error_message=error_message,
             parameters=self._config.parameters,
         )
+
+    def _build_positions(self) -> list[PositionRecord]:
+        """Pair BUY/SELL trades into PositionRecords."""
+        positions: list[PositionRecord] = []
+        pending: TradeRecord | None = None
+        for trade in self._trades:
+            if trade.side == "BUY":
+                pending = trade
+            elif trade.side == "SELL" and pending is not None:
+                positions.append(
+                    PositionRecord(
+                        symbol=pending.symbol,
+                        entry_price=pending.price,
+                        entry_time=pending.timestamp,
+                        quantity=pending.quantity,
+                        sl_price=pending.sl_price,
+                        tp_price=pending.tp_price,
+                        exit_price=trade.price,
+                        exit_time=trade.timestamp,
+                        pnl=trade.pnl,
+                        commission=pending.commission + trade.commission,
+                    )
+                )
+                pending = None
+        # Open position — no matching SELL yet
+        if pending is not None:
+            positions.append(
+                PositionRecord(
+                    symbol=pending.symbol,
+                    entry_price=pending.price,
+                    entry_time=pending.timestamp,
+                    quantity=pending.quantity,
+                    sl_price=pending.sl_price,
+                    tp_price=pending.tp_price,
+                    exit_price=None,
+                    exit_time=None,
+                    pnl=0.0,
+                    commission=pending.commission,
+                )
+            )
+        return positions
 
     def _calculate_metrics(self, started_at: datetime, completed_at: datetime) -> BacktestMetrics:
         """Calculate all performance metrics from collected data."""
