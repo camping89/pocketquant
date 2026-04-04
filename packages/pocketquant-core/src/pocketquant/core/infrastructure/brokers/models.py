@@ -17,6 +17,8 @@ class OrderResult:
     filled_price: float | None = None
     error_message: str | None = None
     submitted_at: datetime | None = None
+    sl_price: float | None = None
+    tp_price: float | None = None
 
     @property
     def is_success(self) -> bool:

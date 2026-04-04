@@ -10,6 +10,7 @@ from pocketquant.backtest.domain.value_objects import (
     BacktestMetrics,
     EquityPoint,
     OptimizationResultEntry,
+    PositionRecord,
     TradeRecord,
 )
 
@@ -24,6 +25,7 @@ class BacktestResult:
     metrics: BacktestMetrics
     equity_curve: list[EquityPoint]
     trades: list[TradeRecord]
+    positions: list[PositionRecord]
     started_at: datetime
     completed_at: datetime
     status: str  # "completed", "failed"
@@ -43,6 +45,7 @@ class BacktestResult:
             "metrics": self.metrics.to_mongo(),
             "equity_curve": [p.to_mongo() for p in self.equity_curve],
             "trades": [t.to_mongo() for t in self.trades],
+            "positions": [p.to_mongo() for p in self.positions],
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "status": self.status,
@@ -60,6 +63,7 @@ class BacktestResult:
             metrics=BacktestMetrics.from_mongo(data["metrics"]),
             equity_curve=[EquityPoint.from_mongo(p) for p in data.get("equity_curve", [])],
             trades=[TradeRecord.from_mongo(t) for t in data.get("trades", [])],
+            positions=[PositionRecord.from_mongo(p) for p in data.get("positions", [])],
             started_at=data["started_at"],
             completed_at=data["completed_at"],
             status=data["status"],

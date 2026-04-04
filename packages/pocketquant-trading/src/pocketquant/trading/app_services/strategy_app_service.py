@@ -356,6 +356,8 @@ class StrategyAppService:
             order_type=order_type,
             quantity=size,
             price=price,
+            sl_price=signal.stop_loss_price,
+            tp_price=signal.take_profit_price,
         )
 
     async def _get_or_create_broker(self, broker_type: str) -> IBroker:

@@ -9,7 +9,7 @@ from typing import Any
 
 @dataclass
 class TradeRecord:
-    """Record of a single trade execution during backtest."""
+    """Internal record of a single order fill during backtest."""
 
     order_id: str
     symbol: str
@@ -17,11 +17,12 @@ class TradeRecord:
     quantity: float
     price: float
     commission: float
-    pnl: float  # Realized P&L for this trade
+    pnl: float
     timestamp: datetime
+    sl_price: float | None = None
+    tp_price: float | None = None
 
     def to_mongo(self) -> dict[str, Any]:
-        """Convert to dictionary for MongoDB storage."""
         return {
             "order_id": self.order_id,
             "symbol": self.symbol,
@@ -31,11 +32,12 @@ class TradeRecord:
             "commission": self.commission,
             "pnl": self.pnl,
             "timestamp": self.timestamp,
+            "sl_price": self.sl_price,
+            "tp_price": self.tp_price,
         }
 
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> TradeRecord:
-        """Create from dictionary."""
         return cls(
             order_id=data["order_id"],
             symbol=data["symbol"],
@@ -45,6 +47,53 @@ class TradeRecord:
             commission=data.get("commission", 0.0),
             pnl=data["pnl"],
             timestamp=data["timestamp"],
+            sl_price=data.get("sl_price"),
+            tp_price=data.get("tp_price"),
+        )
+
+
+@dataclass
+class PositionRecord:
+    """Completed or open position — one BUY/SELL pair aggregated for the API."""
+
+    symbol: str
+    entry_price: float
+    entry_time: datetime
+    quantity: float
+    sl_price: float | None
+    tp_price: float | None
+    exit_price: float | None  # None if still open
+    exit_time: datetime | None  # None if still open
+    pnl: float
+    commission: float  # combined entry + exit commission
+
+    def to_mongo(self) -> dict[str, Any]:
+        return {
+            "symbol": self.symbol,
+            "entry_price": self.entry_price,
+            "entry_time": self.entry_time,
+            "quantity": self.quantity,
+            "sl_price": self.sl_price,
+            "tp_price": self.tp_price,
+            "exit_price": self.exit_price,
+            "exit_time": self.exit_time,
+            "pnl": self.pnl,
+            "commission": self.commission,
+        }
+
+    @classmethod
+    def from_mongo(cls, data: dict[str, Any]) -> PositionRecord:
+        return cls(
+            symbol=data["symbol"],
+            entry_price=data["entry_price"],
+            entry_time=data["entry_time"],
+            quantity=data["quantity"],
+            sl_price=data.get("sl_price"),
+            tp_price=data.get("tp_price"),
+            exit_price=data.get("exit_price"),
+            exit_time=data.get("exit_time"),
+            pnl=data.get("pnl", 0.0),
+            commission=data.get("commission", 0.0),
         )
 
 

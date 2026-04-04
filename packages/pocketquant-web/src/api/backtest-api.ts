@@ -1,12 +1,15 @@
 import { apiFetch } from './api-client'
 
-export interface BacktestTrade {
-  side: string
-  price: number
+export interface BacktestPosition {
+  entry_price: number
+  entry_time: string
+  exit_price: number | null
+  exit_time: string | null
   quantity: number
+  sl_price: number | null
+  tp_price: number | null
   pnl: number
   commission: number
-  timestamp: string
 }
 
 export interface BacktestMetrics {
@@ -24,7 +27,7 @@ export interface BacktestResponse {
   run_id: string
   status: string
   metrics: BacktestMetrics | null
-  trades: BacktestTrade[]
+  positions: BacktestPosition[]
 }
 
 export async function fetchStrategies(): Promise<string[]> {

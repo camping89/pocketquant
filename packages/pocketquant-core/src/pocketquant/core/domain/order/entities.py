@@ -39,6 +39,8 @@ class OrderAggregate(BaseModel):
     quantity: float
     price: float | None = None
     stop_price: float | None = None
+    sl_price: float | None = None
+    tp_price: float | None = None
     status: OrderStatus = OrderStatus.PENDING
     filled_quantity: float = 0.0
     filled_price: float | None = None
@@ -67,6 +69,8 @@ class OrderAggregate(BaseModel):
         quantity: float,
         price: float | None = None,
         stop_price: float | None = None,
+        sl_price: float | None = None,
+        tp_price: float | None = None,
     ) -> OrderAggregate:
         """Factory method to create a new order."""
         if quantity <= 0:
@@ -86,6 +90,8 @@ class OrderAggregate(BaseModel):
             quantity=quantity,
             price=price,
             stop_price=stop_price,
+            sl_price=sl_price,
+            tp_price=tp_price,
         )
 
     def submit(self, broker_order_id: str) -> OrderAggregate:
