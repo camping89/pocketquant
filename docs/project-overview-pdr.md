@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-03-23 | **Status:** v1.0 Complete | **Codebase:** 278 Python files, 13,641 LOC in packages/ | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4-package uv workspace monorepo | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-04-07 | **Status:** v1.0 Complete | **Codebase:** 295 Python files, 14,751 LOC in packages/ + 25 TypeScript (pocketquant-web) | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4-package uv workspace monorepo + React 19 SPA | **Test Coverage:** 78%+ average
 
 ## Project Vision
 
@@ -301,47 +301,55 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 ### Module Breakdown (Clean Architecture + DDD + CQRS)
 
 ```
-packages/pocketquant-core/
-├── domain/             (2,364 LOC, 39 files)
+packages/pocketquant-core/       (~4,966 LOC)
+├── domain/             (~355 LOC + concepts ~545 LOC)
 │   ├── Entities (6): Bar, Symbol, Order, Position, Backtest, SyncStatus
 │   ├── Aggregates (2): OrderAggregate, PositionAggregate
 │   ├── Value Objects, Events, Services (pure logic, zero I/O)
+│   ├── Concepts: Quote (70 LOC), Risk (167 LOC), Strategy (383 LOC)
 │   └── MongoDB Persistence: `to_mongo()`/`from_mongo()` methods
-├── common/             (993 LOC, 32 files)
+├── common/             (~1,146 LOC, 32 files)
 │   ├── Mediator & EventBus, CQRS/Event handler auto-discovery
 │   ├── UUID Utilities (UUID7), DI Container Integration
-│   └── Middleware, Logging (structlog), Health Checks
-├── infrastructure/     (2,883 LOC, 28 files)
-│   ├── Brokers (IBroker, PaperBroker, OKXBroker)
-│   ├── Data Providers (TradingView REST/WebSocket)
+│   ├── Middleware (correlation, logging, idempotency, rate limiting)
+│   └── Health checks, logging (structlog)
+├── infrastructure/     (~550 LOC, 28 files)
+│   ├── Brokers (IBroker, PaperBroker 264 LOC, OKXBroker)
+│   ├── Data Providers (TradingView 295 LOC WebSocket, 168 LOC client)
 │   ├── OKX WebSocket with HMAC-SHA256 auth
-│   ├── Job Scheduling (APScheduler)
+│   ├── Job Scheduling (APScheduler 182 LOC)
 │   └── HTTP Client & Webhooks
-└── persistence/        (1,214 LOC, 18 files)
+└── persistence/        (~394 LOC, 18 files)
     ├── Database (MongoDB, PyMongo async)
     ├── Cache (Redis async)
     └── Repositories (7): Bar, Order, Position, Backtest, Optimization, Symbol, SyncStatus
 
-packages/pocketquant-backtest/
-├── engine/
-│   ├── BacktestAppService (execute strategy on historical bars)
-│   ├── GridOptimizationAppService (parameter search)
-│   └── HistoricalReplayAppService (bar injection)
+packages/pocketquant-backtest/   (~2,429 LOC, 33 files)
 ├── domain/
-│   └── BacktestResult, OptimizationResult entities
-└── persistence/
-    └── BacktestRepository, OptimizationRepository
+│   ├── BacktestResult, OptimizationResult entities
+│   └── PerformanceCalculator (215 LOC)
+├── engine/
+│   ├── BacktestAppService (168 LOC)
+│   ├── GridOptimizationAppService (258 LOC)
+│   ├── HistoricalReplayAppService (121 LOC)
+│   └── ResultCollector (310 LOC)
+├── optimization/
+│   └── GridOptimizationService, config models
+└── handlers/ + persistence/
 
-packages/pocketquant-trading/
+packages/pocketquant-trading/    (~3,452 LOC, 65 files)
+├── brokers/okx/
+│   ├── OKXBroker + 7 WebSocket support files (auth, mappers, handlers)
+│   └── ~1,500+ LOC total broker integration
 ├── app_services/
-│   ├── OrderAppService (order state machine + recovery)
-│   └── PositionAppService (P&L calculation)
-├── brokers/
-│   └── OKX broker implementation (live trading)
+│   ├── StrategyAppService, OrderAppService, PositionAppService
+│   └── YamlStrategyLoader
+├── handlers/
+│   ├── Strategy ops (load/start/stop/get_one/get_all)
+│   └── Trading ops (list_orders/get_order/list_positions/get_position)
 └── persistence/
-    └── Order/Position repositories
 
-packages/pocketquant-api/        (3,016 LOC, 134 files)
+packages/pocketquant-api/        (~2,853 LOC, 87 files)
 ├── features/           - Operation-First Vertical Slices
 │   ├── backtesting/    - Run, optimize, retrieve backtests
 │   ├── market_data/    - Sync, bar queries, quotes, symbols
@@ -353,11 +361,18 @@ packages/pocketquant-api/        (3,016 LOC, 134 files)
 │   └── 6 Provider classes
 └── main.py            - FastAPI app + lifespan setup
 
-**Total: 13,641 LOC (278 Python files)**
-- pocketquant-core: 97 files, 5,609 LOC
-- pocketquant-backtest: 40 files
-- pocketquant-trading: 65 files
-- pocketquant-api: 86 files, ~2,738 LOC
+pocketquant-web (React SPA)      (~1,414 LOC, 25 TypeScript files)
+├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector
+├── Hooks: useOHLCV, useBacktest, useSymbols, useIndicators, useRealTimeBar
+├── API: backtestApi, marketDataApi, apiFetch utilities
+└── Tech: React 19, Vite 8, TypeScript 5.9, Lightweight Charts 5.1
+
+**Total: 14,751 LOC Python (295 files) + 1,414 LOC TypeScript (25 files)**
+- pocketquant-core: ~4,966 LOC
+- pocketquant-backtest: ~2,429 LOC
+- pocketquant-trading: ~3,452 LOC
+- pocketquant-api: ~2,853 LOC
+- pocketquant-web: ~1,414 LOC TypeScript
 ```
 
 **Operation-First Pattern:** Each feature contains self-contained operations (folders). Each operation is a complete use case: command/query definition, handler logic, optional route. Shared infrastructure within a feature is in base/.
