@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-03-30 | **Codebase Size:** ~14,000+ LOC | **Total Files:** 278 Python + 25 TypeScript | **Architecture:** Clean Architecture + DDD + CQRS + Dishka (backend); React 19 SPA (frontend) | **Structure:** 5-package monorepo (uv workspace + npm)
+**Last Updated:** 2026-04-07 | **Codebase Size:** ~14,751 LOC Python + ~1,414 LOC TypeScript | **Total Files:** 295 Python + 25 TypeScript | **Architecture:** Clean Architecture + DDD + CQRS + Dishka (backend); React 19 SPA (frontend) | **Structure:** 5-package monorepo (uv workspace + npm)
 
 ## Architecture Overview
 
@@ -25,26 +25,29 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 ## Module Breakdown
 
-### pocketquant-web (TypeScript, 25 files, ~1.2 KB LOC) — React SPA
+### pocketquant-web (TypeScript, 25 files, ~1,414 LOC) — React SPA
 
-**Purpose:** Real-time charting UI for market data visualization with technical indicators.
+**Purpose:** Real-time charting UI for market data visualization with technical indicators and backtest visualization.
 
-**Tech Stack:** Vite 8, React 19, TypeScript 5.9, Lightweight Charts 5.1, TanStack Query 5.x
+**Tech Stack:** Vite 8, React 19, TypeScript 5.9, Lightweight Charts 5.1, TanStack Query 5.95, SMA/EMA indicators
 
 **Components:**
-- **TradingChart:** Candlestick + volume + 5 indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
-- **SymbolSelector:** Dropdown for instrument selection
-- **IntervalSelector:** Timeframe picker (1m, 5m, 15m, ..., 1M)
-- **IndicatorToggles:** Show/hide overlay indicators
+- **TradingChart:** Candlestick + volume + 5 technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
+- **SymbolSelector:** Dropdown for instrument selection with available symbols
+- **IntervalSelector:** Timeframe picker (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M)
+- **StrategySelector:** Choose strategy for backtesting
+- **IndicatorToggles:** Show/hide overlay indicators on chart
 - **AppHeader:** Navigation and branding
 
 **Hooks:**
-- `useOHLCV()` - Fetch historical bars via TanStack Query
-- `useRealtimeBar()` - Poll API for latest bar (5-10s interval)
-- `useSymbols()` - Symbol registry
+- `useOHLCV()` - Fetch historical bars via TanStack Query with caching
+- `useBacktest()` - Execute and track backtest runs
+- `useSymbols()` - List available symbols
+- `useAvailableIntervals()` - Get compatible timeframes
+- `useRealTimeBar()` - Poll API for latest bar (5-10s interval)
 - `useIndicators()` - Calculate indicator values from bars
 
-**API Layer:** `api-client.ts` wraps fetch + error handling; proxies `/api/*` to `:41920`.
+**API Layer:** `apiFetch.ts` wraps fetch + error handling; proxies `/api/*` to `:41920`.
 
 **Deployment:** Vite builds to `dist/`, served as static assets via FastAPI.
 
@@ -99,9 +102,13 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - `get_correlation_id()` - Thread/async-safe context variable access
 - **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
 
-### pocketquant.core.domain (2,364 LOC, 39 files) — Pure Business Logic + Persistence
+### pocketquant.core.domain (~900 LOC entities + concepts, 39 files) — Pure Business Logic + Persistence
 
 **Rules:** No I/O imports (pymongo, redis, aiohttp). **Pydantic BaseModel with MongoDB persistence.** Aggregates have `to_mongo()` and `from_mongo()` methods. Immutable value objects. Domain events. Validation in `__post_init__`.
+
+**Statistics:**
+- domain/ folder: ~355 LOC (Bar 382, Order 382, Position 298, Symbol 81, SyncStatus 51, shared 63)
+- concepts/ folder: ~545 LOC (quote 70, risk 167, strategy 383 including MACrossover 159, HitAndRun 156)
 
 **Domain Structure (Three-Tier DDD):**
 - **Top-level** (collection-backed): bar/, order/, position/, symbol/, sync_status/, backtest/

@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-03-23 | **Version:** 3.3 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka
+**Last Updated:** 2026-04-07 | **Version:** 3.3 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Codebase:** 295 Python files (14,751 LOC) + 25 TypeScript (1,414 LOC)
 
 ## High-Level Architecture
 
