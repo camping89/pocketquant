@@ -5,6 +5,14 @@
 ## [Unreleased]
 
 ### Added
+- **Bar Integrity System** - Data quality validation + automated repair
+  - `is_bar_aligned()` + `filter_aligned_bars()` validators in `bar_builder.py`
+  - `check_integrity()` detects misaligned bars + gaps (7-day lookback)
+  - `repair_integrity()` deletes misaligned bars, resyncs gaps via standard sync
+  - 2 new BarRepository methods: `find_datetimes()` (time-range query), `delete_many_by_ids()` (bulk delete)
+  - 2 new endpoints: `POST /api/v1/market-data/integrity/check` and `/integrity/repair`
+  - 2 daily cron jobs: `sync_integrity` (04:00 UTC) and `sync_repair` (04:30 UTC)
+  - Total background jobs: 6 → 8
 - **pocketquant-web package** - React 19 SPA for real-time charting
   - Vite 8 + TypeScript 5.9 build pipeline
   - TradingView-like candlestick chart (Lightweight Charts v5.1)

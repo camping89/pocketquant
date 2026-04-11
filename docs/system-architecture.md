@@ -217,6 +217,10 @@ features/
 │   ├── bar/                 # Nested group (renamed from ohlcv/)
 │   │   ├── get_bars/       # Operation: Get bars
 │   │   └── router.py
+│   ├── integrity/           # NEW: Nested group for data integrity
+│   │   ├── check/          # Operation: Check bar alignment + gaps
+│   │   ├── repair/         # Operation: Delete misaligned, resync gaps
+│   │   └── route.py
 │   ├── quotes/              # Nested group
 │   │   ├── start_feed/     # Operation: Start WebSocket
 │   │   ├── stop_feed/      # Operation: Stop WebSocket
@@ -654,6 +658,40 @@ QuoteAppService._on_quote_update
   └─> EventBus.publish(QuoteReceivedEvent(...))
 ```
 
+### Data Integrity Pipeline
+
+**Check Phase (POST /market-data/integrity/check):**
+```
+IntegrityRequest → BarRepository.find_datetimes(symbol, exchange, interval, start, end)
+  ↓
+check_integrity(symbol, exchange, interval, days_back=7)
+  ├─> Fetch all bars in time range
+  ├─> Filter misaligned bars via is_bar_aligned(datetime, interval)
+  ├─> Build expected time grid (epoch-aligned timestamps)
+  ├─> Detect missing timestamps (gaps in grid)
+  └─> Return {misaligned_count, missing_count, gap_ranges}
+```
+
+**Repair Phase (POST /market-data/integrity/repair):**
+```
+IntegrityRequest → repair_integrity(symbol, exchange, interval, days_back=7)
+  ├─> Run check_integrity() first
+  │
+  ├─> Delete misaligned bars
+  │   └─> BarRepository.delete_many_by_ids(misaligned_ids)
+  │
+  └─> Resync gap ranges
+      └─> SyncSymbolCommand → Mediator → SyncSymbolHandler (standard sync)
+
+Response: {deleted, gaps_resynced, missing_before}
+```
+
+**Automated Integrity Jobs (Daily @ 04:00 & 04:30 UTC):**
+- `sync_integrity` cron job (04:00) — Check all symbols for all intervals, log results
+- `sync_repair` cron job (04:30) — Repair worst alignment issues, resync critical gaps
+
+**Alignment Validation:** `is_bar_aligned(datetime, interval)` checks if bar timestamp aligns to interval boundary (epoch mod INTERVAL_SECONDS == 0).
+
 ### Strategy Execution Pipeline
 
 ```
@@ -768,7 +806,7 @@ OptimizationHandler
 - **CoreProvider** - Settings, EventBus (max_history=**100**), Mediator
 - **PersistenceProvider** - Database (PyMongo), Cache (Redis), 7 repositories
 - **InfrastructureProvider** - Brokers (Paper, OKX), TradingViewClient, JobScheduler
-- **MarketDataProvider** - BarAppService, QuoteAppService, sync background jobs
+- **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
 - **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
 - **HandlerProvider** - All 27 CQRS handlers (via @handles decorator)
 
