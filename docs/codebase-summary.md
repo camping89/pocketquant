@@ -261,6 +261,8 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
    - Uses `Bar.to_mongo()` / `Bar.from_mongo()` for serialization
    - `get_bars(symbol, exchange, interval, limit)` - Query bars
    - `upsert_many(records)` - Bulk insert/update (unique on timestamp)
+   - `find_datetimes(symbol, exchange, interval, start, end)` - Query by time range (for integrity checks)
+   - `delete_many_by_ids(ids)` - Bulk delete misaligned bars
 2. **OrderRepository** - Order lifecycle with OrderAggregate persistence
    - `save(order)` - Persist order state
    - `find_pending()` - Recover non-terminal orders on startup
@@ -508,7 +510,7 @@ Routes:
 **MarketDataProvider** - Real-time data services
 - BarAppService (multi-interval aggregation)
 - QuoteAppService (WebSocket lifecycle)
-- Sync background jobs (APScheduler registration)
+- Sync background jobs: 8 jobs registered (sync_5m, sync_15m, sync_all_1h, sync_all_1d, sync_1w, sync_1M, sync_integrity, sync_repair)
 
 **TradingProvider** - Order/position management
 - OrderAppService (order state machine)
@@ -594,13 +596,33 @@ QuoteAppService._on_quote_update
 
 ### Background Job Pipeline
 
+**8 jobs** registered in `register_sync_jobs()`:
+
 ```
-APScheduler triggers job (6-hourly or market hours)
-    ↓
-sync_all_symbols job (each symbol independently)
-    ├─> TradingViewClient.fetch_ohlcv
-    ├─> OHLCVRepository.upsert_many
-    └─> Error logging per symbol (don't break loop)
+1. sync_5m        (every 5 minutes)   — Sync all symbols @ 5m interval
+2. sync_15m       (every 15 minutes)  — Sync all symbols @ 15m interval
+3. sync_all_1h    (every 6 hours)     — Sync all symbols @ 1h+ intervals
+4. sync_all_1d    (daily @ 00:00)     — Sync all symbols @ daily interval
+5. sync_1w        (weekly @ 00:00)    — Sync all symbols @ weekly interval
+6. sync_1M        (monthly @ 00:00)   — Sync all symbols @ monthly interval
+7. sync_integrity (daily @ 04:00)     — Check bar alignment + gaps (7 days back)
+8. sync_repair    (daily @ 04:30)     — Delete misaligned bars, resync gaps
+```
+
+Each job iterates all symbols, catches errors per symbol (don't break loop), logs failures.
+
+**Integrity Pipeline:**
+```
+sync_integrity job triggers check_integrity()
+    ├─> Query bars by timestamp range
+    ├─> Validate alignment via is_bar_aligned()
+    ├─> Detect gaps in time grid
+    └─> Return report (misaligned_ids, missing_count, gap_ranges)
+
+sync_repair job triggers repair_integrity()
+    ├─> Run check_integrity()
+    ├─> Delete misaligned bars via delete_many_by_ids()
+    └─> Resync gaps via SyncSymbolCommand
 ```
 
 ## Key Patterns
@@ -690,7 +712,15 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:41920/api/v1/docs` (local dev)
 - **Health Check:** `http://localhost:41920/health` (local dev)
 
-## Recent Changes (2026-03-15)
+## Recent Changes (2026-04-11)
+
+**Bar Integrity System (2026-04-11)**
+- **Alignment validator:** `is_bar_aligned()` and `filter_aligned_bars()` in `bar_builder.py` — drops misaligned bars at ingestion time in `SyncSymbolHandler`
+- **Integrity check/repair:** `check_integrity()` and `repair_integrity()` functions in new `integrity_jobs.py`
+- **2 new repo methods:** `find_datetimes()` and `delete_many_by_ids()` on `BarRepository`
+- **2 API endpoints:** `POST /api/v1/market-data/integrity/check` and `POST /api/v1/market-data/integrity/repair`
+- **2 cron jobs:** `sync_integrity` (04:00 UTC) and `sync_repair` (04:30 UTC)
+- Background jobs: 6 → 8
 
 **4-Package Monorepo Restructuring (2026-03-21)**
 - Reorganized codebase: packages/{core, backtest, trading, api} using uv workspace
