@@ -79,6 +79,41 @@ Routes use `FromDishka[Mediator]` + `DishkaRoute` (NOT `Depends()`)
 No empty subclasses. Use base classes directly:
 - Repository methods work with domain entities directly (Bar.to_mongo(), Bar.from_mongo())
 
+## Naming Conventions
+
+**Principle:** Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domain services) get NO suffix — they ARE the domain language.
+
+### Files & Directories
+
+- **Python files:** `snake_case.py` — e.g., `bar_builder.py`, `sync_jobs.py`, `bar_repository.py`
+- **Directories:** `snake_case/` — e.g., `sync_one/`, `get_ohlcv/`, `bar/`
+- **Standard domain files:** `entities.py`, `events.py`, `value_objects.py`, `enums.py`, `interfaces.py`
+- **CQRS handlers:** `{feature}/{operation}/` with `command.py`|`query.py` + `handler.py` + `route.py` + `__init__.py`
+
+### Class Naming by Layer
+
+| Layer | Pattern | Suffix | Examples |
+|-------|---------|--------|----------|
+| Entities | `{Name}` or `{Name}Aggregate` | None / `Aggregate` (complex only) | `Bar`, `Symbol`, `OrderAggregate` |
+| Events | `{Entity}{PastTense}Event` | `Event` | `OrderFilledEvent`, `BarCompletedEvent` |
+| Enums | `{Concept}` | None | `Interval`, `OrderType`, `OrderSide` |
+| Value Objects | `{Concept}` | None | `PnL`, `OHLCV`, `BarRange` |
+| Domain Services | `{DescriptiveName}` | None | `BarBuilder`, `PerformanceCalculator` |
+| Repositories | `{Entity}Repository` | `Repository` | `BarRepository`, `OrderRepository` |
+| Infra Interfaces | `I{Concept}` | `I` prefix | `IBroker`, `IDataProvider`, `IBrokerFactory` |
+| Infra Impls | `{Source}{Type}` | None (source-prefixed) | `OkxBroker`, `TradingViewClient`, `PaperBroker` |
+| App Services | `{Entity}AppService` | `AppService` | `BarAppService`, `StrategyAppService` |
+| CQRS Queries | `{Get\|List}{Entity}Query` | `Query` | `GetOHLCVQuery`, `ListOrdersQuery` |
+| CQRS Commands | `{Action}{Entity}Command` | `Command` | `SyncSymbolCommand`, `StartStrategyCommand` |
+| CQRS Handlers | `{MatchingRequest}Handler` | `Handler` | `SyncSymbolHandler`, `ListOrdersHandler` |
+| DTOs | `{Name}Response` | `Response` | `SyncResponse`, `QuoteResponse` |
+| Routes | (functions) | — | `async def sync_symbol(...)` |
+| Middleware | `{Name}Middleware` | `Middleware` | `RateLimitMiddleware`, `IdempotencyMiddleware` |
+| Errors | `{Name}Error` | `Error` | `AppError`, `NotFoundError`, `DomainError` |
+| DI Providers | `{Domain}Provider` | `Provider` | `CoreProvider`, `TradingProvider` |
+| Configs | `{Name}Config` | `Config` | `BacktestConfig`, `WebhookConfig` |
+| Background Jobs | (functions) | — | `sync_5m()`, `sync_integrity()` |
+
 ## Known Issues
 
 See `docs/migration-doubts-and-notes.md` for post-migration notes and unresolved questions.
