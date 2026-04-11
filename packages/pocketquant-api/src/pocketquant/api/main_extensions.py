@@ -73,6 +73,7 @@ async def start_background_jobs(container: AsyncContainer) -> None:
         mediator=await container.get(Mediator),
         job_scheduler=await container.get(JobScheduler),
         sync_status_repo=await container.get(SyncStatusRepository),
+        bar_repo=await container.get(BarRepository),
     )
     logger.info("background_jobs_enabled")
 

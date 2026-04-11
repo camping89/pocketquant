@@ -1,10 +1,12 @@
 """Background sync jobs for market data — tiered by timeframe cadence."""
 
+from pocketquant.api.market_data.app_services.integrity_jobs import check_integrity, repair_integrity
 from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
@@ -71,8 +73,9 @@ def register_sync_jobs(
     mediator: Mediator,
     job_scheduler: JobScheduler,
     sync_status_repo: SyncStatusRepository,
+    bar_repo: BarRepository,
 ) -> None:
-    """Register 6 tiered background sync jobs with the scheduler."""
+    """Register 8 background sync/integrity jobs with the scheduler."""
     async def sync_5m():
         await _sync_by_intervals([Interval.MINUTE_5], 30, "sync_5m", mediator, sync_status_repo)
 
@@ -98,4 +101,35 @@ def register_sync_jobs(
     job_scheduler.add_cron_job(sync_daily, job_id="sync_daily", hour=0, minute=30)
     job_scheduler.add_cron_job(sync_backfill, job_id="sync_backfill", hour=3, minute=0)
 
-    logger.info("market_data.registered_sync_jobs", job_count=6)
+    async def sync_integrity():
+        """Daily integrity check — log warnings for issues found."""
+        statuses = await sync_status_repo.find_all()
+        symbols = list({(s.symbol, s.exchange) for s in statuses})
+        for symbol, exchange in symbols:
+            for interval in SYNC_INTERVALS:
+                report = await check_integrity(symbol, exchange, interval, bar_repo)
+                if report["misaligned_count"] or report["missing_count"]:
+                    logger.warning(
+                        "integrity.issues_found",
+                        symbol=symbol, exchange=exchange, interval=interval.value,
+                        misaligned=report["misaligned_count"], missing=report["missing_count"],
+                    )
+
+    async def sync_repair():
+        """Daily auto-repair — delete misaligned + resync gaps."""
+        statuses = await sync_status_repo.find_all()
+        symbols = list({(s.symbol, s.exchange) for s in statuses})
+        for symbol, exchange in symbols:
+            for interval in SYNC_INTERVALS:
+                result = await repair_integrity(symbol, exchange, interval, bar_repo, mediator)
+                if result["deleted"] or result["gaps_resynced"]:
+                    logger.info(
+                        "integrity.repaired",
+                        symbol=symbol, exchange=exchange, interval=interval.value,
+                        deleted=result["deleted"], gaps_resynced=result["gaps_resynced"],
+                    )
+
+    job_scheduler.add_cron_job(sync_integrity, job_id="sync_integrity", hour=4, minute=0)
+    job_scheduler.add_cron_job(sync_repair, job_id="sync_repair", hour=4, minute=30)
+
+    logger.info("market_data.registered_sync_jobs", job_count=8)

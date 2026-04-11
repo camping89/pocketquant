@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 
@@ -20,6 +21,22 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     aligned_seconds = (total_seconds // seconds) * seconds
 
     return epoch + timedelta(seconds=aligned_seconds)
+
+
+def is_bar_aligned(timestamp: datetime, interval: Interval) -> bool:
+    """Check if timestamp falls on the expected grid for the interval."""
+    return timestamp == get_bar_start(timestamp, interval)
+
+
+def filter_aligned_bars(bars: list[Bar], interval: Interval) -> tuple[list[Bar], list[Bar]]:
+    """Split bars into (aligned, misaligned). Pure function, no I/O."""
+    aligned, misaligned = [], []
+    for bar in bars:
+        if bar.datetime and is_bar_aligned(bar.datetime, interval):
+            aligned.append(bar)
+        else:
+            misaligned.append(bar)
+    return aligned, misaligned
 
 
 @dataclass
