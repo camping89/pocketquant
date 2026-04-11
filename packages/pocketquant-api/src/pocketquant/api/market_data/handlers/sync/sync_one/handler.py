@@ -7,6 +7,7 @@ from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.services.bar_builder import filter_aligned_bars
 from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.infrastructure.tradingview import TradingViewClient
@@ -58,6 +59,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
 
             # Filter out bars we already have (keep only newer than latest - 3 bar buffer)
             records = await self._filter_new_bars(records, symbol, exchange, interval)
+            records = self._filter_misaligned_bars(records, interval)
 
             inserted_count = await self._persist_bars(symbol, exchange, records)
             total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
@@ -135,6 +137,18 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 cutoff=str(cutoff_dt),
             )
         return filtered
+
+    def _filter_misaligned_bars(self, records: list[Bar], interval: DomainInterval) -> list[Bar]:
+        """Drop bars whose timestamps don't align to the interval grid."""
+        aligned, misaligned = filter_aligned_bars(records, interval)
+        if misaligned:
+            logger.warning(
+                "market_data.sync.misaligned_bars_dropped",
+                count=len(misaligned),
+                interval=interval.value,
+                sample_times=[str(b.datetime) for b in misaligned[:3]],
+            )
+        return aligned
 
     async def _persist_bars(self, symbol: str, exchange: str, records: list[Bar]) -> int:
         inserted_count = await self._bar_repo.insert_many(records)

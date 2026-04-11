@@ -167,6 +167,36 @@ class BarRepository(BaseRepository):
         )
         return Bar.from_mongo(doc) if doc else None
 
+    async def find_datetimes(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: Interval,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[dict]:
+        """Return lightweight [{_id, datetime}] sorted asc for integrity scanning."""
+        query: dict = {
+            "symbol": symbol.upper(),
+            "exchange": exchange.upper(),
+            "interval": interval.value,
+        }
+        if start_date or end_date:
+            query["datetime"] = {}
+            if start_date:
+                query["datetime"]["$gte"] = start_date
+            if end_date:
+                query["datetime"]["$lte"] = end_date
+        cursor = self._collection().find(query, {"_id": 1, "datetime": 1}).sort("datetime", 1).limit(100_000)
+        return [doc async for doc in cursor]
+
+    async def delete_many_by_ids(self, ids: list[str]) -> int:
+        """Bulk delete bars by _id list."""
+        if not ids:
+            return 0
+        result = await self._collection().delete_many({"_id": {"$in": ids}})
+        return result.deleted_count
+
     async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange, interval, datetime)."""
         collection = self._collection()
