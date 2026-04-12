@@ -90,6 +90,34 @@ export interface SyncStatus {
   error_message: string | null
 }
 
+// --- Monitor types ---
+
+export interface IntegrityReport {
+  symbol: string
+  exchange: string
+  interval: string
+  total: number
+  misaligned_count: number
+  misaligned_ids: string[]
+  missing_count: number
+  gap_ranges: [string, string][]
+}
+
+export interface RepairResult {
+  symbol: string
+  exchange: string
+  interval: string
+  deleted: number
+  gaps_resynced: number
+  missing_before: number
+}
+
+export interface JobInfo {
+  id: string
+  next_run: string | null
+  trigger: string
+}
+
 // --- UI types ---
 
 export type Interval = '1m' | '3m' | '5m' | '15m' | '30m' | '45m' | '1h' | '2h' | '3h' | '4h' | '1d' | '1w' | '1M'
