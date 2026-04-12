@@ -71,12 +71,16 @@ class Bar(BaseModel):
         interval_val = doc.get("interval")
         if isinstance(interval_val, str):
             interval_val = Interval(interval_val)
+        # MongoDB returns naive datetimes by default — normalize to UTC-aware
+        bar_dt = doc.get("datetime")
+        if bar_dt is not None and bar_dt.tzinfo is None:
+            bar_dt = bar_dt.replace(tzinfo=UTC)
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),
             symbol=doc.get("symbol", ""),
             exchange=doc.get("exchange", ""),
             interval=interval_val,
-            datetime=doc.get("datetime"),
+            datetime=bar_dt,
             open=doc.get("open", 0.0),
             high=doc.get("high", 0.0),
             low=doc.get("low", 0.0),

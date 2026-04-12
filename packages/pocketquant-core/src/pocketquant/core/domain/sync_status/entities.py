@@ -1,5 +1,6 @@
 """SyncStatus entity — Pydantic model with MongoDB persistence."""
 
+from datetime import UTC
 from datetime import datetime as dt
 from typing import Any
 
@@ -38,14 +39,21 @@ class SyncStatus(BaseModel):
     def from_mongo(cls, doc: dict[str, Any]) -> SyncStatus:
         """Reconstruct from MongoDB document."""
         raw_id = doc.get("_id", "")
+        # MongoDB returns naive datetimes by default — normalize to UTC-aware
+        last_sync = doc.get("last_sync_at")
+        if last_sync is not None and last_sync.tzinfo is None:
+            last_sync = last_sync.replace(tzinfo=UTC)
+        last_bar = doc.get("last_bar_at")
+        if last_bar is not None and last_bar.tzinfo is None:
+            last_bar = last_bar.replace(tzinfo=UTC)
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),
             symbol=doc.get("symbol", ""),
             exchange=doc.get("exchange", ""),
             interval=doc.get("interval", ""),
             status=doc.get("status", "pending"),
-            last_sync_at=doc.get("last_sync_at"),
-            last_bar_at=doc.get("last_bar_at"),
+            last_sync_at=last_sync,
+            last_bar_at=last_bar,
             bar_count=doc.get("bar_count", 0),
             error_message=doc.get("error_message"),
         )
