@@ -1,17 +1,18 @@
 import { useState, useMemo, useEffect } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { AppHeader } from '../components/layout/app-header'
 import { TradingChart } from '../components/chart/trading-chart'
 import { useAvailableIntervals } from '../hooks/use-available-intervals'
 import { useOHLCV } from '../hooks/use-ohlcv'
 import { useBacktest } from '../hooks/use-backtest'
-import type { SelectedSymbol, Interval, IndicatorConfig } from '../types/market-data'
+import type { Interval, IndicatorConfig } from '../types/market-data'
 
 export const Route = createFileRoute('/')({
   component: ChartPage,
 })
 
-const DEFAULT_SYMBOL: SelectedSymbol = { exchange: 'BINANCE', symbol: 'BTCUSDT' }
+const rootApi = getRouteApi('__root__')
+
 const DEFAULT_INTERVAL: Interval = '1d'
 const DEFAULT_INDICATORS: IndicatorConfig = {
   sma: false,
@@ -22,14 +23,14 @@ const DEFAULT_INDICATORS: IndicatorConfig = {
 }
 
 function ChartPage() {
-  const [symbol, setSymbol] = useState<SelectedSymbol>(DEFAULT_SYMBOL)
+  const { exchange, symbol } = rootApi.useSearch()
   const [selectedInterval, setSelectedInterval] = useState<Interval>(DEFAULT_INTERVAL)
   const [indicators, setIndicators] = useState<IndicatorConfig>(DEFAULT_INDICATORS)
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
-  const availableIntervals = useAvailableIntervals(symbol)
+  const availableIntervals = useAvailableIntervals({ exchange, symbol })
 
-  const { data: ohlcvData } = useOHLCV(symbol.exchange, symbol.symbol, selectedInterval)
-  const backtest = useBacktest(symbol.exchange, symbol.symbol, selectedInterval)
+  const { data: ohlcvData } = useOHLCV(exchange, symbol, selectedInterval)
+  const backtest = useBacktest(exchange, symbol, selectedInterval)
   const isDebug = typeof window !== 'undefined' && localStorage.getItem('pq:debug') === '1'
 
   useEffect(() => {
@@ -38,7 +39,7 @@ function ChartPage() {
     } else {
       backtest.reset()
     }
-  }, [selectedStrategy, symbol, selectedInterval]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedStrategy, exchange, symbol, selectedInterval]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const debugBarInfo = useMemo(() => {
     if (!isDebug || !ohlcvData?.lastBarRaw) return undefined
@@ -55,8 +56,6 @@ function ChartPage() {
   return (
     <div className="app-layout">
       <AppHeader
-        symbol={symbol}
-        onSymbolChange={setSymbol}
         intervals={availableIntervals}
         interval={interval}
         onIntervalChange={setSelectedInterval}
@@ -69,8 +68,8 @@ function ChartPage() {
       />
       <main className="chart-container">
         <TradingChart
-          exchange={symbol.exchange}
-          symbol={symbol.symbol}
+          exchange={exchange}
+          symbol={symbol}
           interval={interval}
           indicators={indicators}
           positions={backtest.data?.positions}

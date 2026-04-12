@@ -39,8 +39,6 @@ function IntegrityRow({
 
   return (
     <tr>
-      <td className="mono">{s.symbol}</td>
-      <td>{s.exchange}</td>
       <td className="mono">{s.interval}</td>
       <td className="num">{state.report ? state.report.misaligned_count : '—'}</td>
       <td className="num">{state.report ? state.report.missing_count : '—'}</td>
@@ -63,15 +61,18 @@ function IntegrityRow({
   )
 }
 
-export function IntegrityPanel() {
+interface IntegrityPanelProps {
+  exchange: string
+  symbol: string
+}
+
+export function IntegrityPanel({ exchange, symbol }: IntegrityPanelProps) {
   const { data: syncData } = useSyncStatus()
   const [daysBack, setDaysBack] = useState(7)
 
   if (!syncData?.length) return null
 
-  const uniqueRows = Array.from(
-    new Map(syncData.map((s) => [`${s.exchange}:${s.symbol}:${s.interval}`, s])).values(),
-  )
+  const filtered = syncData.filter((s) => s.exchange === exchange && s.symbol === symbol)
 
   return (
     <section className="monitor-section">
@@ -92,11 +93,11 @@ export function IntegrityPanel() {
         <table className="monitor-table">
           <thead>
             <tr>
-              <th>Symbol</th><th>Exchange</th><th>TF</th><th>Misaligned</th><th>Gaps</th><th>Actions</th>
+              <th>TF</th><th>Misaligned</th><th>Gaps</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {uniqueRows.map((s) => (
+            {filtered.map((s) => (
               <IntegrityRow
                 key={`${s.exchange}:${s.symbol}:${s.interval}`}
                 s={s}
