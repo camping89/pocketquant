@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [TanStackRouterVite({ quoteStyle: 'single' }), react()],
   server: {
     port: 5173,
     proxy: {
