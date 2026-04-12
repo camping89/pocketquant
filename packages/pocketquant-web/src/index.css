@@ -21,7 +21,6 @@
 html, body, #root {
   height: 100%;
   width: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -45,6 +44,7 @@ input, select {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
 .chart-container {
@@ -228,4 +228,187 @@ input, select {
 }
 .chart-error {
   color: var(--down-color);
+}
+
+/* ── App Shell (router) ── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-nav {
+  display: flex;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.app-nav a {
+  padding: 8px 16px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.app-nav a:hover { color: var(--text-primary); }
+.app-nav a.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Monitor Page ── */
+.monitor-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.monitor-page h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.monitor-section {
+  margin-bottom: 24px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.section-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.refresh-indicator {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.monitor-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.monitor-table th {
+  text-align: left;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+.monitor-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(43, 43, 67, 0.4);
+  white-space: nowrap;
+}
+.monitor-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+.monitor-table .mono {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+}
+.monitor-table .num {
+  text-align: right;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+/* Status dots */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.status-ok { background: var(--up-color); }
+.status-warn { background: #ffa726; }
+.status-stale { background: var(--down-color); }
+
+/* Buttons */
+.btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+.btn-warn {
+  color: #ffa726;
+  border-color: rgba(255, 167, 38, 0.4);
+}
+.btn-warn:hover:not(:disabled) {
+  color: #ffb74d;
+  border-color: #ffa726;
+}
+.btn-neutral { margin-right: 6px; }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.repair-result {
+  font-size: 11px;
+  color: var(--up-color);
+  margin-left: 6px;
+}
+
+/* Days back input */
+.days-input {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.days-input input {
+  width: 50px;
+  padding: 2px 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Loading / error / empty states */
+.monitor-loading,
+.monitor-empty {
+  padding: 16px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.monitor-error {
+  padding: 10px 14px;
+  background: rgba(239, 83, 80, 0.1);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: 4px;
+  color: var(--down-color);
+  font-size: 13px;
 }
