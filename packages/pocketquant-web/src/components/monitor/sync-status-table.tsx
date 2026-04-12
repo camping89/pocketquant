@@ -1,5 +1,4 @@
 import { useSyncStatus } from '../../hooks/use-sync-status'
-import type { SyncStatus } from '../../types/market-data'
 
 const INTERVAL_MS: Record<string, number> = {
   '1m': 60_000, '3m': 180_000, '5m': 300_000, '15m': 900_000,
@@ -25,27 +24,19 @@ function formatAge(iso: string | null): string {
   return `${Math.floor(ms / 86_400_000)}d`
 }
 
-function Row({ s }: { s: SyncStatus }) {
-  const cls = s.error_message ? 'status-stale' : ageClass(s.last_bar_at, s.interval)
-  return (
-    <tr>
-      <td className="mono">{s.symbol}</td>
-      <td>{s.exchange}</td>
-      <td className="mono">{s.interval}</td>
-      <td className="num">{s.bar_count.toLocaleString()}</td>
-      <td className="num">{formatAge(s.last_bar_at)}</td>
-      <td><span className={`status-dot ${cls}`} />{s.error_message ?? s.status}</td>
-    </tr>
-  )
+interface SyncStatusTableProps {
+  exchange: string
+  symbol: string
 }
 
-export function SyncStatusTable() {
+export function SyncStatusTable({ exchange, symbol }: SyncStatusTableProps) {
   const { data, isLoading, error, dataUpdatedAt } = useSyncStatus()
 
   if (isLoading) return <div className="monitor-loading">Loading sync status...</div>
   if (error) return <div className="monitor-error">Failed to load sync status: {error.message}</div>
   if (!data?.length) return <div className="monitor-empty">No symbols tracked</div>
 
+  const filtered = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
   const ago = dataUpdatedAt ? formatAge(new Date(dataUpdatedAt).toISOString()) : ''
 
   return (
@@ -54,18 +45,32 @@ export function SyncStatusTable() {
         <h3>Sync Status</h3>
         {ago && <span className="refresh-indicator">updated {ago} ago</span>}
       </div>
-      <div className="table-wrap">
-        <table className="monitor-table">
-          <thead>
-            <tr>
-              <th>Symbol</th><th>Exchange</th><th>TF</th><th>Bars</th><th>Age</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((s) => <Row key={`${s.exchange}-${s.symbol}-${s.interval}`} s={s} />)}
-          </tbody>
-        </table>
-      </div>
+      {filtered.length === 0 ? (
+        <div className="monitor-empty">No sync data for {exchange}:{symbol}</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="monitor-table">
+            <thead>
+              <tr>
+                <th>TF</th><th>Bars</th><th>Age</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr key={s.interval}>
+                  <td className="mono">{s.interval}</td>
+                  <td className="num">{s.bar_count.toLocaleString()}</td>
+                  <td className="num">{formatAge(s.last_bar_at)}</td>
+                  <td>
+                    <span className={`status-dot ${s.error_message ? 'status-stale' : ageClass(s.last_bar_at, s.interval)}`} />
+                    {s.error_message ?? s.status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   )
 }
