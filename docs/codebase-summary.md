@@ -27,17 +27,18 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 
 ### pocketquant-web (TypeScript, 25 files, ~1,414 LOC) — React SPA
 
-**Purpose:** Real-time charting UI for market data visualization with technical indicators and backtest visualization.
+**Purpose:** Real-time charting UI for market data visualization with technical indicators, backtest visualization, and system monitoring.
 
-**Tech Stack:** Vite 8, React 19, TypeScript 5.9, Lightweight Charts 5.1, TanStack Query 5.95, SMA/EMA indicators
+**Tech Stack:** Vite 8, React 19, TypeScript 5.9, TanStack Router (file-based routing), Lightweight Charts 5.1, TanStack Query 5.95, SMA/EMA indicators
+
+**Routes:**
+- `/` (Charts) - Trading chart with symbol/interval/strategy selectors, technical indicators, backtest runner
+- `/monitor` - System monitoring dashboard (sync status, data integrity checks, background jobs)
 
 **Components:**
+- **Chart Page:** TradingChart + SymbolSelector + IntervalSelector + StrategySelector + IndicatorToggles + AppHeader
 - **TradingChart:** Candlestick + volume + 5 technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
-- **SymbolSelector:** Dropdown for instrument selection with available symbols
-- **IntervalSelector:** Timeframe picker (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M)
-- **StrategySelector:** Choose strategy for backtesting
-- **IndicatorToggles:** Show/hide overlay indicators on chart
-- **AppHeader:** Navigation and branding
+- **Monitor Dashboard:** SyncStatusTable (auto-poll 30s) + IntegrityPanel (check/repair) + BackgroundJobsList (auto-poll 30s)
 
 **Hooks:**
 - `useOHLCV()` - Fetch historical bars via TanStack Query with caching
@@ -46,10 +47,13 @@ Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
 - `useAvailableIntervals()` - Get compatible timeframes
 - `useRealTimeBar()` - Poll API for latest bar (5-10s interval)
 - `useIndicators()` - Calculate indicator values from bars
+- `useSyncStatus()` - Poll sync status (30s interval)
+- `useIntegrityCheck()` / `useIntegrityRepair()` - Data integrity mutations
+- `useBackgroundJobs()` - Poll background job list (30s interval)
 
-**API Layer:** `apiFetch.ts` wraps fetch + error handling; proxies `/api/*` to `:41920`.
+**API Layer:** `apiFetch()` / `apiPost()` wrappers for fetch + error handling; proxies `/api/*` to `:41920`.
 
-**Deployment:** Vite builds to `dist/`, served as static assets via FastAPI.
+**Deployment:** Vite builds to `dist/`, served as static assets via FastAPI (SPA fallback for `/monitor` route).
 
 ### pocketquant.core.common (993 LOC, 32 files)
 
