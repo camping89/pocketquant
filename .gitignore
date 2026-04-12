@@ -1,3 +1,6 @@
+# TanStack Router generated
+routeTree.gen.ts
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -15,6 +18,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!packages/pocketquant-web/src/lib/
 lib64/
 parts/
 sdist/
