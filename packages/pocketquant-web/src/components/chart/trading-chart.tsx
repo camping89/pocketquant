@@ -47,21 +47,18 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
     const chart = chartRef.current
     if (!chart || !data) return
 
-    if (markersRef.current) {
-      markersRef.current.detach()
-      markersRef.current = null
-    }
-    if (candleRef.current) {
-      chart.removeSeries(candleRef.current)
+    // Clear stale refs — series may belong to a previous (destroyed) chart instance
+    // after route navigation, so removeSeries can throw. Best-effort cleanup.
+    try {
+      if (markersRef.current) { markersRef.current.detach(); markersRef.current = null }
+      if (candleRef.current) { chart.removeSeries(candleRef.current); candleRef.current = null }
+      if (volumeRef.current) { chart.removeSeries(volumeRef.current); volumeRef.current = null }
+      if (indicatorRefs.current) { removeIndicatorSeries(chart, indicatorRefs.current); indicatorRefs.current = null }
+    } catch {
       candleRef.current = null
-    }
-    if (volumeRef.current) {
-      chart.removeSeries(volumeRef.current)
       volumeRef.current = null
-    }
-    if (indicatorRefs.current) {
-      removeIndicatorSeries(chart, indicatorRefs.current)
       indicatorRefs.current = null
+      markersRef.current = null
     }
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -87,7 +84,7 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
     chart.timeScale().fitContent()
 
     return () => {
-      if (chart) {
+      if (chartRef.current) {
         if (candleRef.current) {
           chart.removeSeries(candleRef.current)
           candleRef.current = null
@@ -115,8 +112,8 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
     indicatorRefs.current = addIndicatorSeries(chart, indicatorData, indicators)
 
     return () => {
-      if (chart && indicatorRefs.current) {
-        removeIndicatorSeries(chart, indicatorRefs.current)
+      if (chartRef.current && indicatorRefs.current) {
+        removeIndicatorSeries(chartRef.current, indicatorRefs.current)
         indicatorRefs.current = null
       }
     }
