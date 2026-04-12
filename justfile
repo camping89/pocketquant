@@ -51,6 +51,15 @@ types:
 # Run lint + format + type check
 qa: lint fmt types
 
-# Start dev server with hot reload
-dev:
+# Start Redis only (when using remote MongoDB)
+redis:
+    docker compose -f docker/compose.yml up -d redis
+
+# Start backend dev server with hot reload
+be:
     uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920
+
+# Start frontend dev server
+[working-directory: 'packages/pocketquant-web']
+fe:
+    npm run dev
