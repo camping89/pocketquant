@@ -286,7 +286,8 @@ input, select {
   font-weight: 600;
   color: var(--text-primary);
 }
-.refresh-indicator {
+.refresh-indicator,
+.section-subtitle {
   font-size: 11px;
   color: var(--text-secondary);
 }

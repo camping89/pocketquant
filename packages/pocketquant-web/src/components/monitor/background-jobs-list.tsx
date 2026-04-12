@@ -17,6 +17,7 @@ export function BackgroundJobsList() {
     <section className="monitor-section">
       <div className="section-header">
         <h3>Background Jobs</h3>
+        <span className="section-subtitle">System-wide — not filtered by symbol</span>
       </div>
       <div className="table-wrap">
         <table className="monitor-table">
