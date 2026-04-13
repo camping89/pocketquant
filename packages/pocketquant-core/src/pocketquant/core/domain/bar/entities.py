@@ -13,6 +13,14 @@ def _utc_now() -> dt:
     return dt.now(UTC)
 
 
+def _coerce_utc(value: dt | None) -> dt | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 class Bar(BaseModel):
     """Price bar with identity and MongoDB persistence.
 
@@ -71,23 +79,19 @@ class Bar(BaseModel):
         interval_val = doc.get("interval")
         if isinstance(interval_val, str):
             interval_val = Interval(interval_val)
-        # MongoDB returns naive datetimes by default — normalize to UTC-aware
-        bar_dt = doc.get("datetime")
-        if bar_dt is not None and bar_dt.tzinfo is None:
-            bar_dt = bar_dt.replace(tzinfo=UTC)
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),
             symbol=doc.get("symbol", ""),
             exchange=doc.get("exchange", ""),
             interval=interval_val,
-            datetime=bar_dt,
+            datetime=_coerce_utc(doc.get("datetime")),
             open=doc.get("open", 0.0),
             high=doc.get("high", 0.0),
             low=doc.get("low", 0.0),
             close=doc.get("close", 0.0),
             volume=doc.get("volume", 0.0),
             tick_count=doc.get("tick_count", 0),
-            created_at=doc.get("created_at", _utc_now()),
+            created_at=_coerce_utc(doc.get("created_at")) or _utc_now(),
         )
 
     def to_dict(self) -> dict:
