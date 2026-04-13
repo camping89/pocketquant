@@ -42,8 +42,9 @@ done
 
 # ─── Deploy ───────────────────────────────────────────────────
 
-echo "=== Pulling latest image ==="
+echo "=== Pulling latest images ==="
 docker pull "${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}"
+docker pull "${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}"
 
 echo "=== Starting services ==="
 docker compose -f docker/compose.prod.yml --env-file docker/.env up -d --remove-orphans
