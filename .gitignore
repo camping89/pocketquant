@@ -102,8 +102,6 @@ repomix-output.xml
 
 .env.test
 
-.claude/session-state/archive/
-
-.claude/session-state/
+**/.claude/session-state/
 
 plans/
