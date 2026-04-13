@@ -130,6 +130,6 @@ def register_sync_jobs(
                     )
 
     job_scheduler.add_cron_job(sync_integrity, job_id="sync_integrity", hour=4, minute=0)
-    job_scheduler.add_cron_job(sync_repair, job_id="sync_repair", hour=4, minute=30)
+    job_scheduler.add_interval_job(sync_repair, job_id="sync_repair", hours=12)
 
     logger.info("market_data.registered_sync_jobs", job_count=8)

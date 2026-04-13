@@ -31,7 +31,7 @@ class GetSymbolSyncStatusHandler(Handler[GetSymbolSyncStatusQuery, SyncStatusRes
             interval=status.interval,
             status=status.status,
             bar_count=status.bar_count,
-            last_sync_at=status.last_sync_at.isoformat() if status.last_sync_at else None,
-            last_bar_at=status.last_bar_at.isoformat() if status.last_bar_at else None,
+            last_sync_at=status.last_sync_at.isoformat().replace("+00:00", "Z") if status.last_sync_at else None,
+            last_bar_at=status.last_bar_at.isoformat().replace("+00:00", "Z") if status.last_bar_at else None,
             error_message=status.error_message,
         )

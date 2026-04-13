@@ -9,6 +9,7 @@ from dishka import Provider, Scope, provide
 from pocketquant.api.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
+from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.infrastructure.tradingview import TradingViewClient
 from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
@@ -16,9 +17,11 @@ from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandle
 
 class InfrastructureProvider(Provider):
     @provide(scope=Scope.APP)
-    async def get_job_scheduler(self, settings: Settings) -> AsyncIterator[JobScheduler]:
+    async def get_job_scheduler(
+        self, settings: Settings, history_repo: JobHistoryRepository
+    ) -> AsyncIterator[JobScheduler]:
         """Initialize and start scheduler. Shutdown on app exit."""
-        scheduler = JobScheduler()
+        scheduler = JobScheduler(history_repo=history_repo)
         if settings.enable_jobs:
             scheduler.initialize(settings)
             scheduler.start()

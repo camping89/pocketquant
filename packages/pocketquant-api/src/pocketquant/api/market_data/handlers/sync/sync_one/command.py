@@ -17,3 +17,7 @@ class SyncSymbolCommand(BaseModel):
         le=LIMIT_TVDATAFEED_MAX_BARS,
         description="Number of bars to fetch",
     )
+    skip_filter: bool = Field(
+        default=False,
+        description="Bypass _filter_new_bars — used by repair to fill gaps",
+    )

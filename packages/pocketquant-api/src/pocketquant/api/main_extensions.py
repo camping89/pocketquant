@@ -25,6 +25,7 @@ from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
+from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
@@ -45,6 +46,7 @@ _REPO_TYPES: list[type] = [
     SyncStatusRepository,
     SymbolRepository,
     OptimizationRepository,
+    JobHistoryRepository,
 ]
 
 
@@ -145,7 +147,7 @@ def register_routes(app: FastAPI, settings) -> None:
 
     @api.get("/system/jobs")
     async def list_jobs(job_scheduler: FromDishka[JobScheduler]) -> list[dict]:
-        return job_scheduler.get_jobs()
+        return await job_scheduler.get_jobs()
 
     api.include_router(market_data_router)
     api.include_router(quote_router)

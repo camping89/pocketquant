@@ -23,8 +23,8 @@ class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
                 interval=s.interval,
                 status=s.status,
                 bar_count=s.bar_count,
-                last_sync_at=s.last_sync_at.isoformat() if s.last_sync_at else None,
-                last_bar_at=s.last_bar_at.isoformat() if s.last_bar_at else None,
+                last_sync_at=s.last_sync_at.isoformat().replace("+00:00", "Z") if s.last_sync_at else None,
+                last_bar_at=s.last_bar_at.isoformat().replace("+00:00", "Z") if s.last_bar_at else None,
                 error_message=s.error_message,
             )
             for s in statuses

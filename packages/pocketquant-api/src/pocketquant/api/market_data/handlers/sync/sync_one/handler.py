@@ -53,12 +53,25 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         try:
             records = await self._fetch_bars(symbol, exchange, interval, request.n_bars)
             if not records:
+                # Transient provider failure — preserve existing sync_status if bars exist
+                total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
+                if total_bars > 0:
+                    logger.warning(
+                        "market_data.sync.empty_fetch_skipped",
+                        symbol=symbol,
+                        exchange=exchange,
+                        interval=interval.value,
+                        existing_bars=total_bars,
+                    )
+                    await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
+                    return self._success(symbol, exchange, interval, 0, total_bars, latest_bar)
                 return await self._fail(
                     symbol, exchange, interval, "No data returned from provider"
                 )
 
-            # Filter out bars we already have (keep only newer than latest - 3 bar buffer)
-            records = await self._filter_new_bars(records, symbol, exchange, interval)
+            # Filter out bars we already have (skip for repair to allow gap filling)
+            if not request.skip_filter:
+                records = await self._filter_new_bars(records, symbol, exchange, interval)
             records = self._filter_misaligned_bars(records, interval)
 
             inserted_count = await self._persist_bars(symbol, exchange, records)
