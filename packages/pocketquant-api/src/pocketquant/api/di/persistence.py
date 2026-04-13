@@ -18,6 +18,7 @@ from pocketquant.core.persistence.redis import Cache
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
+from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
 from pocketquant.trading.persistence.order_repository import OrderRepository
 from pocketquant.trading.persistence.position_repository import PositionRepository
 
@@ -47,3 +48,4 @@ class PersistenceProvider(Provider):
     optimization_repository = provide(OptimizationRepository, scope=Scope.APP)
     symbol_repository = provide(SymbolRepository, scope=Scope.APP)
     sync_status_repository = provide(SyncStatusRepository, scope=Scope.APP)
+    job_history_repository = provide(JobHistoryRepository, scope=Scope.APP)

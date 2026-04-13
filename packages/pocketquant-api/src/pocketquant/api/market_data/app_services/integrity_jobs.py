@@ -82,7 +82,7 @@ async def repair_integrity(
     mediator: Mediator,
     days_back: int = 7,
 ) -> dict:
-    """Delete misaligned bars + resync gaps via existing sync pipeline."""
+    """Delete misaligned bars + resync gaps via sync pipeline (skip_filter=True)."""
     report = await check_integrity(symbol, exchange, interval, bar_repo, days_back)
 
     deleted = 0
@@ -93,7 +93,8 @@ async def repair_integrity(
     if report["gap_ranges"]:
         try:
             command = SyncSymbolCommand(
-                symbol=symbol, exchange=exchange, interval=interval, n_bars=5000,
+                symbol=symbol, exchange=exchange, interval=interval,
+                n_bars=5000, skip_filter=True,
             )
             await mediator.send(command)
             resynced = len(report["gap_ranges"])
@@ -103,6 +104,18 @@ async def repair_integrity(
                 symbol=symbol, interval=interval.value, error=str(e),
             )
 
+    # Verify: re-check integrity after repair
+    verify = await check_integrity(symbol, exchange, interval, bar_repo, days_back)
+    still_missing = verify["missing_count"]
+    still_missing_ranges = verify["gap_ranges"]
+
+    if still_missing > 0:
+        logger.warning(
+            "integrity.repair.still_missing",
+            symbol=symbol, exchange=exchange, interval=interval.value,
+            still_missing=still_missing, ranges=still_missing_ranges,
+        )
+
     return {
         "symbol": symbol.upper(),
         "exchange": exchange.upper(),
@@ -110,4 +123,6 @@ async def repair_integrity(
         "deleted": deleted,
         "gaps_resynced": resynced,
         "missing_before": report["missing_count"],
+        "still_missing": still_missing,
+        "still_missing_ranges": still_missing_ranges,
     }
