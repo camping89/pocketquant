@@ -1,6 +1,6 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-04-10 | **Total Handlers:** 27 CQRS handlers across market data, strategy, backtest, and trading | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka
+**Last Updated:** 2026-04-13 | **Total Handlers:** 27 CQRS handlers across market data, strategy, backtest, and trading | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC
 
 Current note: route names in this document are historical in a few places. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
 
@@ -19,6 +19,13 @@ This document details the complete pipeline for each of the 27 CQRS handlers in 
 
 **Request:** POST `/api/v1/market-data/sync`
 
+**Command Fields:**
+- `symbol: str` - Trading symbol (e.g., AAPL)
+- `exchange: str` - Exchange name (e.g., NASDAQ)
+- `interval: Interval` - Time interval (default: DAY_1)
+- `n_bars: int` - Number of bars to fetch (default: 5000)
+- `skip_filter: bool` - **NEW** Bypass `_filter_new_bars` — used by repair to fill gaps (default: False)
+
 **Implementation (Extract-Method Pattern, 8 Private Helpers):**
 
 ```python
@@ -31,7 +38,11 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         if not bars:
             return await self._fail("No bars returned")
 
-        self._validate_bars(bars)
+        # Filter out bars we already have (skip for repair to allow gap filling)
+        if not cmd.skip_filter:
+            bars = await self._filter_new_bars(bars, cmd.symbol, cmd.exchange, cmd.interval)
+        bars = self._filter_misaligned_bars(bars, cmd.interval)
+        
         count = await self._persist_bars(bars, cmd.symbol)
         await self._invalidate_cache(cmd.symbol)
         await self._publish_sync_event(cmd, count)

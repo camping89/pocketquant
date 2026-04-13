@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-04-10 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright
+**Last Updated:** 2026-04-13 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Codebase:** 334 files, ~16,815 LOC
 
 Current note: this document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md).
 
@@ -177,7 +177,7 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 - `packages/pocketquant-api/src/pocketquant/api/main.py` — Lifespan: create container, `setup_dishka()`
 
 **6 Providers (initialization order):**
-1. **CoreProvider** - Settings, EventBus (max_history=100), Mediator
+1. **CoreProvider** - Settings, EventBus (max_history=50), Mediator
 2. **PersistenceProvider** - Database, Cache, 7 repositories
 3. **InfrastructureProvider** - Brokers, TradingView, Scheduler
 4. **MarketDataProvider** - BarAppService, QuoteAppService
@@ -394,6 +394,21 @@ For complex handlers exceeding ~30 lines with 8+ operations, extract private hel
 - Each helper: single-responsibility, async or sync as needed
 - Improves testability: easier to test 8 focused helpers than one giant method
 
+### 9.5. Integrity Repair Flow
+
+Bar integrity repair: check → delete misaligned → resync gaps → verify.
+
+**5-Step Process:**
+1. **Check:** `check_integrity()` → list misaligned + missing bars
+2. **Delete:** `bar_repo.delete_many_by_ids(misaligned_ids)`
+3. **Resync:** `SyncSymbolCommand(..., skip_filter=True, n_bars=5000)` — bypasses filter to fill gaps
+4. **Verify:** re-check integrity, capture `still_missing` count + ranges
+5. **Log:** warn if gaps remain after repair
+
+**Why skip_filter:** `_filter_new_bars` uses array-position cutoff (bar[-3]), unreliable on sparse gap data. Flag bypasses it to fill all gap periods.
+
+**Usage:** Background job `sync_repair` (every 12h) or manual `/api/v1/market-data/integrity/repair` endpoint. Returns `RepairResult` with deleted count, gaps_resynced, still_missing, still_missing_ranges.
+
 ### 10. Schema Consolidation (Use Base Classes)
 
 Eliminate redundant empty Create subclasses. Use base classes directly for repository operations.
@@ -471,9 +486,9 @@ Use kebab-case with descriptive names that indicate purpose:
 
 ```
 quote_routes.py           # FastAPI routes for quotes
-quote_app_service.py          # QuoteAppService business logic
-quote_aggregator.py       # QuoteAggregator bar building
-ohlcv_repository.py       # OHLCVRepository data access
+quote_app_service.py      # QuoteAppService business logic
+bar_builder.py            # BarBuilder domain service
+bar_repository.py         # BarRepository data access
 tradingview.py            # TradingViewClient for REST API
 tradingview_ws.py         # TradingViewWebSocketClient for WebSocket
 ```

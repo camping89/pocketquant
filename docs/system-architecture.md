@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-04-10 | **Version:** 3.4 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package
+**Last Updated:** 2026-04-13 | **Version:** 3.5 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 334 files, ~16,815 LOC
 
 Current note: for local run/test steps and canonical route names, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document remains a deeper design reference.
 
@@ -274,7 +274,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         strategy = await StrategyLoader.load_yaml(cmd.strategy_yaml)
 
         # 2. Fetch historical bars from infrastructure
-        bars = await OHLCVRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
+        bars = await BarRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
 
         # 3. Execute domain logic via BacktestAppService
         results = BacktestAppService.run(strategy, bars, self.broker)
@@ -536,6 +536,7 @@ Route Response
 | `optimizations` | OptimizationRepository | Parameter optimization |
 | `symbols` | SymbolRepository | Symbol metadata |
 | `sync_status` | SyncStatusRepository | Data sync progress |
+| `job_history` | JobHistoryRepository | Background job execution history |
 
 **All repositories:**
 - Inherit from `BaseRepository` (provides `_collection()` helper)
@@ -597,195 +598,25 @@ Ready to process market events and recover fills
 
 ## Event Bus Pattern
 
-**Purpose:** Decouple features via domain events (in-memory, FIFO, 100 event max history).
+**Purpose:** Decouple features via domain events (in-memory, FIFO, 50 event max history).
 
 **Characteristics:**
 - Handlers publish → EventBus.publish(event) → subscribers notified sequentially
-- Bounded history (**100 events max**, hardcoded in CoreProvider)
+- Bounded history (**50 events max**, hardcoded in CoreProvider)
 - Sync + async handlers supported
 - No persistence (events lost on restart)
 
-## Data Pipelines
+## Data Pipelines (Overview)
 
-### Historical Data Sync Pipeline
+**See [handler-pipelines.md](./handler-pipelines.md) for detailed 27-handler flows.**
 
-```
-POST /market-data/sync
-  ↓
-Route → SyncSymbolCommand → Mediator
-  ↓
-SyncSymbolHandler
-  ├─> TradingViewClient.fetch_ohlcv
-  │   ├─> ThreadPoolExecutor (blocking I/O isolation)
-  │   ├─> tvdatafeed.get_hist(symbol, exchange, interval, n_bars)
-  │   └─> Return list[Bar]
-  │
-  ├─> Domain validation via Bar.from_mongo()
-  │
-  ├─> MongoDB.bulk_write (upsert on timestamp)
-  │   └─> Uses COLLECTION_BARS (renamed from COLLECTION_OHLCV)
-  │
-  ├─> Redis.delete_pattern(f"bar:{symbol}:*")  # Cache invalidation
-  │
-  └─> EventBus.publish(HistoricalDataSyncedEvent(...))
-
-Response: {bars_synced: 100, status: "completed"}
-```
-
-### Real-time Quote Pipeline
-
-```
-TradingView WebSocket
-  ↓
-Binary Frame: ~m~{length}~m~{json}
-  ↓
-TradingViewWebSocketClient.parse_frame (injected via QuoteAppService constructor)
-  ↓
-QuoteAppService._on_quote_update
-  ├─> Redis.set(f"quote:latest:{exchange}:{symbol}", quote, ttl=60)
-  │
-  ├─> BarAppService.process_tick(quote)
-  │   ├─> For each interval (1m, 5m, 15m, ...)
-  │   │   ├─> Get/create BarBuilder
-  │   │   ├─> Update OHLC (asyncio.Lock for safety)
-  │   │   └─> Check time boundary
-  │   │
-  │   └─> On bar complete:
-  │       ├─> BarAppService._save_completed_bar()
-  │       │   ├─> MongoDB.insert_one(bar)
-  │       │   ├─> Redis.set(f"bar:current:{exchange}:{symbol}:{interval}", bar)
-  │       │   └─> EventBus.publish(BarCompletedEvent(...)) [SOURCE: _save_completed_bar()]
-  │       └─> build_bar_cache_key() [renamed from build_ohlcv_cache_key()]
-  │
-  └─> EventBus.publish(QuoteReceivedEvent(...))
-```
-
-### Data Integrity Pipeline
-
-**Check Phase (POST /market-data/integrity/check):**
-```
-IntegrityRequest → BarRepository.find_datetimes(symbol, exchange, interval, start, end)
-  ↓
-check_integrity(symbol, exchange, interval, days_back=7)
-  ├─> Fetch all bars in time range
-  ├─> Filter misaligned bars via is_bar_aligned(datetime, interval)
-  ├─> Build expected time grid (epoch-aligned timestamps)
-  ├─> Detect missing timestamps (gaps in grid)
-  └─> Return {misaligned_count, missing_count, gap_ranges}
-```
-
-**Repair Phase (POST /market-data/integrity/repair):**
-```
-IntegrityRequest → repair_integrity(symbol, exchange, interval, days_back=7)
-  ├─> Run check_integrity() first
-  │
-  ├─> Delete misaligned bars
-  │   └─> BarRepository.delete_many_by_ids(misaligned_ids)
-  │
-  └─> Resync gap ranges
-      └─> SyncSymbolCommand → Mediator → SyncSymbolHandler (standard sync)
-
-Response: {deleted, gaps_resynced, missing_before}
-```
-
-**Automated Integrity Jobs (Daily @ 04:00 & 04:30 UTC):**
-- `sync_integrity` cron job (04:00) — Check all symbols for all intervals, log results
-- `sync_repair` cron job (04:30) — Repair worst alignment issues, resync critical gaps
-
-**Alignment Validation:** `is_bar_aligned(datetime, interval)` checks if bar timestamp aligns to interval boundary (epoch mod INTERVAL_SECONDS == 0).
-
-### Strategy Execution Pipeline
-
-```
-Market Data Event (BarCompletedEvent or QuoteReceivedEvent)
-  ↓
-StrategyAppService._on_market_event
-  ├─> Validate strategy is running
-  │
-  ├─> Call strategy.on_bar(bar) or on_tick(quote)
-  │   └─> Strategy generates signal: Buy/Sell/Hold
-  │
-  ├─> RiskCheckHandler.check_signal(signal)
-  │   ├─> Check position limits
-  │   ├─> Check account limits
-  │   └─> Return approved signal or None
-  │
-  ├─> On approved signal:
-  │   ├─> Build Order via OrderBuilder
-  │   ├─> Submit order via IBroker.submit_order(order)
-  │   ├─> OrderRepository.save(order) - MongoDB persistence
-  │   └─> EventBus.publish(OrderSubmittedEvent(...))
-  │
-  └─> On fill event:
-      ├─> PositionAppService._on_order_filled
-      │   ├─> Create/update position
-      │   ├─> PositionRepository.save(position) - MongoDB persistence
-      │   └─> EventBus.publish(PositionOpenedEvent/PositionUpdatedEvent)
-      ├─> Calculate P&L
-      └─> OrderRepository.save(order) - Persist filled state
-```
-
-### Backtesting Pipeline
-
-```
-POST /backtest/run
-  ↓
-BacktestRunCommand → Mediator
-  ↓
-BacktestHandler
-  ├─> Load strategy YAML config
-  │
-  ├─> Fetch historical bars from MongoDB
-  │   └─> Sorted by timestamp (ascending)
-  │
-  ├─> BacktestAppService.run()
-  │   ├─> Initialize PaperBroker
-  │   ├─> Initialize StrategyAppService
-  │   │
-  │   └─> For each bar (chronological):
-  │       ├─> Inject bar to StrategyAppService
-  │       ├─> Strategy.on_bar(bar) → signal
-  │       ├─> RiskCheckHandler.check_signal()
-  │       ├─> PaperBroker.submit_order()
-  │       ├─> Simulate fill with slippage/delay
-  │       ├─> Update PositionAppService
-  │       └─> Collect fill events
-  │
-  ├─> ResultCollector.finalize()
-  │   ├─> PerformanceCalculator.calculate()
-  │   │   ├─> Sharpe ratio
-  │   │   ├─> Sortino ratio
-  │   │   ├─> Max drawdown
-  │   │   ├─> Win rate
-  │   │   └─> Return metrics
-  │   │
-  │   └─> Store BacktestResult in MongoDB
-  │
-  └─> Return BacktestResultDTO
-```
-
-### Parameter Optimization Pipeline
-
-```
-POST /backtest/optimize
-  ↓
-OptimizationCommand → Mediator
-  ↓
-OptimizationHandler
-  ├─> GridOptimizationAppService.optimize()
-  │   ├─> Generate parameter combinations
-  │   │
-  │   ├─> For each combo (parallel via multiprocessing):
-  │   │   ├─> Backtest with params
-  │   │   ├─> Collect performance metric (e.g., Sharpe)
-  │   │   └─> Return score
-  │   │
-  │   └─> Return best_params, best_score
-  │
-  ├─> Store OptimizationResult in MongoDB
-  │
-  └─> Return OptimizationResultDTO
-```
+Key pipelines at high level:
+1. **Historical Sync:** TradingView → BarRepository.upsert_many() → Cache invalidation → EventBus
+2. **Real-time Quotes:** TradingView WebSocket → QuoteAppService → BarAppService (13 intervals) → MongoDB + EventBus
+3. **Data Integrity:** Check alignment + gaps → Delete misaligned → Resync gaps (skip_filter=True) → Verify — Cron jobs @ 04:00 UTC (check) & every 12h (repair)
+4. **Strategy Execution:** Market event → Strategy.on_bar() → Risk check → Broker.submit_order() → Position tracking
+5. **Backtesting:** YAML config → Historical bars → PaperBroker.simulate_fills() → PerformanceCalculator → MongoDB
+6. **Parameter Optimization:** GridOptimizationAppService → Parallel backtests → Best params → MongoDB
 
 ## Concurrency Model
 
@@ -805,7 +636,7 @@ OptimizationHandler
 | `packages/pocketquant-api/src/pocketquant/api/main.py` | Lifespan: create container, setup_dishka |
 
 **6 Providers:**
-- **CoreProvider** - Settings, EventBus (max_history=**100**), Mediator
+- **CoreProvider** - Settings, EventBus (max_history=**50**), Mediator
 - **PersistenceProvider** - Database (PyMongo), Cache (Redis), 7 repositories
 - **InfrastructureProvider** - Brokers (Paper, OKX), TradingViewClient, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
@@ -844,7 +675,7 @@ OptimizationHandler
 |--------|------|---------|
 | **TradingView** | HTTP + WS | ThreadPoolExecutor (4 workers), binary frames, exponential backoff |
 | **OKX** | WS + Auth | HMAC-SHA256, 1s-30s backoff, 10-fail circuit breaker |
-| **MongoDB** | Async | PyMongo, pool 5-50 connections, 7 collections |
+| **MongoDB** | Async | PyMongo, pool 5-50 connections, 8 collections |
 | **Redis** | Async | redis-py, TTL: 60s quotes, 300s bars, 86400s idempotency |
 
 ## Error Handling

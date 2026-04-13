@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-04-10 | **Status:** v1.0 Complete | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages in the `uv` workspace + `pocketquant-web` as a separate npm app
+**Last Updated:** 2026-04-13 | **Status:** v1.0 Complete | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages in the `uv` workspace + `pocketquant-web` as a separate npm app | **Codebase:** 334 files, ~16,815 LOC
 
 Current note: use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md) for the current local workflow and verified endpoint names.
 
@@ -111,18 +111,21 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F6: Background Job Scheduling
 
-**Requirement:** Automatically sync data on schedule.
+**Requirement:** Automatically sync data on schedule with integrity verification.
 
 **Sub-requirements:**
-- Periodic sync all symbols (6 hours)
-- Market hours sync for daily data (hourly, Mon-Fri 9-17 UTC)
+- Tiered sync by interval (5m, 15m, 1h, 4h, daily)
+- Full backfill sync (5000 bars across all intervals)
+- Daily integrity checks (bar alignment + gaps)
+- Scheduled gap-fill repairs every 12h with verification
 - Per-symbol error handling (don't break loop)
-- Status tracking for each job execution
-- Graceful shutdown (wait for jobs to complete)
+- Job execution history tracking (7-day TTL)
 
-**Jobs:**
-- sync_all_symbols: Every 6 hours (500 bars per symbol)
-- sync_daily_data: Hourly Mon-Fri 9-17 UTC (10 bars, daily only)
+**Jobs (8 total):**
+- sync_5m, sync_15m, sync_hourly, sync_swing, sync_daily — Per-interval syncs (varying bar counts: 30, 30, 10, 6, 7)
+- sync_backfill (03:00 UTC) — Full backfill (5000 bars, all intervals)
+- sync_integrity (04:00 UTC) — Check alignment + gaps (7 days back)
+- sync_repair (every 12h) — Delete misaligned, resync gaps, verify still_missing
 
 ### F7: Strategy Engine
 
