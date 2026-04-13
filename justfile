@@ -57,7 +57,7 @@ redis:
 
 # Start backend dev server with hot reload
 be:
-    uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920
+    {{python}} -m uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920
 
 # Start frontend dev server
 [working-directory: 'packages/pocketquant-web']
