@@ -1,4 +1,4 @@
-import { createRootRoute, Link, Outlet, useNavigate } from '@tanstack/react-router'
+import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { SymbolSelector } from '../components/controls/symbol-selector'
 import type { SelectedSymbol } from '../types/market-data'
 
@@ -14,21 +14,21 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   const { exchange, symbol } = Route.useSearch()
-  const navigate = useNavigate()
+  const navigate = Route.useNavigate()
 
   const selected: SelectedSymbol = { exchange, symbol }
   const handleSymbolChange = (v: SelectedSymbol) => {
-    navigate({ search: (prev: RootSearchParams) => ({ ...prev, exchange: v.exchange, symbol: v.symbol }) })
+    void navigate({ search: { exchange: v.exchange, symbol: v.symbol } })
   }
 
   return (
     <div className="app-shell">
       <nav className="app-nav">
         <SymbolSelector value={selected} onChange={handleSymbolChange} />
-        <Link to="/" search={(prev: RootSearchParams) => prev} activeProps={{ className: 'active' }} activeOptions={{ exact: true }}>
+        <Link to="/" search={{ exchange, symbol }} activeProps={{ className: 'active' }} activeOptions={{ exact: true }}>
           Charts
         </Link>
-        <Link to="/monitor" search={(prev: RootSearchParams) => prev} activeProps={{ className: 'active' }}>
+        <Link to="/monitor" search={{ exchange, symbol }} activeProps={{ className: 'active' }}>
           Monitor
         </Link>
       </nav>
