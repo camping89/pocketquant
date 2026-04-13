@@ -1,6 +1,8 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-04-07 | **Status:** v1.0 Complete | **Codebase:** 295 Python files, 14,751 LOC in packages/ + 25 TypeScript (pocketquant-web) | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4-package uv workspace monorepo + React 19 SPA | **Test Coverage:** 78%+ average
+**Last Updated:** 2026-04-10 | **Status:** v1.0 Complete | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages in the `uv` workspace + `pocketquant-web` as a separate npm app
+
+Current note: use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md) for the current local workflow and verified endpoint names.
 
 ## Project Vision
 
@@ -59,7 +61,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - POST `/api/v1/quotes/stop` - Stop WebSocket
 - POST `/api/v1/quotes/subscribe` - Register symbol
 - POST `/api/v1/quotes/unsubscribe` - Deregister symbol
-- GET `/api/v1/quotes/status` - Connection status
+- GET `/api/v1/market-data/status` - Connection status
 - GET `/api/v1/quotes/latest/{exchange}/{symbol}` - Latest quote
 - GET `/api/v1/quotes/all` - All cached quotes
 
@@ -92,7 +94,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Support flexible time ranges
 
 **API Endpoints:**
-- GET `/api/v1/market-data/bar/{exchange}/{symbol}` - Bars with query params
+- GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Bars with query params
 
 ### F5: Symbol Registry
 

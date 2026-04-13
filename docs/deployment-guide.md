@@ -1,6 +1,8 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-03-23 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via deploy.sh
+**Last Updated:** 2026-04-10 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via deploy.sh
+
+Current note: for local development and UI testing, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document is production-only.
 
 ## Architecture
 

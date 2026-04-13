@@ -1,6 +1,8 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-04-07 | **Coverage:** 295 Python files, 14,751 LOC in packages/ + 25 TypeScript (1,414 LOC) | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright
+**Last Updated:** 2026-04-10 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright
+
+Current note: this document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md).
 
 ## Clean Architecture Rules
 

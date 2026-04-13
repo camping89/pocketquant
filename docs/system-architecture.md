@@ -1,6 +1,8 @@
 # System Architecture
 
-**Last Updated:** 2026-04-07 | **Version:** 3.3 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Codebase:** 295 Python files (14,751 LOC) + 25 TypeScript (1,414 LOC)
+**Last Updated:** 2026-04-10 | **Version:** 3.4 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package
+
+Current note: for local run/test steps and canonical route names, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document remains a deeper design reference.
 
 ## High-Level Architecture
 

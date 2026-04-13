@@ -1,6 +1,8 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-03-23 | **Total Handlers:** 27 CQRS handlers across 4 domains | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka
+**Last Updated:** 2026-04-10 | **Total Handlers:** 27 CQRS handlers across market data, strategy, backtest, and trading | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka
+
+Current note: route names in this document are historical in a few places. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
 
 This document details the complete pipeline for each of the 27 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
 
@@ -660,4 +662,3 @@ register_all_handlers(container)  # Wires all @handles decorators to Mediator
 | **RunBacktestHandler** | 10s-2min | Depends on bar count, strategy complexity |
 | **StrategyAppService.on_bar()** | <1ms | In-memory strategy execution |
 | **RiskCheckHandler** | <0.1ms | Memory checks only |
-
