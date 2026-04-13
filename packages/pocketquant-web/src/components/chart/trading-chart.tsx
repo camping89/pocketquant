@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import {
   CandlestickSeries,
   HistogramSeries,
@@ -38,6 +38,7 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const [ohlcv, setOhlcv] = useState<{ o: number; h: number; l: number; c: number; v: number; t: string } | null>(null)
   const indicatorRefs = useRef<IndicatorSeriesRefs | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const boxPrimitiveRef = useRef<PositionBoxPrimitive | null>(null)
@@ -82,6 +83,23 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
     volumeRef.current = volumeSeries
 
     chart.timeScale().fitContent()
+
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time || !param.seriesData) {
+        setOhlcv(null)
+        return
+      }
+      const candle = param.seriesData.get(candleSeries) as { open: number; high: number; low: number; close: number } | undefined
+      const vol = param.seriesData.get(volumeSeries) as { value: number } | undefined
+      if (candle) {
+        const d = new Date((param.time as number) * 1000)
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const t = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
+        setOhlcv({ o: candle.open, h: candle.high, l: candle.low, c: candle.close, v: vol?.value ?? 0, t })
+      } else {
+        setOhlcv(null)
+      }
+    })
 
     return () => {
       if (chartRef.current) {
@@ -230,6 +248,16 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
         ref={containerRef}
         style={{ width: '100%', height: '100%' }}
       />
+      {ohlcv && (
+        <div className="chart-ohlcv-legend">
+          <span className="ohlcv-time">{ohlcv.t}</span>
+          <span>O <b>{ohlcv.o.toFixed(2)}</b></span>
+          <span>H <b>{ohlcv.h.toFixed(2)}</b></span>
+          <span>L <b>{ohlcv.l.toFixed(2)}</b></span>
+          <span>C <b style={{ color: ohlcv.c >= ohlcv.o ? '#26a69a' : '#ef5350' }}>{ohlcv.c.toFixed(2)}</b></span>
+          <span>V <b>{ohlcv.v.toFixed(2)}</b></span>
+        </div>
+      )}
       {isLoading && <div className="chart-overlay">Loading...</div>}
       {error && <div className="chart-overlay chart-error">Failed to load data</div>}
     </div>

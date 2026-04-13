@@ -215,6 +215,26 @@ input, select {
 }
 
 /* Chart overlay (loading/error) */
+.chart-ohlcv-legend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  gap: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.chart-ohlcv-legend b {
+  color: var(--text-primary);
+}
+.chart-ohlcv-legend .ohlcv-time {
+  color: var(--text-muted, #888);
+  margin-right: 4px;
+}
+
 .chart-overlay {
   position: absolute;
   inset: 0;
@@ -266,10 +286,29 @@ input, select {
   overflow-y: auto;
   padding: 20px 24px;
 }
+.monitor-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
 .monitor-page h2 {
   font-size: 18px;
   font-weight: 600;
-  margin-bottom: 20px;
+}
+.utc-clock {
+  font-size: 14px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+/* Card containers */
+.monitor-card {
+  background: rgba(22, 33, 62, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
 }
 
 .monitor-section {
@@ -282,7 +321,7 @@ input, select {
   margin-bottom: 10px;
 }
 .section-header h3 {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -299,12 +338,16 @@ input, select {
 .monitor-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 13px;
 }
 .monitor-table th {
   text-align: left;
   padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--text-secondary);
+  opacity: 0.8;
   font-weight: 600;
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
@@ -314,8 +357,12 @@ input, select {
   border-bottom: 1px solid rgba(43, 43, 67, 0.4);
   white-space: nowrap;
 }
+.monitor-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
 .monitor-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
 }
 .monitor-table .mono {
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -325,19 +372,123 @@ input, select {
   text-align: right;
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 }
-
-/* Status dots */
-.status-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: middle;
+.monitor-table tfoot td {
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: none;
+  padding-top: 8px;
 }
-.status-ok { background: var(--up-color); }
-.status-warn { background: #ffa726; }
-.status-stale { background: var(--down-color); }
+
+/* Row highlighting */
+.monitor-table tr.row-warn {
+  border-left: 3px solid #ffa726;
+}
+.monitor-table tr.row-error {
+  border-left: 3px solid #ef5350;
+}
+.monitor-table tr.row-expanded {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Age color classes */
+.age-fresh { color: var(--up-color); }
+.age-warn { color: #ffa726; }
+.age-stale { color: var(--down-color); }
+.age-neutral { color: var(--text-secondary); }
+
+/* Integrity color classes */
+.integrity-ok { color: var(--up-color); }
+.integrity-warn { color: #ffa726; }
+.integrity-error { color: var(--down-color); }
+
+/* Text helpers */
+.text-error { color: var(--down-color); }
+
+/* Status pills */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status-pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.status-pill--ok { background: rgba(38, 166, 154, 0.15); color: #26a69a; }
+.status-pill--ok::before { background: #26a69a; }
+.status-pill--warn { background: rgba(255, 167, 38, 0.15); color: #ffa726; }
+.status-pill--warn::before { background: #ffa726; }
+.status-pill--error { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
+.status-pill--error::before { background: #ef5350; }
+.status-pill--neutral { background: rgba(139, 139, 154, 0.15); color: #8b8b9a; }
+.status-pill--neutral::before { background: #8b8b9a; }
+
+/* Health banner */
+.health-banner {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.health-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.health-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.health-pill--ok { background: rgba(38, 166, 154, 0.1); border-color: rgba(38, 166, 154, 0.3); color: #26a69a; }
+.health-pill--ok .health-pill-dot { background: #26a69a; }
+.health-pill--warn { background: rgba(255, 167, 38, 0.1); border-color: rgba(255, 167, 38, 0.3); color: #ffa726; }
+.health-pill--warn .health-pill-dot { background: #ffa726; }
+.health-pill--error { background: rgba(239, 83, 80, 0.1); border-color: rgba(239, 83, 80, 0.3); color: #ef5350; }
+.health-pill--error .health-pill-dot { background: #ef5350; }
+.health-pill--neutral { background: rgba(139, 139, 154, 0.1); border-color: rgba(139, 139, 154, 0.3); color: #8b8b9a; }
+.health-pill--neutral .health-pill-dot { background: #8b8b9a; }
+
+/* Expanded detail panel */
+.detail-panel {
+  padding: 12px 16px 12px 32px;
+  background: rgba(15, 52, 96, 0.3);
+  border-left: 2px solid var(--border-color);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.detail-panel dl {
+  margin: 0;
+}
+.detail-panel dt {
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 8px;
+}
+.detail-panel dt:first-child {
+  margin-top: 0;
+}
+.detail-panel dd {
+  color: var(--text-primary);
+  margin-left: 0;
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 12px;
+}
 
 /* Buttons */
 .btn {
@@ -348,6 +499,7 @@ input, select {
   font-weight: 600;
   background: var(--bg-primary);
   color: var(--text-secondary);
+  cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
 }
 .btn:hover:not(:disabled) {
@@ -366,7 +518,6 @@ input, select {
   color: #ffb74d;
   border-color: #ffa726;
 }
-.btn-neutral { margin-right: 6px; }
 
 .actions {
   display: flex;
@@ -386,6 +537,7 @@ input, select {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-left: auto;
 }
 .days-input input {
   width: 50px;

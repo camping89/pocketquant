@@ -110,12 +110,24 @@ export interface RepairResult {
   deleted: number
   gaps_resynced: number
   missing_before: number
+  still_missing: number
+  still_missing_ranges: [string, string][]
+}
+
+export interface JobLastRun {
+  started_at: string
+  finished_at: string | null
+  duration_ms: number | null
+  status: 'running' | 'completed' | 'failed'
+  error: string | null
 }
 
 export interface JobInfo {
   id: string
+  name: string
   next_run: string | null
   trigger: string
+  last_run: JobLastRun | null
 }
 
 // --- UI types ---
