@@ -4,7 +4,6 @@
  */
 
 import type {
-  CanvasRenderingTarget2D,
   IChartApiBase,
   IPrimitivePaneRenderer,
   IPrimitivePaneView,
@@ -13,6 +12,7 @@ import type {
   SeriesAttachedParameter,
   Time,
 } from 'lightweight-charts'
+import type { CanvasRenderingTarget2D } from 'fancy-canvas'
 
 /** Format quantity: strip scientific notation, max 8 significant digits */
 function fmtQty(n: number): string {
@@ -70,13 +70,23 @@ function dashedLine(
 }
 
 class BoxRenderer implements IPrimitivePaneRenderer {
-  constructor(
-    private readonly positions: PositionData[],
-    private readonly chart: IChartApiBase<Time>,
-    private readonly series: ISeriesApi<'Candlestick', Time>,
-  ) {}
+  private readonly positions: PositionData[]
+  private readonly chart: IChartApiBase<Time>
+  private readonly series: ISeriesApi<'Candlestick', Time>
 
-  draw(_target: CanvasRenderingTarget2D): void {}
+  constructor(
+    positions: PositionData[],
+    chart: IChartApiBase<Time>,
+    series: ISeriesApi<'Candlestick', Time>,
+  ) {
+    this.positions = positions
+    this.chart = chart
+    this.series = series
+  }
+
+  draw(target: CanvasRenderingTarget2D): void {
+    void target
+  }
 
   drawBackground(target: CanvasRenderingTarget2D): void {
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hR, verticalPixelRatio: vR }) => {

@@ -222,7 +222,7 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
         boxPrimitiveRef.current = null
       }
     }
-  }, [positions, data]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [positions, data])
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>
