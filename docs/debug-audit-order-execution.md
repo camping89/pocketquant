@@ -1,6 +1,8 @@
 # How a Real Order Gets Created — A Complete Walkthrough
 
-**Last Updated:** 2026-03-22 | **Scope:** Every line of code executed from API call to exchange fill
+**Last Updated:** 2026-04-10 | **Scope:** Every line of code executed from API call to exchange fill
+
+Current note: this is a deep-dive walkthrough. Use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md) for the current local execution steps.
 
 This document walks you through the entire order execution path, step by step, explaining what each piece does and why we built it that way. By the end, you will understand every file, function, and design decision involved in placing a real trade.
 
@@ -26,7 +28,7 @@ Each step flows into the next through either direct function calls or async even
 
 ## Step 1: Loading a Strategy
 
-**You call:** `POST /api/v1/strategy/load` with `{"path": "strategies/ma_crossover.yaml"}`
+**You call:** `POST /api/v1/strategies/load` with `{"path": "strategies/examples/ma-crossover-btc-usdt.yaml"}`
 
 ### 1a. The Route
 

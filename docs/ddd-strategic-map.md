@@ -1,6 +1,8 @@
 # DDD Strategic Map
 
-**Last Updated:** 2026-03-22 | **Status:** v1.0 Complete | **Bounded Contexts:** 6 (Market Data, Trading, Strategy, Risk, Symbol, Backtest)
+**Last Updated:** 2026-04-10 | **Status:** v1.0 Complete | **Bounded Contexts:** 6 (Market Data, Trading, Strategy, Risk, Symbol, Backtest)
+
+Current note: the repo now includes `pocketquant-web` as a separate frontend package in addition to the backend bounded contexts discussed here.
 
 ## Bounded Contexts
 

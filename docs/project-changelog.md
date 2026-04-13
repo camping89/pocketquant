@@ -1,6 +1,6 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-03-30 | **Format:** Semantic Versioning
+**Last Updated:** 2026-04-10 | **Format:** Semantic Versioning
 
 ## [Unreleased]
 
@@ -21,6 +21,15 @@
   - API proxy to FastAPI backend at `:41920`
   - Static asset deployment via FastAPI server
 
+### Changed
+- Refreshed the root README and docs index for the 5-package repo shape
+- Added `docs/run-and-test-guide.md` as the canonical local workflow doc
+- Updated `just dev` to run through the project virtualenv instead of assuming global `uvicorn`
+
+### Fixed
+- Re-running sync against existing data no longer fails on naive vs aware Mongo datetimes
+- Sync-related timestamps loaded from Mongo are normalized to UTC in domain entities
+
 ## [v1.0.0] — 2026-03-23
 
 ### Initial Release
@@ -37,4 +46,4 @@
   - Parameter grid optimization
   - MongoDB persistence, Redis caching
   - Health checks, structured logging, rate limiting, idempotency
-- **Monorepo:** 4 packages via uv workspace, 278 Python files, 13,641 LOC
+- **Monorepo:** 4 backend packages via uv workspace, plus `pocketquant-web`

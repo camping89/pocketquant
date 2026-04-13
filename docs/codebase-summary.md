@@ -1,31 +1,122 @@
 # Codebase Summary
 
-**Last Updated:** 2026-04-07 | **Codebase Size:** ~14,751 LOC Python + ~1,414 LOC TypeScript | **Total Files:** 295 Python + 25 TypeScript | **Architecture:** Clean Architecture + DDD + CQRS + Dishka (backend); React 19 SPA (frontend) | **Structure:** 5-package monorepo (uv workspace + npm)
+This is the current high-level map of the repository as of 2026-04-10.
 
-## Architecture Overview
+## Packages
 
-PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependencies:
+### `packages/pocketquant-core`
 
+Shared backend foundation:
+
+- domain entities and value objects
+- common utilities such as logging, mediator, event bus, middleware, cache keys
+- infrastructure adapters for TradingView, brokers, scheduling, HTTP
+- MongoDB and Redis persistence abstractions
+
+Key folders:
+
+- `src/pocketquant/core/domain`
+- `src/pocketquant/core/common`
+- `src/pocketquant/core/infrastructure`
+- `src/pocketquant/core/persistence`
+
+### `packages/pocketquant-backtest`
+
+Backtest feature package:
+
+- `/backtest/strategies`
+- `/backtest/run`
+- `/backtest/optimize`
+- `/backtest/{run_id}`
+- `/backtest/optimization/{optimization_id}`
+- `/backtest/strategy/{strategy_id}`
+
+Key folders:
+
+- `src/pocketquant/backtest/handlers`
+- `src/pocketquant/backtest/persistence`
+- `src/pocketquant/backtest/domain`
+
+### `packages/pocketquant-trading`
+
+Trading and strategy runtime package:
+
+- strategy load/start/stop/list/get handlers
+- order and position application services
+- YAML strategy loading
+- broker integration and strategy orchestration
+
+Key folders:
+
+- `src/pocketquant/trading/handlers`
+- `src/pocketquant/trading/app_services`
+- `src/pocketquant/trading/persistence`
+
+### `packages/pocketquant-api`
+
+FastAPI composition root:
+
+- `main.py` creates the app
+- `main_extensions.py` wires middleware, routes, health, jobs, and SPA serving
+- `di/` owns Dishka container setup
+- `market_data/` owns sync, OHLCV, quote, and status handlers
+
+Important route groups:
+
+- `/health`
+- `/api/v1/market-data/*`
+- `/api/v1/quotes/*`
+- `/api/v1/strategies/*`
+- `/api/v1/trading/*`
+- `/api/v1/backtest/*`
+- `/api/v1/system/jobs`
+
+### `packages/pocketquant-web`
+
+React 19 + Vite frontend:
+
+- chart rendering with `lightweight-charts`
+- symbol selector backed by `/market-data/symbols`
+- interval availability backed by `/market-data/sync-status`
+- OHLCV chart data backed by `/market-data/ohlcv/{exchange}/{symbol}`
+- backtest overlay backed by `/backtest/run`
+
+Important files:
+
+- `src/App.tsx`
+- `src/components/chart/trading-chart.tsx`
+- `src/api/market-data-api.ts`
+- `src/api/backtest-api.ts`
+- `vite.config.ts`
+
+## Runtime Model
+
+### Backend Startup
+
+The normal local path is:
+
+1. `just install`
+2. `just up`
+3. `just check`
+4. `just dev`
+
+`just dev` runs:
+
+```bash
+.venv/bin/python -m uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920
 ```
-Features (Routes, Commands, Queries, Handlers)
-  ↓ depends on
-Application (Orchestrators: StrategyAppService, BacktestAppService, BarAppService)
-  ↓ depends on
-Domain (Pure business logic: Aggregates, Value Objects, Events)
-  ↑ depended on by
-Infrastructure (I/O: Brokers, Providers, Persistence, Scheduling)
-```
 
-**Key Characteristics:**
-- **Domain Layer:** Pure business logic with ZERO I/O dependencies (enforced via AST checks)
-- **Application Layer:** Stateful orchestrators (StrategyAppService, BacktestAppService, BarAppService, etc.)
-- **Features Layer:** Thin CQRS operation routes (routes → commands/queries → handlers)
-- **Infrastructure Layer:** All external I/O (brokers, providers, database, cache, scheduling)
-- **Common Layer:** Shared utilities (Mediator, EventBus, middleware, health checks)
+On startup the API:
 
-## Module Breakdown
+1. loads settings from `.env`
+2. connects MongoDB and Redis
+3. registers all CQRS handlers
+4. ensures repository indexes
+5. registers health checks
+6. starts background jobs if `ENABLE_JOBS=true`
+7. mounts the built SPA if `packages/pocketquant-web/dist` exists
 
-### pocketquant-web (TypeScript, 25 files, ~1,414 LOC) — React SPA
+### Frontend Startup
 
 **Purpose:** Real-time charting UI for market data visualization with technical indicators, backtest visualization, and system monitoring.
 
@@ -337,160 +428,97 @@ backtesting/
 └── router.py            # Main feature router
 ```
 
-Routes:
-- POST `/api/v1/backtest/run` - Execute backtest
-- POST `/api/v1/backtest/optimize` - Parameter optimization
-- GET `/api/v1/backtest/{run_id}` - Retrieve results
-- GET `/api/v1/backtest/optimization/{id}` - Optimization results
-- GET `/api/v1/backtest/strategy/{id}` - Strategy results
+`vite.config.ts` proxies `/api/*` to `http://localhost:41920`.
 
-**market_data/ (1,534 LOC, 68 files)**
+Built frontend workflow:
 
-Structure:
-```
-market_data/
-├── base/                # Shared infrastructure
-│   ├── jobs/           # Background job definitions
-│   ├── managers/       # BarAppService
-│   ├── models/         # DTOs
-│   ├── providers/      # Data providers
-│   └── services/       # Sync service
-├── sync/                # Sync feature (nested)
-│   ├── sync_one/       # Operation: Sync single
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── sync_bulk/      # Operation: Sync bulk
-│   │   ├── command.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   ├── dto.py
-│   └── router.py
-├── bar/                 # Bar feature (nested) - renamed from ohlcv/
-│   ├── get_bars/       # Operation: Get bars
-│   │   ├── query.py
-│   │   ├── handler.py
-│   │   └── route.py
-│   └── router.py
-├── quotes/              # Quotes feature (nested)
-│   ├── get_all/        # Operation: Get all quotes
-│   ├── get_current_bar/
-│   ├── get_latest/
-│   ├── start_feed/
-│   ├── stop_feed/
-│   ├── subscribe/
-│   ├── unsubscribe/
-│   └── router.py
-├── status/              # Status feature (nested)
-│   ├── get_quote_service_status/
-│   ├── get_symbol_sync_status/
-│   ├── get_sync_status/
-│   └── router.py
-├── list_symbols/        # Operation: List symbols
-│   ├── query.py
-│   ├── handler.py
-│   └── route.py
-├── repositories/        # Data access
-│   ├── bar_repository.py
-│   ├── symbol_repository.py
-│   └── sync_status_repository.py
-└── router.py            # Main feature router
+```bash
+cd packages/pocketquant-web
+npm run build
 ```
 
-Routes:
-- POST `/api/v1/market-data/sync` - Single symbol sync
-- POST `/api/v1/market-data/sync/bulk` - Bulk sync
-- GET `/api/v1/market-data/bar/{exchange}/{symbol}` - Query bars (path renamed from ohlcv)
-- GET `/api/v1/market-data/symbols` - List symbols
-- POST `/api/v1/quotes/start` - Start WebSocket
-- POST `/api/v1/quotes/stop` - Stop WebSocket
+After that, FastAPI serves the generated `dist` bundle at `/`.
 
-**strategy/ (416 LOC, 22 files)**
+### Market Data Flow
 
-Structure:
-```
-strategy/
-├── base/                # Shared infrastructure
-│   ├── engine/         # StrategyAppService
-│   ├── interfaces/     # IStrategy interface
-│   └── loader/         # YAML loader
-├── get_all/            # Operation: List strategies
-│   ├── query.py
-│   ├── handler.py
-│   └── route.py
-├── get_one/            # Operation: Get strategy
-│   ├── query.py
-│   └── handler.py
-├── load/               # Operation: Load strategy
-│   ├── command.py
-│   ├── handler.py
-│   └── route.py
-├── start/              # Operation: Start strategy
-│   ├── command.py
-│   ├── handler.py
-│   └── route.py
-├── stop/               # Operation: Stop strategy
-│   ├── command.py
-│   ├── handler.py
-│   └── route.py
-└── router.py           # Main feature router
-```
+Historical sync flow:
 
-Routes:
-- GET `/api/v1/strategies` - List strategies
-- POST `/api/v1/strategies/load` - Load strategy
-- POST `/api/v1/strategies/start` - Start strategy
-- POST `/api/v1/strategies/stop` - Stop strategy
+1. `POST /api/v1/market-data/sync`
+2. `SyncSymbolHandler` fetches bars from `TradingViewClient`
+3. bars are filtered against the latest stored bar
+4. `BarRepository.insert_many()` stores new bars
+5. `SyncStatusRepository` is updated
+6. Redis OHLCV caches are invalidated
 
-**trading/ (281 LOC, 18 files)**
+Read flow:
 
-Structure:
-```
-trading/
-├── base/                # Shared infrastructure
-│   ├── managers/       # OrderAppService, PositionAppService
-│   ├── models/         # DTOs
-│   └── repositories/   # OrderRepository, PositionRepository
-├── list_orders/        # Operation: List orders
-│   ├── query.py
-│   ├── handler.py
-│   └── route.py
-├── get_order/          # Operation: Get order
-│   ├── query.py
-│   └── handler.py
-├── list_positions/     # Operation: List positions
-│   ├── query.py
-│   ├── handler.py
-│   └── route.py
-├── get_position/       # Operation: Get position
-│   ├── query.py
-│   └── handler.py
-└── router.py           # Main feature router
+1. `GET /api/v1/market-data/ohlcv/{exchange}/{symbol}`
+2. handler queries `BarRepository`
+3. API returns bars in descending order
+4. frontend reverses them for chart rendering
+
+Live quote flow:
+
+1. `POST /api/v1/quotes/start`
+2. `POST /api/v1/quotes/subscribe`
+3. quote service ingests TradingView ticks
+4. bar aggregation updates in-progress candles
+5. the UI listens to `/api/v1/market-data/bars/stream/{exchange}/{symbol}`
+
+### UI Expectations
+
+The current UI assumes:
+
+- the backend is running on `:41920`
+- at least one symbol has already been synced
+- interval buttons are derived from completed sync statuses
+- selecting a strategy triggers an immediate backtest over the last 30 days
+
+If the UI looks empty, check these first:
+
+- `GET /api/v1/market-data/sync-status`
+- `GET /api/v1/market-data/symbols`
+- `GET /api/v1/backtest/strategies`
+
+## Test Assets
+
+Backend automated tests:
+
+- `packages/pocketquant-core/tests`
+- `packages/pocketquant-backtest/tests`
+- `packages/pocketquant-trading/tests`
+- `packages/pocketquant-api/tests`
+
+Current test commands:
+
+```bash
+just test
+just test-pkg core
+just lint
+just types
 ```
 
-Routes:
-- GET `/api/v1/orders` - List orders
-- GET `/api/v1/orders/{order_id}` - Get order
-- GET `/api/v1/positions` - List positions
+Frontend validation:
 
-**risk/ (158 LOC, 3 files)**
-
-Structure:
-```
-risk/
-├── check_risk/         # Operation: Check risk
-│   ├── command.py
-│   ├── handler.py
-│   └── route.py
-└── __init__.py
+```bash
+cd packages/pocketquant-web
+npm run lint
+npm run build
 ```
 
-Routes:
-- POST `/api/v1/risk/check` - Pre-trade validation
+Manual API smoke tests:
 
-## Dependency Injection (Dishka)
+- `tests/http/` for Bruno
+- `tests/manual/api-test.http` for curl-based checks
 
-### 6 Providers (packages/pocketquant-api/src/pocketquant/api/di/)
+## Current Strategy IDs
+
+The backtest strategy registry currently exposes:
+
+- `ma_crossover`
+- `hit_and_run`
+
+## Files Worth Reading First
 
 **CoreProvider** - App-level singletons
 - Settings (from config)

@@ -11,13 +11,13 @@ post {
 
 body:json {
   {
-    "strategy_id": "sma-crossover",
-    "exchange": "HOSE",
-    "symbol": "VNM",
+    "strategy_id": "ma_crossover",
+    "exchange": "BINANCE",
+    "symbol": "BTCUSDT",
     "interval": "1d",
-    "start_date": "2025-01-01",
-    "end_date": "2026-03-01",
-    "initial_capital": 100000000,
+    "start_date": "2026-01-01",
+    "end_date": "2026-03-30",
+    "initial_capital": 10000,
     "param_grid": {
       "fast_period": [5, 10, 15, 20],
       "slow_period": [30, 50, 100]

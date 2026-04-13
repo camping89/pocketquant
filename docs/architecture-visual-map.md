@@ -1,6 +1,8 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-03-23 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4-package monorepo
+**Last Updated:** 2026-04-10 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4 backend packages + 1 frontend package
+
+Current note: `pocketquant-web` is now part of the repo and sits alongside the backend package graph shown below.
 
 ## 1. ASCII Layer Relation Map
 
