@@ -8,7 +8,7 @@ function jobStatus(job: JobInfo): { variant: 'ok' | 'warn' | 'error' | 'neutral'
   if (!job.next_run) return { variant: 'neutral', label: 'never' }
   const overdue = Date.now() - new Date(job.next_run.endsWith('Z') ? job.next_run : job.next_run + 'Z').getTime()
   if (overdue > 60_000) return { variant: 'warn', label: 'overdue' }
-  if (!job.last_run) return { variant: 'neutral', label: 'never' }
+  if (!job.last_run) return { variant: 'neutral', label: 'pending' }
   return { variant: 'ok', label: 'OK' }
 }
 
