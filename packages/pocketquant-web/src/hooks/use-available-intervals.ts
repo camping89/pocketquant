@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchSyncStatus } from '../api/market-data-api'
 import type { Interval, SelectedSymbol } from '../types/market-data'
 
-const INTERVAL_ORDER: Interval[] = [
+export const INTERVAL_ORDER: Interval[] = [
   '1m', '3m', '5m', '15m', '30m', '45m',
   '1h', '2h', '3h', '4h',
   '1d', '1w', '1M',
