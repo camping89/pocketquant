@@ -1,8 +1,9 @@
 """Position aggregate for tracking open positions and P&L — Pydantic model."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
+from pocketquant.core.common.time import utc_now
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.core.domain.position.events import (
@@ -13,10 +14,6 @@ from pocketquant.core.domain.position.events import (
 from pocketquant.core.domain.position.value_objects import PnL
 from pocketquant.core.domain.shared.events import DomainEvent
 from pydantic import BaseModel, Field, PrivateAttr
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 class PositionAggregate(BaseModel):
@@ -36,7 +33,7 @@ class PositionAggregate(BaseModel):
     current_price: float
     realized_pnl: float = 0.0
     is_closed: bool = False
-    opened_at: datetime = Field(default_factory=_utc_now)
+    opened_at: datetime = Field(default_factory=utc_now)
     closed_at: datetime | None = None
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
@@ -151,7 +148,7 @@ class PositionAggregate(BaseModel):
     def _close(self, exit_price: float) -> PositionAggregate:
         """Internal close after reducing to zero."""
         self.is_closed = True
-        self.closed_at = datetime.now(UTC)
+        self.closed_at = utc_now()
         self._events.append(
             PositionClosedEvent(
                 position_id=self.id,

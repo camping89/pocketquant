@@ -66,6 +66,8 @@ class HistoricalReplayAppService:
         async for bar in bars:
             # Track timing
             bar_time = bar.datetime
+            if bar_time is None:
+                continue
             if first_bar_time is None:
                 first_bar_time = bar_time
             last_bar_time = bar_time

@@ -7,6 +7,7 @@ from typing import Any
 
 from pocketquant.core.common.constants import COLLECTION_JOB_HISTORY
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.persistence.base_repository import BaseRepository
 
@@ -67,11 +68,11 @@ class JobHistoryRepository(BaseRepository):
             {"$group": {"_id": "$job_id", "doc": {"$first": "$$ROOT"}}},
         ]
         results: dict[str, dict[str, Any]] = {}
-        async for row in self._collection().aggregate(pipeline):
+        async for row in self._collection().aggregate(pipeline):  # pyright: ignore[reportGeneralTypeIssues]
             doc = row["doc"]
             results[row["_id"]] = {
-                "started_at": doc["started_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if doc.get("started_at") else None,
-                "finished_at": doc["finished_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if doc.get("finished_at") else None,
+                "started_at": to_utc_iso(doc.get("started_at")),
+                "finished_at": to_utc_iso(doc.get("finished_at")),
                 "duration_ms": doc.get("duration_ms"),
                 "status": doc.get("status"),
                 "error": doc.get("error"),

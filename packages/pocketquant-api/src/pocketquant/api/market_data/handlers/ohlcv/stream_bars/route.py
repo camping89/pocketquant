@@ -50,7 +50,7 @@ async def stream_bars(
         try:
             bar = await bar_repository.get_latest(symbol, exchange, interval)
             if bar is not None:
-                last_bar_start = bar.datetime.isoformat()
+                last_bar_start = bar.datetime.isoformat() if bar.datetime else ""
                 last_close = bar.close
                 last_volume = bar.volume
                 yield f"data: {json.dumps(_make_payload(bar, last_bar_start))}\n\n"
@@ -66,7 +66,7 @@ async def stream_bars(
                 if bar is None:
                     continue
 
-                bar_start = bar.datetime.isoformat()
+                bar_start = bar.datetime.isoformat() if bar.datetime else ""
                 bar_changed = bar_start != last_bar_start
                 ohlcv_changed = bar.close != last_close or bar.volume != last_volume
 

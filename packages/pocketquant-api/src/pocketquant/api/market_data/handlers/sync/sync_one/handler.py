@@ -212,7 +212,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             status="completed",
             bars_synced=bars_synced,
             total_bars=total_bars,
-            last_bar_at=latest_bar.datetime.isoformat() if latest_bar else None,
+            last_bar_at=latest_bar.datetime.isoformat() if latest_bar and latest_bar.datetime else None,
         )
 
     async def _fail(

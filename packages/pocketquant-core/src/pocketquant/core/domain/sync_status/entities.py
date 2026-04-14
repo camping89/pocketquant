@@ -1,19 +1,11 @@
 """SyncStatus entity — Pydantic model with MongoDB persistence."""
 
-from datetime import UTC
 from datetime import datetime as dt
 from typing import Any
 
+from pocketquant.core.common.time import coerce_utc
 from pocketquant.core.common.uuid import UUID, generate_id
 from pydantic import BaseModel, Field
-
-
-def _coerce_utc(value: dt | None) -> dt | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
 
 
 class SyncStatus(BaseModel):
@@ -53,8 +45,8 @@ class SyncStatus(BaseModel):
             exchange=doc.get("exchange", ""),
             interval=doc.get("interval", ""),
             status=doc.get("status", "pending"),
-            last_sync_at=_coerce_utc(doc.get("last_sync_at")),
-            last_bar_at=_coerce_utc(doc.get("last_bar_at")),
+            last_sync_at=coerce_utc(doc.get("last_sync_at")),
+            last_bar_at=coerce_utc(doc.get("last_bar_at")),
             bar_count=doc.get("bar_count", 0),
             error_message=doc.get("error_message"),
         )

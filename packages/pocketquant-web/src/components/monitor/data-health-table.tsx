@@ -86,6 +86,14 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
     )
   }
 
+  const isCheckingAny = filtered.some((s) => getRow(s.interval).checking)
+
+  function handleCheckAll() {
+    for (const s of filtered) {
+      if (!getRow(s.interval).checking) handleCheck(s)
+    }
+  }
+
   const totals = filtered.reduce(
     (acc, s) => {
       const rs = getRow(s.interval)
@@ -104,16 +112,25 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
       <div className="section-header">
         <h3>Data Health</h3>
         {ago && <span className="refresh-indicator">updated {ago} ago</span>}
-        <label className="days-input">
-          Days back:
-          <input
-            type="number"
-            min={1}
-            max={90}
-            value={daysBack}
-            onChange={(e) => setDaysBack(Math.max(1, Math.min(90, Number(e.target.value) || 1)))}
-          />
-        </label>
+        <div className="section-actions">
+          <label className="days-input">
+            Days back:
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={daysBack}
+              onChange={(e) => setDaysBack(Math.max(1, Math.min(90, Number(e.target.value) || 1)))}
+            />
+          </label>
+          <button
+            className="btn-sm"
+            onClick={handleCheckAll}
+            disabled={isCheckingAny || filtered.length === 0}
+          >
+            {isCheckingAny ? 'Checking…' : 'Check All'}
+          </button>
+        </div>
       </div>
       {filtered.length === 0 ? (
         <div className="monitor-empty">No sync data for {exchange}:{symbol}</div>

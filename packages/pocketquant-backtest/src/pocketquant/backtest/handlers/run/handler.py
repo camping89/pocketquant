@@ -97,10 +97,10 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
 
         # Inject directly — bypass load_strategy() to avoid broker-factory lookup.
         # start_strategy() also acquires _lock; do both in one critical section.
-        async with self._strategy_app_service._lock:
-            self._strategy_app_service._strategies[sid] = strategy
-            self._strategy_app_service._brokers[sid] = broker
-            self._strategy_app_service._configs[sid] = strategy.config
+        async with self._strategy_app_service._lock:  # pyright: ignore[reportPrivateUsage]
+            self._strategy_app_service._strategies[sid] = strategy  # pyright: ignore[reportPrivateUsage]
+            self._strategy_app_service._brokers[sid] = broker  # pyright: ignore[reportPrivateUsage]
+            self._strategy_app_service._configs[sid] = strategy.config  # pyright: ignore[reportPrivateUsage]
             # Connect broker and start strategy inside the lock (broker is PaperBroker,
             # connect() is a no-op, so this is safe)
             if not broker.is_connected:

@@ -1,14 +1,10 @@
 """Quote DTOs — application-layer models for Redis cache and tick processing."""
 
-from datetime import UTC
 from datetime import datetime as dt
 from typing import Any
 
+from pocketquant.core.common.time import utc_now
 from pydantic import BaseModel, ConfigDict, Field
-
-
-def _utc_now() -> dt:
-    return dt.now(UTC)
 
 
 class Quote(BaseModel):
@@ -16,7 +12,7 @@ class Quote(BaseModel):
 
     symbol: str = Field(..., description="Trading symbol")
     exchange: str = Field(..., description="Exchange name")
-    timestamp: dt = Field(default_factory=_utc_now, description="Quote timestamp")
+    timestamp: dt = Field(default_factory=utc_now, description="Quote timestamp")
 
     last_price: float = Field(..., alias="lp", description="Last traded price")
     bid: float | None = Field(None, description="Best bid price")

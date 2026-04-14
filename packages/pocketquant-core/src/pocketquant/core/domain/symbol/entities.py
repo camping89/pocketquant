@@ -1,14 +1,11 @@
 """Symbol entity - Pydantic model with MongoDB persistence."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
+from pocketquant.core.common.time import utc_now
 from pocketquant.core.common.uuid import UUID, generate_id
 from pydantic import BaseModel, ConfigDict, Field
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 class Symbol(BaseModel):
@@ -22,7 +19,7 @@ class Symbol(BaseModel):
     name: str | None = None
     asset_type: str | None = None
     is_active: bool = True
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: datetime = Field(default_factory=utc_now)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Symbol):
@@ -77,5 +74,5 @@ class Symbol(BaseModel):
             name=doc.get("name"),
             asset_type=doc.get("asset_type"),
             is_active=doc.get("is_active", True),
-            created_at=doc.get("created_at", _utc_now()),
+            created_at=doc.get("created_at", utc_now()),
         )
