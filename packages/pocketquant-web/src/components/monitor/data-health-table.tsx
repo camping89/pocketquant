@@ -32,6 +32,12 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
   const [daysBack, setDaysBack] = useState(7)
 
+  const filtered = useMemo(() => {
+    if (!data?.length) return []
+    const rows = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
+    return rows.sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval))
+  }, [data, exchange, symbol])
+
   useEffect(() => {
     if (!onIntegrityUpdate) return
     let totalMisaligned = 0
@@ -50,11 +56,6 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
   if (isLoading) return <div className="monitor-loading">Loading data health...</div>
   if (error) return <div className="monitor-error">Failed to load: {error.message}</div>
   if (!data?.length) return <div className="monitor-empty">No symbols tracked</div>
-
-  const filtered = useMemo(() => {
-    const rows = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
-    return rows.sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval))
-  }, [data, exchange, symbol])
   const ago = dataUpdatedAt ? formatAge(new Date(dataUpdatedAt).toISOString()) : ''
 
   const defaultRow: RowState = { expanded: false, checking: false, repairing: false }
