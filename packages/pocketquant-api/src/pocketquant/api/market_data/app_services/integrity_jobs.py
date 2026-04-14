@@ -43,8 +43,9 @@ async def check_integrity(
     Note: Only reliable for 24/7 markets (crypto). Equity symbols with market hours
     will produce false-positive gap detections on weekends/holidays.
     """
-    # Use naive datetimes — MongoDB returns naive, so set arithmetic must match
-    end = datetime.now(UTC).replace(tzinfo=None)
+    # Truncate end to last CLOSED bar — current incomplete bar can't exist in DB yet
+    now = datetime.now(UTC).replace(tzinfo=None)
+    end = get_bar_start(now, interval)
     start = end - timedelta(days=days_back)
     docs = await bar_repo.find_datetimes(symbol, exchange, interval, start, end)
 
@@ -55,7 +56,7 @@ async def check_integrity(
     grid_start = get_bar_start(start, interval)
     expected: set[datetime] = set()
     t = grid_start
-    while t <= end:
+    while t < end:
         expected.add(t)
         t += timedelta(seconds=seconds)
 
