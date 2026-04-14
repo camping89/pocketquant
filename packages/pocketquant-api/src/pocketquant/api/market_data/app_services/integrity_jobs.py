@@ -43,25 +43,24 @@ async def check_integrity(
     Note: Only reliable for 24/7 markets (crypto). Equity symbols with market hours
     will produce false-positive gap detections on weekends/holidays.
     """
-    # Truncate end to last CLOSED bar — current incomplete bar can't exist in DB yet
+    # Grid ends at last CLOSED bar — current incomplete bar can't exist in DB yet
     now = datetime.now(UTC).replace(tzinfo=None)
     end = get_bar_start(now, interval)
     start = end - timedelta(days=days_back)
     docs = await bar_repo.find_datetimes(symbol, exchange, interval, start, end)
 
-    misaligned = [d for d in docs if not is_bar_aligned(d["datetime"], interval)]
-    aligned_times = {d["datetime"] for d in docs if is_bar_aligned(d["datetime"], interval)}
+    misaligned, aligned_times = [], set()
+    for d in docs:
+        if is_bar_aligned(d["datetime"], interval):
+            aligned_times.add(d["datetime"])
+        else:
+            misaligned.append(d)
 
-    seconds = INTERVAL_SECONDS[interval]
-    grid_start = get_bar_start(start, interval)
-    expected: set[datetime] = set()
-    t = grid_start
-    while t < end:
-        expected.add(t)
-        t += timedelta(seconds=seconds)
+    step = timedelta(seconds=INTERVAL_SECONDS[interval])
+    expected = {start + i * step for i in range(int((end - start) / step))}
 
     missing = sorted(expected - aligned_times)
-    gap_ranges = _group_gaps(missing, timedelta(seconds=seconds))
+    gap_ranges = _group_gaps(missing, step)
 
     return {
         "symbol": symbol.upper(),

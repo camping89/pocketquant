@@ -172,7 +172,7 @@ class BarAppService:
             "symbol": bar.symbol,
             "exchange": bar.exchange,
             "interval": interval.value,
-            "bar_start": bar.datetime.isoformat(),
+            "bar_start": bar.datetime.isoformat() if bar.datetime else None,
             "open": bar.open,
             "high": bar.high,
             "low": bar.low,

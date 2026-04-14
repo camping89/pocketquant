@@ -14,10 +14,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.config import Settings
 
 if TYPE_CHECKING:
-    from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
+    from pocketquant.core.infrastructure.scheduling.job_history_repository import (
+        JobHistoryRepository,
+    )
 
 logger = get_logger(__name__)
 
@@ -215,7 +218,7 @@ class JobScheduler:
             entry: dict[str, Any] = {
                 "id": job.id,
                 "name": job.name,
-                "next_run": job.next_run_time.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if job.next_run_time else None,
+                "next_run": to_utc_iso(job.next_run_time),
                 "trigger": str(job.trigger),
                 "last_run": last_runs.get(job.id),
             }

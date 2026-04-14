@@ -1,24 +1,12 @@
 """Bar entities — Pydantic models with MongoDB persistence."""
 
-from datetime import UTC
 from datetime import datetime as dt
 from typing import Any
 
+from pocketquant.core.common.time import coerce_utc, utc_now
 from pocketquant.core.common.uuid import UUID, generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pydantic import BaseModel, ConfigDict, Field
-
-
-def _utc_now() -> dt:
-    return dt.now(UTC)
-
-
-def _coerce_utc(value: dt | None) -> dt | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
 
 
 class Bar(BaseModel):
@@ -41,7 +29,7 @@ class Bar(BaseModel):
     close: float = 0.0
     volume: float = 0.0
     tick_count: int = 0
-    created_at: dt = Field(default_factory=_utc_now)
+    created_at: dt = Field(default_factory=utc_now)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Bar):
@@ -84,14 +72,14 @@ class Bar(BaseModel):
             symbol=doc.get("symbol", ""),
             exchange=doc.get("exchange", ""),
             interval=interval_val,
-            datetime=_coerce_utc(doc.get("datetime")),
+            datetime=coerce_utc(doc.get("datetime")),
             open=doc.get("open", 0.0),
             high=doc.get("high", 0.0),
             low=doc.get("low", 0.0),
             close=doc.get("close", 0.0),
             volume=doc.get("volume", 0.0),
             tick_count=doc.get("tick_count", 0),
-            created_at=_coerce_utc(doc.get("created_at")) or _utc_now(),
+            created_at=coerce_utc(doc.get("created_at")) or utc_now(),
         )
 
     def to_dict(self) -> dict:

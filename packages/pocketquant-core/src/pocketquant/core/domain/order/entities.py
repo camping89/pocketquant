@@ -1,8 +1,9 @@
 """Order aggregate with state machine for order lifecycle — Pydantic model."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, ClassVar
 
+from pocketquant.core.common.time import utc_now
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.order.events import (
@@ -14,10 +15,6 @@ from pocketquant.core.domain.order.events import (
 )
 from pocketquant.core.domain.shared.events import DomainEvent
 from pydantic import BaseModel, Field, PrivateAttr
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 class InvalidOrderTransitionError(Exception):
@@ -45,8 +42,8 @@ class OrderAggregate(BaseModel):
     filled_quantity: float = 0.0
     filled_price: float | None = None
     broker_order_id: str | None = None
-    created_at: datetime = Field(default_factory=_utc_now)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     # State machine: valid transitions (class-level, allocated once)
@@ -99,7 +96,7 @@ class OrderAggregate(BaseModel):
         self._validate_transition(OrderStatus.SUBMITTED)
         self.status = OrderStatus.SUBMITTED
         self.broker_order_id = broker_order_id
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = utc_now()
         self._events.append(
             OrderSubmittedEvent(
                 order_id=self.id,
@@ -132,7 +129,7 @@ class OrderAggregate(BaseModel):
 
         self.filled_quantity = total_filled
         self.status = OrderStatus.PARTIALLY_FILLED
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = utc_now()
 
         self._events.append(
             OrderPartiallyFilledEvent(
@@ -167,7 +164,7 @@ class OrderAggregate(BaseModel):
 
         self.filled_quantity = self.quantity
         self.status = OrderStatus.FILLED
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = utc_now()
 
         self._events.append(
             OrderFilledEvent(
@@ -189,7 +186,7 @@ class OrderAggregate(BaseModel):
                 f"Cannot cancel order in terminal state: {self.status}"
             )
         self.status = OrderStatus.CANCELLED
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = utc_now()
         self._events.append(
             OrderCancelledEvent(
                 order_id=self.id,
@@ -203,7 +200,7 @@ class OrderAggregate(BaseModel):
         """Reject the order (broker rejection)."""
         self._validate_transition(OrderStatus.REJECTED)
         self.status = OrderStatus.REJECTED
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = utc_now()
         self._events.append(
             OrderRejectedEvent(
                 order_id=self.id,

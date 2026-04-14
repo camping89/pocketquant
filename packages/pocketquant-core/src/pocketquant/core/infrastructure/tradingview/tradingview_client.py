@@ -1,6 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timezone, timedelta
+from datetime import UTC, datetime
 
 import pandas as pd
 from pocketquant.core.common.logging import get_logger

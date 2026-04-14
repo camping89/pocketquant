@@ -34,7 +34,7 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         result = [
             {
                 "id": str(bar.id),
-                "datetime": bar.datetime.isoformat(),
+                "datetime": bar.datetime.isoformat() if bar.datetime else None,
                 "open": bar.open,
                 "high": bar.high,
                 "low": bar.low,

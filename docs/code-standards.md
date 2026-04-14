@@ -776,6 +776,25 @@ All aggregates migrated:
 | **Features** | ❌ No business logic ✅ Thin routes ✅ @handles decorator ✅ Call Application services |
 | **Infrastructure** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
 
+## Datetime Serialization (API Responses)
+
+When serializing `datetime` to JSON for frontend consumption, **always use `to_utc_iso()`**:
+
+```python
+from pocketquant.core.common.time import to_utc_iso
+
+# Good: consistent UTC, JavaScript-safe
+"next_run": to_utc_iso(job.next_run_time)   # → "2026-04-14T01:43:57Z" or None
+
+# Bad: malformed if datetime has tz offset (e.g. +07:00Z)
+"next_run": dt.isoformat() + "Z"
+
+# Bad: missing Z suffix, JS parses as local time
+"next_run": dt.isoformat()
+```
+
+**Internal use** (logging, cache keys): bare `.isoformat()` is fine.
+
 ## Deprecated Patterns (DO NOT USE)
 
 - Business logic in features/ → move to Application layer
