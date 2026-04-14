@@ -215,7 +215,7 @@ class JobScheduler:
             entry: dict[str, Any] = {
                 "id": job.id,
                 "name": job.name,
-                "next_run": job.next_run_time.isoformat() + "Z" if job.next_run_time else None,
+                "next_run": job.next_run_time.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if job.next_run_time else None,
                 "trigger": str(job.trigger),
                 "last_run": last_runs.get(job.id),
             }

@@ -70,8 +70,8 @@ class JobHistoryRepository(BaseRepository):
         async for row in self._collection().aggregate(pipeline):
             doc = row["doc"]
             results[row["_id"]] = {
-                "started_at": doc["started_at"].isoformat() + "Z" if doc.get("started_at") else None,
-                "finished_at": doc["finished_at"].isoformat() + "Z" if doc.get("finished_at") else None,
+                "started_at": doc["started_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if doc.get("started_at") else None,
+                "finished_at": doc["finished_at"].strftime("%Y-%m-%dT%H:%M:%SZ") if doc.get("finished_at") else None,
                 "duration_ms": doc.get("duration_ms"),
                 "status": doc.get("status"),
                 "error": doc.get("error"),
