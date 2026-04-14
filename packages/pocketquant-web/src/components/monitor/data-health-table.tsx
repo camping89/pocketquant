@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useIntegrityCheck, useIntegrityRepair } from '../../hooks/use-integrity'
+import { useEffect, useMemo, useState } from 'react'
+import { checkIntegrity } from '../../api/monitor-api'
+import { INTERVAL_ORDER } from '../../hooks/use-available-intervals'
+import { useIntegrityRepair } from '../../hooks/use-integrity'
 import { useSyncStatus } from '../../hooks/use-sync-status'
 import type { IntegrityReport, RepairResult } from '../../types/market-data'
 import { DataHealthRow } from './data-health-row'
@@ -26,7 +28,6 @@ interface DataHealthTableProps {
 
 export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHealthTableProps) {
   const { data, isLoading, error, dataUpdatedAt } = useSyncStatus()
-  const check = useIntegrityCheck()
   const repair = useIntegrityRepair()
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
   const [daysBack, setDaysBack] = useState(7)
@@ -50,27 +51,34 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
   if (error) return <div className="monitor-error">Failed to load: {error.message}</div>
   if (!data?.length) return <div className="monitor-empty">No symbols tracked</div>
 
-  const filtered = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
+  const filtered = useMemo(() => {
+    const rows = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
+    return rows.sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval))
+  }, [data, exchange, symbol])
   const ago = dataUpdatedAt ? formatAge(new Date(dataUpdatedAt).toISOString()) : ''
 
+  const defaultRow: RowState = { expanded: false, checking: false, repairing: false }
+
   function getRow(key: string): RowState {
-    return rowStates[key] ?? { expanded: false, checking: false, repairing: false }
+    return rowStates[key] ?? defaultRow
   }
 
   function updateRow(key: string, patch: Partial<RowState>) {
-    setRowStates((prev) => ({ ...prev, [key]: { ...getRow(key), ...patch } }))
+    setRowStates((prev) => {
+      const current = prev[key] ?? defaultRow
+      return { ...prev, [key]: { ...current, ...patch } }
+    })
   }
 
-  function handleCheck(s: typeof filtered[0]) {
+  async function handleCheck(s: typeof filtered[0]) {
     const key = s.interval
     updateRow(key, { checking: true })
-    check.mutate(
-      { symbol: s.symbol, exchange: s.exchange, interval: s.interval, daysBack },
-      {
-        onSuccess: (report) => updateRow(key, { report, checking: false }),
-        onError: () => updateRow(key, { checking: false }),
-      },
-    )
+    try {
+      const report = await checkIntegrity(s.symbol, s.exchange, s.interval, daysBack)
+      updateRow(key, { report, checking: false })
+    } catch {
+      updateRow(key, { checking: false })
+    }
   }
 
   function handleRepair(s: typeof filtered[0]) {
