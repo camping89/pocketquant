@@ -105,3 +105,4 @@ repomix-output.xml
 **/.claude/session-state/
 
 plans/
+.claude/settings.local.json
