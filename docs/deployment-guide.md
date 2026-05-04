@@ -1,17 +1,21 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-04-10 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via deploy.sh
+**Last Updated:** 2026-05-04 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via deploy.sh
 
 Current note: for local development and UI testing, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document is production-only.
 
 ## Architecture
 
-4 Docker containers on a disposable VPS. CI builds image, you pull manually.
+5 Docker containers on a disposable VPS (app, web, mongodb, redis, portainer). CI builds image, you pull manually.
 
 ```
 GitHub push → CI builds Docker image → Docker Hub
-VPS: deploy.sh pulls image → docker compose up (app + mongodb + redis + portainer)
+VPS: deploy.sh pulls image → docker compose up (app + web + mongodb + redis + portainer)
 ```
+
+### Distributed Scheduling
+
+Background sync jobs are scheduled via APScheduler with a **MongoDBJobStore** backed by collection `apscheduler_jobs`. Multiple processes (e.g. the VPS app + a local dev BE pointing at VPS Mongo) coordinate through this shared collection — the first instance to update `next_run_time` wins each tick, the others skip. No extra lock layer needed. See [Local Dev Pointing at VPS DB](#local-dev-pointing-at-vps-db).
 
 ## Prerequisites
 
@@ -174,6 +178,45 @@ Replace `$VAR` with your actual port values from `.env`.
 ssh -i $KEY -L 52017:localhost:52017 -L 53679:localhost:53679 $VPS
 # Then connect DataGrip to localhost:52017
 ```
+
+---
+
+## Local Dev Pointing at VPS DB
+
+Run FE + BE on your machine but point them at the production VPS Mongo + Redis so there is one source of truth for data. Useful for live debugging, feature work, and ad-hoc queries against real data.
+
+### Setup
+
+1. Copy VPS connection settings from `pocketquant-config/.env.prod` into your local `D:\w\_me\pocketquant\.env`. Override these for local-friendly behaviour:
+
+   ```env
+   ENVIRONMENT=development
+   LOG_FORMAT=console
+   ```
+
+2. Verify connectivity:
+
+   ```bash
+   just check
+   ```
+
+   Expect Mongo + Redis healthy against `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>`.
+
+3. Start servers (two terminals):
+
+   ```bash
+   just be      # FastAPI on :41920
+   just fe      # Vite dev server on :5173 (proxies /api -> :41920)
+   ```
+
+   Or build the SPA once (`cd packages/pocketquant-web && npm run build`) and let FastAPI serve it at `http://localhost:41920/`.
+
+### Safety notes
+
+- Local writes go to the **production** database. Treat destructive scripts (drop, reset, bulk delete) with the same care as on the VPS.
+- Tests must NEVER touch prod. `packages/pocketquant-core/tests/conftest.py` raises if `MONGODB_URL` or `REDIS_URL` contains the prod IP, and uses ephemeral testcontainers (Mongo + Redis) for the `settings` fixture.
+- Before pointing at prod, back up your previous local config: `cp .env .env.local-only.bak`. To revert: `cp .env.local-only.bak .env && just up`.
+- `ENABLE_JOBS=true` on local is safe because the MongoDBJobStore coordinates with the VPS scheduler — the same job will not fire twice per tick.
 
 ---
 
