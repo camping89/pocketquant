@@ -21,7 +21,6 @@ from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.health.checks import check_database, check_redis
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
@@ -72,10 +71,8 @@ async def start_background_jobs(container: AsyncContainer) -> None:
     from pocketquant.api.market_data.app_services.sync_jobs import register_sync_jobs
 
     register_sync_jobs(
-        mediator=await container.get(Mediator),
+        container=container,
         job_scheduler=await container.get(JobScheduler),
-        sync_status_repo=await container.get(SyncStatusRepository),
-        bar_repo=await container.get(BarRepository),
     )
     logger.info("background_jobs_enabled")
 
