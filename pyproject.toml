@@ -23,6 +23,7 @@ dev = [
     "pyright>=1.1.350",
     "pre-commit>=3.6.0",
     "import-linter>=2.11",
+    "testcontainers[mongodb,redis]>=4.8.0",
 ]
 
 [tool.uv.sources]

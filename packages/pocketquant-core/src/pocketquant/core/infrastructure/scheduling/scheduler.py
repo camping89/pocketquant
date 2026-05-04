@@ -1,15 +1,23 @@
-"""Background job scheduler — instance-based for DI container."""
+"""Background job scheduler — instance-based for DI container.
+
+Uses APScheduler with MongoDBJobStore for distributed coordination across
+multiple processes (e.g. local dev + VPS). Both instances share the same Mongo
+collection; the first to update next_run_time wins each tick.
+
+Jobs MUST be passed as text references (e.g. "module.path:func") so they can be
+serialized into Mongo. Module-level coroutine functions only — no closures.
+History recording lives inside each job function (see sync_jobs.py).
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.base import JobLookupError
-from apscheduler.jobstores.memory import MemoryJobStore
+from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -30,10 +38,21 @@ class JobScheduler:
 
     def __init__(self, history_repo: JobHistoryRepository | None = None) -> None:
         self._scheduler: AsyncIOScheduler | None = None
+        # history_repo only used by get_jobs() to enrich /system/jobs response.
+        # Job functions write history themselves (see sync_jobs._run_sync_job).
         self._history_repo = history_repo
 
     def initialize(self, settings: Settings) -> None:
-        jobstores = {"default": MemoryJobStore()}
+        # MongoDBJobStore = distributed coordination across processes (VPS + local).
+        # Each tick, scheduler instances race to update next_run_time in Mongo;
+        # the loser's view becomes stale and skips. No extra lock layer needed.
+        jobstores = {
+            "default": MongoDBJobStore(
+                database=settings.mongodb_database,
+                collection="apscheduler_jobs",
+                host=str(settings.mongodb_url),
+            )
+        }
         executors = {"default": AsyncIOExecutor()}
         job_defaults = {
             "coalesce": True,
@@ -61,42 +80,9 @@ class JobScheduler:
             self._scheduler = None
             logger.info("scheduler.stopped")
 
-    def _wrap_with_history(self, job_id: str, func: Callable) -> Callable:
-        """Wrap an async job func to record execution in history."""
-        if self._history_repo is None:
-            return func
-        repo = self._history_repo
-
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> None:
-            doc_id: str | None = None
-            started_at = datetime.now(UTC)
-            try:
-                doc_id = await repo.record_start(job_id)
-            except Exception:
-                logger.warning("job_history.record_start_failed", job_id=job_id, exc_info=True)
-            try:
-                await func(*args, **kwargs)
-                duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
-                if doc_id:
-                    try:
-                        await repo.record_finish(doc_id, status="completed", duration_ms=duration_ms)
-                    except Exception:
-                        logger.warning("job_history.record_finish_failed", job_id=job_id, exc_info=True)
-            except Exception as exc:
-                duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
-                if doc_id:
-                    try:
-                        await repo.record_finish(doc_id, status="failed", duration_ms=duration_ms, error=str(exc))
-                    except Exception:
-                        logger.warning("job_history.record_finish_failed", job_id=job_id, exc_info=True)
-                raise
-
-        return wrapper
-
     def add_interval_job(
         self,
-        func: Callable,
+        func: Callable | str,
         *,
         job_id: str,
         seconds: int | None = None,
@@ -105,6 +91,8 @@ class JobScheduler:
         start_date: datetime | None = None,
         **kwargs: Any,
     ) -> str:
+        """Register an interval job. `func` must be a text reference (e.g. "pkg.mod:func")
+        when using a persistent jobstore — closures cannot be serialized."""
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -119,10 +107,9 @@ class JobScheduler:
             trigger_kwargs["start_date"] = start_date
 
         trigger = IntervalTrigger(**trigger_kwargs)
-        wrapped = self._wrap_with_history(job_id, func)
 
         self._scheduler.add_job(
-            wrapped,
+            func,
             trigger=trigger,
             id=job_id,
             replace_existing=True,
@@ -140,7 +127,7 @@ class JobScheduler:
 
     def add_cron_job(
         self,
-        func: Callable,
+        func: Callable | str,
         *,
         job_id: str,
         cron_expression: str | None = None,
@@ -149,6 +136,7 @@ class JobScheduler:
         day_of_week: str | None = None,
         **kwargs: Any,
     ) -> str:
+        """Register a cron job. `func` must be a text reference (see add_interval_job)."""
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -168,10 +156,8 @@ class JobScheduler:
                 day_of_week=day_of_week,
             )
 
-        wrapped = self._wrap_with_history(job_id, func)
-
         self._scheduler.add_job(
-            wrapped,
+            func,
             trigger=trigger,
             id=job_id,
             replace_existing=True,

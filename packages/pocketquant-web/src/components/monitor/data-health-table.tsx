@@ -35,7 +35,11 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
   const filtered = useMemo(() => {
     if (!data?.length) return []
     const rows = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
-    return rows.sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval))
+    return rows.sort(
+      (a, b) =>
+        INTERVAL_ORDER.indexOf(a.interval as (typeof INTERVAL_ORDER)[number]) -
+        INTERVAL_ORDER.indexOf(b.interval as (typeof INTERVAL_ORDER)[number]),
+    )
   }, [data, exchange, symbol])
 
   useEffect(() => {
