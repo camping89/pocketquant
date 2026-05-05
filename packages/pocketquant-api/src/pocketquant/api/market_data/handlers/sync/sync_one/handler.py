@@ -1,13 +1,19 @@
 """Handler for sync symbol command."""
 
 from pocketquant.api.market_data.handlers.sync.dto import SyncResponse
+from pocketquant.api.market_data.handlers.sync.sync_one.anomaly_log import emit_no_progress
+from pocketquant.api.market_data.handlers.sync.sync_one.bar_filters import (
+    drop_misaligned_bars,
+    filter_new_bars,
+)
 from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
+from pocketquant.api.market_data.handlers.sync.sync_one.provider_fetch import fetch_with_retry
+from pocketquant.api.market_data.handlers.sync.sync_one.responses import build_success
 from pocketquant.core.common.cache import Cache
 from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.bar.services.bar_builder import filter_aligned_bars
 from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.infrastructure.tradingview import TradingViewClient
@@ -53,55 +59,58 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         try:
             records = await self._fetch_bars(symbol, exchange, interval, request.n_bars)
             bars_fetched = len(records)
-            if not records:
-                # Transient provider failure — preserve existing sync_status if bars exist
-                total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
-                if total_bars > 0:
-                    await self._sync_status_repo.bump_empty_fetch(symbol, exchange, interval)
-                    logger.warning(
-                        "market_data.sync.empty_fetch_skipped",
-                        symbol=symbol,
-                        exchange=exchange,
-                        interval=interval.value,
-                        existing_bars=total_bars,
-                    )
-                    await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
-                    return self._success(
-                        symbol, exchange, interval,
-                        bars_synced=0, bars_fetched=0,
-                        filtered_existing=0, filtered_misaligned=0,
-                        total_bars=total_bars, latest_bar=latest_bar,
-                    )
-                return await self._fail(
-                    symbol, exchange, interval, "No data returned from provider"
-                )
-
-            # Filter out bars we already have (skip for repair to allow gap filling)
             filtered_existing = 0
-            if not request.skip_filter:
-                pre = len(records)
-                records = await self._filter_new_bars(records, symbol, exchange, interval)
-                filtered_existing = pre - len(records)
+            filtered_misaligned = 0
 
-            pre_align = len(records)
-            records = self._filter_misaligned_bars(records, interval)
-            filtered_misaligned = pre_align - len(records)
+            if records:
+                # Skip existence filter on repair runs to allow gap filling.
+                if not request.skip_filter:
+                    pre = len(records)
+                    records = await filter_new_bars(
+                        records, symbol, exchange, interval, self._bar_repo,
+                    )
+                    filtered_existing = pre - len(records)
+                pre_align = len(records)
+                records = drop_misaligned_bars(records, interval)
+                filtered_misaligned = pre_align - len(records)
 
             inserted_count = await self._persist_bars(symbol, exchange, records)
             total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
 
+            # Genuine first-sync failure: provider returned nothing AND no prior bars.
+            if bars_fetched == 0 and total_bars == 0:
+                return await self._fail(
+                    symbol, exchange, interval, "No data returned from provider",
+                )
+
             await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
             await self._invalidate_cache(symbol, exchange, interval)
+
+            # Single bump/reset decision: covers empty-fetch, all-misaligned,
+            # and all-already-existing cases uniformly.
             if inserted_count > 0:
                 await self._sync_status_repo.reset_empty_fetch(symbol, exchange, interval)
+                logger.info(
+                    "market_data.sync.completed",
+                    symbol=symbol,
+                    exchange=exchange,
+                    bars_inserted=inserted_count,
+                )
+            else:
+                streak = await self._sync_status_repo.bump_empty_fetch(
+                    symbol, exchange, interval,
+                )
+                emit_no_progress(
+                    symbol, exchange, interval,
+                    bars_fetched=bars_fetched,
+                    filtered_misaligned=filtered_misaligned,
+                    filtered_existing=filtered_existing,
+                    attempts=getattr(self, "_fetch_attempts", 1),
+                    streak=streak,
+                    latest_bar=latest_bar,
+                )
 
-            logger.info(
-                "market_data.sync.completed",
-                symbol=symbol,
-                exchange=exchange,
-                bars_inserted=inserted_count,
-            )
-            return self._success(
+            return build_success(
                 symbol, exchange, interval,
                 bars_synced=inserted_count, bars_fetched=bars_fetched,
                 filtered_existing=filtered_existing,
@@ -128,61 +137,12 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         interval: DomainInterval,
         n_bars: int,
     ) -> list[Bar]:
-        return await self.provider.fetch_ohlcv(
-            symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars
+        records, attempts = await fetch_with_retry(
+            self.provider, symbol, exchange, interval, n_bars,
         )
-
-    async def _filter_new_bars(
-        self,
-        records: list[Bar],
-        symbol: str,
-        exchange: str,
-        interval: DomainInterval,
-    ) -> list[Bar]:
-        """Filter fetched bars to only those newer than DB latest - 3 bar overlap buffer.
-
-        On first sync (no existing data), returns all records unchanged.
-        The 3-bar overlap ensures we don't miss bars near the boundary;
-        insert_many(ordered=False) will skip any duplicates.
-        """
-        latest = await self._bar_repo.get_latest(symbol, exchange, interval)
-        if not latest or not latest.datetime:
-            return records
-
-        # Keep bars from (latest - 3 intervals) onwards
-        overlap_buffer = 3
-        cutoff_bars = sorted(
-            [r for r in records if r.datetime and r.datetime <= latest.datetime],
-            key=lambda b: b.datetime,  # type: ignore[arg-type]
-        )
-        # Find the cutoff: 3 bars before the latest existing bar
-        if len(cutoff_bars) > overlap_buffer:
-            cutoff_dt = cutoff_bars[-overlap_buffer].datetime
-        else:
-            cutoff_dt = cutoff_bars[0].datetime if cutoff_bars else latest.datetime
-
-        filtered = [r for r in records if r.datetime and r.datetime >= cutoff_dt]
-        skipped = len(records) - len(filtered)
-        if skipped > 0:
-            logger.info(
-                "market_data.sync.filtered_existing",
-                kept=len(filtered),
-                skipped=skipped,
-                cutoff=str(cutoff_dt),
-            )
-        return filtered
-
-    def _filter_misaligned_bars(self, records: list[Bar], interval: DomainInterval) -> list[Bar]:
-        """Drop bars whose timestamps don't align to the interval grid."""
-        aligned, misaligned = filter_aligned_bars(records, interval)
-        if misaligned:
-            logger.warning(
-                "market_data.sync.misaligned_bars_dropped",
-                count=len(misaligned),
-                interval=interval.value,
-                sample_times=[str(b.datetime) for b in misaligned[:3]],
-            )
-        return aligned
+        # Exposed to handle() / Phase 2 anomaly log via getattr fallback.
+        self._fetch_attempts = attempts
+        return records
 
     async def _persist_bars(self, symbol: str, exchange: str, records: list[Bar]) -> int:
         if not records:
@@ -218,32 +178,6 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
     async def _invalidate_cache(self, symbol: str, exchange: str, interval: DomainInterval) -> None:
         cache_key = build_bar_cache_key(symbol, exchange, interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")
-
-    def _success(
-        self,
-        symbol: str,
-        exchange: str,
-        interval: DomainInterval,
-        *,
-        bars_synced: int,
-        bars_fetched: int,
-        filtered_existing: int,
-        filtered_misaligned: int,
-        total_bars: int,
-        latest_bar: Bar | None,
-    ) -> SyncResponse:
-        return SyncResponse(
-            symbol=symbol,
-            exchange=exchange,
-            interval=interval.value,
-            status="completed",
-            bars_synced=bars_synced,
-            bars_fetched=bars_fetched,
-            filtered_existing=filtered_existing,
-            filtered_misaligned=filtered_misaligned,
-            total_bars=total_bars,
-            last_bar_at=latest_bar.datetime.isoformat() if latest_bar and latest_bar.datetime else None,
-        )
 
     async def _fail(
         self, symbol: str, exchange: str, interval: DomainInterval, message: str
