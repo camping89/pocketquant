@@ -268,13 +268,23 @@ class JobHistoryRepository(BaseRepository):
         )
         # TTL: drop & recreate if expireAfterSeconds drifted.
         await self._ensure_ttl_index(coll)
-        # Idempotency for listener-written rows. sparse=True: wrapper-written
-        # rows have no scheduled_run_time, so they are excluded.
+        # Idempotency for listener-written rows. partialFilterExpression keeps
+        # legacy + wrapper rows (which have scheduled_run_time=null/missing)
+        # OUT of the unique constraint — sparse alone treats null as a value.
+        try:
+            existing = await coll.index_information()
+        except Exception:
+            existing = {}
+        if "idx_skip_idempotency" in existing:
+            try:
+                await coll.drop_index("idx_skip_idempotency")
+            except Exception:
+                logger.warning("job_history.idempotency_drop_failed", exc_info=True)
         await coll.create_index(
             [("job_id", 1), ("scheduled_run_time", 1)],
             name="idx_skip_idempotency",
             unique=True,
-            sparse=True,
+            partialFilterExpression={"scheduled_run_time": {"$type": "date"}},
         )
         logger.info("job_history.indexes_ensured")
 
