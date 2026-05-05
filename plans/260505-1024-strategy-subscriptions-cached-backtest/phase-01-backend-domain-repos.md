@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Backend Domain & Repos"
-status: pending
+status: completed
 priority: P1
 effort: "0.5d"
 dependencies: []
@@ -118,12 +118,12 @@ async def ensure_indexes() -> None  # add unique(subscription_id), keep index(st
 
 ## Success Criteria
 
-- [ ] `StrategySubscription` entity import được từ `pocketquant.trading.domain.subscription`
-- [ ] `deterministic_id()` cùng input → cùng output (test simple: assert eq)
-- [ ] `StrategySubscriptionRepository` có đủ 6 methods + `ensure_indexes`
-- [ ] `BacktestRepository` thêm 5 methods, không break methods cũ (`save`, `list_by_strategy`, `delete`, `find_by_id`)
-- [ ] `ensure_indexes` idempotent (chạy 2 lần OK)
-- [ ] Sparse unique index trên `subscription_id` cho phép null cho legacy docs
+- [x] `StrategySubscription` entity import được từ `pocketquant.trading.domain.subscription`
+- [x] `deterministic_id()` cùng input → cùng output (test simple: assert eq)
+- [x] `StrategySubscriptionRepository` có đủ 6 methods + `ensure_indexes`
+- [x] `BacktestRepository` thêm 5 methods, không break methods cũ (`save`, `list_by_strategy`, `delete`, `find_by_id`)
+- [x] `ensure_indexes` idempotent (chạy 2 lần OK)
+- [x] Sparse unique index trên `subscription_id` cho phép null cho legacy docs
 
 ## Risk Assessment
 

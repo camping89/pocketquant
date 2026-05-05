@@ -1,0 +1,177 @@
+"""Integration tests for strategy subscription API endpoints.
+
+Tests the full HTTP request/response cycle via the ASGI test client.
+Strategy is loaded directly via StrategyAppService to avoid YAML I/O.
+
+Error mapping note: SubscriptionAlreadyExistsError extends DomainError → HTTP 400
+(not 409 — the exception handler maps AppError.status_code, and DomainError uses 400).
+"""
+
+from __future__ import annotations
+
+import pytest
+from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
+
+pytestmark = pytest.mark.integration
+
+_STRATEGY_ID = "test-sub-strat"
+_API = "/api/v1/strategies"
+
+
+@pytest.fixture(autouse=True)
+async def load_strategy(app_client):
+    """Load test strategy + clean MongoDB subscription/backtest collections per test."""
+    from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+    from pocketquant.trading.persistence.strategy_subscription_repository import (
+        StrategySubscriptionRepository,
+    )
+
+    container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
+    svc: StrategyAppService = await container.get(StrategyAppService)
+    sub_repo: StrategySubscriptionRepository = await container.get(StrategySubscriptionRepository)
+    bt_repo: BacktestRepository = await container.get(BacktestRepository)
+
+    # Clean collections so tests are isolated
+    await sub_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
+    await bt_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
+
+    config = StrategyConfig(
+        id=_STRATEGY_ID,
+        name="Test Strategy",
+        symbol="BTC-USDT",
+        exchange="BINANCE",
+        interval="1h",
+    )
+    await svc.unload_strategy(_STRATEGY_ID)
+    await svc.load_strategy(config)
+    yield
+    await svc.unload_strategy(_STRATEGY_ID)
+
+
+# ---------------------------------------------------------------------------
+# POST /{strategy_id}/symbols
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_add_two_different_symbols_returns_201(app_client):
+    r1 = await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "BTC-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+    assert r1.status_code == 201, r1.text
+
+    r2 = await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "ETH-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+    assert r2.status_code == 201, r2.text
+
+    body1 = r1.json()
+    body2 = r2.json()
+    assert body1["symbol"] == "BTC-USDT"
+    assert body2["symbol"] == "ETH-USDT"
+    # IDs must be distinct
+    assert body1["id"] != body2["id"]
+
+
+@pytest.mark.asyncio
+async def test_add_duplicate_symbol_returns_400(app_client):
+    payload = {"symbol": "BTC-USDT", "exchange": "BINANCE", "interval": "1h"}
+    r1 = await app_client.post(f"{_API}/{_STRATEGY_ID}/symbols", json=payload)
+    assert r1.status_code == 201, r1.text
+
+    r2 = await app_client.post(f"{_API}/{_STRATEGY_ID}/symbols", json=payload)
+    # DomainError.status_code = 400; error_code = SUBSCRIPTION_ALREADY_EXISTS
+    assert r2.status_code == 400, r2.text
+    assert r2.json()["error"]["code"] == "SUBSCRIPTION_ALREADY_EXISTS"
+
+
+# ---------------------------------------------------------------------------
+# GET /{strategy_id}/symbols
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_symbols_returns_added_subs_with_null_backtest(app_client):
+    await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "BTC-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+    await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "ETH-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+
+    r = await app_client.get(f"{_API}/{_STRATEGY_ID}/symbols")
+    assert r.status_code == 200, r.text
+    items = r.json()
+    assert len(items) == 2
+    for item in items:
+        assert item["backtest"] is None
+
+
+# ---------------------------------------------------------------------------
+# DELETE /{strategy_id}/symbols/{sub_id}
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_symbol_removes_it_from_list(app_client):
+    r1 = await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "BTC-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+    r2 = await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "ETH-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+    sub_id = r1.json()["id"]
+
+    del_r = await app_client.delete(f"{_API}/{_STRATEGY_ID}/symbols/{sub_id}")
+    assert del_r.status_code == 204, del_r.text
+
+    list_r = await app_client.get(f"{_API}/{_STRATEGY_ID}/symbols")
+    items = list_r.json()
+    assert len(items) == 1
+    assert items[0]["id"] == r2.json()["id"]
+
+
+# ---------------------------------------------------------------------------
+# DELETE /{strategy_id}  (cascade)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_strategy_clears_all_subscriptions(app_client):
+    await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "BTC-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+    await app_client.post(
+        f"{_API}/{_STRATEGY_ID}/symbols",
+        json={"symbol": "ETH-USDT", "exchange": "BINANCE", "interval": "1h"},
+    )
+
+    del_r = await app_client.delete(f"{_API}/{_STRATEGY_ID}")
+    assert del_r.status_code == 204, del_r.text
+
+    # After cascade delete the strategy is unloaded; re-load to query symbols
+    from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
+    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+
+    container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
+    svc: StrategyAppService = await container.get(StrategyAppService)
+    config = StrategyConfig(
+        id=_STRATEGY_ID,
+        name="Test Strategy",
+        symbol="BTC-USDT",
+        exchange="BINANCE",
+        interval="1h",
+    )
+    await svc.load_strategy(config)
+
+    list_r = await app_client.get(f"{_API}/{_STRATEGY_ID}/symbols")
+    assert list_r.status_code == 200, list_r.text
+    assert list_r.json() == []

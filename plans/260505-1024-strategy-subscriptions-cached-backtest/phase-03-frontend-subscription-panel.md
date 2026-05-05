@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Frontend Subscription Panel"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [2]
@@ -149,14 +149,14 @@ export const useRunAll = (strategyId) =>
 
 ## Success Criteria
 
-- [ ] Chọn strategy → subscription panel render với 0 hoặc N rows
-- [ ] Add symbol → row appears với "none" badge
-- [ ] Run All → tất cả rows flip "none/done" → "running" → polling cập nhật mỗi 2s → "done"
-- [ ] Click row done → chart render positions trong < 200ms
-- [ ] Delete row → row gone, chart clear nếu đang chọn
-- [ ] Delete strategy → toàn bộ subs + chart clear
-- [ ] Status='failed' → badge đỏ, tooltip hiển thị error_msg
-- [ ] Polling tự stop khi không còn sub `running`
+- [x] Chọn strategy → subscription panel render với 0 hoặc N rows
+- [x] Add symbol → row appears với "none" badge
+- [x] Run All → tất cả rows flip "none/done" → "running" → polling cập nhật mỗi 2s → "done"
+- [x] Click row done → chart render positions trong < 200ms
+- [x] Delete row → row gone, chart clear nếu đang chọn
+- [x] Delete strategy → toàn bộ subs + chart clear
+- [x] Status='failed' → badge đỏ, tooltip hiển thị error_msg
+- [x] Polling tự stop khi không còn sub `running`
 
 ## Risk Assessment
 

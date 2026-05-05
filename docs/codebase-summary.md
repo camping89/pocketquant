@@ -44,15 +44,18 @@ Key folders:
 Trading and strategy runtime package:
 
 - strategy load/start/stop/list/get handlers
+- strategy subscription handlers (add/list/delete symbols, run-all backtest, delete strategy cascade)
 - order and position application services
 - YAML strategy loading
 - broker integration and strategy orchestration
+- async job worker: `run_subscription_backtest()` enqueued via APScheduler
 
 Key folders:
 
 - `src/pocketquant/trading/handlers`
 - `src/pocketquant/trading/app_services`
 - `src/pocketquant/trading/persistence`
+- `src/pocketquant/trading/jobs` (NEW: backtest_jobs.py)
 
 ### `packages/pocketquant-api`
 
@@ -82,13 +85,17 @@ React 19 + Vite frontend:
 - interval availability backed by `/market-data/sync-status`
 - OHLCV chart data backed by `/market-data/ohlcv/{exchange}/{symbol}`
 - backtest overlay backed by `/backtest/run`
+- subscription panel sidebar (280px) with polling, status badges, cascade delete UI
 
 Important files:
 
 - `src/App.tsx`
 - `src/components/chart/trading-chart.tsx`
+- `src/components/subscription-panel.tsx` (NEW)
 - `src/api/market-data-api.ts`
 - `src/api/backtest-api.ts`
+- `src/api/strategy-subscription-api.ts` (NEW)
+- `src/hooks/useSubscriptions.ts` (NEW)
 - `vite.config.ts`
 
 ## Runtime Model

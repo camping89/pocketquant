@@ -2,10 +2,12 @@ import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute, getRouteApi } from '@tanstack/react-router'
 import { AppHeader } from '../components/layout/app-header'
 import { TradingChart } from '../components/chart/trading-chart'
+import { SubscriptionPanel } from '../components/strategy/subscription-panel'
 import { useAvailableIntervals } from '../hooks/use-available-intervals'
 import { useOHLCV } from '../hooks/use-ohlcv'
-import { useBacktest } from '../hooks/use-backtest'
+import { useSubscriptionBacktest } from '../hooks/use-subscriptions'
 import type { Interval, IndicatorConfig } from '../types/market-data'
+import type { BacktestPosition } from '../api/backtest-api'
 
 export const Route = createFileRoute('/')({
   component: ChartPage,
@@ -27,19 +29,19 @@ function ChartPage() {
   const [selectedInterval, setSelectedInterval] = useState<Interval>(DEFAULT_INTERVAL)
   const [indicators, setIndicators] = useState<IndicatorConfig>(DEFAULT_INDICATORS)
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null)
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null)
   const availableIntervals = useAvailableIntervals({ exchange, symbol })
 
   const { data: ohlcvData } = useOHLCV(exchange, symbol, selectedInterval)
-  const backtest = useBacktest(exchange, symbol, selectedInterval)
-  const isDebug = typeof window !== 'undefined' && localStorage.getItem('pq:debug') === '1'
 
+  // Reset selected sub whenever strategy changes
   useEffect(() => {
-    if (selectedStrategy) {
-      backtest.run(selectedStrategy)
-    } else {
-      backtest.reset()
-    }
-  }, [selectedStrategy, exchange, symbol, selectedInterval]) // eslint-disable-line react-hooks/exhaustive-deps
+    setSelectedSubId(null)
+  }, [selectedStrategy])
+
+  const { data: backtestDoc } = useSubscriptionBacktest(selectedStrategy, selectedSubId)
+
+  const isDebug = typeof window !== 'undefined' && localStorage.getItem('pq:debug') === '1'
 
   const debugBarInfo = useMemo(() => {
     if (!isDebug || !ohlcvData?.lastBarRaw) return undefined
@@ -53,6 +55,11 @@ function ChartPage() {
     return availableIntervals[0].value
   }, [availableIntervals, selectedInterval])
 
+  // Only pass positions when backtest is completed
+  const positions = backtestDoc?.status === 'completed'
+    ? (backtestDoc.positions as BacktestPosition[] | undefined)
+    : undefined
+
   return (
     <div className="app-layout">
       <AppHeader
@@ -63,18 +70,24 @@ function ChartPage() {
         onIndicatorsChange={setIndicators}
         selectedStrategy={selectedStrategy}
         onStrategyChange={setSelectedStrategy}
-        backtestLoading={backtest.isLoading}
         debugBarInfo={debugBarInfo}
       />
-      <main className="chart-container">
-        <TradingChart
-          exchange={exchange}
-          symbol={symbol}
-          interval={interval}
-          indicators={indicators}
-          positions={backtest.data?.positions}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <SubscriptionPanel
+          strategyId={selectedStrategy}
+          selectedSubId={selectedSubId}
+          onSelectSub={setSelectedSubId}
         />
-      </main>
+        <main className="chart-container">
+          <TradingChart
+            exchange={exchange}
+            symbol={symbol}
+            interval={interval}
+            indicators={indicators}
+            positions={positions}
+          />
+        </main>
+      </div>
     </div>
   )
 }

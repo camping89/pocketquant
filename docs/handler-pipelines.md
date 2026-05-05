@@ -1,17 +1,18 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-04-13 | **Total Handlers:** 27 CQRS handlers across market data, strategy, backtest, and trading | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC
+**Last Updated:** 2026-05-05 | **Total Handlers:** 35 CQRS handlers across market data, strategy, backtest, trading, and subscriptions | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC
 
 Current note: route names in this document are historical in a few places. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
 
-This document details the complete pipeline for each of the 27 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
+This document details the complete pipeline for each of the 35 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
 
 ## Handler Categories
 
 - **Market Data (13):** Sync, Bar retrieval, quotes, symbols, status
-- **Strategy (5):** Load, start, stop, get one, get all
 - **Backtesting (5):** Run, optimize, get results
+- **Strategy (11):** Load, start, stop, get one, get all, add subscription, list subscriptions, delete subscription, run-all backtest, get subscription backtest, delete strategy cascade
 - **Trading (4):** List/get orders, list/get positions
+- **Subscriptions (2):** Integrated into Strategy handlers (24-29)
 
 ## A. Market Data Handlers (13)
 
@@ -564,18 +565,180 @@ Response: StrategiesDTO
 
 ---
 
+### 24. AddSubscriptionHandler (AddSubscriptionCommand) [NEW]
+
+**Request:** POST `/api/v1/strategies/{strategy_id}/symbols`
+
+**Pipeline:**
+```
+AddSubscriptionCommand(strategy_id, symbol, exchange, interval)
+  ↓
+Handler.handle():
+  1. Validate: StrategyAppService.get_strategy(strategy_id) exists
+  ↓
+  2. Compute ID: subscription_id = sha256(f"{strategy_id}:{symbol}:{exchange}:{interval}")[:16]
+  ↓
+  3. Check Duplicate: StrategySubscriptionRepository.find_by_id(subscription_id)
+     └─ If exists, return 409 Conflict → mapped to 400 DomainError
+  ↓
+  4. Create: StrategySubscription(strategy_id, symbol, exchange, interval, subscription_id)
+  ↓
+  5. Persist: StrategySubscriptionRepository.save(subscription)
+  ↓
+Response: SubscriptionDTO(subscription_id, strategy_id, symbol, exchange, interval)
+```
+
+**Side Effects:**
+- MongoDB: document inserted into `strategy_subscriptions` collection
+
+---
+
+### 25. ListSubscriptionsHandler (ListSubscriptionsQuery) [NEW]
+
+**Request:** GET `/api/v1/strategies/{strategy_id}/symbols`
+
+**Pipeline:**
+```
+ListSubscriptionsQuery(strategy_id)
+  ↓
+Validate: StrategyAppService.get_strategy(strategy_id) exists
+  ↓
+Fetch: StrategySubscriptionRepository.find_by_strategy_id(strategy_id)
+  └─ MongoDB query on `strategy_subscriptions` index: strategy_id
+  ↓
+Serialize: List[SubscriptionDTO]
+  ↓
+Response: SubscriptionsDTO(subscriptions=[...])
+```
+
+---
+
+### 26. DeleteSubscriptionHandler (DeleteSubscriptionCommand) [NEW]
+
+**Request:** DELETE `/api/v1/strategies/{strategy_id}/symbols/{sub_id}`
+
+**Pipeline:**
+```
+DeleteSubscriptionCommand(strategy_id, subscription_id)
+  ↓
+Handler.handle():
+  1. Validate: StrategySubscriptionRepository.find_by_id(subscription_id)
+  ↓
+  2. Delete subscription: StrategySubscriptionRepository.delete_by_id(subscription_id)
+  ↓
+  3. Delete cached backtest: BacktestRepository.delete_by_subscription_id(subscription_id)
+     └─ Uses sparse unique index on `subscription_id`
+  ↓
+Response: DeletionDTO(deleted=True, subscription_id)
+```
+
+**Side Effects:**
+- MongoDB: document deleted from `strategy_subscriptions`
+- MongoDB: backtest document with matching `subscription_id` deleted (if exists)
+
+---
+
+### 27. RunAllBacktestsHandler (RunAllBacktestsCommand) [NEW]
+
+**Request:** POST `/api/v1/strategies/{strategy_id}/backtest/run-all`
+
+**Pipeline:**
+```
+RunAllBacktestsCommand(strategy_id)
+  ↓
+Handler.handle():
+  1. Validate: StrategyAppService.get_strategy(strategy_id) exists
+  ↓
+  2. Load strategy YAML: StrategyLoader.load_yaml(strategy_id)
+  ↓
+  3. Fetch subscriptions: StrategySubscriptionRepository.find_by_strategy_id(strategy_id)
+  ↓
+  4. For each subscription (parallel or sequential):
+     └─ JobScheduler.add_one_off_job(
+          run_subscription_backtest,
+          args=(strategy_id, subscription_id),
+          trigger=DateTrigger(run_date=now)
+        )
+  ↓
+Response: RunAllDTO(job_ids=[...], count=N)
+```
+
+**Job Worker:** `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest(strategy_id, subscription_id)`
+- Loads bars for (symbol, exchange, interval)
+- Executes backtest via BacktestAppService
+- Synthetic strategy id: `f"{strategy_id}::bt::{subscription_id}"` (prevents live strategy clobber)
+- Persists to `backtests` collection with `_id=subscription_id` (upsert)
+- Marks doc `status='completed'` or `status='failed'`
+- Re-checks subscription exists before persist (TOCTOU protection)
+
+**Side Effects:**
+- APScheduler: one-off job enqueued per subscription
+- MongoDB: async backtest documents created/updated with `status='running'`
+
+---
+
+### 28. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery) [NEW]
+
+**Request:** GET `/api/v1/strategies/{strategy_id}/symbols/{sub_id}/backtest`
+
+**Pipeline:**
+```
+GetSubscriptionBacktestQuery(strategy_id, subscription_id)
+  ↓
+Validate: Subscription exists (StrategySubscriptionRepository)
+  ↓
+Fetch: BacktestRepository.find_by_subscription_id(subscription_id)
+  └─ MongoDB query on sparse index: subscription_id
+  └─ Returns cached backtest result (if completed)
+  ↓
+Serialize: BacktestResultDTO(status, metrics, trades, last_run_at)
+  ↓
+Response: BacktestResultDTO | NotFoundDTO (if not yet run)
+```
+
+---
+
+### 29. DeleteStrategyHandler (DeleteStrategyCommand) [NEW]
+
+**Request:** DELETE `/api/v1/strategies/{strategy_id}`
+
+**Pipeline:**
+```
+DeleteStrategyCommand(strategy_id)
+  ↓
+Handler.handle():
+  1. Validate: StrategyAppService.get_strategy(strategy_id)
+  ↓
+  2. Unload strategy: StrategyAppService.unload(strategy_id)
+     └─ Stop if running, cleanup
+  ↓
+  3. Delete subscriptions: StrategySubscriptionRepository.delete_by_strategy_id(strategy_id)
+  ↓
+  4. Delete backtest_runs: BacktestRepository.delete_by_strategy_id(strategy_id)
+     └─ Cascade via strategy_id index
+  ↓
+Response: DeletionDTO(deleted=True, strategy_id)
+```
+
+**Side Effects:**
+- In-memory: strategy unloaded from StrategyAppService
+- MongoDB: all `strategy_subscriptions` docs with matching strategy_id deleted
+- MongoDB: all `backtests` docs with matching strategy_id deleted (cascade)
+
+---
+
 ## D. Trading Handlers (4)
 
-### 24-27. Order & Position Handlers
+### 30-33. Order & Position Handlers
 
 Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 
 **Pipelines:**
 ```
-24. ListOrdersHandler:    OrderAppService.list_all() → List[OrderDTO]
-25. GetOrderHandler:      OrderAppService.get_by_id(order_id) → OrderDTO
-26. ListPositionsHandler: PositionAppService.list_all() → List[PositionDTO]
-27. GetPositionHandler:   PositionAppService.get_by_id(position_id) → PositionDTO
+30. ListOrdersHandler:    OrderAppService.list_all() → List[OrderDTO]
+31. GetOrderHandler:      OrderAppService.get_by_id(order_id) → OrderDTO
+32. ListPositionsHandler: PositionAppService.list_all() → List[PositionDTO]
+33. GetPositionHandler:   PositionAppService.get_by_id(position_id) → PositionDTO
 ```
 
 ---
@@ -647,7 +810,7 @@ BacktestResult saved to MongoDB
 
 ## Handler Registration
 
-All 27 handlers registered via `@handles` decorator:
+All 35 handlers registered via `@handles` decorator:
 
 ```python
 @handles(SyncSymbolCommand)

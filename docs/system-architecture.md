@@ -234,12 +234,20 @@ features/
 │   │   └── router.py
 │   ├── list_symbols/        # Operation: List symbols
 │   └── router.py
-├── strategy/                 # Strategy feature (4 operations)
+├── strategy/                 # Strategy feature (10 operations)
 │   ├── get_all/            # Operation: List strategies
 │   ├── get_one/            # Operation: Get strategy
 │   ├── load/               # Operation: Load strategy YAML
 │   ├── start/              # Operation: Start strategy
 │   ├── stop/               # Operation: Stop strategy
+│   ├── subscriptions/       # NEW: Nested group for strategy subscriptions
+│   │   ├── add_symbol/     # Operation: POST /strategies/{strategy_id}/symbols
+│   │   ├── list_symbols/   # Operation: GET /strategies/{strategy_id}/symbols
+│   │   ├── delete_symbol/  # Operation: DELETE /strategies/{strategy_id}/symbols/{sub_id}
+│   │   ├── run_all_backtest/ # Operation: POST /strategies/{strategy_id}/backtest/run-all
+│   │   ├── get_subscription_backtest/ # Operation: GET /strategies/{strategy_id}/symbols/{sub_id}/backtest
+│   │   └── router.py
+│   ├── delete/             # Operation: DELETE /strategies/{strategy_id} (cascade)
 │   └── router.py
 ├── trading/                  # Trading feature (3 operations)
 │   ├── list_orders/        # Operation: List orders
@@ -330,9 +338,10 @@ persistence/                           # Data access (MongoDB, Redis, repositori
     ├── bar_repository.py       # Bar persistence (renamed from ohlcv_repository.py)
     ├── order_repository.py     # Order persistence
     ├── position_repository.py  # Position tracking
-    ├── backtest_repository.py  # Backtest results
+    ├── backtest_repository.py  # Backtest results + subscription-scoped upsert
     ├── optimization_repository.py  # Parameter optimization
     ├── symbol_repository.py    # Symbol metadata
+    ├── strategy_subscription_repository.py  # Strategy ↔ subscriptions (NEW)
     └── sync_status_repository.py   # Data sync status
 # NOTE: schemas/ directory deleted (2026-03-15)
 # Persistence logic consolidated into domain entities via to_mongo()/from_mongo()
@@ -532,10 +541,11 @@ Route Response
 | `bars` | BarRepository | Market OHLCV bars |
 | `orders` | OrderRepository | Order lifecycle |
 | `positions` | PositionRepository | Position tracking |
-| `backtests` | BacktestRepository | Backtest results |
+| `backtests` | BacktestRepository | Backtest results + subscription cache (dual-purpose via `subscription_id` field) |
 | `optimizations` | OptimizationRepository | Parameter optimization |
 | `symbols` | SymbolRepository | Symbol metadata |
 | `sync_status` | SyncStatusRepository | Data sync progress |
+| `strategy_subscriptions` | StrategySubscriptionRepository | Strategy ↔ (symbol/exchange/interval) subscriptions |
 | `job_history` | JobHistoryRepository | Background job execution history |
 
 **All repositories:**
