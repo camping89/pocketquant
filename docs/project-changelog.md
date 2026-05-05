@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Sync scheduler phase drift** (2026-05-05) — bar-aligned sync jobs (sync_5m/15m/hourly/swing/repair) now use UTC wall-clock `CronTrigger` instead of startup-anchored `IntervalTrigger`. Eliminates phase drift on container restart that caused up to 15-min lag and missed-bar gaps. Critical for strategy entry/exit signal timing. Regression guard: `tests/test_sync_jobs_phase.py`.
+
 ### Added
 - **Strategy Subscriptions + Cached Backtest** (2026-05-05)
   - New `StrategySubscription` domain entity: 1 strategy ↔ N (symbol/exchange/interval) subscriptions

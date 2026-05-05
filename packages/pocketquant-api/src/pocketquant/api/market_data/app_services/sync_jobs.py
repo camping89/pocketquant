@@ -372,10 +372,21 @@ def register_sync_jobs(
     """Wire container reference + register 8 sync/integrity jobs as text refs."""
     set_container(container)
 
-    job_scheduler.add_interval_job(f"{_MODULE}:sync_5m", job_id="sync_5m", minutes=5)
-    job_scheduler.add_interval_job(f"{_MODULE}:sync_15m", job_id="sync_15m", minutes=15)
-    job_scheduler.add_interval_job(f"{_MODULE}:sync_hourly", job_id="sync_hourly", hours=1)
-    job_scheduler.add_interval_job(f"{_MODULE}:sync_swing", job_id="sync_swing", hours=4)
+    # UTC wall-clock anchored — bar-aligned crons eliminate phase drift on restart.
+    # Strategy correctness depends on bar-close events arriving on time; lag/gaps
+    # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:sync_5m", job_id="sync_5m", cron_expression="*/5 * * * *",
+    )
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:sync_15m", job_id="sync_15m", cron_expression="*/15 * * * *",
+    )
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:sync_hourly", job_id="sync_hourly", cron_expression="0 * * * *",
+    )
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:sync_swing", job_id="sync_swing", cron_expression="0 */4 * * *",
+    )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_daily", job_id="sync_daily", hour=0, minute=30,
     )
@@ -385,8 +396,8 @@ def register_sync_jobs(
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_integrity", job_id="sync_integrity", hour=4, minute=0,
     )
-    job_scheduler.add_interval_job(
-        f"{_MODULE}:sync_repair", job_id="sync_repair", hours=12,
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:sync_repair", job_id="sync_repair", cron_expression="0 */12 * * *",
     )
 
     logger.info("market_data.registered_sync_jobs", job_count=8)
