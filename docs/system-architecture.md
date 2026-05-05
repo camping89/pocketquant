@@ -357,7 +357,7 @@ persistence/                           # Data access (MongoDB, Redis, repositori
 | **OKXBroker** | Live trading, HMAC auth, exponential backoff reconnection |
 | **TradingViewClient** | REST API via ThreadPoolExecutor (max 4 workers) |
 | **TradingViewWebSocketClient** | Binary frame parsing (~m~{len}~m~{json}) |
-| **JobScheduler** | APScheduler wrapper, async job execution |
+| **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — packages/pocketquant-core/src/pocketquant/core/common/
 
@@ -692,9 +692,14 @@ Key pipelines at high level:
 
 | Category | Strategy |
 |----------|----------|
-| **Transient** | Exponential backoff, auto-reconnect |
+| **Transient** | Exponential backoff (0/3/8s, 15s budget in fetch_with_retry), auto-reconnect |
 | **Permanent** | HTTP errors (4xx/5xx) |
 | **Silent** | Log, continue execution |
+
+**Data Sync Anomalies (Structured Logs):**
+- `market_data.sync.fetch_recovered` (INFO) — Retry succeeded after attempt N
+- `market_data.sync.no_progress` (WARN) — Zero bars inserted; tracked via no_progress_streak (broadened semantics: empty/misaligned/existing)
+- `market_data.sync.stuck_threshold_crossed` (ERROR, once per streak) — Streak reaches 3× cadence threshold with stale last bar
 
 ## Performance & Security
 

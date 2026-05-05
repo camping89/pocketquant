@@ -410,6 +410,14 @@ Each feature is self-contained. Operations are the primary organizational unit. 
 **Dependency:** Features depend on Application + Domain + Infrastructure.
 **No reverse dependencies:** Domain never imports from Features.
 
+**sync_one Refactor (2026-05-05):** Handler folder split into focused modules:
+- `provider_fetch.py` — Bounded retry (backoff 0/3/8s; 15s budget) + aligned-bar detection
+- `bar_filters.py` — Filter existing + misaligned bars
+- `bar_alignment.py` — Alignment validation utility
+- `anomaly_log.py` — Structured logs (market_data.sync.no_progress WARN, stuck_threshold_crossed ERROR)
+- `responses.py` — Success/error response builders
+Handler.py now 195 LOC (was 261), each private helper does one task.
+
 **backtesting/ (626 LOC, 22 files)**
 
 Structure:
@@ -613,10 +621,11 @@ Route → HTTP Response (JSON)
 See [system-architecture.md](./system-architecture.md) for diagram and [handler-pipelines.md](./handler-pipelines.md) for detailed 27-handler flows.
 
 **8 Background Jobs** (scheduled in `register_sync_jobs()`):
-- sync_5m, sync_15m, sync_hourly, sync_swing, sync_daily (frequent intervals) — Sync all symbols per interval
+- sync_5m, sync_15m, sync_hourly, sync_swing, sync_daily (frequent intervals, +2s cron offset to dodge bar-close race) — Sync all symbols per interval
 - sync_backfill (03:00 UTC) — Full backfill (5000 bars) across all intervals
 - sync_integrity (04:00 UTC) — Check bar alignment + gaps (7 days back)
 - sync_repair (every 12h) — Delete misaligned, resync gaps, verify still_missing count
+- Each sub-daily sync uses bounded retry inside handler (no provider hiccups leak to cron)
 
 ## Key Patterns
 

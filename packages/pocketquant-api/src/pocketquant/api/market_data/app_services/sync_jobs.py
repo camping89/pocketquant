@@ -375,17 +375,27 @@ def register_sync_jobs(
     # UTC wall-clock anchored — bar-aligned crons eliminate phase drift on restart.
     # Strategy correctness depends on bar-close events arriving on time; lag/gaps
     # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
+    #
+    # Sub-daily syncs run at +2s from bar close. Eliminates the in-progress
+    # (misaligned) bar race on provider — TradingView occasionally returns the
+    # current open bar at exact bar-close moment. 2s gives provider time to
+    # settle the just-closed bar's grid-aligned timestamp. Combined with bounded
+    # retry in provider_fetch.py for residual provider lag.
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_5m", job_id="sync_5m", cron_expression="*/5 * * * *",
+        f"{_MODULE}:sync_5m", job_id="sync_5m",
+        cron_expression="*/5 * * * *", second=2,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_15m", job_id="sync_15m", cron_expression="*/15 * * * *",
+        f"{_MODULE}:sync_15m", job_id="sync_15m",
+        cron_expression="*/15 * * * *", second=2,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_hourly", job_id="sync_hourly", cron_expression="0 * * * *",
+        f"{_MODULE}:sync_hourly", job_id="sync_hourly",
+        cron_expression="0 * * * *", second=2,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_swing", job_id="sync_swing", cron_expression="0 */4 * * *",
+        f"{_MODULE}:sync_swing", job_id="sync_swing",
+        cron_expression="0 */4 * * *", second=2,
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_daily", job_id="sync_daily", hour=0, minute=30,

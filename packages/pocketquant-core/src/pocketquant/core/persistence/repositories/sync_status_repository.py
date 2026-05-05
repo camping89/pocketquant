@@ -61,7 +61,13 @@ class SyncStatusRepository(BaseRepository):
     async def bump_empty_fetch(
         self, symbol: str, exchange: str, interval: Interval
     ) -> int:
-        """Atomic $inc on consecutive_empty_fetches. Returns the new count."""
+        """Atomic $inc on consecutive_empty_fetches.
+
+        Despite the legacy name, this counter tracks any non-progress sync
+        (``inserted == 0`` with existing data), including all-misaligned and
+        fully-filtered-existing cases. Reset by ``reset_empty_fetch`` on
+        successful insert. Returns the new count.
+        """
         res = await self._collection().find_one_and_update(
             {
                 "symbol": symbol.upper(),

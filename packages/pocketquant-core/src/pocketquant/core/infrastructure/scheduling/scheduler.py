@@ -192,10 +192,15 @@ class JobScheduler:
         cron_expression: str | None = None,
         hour: str | int | None = None,
         minute: str | int | None = None,
+        second: str | int | None = None,
         day_of_week: str | None = None,
         **kwargs: Any,
     ) -> str:
-        """Register a cron job. `func` must be a text reference (see add_interval_job)."""
+        """Register a cron job. `func` must be a text reference (see add_interval_job).
+
+        `second` defaults to 0 in APScheduler when omitted; pass an explicit value
+        (e.g. ``second=2``) to offset bar-aligned jobs past provider publish lag.
+        """
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -207,11 +212,13 @@ class JobScheduler:
                 day=parts[2] if len(parts) > 2 else None,
                 month=parts[3] if len(parts) > 3 else None,
                 day_of_week=parts[4] if len(parts) > 4 else None,
+                second=second,
             )
         else:
             trigger = CronTrigger(
                 hour=hour,
                 minute=minute,
+                second=second,
                 day_of_week=day_of_week,
             )
 
@@ -228,6 +235,7 @@ class JobScheduler:
             job_id=job_id,
             cron_hour=hour,
             cron_minute=minute,
+            cron_second=second,
             cron_day_of_week=day_of_week,
         )
         return job_id

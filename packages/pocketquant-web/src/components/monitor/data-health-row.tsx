@@ -44,7 +44,16 @@ export function DataHealthRow({
     .join(' ')
 
   const variant = statusVariant(s)
-  const statusLabel = s.error_message ? 'error' : s.status === 'completed' ? 'synced' : s.status
+  const statusLabel = s.error_message
+    ? 'error'
+    : s.is_stuck
+      ? 'delayed'
+      : s.status === 'completed'
+        ? 'synced'
+        : s.status
+  const statusTitle = s.is_stuck
+    ? 'Sync ran successfully — provider data lag detected. Auto-recovers when provider publishes the next bar.'
+    : undefined
 
   return (
     <>
@@ -57,7 +66,7 @@ export function DataHealthRow({
         <td className={`num ${ageColorClass(s.last_bar_at, s.interval)}`}>{formatAge(s.last_bar_at)}</td>
         <td className={integrityColorClass(report)}>{formatIntegrity(report)}</td>
         <td>
-          <StatusPill variant={variant} label={statusLabel} />
+          <StatusPill variant={variant} label={statusLabel} title={statusTitle} />
           <StuckBadge show={!!s.is_stuck} />
         </td>
         <td className="actions" onClick={(e) => e.stopPropagation()}>

@@ -32,6 +32,8 @@ export function ageColorClass(lastBarAt: string | null, interval: string): strin
 
 export function statusVariant(s: SyncStatus): 'ok' | 'warn' | 'error' | 'neutral' {
   if (s.error_message) return 'error'
+  // Stuck overrides "completed" green — sync ran but data isn't progressing.
+  if (s.is_stuck) return 'warn'
   if (s.status === 'completed') return 'ok'
   if (s.status === 'pending') return 'warn'
   return 'neutral'
@@ -87,4 +89,31 @@ export function formatUtcTime(iso: string | null): string {
 
 export function formatNextRun(iso: string | null): string {
   return formatUtcTime(iso)
+}
+
+export function formatHumanizedNextRun(iso: string | null): string {
+  if (!iso) return '—'
+  const target = parseIso(iso)
+  if (Number.isNaN(target.getTime())) return '—'
+  const diffMs = target.getTime() - Date.now()
+  const past = diffMs < 0
+  const abs = Math.abs(diffMs)
+  let text: string
+  if (abs < 1_000) text = 'now'
+  else if (abs < 60_000) text = `${Math.round(abs / 1_000)}s`
+  else if (abs < 3_600_000) {
+    const m = Math.floor(abs / 60_000)
+    const s = Math.floor((abs % 60_000) / 1_000)
+    text = s > 0 && m < 5 ? `${m}m ${s}s` : `${m}m`
+  } else if (abs < 86_400_000) {
+    const h = Math.floor(abs / 3_600_000)
+    const m = Math.floor((abs % 3_600_000) / 60_000)
+    text = m > 0 ? `${h}h ${m}m` : `${h}h`
+  } else {
+    const d = Math.floor(abs / 86_400_000)
+    const h = Math.floor((abs % 86_400_000) / 3_600_000)
+    text = h > 0 ? `${d}d ${h}h` : `${d}d`
+  }
+  if (text === 'now') return 'now'
+  return past ? `${text} ago` : `in ${text}`
 }
