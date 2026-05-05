@@ -7,6 +7,7 @@ from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.domain.sync_status import SyncStatus
 from pocketquant.core.persistence.base_repository import BaseRepository
+from pymongo import ReturnDocument
 
 
 class SyncStatusRepository(BaseRepository):
@@ -56,6 +57,34 @@ class SyncStatusRepository(BaseRepository):
         collection = self._collection()
         cursor = collection.find()
         return [SyncStatus.from_mongo(doc) async for doc in cursor]
+
+    async def bump_empty_fetch(
+        self, symbol: str, exchange: str, interval: Interval
+    ) -> int:
+        """Atomic $inc on consecutive_empty_fetches. Returns the new count."""
+        res = await self._collection().find_one_and_update(
+            {
+                "symbol": symbol.upper(),
+                "exchange": exchange.upper(),
+                "interval": interval.value,
+            },
+            {"$inc": {"consecutive_empty_fetches": 1}},
+            return_document=ReturnDocument.AFTER,
+        )
+        return int(res.get("consecutive_empty_fetches", 0)) if res else 0
+
+    async def reset_empty_fetch(
+        self, symbol: str, exchange: str, interval: Interval
+    ) -> None:
+        """Reset counter to 0 on a successful insert."""
+        await self._collection().update_one(
+            {
+                "symbol": symbol.upper(),
+                "exchange": exchange.upper(),
+                "interval": interval.value,
+            },
+            {"$set": {"consecutive_empty_fetches": 0}},
+        )
 
     async def find_one(self, symbol: str, exchange: str, interval: Interval) -> SyncStatus | None:
         """Get sync status for specific symbol/exchange/interval."""

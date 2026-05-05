@@ -52,10 +52,12 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
 
         try:
             records = await self._fetch_bars(symbol, exchange, interval, request.n_bars)
+            bars_fetched = len(records)
             if not records:
                 # Transient provider failure — preserve existing sync_status if bars exist
                 total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
                 if total_bars > 0:
+                    await self._sync_status_repo.bump_empty_fetch(symbol, exchange, interval)
                     logger.warning(
                         "market_data.sync.empty_fetch_skipped",
                         symbol=symbol,
@@ -64,21 +66,34 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                         existing_bars=total_bars,
                     )
                     await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
-                    return self._success(symbol, exchange, interval, 0, total_bars, latest_bar)
+                    return self._success(
+                        symbol, exchange, interval,
+                        bars_synced=0, bars_fetched=0,
+                        filtered_existing=0, filtered_misaligned=0,
+                        total_bars=total_bars, latest_bar=latest_bar,
+                    )
                 return await self._fail(
                     symbol, exchange, interval, "No data returned from provider"
                 )
 
             # Filter out bars we already have (skip for repair to allow gap filling)
+            filtered_existing = 0
             if not request.skip_filter:
+                pre = len(records)
                 records = await self._filter_new_bars(records, symbol, exchange, interval)
+                filtered_existing = pre - len(records)
+
+            pre_align = len(records)
             records = self._filter_misaligned_bars(records, interval)
+            filtered_misaligned = pre_align - len(records)
 
             inserted_count = await self._persist_bars(symbol, exchange, records)
             total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
 
             await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
             await self._invalidate_cache(symbol, exchange, interval)
+            if inserted_count > 0:
+                await self._sync_status_repo.reset_empty_fetch(symbol, exchange, interval)
 
             logger.info(
                 "market_data.sync.completed",
@@ -86,7 +101,13 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 exchange=exchange,
                 bars_inserted=inserted_count,
             )
-            return self._success(symbol, exchange, interval, inserted_count, total_bars, latest_bar)
+            return self._success(
+                symbol, exchange, interval,
+                bars_synced=inserted_count, bars_fetched=bars_fetched,
+                filtered_existing=filtered_existing,
+                filtered_misaligned=filtered_misaligned,
+                total_bars=total_bars, latest_bar=latest_bar,
+            )
 
         except Exception as e:
             logger.error(
@@ -164,6 +185,8 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         return aligned
 
     async def _persist_bars(self, symbol: str, exchange: str, records: list[Bar]) -> int:
+        if not records:
+            return 0
         inserted_count = await self._bar_repo.insert_many(records)
         await self._symbol_repo.upsert(Symbol.create(code=symbol, exchange=exchange))
         return inserted_count
@@ -201,7 +224,11 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         symbol: str,
         exchange: str,
         interval: DomainInterval,
+        *,
         bars_synced: int,
+        bars_fetched: int,
+        filtered_existing: int,
+        filtered_misaligned: int,
         total_bars: int,
         latest_bar: Bar | None,
     ) -> SyncResponse:
@@ -211,6 +238,9 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             interval=interval.value,
             status="completed",
             bars_synced=bars_synced,
+            bars_fetched=bars_fetched,
+            filtered_existing=filtered_existing,
+            filtered_misaligned=filtered_misaligned,
             total_bars=total_bars,
             last_bar_at=latest_bar.datetime.isoformat() if latest_bar and latest_bar.datetime else None,
         )

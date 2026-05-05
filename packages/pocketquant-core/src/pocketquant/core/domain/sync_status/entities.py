@@ -20,6 +20,9 @@ class SyncStatus(BaseModel):
     last_bar_at: dt | None = None
     bar_count: int = 0
     error_message: str | None = None
+    # Diagnostic counter — incremented when provider returns [] but DB has bars.
+    # Reset on any successful insert. Used by UI + `is_stuck` derivation.
+    consecutive_empty_fetches: int = 0
 
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to MongoDB document."""
@@ -33,6 +36,7 @@ class SyncStatus(BaseModel):
             "last_bar_at": self.last_bar_at,
             "bar_count": self.bar_count,
             "error_message": self.error_message,
+            "consecutive_empty_fetches": self.consecutive_empty_fetches,
         }
 
     @classmethod
@@ -49,4 +53,5 @@ class SyncStatus(BaseModel):
             last_bar_at=coerce_utc(doc.get("last_bar_at")),
             bar_count=doc.get("bar_count", 0),
             error_message=doc.get("error_message"),
+            consecutive_empty_fetches=int(doc.get("consecutive_empty_fetches", 0) or 0),
         )

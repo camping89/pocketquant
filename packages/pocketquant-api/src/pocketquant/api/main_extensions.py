@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pocketquant.api.market_data.handlers.quotes.router import router as quote_router
 from pocketquant.api.market_data.handlers.router import router as market_data_router
+from pocketquant.api.system_jobs.route import router as system_jobs_router
 from pocketquant.backtest.handlers import backtest_router
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.backtest.persistence.optimization_repository import (
@@ -148,6 +149,7 @@ def register_routes(app: FastAPI, settings) -> None:
 
     api.include_router(market_data_router)
     api.include_router(quote_router)
+    api.include_router(system_jobs_router)
     api.include_router(strategy_router)
     api.include_router(trading_router)
     api.include_router(backtest_router)

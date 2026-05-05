@@ -25,6 +25,8 @@ async def get_sync_statuses(
             "last_sync_at": s.last_sync_at,
             "last_bar_at": s.last_bar_at,
             "error_message": s.error_message,
+            "consecutive_empty_fetches": s.consecutive_empty_fetches,
+            "is_stuck": s.is_stuck,
         }
         for s in statuses
     ]
