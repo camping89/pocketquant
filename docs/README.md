@@ -31,6 +31,10 @@ Start with the canonical set.
 - [Migration Doubts And Notes](./migration-doubts-and-notes.md)
 - [Project Changelog](./project-changelog.md)
 
+## Features
+
+- [Add Symbol (Strategy Subscription)](./feature-add-symbol.md)
+
 ## Current Repo Shape
 
 ```text
