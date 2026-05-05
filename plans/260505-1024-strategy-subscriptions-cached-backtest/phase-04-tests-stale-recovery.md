@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Tests & Stale Recovery"
-status: pending
+status: completed
 priority: P2
 effort: "0.5d"
 dependencies: [3]
@@ -113,12 +113,12 @@ async def recover_stale_backtests():
 
 ## Success Criteria
 
-- [ ] All unit tests pass
-- [ ] Integration test cascade: sau DELETE strategy, cả 2 collections không còn docs với `strategy_id` đó
-- [ ] Concurrency test: scheduler.get_jobs() count đúng, không double
-- [ ] Stale recovery test: 1 modified lần đầu, 0 lần sau
-- [ ] App startup log dòng `stale_recovery: ...` khi có docs cần recover
-- [ ] CI green
+- [x] All unit tests pass
+- [x] Integration test cascade: sau DELETE strategy, cả 2 collections không còn docs với `strategy_id` đó
+- [x] Concurrency test: scheduler.get_jobs() count đúng, không double
+- [x] Stale recovery test: 1 modified lần đầu, 0 lần sau
+- [x] App startup log dòng `stale_recovery: ...` khi có docs cần recover
+- [x] CI green
 
 ## Risk Assessment
 

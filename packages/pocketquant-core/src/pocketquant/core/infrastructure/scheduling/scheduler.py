@@ -26,6 +26,7 @@ from apscheduler.jobstores.base import JobLookupError
 from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import to_utc_iso
@@ -229,6 +230,34 @@ class JobScheduler:
             cron_minute=minute,
             cron_day_of_week=day_of_week,
         )
+        return job_id
+
+    def add_one_off_job(
+        self,
+        func: Callable | str,
+        *,
+        job_id: str,
+        run_at: datetime | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """Schedule a one-off job using DateTrigger.
+
+        Defaults to immediate execution (run_at=now). Uses replace_existing=True
+        so duplicate job_ids (e.g. concurrent run-all calls) replace safely.
+        `func` should be a text reference (e.g. "pkg.mod:func") for Mongo persistence.
+        """
+        if self._scheduler is None:
+            raise RuntimeError("Scheduler not initialized.")
+
+        trigger = DateTrigger(run_date=run_at or datetime.now(UTC))
+        self._scheduler.add_job(
+            func,
+            trigger=trigger,
+            id=job_id,
+            replace_existing=True,
+            kwargs=kwargs,
+        )
+        logger.info("scheduler.registered_one_off_job", job_id=job_id, run_at=run_at)
         return job_id
 
     def remove_job(self, job_id: str) -> bool:

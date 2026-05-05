@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Backend Job Worker & CQRS"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [1]
@@ -176,14 +176,14 @@ async def delete_strategy(strategy_id: str, mediator: FromDishka[Mediator]): ...
 
 ## Success Criteria
 
-- [ ] POST `/strategies/{id}/symbols` với `{BTC-USDT, okx, 1h}` → 201, doc tồn tại
-- [ ] POST lần 2 cùng input → 409 Conflict
-- [ ] GET `/strategies/{id}/symbols` → array với `backtest: null` cho subs chưa run
-- [ ] POST `/run-all` → 202, response `{job_ids: [...]}`, scheduler có jobs
-- [ ] Sau ~vài giây: GET `/symbols/{sub_id}/backtest` → 200 với positions
-- [ ] DELETE `/strategies/{id}/symbols/{sub_id}` → 204, doc gone, backtest gone
-- [ ] DELETE `/strategies/{id}` → 204, list_by_strategy empty cho cả 2 collections
-- [ ] Concurrent `/run-all` x2 → scheduler chỉ có 1 job per sub_id (replace_existing OK)
+- [x] POST `/strategies/{id}/symbols` với `{BTC-USDT, okx, 1h}` → 201, doc tồn tại
+- [x] POST lần 2 cùng input → 409 Conflict
+- [x] GET `/strategies/{id}/symbols` → array với `backtest: null` cho subs chưa run
+- [x] POST `/run-all` → 202, response `{job_ids: [...]}`, scheduler có jobs
+- [x] Sau ~vài giây: GET `/symbols/{sub_id}/backtest` → 200 với positions
+- [x] DELETE `/strategies/{id}/symbols/{sub_id}` → 204, doc gone, backtest gone
+- [x] DELETE `/strategies/{id}` → 204, list_by_strategy empty cho cả 2 collections
+- [x] Concurrent `/run-all` x2 → scheduler chỉ có 1 job per sub_id (replace_existing OK)
 
 ## Risk Assessment
 

@@ -11,6 +11,7 @@ from pocketquant.api.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
+    recover_stale_backtests,
     register_health_checks,
     register_routes,
     start_background_jobs,
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         await register_handlers(container)
         await ensure_all_indexes(container)
+        await recover_stale_backtests(container)
         await register_health_checks(container, app)
         await start_background_jobs(container)
 

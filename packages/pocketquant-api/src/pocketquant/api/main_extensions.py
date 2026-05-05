@@ -34,6 +34,9 @@ from pocketquant.trading.handlers.strategy import strategy_router
 from pocketquant.trading.handlers.trading import trading_router
 from pocketquant.trading.persistence.order_repository import OrderRepository
 from pocketquant.trading.persistence.position_repository import PositionRepository
+from pocketquant.trading.persistence.strategy_subscription_repository import (
+    StrategySubscriptionRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -47,6 +50,7 @@ _REPO_TYPES: list[type] = [
     SymbolRepository,
     OptimizationRepository,
     JobHistoryRepository,
+    StrategySubscriptionRepository,
 ]
 
 
@@ -62,8 +66,25 @@ async def ensure_all_indexes(container: AsyncContainer) -> None:
     logger.info("database_indexes_ensured")
 
 
+async def recover_stale_backtests(container: AsyncContainer) -> None:
+    """Mark any backtest docs stuck in 'running' as 'failed' on startup.
+
+    Safe to call repeatedly — idempotent. Logs once if any docs were updated.
+    """
+    repo = await container.get(BacktestRepository)
+    n = await repo.mark_stale_running_as_failed()
+    if n:
+        logger.info("stale_backtest_recovery", marked_failed=n)
+
+
 async def start_background_jobs(container: AsyncContainer) -> None:
-    """Register background sync jobs with the scheduler."""
+    """Register background sync jobs with the scheduler and wire backtest job container."""
+    from pocketquant.trading.jobs.backtest_jobs import set_container as set_backtest_container
+
+    # Always wire backtest jobs container so one-off jobs can resolve dependencies
+    set_backtest_container(container)
+    logger.info("backtest_jobs_container_wired")
+
     settings = await container.get(Settings)
     if not settings.enable_jobs:
         logger.info("background_jobs_disabled")

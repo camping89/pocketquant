@@ -5,6 +5,22 @@
 ## [Unreleased]
 
 ### Added
+- **Strategy Subscriptions + Cached Backtest** (2026-05-05)
+  - New `StrategySubscription` domain entity: 1 strategy ↔ N (symbol/exchange/interval) subscriptions
+  - Deterministic 16-char SHA256 subscription IDs
+  - New MongoDB collection `strategy_subscriptions` with index on `strategy_id`
+  - Extended `BacktestRepository` with subscription-scoped methods + sparse unique index on `subscription_id`
+  - Backtest docs now serve dual purpose: ad-hoc runs (legacy `_id=uuid`) and subscription cache (`_id=subscription_id`)
+  - 6 new REST endpoints under `/api/v1/strategies/{strategy_id}`:
+    - `POST /symbols`, `GET /symbols`, `DELETE /symbols/{sub_id}`
+    - `POST /backtest/run-all` (async APScheduler fan-out jobs)
+    - `GET /symbols/{sub_id}/backtest`
+    - `DELETE /` (cascade unload + delete subs + delete backtest_runs)
+  - Async job worker `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest`
+  - Synthetic strategy id pattern (`{strategy_id}::bt::{sub_id}`) to prevent concurrent run collisions
+  - Stale recovery: app startup marks `status='running'` docs older than 10 min as `failed`
+  - Status vocabulary: `'running'` | `'completed'` | `'failed'`
+  - Frontend subscription panel sidebar (280px) with polling, status badges, cascade delete UI
 - **Bar Integrity System** - Data quality validation + automated repair
   - `is_bar_aligned()` + `filter_aligned_bars()` validators in `bar_builder.py`
   - `check_integrity()` detects misaligned bars + gaps (7-day lookback)

@@ -1,7 +1,7 @@
 ---
 title: "Strategy Subscriptions + Cached Backtest"
 description: "1 strategy ↔ N symbol subscriptions; manual async backtest persisted in mongo; chart đọc cache; cascade delete"
-status: pending
+status: completed
 priority: P2
 branch: "develop"
 tags: [backtest, strategy, mongo, cqrs, frontend]
@@ -35,10 +35,10 @@ Mục tiêu: tách "compute" khỏi "view". User Run thủ công → persist →
 
 | # | Phase | File | Status | Est |
 |---|-------|------|--------|-----|
-| 1 | Backend Domain & Repos | [phase-01-backend-domain-repos.md](./phase-01-backend-domain-repos.md) | Pending | 0.5d |
-| 2 | Backend Job Worker & CQRS | [phase-02-backend-job-worker-cqrs.md](./phase-02-backend-job-worker-cqrs.md) | Pending | 1d |
-| 3 | Frontend Subscription Panel | [phase-03-frontend-subscription-panel.md](./phase-03-frontend-subscription-panel.md) | Pending | 1d |
-| 4 | Tests & Stale Recovery | [phase-04-tests-stale-recovery.md](./phase-04-tests-stale-recovery.md) | Pending | 0.5d |
+| 1 | Backend Domain & Repos | [phase-01-backend-domain-repos.md](./phase-01-backend-domain-repos.md) | Done | 0.5d |
+| 2 | Backend Job Worker & CQRS | [phase-02-backend-job-worker-cqrs.md](./phase-02-backend-job-worker-cqrs.md) | Done | 1d |
+| 3 | Frontend Subscription Panel | [phase-03-frontend-subscription-panel.md](./phase-03-frontend-subscription-panel.md) | Done | 1d |
+| 4 | Tests & Stale Recovery | [phase-04-tests-stale-recovery.md](./phase-04-tests-stale-recovery.md) | Done | 0.5d |
 
 ## Dependencies
 
@@ -61,3 +61,19 @@ Mục tiêu: tách "compute" khỏi "view". User Run thủ công → persist →
 - Auto-refresh khi có bars mới
 - Per-row Run button
 - UI chỉnh range backtest
+
+## Completion Notes
+
+**Implementation Summary:**
+- Total LOC delta: ~3,500 across backend + frontend
+- Test count: 29 total (14 unit + 8 trading integration + 7 API integration), all green (9.44s)
+- All 4 phases completed with full integration
+
+**Key Deviations & Fixes:**
+- **C1 (Failed Status Mislabel)**: `save_for_subscription()` now correctly maps `result.status='completed'` to doc status, not 'done'
+- **C2 (Concurrent Strategy Clobber)**: Job worker uses synthetic_id pattern (`f"{strategy_id}:{sub_id}"`) to prevent concurrent jobs from clobbering user's live strategy
+- **M1 (TOCTOU Race)**: Job re-checks subscription exists before persisting result to avoid orphaned docs if user deletes during backtest
+- **M2 (N+1 Query)**: `get_subscription_statuses()` batches status lookups instead of looping
+- **M3 (FE Cache Invalidation)**: `useSubscriptions()` polling respects `refetchInterval` conditional on `status='running'`
+- **M7 (Status Vocabulary)**: Unified to 'completed' (not 'done'); HTTP 409 for duplicate subscriptions mapped to 400 via `DomainError` handler
+- **Sparse Unique Index**: Subscription_id index allows null for legacy backtest docs without subscriptions

@@ -1,6 +1,6 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-04-10 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4 backend packages + 1 frontend package
+**Last Updated:** 2026-05-05 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4 backend packages + 1 frontend package
 
 Current note: `pocketquant-web` is now part of the repo and sits alongside the backend package graph shown below.
 
@@ -18,9 +18,9 @@ Current note: `pocketquant-web` is now part of the repo and sits alongside the b
   └────────────┬─────────────────────────────────┘
                │
   ╔════════════╧═════════════════════════════════════════════╗
-  ║  FEATURES  (src/features/)  27 CQRS Handlers            ║
-  ║  market_data(13) backtesting(5) strategy(5) trading(4)  ║
-  ║  risk(1)                                                 ║
+  ║  FEATURES  (src/features/)  35 CQRS Handlers            ║
+  ║  market_data(13) backtesting(5) strategy(11) trading(4) ║
+  ║  risk(1) + subscriptions(2)                             ║
   ║  Route → Command/Query → Mediator.send() → Handler      ║
   ╚════════════╤═════════════════════════════════════════════╝
                │
@@ -60,9 +60,9 @@ Current note: `pocketquant-web` is now part of the repo and sits alongside the b
                              │
   ╔══════════════════════════╧════════════════════════════╗
   ║  PERSISTENCE  (src/persistence/)                      ║
-  ║  Database(MongoDB)  Cache(Redis)  7 Repositories     ║
+  ║  Database(MongoDB)  Cache(Redis)  8 Repositories     ║
   ║  Bar · Order · Position · Backtest · Optimization    ║
-  ║  Symbol · SyncStatus                                  ║
+  ║  Symbol · SyncStatus · StrategySubscription           ║
   ╚══════════╤══════════════════╤═════════════════════════╝
              │                  │
              ▼                  ▼
@@ -117,7 +117,7 @@ graph TB
     subgraph CQRS["CQRS Layer"]
         Commands["Commands/Queries<br/><code>src/features/*/command.py|query.py</code>"]
         Med["Mediator<br/><code>src/common/mediator/</code>"]
-        Handlers["27 Handlers<br/><code>src/features/*/handler.py</code>"]
+        Handlers["35 Handlers<br/><code>src/features/*/handler.py</code>"]
     end
 
     subgraph APP["Application Layer — Orchestrators"]
@@ -131,7 +131,7 @@ graph TB
 
     subgraph DOMAIN["Domain Layer — Pure Logic, No I/O"]
         subgraph TOPLEVEL["Top-Level (collection-backed)"]
-            BarEnt["Bar · Symbol · SyncStatus · BacktestResult"]
+            BarEnt["Bar · Symbol · SyncStatus · BacktestResult · StrategySubscription"]
             Aggregates["OrderAggregate · PositionAggregate"]
         end
         subgraph CONCEPTS["Concepts (non-persisted)"]
@@ -154,7 +154,7 @@ graph TB
     subgraph PERSIST["Persistence Layer"]
         DB["Database (MongoDB)"]
         Cache["Cache (Redis)"]
-        Repos["7 Repositories"]
+        Repos["8 Repositories"]
     end
 
     Routes --> Commands --> Med --> Handlers
