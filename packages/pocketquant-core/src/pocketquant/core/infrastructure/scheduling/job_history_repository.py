@@ -153,7 +153,8 @@ class JobHistoryRepository(BaseRepository):
             {"$group": {"_id": "$job_id", "doc": {"$first": "$$ROOT"}}},
         ]
         results: dict[str, dict[str, Any]] = {}
-        async for row in self._collection().aggregate(pipeline):  # pyright: ignore[reportGeneralTypeIssues]
+        cursor = await self._collection().aggregate(pipeline)
+        async for row in cursor:
             doc = row["doc"]
             results[row["_id"]] = {
                 "started_at": to_utc_iso(doc.get("started_at")),
@@ -213,7 +214,8 @@ class JobHistoryRepository(BaseRepository):
             {"$group": {"_id": "$status", "count": {"$sum": 1}}},
         ]
         by_status: dict[str, int] = {}
-        async for row in coll.aggregate(count_pipeline):  # pyright: ignore[reportGeneralTypeIssues]
+        count_cursor = await coll.aggregate(count_pipeline)
+        async for row in count_cursor:
             by_status[row["_id"]] = row["count"]
 
         p50_ms: float | None = None
@@ -246,7 +248,8 @@ class JobHistoryRepository(BaseRepository):
                     }
                 },
             ]
-            async for row in coll.aggregate(pct_pipeline):  # pyright: ignore[reportGeneralTypeIssues]
+            pct_cursor = await coll.aggregate(pct_pipeline)
+            async for row in pct_cursor:
                 p50_ms = row.get("p50")
                 p95_arr = row.get("p95")
                 if isinstance(p95_arr, list) and p95_arr:
