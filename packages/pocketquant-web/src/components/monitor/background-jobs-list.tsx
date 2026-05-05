@@ -1,7 +1,7 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useBackgroundJobs } from '../../hooks/use-background-jobs'
 import type { JobInfo } from '../../types/market-data'
-import { formatDuration, formatNextRun, formatUtcTime } from './format-helpers'
+import { formatDuration, formatHumanizedNextRun, formatNextRun, formatUtcTime } from './format-helpers'
 import { SparklineStrip } from './sparkline-strip'
 import { StatusPill } from './status-pill'
 
@@ -19,6 +19,12 @@ function jobStatus(job: JobInfo): { variant: 'ok' | 'warn' | 'error' | 'neutral'
 export function BackgroundJobsList() {
   const { data, isLoading, error } = useBackgroundJobs()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [, setTick] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   if (isLoading) return <div className="monitor-loading">Loading jobs...</div>
   if (error) return <div className="monitor-error">Failed to load jobs: {error.message}</div>
@@ -63,7 +69,10 @@ export function BackgroundJobsList() {
                     <td>{job.trigger}</td>
                     <td className="mono">{formatUtcTime(job.last_run?.started_at ?? null)}</td>
                     <td className="mono">{formatDuration(job.last_run?.duration_ms ?? null)}</td>
-                    <td className="mono">{formatNextRun(job.next_run)}</td>
+                    <td className="mono next-run-cell">
+                      <div className="next-run-humanized">{formatHumanizedNextRun(job.next_run)}</div>
+                      <div className="next-run-time">{formatNextRun(job.next_run)}</div>
+                    </td>
                     <td>
                       <StatusPill variant={s.variant} label={s.label} />
                     </td>
