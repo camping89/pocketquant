@@ -165,9 +165,9 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
             <thead>
               <tr>
                 <th>TF</th>
-                <th>Bars</th>
-                <th>Last Bar</th>
-                <th>Age</th>
+                <th className="num">Bars</th>
+                <th className="num">Last Bar</th>
+                <th className="num">Age</th>
                 <th>Integrity</th>
                 <th>Status</th>
                 <th>Actions</th>
