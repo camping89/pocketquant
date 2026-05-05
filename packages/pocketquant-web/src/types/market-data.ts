@@ -88,6 +88,8 @@ export interface SyncStatus {
   last_sync_at: string | null
   last_bar_at: string | null
   error_message: string | null
+  consecutive_empty_fetches?: number
+  is_stuck?: boolean
 }
 
 // --- Monitor types ---
@@ -118,7 +120,7 @@ export interface JobLastRun {
   started_at: string
   finished_at: string | null
   duration_ms: number | null
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'missed' | 'skipped_max_instances'
   error: string | null
 }
 

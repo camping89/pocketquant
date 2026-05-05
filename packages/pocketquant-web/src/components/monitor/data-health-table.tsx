@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { checkIntegrity } from '../../api/monitor-api'
+import { isActiveInterval } from '../../constants/active-intervals'
 import { INTERVAL_ORDER } from '../../hooks/use-available-intervals'
 import { useIntegrityRepair } from '../../hooks/use-integrity'
 import { useSyncStatus } from '../../hooks/use-sync-status'
@@ -31,16 +32,19 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
   const repair = useIntegrityRepair()
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
   const [daysBack, setDaysBack] = useState(7)
+  const [showInactive, setShowInactive] = useState(false)
 
   const filtered = useMemo(() => {
     if (!data?.length) return []
-    const rows = data.filter((s) => s.exchange === exchange && s.symbol === symbol)
+    const rows = data
+      .filter((s) => s.exchange === exchange && s.symbol === symbol)
+      .filter((s) => showInactive || isActiveInterval(s.interval))
     return rows.sort(
       (a, b) =>
         INTERVAL_ORDER.indexOf(a.interval as (typeof INTERVAL_ORDER)[number]) -
         INTERVAL_ORDER.indexOf(b.interval as (typeof INTERVAL_ORDER)[number]),
     )
-  }, [data, exchange, symbol])
+  }, [data, exchange, symbol, showInactive])
 
   useEffect(() => {
     if (!onIntegrityUpdate) return
@@ -135,6 +139,14 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
               value={daysBack}
               onChange={(e) => setDaysBack(Math.max(1, Math.min(90, Number(e.target.value) || 1)))}
             />
+          </label>
+          <label className="days-input">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+            />
+            Show inactive intervals
           </label>
           <button
             className="btn-sm"

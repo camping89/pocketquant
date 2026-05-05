@@ -15,6 +15,9 @@ class SyncStatusResult:
     last_sync_at: str | None = None
     last_bar_at: str | None = None
     error_message: str | None = None
+    # Diagnostics for UI: counter + derived stuck flag.
+    consecutive_empty_fetches: int = 0
+    is_stuck: bool = False
 
 
 @dataclass

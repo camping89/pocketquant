@@ -79,8 +79,13 @@ async def _sync_by_intervals(
     job_name: str,
     mediator: Mediator,
     sync_status_repo: SyncStatusRepository,
-) -> None:
-    """For each tracked symbol, sync the given intervals."""
+    history_repo: JobHistoryRepository,
+    doc_id: str | None,
+) -> tuple[int, int]:
+    """For each tracked symbol, sync the given intervals.
+
+    Returns (total_inserted, total_fetched) rolled up across all sub-syncs.
+    """
     logger.info(f"market_data.{job_name}.started")
 
     statuses = await sync_status_repo.find_all()
@@ -88,11 +93,13 @@ async def _sync_by_intervals(
 
     if not symbols:
         logger.info(f"market_data.{job_name}.skipped", reason="no_tracked_symbols")
-        return
+        return 0, 0
 
     synced = 0
     errors = 0
     first_error: Exception | None = None
+    total_inserted = 0
+    total_fetched = 0
 
     for symbol, exchange in symbols:
         for interval in intervals:
@@ -101,6 +108,28 @@ async def _sync_by_intervals(
                     symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars,
                 )
                 result = await mediator.send(command)
+                total_inserted += result.bars_synced
+                total_fetched += result.bars_fetched
+                if doc_id:
+                    try:
+                        await history_repo.record_detail(
+                            doc_id,
+                            symbol=symbol,
+                            exchange=exchange,
+                            interval=interval.value,
+                            bars_fetched=result.bars_fetched,
+                            bars_inserted=result.bars_synced,
+                            filtered_existing=result.filtered_existing,
+                            filtered_misaligned=result.filtered_misaligned,
+                            status=result.status,
+                            error=result.message,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "job_history.record_detail_failed",
+                            job_id=job_name,
+                            exc_info=True,
+                        )
                 if result.status == "completed":
                     synced += 1
                 else:
@@ -115,10 +144,31 @@ async def _sync_by_intervals(
                 )
                 errors += 1
                 first_error = first_error or e
+                if doc_id:
+                    try:
+                        await history_repo.record_detail(
+                            doc_id,
+                            symbol=symbol,
+                            exchange=exchange,
+                            interval=interval.value,
+                            bars_fetched=0,
+                            bars_inserted=0,
+                            filtered_existing=0,
+                            filtered_misaligned=0,
+                            status="error",
+                            error=str(e),
+                        )
+                    except Exception:
+                        logger.warning(
+                            "job_history.record_detail_failed",
+                            job_id=job_name,
+                            exc_info=True,
+                        )
 
     logger.info(f"market_data.{job_name}.completed", synced_count=synced, error_count=errors)
     if first_error:
         raise first_error
+    return total_inserted, total_fetched
 
 
 # ---------------------------------------------------------------------------
@@ -142,10 +192,16 @@ async def _run_sync(name: str, intervals: list[Interval], n_bars: int) -> None:
         logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
     try:
-        await _sync_by_intervals(intervals, n_bars, name, mediator, sync_status_repo)
+        total_inserted, total_fetched = await _sync_by_intervals(
+            intervals, n_bars, name, mediator, sync_status_repo, history_repo, doc_id,
+        )
         if doc_id:
             await history_repo.record_finish(
-                doc_id, status="completed", duration_ms=_ms_since(started)
+                doc_id,
+                status="completed",
+                duration_ms=_ms_since(started),
+                total_inserted=total_inserted,
+                total_fetched=total_fetched,
             )
     except Exception as exc:
         if doc_id:
@@ -265,23 +321,28 @@ async def _run_repair(name: str) -> None:
 
 
 async def sync_5m() -> None:
-    await _run_sync("sync_5m", [Interval.MINUTE_5], 30)
+    # 60 bars × 5min = 5h coverage — safe headroom for restarts/grace.
+    await _run_sync("sync_5m", [Interval.MINUTE_5], 60)
 
 
 async def sync_15m() -> None:
-    await _run_sync("sync_15m", [Interval.MINUTE_15], 30)
+    # 48 bars × 15min = 12h coverage.
+    await _run_sync("sync_15m", [Interval.MINUTE_15], 48)
 
 
 async def sync_hourly() -> None:
-    await _run_sync("sync_hourly", [Interval.HOUR_1], 10)
+    # 24 bars × 1h = 1d coverage.
+    await _run_sync("sync_hourly", [Interval.HOUR_1], 24)
 
 
 async def sync_swing() -> None:
-    await _run_sync("sync_swing", [Interval.HOUR_4], 6)
+    # 12 bars × 4h = 2d coverage.
+    await _run_sync("sync_swing", [Interval.HOUR_4], 12)
 
 
 async def sync_daily() -> None:
-    await _run_sync("sync_daily", [Interval.DAY_1], 7)
+    # 14 daily bars = 2 weeks coverage.
+    await _run_sync("sync_daily", [Interval.DAY_1], 14)
 
 
 async def sync_backfill() -> None:

@@ -9,6 +9,7 @@ import {
   statusVariant,
 } from './format-helpers'
 import { StatusPill } from './status-pill'
+import { StuckBadge } from './stuck-badge'
 
 interface DataHealthRowProps {
   syncStatus: SyncStatus
@@ -57,6 +58,7 @@ export function DataHealthRow({
         <td className={integrityColorClass(report)}>{formatIntegrity(report)}</td>
         <td>
           <StatusPill variant={variant} label={statusLabel} />
+          <StuckBadge show={!!s.is_stuck} />
         </td>
         <td className="actions" onClick={(e) => e.stopPropagation()}>
           <button className="btn" disabled={checking} onClick={onCheck}>
