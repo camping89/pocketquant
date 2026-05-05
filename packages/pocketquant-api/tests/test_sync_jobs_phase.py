@@ -1,0 +1,72 @@
+"""Regression guard: every interval-mapped sync job MUST use UTC wall-clock cron.
+
+Lag or gaps on bar-close events break strategy entries/exits. `IntervalTrigger`
+without `start_date` anchors to scheduler-startup time, so restarts shift the
+phase off the bar boundary (e.g. fires at :09 instead of :00 for 15m bars).
+This test catches reintroduction of `IntervalTrigger` for any bar-aligned job.
+"""
+
+from __future__ import annotations
+
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from pocketquant.api.market_data.app_services.sync_jobs import register_sync_jobs
+from pocketquant.core.config import Settings
+from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+
+
+# Jobs that ingest bars at fixed intervals — MUST be wall-clock-aligned.
+BAR_ALIGNED_JOB_IDS: set[str] = {
+    "sync_5m",
+    "sync_15m",
+    "sync_hourly",
+    "sync_swing",
+    "sync_daily",
+    "sync_backfill",
+    "sync_integrity",
+    "sync_repair",
+}
+
+
+class _FakeContainer:
+    """Minimal stand-in for AsyncContainer — register_sync_jobs only stores the ref."""
+
+
+def _build_scheduler(settings: Settings) -> JobScheduler:
+    """Initialize scheduler without start() — add_*_job only needs _scheduler!=None.
+
+    Avoids `asyncio.get_running_loop()` failure in sync test context.
+    """
+    sched = JobScheduler(history_repo=None)
+    sched.initialize(settings)
+    return sched
+
+
+def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None:
+    """No bar-aligned job may use IntervalTrigger — must be CronTrigger only."""
+    scheduler = _build_scheduler(settings)
+    register_sync_jobs(_FakeContainer(), scheduler)  # type: ignore[arg-type]
+    jobs = scheduler._scheduler.get_jobs()  # pyright: ignore[reportPrivateUsage]
+
+    registered_ids = {j.id for j in jobs}
+    missing = BAR_ALIGNED_JOB_IDS - registered_ids
+    assert not missing, f"Expected jobs not registered: {missing}"
+
+    for job in jobs:
+        if job.id not in BAR_ALIGNED_JOB_IDS:
+            continue
+        assert isinstance(job.trigger, CronTrigger), (
+            f"Job '{job.id}' uses {type(job.trigger).__name__} — must be CronTrigger "
+            f"to keep phase aligned to UTC wall-clock across restarts."
+        )
+        assert not isinstance(job.trigger, IntervalTrigger), (
+            f"Job '{job.id}' regressed to IntervalTrigger — would drift phase on restart."
+        )
+
+
+def test_scheduler_runs_in_utc(settings: Settings) -> None:
+    """Cron expressions evaluate against scheduler timezone — must be UTC."""
+    scheduler = _build_scheduler(settings)
+    assert str(scheduler._scheduler.timezone) == "UTC", (  # pyright: ignore[reportPrivateUsage]
+        "Scheduler must run in UTC so cron expressions match exchange bar boundaries."
+    )
