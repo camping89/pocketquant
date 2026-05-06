@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { useBackgroundJobs } from '../../hooks/use-background-jobs'
 import type { JobInfo } from '../../types/market-data'
 import { formatDuration, formatHumanizedNextRun, formatNextRun, formatUtcTime } from './format-helpers'
+import { JobInsightsPanel } from './job-insights-panel'
 import { SparklineStrip } from './sparkline-strip'
 import { StatusPill } from './status-pill'
 
@@ -38,7 +39,7 @@ export function BackgroundJobsList() {
     <section className="monitor-section monitor-card">
       <div className="section-header">
         <h3>Background Jobs</h3>
-        <span className="section-subtitle">Click any row to view last 20 runs · drilldown for full history</span>
+        <span className="section-subtitle">Recent column shows last 5 runs · click row for stats &amp; full history</span>
       </div>
       <div className="table-wrap">
         <table className="monitor-table">
@@ -48,6 +49,7 @@ export function BackgroundJobsList() {
               <th>Trigger</th>
               <th>Last Run</th>
               <th>Duration</th>
+              <th>Recent</th>
               <th>Next Run</th>
               <th>Status</th>
             </tr>
@@ -69,6 +71,9 @@ export function BackgroundJobsList() {
                     <td>{job.trigger}</td>
                     <td className="mono">{formatUtcTime(job.last_run?.started_at ?? null)}</td>
                     <td className="mono">{formatDuration(job.last_run?.duration_ms ?? null)}</td>
+                    <td className="recent-cell">
+                      <SparklineStrip jobId={job.id} cellCount={5} compact />
+                    </td>
                     <td className="mono next-run-cell">
                       <div className="next-run-humanized">{formatHumanizedNextRun(job.next_run)}</div>
                       <div className="next-run-time">{formatNextRun(job.next_run)}</div>
@@ -79,8 +84,8 @@ export function BackgroundJobsList() {
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={6} className="sparkline-cell">
-                        <SparklineStrip jobId={job.id} />
+                      <td colSpan={7} className="sparkline-cell">
+                        <JobInsightsPanel jobId={job.id} />
                       </td>
                     </tr>
                   )}

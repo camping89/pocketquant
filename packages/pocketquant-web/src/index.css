@@ -715,6 +715,129 @@ input, select {
   }
 }
 
+/* Inline (compact) sparkline rendered inside a table cell */
+.recent-cell {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+.sparkline-wrap.sparkline-compact {
+  gap: 0;
+  flex-wrap: nowrap;
+}
+.sparkline-strip-compact {
+  gap: 2px;
+}
+.sparkline-strip-compact .spark-cell {
+  width: 6px;
+  height: 16px;
+  border-radius: 2px;
+}
+.sparkline-strip-compact .spark-empty {
+  background: rgba(148, 163, 184, 0.18) !important;
+}
+
+/* Expanded job insights panel */
+.job-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.insights-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.insight-stat {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.insight-stat-breakdown {
+  grid-column: span 2;
+}
+.insight-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.insight-stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.insight-stat-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+.insight-stat-sep {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+.insight-bad { color: var(--status-failed); }
+.insight-warn { color: var(--status-missed); }
+.insight-status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.insight-status-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0b1220;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+.insights-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.insights-strip-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.insight-error {
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+}
+.insight-error-tag {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--status-failed);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  padding-top: 1px;
+}
+.insight-error-msg {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
 .stuck-badge {
   display: inline-block;
   margin-left: 8px;

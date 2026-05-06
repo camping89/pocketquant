@@ -6,6 +6,7 @@ import { statusColor, statusLabel } from './job-status-palette'
 interface SparklineStripProps {
   jobId: string
   cellCount?: number
+  compact?: boolean
 }
 
 function fmtTime(iso: string | null): string {
@@ -16,28 +17,33 @@ function fmtTime(iso: string | null): string {
   return `${hh}:${mm}`
 }
 
-export function SparklineStrip({ jobId, cellCount = 20 }: SparklineStripProps) {
+export function SparklineStrip({ jobId, cellCount = 20, compact = false }: SparklineStripProps) {
   const navigate = useNavigate()
   const rootSearch = useSearch({ from: '__root__' })
   const { data, isLoading, error } = useJobRuns(jobId, { limit: cellCount })
 
-  if (isLoading) return <div className="sparkline-strip sparkline-loading">Loading…</div>
-  if (error) return <div className="sparkline-strip sparkline-error">Failed: {error.message}</div>
+  const wrapCls = compact ? 'sparkline-wrap sparkline-compact' : 'sparkline-wrap'
+  const stripCls = compact ? 'sparkline-strip sparkline-strip-compact' : 'sparkline-strip'
+
+  if (isLoading) return <div className={`${stripCls} sparkline-loading`}>{compact ? '…' : 'Loading…'}</div>
+  if (error)
+    return (
+      <div className={`${stripCls} sparkline-error`} title={error.message}>
+        {compact ? '!' : `Failed: ${error.message}`}
+      </div>
+    )
 
   const runs: JobRun[] = (data ?? []).slice(0, cellCount).reverse()
   const padding = cellCount - runs.length
 
   return (
-    <div className="sparkline-wrap">
-      <div className="sparkline-strip" role="list" aria-label={`Last ${cellCount} runs of ${jobId}`}>
+    <div className={wrapCls}>
+      <div className={stripCls} role="list" aria-label={`Last ${cellCount} runs of ${jobId}`}>
         {Array.from({ length: padding }, (_, i) => (
           <span key={`pad-${i}`} className="spark-cell spark-empty" aria-hidden />
         ))}
         {runs.map((r) => {
-          const cls =
-            r.status === 'running'
-              ? 'spark-cell spark-pulse'
-              : 'spark-cell'
+          const cls = r.status === 'running' ? 'spark-cell spark-pulse' : 'spark-cell'
           const tip = `${fmtTime(r.started_at)} · ${statusLabel(r.status)} · ${r.duration_ms ?? '?'}ms`
           return (
             <button
@@ -48,18 +54,34 @@ export function SparklineStrip({ jobId, cellCount = 20 }: SparklineStripProps) {
               aria-label={tip}
               title={tip}
               style={{ backgroundColor: statusColor(r.status) }}
-              onClick={() => navigate({ to: '/monitor/jobs/$jobId', params: { jobId }, search: { ...rootSearch, run: r._id, window: '24h' } })}
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate({
+                  to: '/monitor/jobs/$jobId',
+                  params: { jobId },
+                  search: { ...rootSearch, run: r._id, window: '24h' },
+                })
+              }}
             />
           )
         })}
       </div>
-      <button
-        type="button"
-        className="sparkline-link"
-        onClick={() => navigate({ to: '/monitor/jobs/$jobId', params: { jobId }, search: { ...rootSearch, window: '24h' } })}
-      >
-        View details →
-      </button>
+      {!compact && (
+        <button
+          type="button"
+          className="sparkline-link"
+          onClick={(e) => {
+            e.stopPropagation()
+            navigate({
+              to: '/monitor/jobs/$jobId',
+              params: { jobId },
+              search: { ...rootSearch, window: '24h' },
+            })
+          }}
+        >
+          View details →
+        </button>
+      )}
     </div>
   )
 }
