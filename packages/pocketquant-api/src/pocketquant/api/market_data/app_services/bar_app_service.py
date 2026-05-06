@@ -1,29 +1,53 @@
 """BarAppService aggregates real-time ticks into bars at multiple intervals."""
 
 import asyncio
+import time
 from collections import defaultdict
 from typing import Any
 
 from pocketquant.api.market_data.app_services.quote_dto import QuoteTick
-from pocketquant.core.common.constants import (
-    CACHE_KEY_BAR_CURRENT,
-    TTL_BAR_CURRENT,
-    build_bar_cache_key,
-)
+from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.services.bar_builder import BarBuilder, get_bar_start
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS, Interval
 from pocketquant.core.persistence.redis import Cache
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
 
+# Minimum seconds between Redis flushes per (symbol, interval) key — throttle high-frequency ticks
+BAR_CURRENT_FLUSH_MIN_INTERVAL_S = 0.2
+
+# All 6 canonical timeframes tracked in-memory per symbol
+_DEFAULT_INTERVALS = [
+    Interval.MINUTE_1,
+    Interval.MINUTE_5,
+    Interval.MINUTE_15,
+    Interval.HOUR_1,
+    Interval.HOUR_4,
+    Interval.DAY_1,
+]
+
+
+def _ttl_for_interval(tf: Interval) -> int:
+    """Return Redis TTL for a bar:current key. Longer TFs need longer TTLs.
+
+    Formula: max(300, interval_seconds * 2) — ensures 1d bar survives 48h.
+    """
+    tf_seconds = INTERVAL_SECONDS.get(tf, 60)
+    return max(300, tf_seconds * 2)
+
 
 class BarAppService:
-    """Aggregates real-time ticks into bars at multiple intervals."""
+    """Aggregates real-time ticks into bars at multiple intervals.
+
+    In-memory state: _bars[symbol_key][interval] = BarBuilder (running OHLCV).
+    Cron (P5 sync_1m + cascade) is the sole MongoDB writer — no upsert_bar here.
+    On bar close: publish BarCompletedEvent (at-least-once) + force-flush Redis.
+    BarRepository kept for get_current_bar DB fallback (P4 SSE).
+    """
 
     def __init__(
         self,
@@ -33,16 +57,15 @@ class BarAppService:
         intervals: list[Interval] | None = None,
     ):
         self._cache = cache
-        self._bar_repo = bar_repository
+        self._bar_repo = bar_repository  # kept for get_current_bar fallback (P4 SSE)
         self._event_bus = event_bus
-        self._intervals = intervals or [
-            Interval.MINUTE_1,
-            Interval.MINUTE_5,
-            Interval.HOUR_1,
-            Interval.DAY_1,
-        ]
+        self._intervals = intervals or _DEFAULT_INTERVALS
 
+        # Nested dict: symbol_key → interval → running BarBuilder
         self._bars: dict[str, dict[Interval, BarBuilder]] = defaultdict(dict)
+
+        # Throttle: track last Redis flush timestamp per (symbol_key, interval)
+        self._last_flush_ts: dict[tuple[str, Interval], float] = {}
 
         self._lock = asyncio.Lock()
 
@@ -72,7 +95,8 @@ class BarAppService:
             self._bars[symbol_key][interval] = current_bar
 
         elif current_bar.is_complete(tick.timestamp):
-            await self._save_completed_bar(current_bar)
+            completed = current_bar
+            await self._save_completed_bar(completed)
 
             current_bar = BarBuilder(
                 symbol=tick.symbol,
@@ -81,33 +105,27 @@ class BarAppService:
                 bar_start=bar_start,
             )
             self._bars[symbol_key][interval] = current_bar
+            # Force-flush new bar to Redis immediately on roll
+            current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
+            await self._cache_current_bar(symbol_key, interval, current_bar, force=True)
+            return
 
         current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
         await self._cache_current_bar(symbol_key, interval, current_bar)
 
     async def _save_completed_bar(self, bar: BarBuilder) -> None:
+        """Emit BarCompletedEvent and clean up Redis for the closed bar.
+
+        NOTE: No MongoDB write here — cron sync_1m + cascade aggregator (P5)
+        is the sole Mongo writer for `bars`. Removing upsert_bar is intentional.
+        """
         if bar.is_empty():
             return
 
         if bar.open is None or bar.high is None or bar.low is None or bar.close is None:
             return
 
-        domain_bar = Bar(
-            symbol=bar.symbol,
-            exchange=bar.exchange,
-            interval=bar.interval,
-            datetime=bar.bar_start,
-            open=bar.open,
-            high=bar.high,
-            low=bar.low,
-            close=bar.close,
-            volume=bar.volume,
-            tick_count=bar.tick_count,
-        )
-
-        await self._bar_repo.upsert_bar(domain_bar)
-
-        # Emit BarCompletedEvent for live strategy execution
+        # Emit event — at-least-once delivery; strategy subscribers must be idempotent
         event = BarCompletedEvent(
             symbol=bar.symbol,
             exchange=bar.exchange,
@@ -122,11 +140,17 @@ class BarAppService:
         )
         await self._event_bus.publish(event)
 
-        cache_key = build_bar_cache_key(bar.symbol, bar.exchange, bar.interval.value)
-        await self._cache.delete_pattern(f"{cache_key}:*")
+        # Delete the exact in-progress key for this (symbol, tf) so SSE stops
+        # reporting a stale closed bar when no follow-up tick arrives (e.g. provider stall).
+        exact_key = CACHE_KEY_BAR_CURRENT.format(
+            exchange=bar.exchange.upper(),
+            symbol=bar.symbol.upper(),
+            interval=bar.interval.value,
+        )
+        await self._cache.delete(exact_key)
 
         logger.info(
-            "bar_manager.bar_saved",
+            "bar_completed_event_published",
             symbol=bar.symbol,
             exchange=bar.exchange,
             interval=bar.interval.value,
@@ -139,12 +163,31 @@ class BarAppService:
         symbol_key: str,
         interval: Interval,
         bar: BarBuilder,
+        force: bool = False,
     ) -> None:
+        """Write bar:current Redis key, throttled per (symbol_key, interval).
+
+        Throttle check is inside the caller's _lock to avoid races.
+        force=True bypasses throttle (used on bar roll).
+        """
+        now = time.monotonic()
+        flush_key = (symbol_key, interval)
+
+        if not force:
+            last = self._last_flush_ts.get(flush_key, 0.0)
+            if now - last < BAR_CURRENT_FLUSH_MIN_INTERVAL_S:
+                return
+
         exchange, symbol = symbol_key.split(":", 1)
         cache_key = CACHE_KEY_BAR_CURRENT.format(
             exchange=exchange, symbol=symbol, interval=interval.value
         )
-        await self._cache.set(cache_key, bar.to_dict(), ttl=TTL_BAR_CURRENT)
+        ttl = _ttl_for_interval(interval)
+        # Inject wall-clock last_update (Unix seconds) for SSE staleness_ms calc (P4)
+        bar_dict = bar.to_dict()
+        bar_dict["last_update"] = time.time()
+        await self._cache.set(cache_key, bar_dict, ttl=ttl)
+        self._last_flush_ts[flush_key] = now
 
     async def get_current_bar(
         self,
@@ -182,19 +225,25 @@ class BarAppService:
         }
 
     async def flush_all_bars(self) -> int:
-        saved_count = 0
+        """Clear in-memory bars on shutdown. No Mongo write — cron handles persistence.
+
+        Emits BarCompletedEvent for any non-empty in-progress bars so strategies
+        see the partial close signal before process exits.
+        """
+        cleared_count = 0
 
         async with self._lock:
             for _symbol_key, intervals in self._bars.items():
                 for _interval, bar in intervals.items():
                     if not bar.is_empty():
                         await self._save_completed_bar(bar)
-                        saved_count += 1
+                        cleared_count += 1
 
             self._bars.clear()
+            self._last_flush_ts.clear()
 
-        logger.info("bar_manager.bars_flushed", saved_count=saved_count)
-        return saved_count
+        logger.info("bar_manager.bars_cleared", bars_cleared=cleared_count)
+        return cleared_count
 
     @property
     def active_symbols(self) -> list[str]:

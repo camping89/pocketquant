@@ -55,6 +55,8 @@ export interface CurrentBarResponse {
   close: number | null
   volume: number
   tick_count: number
+  is_in_progress?: boolean
+  staleness_ms?: number | null
 }
 
 // --- Lightweight Charts data types ---

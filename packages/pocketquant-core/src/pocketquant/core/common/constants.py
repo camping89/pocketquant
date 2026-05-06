@@ -17,6 +17,7 @@ COLLECTION_POSITIONS = "positions"
 COLLECTION_BACKTEST_RUNS = "backtest_runs"
 COLLECTION_OPTIMIZATION_RUNS = "optimization_runs"
 COLLECTION_JOB_HISTORY = "job_history"
+COLLECTION_TRACKED_SYMBOLS = "tracked_symbols"
 
 # ============================================================
 # CACHE_KEYS - Redis key patterns (use .format() for interpolation)

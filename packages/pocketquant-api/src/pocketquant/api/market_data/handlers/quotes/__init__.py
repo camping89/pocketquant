@@ -9,13 +9,9 @@ from pocketquant.api.market_data.handlers.quotes.get_latest import (
     GetLatestQuoteHandler,
     GetLatestQuoteQuery,
 )
-from pocketquant.api.market_data.handlers.quotes.start_feed import (
-    StartQuoteFeedCommand,
-    StartQuoteFeedHandler,
-)
-from pocketquant.api.market_data.handlers.quotes.stop_feed import (
-    StopQuoteFeedCommand,
-    StopQuoteFeedHandler,
+from pocketquant.api.market_data.handlers.quotes.get_status import (
+    GetQuotesStatusHandler,
+    GetQuotesStatusQuery,
 )
 from pocketquant.api.market_data.handlers.quotes.subscribe import (
     SubscribeCommand,
@@ -27,11 +23,9 @@ from pocketquant.api.market_data.handlers.quotes.unsubscribe import (
 )
 
 __all__ = [
-    # Feed
-    "StartQuoteFeedCommand",
-    "StopQuoteFeedCommand",
-    "StartQuoteFeedHandler",
-    "StopQuoteFeedHandler",
+    # Status (observability)
+    "GetQuotesStatusQuery",
+    "GetQuotesStatusHandler",
     # Subscription
     "SubscribeCommand",
     "UnsubscribeCommand",

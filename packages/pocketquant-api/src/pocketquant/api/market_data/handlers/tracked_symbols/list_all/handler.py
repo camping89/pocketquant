@@ -1,0 +1,25 @@
+"""Handler for listing all tracked symbols."""
+
+from pocketquant.api.market_data.handlers.tracked_symbols.list_all.query import ListTrackedSymbolsQuery
+from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
+
+
+@handles(ListTrackedSymbolsQuery)
+class ListTrackedSymbolsHandler(Handler[ListTrackedSymbolsQuery, list[dict]]):
+    """Return all tracked (exchange, symbol) pairs."""
+
+    def __init__(self, tracked_symbol_repository: TrackedSymbolRepository) -> None:
+        self._repo = tracked_symbol_repository
+
+    async def handle(self, request: ListTrackedSymbolsQuery) -> list[dict]:
+        symbols = await self._repo.list_all()
+        return [
+            {
+                "exchange": ts.exchange,
+                "symbol": ts.symbol,
+                "created_at": ts.created_at.isoformat(),
+                "seeded_from": ts.seeded_from,
+            }
+            for ts in symbols
+        ]

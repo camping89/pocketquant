@@ -7,6 +7,7 @@ from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 from pocketquant.api.di.container import create_container, register_handlers
+from pocketquant.api.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.api.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
@@ -15,6 +16,8 @@ from pocketquant.api.main_extensions import (
     register_health_checks,
     register_routes,
     start_background_jobs,
+    start_quote_feed,
+    stop_quote_feed,
 )
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
@@ -39,8 +42,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await register_handlers(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
+        await seed_tracked_symbols(container)
         await register_health_checks(container, app)
         await start_background_jobs(container)
+        await start_quote_feed(container, app)
 
         logger.info("application_started")
         yield
@@ -48,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception as e:
         handle_startup_failure(e)
     finally:
+        await stop_quote_feed(container, app)
         # container.close() runs generator cleanup in reverse order:
         # StrategyAppService.stop → JobScheduler.shutdown → Cache/Database.disconnect
         await container.close()

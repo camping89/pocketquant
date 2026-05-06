@@ -1,16 +1,24 @@
-"""Background sync jobs for market data — tiered by timeframe cadence.
+"""Background sync jobs for market data — single 1m REST fetch + cascade aggregation.
 
-All job entrypoints (sync_5m, sync_15m, ...) are module-level coroutines so
-APScheduler can serialize them as text references for MongoDBJobStore.
-Dependencies (mediator, repos) are resolved at job-execution time from a
-module-level container reference set by `register_sync_jobs`.
+sync_1m runs every minute: fetches last 100 1m bars per tracked symbol via REST,
+upserts to MongoDB, then cascade-aggregates 1m → 5m/15m/1h/4h/1d (math, no extra
+API calls). Sole MongoDB writer for `bars` collection across all timeframes.
+
+sync_verify_cascade runs hourly: picks one sample tracked symbol round-robin,
+fetches REST 5m bars, compares with cascade-computed 5m, logs divergence alerts.
+
+All job entrypoints are module-level coroutines so APScheduler can serialize them
+as text references for MongoDBJobStore. Dependencies (mediator, repos) are resolved
+at job-execution time from a module-level container reference set by
+`register_sync_jobs`.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from pocketquant.api.market_data.app_services.cascade_aggregator import cascade_for_symbol
 from pocketquant.api.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
@@ -23,9 +31,10 @@ from pocketquant.core.infrastructure.scheduling.job_history_repository import (
     JobHistoryRepository,
 )
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.core.infrastructure.tradingview import TradingViewClient
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.sync_status_repository import (
-    SyncStatusRepository,
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
 )
 
 if TYPE_CHECKING:
@@ -33,8 +42,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Canonical timeframes synced across all tracked symbols
+# All timeframes synced / integrity-checked: 1m via REST, 5m–1d via cascade.
 SYNC_INTERVALS = [
+    Interval.MINUTE_1,
     Interval.MINUTE_5,
     Interval.MINUTE_15,
     Interval.HOUR_1,
@@ -48,6 +58,9 @@ SYNC_INTERVALS = [
 # ---------------------------------------------------------------------------
 
 _container: AsyncContainer | None = None
+
+# Round-robin counter for sync_verify_cascade symbol selection.
+_verify_cascade_counter: int = 0
 
 
 def set_container(container: AsyncContainer) -> None:
@@ -78,18 +91,19 @@ async def _sync_by_intervals(
     n_bars: int,
     job_name: str,
     mediator: Mediator,
-    sync_status_repo: SyncStatusRepository,
+    tracked_symbol_repo: TrackedSymbolRepository,
     history_repo: JobHistoryRepository,
     doc_id: str | None,
 ) -> tuple[int, int]:
-    """For each tracked symbol, sync the given intervals.
+    """For each tracked symbol, sync the given intervals via REST provider.
 
     Returns (total_inserted, total_fetched) rolled up across all sub-syncs.
+    Symbol source is TrackedSymbolRepository (replaces old SyncStatusRepository scan).
     """
     logger.info(f"market_data.{job_name}.started")
 
-    statuses = await sync_status_repo.find_all()
-    symbols = list({(s.symbol, s.exchange) for s in statuses})
+    tracked = await tracked_symbol_repo.list_all()
+    symbols = [(ts.symbol, ts.exchange) for ts in tracked]
 
     if not symbols:
         logger.info(f"market_data.{job_name}.skipped", reason="no_tracked_symbols")
@@ -173,8 +187,6 @@ async def _sync_by_intervals(
 
 # ---------------------------------------------------------------------------
 # Job runners — wrap actual work with history recording.
-# History lives here (not in JobScheduler) because picklable text-ref jobs
-# cannot be wrapped with closures.
 # ---------------------------------------------------------------------------
 
 
@@ -182,7 +194,7 @@ async def _run_sync(name: str, intervals: list[Interval], n_bars: int) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
     mediator = await container.get(Mediator)
-    sync_status_repo = await container.get(SyncStatusRepository)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
 
     started = datetime.now(UTC)
     doc_id: str | None = None
@@ -193,7 +205,7 @@ async def _run_sync(name: str, intervals: list[Interval], n_bars: int) -> None:
 
     try:
         total_inserted, total_fetched = await _sync_by_intervals(
-            intervals, n_bars, name, mediator, sync_status_repo, history_repo, doc_id,
+            intervals, n_bars, name, mediator, tracked_symbol_repo, history_repo, doc_id,
         )
         if doc_id:
             await history_repo.record_finish(
@@ -222,7 +234,7 @@ async def _run_sync(name: str, intervals: list[Interval], n_bars: int) -> None:
 async def _run_integrity(name: str) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
-    sync_status_repo = await container.get(SyncStatusRepository)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
 
     started = datetime.now(UTC)
@@ -233,8 +245,8 @@ async def _run_integrity(name: str) -> None:
         logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
     try:
-        statuses = await sync_status_repo.find_all()
-        symbols = list({(s.symbol, s.exchange) for s in statuses})
+        tracked = await tracked_symbol_repo.list_all()
+        symbols = [(ts.symbol, ts.exchange) for ts in tracked]
         for symbol, exchange in symbols:
             for interval in SYNC_INTERVALS:
                 report = await check_integrity(symbol, exchange, interval, bar_repo)
@@ -269,7 +281,7 @@ async def _run_repair(name: str) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
     mediator = await container.get(Mediator)
-    sync_status_repo = await container.get(SyncStatusRepository)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
 
     started = datetime.now(UTC)
@@ -280,8 +292,8 @@ async def _run_repair(name: str) -> None:
         logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
     try:
-        statuses = await sync_status_repo.find_all()
-        symbols = list({(s.symbol, s.exchange) for s in statuses})
+        tracked = await tracked_symbol_repo.list_all()
+        symbols = [(ts.symbol, ts.exchange) for ts in tracked]
         for symbol, exchange in symbols:
             for interval in SYNC_INTERVALS:
                 result = await repair_integrity(
@@ -320,40 +332,227 @@ async def _run_repair(name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def sync_5m() -> None:
-    # 60 bars × 5min = 5h coverage — safe headroom for restarts/grace.
-    await _run_sync("sync_5m", [Interval.MINUTE_5], 60)
+async def sync_1m() -> None:
+    """Fetch last 100 1m bars per tracked symbol, upsert, then cascade to 5m–1d."""
+    container = _get_container()
+    history_repo = await container.get(JobHistoryRepository)
+    mediator = await container.get(Mediator)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+
+    name = "sync_1m"
+    started = datetime.now(UTC)
+    doc_id: str | None = None
+    try:
+        doc_id = await history_repo.record_start(name)
+    except Exception:
+        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
+
+    try:
+        # Step 1: REST-fetch 1m bars for all tracked symbols and upsert to Mongo.
+        total_inserted, total_fetched = await _sync_by_intervals(
+            [Interval.MINUTE_1], 100, name, mediator, tracked_symbol_repo, history_repo, doc_id,
+        )
+
+        # Step 2: Cascade 1m → 5m/15m/1h/4h/1d for each tracked symbol.
+        tracked = await tracked_symbol_repo.list_all()
+        cascade_total: dict[Interval, int] = {}
+        for ts in tracked:
+            try:
+                counts = await cascade_for_symbol(
+                    ts.symbol, ts.exchange, lookback_minutes=100, bar_repo=bar_repo,
+                )
+                for tf, count in counts.items():
+                    cascade_total[tf] = cascade_total.get(tf, 0) + count
+            except Exception:
+                logger.error(
+                    "sync_1m.cascade_failed",
+                    symbol=ts.symbol,
+                    exchange=ts.exchange,
+                    exc_info=True,
+                )
+
+        logger.info(
+            "sync_1m.cascade_summary",
+            cascade_counts={tf.value: n for tf, n in cascade_total.items()},
+        )
+
+        if doc_id:
+            await history_repo.record_finish(
+                doc_id,
+                status="completed",
+                duration_ms=_ms_since(started),
+                total_inserted=total_inserted,
+                total_fetched=total_fetched,
+            )
+    except Exception as exc:
+        if doc_id:
+            try:
+                await history_repo.record_finish(
+                    doc_id,
+                    status="failed",
+                    duration_ms=_ms_since(started),
+                    error=str(exc),
+                )
+            except Exception:
+                logger.warning(
+                    "job_history.record_finish_failed", job_id=name, exc_info=True
+                )
+        raise
 
 
-async def sync_15m() -> None:
-    # 48 bars × 15min = 12h coverage.
-    await _run_sync("sync_15m", [Interval.MINUTE_15], 48)
+async def sync_verify_cascade() -> None:
+    """Hourly sanity check: compare cascade 5m bars vs REST get_hist(5m, n=12).
 
+    Picks one tracked symbol per run (round-robin). Logs divergence_alert if
+    abs(rest.close - cascade.close) > 0.01 for >5% of the 12 comparison bars.
+    """
+    global _verify_cascade_counter
 
-async def sync_hourly() -> None:
-    # 24 bars × 1h = 1d coverage.
-    await _run_sync("sync_hourly", [Interval.HOUR_1], 24)
+    container = _get_container()
+    history_repo = await container.get(JobHistoryRepository)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+    provider = await container.get(TradingViewClient)
 
+    name = "sync_verify_cascade"
+    started = datetime.now(UTC)
+    doc_id: str | None = None
+    try:
+        doc_id = await history_repo.record_start(name)
+    except Exception:
+        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
-async def sync_swing() -> None:
-    # 12 bars × 4h = 2d coverage.
-    await _run_sync("sync_swing", [Interval.HOUR_4], 12)
+    try:
+        tracked = await tracked_symbol_repo.list_all()
+        if not tracked:
+            logger.info("sync_verify_cascade.skipped", reason="no_tracked_symbols")
+            if doc_id:
+                await history_repo.record_finish(
+                    doc_id, status="completed", duration_ms=_ms_since(started)
+                )
+            return
 
+        # Round-robin symbol selection.
+        idx = _verify_cascade_counter % len(tracked)
+        _verify_cascade_counter += 1
+        ts = tracked[idx]
+        symbol = ts.symbol.upper()
+        exchange = ts.exchange.upper()
 
-async def sync_daily() -> None:
-    # 14 daily bars = 2 weeks coverage.
-    await _run_sync("sync_daily", [Interval.DAY_1], 14)
+        logger.info(
+            "sync_verify_cascade.started",
+            symbol=symbol,
+            exchange=exchange,
+            sample_idx=idx,
+        )
+
+        # Fetch 12 REST 5m bars (last ~1 hour).
+        rest_bars = await provider.fetch_ohlcv(
+            symbol=symbol,
+            exchange=exchange,
+            interval=Interval.MINUTE_5,
+            n_bars=12,
+        )
+
+        if not rest_bars:
+            logger.warning("sync_verify_cascade.rest_empty", symbol=symbol, exchange=exchange)
+            if doc_id:
+                await history_repo.record_finish(
+                    doc_id, status="completed", duration_ms=_ms_since(started)
+                )
+            return
+
+        # Query cascade-computed 5m bars for the same time window.
+        oldest_rest = min(b.datetime for b in rest_bars if b.datetime)
+        newest_rest = max(b.datetime for b in rest_bars if b.datetime)
+        cascade_bars = await bar_repo.find(
+            symbol=symbol,
+            exchange=exchange,
+            interval=Interval.MINUTE_5,
+            start_date=oldest_rest,
+            end_date=newest_rest + timedelta(minutes=5),
+            limit=20,
+        )
+
+        if not cascade_bars:
+            logger.warning(
+                "sync_verify_cascade.cascade_empty",
+                symbol=symbol,
+                exchange=exchange,
+                reason="no_cascade_5m_bars_in_window",
+            )
+            if doc_id:
+                await history_repo.record_finish(
+                    doc_id, status="completed", duration_ms=_ms_since(started)
+                )
+            return
+
+        # Build lookup: cascade bars indexed by datetime for O(1) comparison.
+        cascade_by_dt: dict = {b.datetime: b for b in cascade_bars if b.datetime}
+
+        divergence_count = 0
+        compared = 0
+        for rest_bar in rest_bars:
+            if not rest_bar.datetime:
+                continue
+            cascade_bar = cascade_by_dt.get(rest_bar.datetime)
+            if cascade_bar is None:
+                continue
+            compared += 1
+            if abs(rest_bar.close - cascade_bar.close) > 0.01:
+                divergence_count += 1
+
+        if compared > 0 and divergence_count / compared > 0.05:
+            logger.warning(
+                "cascade.divergence_alert",
+                symbol=symbol,
+                exchange=exchange,
+                divergence_count=divergence_count,
+                compared=compared,
+                threshold_pct=5,
+            )
+        else:
+            logger.info(
+                "sync_verify_cascade.ok",
+                symbol=symbol,
+                exchange=exchange,
+                compared=compared,
+                divergence_count=divergence_count,
+            )
+
+        if doc_id:
+            await history_repo.record_finish(
+                doc_id, status="completed", duration_ms=_ms_since(started)
+            )
+    except Exception as exc:
+        if doc_id:
+            try:
+                await history_repo.record_finish(
+                    doc_id,
+                    status="failed",
+                    duration_ms=_ms_since(started),
+                    error=str(exc),
+                )
+            except Exception:
+                logger.warning(
+                    "job_history.record_finish_failed", job_id=name, exc_info=True
+                )
+        raise
 
 
 async def sync_backfill() -> None:
+    """Daily deep backfill: REST-fetch 5000 bars for all tracked symbols across all tfs."""
     await _run_sync("sync_backfill", SYNC_INTERVALS, 5000)
 
 
 async def sync_integrity() -> None:
+    """Daily integrity scan across all tfs (1m + cascade outputs)."""
     await _run_integrity("sync_integrity")
 
 
 async def sync_repair() -> None:
+    """Bi-daily gap repair across all tfs."""
     await _run_repair("sync_repair")
 
 
@@ -369,36 +568,23 @@ def register_sync_jobs(
     container: AsyncContainer,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Wire container reference + register 8 sync/integrity jobs as text refs."""
+    """Wire container reference + register 5 sync/integrity jobs as text refs."""
     set_container(container)
 
     # UTC wall-clock anchored — bar-aligned crons eliminate phase drift on restart.
     # Strategy correctness depends on bar-close events arriving on time; lag/gaps
     # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
     #
-    # Sub-daily syncs run at +2s from bar close. Eliminates the in-progress
-    # (misaligned) bar race on provider — TradingView occasionally returns the
-    # current open bar at exact bar-close moment. 2s gives provider time to
-    # settle the just-closed bar's grid-aligned timestamp. Combined with bounded
-    # retry in provider_fetch.py for residual provider lag.
+    # sync_1m runs at +2s from bar close. Gives TradingView time to settle the
+    # just-closed bar. Cascade runs in-process after 1m upsert — no extra API calls.
+    # coalesce + max_instances=1 are APScheduler defaults — overlap prevention built-in.
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_5m", job_id="sync_5m",
-        cron_expression="*/5 * * * *", second=2,
+        f"{_MODULE}:sync_1m", job_id="sync_1m",
+        cron_expression="*/1 * * * *", second=2,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_15m", job_id="sync_15m",
-        cron_expression="*/15 * * * *", second=2,
-    )
-    job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_hourly", job_id="sync_hourly",
-        cron_expression="0 * * * *", second=2,
-    )
-    job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_swing", job_id="sync_swing",
-        cron_expression="0 */4 * * *", second=2,
-    )
-    job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_daily", job_id="sync_daily", hour=0, minute=30,
+        f"{_MODULE}:sync_verify_cascade", job_id="sync_verify_cascade",
+        cron_expression="0 * * * *",
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_backfill", job_id="sync_backfill", hour=3, minute=0,
@@ -410,4 +596,4 @@ def register_sync_jobs(
         f"{_MODULE}:sync_repair", job_id="sync_repair", cron_expression="0 */12 * * *",
     )
 
-    logger.info("market_data.registered_sync_jobs", job_count=8)
+    logger.info("market_data.registered_sync_jobs", job_count=5)
