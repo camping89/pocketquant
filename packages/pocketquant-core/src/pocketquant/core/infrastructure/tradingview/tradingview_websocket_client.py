@@ -74,6 +74,8 @@ class TradingViewWebSocketClient:
         self._running = False
         self._reconnect_delay = 1.0
         self._max_reconnect_delay = 60.0
+        # In-memory tracker updated on every quote tick; used by /quotes/status lag metric
+        self.last_tick_at: datetime | None = None
 
     async def connect(self) -> None:
         logger.info("tradingview_ws.connecting")
@@ -188,6 +190,9 @@ class TradingViewWebSocketClient:
             "low_price": values.get("low_price"),
             "prev_close": values.get("prev_close_price"),
         }
+
+        # Track last tick timestamp for /quotes/status lag metric
+        self.last_tick_at = datetime.now(UTC)
 
         # Log only fields with values
         log_data = {k: v for k, v in quote_update.items() if v is not None}

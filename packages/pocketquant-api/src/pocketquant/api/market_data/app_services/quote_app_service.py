@@ -77,3 +77,13 @@ class QuoteAppService:
             symbol=symbol_key,
             price=last_price,
         )
+
+    async def start(self) -> None:
+        """Start the WS feed as a background task. Idempotent — no-op if already running."""
+        if self.running:
+            logger.debug("quote_service.already_running")
+            return
+
+        self.running = True
+        self.ws_task = asyncio.create_task(self.provider.run_forever())
+        logger.info("quote_service.ws_task_started")

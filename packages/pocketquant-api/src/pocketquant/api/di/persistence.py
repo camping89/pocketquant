@@ -21,6 +21,7 @@ from pocketquant.core.persistence.repositories.sync_status_repository import Syn
 from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
 from pocketquant.trading.persistence.order_repository import OrderRepository
 from pocketquant.trading.persistence.position_repository import PositionRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
 from pocketquant.trading.persistence.strategy_subscription_repository import (
     StrategySubscriptionRepository,
 )
@@ -53,3 +54,4 @@ class PersistenceProvider(Provider):
     sync_status_repository = provide(SyncStatusRepository, scope=Scope.APP)
     job_history_repository = provide(JobHistoryRepository, scope=Scope.APP)
     strategy_subscription_repository = provide(StrategySubscriptionRepository, scope=Scope.APP)
+    tracked_symbol_repository = provide(TrackedSymbolRepository, scope=Scope.APP)

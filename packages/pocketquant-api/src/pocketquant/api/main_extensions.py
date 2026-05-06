@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pocketquant.api.market_data.handlers.quotes.router import router as quote_router
 from pocketquant.api.market_data.handlers.router import router as market_data_router
+from pocketquant.api.market_data.handlers.tracked_symbols import router as tracked_symbols_router
 from pocketquant.api.system_jobs.route import router as system_jobs_router
 from pocketquant.backtest.handlers import backtest_router
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
@@ -30,6 +31,10 @@ from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
+from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.api.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
+from pocketquant.core.infrastructure.tradingview import TradingViewWebSocketClient
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
 from pocketquant.trading.handlers.strategy import strategy_router
 from pocketquant.trading.handlers.trading import trading_router
 from pocketquant.trading.persistence.order_repository import OrderRepository
@@ -51,6 +56,7 @@ _REPO_TYPES: list[type] = [
     OptimizationRepository,
     JobHistoryRepository,
     StrategySubscriptionRepository,
+    TrackedSymbolRepository,
 ]
 
 
@@ -99,6 +105,39 @@ async def start_background_jobs(container: AsyncContainer) -> None:
     logger.info("background_jobs_enabled")
 
 
+async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
+    """Start WS feed + subscription reconcile loop as background tasks.
+
+    Stores task handles on app.state for lifespan cleanup:
+      app.state.ws_task          — TradingViewWebSocketClient.run_forever()
+      app.state.subscription_task — WsSubscriptionManager.run()
+    """
+    quote_svc = await container.get(QuoteAppService)
+    sub_mgr = await container.get(WsSubscriptionManager)
+
+    await quote_svc.start()
+    app.state.ws_task = quote_svc.ws_task  # task created inside start()
+
+    app.state.subscription_task = asyncio.create_task(sub_mgr.run())
+    logger.info("quote_feed.started")
+
+
+async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
+    """Cancel WS + subscription tasks then disconnect the provider. 5s timeout each."""
+    for attr in ("ws_task", "subscription_task"):
+        task: asyncio.Task | None = getattr(app.state, attr, None)
+        if task and not task.done():
+            task.cancel()
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+    provider = await container.get(TradingViewWebSocketClient)
+    await provider.disconnect()
+    logger.info("quote_feed.stopped")
+
+
 async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
     """Register health check functions with the coordinator."""
     hc = await container.get(HealthCoordinator)
@@ -107,9 +146,13 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
 
 
 def handle_startup_failure(error: Exception) -> None:
-    """Display a rich error panel and hard-exit on startup failure."""
-    import os
+    """Display a rich error panel and re-raise so lifespan finally block runs.
 
+    Raises the original exception so FastAPI's lifespan context manager propagates
+    it as a startup error (process exits), but the finally block in lifespan()
+    executes first — cancelling WS/subscription tasks and closing the DI container.
+    Using os._exit() would bypass that cleanup; sys.exit() / re-raise does not.
+    """
     from rich.console import Console
     from rich.panel import Panel
 
@@ -124,7 +167,7 @@ def handle_startup_failure(error: Exception) -> None:
     console.print("\n[dim]Your code:[/]")
     console.print("  -> [cyan]pocketquant.api.main[/] in lifespan")
     console.print("  -> [cyan]pocketquant.core.persistence.mongodb[/] in connect")
-    os._exit(1)
+    raise error
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +212,7 @@ def register_routes(app: FastAPI, settings) -> None:
         return await job_scheduler.get_jobs()
 
     api.include_router(market_data_router)
+    api.include_router(tracked_symbols_router, prefix="/market-data")
     api.include_router(quote_router)
     api.include_router(system_jobs_router)
     api.include_router(strategy_router)

@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import MongoDsn, RedisDsn
+from pydantic import MongoDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     okx_api_secret: str | None = None
     okx_passphrase: str | None = None
     okx_demo_mode: bool = True
+
+    # Admin API (v1 token auth — set in production; unset = dev mode, skip auth)
+    # SecretStr prevents accidental logging/serialisation of the token value.
+    admin_token: SecretStr | None = None
 
     # Strategy Engine
     default_broker: Literal["paper", "okx"] = "paper"

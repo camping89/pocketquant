@@ -6,11 +6,14 @@ with Mediator in pocketquant.api.di.container:register_handlers().
 
 from dishka import Provider, Scope, provide
 from pocketquant.api.market_data.handlers.list_symbols.handler import ListSymbolsHandler
+from pocketquant.api.market_data.handlers.tracked_symbols.add.handler import AddTrackedSymbolHandler
+from pocketquant.api.market_data.handlers.tracked_symbols.list_all.handler import ListTrackedSymbolsHandler
+from pocketquant.api.market_data.handlers.tracked_symbols.remove.handler import RemoveTrackedSymbolHandler
+from pocketquant.api.market_data.handlers.tracked_symbols.update.handler import UpdateTrackedSymbolHandler
 from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.handler import GetOHLCVHandler
 from pocketquant.api.market_data.handlers.quotes.get_all.handler import GetAllQuotesHandler
 from pocketquant.api.market_data.handlers.quotes.get_latest.handler import GetLatestQuoteHandler
-from pocketquant.api.market_data.handlers.quotes.start_feed.handler import StartQuoteFeedHandler
-from pocketquant.api.market_data.handlers.quotes.stop_feed.handler import StopQuoteFeedHandler
+from pocketquant.api.market_data.handlers.quotes.get_status.handler import GetQuotesStatusHandler
 from pocketquant.api.market_data.handlers.quotes.subscribe.handler import SubscribeHandler
 from pocketquant.api.market_data.handlers.quotes.unsubscribe.handler import UnsubscribeHandler
 from pocketquant.api.market_data.handlers.status.get_quote_service_status.handler import (
@@ -49,16 +52,19 @@ from pocketquant.trading.handlers.trading.list_positions.handler import ListPosi
 
 
 class HandlerProvider(Provider):
-    # Market data (13)
+    # Market data (16 — includes tracked_symbols CRUD; start_feed/stop_feed removed)
+    list_tracked_symbols_handler = provide(ListTrackedSymbolsHandler, scope=Scope.APP)
+    add_tracked_symbol_handler = provide(AddTrackedSymbolHandler, scope=Scope.APP)
+    update_tracked_symbol_handler = provide(UpdateTrackedSymbolHandler, scope=Scope.APP)
+    remove_tracked_symbol_handler = provide(RemoveTrackedSymbolHandler, scope=Scope.APP)
     sync_symbol_handler = provide(SyncSymbolHandler, scope=Scope.APP)
     bulk_sync_handler = provide(BulkSyncHandler, scope=Scope.APP)
     get_ohlcv_handler = provide(GetOHLCVHandler, scope=Scope.APP)
-    start_quote_feed_handler = provide(StartQuoteFeedHandler, scope=Scope.APP)
-    stop_quote_feed_handler = provide(StopQuoteFeedHandler, scope=Scope.APP)
     subscribe_handler = provide(SubscribeHandler, scope=Scope.APP)
     unsubscribe_handler = provide(UnsubscribeHandler, scope=Scope.APP)
     get_latest_quote_handler = provide(GetLatestQuoteHandler, scope=Scope.APP)
     get_all_quotes_handler = provide(GetAllQuotesHandler, scope=Scope.APP)
+    get_quotes_status_handler = provide(GetQuotesStatusHandler, scope=Scope.APP)
     get_sync_status_handler = provide(GetSyncStatusHandler, scope=Scope.APP)
     get_symbol_sync_status_handler = provide(GetSymbolSyncStatusHandler, scope=Scope.APP)
     get_quote_service_status_handler = provide(GetQuoteServiceStatusHandler, scope=Scope.APP)
@@ -93,15 +99,18 @@ class HandlerProvider(Provider):
 
 # All handler types — used by register_handlers() in pocketquant.api.di.container
 ALL_HANDLER_TYPES: list[type] = [
+    ListTrackedSymbolsHandler,
+    AddTrackedSymbolHandler,
+    UpdateTrackedSymbolHandler,
+    RemoveTrackedSymbolHandler,
     SyncSymbolHandler,
     BulkSyncHandler,
     GetOHLCVHandler,
-    StartQuoteFeedHandler,
-    StopQuoteFeedHandler,
     SubscribeHandler,
     UnsubscribeHandler,
     GetLatestQuoteHandler,
     GetAllQuotesHandler,
+    GetQuotesStatusHandler,
     GetSyncStatusHandler,
     GetSymbolSyncStatusHandler,
     GetQuoteServiceStatusHandler,
