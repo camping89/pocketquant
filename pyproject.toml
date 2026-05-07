@@ -47,11 +47,13 @@ typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
 testpaths = [
     "packages/pocketquant-core/tests",
     "packages/pocketquant-backtest/tests",
     "packages/pocketquant-trading/tests",
     "packages/pocketquant-api/tests",
+    "tests",
 ]
 markers = [
     "integration: marks tests as integration tests (require network)",
