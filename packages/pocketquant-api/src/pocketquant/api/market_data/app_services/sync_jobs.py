@@ -106,7 +106,9 @@ async def _sync_by_intervals(
     symbols = [(ts.symbol, ts.exchange) for ts in tracked]
 
     if not symbols:
-        logger.info(f"market_data.{job_name}.skipped", reason="no_tracked_symbols")
+        logger.warning(
+            f"market_data.{job_name}.skipped", reason="no_tracked_symbols",
+        )
         return 0, 0
 
     synced = 0
@@ -426,7 +428,9 @@ async def sync_verify_cascade() -> None:
     try:
         tracked = await tracked_symbol_repo.list_all()
         if not tracked:
-            logger.info("sync_verify_cascade.skipped", reason="no_tracked_symbols")
+            logger.warning(
+                "sync_verify_cascade.skipped", reason="no_tracked_symbols",
+            )
             if doc_id:
                 await history_repo.record_finish(
                     doc_id, status="completed", duration_ms=_ms_since(started)
