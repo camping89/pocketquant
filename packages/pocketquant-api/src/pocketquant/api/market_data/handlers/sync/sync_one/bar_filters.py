@@ -2,22 +2,22 @@
 
 Two concerns:
 
-- Existence filter (DB-aware): drop bars older than `latest - 3 intervals` to
-  avoid re-inserting bars we already have. Insert pipeline handles dedupe via
-  unique index, but pre-filtering cuts wire/log noise.
+- Existence filter (DB-aware): drop only bars whose datetime already exists
+  in DB for (symbol, exchange, interval). Lets non-contiguous gaps fill on
+  next sync. Insert pipeline still handles dedup via unique index as safety
+  net, but pre-filtering cuts wire/log noise.
 - Misalignment filter (pure): drop bars whose timestamps don't sit on the
   interval grid (provider sometimes returns the in-progress open bar).
 """
 
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.time import coerce_utc
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.services.bar_builder import filter_aligned_bars
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
-
-_OVERLAP_BUFFER = 3
 
 
 async def filter_new_bars(
@@ -27,33 +27,43 @@ async def filter_new_bars(
     interval: Interval,
     bar_repo: BarRepository,
 ) -> list[Bar]:
-    """Keep only bars from `latest - 3 intervals` onwards.
+    """Drop records whose datetime already exists in DB for this key.
 
-    On first sync (no existing data), returns records unchanged. The 3-bar
-    overlap ensures boundary bars aren't missed; insert_many(ordered=False)
-    skips duplicates via unique index.
+    Queries existing datetimes within [min(records.dt), max(records.dt)] via
+    indexed range scan and excludes them. Bars with `datetime=None` pass through
+    (drop_misaligned_bars handles them). Empty input or all-None datetimes →
+    returns input unchanged.
+
+    Correctly handles non-contiguous DB state: scattered holes get filled,
+    not assumed-already-present like the prior latest-cutoff heuristic.
     """
-    latest = await bar_repo.get_latest(symbol, exchange, interval)
-    if not latest or not latest.datetime:
+    if not records:
         return records
 
-    cutoff_bars = sorted(
-        [r for r in records if r.datetime and r.datetime <= latest.datetime],
-        key=lambda b: b.datetime,  # type: ignore[arg-type, return-value]
-    )
-    if len(cutoff_bars) > _OVERLAP_BUFFER:
-        cutoff_dt = cutoff_bars[-_OVERLAP_BUFFER].datetime
-    else:
-        cutoff_dt = cutoff_bars[0].datetime if cutoff_bars else latest.datetime
+    times = [r.datetime for r in records if r.datetime is not None]
+    if not times:
+        return records
 
-    filtered = [r for r in records if r.datetime and r.datetime >= cutoff_dt]
+    existing_docs = await bar_repo.find_datetimes(
+        symbol, exchange, interval,
+        start_date=min(times),
+        end_date=max(times),
+    )
+    # Mongo client is not tz_aware; raw projection returns naive datetimes.
+    # Coerce both sides to tz-aware UTC for set membership equivalence.
+    existing_set = {coerce_utc(d["datetime"]) for d in existing_docs}
+
+    filtered = [
+        r for r in records
+        if r.datetime is None or coerce_utc(r.datetime) not in existing_set
+    ]
     skipped = len(records) - len(filtered)
     if skipped > 0:
         logger.info(
             "market_data.sync.filtered_existing",
             kept=len(filtered),
             skipped=skipped,
-            cutoff=str(cutoff_dt),
+            existing_count=len(existing_set),
         )
     return filtered
 
