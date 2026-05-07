@@ -16,12 +16,12 @@ from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 
 
 # Jobs that ingest bars at fixed intervals — MUST be wall-clock-aligned.
+# Post-cascade refactor (260506 plan): single sync_1m runs per minute and
+# cascade-aggregates to higher tfs in-process. Verify/backfill/integrity/repair
+# remain bar-aligned cron jobs.
 BAR_ALIGNED_JOB_IDS: set[str] = {
-    "sync_5m",
-    "sync_15m",
-    "sync_hourly",
-    "sync_swing",
-    "sync_daily",
+    "sync_1m",
+    "sync_verify_cascade",
     "sync_backfill",
     "sync_integrity",
     "sync_repair",
