@@ -405,7 +405,7 @@ Bar integrity repair: check → delete misaligned → resync gaps → verify.
 4. **Verify:** re-check integrity, capture `still_missing` count + ranges
 5. **Log:** warn if gaps remain after repair
 
-**Why skip_filter:** `_filter_new_bars` uses array-position cutoff (bar[-3]), unreliable on sparse gap data. Flag bypasses it to fill all gap periods.
+**Why skip_filter:** `filter_new_bars` queries `bar_repo.find_datetimes` to drop only records whose datetime already exists. Correct for sparse gaps. `skip_filter=True` is still useful for repair flows that want to force re-upsert (e.g., to refresh OHLCV values that may have shifted), bypassing both the existence check AND the wire-noise reduction.
 
 **Usage:** Background job `sync_repair` (every 12h) or manual `/api/v1/market-data/integrity/repair` endpoint. Returns `RepairResult` with deleted count, gaps_resynced, still_missing, still_missing_ranges.
 
