@@ -2,7 +2,7 @@
  *  Rows in sync_status with intervals outside this list are orphans (filtered
  *  in the Data Health table by default). Keep in sync with backend
  *  `SYNC_INTERVALS` in `pocketquant.api.market_data.app_services.sync_jobs`. */
-export const ACTIVE_INTERVALS = ['5m', '15m', '1h', '4h', '1d'] as const
+export const ACTIVE_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 
 export type ActiveInterval = (typeof ACTIVE_INTERVALS)[number]
 
