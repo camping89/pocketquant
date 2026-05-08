@@ -1,6 +1,6 @@
 [project]
 name = "pocketquant-api"
-version = "0.1.0"
+version = "2.0.0"
 description = "PocketQuant FastAPI server — composition root"
 requires-python = ">=3.14"
 license = { text = "MIT" }

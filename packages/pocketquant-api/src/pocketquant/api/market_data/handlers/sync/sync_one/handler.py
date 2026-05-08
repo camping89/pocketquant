@@ -16,7 +16,7 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
-from pocketquant.core.infrastructure.tradingview import TradingViewClient
+from pocketquant.core.infrastructure.data_provider import IDataProvider
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
@@ -30,7 +30,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
 
     def __init__(
         self,
-        provider: TradingViewClient,
+        provider: IDataProvider,
         cache: Cache,
         bar_repository: BarRepository,
         symbol_repository: SymbolRepository,

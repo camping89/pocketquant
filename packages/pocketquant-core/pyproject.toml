@@ -1,6 +1,6 @@
 [project]
 name = "pocketquant-core"
-version = "0.1.0"
+version = "2.0.0"
 description = "PocketQuant core domain, common utilities, and persistence"
 requires-python = ">=3.14"
 license = { text = "MIT" }
@@ -10,7 +10,6 @@ dependencies = [
     "pymongo>=4.16.0",
     "redis>=5.0.0",
     "apscheduler>=3.10.0",
-    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git",
     "websockets>=12.0",
     "pandas>=2.1.0",
     "numpy>=1.26.0",

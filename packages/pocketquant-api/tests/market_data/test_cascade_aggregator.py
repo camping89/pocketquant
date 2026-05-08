@@ -1,6 +1,6 @@
 """Unit tests for cascade_aggregator — pure functions, no infra."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from pocketquant.api.market_data.app_services.cascade_aggregator import (

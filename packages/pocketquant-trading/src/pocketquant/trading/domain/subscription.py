@@ -71,7 +71,7 @@ class StrategySubscription:
         }
 
     @classmethod
-    def from_mongo(cls, doc: dict) -> "StrategySubscription":
+    def from_mongo(cls, doc: dict) -> StrategySubscription:
         """Deserialise from a MongoDB document."""
         return cls(
             id=doc["_id"],

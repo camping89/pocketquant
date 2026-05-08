@@ -1,6 +1,6 @@
 """Tests for fetch_with_retry — bounded retry on empty / all-misaligned response.
 
-Mocks TradingViewClient with scripted return-sequences. Patches asyncio.sleep
+Mocks IDataProvider with scripted return-sequences. Patches asyncio.sleep
 for fast execution. Uses structlog.testing.capture_logs for log assertion.
 """
 
@@ -52,7 +52,7 @@ def fast_sleep() -> Iterator[AsyncMock]:
 
 @pytest.fixture
 def fake_provider() -> AsyncMock:
-    """Mock TradingViewClient.fetch_ohlcv with scripted side_effects per test."""
+    """Mock IDataProvider.fetch_ohlcv with scripted side_effects per test."""
     provider = AsyncMock()
     provider.fetch_ohlcv = AsyncMock()
     return provider

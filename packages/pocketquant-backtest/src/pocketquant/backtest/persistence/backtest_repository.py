@@ -1,6 +1,6 @@
 """Backtest repository - MongoDB persistence for backtest runs and results."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pocketquant.backtest.domain import BacktestResult
@@ -99,7 +99,7 @@ class BacktestRepository(BaseRepository):
         exactly one doc per subscription in this collection.
         """
         collection = self._collection()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await collection.update_one(
             {"_id": sub_id},
             {
@@ -133,7 +133,7 @@ class BacktestRepository(BaseRepository):
         doc = result.to_mongo()
         doc["_id"] = sub_id  # ensure _id matches regardless of result.id
         doc["subscription_id"] = sub_id
-        doc["last_run_at"] = datetime.now(timezone.utc)
+        doc["last_run_at"] = datetime.now(UTC)
 
         # Map engine status to subscription vocabulary
         if result.status == "failed":
@@ -231,7 +231,7 @@ class BacktestRepository(BaseRepository):
         """
         from datetime import timedelta
 
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold_minutes)
+        cutoff = datetime.now(UTC) - timedelta(minutes=threshold_minutes)
         collection = self._collection()
         result = await collection.update_many(
             {"status": "running", "last_run_at": {"$lt": cutoff}},

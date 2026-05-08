@@ -1,11 +1,10 @@
 """Unit tests for BarAppService — throttle, no-Mongo-write, multi-tf state."""
 
 import time
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from pocketquant.api.market_data.app_services.bar_app_service import (
-    BAR_CURRENT_FLUSH_MIN_INTERVAL_S,
     BarAppService,
 )
 from pocketquant.api.market_data.app_services.quote_dto import QuoteTick
@@ -135,6 +134,7 @@ class TestThrottle:
     async def test_force_flush_bypasses_throttle(self, bar_service, mock_cache):
         """force=True bypasses throttle (used on bar roll)."""
         from datetime import UTC, datetime
+
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         builder = BarBuilder(
@@ -160,6 +160,7 @@ class TestNoMongoWrite:
     async def test_bar_completion_no_mongo_write(self, bar_service, mock_bar_repo):
         """On bar completion, upsert_bar is NOT called."""
         from datetime import UTC, datetime
+
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         bar = BarBuilder(
@@ -182,6 +183,7 @@ class TestNoMongoWrite:
     ):
         """BarCompletedEvent IS published on bar completion."""
         from datetime import UTC, datetime
+
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         bar = BarBuilder(
@@ -292,6 +294,7 @@ class TestCacheKeyInjection:
     async def test_cache_includes_last_update(self, bar_service, mock_cache):
         """Redis cache dict includes last_update (Unix seconds)."""
         from datetime import UTC, datetime
+
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         builder = BarBuilder(

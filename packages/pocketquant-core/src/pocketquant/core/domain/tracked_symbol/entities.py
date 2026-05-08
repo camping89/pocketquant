@@ -31,7 +31,7 @@ class TrackedSymbol(BaseModel):
         }
 
     @classmethod
-    def from_mongo(cls, doc: dict[str, Any]) -> "TrackedSymbol":
+    def from_mongo(cls, doc: dict[str, Any]) -> TrackedSymbol:
         """Reconstruct from MongoDB document."""
         return cls(
             exchange=doc["exchange"],

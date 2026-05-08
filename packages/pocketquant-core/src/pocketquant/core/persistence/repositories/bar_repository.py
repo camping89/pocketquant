@@ -187,7 +187,12 @@ class BarRepository(BaseRepository):
                 query["datetime"]["$gte"] = start_date
             if end_date:
                 query["datetime"]["$lte"] = end_date
-        cursor = self._collection().find(query, {"_id": 1, "datetime": 1}).sort("datetime", 1).limit(100_000)
+        cursor = (
+            self._collection()
+            .find(query, {"_id": 1, "datetime": 1})
+            .sort("datetime", 1)
+            .limit(100_000)
+        )
         return [doc async for doc in cursor]
 
     async def delete_many_by_ids(self, ids: list[str]) -> int:
@@ -196,6 +201,43 @@ class BarRepository(BaseRepository):
             return 0
         result = await self._collection().delete_many({"_id": {"$in": ids}})
         return result.deleted_count
+
+    async def delete_many_by_range(
+        self,
+        symbol: str,
+        exchange: str,
+        intervals: list[Interval],
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> int:
+        """Delete bars for symbol+exchange within [start_dt, end_dt) for the given intervals.
+
+        Returns the total deleted_count. Passing an empty intervals list is a no-op (returns 0).
+        Uses $in filter so multiple intervals are deleted in a single round-trip.
+        """
+        if not intervals:
+            logger.warning("delete_many_by_range.no_intervals", symbol=symbol, exchange=exchange)
+            return 0
+
+        result = await self._collection().delete_many(
+            {
+                "symbol": symbol.upper(),
+                "exchange": exchange.upper(),
+                "interval": {"$in": [i.value for i in intervals]},
+                "datetime": {"$gte": start_dt, "$lt": end_dt},
+            }
+        )
+        deleted = result.deleted_count
+        logger.info(
+            "bar_repo.delete_many_by_range",
+            symbol=symbol,
+            exchange=exchange,
+            intervals=[i.value for i in intervals],
+            start_dt=start_dt.isoformat(),
+            end_dt=end_dt.isoformat(),
+            deleted_count=deleted,
+        )
+        return deleted
 
     async def ensure_indexes(self) -> None:
         """Create compound index on (symbol, exchange, interval, datetime)."""

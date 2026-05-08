@@ -9,7 +9,7 @@ from pocketquant.api.market_data.app_services.quote_dto import Quote, QuoteTick
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
-from pocketquant.core.infrastructure.tradingview import TradingViewWebSocketClient
+from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
 from pocketquant.core.persistence.redis import Cache
 
 logger = get_logger(__name__)
@@ -23,7 +23,7 @@ class QuoteAppService:
         settings: Settings,
         cache: Cache,
         bar_manager: BarAppService,
-        provider: TradingViewWebSocketClient,
+        provider: IRealtimeQuoteProvider,
     ):
         self.settings = settings
         self._cache = cache
@@ -63,12 +63,25 @@ class QuoteAppService:
         cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
         await self._cache.set(cache_key, quote.to_cache_dict(), ttl=TTL_QUOTE_LATEST)
 
+        # Clamp incoming volume delta: Binance @aggTrade `q` is per-trade delta.
+        # Negative values are spec-violations; clamp to 0.0 and warn for observability.
+        raw_vol = quote_data.get("volume")
+        if raw_vol is None:
+            delta: float | None = None
+        else:
+            raw_float = float(raw_vol)
+            if raw_float < 0:
+                logger.warning("binance_ws.negative_volume", q=raw_vol)
+                delta = 0.0
+            else:
+                delta = raw_float
+
         tick = QuoteTick(
             symbol=symbol,
             exchange=exchange,
             timestamp=quote.timestamp,
             price=last_price,
-            volume=quote_data.get("volume"),
+            volume=delta,
         )
         await self.bar_manager.add_tick(tick)
 

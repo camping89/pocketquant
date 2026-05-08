@@ -1,6 +1,6 @@
 [project]
 name = "pocketquant-trading"
-version = "0.1.0"
+version = "2.0.0"
 description = "PocketQuant live trading, OKX broker, and strategy orchestration"
 requires-python = ">=3.14"
 license = { text = "MIT" }

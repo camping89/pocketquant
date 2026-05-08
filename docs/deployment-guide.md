@@ -79,13 +79,14 @@ MONGO_PORT=52017
 REDIS_PORT=53679
 PORTAINER_PORT=54900
 
-# Optional — fill if using:
-TRADINGVIEW_USERNAME=your_username
-TRADINGVIEW_PASSWORD=your_password
+# Optional — fill if using OKX live trading:
 OKX_API_KEY=your_key
 OKX_API_SECRET=your_secret
 OKX_PASSPHRASE=your_passphrase
 OKX_DEMO_MODE=false
+
+# Crypto market data: Binance public REST/WS (no auth required)
+# Remove stale TRADINGVIEW_* vars from production .env if present (ignored by Pydantic via extra="ignore")
 ```
 
 ### Step 2: Copy files to VPS
@@ -158,6 +159,60 @@ If .env changed:
 scp -i $KEY .env ${VPS}:/opt/pocketquant/docker/.env
 ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy.sh"
 ```
+
+---
+
+## 2-Year Bar Re-Sync Procedure
+
+**Purpose:** Refresh historical market data after major data source changes (e.g., Binance migration, bug fixes).
+
+**Prerequisites:** VPS deployment running, MongoDB accessible, ~30 GB free disk space for mongodump backup.
+
+**Runbook:**
+
+### Step 1: Backup Current Data
+```bash
+ssh -i $KEY $VPS "mongodump --uri='$MONGODB_URL' --archive=/opt/pocketquant/backup-$(date -u +%Y%m%d-%H%M%S).archive"
+```
+
+### Step 2: Pre-Audit (Baseline Quality Check)
+```bash
+ssh -i $KEY $VPS "cd /opt/pocketquant && python scripts/audit_bar_quality.py --days 730 --output /opt/pocketquant/audit-pre.md"
+# Inspect output — note flat_pct and zerovol_pct per interval
+```
+
+### Step 3: Plan Resync (Dry Run)
+```bash
+ssh -i $KEY $VPS "cd /opt/pocketquant && python scripts/resync_2y_from_binance.py --dry-run --days 730"
+# Output shows symbols, intervals, and bar counts to resync (no writes)
+```
+
+### Step 4: Execute Resync (Live)
+```bash
+# For all symbols (default, ~2-3 hours):
+ssh -i $KEY $VPS "cd /opt/pocketquant && python scripts/resync_2y_from_binance.py --days 730"
+
+# For specific symbols only (faster, ~30 min):
+ssh -i $KEY $VPS "cd /opt/pocketquant && python scripts/resync_2y_from_binance.py --days 730 --symbols BTCUSDT,ETHUSDT"
+```
+
+### Step 5: Higher-Timeframe Direct Fetch
+```bash
+# Binance cascade (1m→5m→15m→...→1M) is slow over WAN.
+# Fetch higher TFs directly for speed:
+ssh -i $KEY $VPS "curl -X POST http://localhost:\$APP_PORT/api/v1/market-data/sync \
+  -H 'Content-Type: application/json' \
+  -d '{\"symbol\":\"BTCUSDT\",\"exchange\":\"BINANCE\",\"interval\":\"1h\",\"n_bars\":17520}'"
+# Repeat for 4h (4380 bars) and 1d (730 bars)
+```
+
+### Step 6: Post-Audit (Verify Quality)
+```bash
+ssh -i $KEY $VPS "cd /opt/pocketquant && python scripts/audit_bar_quality.py --days 730 --output /opt/pocketquant/audit-post.md"
+# Compare to pre-audit: flat_pct and zerovol_pct should be ≤ 1% (or 0.0% if bug fixed)
+```
+
+**Monitoring:** Check VPS logs during resync via `docker logs pocketquant-app --tail 100 -f` for rate-limit errors or data quality warnings.
 
 ---
 
@@ -262,7 +317,7 @@ VPS is disposable. To move to a new VPS, repeat "First Deploy" steps. Database w
 
 After migrating from the old GHCR-based setup, delete unused GitHub repo settings:
 
-**Delete secrets:** DEPLOY_SSH_KEY, GHCR_TOKEN, MONGO_PASSWORD, MONGO_EXPRESS_PASSWORD, GRAFANA_PASSWORD, TRADINGVIEW_USERNAME, TRADINGVIEW_PASSWORD, OKX_API_KEY, OKX_API_SECRET, OKX_PASSPHRASE
+**Delete secrets:** DEPLOY_SSH_KEY, GHCR_TOKEN, MONGO_PASSWORD, MONGO_EXPRESS_PASSWORD, GRAFANA_PASSWORD (TRADINGVIEW_USERNAME and TRADINGVIEW_PASSWORD already removed in v2.0.0), OKX_API_KEY, OKX_API_SECRET, OKX_PASSPHRASE
 
 **Delete vars:** DEPLOY_HOST, DEPLOY_SSH_PORT, DEPLOY_USER
 

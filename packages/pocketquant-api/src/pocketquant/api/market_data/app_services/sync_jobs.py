@@ -27,11 +27,11 @@ from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infrastructure.data_provider import IDataProvider
 from pocketquant.core.infrastructure.scheduling.job_history_repository import (
     JobHistoryRepository,
 )
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.core.infrastructure.tradingview import TradingViewClient
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
@@ -415,7 +415,7 @@ async def sync_verify_cascade() -> None:
     history_repo = await container.get(JobHistoryRepository)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
-    provider = await container.get(TradingViewClient)
+    provider = await container.get(IDataProvider)
 
     name = "sync_verify_cascade"
     started = datetime.now(UTC)
@@ -579,7 +579,7 @@ def register_sync_jobs(
     # Strategy correctness depends on bar-close events arriving on time; lag/gaps
     # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
     #
-    # sync_1m runs at +2s from bar close. Gives TradingView time to settle the
+    # sync_1m runs at +2s from bar close. Gives the data provider time to settle the
     # just-closed bar. Cascade runs in-process after 1m upsert — no extra API calls.
     # coalesce + max_instances=1 are APScheduler defaults — overlap prevention built-in.
     job_scheduler.add_cron_job(

@@ -1,10 +1,14 @@
 """Handler for updating tracked symbol metadata."""
 
-from pocketquant.api.market_data.handlers.tracked_symbols.update.command import UpdateTrackedSymbolCommand
+from pocketquant.api.market_data.handlers.tracked_symbols.update.command import (
+    UpdateTrackedSymbolCommand,
+)
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
 
 logger = get_logger(__name__)
 

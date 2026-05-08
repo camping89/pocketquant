@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-04-13 | **Version:** 3.5 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 334 files, ~16,815 LOC
+**Last Updated:** 2026-05-08 | **Version:** 4.0 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 334 files, ~16,815 LOC | **Market Data:** Binance public REST/WS (@aggTrade), no auth required
 
 Current note: for local run/test steps and canonical route names, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document remains a deeper design reference.
 
@@ -18,7 +18,7 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
                        ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                         External Services                        │
-│     TradingView (REST + WS)  │  OKX (REST + WS)  │  Scheduler   │
+│   Binance (REST + WS @aggTrade)  │  OKX (REST + WS)  │  Scheduler│
 └───────────┬─────────────────────────┬───────────────────────────┘
             │                         │
             ▼                         ▼
@@ -48,16 +48,16 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 │              Infrastructure Layer (External I/O)                 │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
 │  │ Brokers  │  │Providers │  │Persistence│  │ Scheduling  │   │
-│  │ (OKX,   │  │(TradingVw│  │(MongoDB,  │  │  (APScheduler)  │
-│  │ Paper)  │  │ WebSocket│  │ Redis)    │  │              │   │
+│  │ (OKX,   │  │(Binance  │  │(MongoDB,  │  │  (APScheduler)  │
+│  │ Paper)  │  │ REST/WS) │  │ Redis)    │  │              │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
         │              │               │            │
         ▼              ▼               ▼            ▼
     ┌────────┐  ┌──────────┐  ┌──────────────┐  ┌──────────┐
-    │  OKX   │  │TradingVw │  │  MongoDB     │  │ Redis /  │
-    │ Live   │  │ Market   │  │  (Bars,     │  │BackgroundJobs
-    │Trading │  │  Data    │  │  Orders,    │  │          │
+    │  OKX   │  │ Binance  │  │  MongoDB     │  │ Redis /  │
+    │ Live   │  │  Public  │  │  (Bars,     │  │BackgroundJobs
+    │Trading │  │  REST/WS │  │  Orders,    │  │          │
     │        │  │          │  │  Positions) │  │          │
     └────────┘  └──────────┘  └──────────────┘  └──────────┘
 ```
@@ -321,14 +321,17 @@ infrastructure/                        # External I/O (brokers, providers, sched
 │           ├── okx_order_mapper.py       # Order state mapping
 │           ├── okx_position_mapper.py    # Position state mapping
 │           └── okx_reconnection_handler.py  # Resilient connection
-├── tradingview/              # TradingView integration
-│   ├── provider.py          # TradingViewClient (REST via tvdatafeed)
-│   └── websocket.py         # TradingViewWebSocketClient (binary frames)
+├── binance/                  # Binance REST + WS integration
+│   ├── binance_client.py    # BinanceClient (implements IDataProvider)
+│   ├── binance_websocket.py # BinanceWebSocketClient (@aggTrade stream)
+│   └── models.py            # Binance-specific DTOs
 ├── http_client/              # Generic HTTP utilities
 │   └── client.py            # Async HTTP client (aiohttp wrapper)
 ├── scheduling/               # Job scheduling (APScheduler)
-└── webhooks/                 # Webhook delivery
-    └── dispatcher.py        # WebhookDispatcher (HMAC signing, retry)
+├── webhooks/                 # Webhook delivery
+│   └── dispatcher.py        # WebhookDispatcher (HMAC signing, retry)
+├── data_provider.py         # IDataProvider protocol (abstraction for historical bars)
+└── realtime_quote_provider.py # IRealtimeQuoteProvider protocol (abstraction for real-time quotes)
 
 persistence/                           # Data access (MongoDB, Redis, repositories)
 ├── mongodb.py               # MongoDB async singleton (PyMongo)
@@ -355,8 +358,8 @@ persistence/                           # Data access (MongoDB, Redis, repositori
 | **RedisConnection** | JSON serialization, pattern deletion, TTL support |
 | **PaperBroker** | In-memory simulation, configurable slippage/delay |
 | **OKXBroker** | Live trading, HMAC auth, exponential backoff reconnection |
-| **TradingViewClient** | REST API via ThreadPoolExecutor (max 4 workers) |
-| **TradingViewWebSocketClient** | Binary frame parsing (~m~{len}~m~{json}) |
+| **BinanceClient** | Implements IDataProvider; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilder). Rate limit: 1200 weight/min. |
+| **BinanceWebSocketClient** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProvider. |
 | **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — packages/pocketquant-core/src/pocketquant/core/common/
@@ -484,10 +487,10 @@ Mediator (common/mediator/mediator.py)
   └─ Call handler.handle(command)
   ↓
 Handler (features/market_data/sync/sync_one/handler.py)
-  ├─ [1] Fetch: TradingViewClient.fetch_ohlcv()  [infrastructure]
-  ├─ [2] Validate: Bar.from_mongo()                [domain]
-  ├─ [3] Persist: BarRepository.upsert_many()      [infrastructure]
-  ├─ [4] Invalidate: Cache.delete_pattern()        [infrastructure]
+  ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [infrastructure]
+  ├─ [2] Validate: Bar.from_mongo()                               [domain]
+  ├─ [3] Persist: BarRepository.upsert_many()                     [infrastructure]
+  ├─ [4] Invalidate: Cache.delete_pattern()                       [infrastructure]
   └─ [5] Publish: EventBus.publish(HistoricalDataSyncedEvent)
   ↓
 Route Response
@@ -621,8 +624,8 @@ Ready to process market events and recover fills
 **See [handler-pipelines.md](./handler-pipelines.md) for detailed 27-handler flows.**
 
 Key pipelines at high level:
-1. **Historical Sync:** TradingView → BarRepository.upsert_many() → Cache invalidation → EventBus
-2. **Real-time Quotes:** TradingView WebSocket → QuoteAppService → BarAppService (13 intervals) → MongoDB + EventBus
+1. **Historical Sync:** BinanceClient.fetch_ohlcv() → BarRepository.upsert_many() → Cache invalidation → EventBus (requires delta-volume contract)
+2. **Real-time Quotes:** Binance @aggTrade WebSocket → QuoteAppService → BarAppService (13 intervals) → MongoDB + EventBus
 3. **Data Integrity:** Check alignment + gaps → Delete misaligned → Resync gaps (skip_filter=True) → Verify — Cron jobs @ 04:00 UTC (check) & every 12h (repair)
 4. **Strategy Execution:** Market event → Strategy.on_bar() → Risk check → Broker.submit_order() → Position tracking
 5. **Backtesting:** YAML config → Historical bars → PaperBroker.simulate_fills() → PerformanceCalculator → MongoDB
@@ -631,8 +634,8 @@ Key pipelines at high level:
 ## Concurrency Model
 
 - **Event Loop:** All async code on single event loop (FastAPI/Uvicorn)
-- **Thread Pool:** TradingView REST (tvdatafeed) uses ThreadPoolExecutor (4 workers) to prevent blocking
-- **Asyncio.Lock:** BarAppService uses lock for thread-safe OHLC atomic updates
+- **Async I/O:** Binance REST/WS via aiohttp (no thread pool required)
+- **Asyncio.Lock:** BarAppService uses lock for thread-safe OHLC atomic updates during real-time bar aggregation
 
 ## Dependency Injection (Dishka)
 
@@ -648,7 +651,7 @@ Key pipelines at high level:
 **6 Providers:**
 - **CoreProvider** - Settings, EventBus (max_history=**50**), Mediator
 - **PersistenceProvider** - Database (PyMongo), Cache (Redis), 7 repositories
-- **InfrastructureProvider** - Brokers (Paper, OKX), TradingViewClient, JobScheduler
+- **InfrastructureProvider** - Brokers (Paper, OKX), BinanceClient, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
 - **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
 - **HandlerProvider** - All 27 CQRS handlers (via @handles decorator)
@@ -683,7 +686,7 @@ Key pipelines at high level:
 
 | System | Type | Details |
 |--------|------|---------|
-| **TradingView** | HTTP + WS | ThreadPoolExecutor (4 workers), binary frames, exponential backoff |
+| **Binance** | HTTP + WS | Public REST (no auth), rate limit 1200 weight/min. @aggTrade WebSocket for real-time quotes. Bars must include per-tick delta volume. |
 | **OKX** | WS + Auth | HMAC-SHA256, 1s-30s backoff, 10-fail circuit breaker |
 | **MongoDB** | Async | PyMongo, pool 5-50 connections, 8 collections |
 | **Redis** | Async | redis-py, TTL: 60s quotes, 300s bars, 86400s idempotency |

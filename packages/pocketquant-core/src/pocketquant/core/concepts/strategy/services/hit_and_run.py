@@ -3,9 +3,9 @@
 from collections import deque
 from datetime import UTC, datetime
 
+from pocketquant.core.concepts.strategy.enums import Direction
 from pocketquant.core.concepts.strategy.interfaces import IStrategy
 from pocketquant.core.concepts.strategy.value_objects import Signal, StrategyConfig
-from pocketquant.core.concepts.strategy.enums import Direction
 
 
 class HitAndRunStrategy(IStrategy):

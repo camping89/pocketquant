@@ -1,4 +1,4 @@
-"""Bounded retry around TradingView fetch_ohlcv.
+"""Bounded retry around IDataProvider.fetch_ohlcv.
 
 Provider may return [] or in-progress (misaligned) bar at exact bar-close
 moment. Brief retry recovers without breaking cron alignment.
@@ -14,12 +14,12 @@ from pocketquant.api.market_data.handlers.sync.sync_one.bar_alignment import has
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval
-from pocketquant.core.infrastructure.tradingview import TradingViewClient
+from pocketquant.core.infrastructure.data_provider import IDataProvider
 
 logger = get_logger(__name__)
 
 # Retry policy: aggressive. Combined with +2s cron offset (sync_jobs.py) which
-# eliminates the bar-close race; retry now only handles residual provider hiccups.
+# eliminates the bar-close race; retry now only handles residual Binance hiccups.
 # See docs/learning/retry-tuning-aggressive-vs-conservative.md for the decision
 # and trade-offs. Promote to Settings only when (a) ops needs runtime tuning
 # during a live incident, or (b) a second provider with different latency
@@ -29,7 +29,7 @@ _TIME_BUDGET_SECONDS = 15
 
 
 async def fetch_with_retry(
-    provider: TradingViewClient,
+    provider: IDataProvider,
     symbol: str,
     exchange: str,
     interval: Interval,

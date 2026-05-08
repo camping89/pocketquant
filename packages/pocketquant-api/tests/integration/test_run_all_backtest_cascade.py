@@ -149,9 +149,6 @@ async def setup_strategy_and_bars(app_client):
 async def test_run_all_backtest_cascade_delete(app_client):
     """Full flow: add sub → run-all → poll until done → delete strategy → DB clean."""
     from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
-    from pocketquant.trading.persistence.strategy_subscription_repository import (
-        StrategySubscriptionRepository,
-    )
 
     container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     bt_repo: BacktestRepository = await container.get(BacktestRepository)

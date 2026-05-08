@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pocketquant.api.market_data.handlers.quotes.get_status.query import GetQuotesStatusQuery
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.infrastructure.tradingview import TradingViewWebSocketClient
+from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
 
 
 @dataclass
@@ -22,7 +22,7 @@ class QuotesStatusResult:
 class GetQuotesStatusHandler(Handler[GetQuotesStatusQuery, QuotesStatusResult]):
     """Handle GET /quotes/status — reads provider state directly (no DB)."""
 
-    def __init__(self, provider: TradingViewWebSocketClient):
+    def __init__(self, provider: IRealtimeQuoteProvider):
         self._provider = provider
 
     async def handle(self, request: GetQuotesStatusQuery) -> QuotesStatusResult:

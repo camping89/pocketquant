@@ -1,6 +1,6 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-05-05 | **Total Handlers:** 35 CQRS handlers across market data, strategy, backtest, trading, and subscriptions | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC
+**Last Updated:** 2026-05-08 | **Total Handlers:** 35 CQRS handlers across market data, strategy, backtest, trading, and subscriptions | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC | **Data Provider:** Binance (IDataProvider impl, 1200 weight/min rate limit)
 
 Current note: route names in this document are historical in a few places. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
 
@@ -50,11 +50,10 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         return await self._success(count)
 
     async def _fetch_bars(self, cmd: SyncSymbolCommand) -> List[Bar]:
-        """Fetch via TradingView (thread pool)."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self.executor,
-            self.provider.fetch_ohlcv,
+        """Fetch via IDataProvider (current impl: BinanceClient).
+        Returns bars with per-tick delta volumes (required by BarBuilder).
+        Rate limits: Binance 1200 weight/min."""
+        return await self.provider.fetch_ohlcv(
             cmd.symbol, cmd.exchange, cmd.interval, cmd.n_bars
         )
 
@@ -157,11 +156,11 @@ Response: BarsDTO (never return domain entities)
 StartQuoteFeedCommand()
   ↓
 Handler.handle():
-  1. Connect: TradingViewWebSocketClient.connect()
-     └─ wss://data.tradingview.com/socket.io/websocket
+  1. Connect: BinanceWebSocketClient.connect() (implements IRealtimeQuoteProvider)
+     └─ wss://stream.binance.com:9443/ws/{symbol}@aggTrade
   ↓
   2. Start async task: asyncio.create_task(provider.listen())
-     └─ Background loop receives frames
+     └─ Background loop receives aggTrade events
   ↓
   3. Set flag: QuoteAppService.is_running = True
   ↓
@@ -748,9 +747,9 @@ Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 ### Real-time Quote → Strategy Execution (Real-Time Wiring Status: In Progress)
 
 ```
-WebSocket tick from TradingView
+WebSocket aggTrade event from Binance @aggTrade
   ↓
-TradingViewWebSocketClient.parse_frame()
+BinanceWebSocketClient.parse_aggTrade_event()
   ↓
 QuoteAppService._on_quote_update(quote)
   ├─ Cache.set(f"quote:latest:{exchange}:{symbol}", quote, ttl=60)
