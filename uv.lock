@@ -708,7 +708,7 @@ wheels = [
 
 [[package]]
 name = "pocketquant-api"
-version = "0.1.0"
+version = "2.0.0"
 source = { editable = "packages/pocketquant-api" }
 dependencies = [
     { name = "dishka" },
@@ -731,7 +731,7 @@ requires-dist = [
 
 [[package]]
 name = "pocketquant-backtest"
-version = "0.1.0"
+version = "2.0.0"
 source = { editable = "packages/pocketquant-backtest" }
 dependencies = [
     { name = "numpy" },
@@ -748,7 +748,7 @@ requires-dist = [
 
 [[package]]
 name = "pocketquant-core"
-version = "0.1.0"
+version = "2.0.0"
 source = { editable = "packages/pocketquant-core" }
 dependencies = [
     { name = "apscheduler" },
@@ -783,7 +783,7 @@ requires-dist = [
 
 [[package]]
 name = "pocketquant-trading"
-version = "0.1.0"
+version = "2.0.0"
 source = { editable = "packages/pocketquant-trading" }
 dependencies = [
     { name = "pocketquant-core" },
