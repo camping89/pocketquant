@@ -4,7 +4,7 @@ description: "Replace TradingView with Binance REST + WS for crypto market data,
 status: pending
 priority: P1
 effort: 16h
-branch: kai/feat/binance-data-provider
+branch: develop
 tags: [market-data, infrastructure, binance, bug-fix]
 created: 2026-05-07
 brainstorm: plans/reports/brainstorm-260507-1835-vps-bars-mismatch-tv-pro-fix.md
