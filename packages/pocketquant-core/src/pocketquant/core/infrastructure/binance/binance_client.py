@@ -73,9 +73,15 @@ class BinanceClient(IDataProvider):
 
         all_bars: list[Bar] = []
         remaining = n_bars
-        # Work backwards from now: calculate startTime for the first chunk
+        # Cap endTime at the last CLOSED bar boundary, excluding the in-progress bar.
+        # Binance returns a kline whose openTime equals floor(now/duration)*duration with
+        # only the partial data accumulated since that boundary; persisting it corrupts
+        # OHLCV until the bar closes. By stopping the window at the previous boundary we
+        # guarantee every returned kline is final.
         now_ms = int(datetime.now(UTC).timestamp() * 1000)
-        end_time_ms = now_ms
+        last_closed_open_ms = (now_ms // bar_duration_ms) * bar_duration_ms
+        cutoff_dt = datetime.fromtimestamp(last_closed_open_ms / 1000, tz=UTC)
+        end_time_ms = last_closed_open_ms
 
         while remaining > 0:
             chunk_limit = min(remaining, _MAX_BARS_PER_CALL)
@@ -84,8 +90,10 @@ class BinanceClient(IDataProvider):
             params: dict[str, Any] = {
                 "symbol": validated_symbol,
                 "interval": binance_interval,
+                # endTime is inclusive on Binance; -1 ms ensures the in-progress bar
+                # at last_closed_open_ms is never returned even under clock skew.
                 "startTime": start_time_ms,
-                "endTime": end_time_ms - 1,  # exclusive upper bound
+                "endTime": end_time_ms - 1,
                 "limit": chunk_limit,
             }
 
@@ -96,7 +104,18 @@ class BinanceClient(IDataProvider):
             chunk_bars = [
                 kline_to_bar(k, validated_symbol, exchange, interval) for k in klines
             ]
-            all_bars = chunk_bars + all_bars  # prepend so result stays ascending
+            # Defense-in-depth: drop any bar whose openTime >= cutoff in case Binance
+            # returns one despite endTime cap (clock skew / server-side off-by-one).
+            filtered = [b for b in chunk_bars if b.datetime is not None and b.datetime < cutoff_dt]
+            dropped = len(chunk_bars) - len(filtered)
+            if dropped:
+                logger.debug(
+                    "binance.in_progress_bar_filtered",
+                    symbol=validated_symbol,
+                    interval=binance_interval,
+                    count=dropped,
+                )
+            all_bars = filtered + all_bars  # prepend so result stays ascending
             remaining -= len(klines)
             end_time_ms = start_time_ms  # slide window back
 
