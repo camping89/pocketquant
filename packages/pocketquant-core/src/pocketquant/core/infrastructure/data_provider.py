@@ -1,3 +1,9 @@
+"""IDataProvider — abstract base class for REST/historical market data providers.
+
+Moved from infrastructure/tradingview/base.py to a neutral path so no concrete
+provider implementation (Binance, OKX, etc.) is implied by the module location.
+"""
+
 from abc import ABC, abstractmethod
 
 from pocketquant.core.domain.bar.entities import Bar
@@ -28,6 +34,6 @@ class IDataProvider(ABC):
         ...
 
     @abstractmethod
-    def close(self) -> None:
+    async def close(self) -> None:
         """Clean up resources."""
         ...

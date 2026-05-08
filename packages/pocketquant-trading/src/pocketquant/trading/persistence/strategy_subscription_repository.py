@@ -1,13 +1,12 @@
 """StrategySubscriptionRepository — MongoDB persistence for strategy subscriptions."""
 
-from pymongo.errors import DuplicateKeyError
-
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.persistence.base_repository import BaseRepository
 from pocketquant.trading.domain.subscription import (
     StrategySubscription,
     SubscriptionAlreadyExistsError,
 )
+from pymongo.errors import DuplicateKeyError
 
 logger = get_logger(__name__)
 

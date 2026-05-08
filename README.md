@@ -2,8 +2,8 @@
 
 PocketQuant is an algorithmic trading monorepo with:
 
-- historical market-data sync from TradingView
-- live quote ingestion and bar aggregation
+- historical market-data sync from Binance public REST/WS (no auth required)
+- live quote ingestion via Binance @aggTrade and bar aggregation
 - backtesting and optimization APIs
 - strategy orchestration and broker abstractions
 - a React/Vite chart UI for inspecting synced data and backtest overlays
@@ -87,6 +87,10 @@ Then start the API and open:
 - `http://localhost:41920/`
 
 FastAPI serves `packages/pocketquant-web/dist` when it exists.
+
+## Market Data
+
+**Crypto market data:** Binance public REST/WS (@aggTrade). No authentication required.
 
 ## Sync Smoke Test
 

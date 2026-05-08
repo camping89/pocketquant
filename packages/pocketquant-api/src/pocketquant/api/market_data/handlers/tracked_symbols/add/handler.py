@@ -5,7 +5,9 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
 
 logger = get_logger(__name__)
 

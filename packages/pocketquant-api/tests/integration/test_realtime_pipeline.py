@@ -9,11 +9,8 @@ Tests verify:
 - Cascade aggregator idempotent on 1m seed
 """
 
-import asyncio
-import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from pocketquant.api.market_data.app_services.bar_app_service import BarAppService
@@ -23,8 +20,8 @@ from pocketquant.api.market_data.app_services.cascade_aggregator import (
 from pocketquant.api.market_data.app_services.quote_dto import QuoteTick
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.redis import Cache
@@ -331,10 +328,10 @@ class TestAutoSeedMigration:
         cache = Cache(settings)
         await cache.connect()
 
+        from pocketquant.api.di.container import create_container
         from pocketquant.api.market_data.app_services.tracked_symbol_seeder import (
             seed_tracked_symbols,
         )
-        from pocketquant.api.di.container import create_container
 
         # Create minimal container with test infra
         container = create_container(settings)
@@ -362,10 +359,10 @@ class TestAutoSeedMigration:
         cache = Cache(settings)
         await cache.connect()
 
+        from pocketquant.api.di.container import create_container
         from pocketquant.api.market_data.app_services.tracked_symbol_seeder import (
             seed_tracked_symbols,
         )
-        from pocketquant.api.di.container import create_container
 
         container = create_container(settings)
 

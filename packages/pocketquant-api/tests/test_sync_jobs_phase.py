@@ -14,7 +14,6 @@ from pocketquant.api.market_data.app_services.sync_jobs import register_sync_job
 from pocketquant.core.config import Settings
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 
-
 # Jobs that ingest bars at fixed intervals — MUST be wall-clock-aligned.
 # Post-cascade refactor (260506 plan): single sync_1m runs per minute and
 # cascade-aggregates to higher tfs in-process. Verify/backfill/integrity/repair

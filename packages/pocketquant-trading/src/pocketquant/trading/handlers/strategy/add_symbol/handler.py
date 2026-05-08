@@ -5,7 +5,9 @@ from datetime import UTC, datetime
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.domain.subscription import StrategySubscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand

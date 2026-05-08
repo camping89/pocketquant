@@ -2,7 +2,9 @@
 
 from fastapi import APIRouter
 from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.route import router as get_ohlcv_router
-from pocketquant.api.market_data.handlers.ohlcv.stream_bars.route import router as stream_bars_router
+from pocketquant.api.market_data.handlers.ohlcv.stream_bars.route import (
+    router as stream_bars_router,
+)
 
 router = APIRouter()
 

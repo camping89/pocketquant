@@ -2,7 +2,10 @@
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pocketquant.api.market_data.app_services.integrity_jobs import check_integrity, repair_integrity
+from pocketquant.api.market_data.app_services.integrity_jobs import (
+    check_integrity,
+    repair_integrity,
+)
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository

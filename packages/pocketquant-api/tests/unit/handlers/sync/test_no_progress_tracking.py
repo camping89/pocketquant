@@ -1,7 +1,7 @@
 """Tests for no-progress tracking + anomaly log emission.
 
 Mocks SyncStatusRepository, BarRepository, SymbolRepository, Cache, and
-TradingViewClient. Patches `fetch_with_retry` so handler uses scripted
+IDataProvider. Patches `fetch_with_retry` so handler uses scripted
 provider responses without retry overhead.
 
 Each test asserts which sync_status_repo method was called (bump vs reset)

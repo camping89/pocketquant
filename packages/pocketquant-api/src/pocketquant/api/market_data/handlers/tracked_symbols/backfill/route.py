@@ -22,7 +22,7 @@ from pocketquant.api.market_data.handlers.tracked_symbols.backfill.handler impor
 )
 from pocketquant.api.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infrastructure.tradingview import TradingViewClient
+from pocketquant.core.infrastructure.data_provider import IDataProvider
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
 router = APIRouter(route_class=DishkaRoute)
@@ -35,7 +35,7 @@ router = APIRouter(route_class=DishkaRoute)
 async def backfill_tracked_symbol(
     exchange: str,
     symbol: str,
-    provider: FromDishka[TradingViewClient],
+    provider: FromDishka[IDataProvider],
     bar_repository: FromDishka[BarRepository],
     interval: Interval = Query(default=Interval.MINUTE_1, description="Timeframe to backfill"),
     n: int = Query(default=100, ge=1, le=5000, description="Number of bars"),

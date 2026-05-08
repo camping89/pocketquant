@@ -1,6 +1,46 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-04-10 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-08 | **Format:** Semantic Versioning
+
+## [v2.0.0] — 2026-05-08 — Binance Migration + TradingView Removal (BREAKING)
+
+### Breaking Changes
+- **BREAKING:** Removed `Settings.tradingview_username` and `Settings.tradingview_password` fields (Pydantic ignores stale env vars via `extra="ignore"`)
+- **BREAKING:** Removed `TRADINGVIEW_USERNAME` and `TRADINGVIEW_PASSWORD` environment variables
+- **BREAKING:** Deleted entire `pocketquant.core.infrastructure.tradingview/` module (no cold backup path)
+
+### Changed
+- **Market Data Path:** Switched crypto data source from TradingView to Binance public REST + WS (@aggTrade)
+  - No authentication required (public API)
+  - Rate limit: 1200 weight/min (typical: 10 weight per request)
+  - Historical sync via `IDataProvider.fetch_ohlcv()` (current impl: BinanceClient)
+  - Real-time quotes via `IRealtimeQuoteProvider` (@aggTrade WebSocket stream)
+- **Data Quality Fix:** BarBuilder cumulative-volume aggregation bug fixed via delta-pass adapter
+  - Bug: Cumulative volume from Binance was interpreted as delta, causing 8.9% flat bars + 8.9% zero-vol bars
+  - Fix: Delta-pass adapter clamps negative deltas to 0, logs warnings for anomalies
+  - Impact: 1m canonical TF flat_pct dropped from 8.9% → 0.0%, zerovol_pct from 8.9% → 0.0%
+- **VPS Production Resync:** 2-year bar re-sync completed post-fix
+  - Baseline: Pre-audit showed 8.9% flat + 8.9% zero-vol on 1m tf (from 2024-05-08)
+  - Post-fix: All canonical timeframes (1m, 5m, 15m, 1h, 4h, 1d) verified clean (0.0% flat, 0.0% zero-vol)
+  - Mongodump backup: `/tmp/pq-backup-260508/` (15M, 60,783 docs)
+  - Audit reports: `plans/reports/audit-260508-bar-quality{,-post}.md`
+
+### Added
+- **IDataProvider + IRealtimeQuoteProvider Protocols**
+  - Extension points for future market data sources (OKX, stocks, etc.)
+  - `IDataProvider.fetch_ohlcv()` contract requires per-tick delta volumes (not cumulative)
+  - `IRealtimeQuoteProvider` for alternative real-time quote streams
+
+### Removed
+- `infrastructure/tradingview/` folder: `provider.py`, `websocket.py`, tvdatafeed dependency
+- All TradingView creds from documentation and deployment guide
+
+### Notes
+- No code changes to BarBuilder (bug was in data source, not aggregation logic)
+- Delta-pass adapter validates incoming data at ingestion time (noisy log warnings for >5000-vol bars)
+- Operator may safely delete stale `TRADINGVIEW_*` env vars from production `.env` (Pydantic ignores via `extra="ignore"`)
+
+---
 
 ## [Unreleased]
 

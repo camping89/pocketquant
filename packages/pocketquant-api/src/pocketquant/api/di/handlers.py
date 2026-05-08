@@ -6,10 +6,6 @@ with Mediator in pocketquant.api.di.container:register_handlers().
 
 from dishka import Provider, Scope, provide
 from pocketquant.api.market_data.handlers.list_symbols.handler import ListSymbolsHandler
-from pocketquant.api.market_data.handlers.tracked_symbols.add.handler import AddTrackedSymbolHandler
-from pocketquant.api.market_data.handlers.tracked_symbols.list_all.handler import ListTrackedSymbolsHandler
-from pocketquant.api.market_data.handlers.tracked_symbols.remove.handler import RemoveTrackedSymbolHandler
-from pocketquant.api.market_data.handlers.tracked_symbols.update.handler import UpdateTrackedSymbolHandler
 from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.handler import GetOHLCVHandler
 from pocketquant.api.market_data.handlers.quotes.get_all.handler import GetAllQuotesHandler
 from pocketquant.api.market_data.handlers.quotes.get_latest.handler import GetLatestQuoteHandler
@@ -27,6 +23,16 @@ from pocketquant.api.market_data.handlers.status.get_sync_status.handler import 
 )
 from pocketquant.api.market_data.handlers.sync.sync_bulk.handler import BulkSyncHandler
 from pocketquant.api.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
+from pocketquant.api.market_data.handlers.tracked_symbols.add.handler import AddTrackedSymbolHandler
+from pocketquant.api.market_data.handlers.tracked_symbols.list_all.handler import (
+    ListTrackedSymbolsHandler,
+)
+from pocketquant.api.market_data.handlers.tracked_symbols.remove.handler import (
+    RemoveTrackedSymbolHandler,
+)
+from pocketquant.api.market_data.handlers.tracked_symbols.update.handler import (
+    UpdateTrackedSymbolHandler,
+)
 from pocketquant.backtest.handlers.get_optimization.handler import GetOptimizationHandler
 from pocketquant.backtest.handlers.get_result.handler import GetBacktestHandler
 from pocketquant.backtest.handlers.list_results.handler import ListBacktestsHandler
@@ -39,7 +45,9 @@ from pocketquant.trading.handlers.strategy.get_one.handler import GetStrategyHan
 from pocketquant.trading.handlers.strategy.get_subscription_backtest.handler import (
     GetSubscriptionBacktestHandler,
 )
-from pocketquant.trading.handlers.strategy.list_symbols.handler import ListSymbolsHandler as ListStrategySymbolsHandler
+from pocketquant.trading.handlers.strategy.list_symbols.handler import (
+    ListSymbolsHandler as ListStrategySymbolsHandler,
+)
 from pocketquant.trading.handlers.strategy.load.handler import LoadStrategyHandler
 from pocketquant.trading.handlers.strategy.remove_symbol.handler import RemoveSymbolHandler
 from pocketquant.trading.handlers.strategy.run_all_backtests.handler import RunAllBacktestsHandler

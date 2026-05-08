@@ -9,6 +9,8 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.api.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
 from pocketquant.api.market_data.handlers.quotes.router import router as quote_router
 from pocketquant.api.market_data.handlers.router import router as market_data_router
 from pocketquant.api.market_data.handlers.tracked_symbols import router as tracked_symbols_router
@@ -26,15 +28,15 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
+from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
 from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
-from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
-from pocketquant.api.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
-from pocketquant.core.infrastructure.tradingview import TradingViewWebSocketClient
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
 from pocketquant.trading.handlers.strategy import strategy_router
 from pocketquant.trading.handlers.trading import trading_router
 from pocketquant.trading.persistence.order_repository import OrderRepository
@@ -109,7 +111,7 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     """Start WS feed + subscription reconcile loop as background tasks.
 
     Stores task handles on app.state for lifespan cleanup:
-      app.state.ws_task          — TradingViewWebSocketClient.run_forever()
+      app.state.ws_task          — IRealtimeQuoteProvider.run_forever()
       app.state.subscription_task — WsSubscriptionManager.run()
     """
     quote_svc = await container.get(QuoteAppService)
@@ -130,10 +132,10 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
             task.cancel()
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
-    provider = await container.get(TradingViewWebSocketClient)
+    provider = await container.get(IRealtimeQuoteProvider)
     await provider.disconnect()
     logger.info("quote_feed.stopped")
 

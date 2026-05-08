@@ -9,9 +9,10 @@ from dishka import Provider, Scope, provide
 from pocketquant.api.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
+from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
+from pocketquant.core.infrastructure.data_provider import IDataProvider
 from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.core.infrastructure.tradingview import TradingViewClient
 from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
 
 
@@ -30,8 +31,8 @@ class InfrastructureProvider(Provider):
             scheduler.shutdown(wait=True)
 
     @provide(scope=Scope.APP)
-    def get_tv_client(self, settings: Settings) -> TradingViewClient:
-        return TradingViewClient(settings=settings)
+    def get_data_provider(self, settings: Settings) -> IDataProvider:
+        return BinanceClient(settings=settings)
 
     broker_factory = provide(BrokerFactory, scope=Scope.APP)
     risk_handler = provide(RiskCheckHandler, scope=Scope.APP)

@@ -1,10 +1,10 @@
 """Market data router - aggregates all market data sub-feature routers."""
 
 from fastapi import APIRouter
+from pocketquant.api.market_data.handlers.integrity.route import router as integrity_router
 from pocketquant.api.market_data.handlers.list_symbols.route import router as list_symbols_router
 from pocketquant.api.market_data.handlers.ohlcv.router import router as ohlcv_router
 from pocketquant.api.market_data.handlers.status.router import router as status_router
-from pocketquant.api.market_data.handlers.integrity.route import router as integrity_router
 from pocketquant.api.market_data.handlers.sync.router import router as sync_router
 
 router = APIRouter(prefix="/market-data", tags=["Market Data"])

@@ -7,7 +7,6 @@ from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 from pocketquant.api.di.container import create_container, register_handlers
-from pocketquant.api.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.api.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
@@ -19,6 +18,7 @@ from pocketquant.api.main_extensions import (
     start_quote_feed,
     stop_quote_feed,
 )
+from pocketquant.api.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.persistence.mongodb import Database

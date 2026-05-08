@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-04-13 | **Codebase Stats:** 334 files, ~16,815 LOC across 5 packages (core: 5.9k, backtest: 2.4k, trading: 3.5k, api: 3.1k, web: 2.0k)
+**Last Updated:** 2026-05-08 | **Codebase Stats:** 334 files, ~16,815 LOC across 5 packages (core: 5.9k, backtest: 2.4k, trading: 3.5k, api: 3.1k, web: 2.0k) | **Market Data Provider:** Binance public REST/WS (no auth required)
 
 High-level map of the PocketQuant monorepo structure, patterns, and architecture.
 
@@ -317,15 +317,18 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
   - Automatic re-subscription on reconnect
 - **Mappers:** OkxOrderMapper, OkxPositionMapper for state translation
 
-**Data Providers:**
-- **TradingViewClient** - REST API (tvdatafeed)
-  - ThreadPoolExecutor (max 4 workers) for blocking I/O
-  - `fetch_ohlcv(symbol, exchange, interval, n_bars)` - Fetch historical bars
-- **TradingViewWebSocketClient** - Binary WebSocket protocol
-  - Custom frame format parsing (~m~{len}~m~{json})
-  - Quote streaming
-  - Auto-reconnection
-- **IDataProvider** - Abstract interface for providers
+**Data Providers (IDataProvider Extension Points):**
+- **BinanceClient** - Implements IDataProvider protocol
+  - Public REST API (no auth required)
+  - `fetch_ohlcv(symbol, exchange, interval, n_bars)` - Fetch historical bars with delta-volume per tick
+  - Rate limits: Binance 1200 weight/min (typical: 10 weight per request)
+  - Returns bars with **per-tick delta volumes** (required by BarBuilder cumulative aggregation)
+- **BinanceWebSocketClient** - Implements IRealtimeQuoteProvider protocol
+  - @aggTrade stream for real-time quote ingestion
+  - Event-driven updates to BarAppService for multi-interval aggregation
+  - Auto-reconnection with exponential backoff
+- **IDataProvider / IRealtimeQuoteProvider** - Abstraction protocols
+  - Enable future implementations (OKX, stocks providers, etc.)
 
 **Scheduling:**
 - **JobScheduler** - APScheduler wrapper
@@ -466,9 +469,9 @@ After that, FastAPI serves the generated `dist` bundle at `/`.
 Historical sync flow:
 
 1. `POST /api/v1/market-data/sync`
-2. `SyncSymbolHandler` fetches bars from `TradingViewClient`
+2. `SyncSymbolHandler` fetches bars from `BinanceClient` (implements IDataProvider)
 3. bars are filtered against the latest stored bar
-4. `BarRepository.insert_many()` stores new bars
+4. `BarRepository.insert_many()` stores new bars (requires delta-volume per tick)
 5. `SyncStatusRepository` is updated
 6. Redis OHLCV caches are invalidated
 
@@ -555,8 +558,8 @@ The backtest strategy registry currently exposes:
 **InfrastructureProvider** - External integrations
 - IBroker implementations (PaperBroker, OKXBroker)
 - BrokerFactory (creates broker by type)
-- TradingViewClient (REST data fetching)
-- TradingViewWebSocketClient (WebSocket quotes)
+- BinanceClient (implements IDataProvider; REST data fetching)
+- BinanceWebSocketClient (implements IRealtimeQuoteProvider; @aggTrade real-time quotes)
 - OkxWebSocketClient + OkxReconnectionHandler (OKX integration)
 - HTTP client (generic async HTTP)
 - WebhookDispatcher
@@ -688,10 +691,10 @@ All settings via environment variables (`.env` file):
 - `REDIS_URL` - Redis DSN
 - `LOG_FORMAT` - "json" (prod) or "console" (dev)
 - `LOG_LEVEL` - log level (debug, info, warning, error)
-- `TRADINGVIEW_USERNAME` - Optional TradingView auth
-- `TRADINGVIEW_PASSWORD` - Optional TradingView auth
 - `ENVIRONMENT` - "development" or "production"
 - `APP_PORT` - Host-mapped API port (default: **58921**, container always 41920)
+- `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_PASSPHRASE` - OKX live trading credentials (optional)
+- `OKX_DEMO_MODE` - Boolean for OKX sandbox (default: true)
 
 ## Dependencies
 
@@ -701,8 +704,7 @@ All settings via environment variables (`.env` file):
 - **redis** - Async Redis client (redis-py)
 - **structlog** - Structured logging
 - **apscheduler** - Job scheduling (APScheduler)
-- **tvdatafeed** - TradingView data source
-- **aiohttp** - Async HTTP + WebSocket
+- **aiohttp** - Async HTTP + WebSocket (Binance REST/WS)
 - **pytest** - Testing framework
 - **ruff** - Linting & formatting
 - **pyright** - Type checking

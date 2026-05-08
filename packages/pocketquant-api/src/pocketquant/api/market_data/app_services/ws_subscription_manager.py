@@ -8,8 +8,10 @@ Cancel-safe: CancelledError propagates cleanly so lifespan teardown works.
 import asyncio
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.infrastructure.tradingview import TradingViewWebSocketClient
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import TrackedSymbolRepository
+from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -21,7 +23,7 @@ class WsSubscriptionManager:
     """Reconciles live WS subscriptions against the tracked_symbols collection.
 
     Args:
-        provider: TradingView WS client (singleton, shared with QuoteAppService).
+        provider: Realtime WS client (singleton, shared with QuoteAppService).
         tracked_symbol_repo: MongoDB repository for tracked symbols.
         quote_app_service: Provides the on_quote_update callback registered per symbol.
         interval_s: Reconcile interval in seconds (default 5.0).
@@ -29,9 +31,9 @@ class WsSubscriptionManager:
 
     def __init__(
         self,
-        provider: TradingViewWebSocketClient,
+        provider: IRealtimeQuoteProvider,
         tracked_symbol_repo: TrackedSymbolRepository,
-        quote_app_service: "QuoteAppService",  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
+        quote_app_service: QuoteAppService,  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
         interval_s: float = 5.0,
     ):
         self._provider = provider

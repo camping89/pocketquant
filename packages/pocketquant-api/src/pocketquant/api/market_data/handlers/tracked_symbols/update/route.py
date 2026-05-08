@@ -3,7 +3,9 @@
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Depends
 from pocketquant.api.common.symbol_validation import validate_symbol_pair
-from pocketquant.api.market_data.handlers.tracked_symbols.update.command import UpdateTrackedSymbolCommand
+from pocketquant.api.market_data.handlers.tracked_symbols.update.command import (
+    UpdateTrackedSymbolCommand,
+)
 from pocketquant.api.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.common.mediator import Mediator
 

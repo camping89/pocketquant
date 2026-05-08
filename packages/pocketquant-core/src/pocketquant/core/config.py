@@ -53,9 +53,6 @@ class Settings(BaseSettings):
     redis_url: RedisDsn
     redis_cache_ttl: int
 
-    tradingview_username: str | None = None
-    tradingview_password: str | None = None
-
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     log_format: Literal["json", "console"]
 

@@ -2,10 +2,18 @@
 
 from fastapi import APIRouter
 from pocketquant.api.market_data.handlers.tracked_symbols.add.route import router as add_router
-from pocketquant.api.market_data.handlers.tracked_symbols.backfill.route import router as backfill_router
-from pocketquant.api.market_data.handlers.tracked_symbols.list_all.route import router as list_router
-from pocketquant.api.market_data.handlers.tracked_symbols.remove.route import router as remove_router
-from pocketquant.api.market_data.handlers.tracked_symbols.update.route import router as update_router
+from pocketquant.api.market_data.handlers.tracked_symbols.backfill.route import (
+    router as backfill_router,
+)
+from pocketquant.api.market_data.handlers.tracked_symbols.list_all.route import (
+    router as list_router,
+)
+from pocketquant.api.market_data.handlers.tracked_symbols.remove.route import (
+    router as remove_router,
+)
+from pocketquant.api.market_data.handlers.tracked_symbols.update.route import (
+    router as update_router,
+)
 
 router = APIRouter(tags=["Tracked Symbols"])
 router.include_router(list_router)

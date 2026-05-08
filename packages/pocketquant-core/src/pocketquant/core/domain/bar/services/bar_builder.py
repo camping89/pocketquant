@@ -61,7 +61,14 @@ class BarBuilder:
             self.bar_end = self.bar_start + timedelta(seconds=INTERVAL_SECONDS[self.interval])
 
     def add_tick(self, price: float, volume: float | None, timestamp: datetime) -> bool:
-        """Add a tick to the bar. Returns False if tick is outside bar range."""
+        """Aggregate a tick into the in-progress bar.
+
+        volume MUST be per-tick DELTA (e.g., Binance @aggTrade ``q`` field).
+        Cumulative session totals will inflate bar volume — adapters must
+        convert before calling this method.
+
+        Returns False if tick is outside bar range (rejected, no state change).
+        """
         if self.bar_end is None or timestamp < self.bar_start or timestamp >= self.bar_end:
             return False
 
