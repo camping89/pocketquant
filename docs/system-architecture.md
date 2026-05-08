@@ -488,6 +488,8 @@ Mediator (common/mediator/mediator.py)
   ↓
 Handler (features/market_data/sync/sync_one/handler.py)
   ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [infrastructure]
+  │       └─ Excludes the in-progress bar: endTime caps at floor(now/duration)*duration - 1
+  │          (single-point fix for v2.0.1; in-progress quote remains in Redis via WS @aggTrade)
   ├─ [2] Validate: Bar.from_mongo()                               [domain]
   ├─ [3] Persist: BarRepository.upsert_many()                     [infrastructure]
   ├─ [4] Invalidate: Cache.delete_pattern()                       [infrastructure]

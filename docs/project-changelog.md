@@ -2,6 +2,20 @@
 
 **Last Updated:** 2026-05-08 | **Format:** Semantic Versioning
 
+## [v2.0.1] — 2026-05-08 — Hotfix: Binance in-progress bar capture
+
+### Fixed
+- **`BinanceClient.fetch_ohlcv` no longer returns the in-progress bar.** Window now caps at the last closed-bar boundary (`floor(now/duration)*duration - 1` ms, exclusive). A second-tier filter drops any kline whose `openTime >= cutoff` even under clock skew. Cron `sync_1m` previously persisted the in-progress kline (~2s of trades) and `filter_new_bars` then locked partial OHLCV in Mongo.
+- **Backfill of regression window** `[2026-05-08T07:30Z → 2026-05-08T15:40Z]` for all tracked symbols (BTCUSDT@BINANCE): 627 partial bars deleted across 1m/5m/15m/1h/4h/1d, 490 fresh 1m bars re-synced via fixed code path, cascade rebuilt. Post-backfill audit: 0 partial bars (tick<50) on 1m; sample 1m@09:30Z matches Binance REST byte-for-byte.
+
+### Changed
+- **`sync_verify_cascade` hardened**: round-robin replaced with all-tracked-symbols loop; comparison now spans full OHLCV (price 0.01% relative threshold; volume 5% relative threshold) instead of close-only `$0.01` absolute. Alert fires when >5% of compared bars diverge on any field, with first-3 sample breakdown for debugging.
+
+### Added
+- `BinanceClient` debug-level event `binance.in_progress_bar_filtered` (count of klines dropped by the defense filter).
+- `scripts/backfill_regression_window.py` — one-shot delete + re-sync + cascade tool, driven from `BarRepository.delete_many_by_range` (already shipped in v2.0.0).
+- `tests/unit/infrastructure/binance/test_binance_client_in_progress_filter.py` (4 cases) and `tests/unit/market_data/test_sync_verify_cascade.py` (10 cases) lock the new behaviour.
+
 ## [v2.0.0] — 2026-05-08 — Binance Migration + TradingView Removal (BREAKING)
 
 ### Breaking Changes
