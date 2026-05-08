@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 # Phase 04 — Audit + 2y re-sync from Binance (all canonical tfs)
 
 ## Context links
@@ -147,16 +151,16 @@ resync_2y_from_binance.py
 
 ## Todo list
 
-- [ ] Confirm/create Mongo compound index `(symbol, exchange, interval, datetime)`
-- [ ] `audit_bar_quality.py` script
-- [ ] Add `BarRepository.delete_many_by_range` accepting interval list (with unit test)
-- [ ] `resync_2y_from_binance.py` script with checkpoint + per-symbol progress logging
-- [ ] Unit tests for both scripts
-- [ ] Document production run procedure (single-day + multi-day) in script docstring
-- [ ] Execute pre-audit on production VPS
-- [ ] Execute mongodump snapshot
-- [ ] Execute re-sync (dry-run → live)
-- [ ] Execute post-audit; commit reports to `plans/reports/`
+- [x] Confirm/create Mongo compound index `(symbol, exchange, interval, datetime)`
+- [x] `audit_bar_quality.py` script
+- [x] Add `BarRepository.delete_many_by_range` accepting interval list (with unit test)
+- [x] `resync_2y_from_binance.py` script with checkpoint + per-symbol progress logging
+- [x] Unit tests for both scripts
+- [x] Document production run procedure (single-day + multi-day) in script docstring
+- [x] Execute pre-audit on production VPS
+- [x] Execute mongodump snapshot
+- [x] Execute re-sync (dry-run → live)
+- [x] Execute post-audit; commit reports to `plans/reports/`
 
 ## Success criteria
 
@@ -191,6 +195,10 @@ resync_2y_from_binance.py
 
 - Phase 05 documents the audit/resync runbook in `deployment-guide.md`.
 - If contamination % spikes again post-fix, escalate root cause (likely cascade aggregator regression).
+
+## Outcome
+
+Created `scripts/audit_bar_quality.py` + `scripts/resync_2y_from_binance.py`. `BarRepository.delete_many_by_range` added (atomic delete by interval list). Pre-audit on production VPS (2026-05-08 13:47 UTC): flat=8.9%, zerovol=8.9%, total 60,783 docs captured in mongodump backup `/tmp/pq-backup-260508/`. Resync executed: deleted contaminated bars, fetched 1,051,199 1m bars from Binance in 104s (higher tfs cascaded from clean 1m, direct REST faster than cascade aggregator over WAN for 730-day lookback). Post-audit: flat=0.0%, zerovol=0.0% across all canonical tfs. 52 test cases added (audit + resync + repo). See [tester-260508-1230-phase-04-audit-resync-execution.md](../reports/tester-260508-1230-phase-04-audit-resync-execution.md).
 
 ## Unresolved questions
 

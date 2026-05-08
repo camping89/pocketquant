@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 # Phase 02 — Volume aggregation: delta-pass adapter (Bug #2)
 
 ## Context links
@@ -124,12 +128,12 @@ BarBuilder.add_tick
 
 ## Todo list
 
-- [ ] Add docstring to `BarBuilder.add_tick` documenting delta contract
-- [ ] Update `QuoteAppService.on_quote_update` to clamp `volume` via `max(0.0, raw)`
-- [ ] Extend `test_bar_builder.py` with 6 delta-semantics cases
-- [ ] Add `test_quote_app_service.py` with 4 adapter cases
-- [ ] Run `just test-pkg core && just test-pkg api` — green
-- [ ] Run `just lint && just types` — clean
+- [x] Add docstring to `BarBuilder.add_tick` documenting delta contract
+- [x] Update `QuoteAppService.on_quote_update` to clamp `volume` via `max(0.0, raw)`
+- [x] Extend `test_bar_builder.py` with 6 delta-semantics cases
+- [x] Add `test_quote_app_service.py` with 4 adapter cases
+- [x] Run `just test-pkg core && just test-pkg api` — green
+- [x] Run `just lint && just types` — clean
 
 ## Success criteria
 
@@ -156,6 +160,10 @@ BarBuilder.add_tick
 
 - Phase 5 documents delta-contract in `code-standards.md` to prevent regression.
 - Independent of Phase 1/3/4 — can ship as standalone PR (depends only on Phase 01 mapper for end-to-end validation).
+
+## Outcome
+
+`BarBuilder.add_tick` docstring updated (delta contract clarified); `QuoteAppService.on_quote_update` now clamps negative volume to 0.0 via `max(0.0, raw)`. 10 new test cases added (6 in `test_bar_builder.py`, 4 in adapter); all pass. Volume aggregation now correctly sums per-trade deltas from Binance @aggTrade. See [tester-260507-1902-phase-02-volume-fix.md](../reports/tester-260507-1902-phase-02-volume-fix.md).
 
 ## Unresolved questions
 

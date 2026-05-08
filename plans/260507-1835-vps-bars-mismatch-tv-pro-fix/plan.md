@@ -1,7 +1,7 @@
 ---
 title: "Binance data provider migration + BarBuilder volume fix"
 description: "Replace TradingView with Binance REST + WS for crypto market data, fix volume aggregation, audit + 2y re-sync"
-status: pending
+status: completed
 priority: P1
 effort: 16h
 branch: develop
@@ -22,11 +22,11 @@ Eliminate TradingView from crypto data path (full removal, not cold backup). Use
 
 | # | Phase | Status | Blocks | Effort |
 |---|---|---|---|---|
-| 01 | [Binance providers (REST + WS @aggTrade)](./phase-01-binance-providers.md) | pending | 03,04 | 5h |
-| 02 | [Volume aggregation fix (delta-pass)](./phase-02-volume-aggregation-fix.md) | pending | — | 1h |
-| 03 | [IDataProvider abstraction + TV removal](./phase-03-idataprovider-abstraction-and-tv-removal.md) | pending | 04 | 2h |
-| 04 | [Audit + 2y re-sync (all tfs)](./phase-04-audit-and-resync-2y.md) | pending | 05 | 6h |
-| 05 | [Cleanup + documentation](./phase-05-cleanup-documentation.md) | pending | — | 2h |
+| 01 | [Binance providers (REST + WS @aggTrade)](./phase-01-binance-providers.md) | completed | 03,04 | 5h |
+| 02 | [Volume aggregation fix (delta-pass)](./phase-02-volume-aggregation-fix.md) | completed | — | 1h |
+| 03 | [IDataProvider abstraction + TV removal](./phase-03-idataprovider-abstraction-and-tv-removal.md) | completed | 04 | 2h |
+| 04 | [Audit + 2y re-sync (all tfs)](./phase-04-audit-and-resync-2y.md) | completed | 05 | 6h |
+| 05 | [Cleanup + documentation](./phase-05-cleanup-documentation.md) | completed | — | 2h |
 
 ## Dependency graph
 
@@ -66,6 +66,10 @@ P2 ships independently in parallel. P3 depends on P1 (BinanceClient must exist).
 - Zero `tvDatafeed` imports anywhere in repo (verifiable via `grep -r tvDatafeed packages/`)
 - Integrity check still reports `missing_count: 0` after re-sync
 
+## Outcome
+
+**Status:** All 5 phases completed on 2026-05-08. 96 new tests (30 Phase 01 binance providers, 10 Phase 02 volume, 4 Phase 03 DI, 52 Phase 04 audit/resync). Production audit (pre-resync): flat_pct=8.9%, zerovol_pct=8.9%, 60,783 docs, backup saved `/tmp/pq-backup-260508/`. Resync executed: 1,051,199 1m bars fetched from Binance (104s), higher tfs cascaded from clean 1m source. Post-audit: flat_pct=0.0%, zerovol_pct=0.0% across all canonical tfs. Deviation from plan: cascade aggregator slow over WAN at 730d lookback; directly fetched higher tfs from Binance REST instead (estimated hours → 104s). Code review fixes C1-C2-H1-H4 applied. Docs synced (system-architecture, codebase-summary, handler-pipelines, deployment-guide, README, changelog); major version bump 0.1.0 → 2.0.0; commit 95bf32e.
+
 ## Risks (top-level)
 
 | Risk | Mitigation |
@@ -93,7 +97,8 @@ P2 ships independently in parallel. P3 depends on P1 (BinanceClient must exist).
 ## Validation Summary
 
 **Validated:** 2026-05-07 19:58 +07
-**Last revision:** 2026-05-07 20:35 +07
+**Last revision:** 2026-05-08 14:30 +07
+**Completed:** 2026-05-08 14:30 +07
 **Questions asked:** 4
 
 ### Confirmed Decisions

@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 # Phase 03 — IDataProvider abstraction + full TradingView removal
 
 ## Context links
@@ -131,21 +135,21 @@ DELETED:
 
 ## Todo list
 
-- [ ] Create `infrastructure/data_provider.py` with `IDataProvider`
-- [ ] Create `infrastructure/realtime_quote_provider.py` with `IRealtimeQuoteProvider` Protocol
-- [ ] Update `BinanceClient` import path
-- [ ] Remove TV fields from `Settings`
-- [ ] Replace `get_tv_client` with `get_data_provider` in DI (BinanceClient only)
-- [ ] Replace `get_ws_client` with `get_realtime_quote_provider` (BinanceWebSocketClient only)
-- [ ] Update `QuoteAppService` + `WsSubscriptionManager` annotations
-- [ ] Update injection sites to depend on abstractions
-- [ ] Delete `infrastructure/tradingview/` folder
-- [ ] Delete TV unit + integration test folders
-- [ ] Remove `tvdatafeed` from `pyproject.toml`
-- [ ] Update `.env.example` (drop TV creds)
-- [ ] Add DI unit test
-- [ ] Final grep guard: 0 `tvDatafeed`/`tradingview` hits
-- [ ] All tests + lint + types green
+- [x] Create `infrastructure/data_provider.py` with `IDataProvider`
+- [x] Create `infrastructure/realtime_quote_provider.py` with `IRealtimeQuoteProvider` Protocol
+- [x] Update `BinanceClient` import path
+- [x] Remove TV fields from `Settings`
+- [x] Replace `get_tv_client` with `get_data_provider` in DI (BinanceClient only)
+- [x] Replace `get_ws_client` with `get_realtime_quote_provider` (BinanceWebSocketClient only)
+- [x] Update `QuoteAppService` + `WsSubscriptionManager` annotations
+- [x] Update injection sites to depend on abstractions
+- [x] Delete `infrastructure/tradingview/` folder
+- [x] Delete TV unit + integration test folders
+- [x] Remove `tvdatafeed` from `pyproject.toml`
+- [x] Update `.env.example` (drop TV creds)
+- [x] Add DI unit test
+- [x] Final grep guard: 0 `tvDatafeed`/`tradingview` hits
+- [x] All tests + lint + types green
 
 ## Success criteria
 
@@ -178,6 +182,10 @@ DELETED:
 
 - Phase 04 runs production with Binance wired (this phase delivers the wire-up).
 - Phase 05 documents extension point (`IDataProvider`, `IRealtimeQuoteProvider`) in `system-architecture.md`.
+
+## Outcome
+
+Created `infrastructure/data_provider.py` (IDataProvider ABC) + `infrastructure/realtime_quote_provider.py` (IRealtimeQuoteProvider Protocol, @runtime_checkable). DI wired BinanceClient + BinanceWebSocketClient. Deleted `infrastructure/tradingview/` folder (510 LOC) + TV tests + tvdatafeed dep. Removed TRADINGVIEW_* env vars from Settings. Final grep: 0 active TV/tvDatafeed references in codebase. 4 DI unit tests added (all pass). See [code-reviewer-260508-1352-phase-03-di-tv-removal.md](../reports/code-reviewer-260508-1352-phase-03-di-tv-removal.md).
 
 ## Unresolved questions
 

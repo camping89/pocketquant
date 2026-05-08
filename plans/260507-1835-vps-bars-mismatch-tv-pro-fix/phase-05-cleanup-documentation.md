@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 # Phase 05 — Cleanup + documentation
 
 ## Context links
@@ -112,16 +116,16 @@ pyproject.toml               ──► major version bump
 
 ## Todo list
 
-- [ ] Update `system-architecture.md` (Binance-only, IDataProvider/IRealtimeQuoteProvider extension)
-- [ ] Update `codebase-summary.md` (binance/ added, tradingview/ removed, last-updated)
-- [ ] Update `handler-pipelines.md` (sync_1m provider abstraction)
-- [ ] Add changelog entry (BREAKING) to `project-changelog.md`
-- [ ] Update `deployment-guide.md` (drop TV creds, add 2y resync runbook)
-- [ ] Update `README.md` quickstart
-- [ ] Bump major version in `pyproject.toml`
-- [ ] Final grep sweep: 0 active TV refs in docs
-- [ ] Lint Markdown
-- [ ] Conventional commit `docs: ...`
+- [x] Update `system-architecture.md` (Binance-only, IDataProvider/IRealtimeQuoteProvider extension)
+- [x] Update `codebase-summary.md` (binance/ added, tradingview/ removed, last-updated)
+- [x] Update `handler-pipelines.md` (sync_1m provider abstraction)
+- [x] Add changelog entry (BREAKING) to `project-changelog.md`
+- [x] Update `deployment-guide.md` (drop TV creds, add 2y resync runbook)
+- [x] Update `README.md` quickstart
+- [x] Bump major version in `pyproject.toml`
+- [x] Final grep sweep: 0 active TV refs in docs
+- [x] Lint Markdown
+- [x] Conventional commit `docs: ...`
 
 ## Success criteria
 
@@ -154,6 +158,10 @@ pyproject.toml               ──► major version bump
 - Merge PR; deploy to production VPS.
 - Run Phase 04 production scripts (audit + 2y resync) post-deploy.
 - Monitor first 24h for `@aggTrade` event-rate impact on `BarAppService` (per Phase 01 risk).
+
+## Outcome
+
+Synced all 6 docs: `system-architecture.md` (Binance-only, IDataProvider/IRealtimeQuoteProvider extension points), `codebase-summary.md` (binance/ added, tradingview/ removed, 25 LOC net decrease), `handler-pipelines.md` (sync_1m abstracted), `project-changelog.md` (BREAKING entry + audit reports), `deployment-guide.md` (TV creds removed, 2y resync runbook added), `README.md` (no TV mention). Major version bumped 0.1.0 → 2.0.0 in pyproject.toml. Final grep: 0 active tradingview/tvDatafeed refs in codebase. Commit 95bf32e. See [docs-manager-260508-1415-phase-05-documentation.md](../reports/docs-manager-260508-1415-phase-05-documentation.md).
 
 ## Unresolved questions
 

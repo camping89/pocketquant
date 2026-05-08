@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 # Phase 01 — Binance providers (REST + WS @aggTrade)
 
 ## Context links
@@ -108,14 +112,14 @@ list[Bar]
 
 ## Todo list
 
-- [ ] Create `infrastructure/binance/` folder + `__init__.py`
-- [ ] `binance_mappers.py` with extended interval map + `kline_to_bar` + `aggtrade_to_quote_dict`
-- [ ] `binance_client.py` implementing `IDataProvider`
-- [ ] `binance_websocket_client.py` consuming `@aggTrade`
-- [ ] Unit tests for REST client (≥6 cases)
-- [ ] Unit tests for WS client (≥5 cases including aggTrade frame parsing + reconnection)
-- [ ] Lint + type-check clean
-- [ ] All core unit tests green
+- [x] Create `infrastructure/binance/` folder + `__init__.py`
+- [x] `binance_mappers.py` with extended interval map + `kline_to_bar` + `aggtrade_to_quote_dict`
+- [x] `binance_client.py` implementing `IDataProvider`
+- [x] `binance_websocket_client.py` consuming `@aggTrade`
+- [x] Unit tests for REST client (≥6 cases)
+- [x] Unit tests for WS client (≥5 cases including aggTrade frame parsing + reconnection)
+- [x] Lint + type-check clean
+- [x] All core unit tests green
 
 ## Success criteria
 
@@ -146,6 +150,10 @@ list[Bar]
 
 - Phase 03 wires `BinanceClient` + `BinanceWebSocketClient` into DI providers and deletes `infrastructure/tradingview/`.
 - Phase 04 uses `BinanceClient` for 2y re-sync.
+
+## Outcome
+
+Delivered 4 new files in `infrastructure/binance/`: `__init__.py`, `binance_client.py` (IDataProvider REST impl, ≤200 LOC), `binance_websocket_client.py` (@aggTrade WS client), `binance_mappers.py` (kline→Bar, aggTrade→quote mapping). 30 unit tests added (6 REST, 5 WS, coverage ≥85%, no regressions). Lint + type-check clean. See [fullstack-260507-1820-phase-01-binance-providers-complete.md](../reports/fullstack-260507-1820-phase-01-binance-providers-complete.md).
 
 ## Unresolved questions
 
