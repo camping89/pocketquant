@@ -59,8 +59,15 @@ SYNC_INTERVALS = [
 
 _container: AsyncContainer | None = None
 
-# Round-robin counter for sync_verify_cascade symbol selection.
-_verify_cascade_counter: int = 0
+# ---------------------------------------------------------------------------
+# Verify cascade thresholds (per-field).
+# Price relative threshold catches scale-aware drift across assets:
+#   BTC $80k → $8 trigger; ETH $3k → $0.30 trigger.
+# Volume gets its own threshold because exchange-side rounding is noisier than price.
+# ---------------------------------------------------------------------------
+PRICE_THRESHOLD_PCT = 0.0001  # 0.01%
+VOLUME_THRESHOLD_PCT = 0.05  # 5%
+DIVERGENCE_ALERT_FRACTION = 0.05  # alert when >5% of compared bars diverge on any field
 
 
 def set_container(container: AsyncContainer) -> None:
@@ -79,6 +86,28 @@ def _get_container() -> AsyncContainer:
 
 def _ms_since(started: datetime) -> int:
     return int((datetime.now(UTC) - started).total_seconds() * 1000)
+
+
+def _diff_pct(a: float, b: float) -> float:
+    """Relative absolute diff. Returns 0.0 when |a| is too small to divide safely."""
+    if abs(a) < 1e-12:
+        return 0.0
+    return abs(a - b) / abs(a)
+
+
+def compare_bar_fields(rest_bar, db_bar) -> dict[str, bool]:  # noqa: ANN001
+    """Per-field divergence map (True == divergent beyond threshold).
+
+    Pure function to keep `sync_verify_cascade` thin and unit-testable. Price
+    fields share PRICE_THRESHOLD_PCT; volume gets its looser VOLUME_THRESHOLD_PCT.
+    """
+    return {
+        "open": _diff_pct(rest_bar.open, db_bar.open) > PRICE_THRESHOLD_PCT,
+        "high": _diff_pct(rest_bar.high, db_bar.high) > PRICE_THRESHOLD_PCT,
+        "low": _diff_pct(rest_bar.low, db_bar.low) > PRICE_THRESHOLD_PCT,
+        "close": _diff_pct(rest_bar.close, db_bar.close) > PRICE_THRESHOLD_PCT,
+        "volume": _diff_pct(rest_bar.volume, db_bar.volume) > VOLUME_THRESHOLD_PCT,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -403,14 +432,69 @@ async def sync_1m() -> None:
         raise
 
 
-async def sync_verify_cascade() -> None:
-    """Hourly sanity check: compare cascade 5m bars vs REST get_hist(5m, n=12).
+async def _verify_one_symbol(
+    symbol: str,
+    exchange: str,
+    *,
+    provider: IDataProvider,
+    bar_repo: BarRepository,
+) -> dict:
+    """Compare REST 5m bars against cascade-stored 5m bars for one (symbol, exchange).
 
-    Picks one tracked symbol per run (round-robin). Logs divergence_alert if
-    abs(rest.close - cascade.close) > 0.01 for >5% of the 12 comparison bars.
+    Returns a per-symbol summary dict with compared / divergence_count / sample_divergences.
+    Raises on REST/DB failures so the caller can record per-symbol error state.
     """
-    global _verify_cascade_counter
+    rest_bars = await provider.fetch_ohlcv(
+        symbol=symbol, exchange=exchange, interval=Interval.MINUTE_5, n_bars=12,
+    )
+    if not rest_bars:
+        return {"symbol": symbol, "exchange": exchange, "compared": 0, "rest_empty": True}
 
+    oldest_rest = min(b.datetime for b in rest_bars if b.datetime)
+    newest_rest = max(b.datetime for b in rest_bars if b.datetime)
+    cascade_bars = await bar_repo.find(
+        symbol=symbol, exchange=exchange, interval=Interval.MINUTE_5,
+        start_date=oldest_rest, end_date=newest_rest + timedelta(minutes=5), limit=20,
+    )
+    if not cascade_bars:
+        return {"symbol": symbol, "exchange": exchange, "compared": 0, "cascade_empty": True}
+
+    cascade_by_dt: dict = {b.datetime: b for b in cascade_bars if b.datetime}
+
+    compared = 0
+    divergence_count = 0
+    samples: list[dict] = []
+    for rest_bar in rest_bars:
+        if not rest_bar.datetime:
+            continue
+        cascade_bar = cascade_by_dt.get(rest_bar.datetime)
+        if cascade_bar is None:
+            continue
+        compared += 1
+        fields_diff = compare_bar_fields(rest_bar, cascade_bar)
+        if any(fields_diff.values()):
+            divergence_count += 1
+            if len(samples) < 3:
+                samples.append(
+                    {"datetime": rest_bar.datetime.isoformat(), "fields": fields_diff}
+                )
+
+    return {
+        "symbol": symbol,
+        "exchange": exchange,
+        "compared": compared,
+        "divergence_count": divergence_count,
+        "samples": samples,
+    }
+
+
+async def sync_verify_cascade() -> None:
+    """Hourly full-fleet sanity check: REST 5m vs cascade 5m, full OHLCV per field.
+
+    Iterates ALL tracked symbols (no round-robin). Each comparison checks O/H/L/C
+    against PRICE_THRESHOLD_PCT and V against VOLUME_THRESHOLD_PCT. Alerts when
+    divergence_count/compared > DIVERGENCE_ALERT_FRACTION for that symbol.
+    """
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
@@ -428,102 +512,59 @@ async def sync_verify_cascade() -> None:
     try:
         tracked = await tracked_symbol_repo.list_all()
         if not tracked:
-            logger.warning(
-                "sync_verify_cascade.skipped", reason="no_tracked_symbols",
-            )
+            logger.warning("sync_verify_cascade.skipped", reason="no_tracked_symbols")
             if doc_id:
                 await history_repo.record_finish(
                     doc_id, status="completed", duration_ms=_ms_since(started)
                 )
             return
 
-        # Round-robin symbol selection.
-        idx = _verify_cascade_counter % len(tracked)
-        _verify_cascade_counter += 1
-        ts = tracked[idx]
-        symbol = ts.symbol.upper()
-        exchange = ts.exchange.upper()
+        logger.info("sync_verify_cascade.started", symbols=len(tracked))
 
-        logger.info(
-            "sync_verify_cascade.started",
-            symbol=symbol,
-            exchange=exchange,
-            sample_idx=idx,
-        )
-
-        # Fetch 12 REST 5m bars (last ~1 hour).
-        rest_bars = await provider.fetch_ohlcv(
-            symbol=symbol,
-            exchange=exchange,
-            interval=Interval.MINUTE_5,
-            n_bars=12,
-        )
-
-        if not rest_bars:
-            logger.warning("sync_verify_cascade.rest_empty", symbol=symbol, exchange=exchange)
-            if doc_id:
-                await history_repo.record_finish(
-                    doc_id, status="completed", duration_ms=_ms_since(started)
+        for ts in tracked:
+            symbol = ts.symbol.upper()
+            exchange = ts.exchange.upper()
+            try:
+                summary = await _verify_one_symbol(
+                    symbol, exchange, provider=provider, bar_repo=bar_repo,
                 )
-            return
-
-        # Query cascade-computed 5m bars for the same time window.
-        oldest_rest = min(b.datetime for b in rest_bars if b.datetime)
-        newest_rest = max(b.datetime for b in rest_bars if b.datetime)
-        cascade_bars = await bar_repo.find(
-            symbol=symbol,
-            exchange=exchange,
-            interval=Interval.MINUTE_5,
-            start_date=oldest_rest,
-            end_date=newest_rest + timedelta(minutes=5),
-            limit=20,
-        )
-
-        if not cascade_bars:
-            logger.warning(
-                "sync_verify_cascade.cascade_empty",
-                symbol=symbol,
-                exchange=exchange,
-                reason="no_cascade_5m_bars_in_window",
-            )
-            if doc_id:
-                await history_repo.record_finish(
-                    doc_id, status="completed", duration_ms=_ms_since(started)
+            except Exception as exc:
+                logger.error(
+                    "sync_verify_cascade.symbol_failed",
+                    symbol=symbol, exchange=exchange, error=str(exc),
                 )
-            return
-
-        # Build lookup: cascade bars indexed by datetime for O(1) comparison.
-        cascade_by_dt: dict = {b.datetime: b for b in cascade_bars if b.datetime}
-
-        divergence_count = 0
-        compared = 0
-        for rest_bar in rest_bars:
-            if not rest_bar.datetime:
                 continue
-            cascade_bar = cascade_by_dt.get(rest_bar.datetime)
-            if cascade_bar is None:
-                continue
-            compared += 1
-            if abs(rest_bar.close - cascade_bar.close) > 0.01:
-                divergence_count += 1
 
-        if compared > 0 and divergence_count / compared > 0.05:
-            logger.warning(
-                "cascade.divergence_alert",
-                symbol=symbol,
-                exchange=exchange,
-                divergence_count=divergence_count,
-                compared=compared,
-                threshold_pct=5,
-            )
-        else:
-            logger.info(
-                "sync_verify_cascade.ok",
-                symbol=symbol,
-                exchange=exchange,
-                compared=compared,
-                divergence_count=divergence_count,
-            )
+            if summary.get("rest_empty"):
+                logger.warning(
+                    "sync_verify_cascade.rest_empty", symbol=symbol, exchange=exchange,
+                )
+                continue
+            if summary.get("cascade_empty"):
+                logger.warning(
+                    "sync_verify_cascade.cascade_empty",
+                    symbol=symbol, exchange=exchange,
+                    reason="no_cascade_5m_bars_in_window",
+                )
+                continue
+
+            compared = summary["compared"]
+            div = summary["divergence_count"]
+            if compared > 0 and div / compared > DIVERGENCE_ALERT_FRACTION:
+                logger.warning(
+                    "cascade.divergence_alert",
+                    symbol=symbol, exchange=exchange,
+                    divergence_count=div, compared=compared,
+                    price_threshold_pct=PRICE_THRESHOLD_PCT,
+                    volume_threshold_pct=VOLUME_THRESHOLD_PCT,
+                    sample_divergences=summary["samples"],
+                )
+            else:
+                logger.info(
+                    "sync_verify_cascade.ok",
+                    symbol=symbol, exchange=exchange,
+                    compared=compared, divergence_count=div,
+                )
 
         if doc_id:
             await history_repo.record_finish(
@@ -533,10 +574,7 @@ async def sync_verify_cascade() -> None:
         if doc_id:
             try:
                 await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
+                    doc_id, status="failed", duration_ms=_ms_since(started), error=str(exc),
                 )
             except Exception:
                 logger.warning(
