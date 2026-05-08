@@ -100,21 +100,32 @@ def compute_boundaries(
     range_start: datetime,
     range_end: datetime,
 ) -> list[datetime]:
-    """Return UTC-aligned bucket start datetimes within [range_start, range_end).
+    """Return UTC-aligned bucket starts whose bucket overlaps [range_start, range_end).
 
-    Alignment rules:
-    - 5m  : minute % 5 == 0
-    - 15m : minute % 15 == 0
-    - 1h  : hour boundary (minute == 0)
-    - 4h  : hour % 4 == 0 (UTC)
-    - 1d  : UTC midnight
+    A bucket [B, B + tf_seconds) overlaps the request range when both:
+      - B < range_end                     (bucket starts before the range ends)
+      - B + tf_seconds > range_start      (bucket ends after the range starts)
 
-    Boundaries are inclusive of range_start if aligned, exclusive of range_end.
+    This guarantees that a bucket which closes inside the range is re-aggregated
+    once with its complete 1m source, even when the bucket *boundary* itself is
+    older than range_start. Without this, larger timeframes (4h, 1d) freeze the
+    moment their start instant falls outside the cron's lookback window —
+    sync_jobs.sync_1m uses lookback_minutes=100, so the just-closed 4h bucket
+    would otherwise never get a clean post-close aggregation pass.
+
+    Alignment (UTC):
+      5m  : minute % 5 == 0
+      15m : minute % 15 == 0
+      1h  : hour boundary
+      4h  : hour % 4 == 0
+      1d  : midnight
+
     Both inputs should be UTC-aware datetimes.
     """
     secs = tf_seconds(tf)
 
-    # Align range_start DOWN to the nearest tf boundary (floor division on epoch).
+    # Align range_start DOWN to its enclosing bucket boundary so the bucket that
+    # *contains* range_start (and therefore overlaps it) is included.
     epoch = range_start.timestamp()
     first_boundary_epoch = math.floor(epoch / secs) * secs
     first_boundary = datetime.fromtimestamp(first_boundary_epoch, tz=UTC)
@@ -122,8 +133,7 @@ def compute_boundaries(
     boundaries: list[datetime] = []
     current = first_boundary
     while current < range_end:
-        if current >= range_start:
-            boundaries.append(current)
+        boundaries.append(current)
         current = current + timedelta(seconds=secs)
 
     return boundaries
