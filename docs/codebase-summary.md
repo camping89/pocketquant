@@ -321,6 +321,7 @@ No CQRS in this layer. These are business orchestrators called by CQRS handlers.
 - **BinanceClient** - Implements IDataProvider protocol
   - Public REST API (no auth required)
   - `fetch_ohlcv(symbol, exchange, interval, n_bars)` - Fetch historical bars with delta-volume per tick
+  - **Excludes the in-progress bar** (v2.0.1) — endTime caps at last closed-bar boundary; a second-tier filter drops any kline `openTime >= cutoff`. Authoritative behaviour in `tests/unit/infrastructure/binance/test_binance_client_in_progress_filter.py`.
   - Rate limits: Binance 1200 weight/min (typical: 10 weight per request)
   - Returns bars with **per-tick delta volumes** (required by BarBuilder cumulative aggregation)
 - **BinanceWebSocketClient** - Implements IRealtimeQuoteProvider protocol
