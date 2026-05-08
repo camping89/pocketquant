@@ -143,72 +143,117 @@ class TestAggregateOhlcv:
 
 
 class TestComputeBoundaries:
-    """Test compute_boundaries — UTC-aligned bucket calculation."""
+    """Test compute_boundaries — overlap semantics (bucket overlaps range)."""
 
     def test_5m_boundaries(self):
         start = datetime(2026, 5, 6, 10, 2, tzinfo=UTC)
         end = datetime(2026, 5, 6, 10, 13, tzinfo=UTC)
         result = compute_boundaries(Interval.MINUTE_5, start, end)
-        # Expected: 10:05, 10:10 (start rounded down to 10:00, but only >= range_start included)
-        assert len(result) == 2
-        assert result[0] == datetime(2026, 5, 6, 10, 5, tzinfo=UTC)
-        assert result[1] == datetime(2026, 5, 6, 10, 10, tzinfo=UTC)
+        # Buckets that overlap [10:02, 10:13): [10:00,10:05), [10:05,10:10), [10:10,10:15)
+        assert result == [
+            datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
+            datetime(2026, 5, 6, 10, 5, tzinfo=UTC),
+            datetime(2026, 5, 6, 10, 10, tzinfo=UTC),
+        ]
 
     def test_1h_boundaries(self):
         start = datetime(2026, 5, 6, 10, 30, tzinfo=UTC)
         end = datetime(2026, 5, 6, 13, 15, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_1, start, end)
-        # Expected: 11:00, 12:00, 13:00 (10:00 is before range_start)
-        assert len(result) == 3
-        assert result[0] == datetime(2026, 5, 6, 11, 0, tzinfo=UTC)
-        assert result[-1] == datetime(2026, 5, 6, 13, 0, tzinfo=UTC)
+        # Buckets [10:00,11:00), [11:00,12:00), [12:00,13:00), [13:00,14:00) all overlap.
+        assert result == [
+            datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
+            datetime(2026, 5, 6, 11, 0, tzinfo=UTC),
+            datetime(2026, 5, 6, 12, 0, tzinfo=UTC),
+            datetime(2026, 5, 6, 13, 0, tzinfo=UTC),
+        ]
 
     def test_1d_boundary_at_midnight(self):
         start = datetime(2026, 5, 6, 15, 0, tzinfo=UTC)
         end = datetime(2026, 5, 8, 10, 0, tzinfo=UTC)
         result = compute_boundaries(Interval.DAY_1, start, end)
-        # Expected: 2026-05-07 00:00, 2026-05-08 00:00 (2026-05-06 00:00 is before range_start)
-        assert len(result) == 2
-        assert result[0] == datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
-        assert result[1] == datetime(2026, 5, 8, 0, 0, tzinfo=UTC)
+        # Buckets [05-06, 05-07), [05-07, 05-08), [05-08, 05-09) all overlap the range.
+        assert result == [
+            datetime(2026, 5, 6, 0, 0, tzinfo=UTC),
+            datetime(2026, 5, 7, 0, 0, tzinfo=UTC),
+            datetime(2026, 5, 8, 0, 0, tzinfo=UTC),
+        ]
 
     def test_hour_boundary_spanning_edge(self):
         """Range spanning hour edge produces correct bucket count."""
         start = datetime(2026, 5, 6, 23, 45, tzinfo=UTC)
         end = datetime(2026, 5, 7, 1, 30, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_1, start, end)
-        # Expected: 00:00 (next day), 01:00 (23:00 is before range_start)
-        assert len(result) == 2
-        assert result[0] == datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
-        assert result[1] == datetime(2026, 5, 7, 1, 0, tzinfo=UTC)
+        # Buckets [23:00,00:00), [00:00,01:00), [01:00,02:00) all overlap.
+        assert result == [
+            datetime(2026, 5, 6, 23, 0, tzinfo=UTC),
+            datetime(2026, 5, 7, 0, 0, tzinfo=UTC),
+            datetime(2026, 5, 7, 1, 0, tzinfo=UTC),
+        ]
 
     def test_4h_alignment(self):
-        """4h boundaries at hour % 4 == 0."""
+        """4h boundaries at hour % 4 == 0; bucket containing range_start included."""
         start = datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
         end = datetime(2026, 5, 6, 20, 0, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_4, start, end)
-        # Expected: 12:00, 16:00, 20:00 (08:00 is before range_start)
-        assert len(result) == 2
-        assert result[0] == datetime(2026, 5, 6, 12, 0, tzinfo=UTC)
-        assert result[1] == datetime(2026, 5, 6, 16, 0, tzinfo=UTC)
+        # Buckets [08:00,12:00), [12:00,16:00), [16:00,20:00) overlap [10:00, 20:00).
+        # [20:00, 24:00) starts at range_end → excluded by `B < range_end`.
+        assert result == [
+            datetime(2026, 5, 6, 8, 0, tzinfo=UTC),
+            datetime(2026, 5, 6, 12, 0, tzinfo=UTC),
+            datetime(2026, 5, 6, 16, 0, tzinfo=UTC),
+        ]
 
     def test_no_boundaries_when_range_empty(self):
-        """No boundaries when range is small but starts at boundary."""
+        """1m-wide range still includes the bucket that contains it."""
         start = datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
         end = datetime(2026, 5, 6, 10, 1, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_1, start, end)
-        # 10:00 is a boundary and >= range_start, so included (next one is at 11:00, outside range)
-        assert len(result) == 1
-        assert result[0] == datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
+        assert result == [datetime(2026, 5, 6, 10, 0, tzinfo=UTC)]
 
     def test_exclusive_end_boundary(self):
-        """Range end is exclusive."""
+        """A bucket starting exactly at range_end is excluded."""
         start = datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
         end = datetime(2026, 5, 6, 10, 5, tzinfo=UTC)
         result = compute_boundaries(Interval.MINUTE_5, start, end)
-        # Expected: 10:00 (but not 10:05 — exclusive end)
-        assert len(result) == 1
-        assert result[0] == datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
+        # [10:00, 10:05) overlaps; [10:05, 10:10) starts at range_end → excluded.
+        assert result == [datetime(2026, 5, 6, 10, 0, tzinfo=UTC)]
+
+    # ------- Regression coverage for the cascade-staleness bug -------
+
+    def test_4h_just_closed_bucket_included_for_final_pass(self):
+        """4h bucket boundary may be older than range_start, but must still be
+        included when its bucket *end* falls inside the range — that's the
+        post-close pass that fixes stale 4h aggregates."""
+        # Cron at 08:00 UTC, lookback 100m → range_start = 06:20.
+        start = datetime(2026, 5, 8, 6, 20, tzinfo=UTC)
+        end = datetime(2026, 5, 8, 8, 0, tzinfo=UTC)
+        result = compute_boundaries(Interval.HOUR_4, start, end)
+        # Old (boundary-in-range) returned []. New must include 04:00 because
+        # [04:00, 08:00) ends exactly at range_end → bucket touched range.
+        # However our overlap rule needs B + tf_secs > range_start; 08:00 > 06:20 ✓.
+        assert result == [datetime(2026, 5, 8, 4, 0, tzinfo=UTC)]
+
+    def test_1d_today_bucket_kept_alive_through_the_day(self):
+        """The current-day 1d bucket must reappear on every cron run, even when
+        midnight has slipped outside lookback (otherwise today's daily bar
+        freezes ~100m past midnight)."""
+        # 14:30 UTC, lookback 100m → range_start = 12:50; midnight is way before.
+        start = datetime(2026, 5, 8, 12, 50, tzinfo=UTC)
+        end = datetime(2026, 5, 8, 14, 30, tzinfo=UTC)
+        result = compute_boundaries(Interval.DAY_1, start, end)
+        assert result == [datetime(2026, 5, 8, 0, 0, tzinfo=UTC)]
+
+    def test_bucket_ending_exactly_at_range_start_excluded(self):
+        """If a bucket ends *at* range_start, there is no overlap — exclude it.
+        Guards the strict `B + tf_secs > range_start` inequality."""
+        # 4h bucket [00:00, 04:00). range starts exactly at 04:00.
+        start = datetime(2026, 5, 8, 4, 0, tzinfo=UTC)
+        end = datetime(2026, 5, 8, 8, 0, tzinfo=UTC)
+        result = compute_boundaries(Interval.HOUR_4, start, end)
+        # [00:00, 04:00) ends at 04:00 == range_start → no overlap.
+        # [04:00, 08:00) starts at 04:00 < 08:00 → included.
+        assert result == [datetime(2026, 5, 8, 4, 0, tzinfo=UTC)]
 
 
 class TestCascadeForSymbol:
