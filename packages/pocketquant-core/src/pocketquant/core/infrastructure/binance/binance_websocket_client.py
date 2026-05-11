@@ -173,7 +173,9 @@ class BinanceWebSocketClient:
             if sym.upper() == raw_symbol.upper():
                 quote_dict = aggtrade_to_quote_dict(event, sym, exch)
                 self.last_tick_at = datetime.now(UTC)
-                logger.info(
+                # DEBUG level: aggTrade fires 50–500 times/sec/symbol; INFO logging
+                # saturates event loop and blocks HTTP handlers.
+                logger.debug(
                     "binance_ws.aggtrade_received",
                     symbol_key=symbol_key,
                     last_price=quote_dict["last_price"],
