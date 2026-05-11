@@ -102,6 +102,7 @@ class PaperBroker(IBroker):
                 submitted_at=datetime.now(UTC),
                 sl_price=order.sl_price,
                 tp_price=order.tp_price,
+                side=order.side,
             )
 
             # Notify subscribers

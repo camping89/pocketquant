@@ -3,6 +3,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   createSeriesMarkers,
+  type IChartApi,
   type ISeriesApi,
   type SeriesMarker,
   type Time,
@@ -28,9 +29,21 @@ interface TradingChartProps {
   interval: Interval
   indicators: IndicatorConfig
   positions?: BacktestPosition[]
+  highlightedPositionIndex?: number | null
+  hoveredPositionIndex?: number | null
+  onChartReady?: (chart: IChartApi) => void
 }
 
-export function TradingChart({ exchange, symbol, interval, indicators, positions }: TradingChartProps) {
+export function TradingChart({
+  exchange,
+  symbol,
+  interval,
+  indicators,
+  positions,
+  highlightedPositionIndex = null,
+  hoveredPositionIndex = null,
+  onChartReady,
+}: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useChart(containerRef)
   const { data, error, isLoading } = useOHLCV(exchange, symbol, interval)
@@ -42,6 +55,12 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
   const indicatorRefs = useRef<IndicatorSeriesRefs | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const boxPrimitiveRef = useRef<PositionBoxPrimitive | null>(null)
+
+  // Notify parent when chart is ready (after useChart effect has run)
+  useEffect(() => {
+    const chart = chartRef.current
+    if (chart && onChartReady) onChartReady(chart)
+  }, [onChartReady])
 
   // Main candlestick + volume series
   useEffect(() => {
@@ -221,7 +240,7 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
     const lastCandleTime = data?.candles.at(-1)?.time ?? null
 
     const posData: PositionData[] = positions
-      .map((p) => {
+      .map((p, idx) => {
         const x2 = p.exit_time != null
           ? toUTCTimestamp(p.exit_time) as Time
           : lastCandleTime as Time
@@ -236,13 +255,15 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
           quantity: p.quantity,
           pnl: p.pnl,
           commission: p.commission,
+          direction: p.direction ?? 'LONG',
+          index: idx,
         } satisfies PositionData
       })
       .filter((p): p is PositionData => p !== null)
 
     if (posData.length === 0) return
 
-    const primitive = new PositionBoxPrimitive(posData)
+    const primitive = new PositionBoxPrimitive(posData, highlightedPositionIndex, hoveredPositionIndex)
     candle.attachPrimitive(primitive)
     boxPrimitiveRef.current = primitive
 
@@ -252,7 +273,7 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
         boxPrimitiveRef.current = null
       }
     }
-  }, [positions, data])
+  }, [positions, data, highlightedPositionIndex, hoveredPositionIndex])
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>

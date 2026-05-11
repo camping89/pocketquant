@@ -1,55 +1,51 @@
-"""Result collector - tracks equity and trades during backtest execution."""
+"""Result collector - tracks equity and positions during backtest execution.
 
-from datetime import datetime, timedelta
+Uses FIFO lot tracking (see ``lot_tracker.py``) so long/short/scale-in/scale-out
+/partial-fill/flip behave per Backtrader / QuantConnect convention.
+"""
 
-import numpy as np
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+
 from pocketquant.backtest.domain import (
-    BacktestMetrics,
     BacktestResult,
     EquityPoint,
     PositionRecord,
     TradeRecord,
 )
-from pocketquant.backtest.domain.services.performance_calculator import PerformanceCalculator
+from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
+from pocketquant.backtest.engine.metrics_builder import build_metrics
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import get_current_time
+from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.infrastructure.brokers.models import OrderResult
+
+logger = logging.getLogger(__name__)
 
 
 class BacktestResultCollector:
-    """Collects trades and equity snapshots during backtest, then calculates metrics.
+    """Collects positions and equity snapshots during backtest, then calculates metrics.
 
-    Design decisions per validated requirements:
-    - Equity curve records only on position changes (trade executions)
-    - Commission calculated per trade using commission_bps
-    - Tracks both realized P&L per trade and running equity
-
-    Usage:
-        collector = BacktestResultCollector(config, initial_capital=10000)
-        # Register as callback on broker
-        await broker.subscribe_order_updates(collector.on_fill)
-        # After backtest completes
-        result = collector.finalize(run_id, started_at, completed_at)
+    Equity is recorded only when a close (realized PnL) occurs.
+    Commission uses ``BacktestConfig.commission_percent`` (decimal, e.g. 0.001 = 0.1%).
     """
 
     def __init__(self, config: BacktestConfig, initial_capital: float) -> None:
         self._config = config
         self._initial_capital = initial_capital
         self._current_equity = initial_capital
-
-        # Track equity at each trade (validated: every trade only)
-        self._equity_curve: list[EquityPoint] = []
-        self._trades: list[TradeRecord] = []
-
-        # Position tracking for P&L calculation
-        self._position_qty: float = 0.0
-        self._position_cost: float = 0.0  # Total cost basis
-        self._total_commission: float = 0.0
-
-        # Running peak for drawdown calculation
         self._peak_equity = initial_capital
 
-        # Record initial equity point
+        self._equity_curve: list[EquityPoint] = []
+        self._trades: list[TradeRecord] = []
+        self._closed_positions: list[PositionRecord] = []
+        self._total_commission = 0.0
+
+        self._lot_tracker = LotTracker()
+
+        # Initial equity point at backtest start
         self._equity_curve.append(
             EquityPoint(
                 timestamp=datetime.combine(config.start_date, datetime.min.time()),
@@ -59,100 +55,113 @@ class BacktestResultCollector:
         )
 
     async def on_fill(self, result: OrderResult) -> None:
-        """Handle order fill - update position, calculate P&L, record equity.
-
-        This is registered as a callback on the PaperBroker.
-        """
+        """Handle order fill — update FIFO lots, emit closed PositionRecords, append equity points."""
         if result.filled_quantity is None or result.filled_quantity <= 0:
             return
-
         fill_price = result.filled_price or 0.0
         fill_qty = result.filled_quantity
+        if fill_price <= 0:
+            return
+
         timestamp = get_current_time()
-
-        # Calculate commission for this trade
-        trade_value = fill_price * fill_qty
-        commission = trade_value * self._config.commission_percent
+        commission = fill_price * fill_qty * self._config.commission_percent
         self._total_commission += commission
+        # Debit commission from equity immediately on every fill (matches legacy behavior)
+        self._current_equity -= commission
 
-        # Calculate P&L based on position direction
-        is_buy = self._is_buy_order(result)
-        pnl = self._calculate_trade_pnl(result, fill_price, fill_qty)
+        side_dir = self._resolve_side(result)
+        outcome = self._lot_tracker.feed(
+            side=side_dir,
+            qty=fill_qty,
+            price=fill_price,
+            time=timestamp,
+            order_id=result.order_id,
+            commission=commission,
+            sl_price=result.sl_price,
+            tp_price=result.tp_price,
+        )
 
-        # Update equity (subtract commission from equity)
-        self._current_equity += pnl - commission
+        # Emit one closed PositionRecord per consumed lot (also updates equity with realized PnL)
+        self._emit_closed_positions(outcome, exit_price=fill_price, exit_time=timestamp)
+        # If fill was pure open (no consumed lots) still record an equity point
+        if not outcome.consumed:
+            self._record_equity_point(timestamp)
 
-        # Update peak and calculate drawdown
-        if self._current_equity > self._peak_equity:
-            self._peak_equity = self._current_equity
-
-        drawdown = 0.0
-        if self._peak_equity > 0:
-            drawdown = (self._current_equity - self._peak_equity) / self._peak_equity
-
-        # Record trade
+        # Always record TradeRecord (legacy use)
         self._trades.append(
             TradeRecord(
                 order_id=result.order_id,
                 symbol=self._config.symbol,
-                side="BUY" if is_buy else "SELL",
+                side="BUY" if side_dir == "LONG" else "SELL",
                 quantity=fill_qty,
                 price=fill_price,
                 commission=commission,
-                pnl=pnl,
+                pnl=sum(self._consumed_pnl(c, fill_price) for c in outcome.consumed),
                 timestamp=timestamp,
-                # SL/TP only set on entry (BUY) trades from signal metadata
-                sl_price=result.sl_price if is_buy else None,
-                tp_price=result.tp_price if is_buy else None,
+                sl_price=result.sl_price if outcome.opened is not None else None,
+                tp_price=result.tp_price if outcome.opened is not None else None,
             )
         )
 
-        # Record equity point (validated: only on position changes)
+    def _resolve_side(self, result: OrderResult) -> Direction:
+        """Pick LONG/SHORT direction for this fill.
+
+        Prefer ``OrderResult.side`` (BUY→LONG, SELL→SHORT). Fallback: infer from
+        current lot state (legacy behavior — long-only assumption).
+        """
+        if result.side == OrderSide.BUY:
+            return "LONG"
+        if result.side == OrderSide.SELL:
+            return "SHORT"
+        # Fallback for legacy fills missing side
+        logger.warning(
+            "OrderResult.side missing on fill %s; falling back to long-only inference",
+            result.order_id,
+        )
+        return "SHORT" if self._lot_tracker.has_long_lot() else "LONG"
+
+    def _emit_closed_positions(
+        self, outcome: FillOutcome, exit_price: float, exit_time: datetime
+    ) -> None:
+        for consumed in outcome.consumed:
+            pnl = self._consumed_pnl(consumed, exit_price)
+            # Commission already debited at each fill (entry + exit) — only add realized PnL here
+            self._current_equity += pnl
+            commission = consumed.entry_commission_portion + consumed.exit_commission_portion
+
+            self._closed_positions.append(
+                PositionRecord(
+                    symbol=self._config.symbol,
+                    direction=consumed.lot.direction,
+                    entry_price=consumed.lot.entry_price,
+                    entry_time=consumed.lot.entry_time,
+                    quantity=consumed.qty_closed,
+                    sl_price=consumed.lot.sl_price,
+                    tp_price=consumed.lot.tp_price,
+                    exit_price=exit_price,
+                    exit_time=exit_time,
+                    pnl=pnl,
+                    commission=commission,
+                )
+            )
+            self._record_equity_point(exit_time)
+
+    def _record_equity_point(self, timestamp: datetime) -> None:
+        if self._current_equity > self._peak_equity:
+            self._peak_equity = self._current_equity
+        drawdown = 0.0
+        if self._peak_equity > 0:
+            drawdown = (self._current_equity - self._peak_equity) / self._peak_equity
         self._equity_curve.append(
-            EquityPoint(
-                timestamp=timestamp,
-                equity=self._current_equity,
-                drawdown=drawdown,
-            )
+            EquityPoint(timestamp=timestamp, equity=self._current_equity, drawdown=drawdown)
         )
 
-    def _is_buy_order(self, result: OrderResult) -> bool:
-        """Determine if order opens (BUY) or closes (SELL) based on current position.
-
-        Long-only assumption: flat/empty position → opening BUY, existing position → closing SELL.
-        Checked before _calculate_trade_pnl updates _position_qty.
-        """
-        return self._position_qty <= 0
-
-    def _calculate_trade_pnl(
-        self, result: OrderResult, fill_price: float, fill_qty: float
-    ) -> float:
-        """Calculate realized P&L for this trade.
-
-        Returns P&L from closing positions (0 for opening trades).
-        """
-        # This is a simplified P&L calculation
-        # Full implementation would track entry/exit pairs
-        # For now, calculate based on position cost basis
-
-        # Assuming we're tracking long positions only for simplicity
-        # A full implementation would need order side from the broker
-        pnl = 0.0
-
-        # If we have an existing position and this closes it
-        if self._position_qty > 0:
-            avg_entry = self._position_cost / self._position_qty if self._position_qty > 0 else 0
-            # Selling closes position: P&L = (exit - entry) * qty
-            close_qty = min(fill_qty, self._position_qty)
-            pnl = (fill_price - avg_entry) * close_qty
-            self._position_qty -= close_qty
-            self._position_cost -= avg_entry * close_qty
-        else:
-            # Opening new position
-            self._position_qty += fill_qty
-            self._position_cost += fill_price * fill_qty
-
-        return pnl
+    @staticmethod
+    def _consumed_pnl(consumed: ConsumedLot, exit_price: float) -> float:
+        """PnL for one consumed lot. Commission excluded — added by caller."""
+        if consumed.lot.direction == "LONG":
+            return (exit_price - consumed.lot.entry_price) * consumed.qty_closed
+        return (consumed.lot.entry_price - exit_price) * consumed.qty_closed
 
     def finalize(
         self,
@@ -162,22 +171,18 @@ class BacktestResultCollector:
         status: str = "completed",
         error_message: str | None = None,
     ) -> BacktestResult:
-        """Finalize backtest and calculate all metrics.
-
-        Args:
-            run_id: Unique identifier for this backtest run.
-            started_at: When backtest started.
-            completed_at: When backtest completed.
-            status: "completed" or "failed".
-            error_message: Error details if failed.
-
-        Returns:
-            Complete BacktestResult with metrics.
-        """
-        metrics = self._calculate_metrics(started_at, completed_at)
+        """Finalize backtest and calculate all metrics."""
         positions = self._build_positions()
+        metrics = build_metrics(
+            closed_positions=self._closed_positions,
+            equity_curve=self._equity_curve,
+            initial_capital=self._initial_capital,
+            current_equity=self._current_equity,
+            total_commission=self._total_commission,
+            start_date=self._config.start_date,
+            end_date=self._config.end_date,
+        )
 
-        # Serialize config for storage
         config_snapshot = {
             "strategy_id": self._config.strategy_id,
             "symbol": self._config.symbol,
@@ -207,104 +212,31 @@ class BacktestResultCollector:
         )
 
     def _build_positions(self) -> list[PositionRecord]:
-        """Pair BUY/SELL trades into PositionRecords."""
-        positions: list[PositionRecord] = []
-        pending: TradeRecord | None = None
-        for trade in self._trades:
-            if trade.side == "BUY":
-                pending = trade
-            elif trade.side == "SELL" and pending is not None:
-                positions.append(
-                    PositionRecord(
-                        symbol=pending.symbol,
-                        entry_price=pending.price,
-                        entry_time=pending.timestamp,
-                        quantity=pending.quantity,
-                        sl_price=pending.sl_price,
-                        tp_price=pending.tp_price,
-                        exit_price=trade.price,
-                        exit_time=trade.timestamp,
-                        pnl=trade.pnl,
-                        commission=pending.commission + trade.commission,
-                    )
-                )
-                pending = None
-        # Open position — no matching SELL yet
-        if pending is not None:
-            positions.append(
+        """Closed positions + still-open lots as PositionRecord(exit_price=None)."""
+        result: list[PositionRecord] = list(self._closed_positions)
+        for lot in self._lot_tracker.lots:
+            if lot.qty_remaining <= 1e-12:
+                continue
+            # Entry commission for still-open lots is proportional to qty_remaining
+            entry_comm_portion = (
+                lot.entry_commission * (lot.qty_remaining / lot.qty_original)
+                if lot.qty_original > 0
+                else 0.0
+            )
+            result.append(
                 PositionRecord(
-                    symbol=pending.symbol,
-                    entry_price=pending.price,
-                    entry_time=pending.timestamp,
-                    quantity=pending.quantity,
-                    sl_price=pending.sl_price,
-                    tp_price=pending.tp_price,
+                    symbol=self._config.symbol,
+                    direction=lot.direction,
+                    entry_price=lot.entry_price,
+                    entry_time=lot.entry_time,
+                    quantity=lot.qty_remaining,
+                    sl_price=lot.sl_price,
+                    tp_price=lot.tp_price,
                     exit_price=None,
                     exit_time=None,
                     pnl=0.0,
-                    commission=pending.commission,
+                    commission=entry_comm_portion,
                 )
             )
-        return positions
+        return result
 
-    def _calculate_metrics(self, started_at: datetime, completed_at: datetime) -> BacktestMetrics:
-        """Calculate all performance metrics from collected data."""
-        if not self._trades:
-            return BacktestMetrics.empty()
-
-        # Build equity array for calculations
-        equity_values = np.array([p.equity for p in self._equity_curve])
-
-        # Calculate days in backtest
-        days = (self._config.end_date - self._config.start_date).days
-        if days <= 0:
-            days = 1
-
-        # Extract P&L list from trades
-        pnl_list = [t.pnl for t in self._trades]
-        avg_win, avg_loss, winning_trades, losing_trades = PerformanceCalculator.average_win_loss(
-            pnl_list
-        )
-
-        # Gross profit and loss for profit factor
-        gross_profit = sum(p for p in pnl_list if p > 0)
-        gross_loss = abs(sum(p for p in pnl_list if p < 0))
-
-        # Calculate average trade duration
-        avg_duration = self._calculate_avg_trade_duration()
-
-        return BacktestMetrics(
-            total_return=PerformanceCalculator.total_return(
-                self._initial_capital, self._current_equity
-            ),
-            cagr=PerformanceCalculator.cagr(self._initial_capital, self._current_equity, days),
-            sharpe_ratio=PerformanceCalculator.sharpe_ratio(equity_values),
-            sortino_ratio=PerformanceCalculator.sortino_ratio(equity_values),
-            max_drawdown=PerformanceCalculator.max_drawdown(equity_values),
-            win_rate=PerformanceCalculator.win_rate(winning_trades, len(self._trades)),
-            profit_factor=PerformanceCalculator.profit_factor(gross_profit, gross_loss),
-            total_trades=len(self._trades),
-            winning_trades=winning_trades,
-            losing_trades=losing_trades,
-            avg_win=avg_win,
-            avg_loss=avg_loss,
-            avg_trade_duration=avg_duration,
-            total_commission=self._total_commission,
-        )
-
-    def _calculate_avg_trade_duration(self) -> timedelta | None:
-        """Calculate average time between entry and exit trades."""
-        if len(self._trades) < 2:
-            return None
-
-        # Simple approach: average time between consecutive trades
-        durations = []
-        for i in range(1, len(self._trades)):
-            delta = self._trades[i].timestamp - self._trades[i - 1].timestamp
-            durations.append(delta.total_seconds())
-
-        if not durations:
-            return None
-
-        avg_seconds = sum(durations) / len(durations)
-        return timedelta(seconds=avg_seconds)
