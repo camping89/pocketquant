@@ -92,6 +92,11 @@ class BarAppService:
                 interval=interval,
                 bar_start=bar_start,
             )
+            # Hydrate from Mongo when a bar already exists at this bucket
+            # (e.g. after mid-bucket restart with cascade-populated in-progress
+            # bar). Prevents the first post-restart tick price from overwriting
+            # the true bucket-open and causing a visible chart gap.
+            await self._seed_builder_from_mongo(current_bar)
             self._bars[symbol_key][interval] = current_bar
 
         elif current_bar.is_complete(tick.timestamp):
@@ -156,6 +161,39 @@ class BarAppService:
             interval=bar.interval.value,
             bar_start=bar.bar_start.isoformat(),
             tick_count=bar.tick_count,
+        )
+
+    async def _seed_builder_from_mongo(self, bar: BarBuilder) -> None:
+        """Hydrate ``bar`` from Mongo if an aggregated bar exists at ``bar.bar_start``.
+
+        Recovers the true bucket-open after a mid-bucket app restart where the
+        BarBuilder would otherwise pick the first incoming tick price as the
+        open. The Mongo source-of-truth is populated by the cascade aggregator.
+        """
+        try:
+            existing = await self._bar_repo.get_latest(
+                bar.symbol, bar.exchange, bar.interval
+            )
+        except Exception as exc:
+            logger.error("bar_app_service.seed_failed", error=str(exc))
+            return
+
+        if existing is None or existing.datetime != bar.bar_start:
+            return
+
+        bar.open = existing.open
+        bar.high = existing.high
+        bar.low = existing.low
+        bar.close = existing.close
+        bar.volume = existing.volume
+        logger.info(
+            "bar_app_service.seeded_from_mongo",
+            symbol=bar.symbol,
+            exchange=bar.exchange,
+            interval=bar.interval.value,
+            bar_start=bar.bar_start.isoformat(),
+            open=bar.open,
+            close=bar.close,
         )
 
     async def _cache_current_bar(
