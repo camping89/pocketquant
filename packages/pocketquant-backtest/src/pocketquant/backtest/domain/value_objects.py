@@ -54,7 +54,7 @@ class TradeRecord:
 
 @dataclass
 class PositionRecord:
-    """Completed or open position — one BUY/SELL pair aggregated for the API."""
+    """Completed or open position — one lot (LONG or SHORT) from entry to exit."""
 
     symbol: str
     entry_price: float
@@ -65,11 +65,13 @@ class PositionRecord:
     exit_price: float | None  # None if still open
     exit_time: datetime | None  # None if still open
     pnl: float
-    commission: float  # combined entry + exit commission
+    commission: float  # combined entry + exit commission proportional to qty
+    direction: str = "LONG"  # "LONG" or "SHORT" — default LONG for backward compat with old Mongo docs
 
     def to_mongo(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol,
+            "direction": self.direction,
             "entry_price": self.entry_price,
             "entry_time": self.entry_time,
             "quantity": self.quantity,
@@ -94,6 +96,7 @@ class PositionRecord:
             exit_time=data.get("exit_time"),
             pnl=data.get("pnl", 0.0),
             commission=data.get("commission", 0.0),
+            direction=data.get("direction", "LONG"),
         )
 
 

@@ -47,6 +47,9 @@ export interface PositionData {
   quantity: number
   pnl: number
   commission: number
+  direction?: 'LONG' | 'SHORT'
+  /** Original index in the backtest positions array — used for highlight match. */
+  index?: number
 }
 
 const FONT_SIZE = 9   // CSS px
@@ -73,15 +76,21 @@ class BoxRenderer implements IPrimitivePaneRenderer {
   private readonly positions: PositionData[]
   private readonly chart: IChartApiBase<Time>
   private readonly series: ISeriesApi<'Candlestick', Time>
+  private readonly highlightIndex: number | null
+  private readonly hoverIndex: number | null
 
   constructor(
     positions: PositionData[],
     chart: IChartApiBase<Time>,
     series: ISeriesApi<'Candlestick', Time>,
+    highlightIndex: number | null,
+    hoverIndex: number | null,
   ) {
     this.positions = positions
     this.chart = chart
     this.series = series
+    this.highlightIndex = highlightIndex
+    this.hoverIndex = hoverIndex
   }
 
   draw(target: CanvasRenderingTarget2D): void {
@@ -109,8 +118,27 @@ class BoxRenderer implements IPrimitivePaneRenderer {
         if (ySL != null && yTP != null) {
           const boxTop = Math.min(ySL, yTP) * vR
           const boxH = Math.abs(ySL - yTP) * vR
-          ctx.fillStyle = pos.pnl >= 0 ? 'rgba(38,166,154,0.09)' : 'rgba(239,83,80,0.09)'
+          // Color by realized PnL (closed positions); open positions tinted by direction
+          const isOpen = pos.exit_price == null
+          const dir = pos.direction ?? 'LONG'
+          if (isOpen) {
+            ctx.fillStyle = dir === 'LONG' ? 'rgba(38,166,154,0.06)' : 'rgba(239,83,80,0.06)'
+          } else {
+            ctx.fillStyle = pos.pnl >= 0 ? 'rgba(38,166,154,0.09)' : 'rgba(239,83,80,0.09)'
+          }
           ctx.fillRect(lx, boxTop, boxW, boxH)
+
+          // Highlight outline (solid for click selection, dashed for hover)
+          const isHighlight = pos.index != null && pos.index === this.highlightIndex
+          const isHover = pos.index != null && pos.index === this.hoverIndex
+          if (isHighlight || isHover) {
+            ctx.save()
+            ctx.strokeStyle = '#FFD600'
+            ctx.lineWidth = 2 * vR
+            if (isHover && !isHighlight) ctx.setLineDash([5 * hR, 4 * hR])
+            ctx.strokeRect(lx, boxTop, boxW, boxH)
+            ctx.restore()
+          }
         }
 
         // --- TP line + label ---
@@ -159,7 +187,10 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           : (yEntry != null ? yEntry * vR : null)
 
         if (boxTopY != null) {
+          const dir = pos.direction ?? 'LONG'
+          const dirColor = dir === 'LONG' ? '#26a69a' : '#ef5350'
           const lines: { text: string; color: string }[] = [
+            { text: `[${dir}]`, color: dirColor },
             { text: `Entry ${fmtPrice(pos.entry_price)}`, color: '#90CAF9' },
           ]
           if (pos.exit_price != null) {
@@ -196,8 +227,10 @@ class BoxPaneView implements IPrimitivePaneView {
     positions: PositionData[],
     chart: IChartApiBase<Time>,
     series: ISeriesApi<'Candlestick', Time>,
+    highlightIndex: number | null,
+    hoverIndex: number | null,
   ) {
-    this._renderer = new BoxRenderer(positions, chart, series)
+    this._renderer = new BoxRenderer(positions, chart, series, highlightIndex, hoverIndex)
   }
 
   zOrder() {
@@ -212,9 +245,17 @@ class BoxPaneView implements IPrimitivePaneView {
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   private _positions: PositionData[]
   private _view: BoxPaneView | null = null
+  private _highlightIndex: number | null
+  private _hoverIndex: number | null
 
-  constructor(positions: PositionData[]) {
+  constructor(
+    positions: PositionData[],
+    highlightIndex: number | null = null,
+    hoverIndex: number | null = null,
+  ) {
     this._positions = positions
+    this._highlightIndex = highlightIndex
+    this._hoverIndex = hoverIndex
   }
 
   attached(param: SeriesAttachedParameter<Time, 'Candlestick'>): void {
@@ -222,6 +263,8 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
       this._positions,
       param.chart as IChartApiBase<Time>,
       param.series,
+      this._highlightIndex,
+      this._hoverIndex,
     )
   }
 

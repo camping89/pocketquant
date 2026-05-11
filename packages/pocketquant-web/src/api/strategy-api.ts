@@ -1,4 +1,8 @@
 import { apiFetch, apiPost } from './api-client'
+import type { SubscriptionBacktest } from './backtest-api'
+
+// Re-export so existing consumers importing from strategy-api continue to work.
+export type { SubscriptionBacktest } from './backtest-api'
 
 // Custom error that carries HTTP status so callers can branch on 404 etc.
 export class ApiError extends Error {
@@ -24,18 +28,6 @@ export interface Subscription {
   interval: string
   created_at: string
   backtest: SubscriptionBacktestStatus | null
-}
-
-export interface SubscriptionBacktest {
-  subscription_id: string
-  strategy_id: string
-  status: string
-  last_run_at: string | null
-  error_msg: string | null
-  metrics?: unknown
-  positions?: unknown[]
-  equity_curve?: unknown[]
-  trades?: unknown[]
 }
 
 export async function listSymbols(strategyId: string): Promise<Subscription[]> {

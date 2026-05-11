@@ -180,6 +180,7 @@ class OKXBroker(IBroker):
                 broker_order_id=broker_order_id,
                 status=status,
                 submitted_at=datetime.now(UTC),
+                side=order.side,
             )
 
             # Notify callbacks

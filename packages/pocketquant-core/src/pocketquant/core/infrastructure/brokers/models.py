@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from pocketquant.core.domain.order import OrderStatus
+from pocketquant.core.domain.order import OrderSide, OrderStatus
 
 
 @dataclass
@@ -19,6 +19,7 @@ class OrderResult:
     submitted_at: datetime | None = None
     sl_price: float | None = None
     tp_price: float | None = None
+    side: OrderSide | None = None  # BUY/SELL — used by FIFO lot tracker; optional for backward compat
 
     @property
     def is_success(self) -> bool:

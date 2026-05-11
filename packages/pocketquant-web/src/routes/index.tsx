@@ -1,13 +1,16 @@
 /* eslint-disable react-refresh/only-export-components -- TanStack Router requires Route export alongside components */
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { createFileRoute, getRouteApi } from '@tanstack/react-router'
+import type { IChartApi } from 'lightweight-charts'
 import { AppHeader } from '../components/layout/app-header'
 import { TradingChart } from '../components/chart/trading-chart'
 import { SubscriptionPanel } from '../components/strategy/subscription-panel'
+import { BacktestPanel } from '../components/strategy/backtest-panel'
 import { TickerWidget } from '../components/ticker-widget'
 import { useAvailableIntervals } from '../hooks/use-available-intervals'
 import { useOHLCV } from '../hooks/use-ohlcv'
-import { useSubscriptionBacktest } from '../hooks/use-subscriptions'
+import { useSubscriptions, useSubscriptionBacktest } from '../hooks/use-subscriptions'
+import { toUTCTimestamp } from '../api/market-data-api'
 import type { Interval, IndicatorConfig } from '../types/market-data'
 import type { BacktestPosition } from '../api/backtest-api'
 
@@ -68,6 +71,63 @@ function ChartPageInner({ exchange, symbol }: ChartPageInnerProps) {
   }, [selectedStrategy])
 
   const { data: backtestDoc } = useSubscriptionBacktest(selectedStrategy, selectedSubId)
+  const { data: subscriptions } = useSubscriptions(selectedStrategy)
+
+  const selectedSub = useMemo(
+    () => subscriptions?.find((s) => s.id === selectedSubId) ?? null,
+    [subscriptions, selectedSubId],
+  )
+
+  const symbolMismatch = !!(
+    selectedSub &&
+    (selectedSub.symbol !== symbol || selectedSub.exchange !== exchange)
+  )
+
+  const chartApiRef = useRef<IChartApi | null>(null)
+  const [chartApi, setChartApi] = useState<IChartApi | null>(null)
+  const [highlightedPos, setHighlightedPos] = useState<number | null>(null)
+  const [hoveredPos, setHoveredPos] = useState<number | null>(null)
+
+  // Reset highlight when subscription changes
+  useEffect(() => {
+    setHighlightedPos(null)
+    setHoveredPos(null)
+  }, [selectedSubId])
+
+  const handleChartReady = useCallback((chart: IChartApi) => {
+    chartApiRef.current = chart
+    setChartApi(chart)
+  }, [])
+
+  const handlePositionClick = useCallback(
+    (idx: number, position: BacktestPosition) => {
+      setHighlightedPos(idx)
+      const chart = chartApiRef.current
+      if (!chart) return
+      const entry = toUTCTimestamp(position.entry_time)
+      const exit = position.exit_time
+        ? toUTCTimestamp(position.exit_time)
+        : entry + 60 * 60 // +1h fallback for open positions
+      const padding = Math.max((exit - entry) * 0.2, 60 * 5)
+      try {
+        chart.timeScale().setVisibleRange({
+          from: (entry - padding) as never,
+          to: (exit + padding) as never,
+        })
+      } catch {
+        // setVisibleRange can throw if data not loaded yet — ignore
+      }
+    },
+    [],
+  )
+
+  const handlePositionHover = useCallback(
+    (idx: number | null, _position: BacktestPosition | null) => {
+      void _position
+      setHoveredPos(idx)
+    },
+    [],
+  )
 
   const handleIntervalChange = useCallback((iv: Interval) => {
     setSelectedInterval(iv)
@@ -114,13 +174,34 @@ function ChartPageInner({ exchange, symbol }: ChartPageInnerProps) {
           <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', minHeight: 32 }}>
             <TickerWidget exchange={exchange} symbol={symbol} />
           </div>
-          <TradingChart
-            exchange={exchange}
-            symbol={symbol}
-            interval={interval}
-            indicators={indicators}
-            positions={positions}
-          />
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <TradingChart
+                exchange={exchange}
+                symbol={symbol}
+                interval={interval}
+                indicators={indicators}
+                positions={positions}
+                highlightedPositionIndex={highlightedPos}
+                hoveredPositionIndex={hoveredPos}
+                onChartReady={handleChartReady}
+              />
+            </div>
+            {selectedSubId && symbolMismatch && (
+              <div className="symbol-mismatch-banner">
+                Backtest panel hidden — switch chart to {selectedSub?.exchange}:{selectedSub?.symbol} to view its backtest.
+              </div>
+            )}
+            {selectedSubId && !symbolMismatch && backtestDoc && (
+              <BacktestPanel
+                backtest={backtestDoc}
+                chart={chartApi}
+                highlightedPositionIndex={highlightedPos}
+                onPositionClick={handlePositionClick}
+                onPositionHover={handlePositionHover}
+              />
+            )}
+          </div>
         </main>
       </div>
     </div>
