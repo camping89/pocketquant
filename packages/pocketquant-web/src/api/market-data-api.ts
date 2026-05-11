@@ -35,23 +35,18 @@ export async function fetchOHLCV(
   // API returns desc order; LC v5 requires ascending
   const bars = [...res.data].reverse()
 
-  // Smooth price gaps: set open = previous close for visual continuity.
-  // Only affects chart display — backend data stays original for strategy/backtest.
-  const candles = bars.map((bar, i) => {
-    const open = i > 0 ? bars[i - 1].close : bar.open
-    return {
-      time: toUTCTimestamp(bar.datetime),
-      open,
-      high: Math.max(bar.high, open),
-      low: Math.min(bar.low, open),
-      close: bar.close,
-    }
-  })
+  const candles = bars.map((bar) => ({
+    time: toUTCTimestamp(bar.datetime),
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  }))
 
-  const volumes = candles.map((c, i) => ({
-    time: c.time,
-    value: bars[i].volume,
-    color: c.close >= c.open ? VOLUME_UP : VOLUME_DOWN,
+  const volumes = bars.map((bar) => ({
+    time: toUTCTimestamp(bar.datetime),
+    value: bar.volume,
+    color: bar.close >= bar.open ? VOLUME_UP : VOLUME_DOWN,
   }))
 
   const lastBar = bars.length > 0 ? bars[bars.length - 1] : undefined
