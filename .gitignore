@@ -105,3 +105,5 @@ repomix-output.xml
 **/.claude/session-state/
 
 .claude/settings.local.json
+
+.playwright-mcp/
