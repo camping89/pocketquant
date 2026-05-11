@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { ISeriesApi } from 'lightweight-charts'
+import { useQueryClient } from '@tanstack/react-query'
 import { toUTCTimestamp } from '../api/market-data-api'
 import type { CurrentBarResponse, Interval } from '../types/market-data'
 
@@ -13,6 +14,10 @@ export interface RealtimeBarState {
 const STALE_THRESHOLD_MS = 30_000
 // How often the stale check timer fires
 const STALE_CHECK_INTERVAL_MS = 5_000
+// Delay before re-fetching historical OHLCV after a bar rollover or SSE
+// reconnect — long enough for sync_1m + cascade to write the just-closed
+// bar's authoritative final close to Mongo.
+const REFETCH_DELAY_MS = 5_000
 
 export function useRealtimeBar(
   exchange: string,
@@ -24,6 +29,7 @@ export function useRealtimeBar(
   const [lastUpdateTs, setLastUpdateTs] = useState<number | null>(null)
   const [isStale, setIsStale] = useState(false)
   const [isInProgress, setIsInProgress] = useState<boolean | null>(null)
+  const queryClient = useQueryClient()
 
   // Refs that survive re-renders and are safe to read/write inside effects
   const lastBarStartRef = useRef<number | null>(null)
@@ -36,6 +42,15 @@ export function useRealtimeBar(
 
     const url = `/api/v1/market-data/bars/stream/${exchange}/${symbol}?interval=${interval}`
     const es = new EventSource(url)
+    const ohlcvQueryKey = ['ohlcv', exchange, symbol, interval] as const
+    const refetchTimers: ReturnType<typeof setTimeout>[] = []
+
+    const scheduleOhlcvRefetch = () => {
+      const t = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ohlcvQueryKey })
+      }, REFETCH_DELAY_MS)
+      refetchTimers.push(t)
+    }
 
     es.onmessage = (event) => {
       const candleSeries = candleRef.current
@@ -50,6 +65,12 @@ export function useRealtimeBar(
 
         // Enforce monotonic time — skip out-of-order events to prevent chart crash
         if (lastBarStartRef.current !== null && time < lastBarStartRef.current) return
+
+        // Bar rollover: the just-closed previous bar may have a stale close in
+        // the chart (SSE doesn't push the final close on completion). Refetch
+        // historical OHLCV so the closed bar gets its authoritative close from
+        // Mongo and any visual gap with the new bar disappears.
+        const isRollover = lastBarStartRef.current !== null && time > lastBarStartRef.current
         lastBarStartRef.current = time
 
         candleSeries.update({
@@ -67,6 +88,8 @@ export function useRealtimeBar(
             : 'rgba(239, 83, 80, 0.3)',
         })
 
+        if (isRollover) scheduleOhlcvRefetch()
+
         const now = Date.now()
         lastUpdateTsRef.current = now
         setLastUpdateTs(now)
@@ -75,6 +98,14 @@ export function useRealtimeBar(
       } catch {
         // malformed event — ignore
       }
+    }
+
+    // EventSource auto-reconnects on transient drops, but events emitted during
+    // the gap are lost. Trigger an OHLCV refetch so the chart resyncs to Mongo
+    // state once the connection is restored.
+    es.onerror = () => {
+      setIsStale(true)
+      scheduleOhlcvRefetch()
     }
 
     // Periodically re-evaluate staleness so the indicator updates without an SSE event
@@ -88,6 +119,7 @@ export function useRealtimeBar(
     return () => {
       es.close()
       clearInterval(staleTimer)
+      for (const t of refetchTimers) clearTimeout(t)
     }
   }, [exchange, symbol, interval]) // eslint-disable-line react-hooks/exhaustive-deps
 
