@@ -82,7 +82,19 @@ export function TradingChart({ exchange, symbol, interval, indicators, positions
     volumeSeries.setData(data.volumes)
     volumeRef.current = volumeSeries
 
-    chart.timeScale().fitContent()
+    // Show ~80 bars at a usable zoom with the latest bar centered — leaves
+    // empty space on the right so live candles have room to grow into the
+    // viewport (standard trading UX). Users can scroll left for older data.
+    const VISIBLE_BARS = 80
+    const HALF = Math.floor(VISIBLE_BARS / 2)
+    const total = data.candles.length
+    if (total > 0) {
+      const lastIdx = total - 1
+      chart.timeScale().setVisibleLogicalRange({
+        from: lastIdx - HALF,
+        to: lastIdx + HALF,
+      })
+    }
 
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.seriesData) {
