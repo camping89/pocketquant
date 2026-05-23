@@ -3,10 +3,11 @@
  * Lists all subscriptions across all loaded strategies with filter + New button.
  */
 import { useState, useMemo } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import { useStrategiesList } from '../../hooks/use-strategies'
-import { useSubscriptions } from '../../hooks/use-subscriptions'
 import { StrategyCard } from './strategy-card'
 import { NewSubscriptionDialog } from './new-subscription-dialog'
+import { listSymbols } from '../../api/strategy-api'
 import type { Subscription } from '../../api/strategy-api'
 
 interface StrategyListSidebarProps {
@@ -14,14 +15,17 @@ interface StrategyListSidebarProps {
   onSelect: (sub: Subscription) => void
 }
 
-/** Aggregates subscriptions from all strategy IDs in parallel. */
+/** Aggregates subscriptions from every strategy id in parallel via useQueries. */
 function useAllSubscriptions(strategyIds: string[]) {
-  // We call useSubscriptions per strategy, but hooks can't be in loops.
-  // Solution: fetch all strategies and flatten — for now support up to first
-  // strategy ID to satisfy Rules of Hooks. Multi-strategy support can be
-  // added in Phase 7 via a dedicated aggregation endpoint.
-  const firstId = strategyIds[0] ?? null
-  const { data: subs = [], isLoading } = useSubscriptions(firstId)
+  const results = useQueries({
+    queries: strategyIds.map((id) => ({
+      queryKey: ['subscriptions', id],
+      queryFn: () => listSymbols(id),
+      staleTime: 10_000,
+    })),
+  })
+  const subs = results.flatMap((r) => r.data ?? [])
+  const isLoading = results.some((r) => r.isLoading)
   return { subs, isLoading }
 }
 

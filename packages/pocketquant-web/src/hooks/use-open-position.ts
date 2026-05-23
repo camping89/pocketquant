@@ -1,7 +1,9 @@
 /**
  * Fetch open position(s) for a strategy subscription.
  * TODO(backend): implement GET /api/v1/strategies/{id}/positions endpoint.
- * Returns null until endpoint exists (404 → null, no retry).
+ * Returns null until endpoint exists. Polling is OFF to avoid console-error
+ * spam against the missing endpoint; re-enable refetchInterval once the
+ * backend route ships.
  */
 import { useQuery } from '@tanstack/react-query'
 
@@ -40,6 +42,7 @@ export function useOpenPosition(strategyId: string | null) {
       const msg = (err as Error)?.message ?? ''
       return !msg.includes('404') && count < 2
     },
-    refetchInterval: 5_000,
+    // refetchInterval intentionally disabled until backend ships /positions.
+    staleTime: 10_000,
   })
 }
