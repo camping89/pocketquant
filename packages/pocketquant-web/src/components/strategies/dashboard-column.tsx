@@ -3,16 +3,16 @@
  * Composes: PnlBadge + EquitySparkline + MetricsTab + PositionsTab + RecentTradesTable.
  * Pulls data from backtest result for the selected subscription.
  */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSubscriptionBacktest } from '../../hooks/use-subscriptions'
 import { useOpenPosition } from '../../hooks/use-open-position'
-import { useStrategyTrades } from '../../hooks/use-strategy-trades'
 import { PnlBadge } from './pnl-badge'
 import { EquitySparkline } from './equity-sparkline'
-import { RecentTradesTable } from './recent-trades-table'
+import { RecentTradesTable, type StrategyTrade } from './recent-trades-table'
 import { MetricsTab } from '../strategy/backtest-panel/metrics-tab'
 import { PositionsTab } from '../strategy/backtest-panel/positions-tab'
 import type { Subscription } from '../../api/strategy-api'
+import type { BacktestPosition } from '../../api/backtest-api'
 
 type DashTab = 'metrics' | 'positions' | 'trades'
 
@@ -34,10 +34,25 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
     sub.id,
   )
   const { data: openPos } = useOpenPosition(sub.id)
-  const { data: trades = [], isLoading: tradesLoading } = useStrategyTrades(sub.id)
 
   const equityCurve = backtest?.equity_curve ?? []
   const unrealizedPnl = openPos?.unrealized_pnl ?? 0
+
+  // Derive trades from backtest positions until a live /trades endpoint ships.
+  // A backtest position with exit_time set is a completed trade.
+  const trades = useMemo<StrategyTrade[]>(() => {
+    const positions = (backtest?.positions ?? []) as BacktestPosition[]
+    return positions.map((p, idx) => ({
+      id: `${idx}-${p.entry_time}`,
+      direction: p.direction,
+      entry_price: p.entry_price,
+      exit_price: p.exit_price,
+      entry_time: p.entry_time,
+      exit_time: p.exit_time,
+      pnl: p.pnl,
+      quantity: p.quantity,
+    }))
+  }, [backtest?.positions])
 
   return (
     <div
@@ -112,9 +127,9 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
           />
         )}
 
-        {activeTab === 'trades' && (
+        {!btLoading && backtest && activeTab === 'trades' && (
           <div style={{ padding: '0 0 8px' }}>
-            <RecentTradesTable trades={trades} isLoading={tradesLoading} />
+            <RecentTradesTable trades={trades} />
           </div>
         )}
       </div>
