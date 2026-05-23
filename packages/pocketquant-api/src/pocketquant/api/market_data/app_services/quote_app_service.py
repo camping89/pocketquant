@@ -35,13 +35,13 @@ class QuoteAppService:
     async def on_quote_update(self, quote_data: dict[str, Any]) -> None:
         """Handle incoming quote updates.
 
-        ``symbol_key`` in quote_data must be composite ``{code}:{exchange}``.
+        ``symbol`` in quote_data must be composite ``{code}:{exchange}``.
         """
-        symbol_key = quote_data.get("symbol_key", "")
-        if not symbol_key or ":" not in symbol_key:
+        raw_symbol = quote_data.get("symbol", "")
+        if not raw_symbol or ":" not in raw_symbol:
             return
 
-        symbol = symbol_key.upper()
+        symbol = raw_symbol.upper()
 
         last_price = quote_data.get("last_price")
         if last_price is None:
