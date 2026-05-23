@@ -29,8 +29,8 @@ export async function fetchOHLCV(
   limit = 1000,
 ): Promise<ChartData> {
   const res = await apiFetch<OHLCVResponse>(
-    `/api/v1/market-data/ohlcv/${encodeSymbolForUrl(symbol)}`,
-    { interval, limit: String(limit) },
+    `/api/v1/market-data/ohlcv/${encodeSymbolForUrl(symbol)}/${interval}`,
+    { limit: String(limit) },
   )
 
   // API returns desc order; LC v5 requires ascending
