@@ -94,10 +94,19 @@ def _minimal_bars(n: int = 30) -> list[Bar]:
 @pytest_asyncio.fixture(autouse=True)
 async def setup(app_client):
     """Seed bars + load strategy; cleanup after."""
+    from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
+    from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+        TrackedSymbolRepository,
+    )
+
     container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     svc: StrategyAppService = await container.get(StrategyAppService)
     bar_repo: BarRepository = await container.get(BarRepository)
     sub_repo: StrategySubscriptionRepository = await container.get(StrategySubscriptionRepository)
+    tracked_repo: TrackedSymbolRepository = await container.get(TrackedSymbolRepository)
+
+    # Track the symbol
+    await tracked_repo.upsert(TrackedSymbol(symbol=_SYMBOL))
 
     await bar_repo.insert_many(_minimal_bars(), source="test")
 

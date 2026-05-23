@@ -99,10 +99,19 @@ def _synthetic_bars(n: int) -> list[Bar]:
 @pytest_asyncio.fixture(autouse=True)
 async def setup_strategy_and_bars(app_client):
     """Seed bars + load strategy; cleanup after."""
+    from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
+    from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+        TrackedSymbolRepository,
+    )
+
     container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     svc: StrategyAppService = await container.get(StrategyAppService)
     bar_repo: BarRepository = await container.get(BarRepository)
     bt_repo: BacktestRepository = await container.get(BacktestRepository)
+    tracked_repo: TrackedSymbolRepository = await container.get(TrackedSymbolRepository)
+
+    # Track the symbol
+    await tracked_repo.upsert(TrackedSymbol(symbol=_SYMBOL))
 
     # Seed synthetic bar data
     await bar_repo.insert_many(_synthetic_bars(_N_BARS), source="test")
@@ -131,7 +140,7 @@ async def setup_strategy_and_bars(app_client):
 
     await svc.unload_strategy(_STRATEGY_ID)
     await bar_repo._collection().delete_many(
-        {"symbol": _SYMBOL, "exchange": _EXCHANGE, "interval": _INTERVAL}
+        {"symbol": _SYMBOL, "interval": _INTERVAL}
     )
     await bt_repo.delete_by_strategy(_STRATEGY_ID)
 
@@ -153,7 +162,7 @@ async def test_run_all_backtest_cascade_delete(app_client):
     # 1. Add subscription
     add_r = await app_client.post(
         f"{_API}/{_STRATEGY_ID}/symbols",
-        json={"symbol": _SYMBOL, "exchange": _EXCHANGE, "interval": _INTERVAL},
+        json={"symbol": _SYMBOL, "interval": _INTERVAL},
     )
     assert add_r.status_code == 201, add_r.text
     sub_id = add_r.json()["id"]
