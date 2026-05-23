@@ -2,9 +2,11 @@
  * Modal dialog for creating a new strategy subscription.
  * Symbol selector + interval picker + strategy template selector + submit.
  */
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useStrategiesList } from '../../hooks/use-strategies'
 import { useCreateSubscription } from '../../hooks/use-strategy-mutations'
+import { useSymbols } from '../../hooks/use-symbols'
+import { parseSymbol } from '../../lib/symbol-format'
 
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']
 
@@ -33,11 +35,21 @@ const inputStyle: React.CSSProperties = {
 
 export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
   const { data: strategies, isLoading: strategiesLoading } = useStrategiesList()
+  const { data: symbols, isLoading: symbolsLoading } = useSymbols()
+
+  const activeSymbols = symbols?.filter((s) => s.is_active) ?? []
 
   const [strategyId, setStrategyId] = useState('')
   const [symbol, setSymbol] = useState('')
   const [interval, setInterval] = useState('1h')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // Default symbol to the first active one once symbols load.
+  useEffect(() => {
+    if (!symbol && activeSymbols.length > 0) {
+      setSymbol(activeSymbols[0].symbol)
+    }
+  }, [activeSymbols, symbol])
 
   // strategyId drives which subscription we create under
   const createSub = useCreateSubscription(strategyId || null)
@@ -47,16 +59,10 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
     setErrorMsg(null)
 
     if (!strategyId) { setErrorMsg('Select a strategy template.'); return }
-
-    const trimmed = symbol.trim().toUpperCase()
-    if (!trimmed) { setErrorMsg('Symbol is required (e.g. BTCUSDT:BINANCE)'); return }
-    if (!trimmed.includes(':')) {
-      setErrorMsg('Use composite format: CODE:EXCHANGE (e.g. BTCUSDT:BINANCE)')
-      return
-    }
+    if (!symbol) { setErrorMsg('Select a symbol.'); return }
 
     createSub.mutate(
-      { symbol: trimmed, interval },
+      { symbol, interval },
       {
         onSuccess: () => onClose(),
         onError: (err: unknown) => {
@@ -110,18 +116,32 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
             </select>
           </div>
 
-          {/* Symbol input */}
+          {/* Symbol picker */}
           <div style={{ marginBottom: 12 }}>
             <label style={labelStyle}>Symbol</label>
-            <input
+            <select
               style={inputStyle}
-              type="text"
-              placeholder="e.g. BTCUSDT:BINANCE"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
-              onBlur={(e) => setSymbol(e.target.value.trim().toUpperCase())}
+              disabled={symbolsLoading || activeSymbols.length === 0}
               autoFocus
-            />
+            >
+              {symbolsLoading ? (
+                <option value="">Loading…</option>
+              ) : activeSymbols.length === 0 ? (
+                <option value="">No active symbols</option>
+              ) : (
+                activeSymbols.map((s) => {
+                  const { code, exchange } = parseSymbol(s.symbol)
+                  const label = exchange ? `${code} — ${exchange}` : code
+                  return (
+                    <option key={s.symbol} value={s.symbol}>
+                      {label}
+                    </option>
+                  )
+                })
+              )}
+            </select>
           </div>
 
           {/* Interval picker */}
