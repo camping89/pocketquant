@@ -41,7 +41,6 @@ from pocketquant.trading.handlers.strategy import strategy_router
 from pocketquant.trading.handlers.trading import trading_router
 from pocketquant.trading.persistence.order_repository import OrderRepository
 from pocketquant.trading.persistence.position_repository import PositionRepository
-from pocketquant.trading.domain.subscription import StrategySubscription
 from pocketquant.trading.persistence.strategy_subscription_repository import (
     StrategySubscriptionRepository,
 )
@@ -87,14 +86,14 @@ async def recover_stale_backtests(container: AsyncContainer) -> None:
 
 
 async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> None:
-    """Re-load strategies into memory based on persisted subscriptions.
+    """Re-load one strategy instance per persisted subscription on startup.
 
-    Strategy instances live in-process and disappear on restart, but their
-    subscriptions are durable in MongoDB. On startup, load one instance per
-    distinct ``strategy_id`` that appears in the registry, seeded with the
-    first subscription's (symbol, interval) — mirrors AddSymbolHandler's
-    auto-load policy. Templates that no longer exist in the registry are
-    skipped with a warning.
+    Strategy instances live in-process and disappear on every container
+    restart, but their subscriptions are durable in MongoDB. Each subscription
+    owns its own runtime instance keyed by ``sub.id`` so that subscribing the
+    same template to multiple (symbol, interval) pairs results in independent
+    instances. Subscriptions whose template no longer exists in the registry
+    are skipped with a warning.
     """
     from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
     from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
@@ -107,22 +106,22 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
     if not subs:
         return
 
-    seen: dict[str, StrategySubscription] = {}
-    for sub in subs:
-        seen.setdefault(sub.strategy_id, sub)
-
     loaded = 0
-    for strategy_id, sub in seen.items():
-        if strategy_service.get_strategy(strategy_id) is not None:
+    for sub in subs:
+        if strategy_service.get_strategy(sub.id) is not None:
             continue
-        strategy_class = STRATEGY_REGISTRY.get(strategy_id)
+        strategy_class = STRATEGY_REGISTRY.get(sub.strategy_id)
         if strategy_class is None:
-            logger.warning("rehydrate_skipped_unknown_template", strategy_id=strategy_id)
+            logger.warning(
+                "rehydrate_skipped_unknown_template",
+                sub_id=sub.id,
+                strategy_id=sub.strategy_id,
+            )
             continue
         await strategy_service.load_strategy(
             StrategyConfig(
-                id=strategy_id,
-                name=strategy_id,
+                id=sub.id,
+                name=sub.strategy_id,
                 symbol=sub.symbol,
                 interval=sub.interval.value,
             ),

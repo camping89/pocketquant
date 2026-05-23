@@ -33,10 +33,12 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
         self._tracked_repo = tracked_symbol_repository
 
     async def handle(self, request: AddSymbolCommand) -> dict:
-        """Validate strategy is in memory and symbol is tracked, then persist subscription.
+        """Persist subscription and load a dedicated strategy instance.
 
-        If ``request.strategy_id`` matches a template in ``STRATEGY_REGISTRY`` but is not
-        yet loaded, this auto-loads it with the request's (symbol, interval) as defaults.
+        Each subscription owns its own ``IStrategy`` instance keyed by ``sub.id``
+        so that subscribing the same template to multiple (symbol, interval)
+        pairs results in independent runtime instances. ``request.strategy_id``
+        is the template name (matched against ``STRATEGY_REGISTRY``).
 
         ``request.symbol`` must be composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         """
@@ -48,16 +50,20 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
                 error_code="SYMBOL_NOT_TRACKED",
             )
 
-        if self._strategy_service.get_strategy(request.strategy_id) is None:
-            strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
-            if strategy_class is None:
-                raise NotFoundError(
-                    f"Strategy '{request.strategy_id}' is not loaded "
-                    "and no template matches in the registry."
-                )
+        strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
+        if strategy_class is None:
+            raise NotFoundError(
+                f"Strategy template '{request.strategy_id}' not found in registry."
+            )
+
+        sub_id = StrategySubscription.deterministic_id(
+            request.strategy_id, symbol, request.interval
+        )
+
+        if self._strategy_service.get_strategy(sub_id) is None:
             await self._strategy_service.load_strategy(
                 StrategyConfig(
-                    id=request.strategy_id,
+                    id=sub_id,
                     name=request.strategy_id,
                     symbol=symbol,
                     interval=request.interval,
@@ -65,9 +71,6 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
                 strategy_class=strategy_class,
             )
 
-        sub_id = StrategySubscription.deterministic_id(
-            request.strategy_id, symbol, request.interval
-        )
         sub = StrategySubscription(
             id=sub_id,
             strategy_id=request.strategy_id,

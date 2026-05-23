@@ -72,8 +72,8 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
           <StartStopButton
             isRunning={isRunning}
             isLoading={isLoading}
-            onStart={() => startMut.mutate(sub.strategy_id)}
-            onStop={() => stopMut.mutate(sub.strategy_id)}
+            onStart={() => startMut.mutate(sub.id)}
+            onStop={() => stopMut.mutate(sub.id)}
           />
           <button
             type="button"

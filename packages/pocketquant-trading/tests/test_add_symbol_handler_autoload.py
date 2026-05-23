@@ -1,7 +1,8 @@
 """Unit tests for AddSymbolHandler auto-load behavior.
 
-Verify that when a strategy template is in STRATEGY_REGISTRY but not yet
-loaded into the engine, AddSymbol auto-loads it instead of returning 404.
+Each subscription owns its own strategy instance keyed by ``sub.id``.
+Verify auto-load happens when no instance exists for that sub_id and the
+template name resolves in STRATEGY_REGISTRY.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
+from pocketquant.trading.domain.subscription import StrategySubscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 
@@ -40,7 +42,7 @@ def _make_handler(
 
 
 @pytest.mark.asyncio
-async def test_autoload_when_template_in_registry_and_not_loaded() -> None:
+async def test_autoload_uses_sub_id_as_instance_key() -> None:
     handler, svc, sub_add, _ = _make_handler(tracked_exists=True, loaded_strategy=None)
 
     result = await handler.handle(
@@ -51,20 +53,24 @@ async def test_autoload_when_template_in_registry_and_not_loaded() -> None:
         )
     )
 
+    expected_sub_id = StrategySubscription.deterministic_id(
+        "ma_crossover", "BTCUSDT:BINANCE", "1h"
+    )
+
     svc.load_strategy.assert_awaited_once()
     cfg = svc.load_strategy.await_args.args[0]
     assert isinstance(cfg, StrategyConfig)
-    assert cfg.id == "ma_crossover"
+    assert cfg.id == expected_sub_id
+    assert cfg.name == "ma_crossover"
     assert cfg.symbol == "BTCUSDT:BINANCE"
     assert cfg.interval == "1h"
     sub_add.assert_awaited_once()
+    assert result["id"] == expected_sub_id
     assert result["strategy_id"] == "ma_crossover"
-    assert result["symbol"] == "BTCUSDT:BINANCE"
-    assert result["interval"] == "1h"
 
 
 @pytest.mark.asyncio
-async def test_no_autoload_when_strategy_already_loaded() -> None:
+async def test_no_autoload_when_instance_already_loaded_for_sub_id() -> None:
     handler, svc, sub_add, _ = _make_handler(
         tracked_exists=True,
         loaded_strategy=MagicMock(),
@@ -83,7 +89,7 @@ async def test_no_autoload_when_strategy_already_loaded() -> None:
 
 
 @pytest.mark.asyncio
-async def test_404_when_unknown_template_and_not_loaded() -> None:
+async def test_404_when_unknown_template() -> None:
     handler, svc, _, _ = _make_handler(tracked_exists=True, loaded_strategy=None)
 
     with pytest.raises(NotFoundError):
