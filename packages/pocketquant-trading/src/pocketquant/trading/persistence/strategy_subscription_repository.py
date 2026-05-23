@@ -43,6 +43,12 @@ class StrategySubscriptionRepository(BaseRepository):
         cursor = collection.find({"strategy_id": strategy_id})
         return [StrategySubscription.from_mongo(doc) async for doc in cursor]
 
+    async def list_all(self) -> list[StrategySubscription]:
+        """Return every subscription in the collection — used for startup rehydration."""
+        collection = self._collection()
+        cursor = collection.find({})
+        return [StrategySubscription.from_mongo(doc) async for doc in cursor]
+
     async def delete(self, sub_id: str) -> int:
         """Delete a subscription by ID. Returns deleted_count (0 or 1)."""
         collection = self._collection()
