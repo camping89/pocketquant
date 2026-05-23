@@ -429,24 +429,27 @@ Implement IStrategy interface for custom trading strategies:
 ```python
 from pocketquant.core.domain.concepts.strategy.interfaces import IStrategy
 
-class MACrossoverStrategy(IStrategy):
+class HitNRun2Strategy(IStrategy):
     def __init__(self, config: StrategyConfig):
         super().__init__(config)
-        self.fast_period = self.get_parameter("fast_period", 10)
-        self.slow_period = self.get_parameter("slow_period", 20)
+        self.entry_lookback_bars = self.get_parameter("entry_lookback_bars", 240)
+        self.sl_lookback_bars = self.get_parameter("sl_lookback_bars", 480)
+        self.tp_lookback_bars = self.get_parameter("tp_lookback_bars", 60)
+        self.max_loss_pct = self.get_parameter("max_loss_pct", 0.01)
+        self.min_profit_pct = self.get_parameter("min_profit_pct", 0.02)
 
     async def on_bar(self, bar: dict) -> Signal | None:
-        """Called on each new bar."""
-        # Update moving averages
-        self.fast_ma = calculate_ma(self.recent_bars, self.fast_period)
-        self.slow_ma = calculate_ma(self.recent_bars, self.slow_period)
+        """Breakdown buy / breakup sell on 1m closed bars."""
+        prev_lows = list(self._lows)[-self.entry_lookback_bars:]
+        self._lows.append(bar["low"])
+        if len(prev_lows) < self.sl_lookback_bars:
+            return None  # warmup
 
-        # Generate signal
-        if self.fast_ma > self.slow_ma and self.prev_fast_ma <= self.prev_slow_ma:
-            return StrategySignal(action="buy", symbol=bar.symbol, quantity=100)
-        elif self.fast_ma < self.slow_ma and self.prev_fast_ma >= self.prev_slow_ma:
-            return StrategySignal(action="sell", symbol=bar.symbol, quantity=100)
-
+        if bar["close"] < min(prev_lows):
+            sl = max(min(prev_lows), bar["close"] * (1 - self.max_loss_pct))
+            tp = max(max(prev_highs_tp), bar["close"] * (1 + self.min_profit_pct))
+            return Signal(direction=Direction.LONG, entry_price=bar["close"],
+                          stop_loss_price=sl, take_profit_price=tp, ...)
         return None  # No signal
 
     async def on_tick(self, quote: QuoteTick) -> Optional[StrategySignal]:

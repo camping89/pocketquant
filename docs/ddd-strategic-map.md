@@ -42,7 +42,7 @@ Trading logic interfaces and signal generation.
 | VO | `Signal`, `Direction`, `StrategyConfig` | — | Active |
 | VO | `StopLossConfig`, `TakeProfitConfig`, `OrderConfig` | — | Active |
 | Event | `SignalGeneratedEvent` | — | Active |
-| Impl | `MACrossoverStrategy` | — | Example implementation |
+| Impl | `HitNRun2Strategy` | — | Active — 1m breakdown/breakup with capped technical SL/TP |
 
 ### Risk
 Position sizing and risk validation.

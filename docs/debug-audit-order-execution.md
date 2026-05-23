@@ -28,7 +28,7 @@ Each step flows into the next through either direct function calls or async even
 
 ## Step 1: Loading a Strategy
 
-**You call:** `POST /api/v1/strategies/load` with `{"path": "strategies/examples/ma-crossover-btc-usdt.yaml"}`
+**You call:** `POST /api/v1/strategies/load` with `{"path": "strategies/examples/your-hitnrun2.yaml"}` (no examples shipped — build your own YAML)
 
 ### 1a. The Route
 
@@ -46,16 +46,19 @@ The request hits a FastAPI route. We use `FromDishka[Mediator]` to inject the CQ
 
 **Sample YAML:**
 ```yaml
-id: "test-ma-crossover"
-name: "MA Crossover Test"
-symbol: "BTC-USDT"
-exchange: "OKX"
+id: "test-hitnrun2"
+name: "HitNRun2 Test"
+symbol: "BTCUSDT:BINANCE"
 interval: "1m"
 broker: "paper"               # "paper" for testing, "okx" for real trading
-strategy_type: "ma_crossover"
+strategy_type: "hitnrun2"
 parameters:
-  fast_period: 10
-  slow_period: 20
+  entry_lookback_bars: 240    # 4h breakdown/breakup window
+  sl_lookback_bars: 480       # 8h technical SL
+  tp_lookback_bars: 60        # 1h technical TP
+  max_loss_pct: 0.01          # cap loss at 1% of entry
+  min_profit_pct: 0.02        # require >= 2% profit target
+  direction: "both"           # "long" | "short" | "both"
 risk:
   max_position_pct: 0.02      # Risk 2% of balance per trade
   max_drawdown_pct: 0.05

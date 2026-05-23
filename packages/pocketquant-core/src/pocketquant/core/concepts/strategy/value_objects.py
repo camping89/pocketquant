@@ -71,15 +71,19 @@ class StrategyConfig:
     """Strategy configuration loaded from YAML.
 
     Example YAML:
-        id: ma-cross-btc-5m
-        name: "MA Crossover BTC/USDT"
-        symbol: BTCUSDT:OKX   # composite {code}:{exchange}
-        interval: 5m
+        id: hitnrun2-btc-1m
+        name: "HitNRun2 BTC/USDT"
+        symbol: BTCUSDT:BINANCE   # composite {code}:{exchange}
+        interval: 1m
         trigger: bar
         broker: paper
         parameters:
-          fast_period: 10
-          slow_period: 20
+          entry_lookback_bars: 240
+          sl_lookback_bars: 480
+          tp_lookback_bars: 60
+          max_loss_pct: 0.01
+          min_profit_pct: 0.02
+          direction: both
         risk:
           model: percent_risk
           risk_per_trade: 0.02

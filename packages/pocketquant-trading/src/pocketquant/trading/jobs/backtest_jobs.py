@@ -122,6 +122,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
             subscription_id,
             symbol,
             interval,
+            event_bus=event_bus,
         )
 
         runner = BacktestAppService(

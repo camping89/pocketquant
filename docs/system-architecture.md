@@ -117,7 +117,7 @@ domain/
 │       ├── events.py       # SignalGeneratedEvent
 │       ├── interfaces.py   # IStrategy ABC
 │       ├── value_objects.py  # Signal, StrategyConfig, OrderConfig, StopLossConfig, TakeProfitConfig
-│       └── services/ma_crossover.py  # MACrossoverStrategy
+│       └── services/hitnrun2.py  # HitNRun2Strategy — 1m breakdown/breakup with capped SL/TP
 └── shared/                 # Cross-cutting
     ├── enums.py            # Interval enum
     ├── events.py           # DomainEvent base (was domain_event.py)

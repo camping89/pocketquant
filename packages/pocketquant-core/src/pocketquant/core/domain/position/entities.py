@@ -35,6 +35,9 @@ class PositionAggregate(BaseModel):
     is_closed: bool = False
     opened_at: datetime = Field(default_factory=utc_now)
     closed_at: datetime | None = None
+    # Risk levels captured on open; consumed by PaperBroker auto-fill loop.
+    sl_price: float | None = None
+    tp_price: float | None = None
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     @classmethod
@@ -45,6 +48,8 @@ class PositionAggregate(BaseModel):
         side: PositionSide,
         entry_price: float,
         quantity: float,
+        sl_price: float | None = None,
+        tp_price: float | None = None,
     ) -> PositionAggregate:
         """Factory method to open a new position."""
         if quantity <= 0:
@@ -60,6 +65,8 @@ class PositionAggregate(BaseModel):
             entry_price=entry_price,
             quantity=quantity,
             current_price=entry_price,
+            sl_price=sl_price,
+            tp_price=tp_price,
         )
         position._events.append(
             PositionOpenedEvent(
@@ -209,6 +216,8 @@ class PositionAggregate(BaseModel):
             "is_closed": self.is_closed,
             "opened_at": self.opened_at,
             "closed_at": self.closed_at,
+            "sl_price": self.sl_price,
+            "tp_price": self.tp_price,
         }
 
     @classmethod
@@ -226,4 +235,6 @@ class PositionAggregate(BaseModel):
             is_closed=doc.get("is_closed", False),
             opened_at=doc["opened_at"],
             closed_at=doc.get("closed_at"),
+            sl_price=doc.get("sl_price"),
+            tp_price=doc.get("tp_price"),
         )
