@@ -26,6 +26,11 @@ from pocketquant.api.market_data.app_services.integrity_jobs import (
 from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
+from pocketquant.core.domain.bar.entities import (
+    SOURCE_REST_BACKFILL,
+    SOURCE_REST_REPAIR,
+    SOURCE_REST_SYNC_1M,
+)
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.data_provider import IDataProvider
 from pocketquant.core.infrastructure.scheduling.job_history_repository import (
@@ -123,6 +128,7 @@ async def _sync_by_intervals(
     tracked_symbol_repo: TrackedSymbolRepository,
     history_repo: JobHistoryRepository,
     doc_id: str | None,
+    source: str,
 ) -> tuple[int, int]:
     """For each tracked symbol, sync the given intervals via REST provider.
 
@@ -150,7 +156,8 @@ async def _sync_by_intervals(
         for interval in intervals:
             try:
                 command = SyncSymbolCommand(
-                    symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars,
+                    symbol=symbol, exchange=exchange, interval=interval,
+                    n_bars=n_bars, source=source,
                 )
                 result = await mediator.send(command)
                 total_inserted += result.bars_synced
@@ -221,7 +228,9 @@ async def _sync_by_intervals(
 # ---------------------------------------------------------------------------
 
 
-async def _run_sync(name: str, intervals: list[Interval], n_bars: int) -> None:
+async def _run_sync(
+    name: str, intervals: list[Interval], n_bars: int, source: str,
+) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
     mediator = await container.get(Mediator)
@@ -237,6 +246,7 @@ async def _run_sync(name: str, intervals: list[Interval], n_bars: int) -> None:
     try:
         total_inserted, total_fetched = await _sync_by_intervals(
             intervals, n_bars, name, mediator, tracked_symbol_repo, history_repo, doc_id,
+            source=source,
         )
         if doc_id:
             await history_repo.record_finish(
@@ -328,7 +338,8 @@ async def _run_repair(name: str) -> None:
         for symbol, exchange in symbols:
             for interval in SYNC_INTERVALS:
                 result = await repair_integrity(
-                    symbol, exchange, interval, bar_repo, mediator
+                    symbol, exchange, interval, bar_repo, mediator,
+                    source=SOURCE_REST_REPAIR,
                 )
                 if result["deleted"] or result["gaps_resynced"]:
                     logger.info(
@@ -383,6 +394,7 @@ async def sync_1m() -> None:
         # Step 1: REST-fetch 1m bars for all tracked symbols and upsert to Mongo.
         total_inserted, total_fetched = await _sync_by_intervals(
             [Interval.MINUTE_1], 100, name, mediator, tracked_symbol_repo, history_repo, doc_id,
+            source=SOURCE_REST_SYNC_1M,
         )
 
         # Step 2: Cascade 1m → 5m/15m/1h/4h/1d for each tracked symbol.
@@ -585,7 +597,7 @@ async def sync_verify_cascade() -> None:
 
 async def sync_backfill() -> None:
     """Daily deep backfill: REST-fetch 5000 bars for all tracked symbols across all tfs."""
-    await _run_sync("sync_backfill", SYNC_INTERVALS, 5000)
+    await _run_sync("sync_backfill", SYNC_INTERVALS, 5000, source=SOURCE_REST_BACKFILL)
 
 
 async def sync_integrity() -> None:

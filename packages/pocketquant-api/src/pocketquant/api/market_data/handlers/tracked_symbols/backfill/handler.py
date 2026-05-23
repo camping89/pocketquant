@@ -20,6 +20,7 @@ from pocketquant.api.market_data.handlers.tracked_symbols.backfill.command impor
     BackfillTrackedSymbolCommand,
 )
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.domain.bar.entities import SOURCE_TRACKED_SYMBOL_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.data_provider import IDataProvider
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
@@ -91,7 +92,7 @@ class BackfillTrackedSymbolHandler:
         persisted = 0
         for bar in bars:
             try:
-                await self._bar_repo.upsert_bar(bar)
+                await self._bar_repo.upsert_bar(bar, source=SOURCE_TRACKED_SYMBOL_BACKFILL)
                 persisted += 1
             except Exception:
                 logger.error(
@@ -130,7 +131,7 @@ class BackfillTrackedSymbolHandler:
 
         for bar in bars_1m:
             try:
-                await self._bar_repo.upsert_bar(bar)
+                await self._bar_repo.upsert_bar(bar, source=SOURCE_TRACKED_SYMBOL_BACKFILL)
             except Exception:
                 logger.error(
                     "backfill.cascade_1m_upsert_failed",

@@ -189,7 +189,7 @@ class TestSyncAndCascadeIntegration:
                 close=103.0 + i,
                 volume=1000.0,
             )
-            await bar_repo.upsert_bar(bar)
+            await bar_repo.upsert_bar(bar, source="test")
 
         # Run cascade
         result = await cascade_for_symbol(symbol, exchange, 15, bar_repo)
@@ -243,7 +243,7 @@ class TestSyncAndCascadeIntegration:
                 close=2005.0,
                 volume=10.0,
             )
-            await bar_repo.upsert_bar(bar)
+            await bar_repo.upsert_bar(bar, source="test")
 
         # First cascade
         result1 = await cascade_for_symbol(symbol, exchange, 120, bar_repo)

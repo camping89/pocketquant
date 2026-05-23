@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 import httpx
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import Settings, get_settings
-from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL, Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
@@ -240,7 +240,7 @@ async def run_backfill(cfg: BackfillConfig) -> int:
                         last=bars[-1].datetime.isoformat() if bars[-1].datetime else None,
                     )
                 else:
-                    inserted = await bar_repo.insert_many(bars)
+                    inserted = await bar_repo.insert_many(bars, source=SOURCE_REST_BACKFILL)
                     inserted_total += inserted
                     logger.info(
                         "backfill.chunk_inserted",

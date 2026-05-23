@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.entities import SOURCE_CASCADE, Bar
 from pocketquant.core.domain.shared.enums import Interval
 
 if TYPE_CHECKING:
@@ -216,7 +216,7 @@ async def cascade_for_symbol(
             )
 
             try:
-                await bar_repo.upsert_bar(bar)
+                await bar_repo.upsert_bar(bar, source=SOURCE_CASCADE)
                 upserted += 1
             except Exception:
                 logger.error(
@@ -237,6 +237,7 @@ async def cascade_for_symbol(
                 tf=tf.value,
                 buckets=len(boundaries),
                 upserted=upserted,
+                source=SOURCE_CASCADE,
             )
 
     return persisted_per_tf

@@ -106,6 +106,7 @@ def _command() -> SyncSymbolCommand:
     return SyncSymbolCommand(
         symbol="BTCUSDT", exchange="BINANCE",
         interval=Interval.MINUTE_15, n_bars=48,
+        source="test",
     )
 
 
