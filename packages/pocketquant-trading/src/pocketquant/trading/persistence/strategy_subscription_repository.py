@@ -15,7 +15,7 @@ class StrategySubscriptionRepository(BaseRepository):
     """MongoDB repository for StrategySubscription persistence.
 
     Collection: strategy_subscriptions
-    PK: _id = deterministic_id(strategy_id, symbol, exchange, interval)
+    PK: _id = deterministic_id(strategy_id, symbol, interval)  — symbol is composite
     """
 
     _collection_name = "strategy_subscriptions"

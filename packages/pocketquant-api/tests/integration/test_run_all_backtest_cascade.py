@@ -30,8 +30,7 @@ pytestmark = pytest.mark.integration
 
 _API = "/api/v1/strategies"
 _STRATEGY_ID = "ma_crossover"   # must be in STRATEGY_REGISTRY
-_SYMBOL = "BTC-USDT"
-_EXCHANGE = "BINANCE"
+_SYMBOL = "BTC-USDT:BINANCE"
 _INTERVAL = "1h"
 _N_BARS = 100
 _POLL_TIMEOUT_S = 30
@@ -83,7 +82,6 @@ def _synthetic_bars(n: int) -> list[Bar]:
         bars.append(
             Bar(
                 symbol=_SYMBOL,
-                exchange=_EXCHANGE,
                 interval=Interval.HOUR_1,
                 datetime=ts,
                 open=price,
@@ -113,7 +111,6 @@ async def setup_strategy_and_bars(app_client):
         id=_STRATEGY_ID,
         name="MA Crossover Test",
         symbol=_SYMBOL,
-        exchange=_EXCHANGE,
         interval=_INTERVAL,
         broker="paper",
         parameters={"fast_period": 5, "slow_period": 20},

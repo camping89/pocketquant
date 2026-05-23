@@ -1,6 +1,31 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-05-08 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-23 | **Format:** Semantic Versioning
+
+## [Unreleased] — 2026-05-23 — Exchange Encapsulation + Strategy Dashboard
+
+### Breaking Changes
+- **BREAKING:** Dropped standalone `exchange` field from domain entities (Bar, Order, Position, Symbol, SyncStatus, StrategySubscription, TrackedSymbol). Composite `{CODE}:{EXCHANGE}` (e.g. `BTCUSDT:BINANCE`) is now the single symbol identifier.
+- **BREAKING:** API surface removes `?exchange=` query filters and `/{exchange}/{symbol}` path segments. New contract: `/{symbol}` (URL-encoded composite, `:` → `%3A`).
+- **BREAKING:** Repos: `BarRepository.find(symbol, interval, ...)` drops exchange param. Indexes rebuilt: `(symbol, interval, datetime) unique`.
+- **BREAKING:** Frontend URL param: `?exchange=X&symbol=Y` → `?symbol=Y:X` (single composite). localStorage key: `chart.interval.{composite}` (was `chart.interval.{exchange}.{code}`).
+
+### Changed
+- Cache keys updated: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`, `ohlcv:{symbol}:{interval}:{limit}`.
+- Repositories: symbol field now composite; business logic never decomposes—exchange is opaque postfix.
+- Database collections: all symbol references use composite identifier format.
+
+### Added
+- **New `/strategies` route:** 3-pane operator dashboard (list with start/stop, config+chart embed with entry/exit markers, positions/metrics panel). Reuses `backtest-panel/*` components.
+- **Migration script:** `scripts/one_time_consolidate_exchange_into_symbol.py` (idempotent, dry-run safe, counts verified). Deploy after backend merge, before FE deploy.
+- **Test coverage:** Composite symbol parsing + strategy page behavior.
+
+### Notes
+- Hard-cut API; no deprecation period for old `?exchange=` param.
+- Composite format applied from day 1 (future-proofs for multi-exchange trading).
+- Migration runs post-deploy, before FE ships; operator dashboard available immediately after.
+
+---
 
 ## [v2.0.1] — 2026-05-08 — Hotfix: Binance in-progress bar capture
 

@@ -23,8 +23,8 @@ export interface SubscriptionBacktestStatus {
 export interface Subscription {
   id: string
   strategy_id: string
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
-  exchange: string
   interval: string
   created_at: string
   backtest: SubscriptionBacktestStatus | null
@@ -36,7 +36,7 @@ export async function listSymbols(strategyId: string): Promise<Subscription[]> {
 
 export async function addSymbol(
   strategyId: string,
-  body: { symbol: string; exchange: string; interval: string },
+  body: { symbol: string; interval: string },
 ): Promise<Subscription> {
   return apiPost<Subscription>(`/api/v1/strategies/${strategyId}/symbols`, body)
 }

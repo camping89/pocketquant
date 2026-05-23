@@ -478,6 +478,28 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 - **Cache Keys:** Use `build_bar_cache_key()` (renamed from `build_ohlcv_cache_key()`)
 - **Collections:** Use `COLLECTION_BARS` (renamed from `COLLECTION_OHLCV`)
 
+## Composite Symbol Format (2026-05-23)
+
+**Format:** `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`, `AAPL:NYSE`)
+
+**Rules:**
+- Single immutable `symbol: str` field replaces `(code: str, exchange: str)` pairs across domain entities
+- Exchange is opaque postfix—business logic never decomposes `symbol` into parts
+- URL-encoded: `:` serialized as `%3A` in path segments (e.g., `/api/v1/bar/BTCUSDT%3ABINANCE`)
+- JSON/database: raw `:` preserved (no encoding inside payloads)
+- Cache keys: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`, etc.
+- Affected entities: Bar, Order, Position, Symbol, SyncStatus, StrategySubscription, TrackedSymbol
+- Migration: `scripts/one_time_consolidate_exchange_into_symbol.py` (idempotent, dry-run safe)
+
+**Example Repository Usage:**
+```python
+# Old (pre-2026-05-23): separate params
+await bar_repo.find(symbol="BTCUSDT", exchange="BINANCE", interval="1d")
+
+# New: composite symbol
+await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
+```
+
 ## Code Organization Guidelines
 
 ### File Naming

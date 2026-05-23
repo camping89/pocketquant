@@ -20,7 +20,6 @@ const STALE_CHECK_INTERVAL_MS = 5_000
 const REFETCH_DELAY_MS = 5_000
 
 export function useRealtimeBar(
-  exchange: string,
   symbol: string,
   interval: Interval,
   candleRef: RefObject<ISeriesApi<'Candlestick'> | null>,
@@ -40,9 +39,9 @@ export function useRealtimeBar(
     lastBarStartRef.current = null
     lastUpdateTsRef.current = null
 
-    const url = `/api/v1/market-data/bars/stream/${exchange}/${symbol}?interval=${interval}`
+    const url = `/api/v1/market-data/bars/stream/${encodeURIComponent(symbol)}?interval=${interval}`
     const es = new EventSource(url)
-    const ohlcvQueryKey = ['ohlcv', exchange, symbol, interval] as const
+    const ohlcvQueryKey = ['ohlcv', symbol, interval] as const
     const refetchTimers: ReturnType<typeof setTimeout>[] = []
 
     const scheduleOhlcvRefetch = () => {
@@ -121,7 +120,7 @@ export function useRealtimeBar(
       clearInterval(staleTimer)
       for (const t of refetchTimers) clearTimeout(t)
     }
-  }, [exchange, symbol, interval]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [symbol, interval]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { lastUpdateTs, isStale, isInProgress }
 }

@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useAddSymbol } from '../../hooks/use-subscriptions'
 
-const EXCHANGES = ['OKX', 'BINANCE']
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']
 
 interface AddSymbolDialogProps {
@@ -11,7 +10,6 @@ interface AddSymbolDialogProps {
 
 export function AddSymbolDialog({ strategyId, onClose }: AddSymbolDialogProps) {
   const [symbol, setSymbol] = useState('')
-  const [exchange, setExchange] = useState('OKX')
   const [interval, setInterval] = useState('1h')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -20,11 +18,13 @@ export function AddSymbolDialog({ strategyId, onClose }: AddSymbolDialogProps) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setErrorMsg(null)
+    // Expect composite format: "BTCUSDT:BINANCE"
     const trimmed = symbol.trim().toUpperCase()
-    if (!trimmed) { setErrorMsg('Symbol is required'); return }
+    if (!trimmed) { setErrorMsg('Symbol is required (e.g. BTCUSDT:BINANCE)'); return }
+    if (!trimmed.includes(':')) { setErrorMsg('Use composite format: CODE:EXCHANGE (e.g. BTCUSDT:BINANCE)'); return }
 
     addSymbol.mutate(
-      { symbol: trimmed, exchange, interval },
+      { symbol: trimmed, interval },
       {
         onSuccess: () => { onClose() },
         onError: (err: unknown) => {
@@ -69,19 +69,12 @@ export function AddSymbolDialog({ strategyId, onClose }: AddSymbolDialogProps) {
             <input
               style={inputStyle}
               type="text"
-              placeholder="e.g. BTC-USDT"
+              placeholder="e.g. BTCUSDT:BINANCE"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
               onBlur={(e) => setSymbol(e.target.value.trim().toUpperCase())}
               autoFocus
             />
-          </div>
-
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>Exchange</label>
-            <select style={inputStyle} value={exchange} onChange={(e) => setExchange(e.target.value)}>
-              {EXCHANGES.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
-            </select>
           </div>
 
           <div style={{ marginBottom: 16 }}>

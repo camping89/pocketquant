@@ -1,4 +1,8 @@
-"""SSE endpoint — streams real-time quote updates by polling Redis quote:latest."""
+"""SSE endpoint — streams real-time quote updates by polling Redis quote:latest.
+
+Path: GET /stream/{symbol}
+``{symbol}`` is URL-encoded composite, e.g. ``BTCUSDT%3ABINANCE``.
+"""
 
 import asyncio
 import json
@@ -7,7 +11,7 @@ from typing import Any
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-from pocketquant.api.common.symbol_validation import validate_symbol_pair
+from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.persistence.redis import Cache
@@ -23,7 +27,6 @@ def _make_payload(quote: dict[str, Any]) -> dict[str, Any]:
     """Build SSE payload from Redis quote:latest dict (written by QuoteAppService)."""
     return {
         "symbol": quote.get("symbol"),
-        "exchange": quote.get("exchange"),
         "last_price": quote.get("last_price"),
         "bid": quote.get("bid"),
         "ask": quote.get("ask"),
@@ -34,21 +37,19 @@ def _make_payload(quote: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@router.get("/stream/{exchange}/{symbol}")
+@router.get("/stream/{symbol}")
 async def stream_quote(
-    exchange: str,
     symbol: str,
     request: Request,
     cache: FromDishka[Cache],
 ) -> StreamingResponse:
     """SSE stream — polls Redis quote:latest every 500ms, emits on last_price or volume change.
 
-    Validates {exchange}/{symbol} path params against SYMBOL_PATTERN (400 on mismatch).
+    ``{symbol}`` path param is URL-encoded composite (e.g. ``BTCUSDT%3ABINANCE``).
+    Validates composite format (400 on mismatch).
     """
-    exchange, symbol = validate_symbol_pair(exchange, symbol)
-    cache_key = CACHE_KEY_QUOTE_LATEST.format(
-        exchange=exchange, symbol=symbol
-    )
+    symbol = validate_composite_symbol(symbol)
+    cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=symbol)
 
     async def event_generator():
         last_price: float | None = None

@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 @handles(SubscribeCommand)
 class SubscribeHandler(Handler[SubscribeCommand, dict]):
-    """Handle subscribing to a symbol."""
+    """Handle subscribing to a composite symbol."""
 
     def __init__(self, quote_app_service: QuoteAppService):
         self._quote_app_service = quote_app_service
@@ -21,15 +21,13 @@ class SubscribeHandler(Handler[SubscribeCommand, dict]):
             raise ValueError("Quote service not running. Start it first via StartQuoteFeedCommand")
 
         symbol = request.symbol.upper()
-        exchange = request.exchange.upper()
 
         key = await self._quote_app_service.provider.subscribe(
             symbol=symbol,
-            exchange=exchange,
             callback=self._quote_app_service.on_quote_update,
         )
 
-        logger.info("quote_service.subscribed", symbol=symbol, exchange=exchange)
+        logger.info("quote_service.subscribed", symbol=symbol)
         return {
             "subscription_key": key,
             "message": f"Subscribed to {key}",

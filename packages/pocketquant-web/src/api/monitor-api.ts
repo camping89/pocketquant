@@ -3,13 +3,11 @@ import type { IntegrityReport, RepairResult, JobInfo } from '../types/market-dat
 
 export async function checkIntegrity(
   symbol: string,
-  exchange: string,
   interval: string,
   daysBack = 7,
 ): Promise<IntegrityReport> {
   return apiPost('/api/v1/market-data/integrity/check', {
     symbol,
-    exchange,
     interval,
     days_back: daysBack,
   })
@@ -17,13 +15,11 @@ export async function checkIntegrity(
 
 export async function repairIntegrity(
   symbol: string,
-  exchange: string,
   interval: string,
   daysBack = 7,
 ): Promise<RepairResult> {
   return apiPost('/api/v1/market-data/integrity/repair', {
     symbol,
-    exchange,
     interval,
     days_back: daysBack,
   })

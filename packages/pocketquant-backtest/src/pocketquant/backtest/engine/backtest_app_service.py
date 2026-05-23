@@ -152,7 +152,7 @@ class BacktestAppService:
         end_datetime = datetime.combine(config.end_date, datetime.max.time())
 
         async for bar in self._bar_repo.stream(
-            config.symbol, config.exchange, Interval(config.interval), start_datetime, end_datetime
+            config.symbol, Interval(config.interval), start_datetime, end_datetime
         ):
             yield bar
 

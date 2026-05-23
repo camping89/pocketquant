@@ -12,7 +12,6 @@ class SignalGeneratedEvent(DomainEvent):
 
     strategy_id: str = ""
     symbol: str = ""
-    exchange: str = ""
     direction: Direction = Direction.FLAT
     confidence: float = 0.0
     entry_price: float | None = None

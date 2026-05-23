@@ -56,7 +56,6 @@ class PositionAppService:
                 position = PositionAggregate.open(
                     strategy_id=event.strategy_id,
                     symbol=event.symbol,
-                    exchange=event.exchange,
                     side=side,
                     entry_price=event.filled_price,
                     quantity=event.filled_quantity,
@@ -72,7 +71,6 @@ class PositionAppService:
                         position_id=position.id,
                         strategy_id=event.strategy_id,
                         symbol=event.symbol,
-                        exchange=event.exchange,
                         side=side,
                         entry_price=event.filled_price,
                         quantity=event.filled_quantity,
@@ -147,7 +145,6 @@ class PositionAppService:
             "id": position.id,
             "strategy_id": position.strategy_id,
             "symbol": position.symbol,
-            "exchange": position.exchange,
             "side": position.side.value,
             "quantity": position.quantity,
             "entry_price": position.entry_price,

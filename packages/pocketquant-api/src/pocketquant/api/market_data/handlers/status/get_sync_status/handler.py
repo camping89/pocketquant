@@ -6,6 +6,7 @@ Composes API response from:
 
 This decouples cascade-derived bar freshness from sync_status (which only
 updates on SyncSymbolCommand). Eliminates false STUCK badges for cascade tfs.
+``symbol`` is composite ``{code}:{exchange}`` throughout.
 """
 
 from __future__ import annotations
@@ -43,12 +44,12 @@ def _iso_z(dt: datetime | None) -> str | None:
 
 
 async def _enrich_with_bars(
-    symbol: str, exchange: str, interval_value: str, bar_repo: BarRepository,
+    symbol: str, interval_value: str, bar_repo: BarRepository,
 ) -> tuple[int, datetime | None]:
     """Return (bar_count, latest_bar_dt) read directly from bars collection."""
     interval = Interval(interval_value)
-    latest = await bar_repo.get_latest(symbol, exchange, interval)
-    count = await bar_repo.count(symbol, exchange, interval)
+    latest = await bar_repo.get_latest(symbol, interval)
+    count = await bar_repo.count(symbol, interval)
     return count, (latest.datetime if latest else None)
 
 
@@ -71,7 +72,7 @@ class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
 
         enrichments = await asyncio.gather(
             *(
-                _enrich_with_bars(s.symbol, s.exchange, s.interval, self._bar_repo)
+                _enrich_with_bars(s.symbol, s.interval, self._bar_repo)
                 for s in statuses
             ),
             return_exceptions=True,
@@ -82,7 +83,7 @@ class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
             if isinstance(enrichment, BaseException):
                 logger.warning(
                     "sync_status.enrich_failed",
-                    symbol=s.symbol, exchange=s.exchange, interval=s.interval,
+                    symbol=s.symbol, interval=s.interval,
                     error=str(enrichment),
                 )
                 bar_count = s.bar_count
@@ -93,7 +94,6 @@ class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
             results.append(
                 SyncStatusResult(
                     symbol=s.symbol,
-                    exchange=s.exchange,
                     interval=s.interval,
                     status=s.status,
                     bar_count=bar_count,

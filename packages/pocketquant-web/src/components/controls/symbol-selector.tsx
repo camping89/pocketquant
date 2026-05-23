@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSymbols } from '../../hooks/use-symbols'
-import type { SelectedSymbol } from '../../types/market-data'
+import { parseSymbol } from '../../lib/symbol-format'
 
 interface SymbolSelectorProps {
-  value: SelectedSymbol
-  onChange: (v: SelectedSymbol) => void
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
+  value: string
+  onChange: (v: string) => void
 }
 
 export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
@@ -21,20 +22,27 @@ export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const filtered = symbols?.filter(
-    (s) =>
-      s.is_active &&
-      (`${s.exchange}:${s.symbol}`.toLowerCase().includes(filter.toLowerCase()) ||
-        s.name.toLowerCase().includes(filter.toLowerCase())),
-  )
+  const lowerFilter = filter.toLowerCase()
+  const filtered = symbols?.filter((s) => {
+    if (!s.is_active) return false
+    // s.symbol is now a composite string from the API
+    const { code } = parseSymbol(s.symbol)
+    return (
+      s.symbol.toLowerCase().includes(lowerFilter) ||
+      code.toLowerCase().includes(lowerFilter) ||
+      s.name.toLowerCase().includes(lowerFilter)
+    )
+  })
+
+  const { code: selectedCode, exchange: selectedExchange } = parseSymbol(value)
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="symbol-btn"
-      >
-        {value.exchange}:{value.symbol}
+      <button onClick={() => setOpen(!open)} className="symbol-btn">
+        <span className="symbol-code">{selectedCode}</span>
+        {selectedExchange && (
+          <span className="exchange-badge">{selectedExchange}</span>
+        )}
       </button>
       {open && (
         <div className="symbol-dropdown">
@@ -46,20 +54,24 @@ export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
             className="symbol-search"
           />
           <div className="symbol-list">
-            {filtered?.map((s) => (
-              <button
-                key={`${s.exchange}:${s.symbol}`}
-                className={`symbol-option ${s.exchange === value.exchange && s.symbol === value.symbol ? 'active' : ''}`}
-                onClick={() => {
-                  onChange({ exchange: s.exchange, symbol: s.symbol })
-                  setOpen(false)
-                  setFilter('')
-                }}
-              >
-                <span className="symbol-code">{s.exchange}:{s.symbol}</span>
-                <span className="symbol-name">{s.name}</span>
-              </button>
-            ))}
+            {filtered?.map((s) => {
+              const { code, exchange } = parseSymbol(s.symbol)
+              return (
+                <button
+                  key={s.symbol}
+                  className={`symbol-option ${s.symbol === value ? 'active' : ''}`}
+                  onClick={() => {
+                    onChange(s.symbol)
+                    setOpen(false)
+                    setFilter('')
+                  }}
+                >
+                  <span className="symbol-code">{code}</span>
+                  {exchange && <span className="exchange-badge">{exchange}</span>}
+                  <span className="symbol-name">{s.name}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

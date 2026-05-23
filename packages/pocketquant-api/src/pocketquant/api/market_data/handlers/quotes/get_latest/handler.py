@@ -10,15 +10,13 @@ from pocketquant.core.common.mediator import Handler, handles
 
 @handles(GetLatestQuoteQuery)
 class GetLatestQuoteHandler(Handler[GetLatestQuoteQuery, QuoteResult | None]):
-    """Handle getting the latest quote for a symbol."""
+    """Handle getting the latest quote for a composite symbol."""
 
     def __init__(self, cache: Cache):
         self._cache = cache
 
     async def handle(self, request: GetLatestQuoteQuery) -> QuoteResult | None:
-        cache_key = CACHE_KEY_QUOTE_LATEST.format(
-            exchange=request.exchange.upper(), symbol=request.symbol.upper()
-        )
+        cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=request.symbol.upper())
 
         data = await self._cache.get(cache_key)
         if data:

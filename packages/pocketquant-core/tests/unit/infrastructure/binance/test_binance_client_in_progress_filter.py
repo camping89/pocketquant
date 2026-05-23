@@ -97,7 +97,7 @@ class TestEndTimeCap:
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with _patch_now(now_ms):
-            await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=1)
+            await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1)
 
         assert captured["params"]["endTime"] == bar_open - 1
 
@@ -116,7 +116,7 @@ class TestEndTimeCap:
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with _patch_now(now_ms):
-            bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=1)
+            bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1)
 
         assert captured["params"]["endTime"] == bar_open - 1
         assert len(bars) == 1
@@ -147,7 +147,7 @@ class TestDefenseInDepthFilter:
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with _patch_now(now_ms):
-            bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=2)
+            bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=2)
 
         assert len(bars) == 1
         assert bars[0].datetime == datetime.fromtimestamp(prev_open / 1000, tz=UTC)
@@ -197,7 +197,7 @@ class TestPaginationConsistency:
         cutoff_dt = datetime.fromtimestamp(bar_open / 1000, tz=UTC)
         with _patch_now(now_ms), patch("asyncio.sleep"):
             bars = await client.fetch_ohlcv(
-                "BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=1500
+                "BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1500
             )
 
         assert call_count == 2

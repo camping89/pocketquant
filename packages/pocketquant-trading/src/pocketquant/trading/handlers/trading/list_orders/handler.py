@@ -22,7 +22,6 @@ class ListOrdersHandler(Handler[ListOrdersQuery, list[dict]]):
                 "id": o.id,
                 "strategy_id": o.strategy_id,
                 "symbol": o.symbol,
-                "exchange": o.exchange,
                 "side": o.side.value,
                 "order_type": o.order_type.value,
                 "quantity": o.quantity,

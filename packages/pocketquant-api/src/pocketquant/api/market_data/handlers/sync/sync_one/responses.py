@@ -7,7 +7,6 @@ from pocketquant.core.domain.shared.value_objects import Interval
 
 def build_success(
     symbol: str,
-    exchange: str,
     interval: Interval,
     *,
     bars_synced: int,
@@ -17,9 +16,9 @@ def build_success(
     total_bars: int,
     latest_bar: Bar | None,
 ) -> SyncResponse:
+    """Build a completed SyncResponse. ``symbol`` is composite ``{code}:{exchange}``."""
     return SyncResponse(
         symbol=symbol,
-        exchange=exchange,
         interval=interval.value,
         status="completed",
         bars_synced=bars_synced,

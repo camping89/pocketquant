@@ -186,7 +186,6 @@ class GridOptimizationAppService:
             backtest_config = BacktestConfig(
                 strategy_id=config.strategy_id,
                 symbol=config.symbol,
-                exchange=config.exchange,
                 interval=config.interval,
                 start_date=config.start_date,
                 end_date=config.end_date,
@@ -245,7 +244,6 @@ class GridOptimizationAppService:
         return {
             "strategy_id": config.strategy_id,
             "symbol": config.symbol,
-            "exchange": config.exchange,
             "interval": config.interval,
             "start_date": config.start_date.isoformat(),
             "end_date": config.end_date.isoformat(),

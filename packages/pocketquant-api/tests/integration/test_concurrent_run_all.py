@@ -33,8 +33,7 @@ pytestmark = pytest.mark.integration
 
 _API = "/api/v1/strategies"
 _STRATEGY_ID = "ma_crossover"
-_SYMBOL = "BTC-USDT"
-_EXCHANGE = "BINANCE"
+_SYMBOL = "BTC-USDT:BINANCE"
 _INTERVAL = "1h"
 
 
@@ -79,7 +78,6 @@ def _minimal_bars(n: int = 30) -> list[Bar]:
     return [
         Bar(
             symbol=_SYMBOL,
-            exchange=_EXCHANGE,
             interval=Interval.HOUR_1,
             datetime=base + timedelta(hours=i),
             open=price,
@@ -107,7 +105,6 @@ async def setup(app_client):
         id=_STRATEGY_ID,
         name="MA Crossover Concurrent Test",
         symbol=_SYMBOL,
-        exchange=_EXCHANGE,
         interval=_INTERVAL,
         broker="paper",
         parameters={"fast_period": 5, "slow_period": 20},
@@ -122,7 +119,7 @@ async def setup(app_client):
 
     await svc.unload_strategy(_STRATEGY_ID)
     await bar_repo._collection().delete_many(
-        {"symbol": _SYMBOL, "exchange": _EXCHANGE, "interval": _INTERVAL}
+        {"symbol": _SYMBOL, "interval": _INTERVAL}
     )
     await sub_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
 
@@ -142,7 +139,7 @@ async def test_concurrent_run_all_no_duplicate_jobs(app_client):
     # Add a subscription
     add_r = await app_client.post(
         f"{_API}/{_STRATEGY_ID}/symbols",
-        json={"symbol": _SYMBOL, "exchange": _EXCHANGE, "interval": _INTERVAL},
+        json={"symbol": _SYMBOL, "interval": _INTERVAL},
     )
     assert add_r.status_code == 201, add_r.text
     sub_id = add_r.json()["id"]

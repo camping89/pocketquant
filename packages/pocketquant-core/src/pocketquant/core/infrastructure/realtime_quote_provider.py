@@ -33,14 +33,13 @@ class IRealtimeQuoteProvider(Protocol):
     async def subscribe(
         self,
         symbol: str,
-        exchange: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Register a symbol subscription. Returns the symbol_key."""
+        """Register a symbol subscription. ``symbol`` is composite ``{code}:{exchange}``. Returns key."""
         ...
 
-    async def unsubscribe(self, symbol: str, exchange: str) -> None:
-        """Remove a symbol subscription."""
+    async def unsubscribe(self, symbol: str) -> None:
+        """Remove a symbol subscription. ``symbol`` is composite ``{code}:{exchange}``."""
         ...
 
     async def run_forever(self) -> None:

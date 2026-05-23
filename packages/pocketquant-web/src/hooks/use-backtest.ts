@@ -10,7 +10,8 @@ export function useStrategies() {
   })
 }
 
-export function useBacktest(exchange: string, symbol: string, interval: Interval) {
+/** Run a backtest for a composite symbol (e.g. "BTCUSDT:BINANCE"). */
+export function useBacktest(symbol: string, interval: Interval) {
   const mutation = useMutation({ mutationFn: runBacktest })
 
   const run = (strategyId: string) => {
@@ -20,7 +21,6 @@ export function useBacktest(exchange: string, symbol: string, interval: Interval
     mutation.mutate({
       strategy_id: strategyId,
       symbol,
-      exchange,
       interval,
       start_date: start,
       end_date: end,

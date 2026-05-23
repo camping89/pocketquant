@@ -4,8 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class UpdateTrackedSymbolCommand(BaseModel):
-    """Update metadata on an existing (exchange, symbol). Future-proof placeholder."""
+    """Update metadata on an existing composite symbol. Future-proof placeholder."""
 
-    exchange: str = Field(..., description="Exchange of the symbol to update")
-    symbol: str = Field(..., description="Symbol to update")
+    symbol: str = Field(..., description="Composite symbol to update, e.g. BTCUSDT:BINANCE")
     # Extensible: add metadata fields here as requirements evolve (e.g. alias, tags)

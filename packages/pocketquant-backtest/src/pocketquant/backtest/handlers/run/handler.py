@@ -35,7 +35,6 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         config = BacktestConfig(
             strategy_id=request.strategy_id,
             symbol=request.symbol,
-            exchange=request.exchange,
             interval=request.interval,
             start_date=request.start_date,
             end_date=request.end_date,
@@ -58,7 +57,6 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
             id=request.strategy_id,
             name=request.strategy_id,
             symbol=request.symbol,
-            exchange=request.exchange,
             interval=request.interval,
             trigger="bar",
             broker="paper",

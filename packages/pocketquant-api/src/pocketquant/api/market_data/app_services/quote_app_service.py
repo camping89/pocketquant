@@ -33,12 +33,15 @@ class QuoteAppService:
         self.ws_task: asyncio.Task | None = None
 
     async def on_quote_update(self, quote_data: dict[str, Any]) -> None:
-        """Handle incoming quote updates."""
+        """Handle incoming quote updates.
+
+        ``symbol_key`` in quote_data must be composite ``{code}:{exchange}``.
+        """
         symbol_key = quote_data.get("symbol_key", "")
         if not symbol_key or ":" not in symbol_key:
             return
 
-        exchange, symbol = symbol_key.split(":", 1)
+        symbol = symbol_key.upper()
 
         last_price = quote_data.get("last_price")
         if last_price is None:
@@ -46,7 +49,6 @@ class QuoteAppService:
 
         quote = Quote(
             symbol=symbol,
-            exchange=exchange,
             timestamp=quote_data.get("timestamp", datetime.now(UTC)),
             lp=last_price,
             bid=quote_data.get("bid"),
@@ -60,7 +62,7 @@ class QuoteAppService:
             prev_close=quote_data.get("prev_close"),
         )
 
-        cache_key = CACHE_KEY_QUOTE_LATEST.format(exchange=exchange, symbol=symbol)
+        cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=symbol)
         await self._cache.set(cache_key, quote.to_cache_dict(), ttl=TTL_QUOTE_LATEST)
 
         # Clamp incoming volume delta: Binance @aggTrade `q` is per-trade delta.
@@ -78,7 +80,6 @@ class QuoteAppService:
 
         tick = QuoteTick(
             symbol=symbol,
-            exchange=exchange,
             timestamp=quote.timestamp,
             price=last_price,
             volume=delta,
@@ -87,7 +88,7 @@ class QuoteAppService:
 
         logger.debug(
             "quote_service.tick_received",
-            symbol=symbol_key,
+            symbol=symbol,
             price=last_price,
         )
 

@@ -22,8 +22,7 @@ from pocketquant.core.domain.shared.enums import Interval
 
 def _aligned_bar(ts: str = "2026-05-05T11:30:00+00:00") -> Bar:
     return Bar(
-        symbol="BTCUSDT",
-        exchange="BINANCE",
+        symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15,
         datetime=datetime.fromisoformat(ts),
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
@@ -33,8 +32,7 @@ def _aligned_bar(ts: str = "2026-05-05T11:30:00+00:00") -> Bar:
 
 def _misaligned_bar(ts: str = "2026-05-05T11:31:23+00:00") -> Bar:
     return Bar(
-        symbol="BTCUSDT",
-        exchange="BINANCE",
+        symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15,
         datetime=datetime.fromisoformat(ts),
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
@@ -66,7 +64,7 @@ async def test_attempt_one_succeeds_no_sleep(
     fake_provider.fetch_ohlcv.return_value = [_aligned_bar()]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BTCUSDT", "BINANCE", Interval.MINUTE_15, 48,
+        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
     )
 
     assert attempts == 1
@@ -86,7 +84,7 @@ async def test_empty_then_aligned_recovers(
 
     with structlog.testing.capture_logs() as logs:
         records, attempts = await fetch_with_retry(
-            fake_provider, "BTCUSDT", "BINANCE", Interval.MINUTE_15, 48,
+            fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
         )
 
     assert attempts == 2
@@ -106,7 +104,7 @@ async def test_all_misaligned_then_aligned(
     ]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BTCUSDT", "BINANCE", Interval.MINUTE_15, 48,
+        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
     )
 
     assert attempts == 2
@@ -122,7 +120,7 @@ async def test_three_empty_exhausts_retries(
     fake_provider.fetch_ohlcv.side_effect = [[], [], []]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BTCUSDT", "BINANCE", Interval.MINUTE_15, 48,
+        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
     )
 
     assert attempts == 3
@@ -140,7 +138,7 @@ async def test_three_misaligned_exhausts_retries(
     fake_provider.fetch_ohlcv.side_effect = [misaligned, misaligned, misaligned]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BTCUSDT", "BINANCE", Interval.MINUTE_15, 48,
+        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
     )
 
     assert attempts == 3
@@ -164,7 +162,7 @@ async def test_time_budget_exhausted_breaks_early(
 
     with patch.object(provider_fetch.time, "monotonic", side_effect=lambda: next(monotonic_values)):
         records, attempts = await fetch_with_retry(
-            fake_provider, "BTCUSDT", "BINANCE", Interval.MINUTE_15, 48,
+            fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
         )
 
     # First attempt fetched (no sleep, delay=0). Second attempt's sleep skipped

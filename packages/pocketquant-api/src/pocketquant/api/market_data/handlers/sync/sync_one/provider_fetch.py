@@ -31,12 +31,12 @@ _TIME_BUDGET_SECONDS = 15
 async def fetch_with_retry(
     provider: IDataProvider,
     symbol: str,
-    exchange: str,
     interval: Interval,
     n_bars: int,
 ) -> tuple[list[Bar], int]:
     """Fetch bars; retry on empty / all-misaligned response.
 
+    ``symbol`` is composite ``{code}:{exchange}``.
     Returns (records, attempts). `records` is the LAST attempt's raw output —
     caller still runs full filter pipeline (existing + alignment).
     """
@@ -53,14 +53,14 @@ async def fetch_with_retry(
             await asyncio.sleep(delay)
 
         records = await provider.fetch_ohlcv(
-            symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars,
+            symbol=symbol, interval=interval, n_bars=n_bars,
         )
 
         if records and has_aligned_bar(records, interval):
             if attempt > 1:
                 logger.info(
                     "market_data.sync.fetch_recovered",
-                    symbol=symbol, exchange=exchange, interval=interval.value,
+                    symbol=symbol, interval=interval.value,
                     attempt=attempt, fetched=len(records),
                 )
             return records, attempt

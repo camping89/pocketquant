@@ -99,7 +99,7 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock())
 
         out = await _verify_one_symbol(
-            "BTCUSDT", "BINANCE", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
         )
         assert out["rest_empty"] is True
         assert out["compared"] == 0
@@ -112,7 +112,7 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=[]))
 
         out = await _verify_one_symbol(
-            "BTCUSDT", "BINANCE", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
         )
         assert out["cascade_empty"] is True
         assert out["compared"] == 0
@@ -125,7 +125,7 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
 
         out = await _verify_one_symbol(
-            "BTCUSDT", "BINANCE", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
         )
         assert out["compared"] == 3
         assert out["divergence_count"] == 0
@@ -140,7 +140,7 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
 
         out = await _verify_one_symbol(
-            "BTCUSDT", "BINANCE", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
         )
         assert out["compared"] == 5
         assert out["divergence_count"] == 5

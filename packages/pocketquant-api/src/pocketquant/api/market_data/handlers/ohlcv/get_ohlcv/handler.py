@@ -10,7 +10,7 @@ from pocketquant.core.persistence.repositories.bar_repository import BarReposito
 
 @handles(GetOHLCVQuery)
 class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
-    """Handle OHLCV data retrieval."""
+    """Handle OHLCV data retrieval. ``symbol`` is composite ``{code}:{exchange}``."""
 
     def __init__(self, cache: Cache, bar_repository: BarRepository):
         self._cache = cache
@@ -18,17 +18,16 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
 
     async def handle(self, request: GetOHLCVQuery) -> list[dict]:
         symbol = request.symbol.upper()
-        exchange = request.exchange.upper()
         interval = Interval(request.interval)
 
-        cache_key = self._build_cache_key(symbol, exchange, interval, request)
+        cache_key = self._build_cache_key(symbol, interval, request)
 
         cached = await self._cache.get(cache_key)
         if cached:
             return cached
 
         bars = await self._bar_repo.find(
-            symbol, exchange, interval, request.start_date, request.end_date, request.limit
+            symbol, interval, request.start_date, request.end_date, request.limit
         )
 
         result = [
@@ -49,11 +48,9 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
         return result
 
     @staticmethod
-    def _build_cache_key(
-        symbol: str, exchange: str, interval: Interval, request: GetOHLCVQuery
-    ) -> str:
+    def _build_cache_key(symbol: str, interval: Interval, request: GetOHLCVQuery) -> str:
         key = CACHE_KEY_OHLCV.format(
-            symbol=symbol, exchange=exchange, interval=interval.value, limit=request.limit
+            symbol=symbol, interval=interval.value, limit=request.limit
         )
         if request.start_date:
             key += f":from:{request.start_date.isoformat()}"

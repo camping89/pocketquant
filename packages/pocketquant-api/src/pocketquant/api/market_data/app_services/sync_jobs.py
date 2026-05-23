@@ -11,6 +11,8 @@ All job entrypoints are module-level coroutines so APScheduler can serialize the
 as text references for MongoDBJobStore. Dependencies (mediator, repos) are resolved
 at job-execution time from a module-level container reference set by
 `register_sync_jobs`.
+
+``symbol`` is composite ``{code}:{exchange}`` throughout — no separate exchange param.
 """
 
 from __future__ import annotations
@@ -134,11 +136,12 @@ async def _sync_by_intervals(
 
     Returns (total_inserted, total_fetched) rolled up across all sub-syncs.
     Symbol source is TrackedSymbolRepository (replaces old SyncStatusRepository scan).
+    Each ts.symbol is composite ``{code}:{exchange}``.
     """
     logger.info(f"market_data.{job_name}.started")
 
     tracked = await tracked_symbol_repo.list_all()
-    symbols = [(ts.symbol, ts.exchange) for ts in tracked]
+    symbols = [ts.symbol for ts in tracked]
 
     if not symbols:
         logger.warning(
@@ -152,12 +155,12 @@ async def _sync_by_intervals(
     total_inserted = 0
     total_fetched = 0
 
-    for symbol, exchange in symbols:
+    for symbol in symbols:
         for interval in intervals:
             try:
                 command = SyncSymbolCommand(
-                    symbol=symbol, exchange=exchange, interval=interval,
-                    n_bars=n_bars, source=source,
+                    symbol=symbol, interval=interval, n_bars=n_bars,
+                    source=source,
                 )
                 result = await mediator.send(command)
                 total_inserted += result.bars_synced
@@ -167,7 +170,6 @@ async def _sync_by_intervals(
                         await history_repo.record_detail(
                             doc_id,
                             symbol=symbol,
-                            exchange=exchange,
                             interval=interval.value,
                             bars_fetched=result.bars_fetched,
                             bars_inserted=result.bars_synced,
@@ -190,7 +192,6 @@ async def _sync_by_intervals(
                 logger.error(
                     f"market_data.{job_name}.symbol_failed",
                     symbol=symbol,
-                    exchange=exchange,
                     interval=interval.value,
                     error=str(e),
                 )
@@ -201,7 +202,6 @@ async def _sync_by_intervals(
                         await history_repo.record_detail(
                             doc_id,
                             symbol=symbol,
-                            exchange=exchange,
                             interval=interval.value,
                             bars_fetched=0,
                             bars_inserted=0,
@@ -287,14 +287,13 @@ async def _run_integrity(name: str) -> None:
 
     try:
         tracked = await tracked_symbol_repo.list_all()
-        symbols = [(ts.symbol, ts.exchange) for ts in tracked]
-        for symbol, exchange in symbols:
+        for ts in tracked:
             for interval in SYNC_INTERVALS:
-                report = await check_integrity(symbol, exchange, interval, bar_repo)
+                report = await check_integrity(ts.symbol, interval, bar_repo)
                 if report["misaligned_count"] or report["missing_count"]:
                     logger.warning(
                         "integrity.issues_found",
-                        symbol=symbol, exchange=exchange, interval=interval.value,
+                        symbol=ts.symbol, interval=interval.value,
                         misaligned=report["misaligned_count"],
                         missing=report["missing_count"],
                     )
@@ -334,17 +333,16 @@ async def _run_repair(name: str) -> None:
 
     try:
         tracked = await tracked_symbol_repo.list_all()
-        symbols = [(ts.symbol, ts.exchange) for ts in tracked]
-        for symbol, exchange in symbols:
+        for ts in tracked:
             for interval in SYNC_INTERVALS:
                 result = await repair_integrity(
-                    symbol, exchange, interval, bar_repo, mediator,
+                    ts.symbol, interval, bar_repo, mediator,
                     source=SOURCE_REST_REPAIR,
                 )
                 if result["deleted"] or result["gaps_resynced"]:
                     logger.info(
                         "integrity.repaired",
-                        symbol=symbol, exchange=exchange, interval=interval.value,
+                        symbol=ts.symbol, interval=interval.value,
                         deleted=result["deleted"],
                         gaps_resynced=result["gaps_resynced"],
                     )
@@ -403,7 +401,7 @@ async def sync_1m() -> None:
         for ts in tracked:
             try:
                 counts = await cascade_for_symbol(
-                    ts.symbol, ts.exchange, lookback_minutes=100, bar_repo=bar_repo,
+                    ts.symbol, lookback_minutes=100, bar_repo=bar_repo,
                 )
                 for tf, count in counts.items():
                     cascade_total[tf] = cascade_total.get(tf, 0) + count
@@ -411,7 +409,6 @@ async def sync_1m() -> None:
                 logger.error(
                     "sync_1m.cascade_failed",
                     symbol=ts.symbol,
-                    exchange=ts.exchange,
                     exc_info=True,
                 )
 
@@ -446,30 +443,29 @@ async def sync_1m() -> None:
 
 async def _verify_one_symbol(
     symbol: str,
-    exchange: str,
     *,
     provider: IDataProvider,
     bar_repo: BarRepository,
 ) -> dict:
-    """Compare REST 5m bars against cascade-stored 5m bars for one (symbol, exchange).
+    """Compare REST 5m bars against cascade-stored 5m bars for composite ``symbol``.
 
     Returns a per-symbol summary dict with compared / divergence_count / sample_divergences.
     Raises on REST/DB failures so the caller can record per-symbol error state.
     """
     rest_bars = await provider.fetch_ohlcv(
-        symbol=symbol, exchange=exchange, interval=Interval.MINUTE_5, n_bars=12,
+        symbol=symbol, interval=Interval.MINUTE_5, n_bars=12,
     )
     if not rest_bars:
-        return {"symbol": symbol, "exchange": exchange, "compared": 0, "rest_empty": True}
+        return {"symbol": symbol, "compared": 0, "rest_empty": True}
 
     oldest_rest = min(b.datetime for b in rest_bars if b.datetime)
     newest_rest = max(b.datetime for b in rest_bars if b.datetime)
     cascade_bars = await bar_repo.find(
-        symbol=symbol, exchange=exchange, interval=Interval.MINUTE_5,
+        symbol=symbol, interval=Interval.MINUTE_5,
         start_date=oldest_rest, end_date=newest_rest + timedelta(minutes=5), limit=20,
     )
     if not cascade_bars:
-        return {"symbol": symbol, "exchange": exchange, "compared": 0, "cascade_empty": True}
+        return {"symbol": symbol, "compared": 0, "cascade_empty": True}
 
     cascade_by_dt: dict = {b.datetime: b for b in cascade_bars if b.datetime}
 
@@ -493,7 +489,6 @@ async def _verify_one_symbol(
 
     return {
         "symbol": symbol,
-        "exchange": exchange,
         "compared": compared,
         "divergence_count": divergence_count,
         "samples": samples,
@@ -535,27 +530,24 @@ async def sync_verify_cascade() -> None:
 
         for ts in tracked:
             symbol = ts.symbol.upper()
-            exchange = ts.exchange.upper()
             try:
                 summary = await _verify_one_symbol(
-                    symbol, exchange, provider=provider, bar_repo=bar_repo,
+                    symbol, provider=provider, bar_repo=bar_repo,
                 )
             except Exception as exc:
                 logger.error(
                     "sync_verify_cascade.symbol_failed",
-                    symbol=symbol, exchange=exchange, error=str(exc),
+                    symbol=symbol, error=str(exc),
                 )
                 continue
 
             if summary.get("rest_empty"):
-                logger.warning(
-                    "sync_verify_cascade.rest_empty", symbol=symbol, exchange=exchange,
-                )
+                logger.warning("sync_verify_cascade.rest_empty", symbol=symbol)
                 continue
             if summary.get("cascade_empty"):
                 logger.warning(
                     "sync_verify_cascade.cascade_empty",
-                    symbol=symbol, exchange=exchange,
+                    symbol=symbol,
                     reason="no_cascade_5m_bars_in_window",
                 )
                 continue
@@ -565,7 +557,7 @@ async def sync_verify_cascade() -> None:
             if compared > 0 and div / compared > DIVERGENCE_ALERT_FRACTION:
                 logger.warning(
                     "cascade.divergence_alert",
-                    symbol=symbol, exchange=exchange,
+                    symbol=symbol,
                     divergence_count=div, compared=compared,
                     price_threshold_pct=PRICE_THRESHOLD_PCT,
                     volume_threshold_pct=VOLUME_THRESHOLD_PCT,
@@ -574,7 +566,7 @@ async def sync_verify_cascade() -> None:
             else:
                 logger.info(
                     "sync_verify_cascade.ok",
-                    symbol=symbol, exchange=exchange,
+                    symbol=symbol,
                     compared=compared, divergence_count=div,
                 )
 

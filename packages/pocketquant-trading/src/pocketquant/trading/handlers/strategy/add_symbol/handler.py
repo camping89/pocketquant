@@ -31,7 +31,10 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
         self._tracked_repo = tracked_symbol_repository
 
     async def handle(self, request: AddSymbolCommand) -> dict:
-        """Validate strategy is in memory and symbol is tracked, then persist subscription."""
+        """Validate strategy is in memory and symbol is tracked, then persist subscription.
+
+        ``request.symbol`` must be composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+        """
         if self._strategy_service.get_strategy(request.strategy_id) is None:
             raise NotFoundError(
                 f"Strategy '{request.strategy_id}' is not loaded. "
@@ -39,22 +42,20 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
             )
 
         symbol = request.symbol.upper()
-        exchange = request.exchange.upper()
-        if not await self._tracked_repo.exists(exchange, symbol):
+        if not await self._tracked_repo.exists(symbol):
             raise NotFoundError(
-                f"Symbol '{exchange}:{symbol}' is not tracked. "
+                f"Symbol '{symbol}' is not tracked. "
                 "Admin must add it to tracked_symbols first.",
                 error_code="SYMBOL_NOT_TRACKED",
             )
 
         sub_id = StrategySubscription.deterministic_id(
-            request.strategy_id, request.symbol, request.exchange, request.interval
+            request.strategy_id, symbol, request.interval
         )
         sub = StrategySubscription(
             id=sub_id,
             strategy_id=request.strategy_id,
-            symbol=request.symbol.upper(),
-            exchange=request.exchange.upper(),
+            symbol=symbol,
             interval=Interval(request.interval),
             created_at=datetime.now(UTC),
         )
@@ -63,7 +64,6 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
             "id": sub.id,
             "strategy_id": sub.strategy_id,
             "symbol": sub.symbol,
-            "exchange": sub.exchange,
             "interval": sub.interval.value,
             "created_at": sub.created_at.isoformat(),
         }

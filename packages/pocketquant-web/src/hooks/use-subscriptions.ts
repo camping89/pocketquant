@@ -59,7 +59,7 @@ export function useSubscriptionBacktest(strategyId: string | null, subId: string
 export function useAddSymbol(strategyId: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { symbol: string; exchange: string; interval: string }) =>
+    mutationFn: (body: { symbol: string; interval: string }) =>
       addSymbol(strategyId!, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] }),
   })

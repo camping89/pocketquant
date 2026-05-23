@@ -10,8 +10,7 @@ router = APIRouter(route_class=DishkaRoute)
 
 
 class SubscribeRequest(BaseModel):
-    symbol: str = Field(..., description="Trading symbol (e.g., AAPL)")
-    exchange: str = Field(..., description="Exchange name (e.g., NASDAQ)")
+    symbol: str = Field(..., description="Composite symbol (e.g., BTCUSDT:BINANCE)")
 
 
 class SubscribeResponse(BaseModel):
@@ -24,6 +23,6 @@ async def subscribe_to_symbol(
     request: SubscribeRequest,
     mediator: FromDishka[Mediator],
 ) -> SubscribeResponse:
-    cmd = SubscribeCommand(symbol=request.symbol, exchange=request.exchange)
+    cmd = SubscribeCommand(symbol=request.symbol)
     result = await mediator.send(cmd)
     return SubscribeResponse(**result)

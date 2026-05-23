@@ -1,7 +1,7 @@
-// SSE payload shape from GET /api/v1/quotes/stream/{exchange}/{symbol}
+// SSE payload shape from GET /api/v1/quotes/stream/{symbol}
 export interface QuoteStreamPayload {
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
-  exchange: string
   last_price: number
   bid: number | null
   ask: number | null

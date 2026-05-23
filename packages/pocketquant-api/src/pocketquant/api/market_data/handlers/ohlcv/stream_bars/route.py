@@ -1,4 +1,9 @@
-"""SSE endpoint — streams bar updates merging Redis in-progress + Mongo closed bars."""
+"""SSE endpoint — streams bar updates merging Redis in-progress + Mongo closed bars.
+
+Path: GET /bars/stream/{symbol}
+``{symbol}`` is URL-encoded composite, e.g. ``BTCUSDT%3ABINANCE``.
+FastAPI auto-decodes ``%3A`` → ``:`` before the handler sees the value.
+"""
 
 import asyncio
 import json
@@ -8,7 +13,7 @@ from typing import Any
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
-from pocketquant.api.common.symbol_validation import validate_symbol_pair
+from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.api.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.enums import Interval
@@ -33,12 +38,10 @@ def _make_payload(bar: dict[str, Any], interval: Interval) -> dict[str, Any]:
 
     staleness_ms: int | None = None
     if is_in_progress and isinstance(last_update, (int, float)):
-        # last_update stored as Unix timestamp (seconds) by BarBuilder.to_dict()
         staleness_ms = max(0, int((time.time() - last_update) * 1000))
 
     return {
         "symbol": bar.get("symbol"),
-        "exchange": bar.get("exchange"),
         "interval": interval.value,
         "bar_start": bar.get("bar_start"),
         "open": bar.get("open"),
@@ -52,9 +55,8 @@ def _make_payload(bar: dict[str, Any], interval: Interval) -> dict[str, Any]:
     }
 
 
-@router.get("/bars/stream/{exchange}/{symbol}")
+@router.get("/bars/stream/{symbol}")
 async def stream_bars(
-    exchange: str,
     symbol: str,
     request: Request,
     bar_service: FromDishka[BarAppService],
@@ -62,11 +64,12 @@ async def stream_bars(
 ) -> StreamingResponse:
     """SSE stream — polls Redis (in-progress) + Mongo fallback, emits on change.
 
-    Validates {exchange}/{symbol} path params against SYMBOL_PATTERN (400 on mismatch).
+    ``{symbol}`` path param is URL-encoded composite (e.g. ``BTCUSDT%3ABINANCE``).
+    Validates composite format (400 on mismatch).
     Validates ?interval against Interval enum; returns 400 with INVALID_INTERVAL
-    if unknown value. Existing callers using ?interval=1m are unaffected.
+    if unknown value.
     """
-    exchange, symbol = validate_symbol_pair(exchange, symbol)
+    symbol = validate_composite_symbol(symbol)
 
     async def event_generator():
         last_bar_start: str | None = None
@@ -75,7 +78,7 @@ async def stream_bars(
 
         # Emit initial bar immediately on connect
         try:
-            bar = await bar_service.get_current_bar(symbol, exchange, interval)
+            bar = await bar_service.get_current_bar(symbol, interval)
             if bar is not None:
                 last_bar_start = bar.get("bar_start")
                 last_close = bar.get("close")
@@ -90,7 +93,7 @@ async def stream_bars(
             while True:
                 await asyncio.sleep(_POLL_INTERVAL)
 
-                bar = await bar_service.get_current_bar(symbol, exchange, interval)
+                bar = await bar_service.get_current_bar(symbol, interval)
                 if bar is None:
                     continue
 

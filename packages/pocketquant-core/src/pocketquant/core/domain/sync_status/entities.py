@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 
 class SyncStatus(BaseModel):
-    """Tracks data sync status for a symbol/exchange/interval."""
+    """Tracks data sync status for a (symbol, interval) pair.
+
+    ``symbol`` stores composite identifier ``{code}:{exchange}``.
+    """
 
     id: UUID = Field(default_factory=generate_id)
     symbol: str = ""
-    exchange: str = ""
     interval: str = ""
     status: str = "pending"
     last_sync_at: dt | None = None
@@ -29,7 +31,6 @@ class SyncStatus(BaseModel):
         return {
             "_id": str(self.id),
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "interval": self.interval,
             "status": self.status,
             "last_sync_at": self.last_sync_at,
@@ -46,7 +47,6 @@ class SyncStatus(BaseModel):
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),
             symbol=doc.get("symbol", ""),
-            exchange=doc.get("exchange", ""),
             interval=doc.get("interval", ""),
             status=doc.get("status", "pending"),
             last_sync_at=coerce_utc(doc.get("last_sync_at")),

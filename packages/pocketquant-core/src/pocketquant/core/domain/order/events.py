@@ -13,7 +13,6 @@ class OrderSubmittedEvent(DomainEvent):
     order_id: str = ""
     strategy_id: str = ""
     symbol: str = ""
-    exchange: str = ""
     side: OrderSide = OrderSide.BUY
     quantity: float = 0.0
     price: float | None = None
@@ -26,7 +25,6 @@ class OrderFilledEvent(DomainEvent):
     order_id: str = ""
     strategy_id: str = ""
     symbol: str = ""
-    exchange: str = ""
     side: OrderSide = OrderSide.BUY
     filled_quantity: float = 0.0
     filled_price: float = 0.0

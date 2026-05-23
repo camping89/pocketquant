@@ -17,10 +17,10 @@ async def sync_symbol(
     cmd: SyncSymbolCommand,
     mediator: FromDishka[Mediator],
 ) -> SyncResponse:
+    """Sync historical OHLCV data. ``symbol`` in body is composite ``{code}:{exchange}``."""
     logger.info(
         "api.sync_requested",
         symbol=cmd.symbol,
-        exchange=cmd.exchange,
         interval=cmd.interval.value,
     )
     return await mediator.send(cmd)
@@ -39,5 +39,5 @@ async def sync_symbol_background(
 
     return {
         "status": "accepted",
-        "message": f"Sync started for {cmd.symbol}:{cmd.exchange}",
+        "message": f"Sync started for {cmd.symbol}",
     }

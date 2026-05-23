@@ -1,9 +1,12 @@
 """Centralized constants with prefixed sections for discoverability."""
 
 
-def build_bar_cache_key(symbol: str, exchange: str, interval: str) -> str:
-    """Build base bar cache key for pattern matching."""
-    return f"ohlcv:{symbol.upper()}:{exchange.upper()}:{interval}"
+def build_bar_cache_key(symbol: str, interval: str) -> str:
+    """Build base bar cache key for pattern matching.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
+    return f"ohlcv:{symbol.upper()}:{interval}"
 
 
 # ============================================================
@@ -21,10 +24,11 @@ COLLECTION_TRACKED_SYMBOLS = "tracked_symbols"
 
 # ============================================================
 # CACHE_KEYS - Redis key patterns (use .format() for interpolation)
+# Symbol values are composite "{code}:{exchange}" - templates kept generic.
 # ============================================================
-CACHE_KEY_QUOTE_LATEST = "quote:latest:{exchange}:{symbol}"
-CACHE_KEY_BAR_CURRENT = "bar:current:{exchange}:{symbol}:{interval}"
-CACHE_KEY_OHLCV = "ohlcv:{symbol}:{exchange}:{interval}:{limit}"
+CACHE_KEY_QUOTE_LATEST = "quote:latest:{symbol}"
+CACHE_KEY_BAR_CURRENT = "bar:current:{symbol}:{interval}"
+CACHE_KEY_OHLCV = "ohlcv:{symbol}:{interval}:{limit}"
 
 # ============================================================
 # TTL - Cache time-to-live (seconds)

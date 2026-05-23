@@ -14,15 +14,16 @@ export interface OHLCVBar {
 
 export interface OHLCVResponse {
   symbol: string
-  exchange: string
   interval: string
   data: OHLCVBar[]
   count: number
 }
 
+/** Composite symbol string in the format "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE". */
+export type SelectedSymbol = string
+
 export interface SymbolInfo {
   symbol: string
-  exchange: string
   name: string
   asset_type: string
   is_active: boolean
@@ -30,7 +31,6 @@ export interface SymbolInfo {
 
 export interface QuoteResponse {
   symbol: string
-  exchange: string
   timestamp: string
   last_price: number
   bid: number | null
@@ -45,7 +45,6 @@ export interface QuoteResponse {
 
 export interface CurrentBarResponse {
   symbol: string
-  exchange: string
   interval: string
   bar_start: string
   bar_end: string | null
@@ -83,7 +82,6 @@ export interface ChartData {
 
 export interface SyncStatus {
   symbol: string
-  exchange: string
   interval: string
   status: string
   bar_count: number
@@ -98,7 +96,6 @@ export interface SyncStatus {
 
 export interface IntegrityReport {
   symbol: string
-  exchange: string
   interval: string
   total: number
   misaligned_count: number
@@ -109,7 +106,6 @@ export interface IntegrityReport {
 
 export interface RepairResult {
   symbol: string
-  exchange: string
   interval: string
   deleted: number
   gaps_resynced: number
@@ -144,9 +140,4 @@ export interface IndicatorConfig {
   rsi: boolean
   macd: boolean
   bollinger: boolean
-}
-
-export interface SelectedSymbol {
-  exchange: string
-  symbol: string
 }

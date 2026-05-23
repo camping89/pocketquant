@@ -24,13 +24,13 @@ class InvalidOrderTransitionError(Exception):
 class OrderAggregate(BaseModel):
     """Order aggregate root with state machine.
 
+    ``symbol`` is composite ``{code}:{exchange}``.
     Tracks order lifecycle from creation to terminal state.
     """
 
     id: str
     strategy_id: str
     symbol: str
-    exchange: str
     side: OrderSide
     order_type: OrderType
     quantity: float
@@ -60,7 +60,6 @@ class OrderAggregate(BaseModel):
         cls,
         strategy_id: str,
         symbol: str,
-        exchange: str,
         side: OrderSide,
         order_type: OrderType,
         quantity: float,
@@ -81,7 +80,6 @@ class OrderAggregate(BaseModel):
             id=generate_id_str(),
             strategy_id=strategy_id,
             symbol=symbol,
-            exchange=exchange,
             side=side,
             order_type=order_type,
             quantity=quantity,
@@ -102,7 +100,6 @@ class OrderAggregate(BaseModel):
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 symbol=self.symbol,
-                exchange=self.exchange,
                 side=self.side,
                 quantity=self.quantity,
                 price=self.price,
@@ -171,7 +168,6 @@ class OrderAggregate(BaseModel):
                 order_id=self.id,
                 strategy_id=self.strategy_id,
                 symbol=self.symbol,
-                exchange=self.exchange,
                 side=self.side,
                 filled_quantity=self.quantity,
                 filled_price=self.filled_price,
@@ -233,7 +229,6 @@ class OrderAggregate(BaseModel):
             "_id": self.id,
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "side": self.side.value,
             "order_type": self.order_type.value,
             "quantity": self.quantity,
@@ -254,7 +249,6 @@ class OrderAggregate(BaseModel):
             id=doc["_id"],
             strategy_id=doc["strategy_id"],
             symbol=doc["symbol"],
-            exchange=doc["exchange"],
             side=OrderSide(doc["side"]),
             order_type=OrderType(doc["order_type"]),
             quantity=doc["quantity"],

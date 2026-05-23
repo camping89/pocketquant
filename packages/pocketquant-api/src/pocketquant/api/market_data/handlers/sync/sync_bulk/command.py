@@ -6,12 +6,16 @@ from pydantic import BaseModel, Field
 
 
 class BulkSyncCommand(BaseModel):
-    """Sync multiple symbols in sequence."""
+    """Sync multiple composite symbols in sequence.
 
-    symbols: list[dict] = Field(
+    Each entry in ``symbols`` must be a composite ``{code}:{exchange}`` string
+    (e.g. ``"BTCUSDT:BINANCE"``).
+    """
+
+    symbols: list[str] = Field(
         ...,
-        description="List of symbols with 'symbol' and 'exchange' keys",
-        examples=[[{"symbol": "AAPL", "exchange": "NASDAQ"}]],
+        description="List of composite symbol strings, e.g. ['BTCUSDT:BINANCE']",
+        examples=[["BTCUSDT:BINANCE", "ETHUSDT:BINANCE"]],
     )
     interval: Interval = Field(default=Interval.DAY_1, description="Time interval")
     n_bars: int = Field(

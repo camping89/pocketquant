@@ -5,24 +5,15 @@ from datetime import datetime
 
 from pocketquant.core.domain.shared.events import DomainEvent
 
-# TODO: Wire HistoricalDataSyncedEvent for UI sync notifications when needed
-# @dataclass(frozen=True, eq=False)
-# class HistoricalDataSyncedEvent(DomainEvent):
-#     """Raised when historical OHLCV data is synchronized from provider."""
-#     symbol: str = ""
-#     exchange: str = ""
-#     interval: str = ""
-#     bars_count: int = 0
-#     first_bar_at: datetime | None = None
-#     last_bar_at: datetime | None = None
-
 
 @dataclass(frozen=True, eq=False)
 class BarCompletedEvent(DomainEvent):
-    """Raised when a real-time bar is completed."""
+    """Raised when a real-time bar is completed.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
 
     symbol: str = ""
-    exchange: str = ""
     interval: str = ""
     bar_start: datetime | None = None
     open: float = 0.0

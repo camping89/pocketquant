@@ -186,7 +186,6 @@ class BacktestResultCollector:
         config_snapshot = {
             "strategy_id": self._config.strategy_id,
             "symbol": self._config.symbol,
-            "exchange": self._config.exchange,
             "interval": self._config.interval,
             "start_date": self._config.start_date.isoformat(),
             "end_date": self._config.end_date.isoformat(),

@@ -20,8 +20,7 @@ from pocketquant.core.infrastructure.brokers.models import OrderResult
 def config() -> BacktestConfig:
     return BacktestConfig(
         strategy_id="s1",
-        symbol="BTCUSDT",
-        exchange="OKX",
+        symbol="BTCUSDT:OKX",
         interval="5m",
         start_date=date(2024, 1, 1),
         end_date=date(2024, 1, 31),

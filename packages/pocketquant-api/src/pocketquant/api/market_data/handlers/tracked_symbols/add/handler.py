@@ -14,26 +14,20 @@ logger = get_logger(__name__)
 
 @handles(AddTrackedSymbolCommand)
 class AddTrackedSymbolHandler(Handler[AddTrackedSymbolCommand, dict]):
-    """Upsert (exchange, symbol) into tracked_symbols. Returns current state."""
+    """Upsert composite symbol into tracked_symbols. Returns current state."""
 
     def __init__(self, tracked_symbol_repository: TrackedSymbolRepository) -> None:
         self._repo = tracked_symbol_repository
 
     async def handle(self, request: AddTrackedSymbolCommand) -> dict:
         ts = TrackedSymbol(
-            exchange=request.exchange,
             symbol=request.symbol,
             created_at=utc_now(),
             seeded_from="admin",
         )
         await self._repo.upsert(ts)
-        logger.info(
-            "tracked_symbols.added",
-            exchange=request.exchange,
-            symbol=request.symbol,
-        )
+        logger.info("tracked_symbols.added", symbol=request.symbol)
         return {
-            "exchange": ts.exchange,
             "symbol": ts.symbol,
             "created_at": ts.created_at.isoformat(),
             "seeded_from": ts.seeded_from,
