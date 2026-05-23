@@ -121,7 +121,7 @@ export function StrategiesPageLayout() {
               </div>
               {/* Config card below the chart */}
               <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
-                <StrategyConfigCard sub={selectedSub} />
+                <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedSub(null)} />
               </div>
             </div>
           ) : (
@@ -186,7 +186,7 @@ export function StrategiesPageLayout() {
                   />
                 </div>
                 <div style={{ padding: 16 }}>
-                  <StrategyConfigCard sub={selectedSub} />
+                  <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedSub(null)} />
                 </div>
               </div>
             ) : emptyCenter

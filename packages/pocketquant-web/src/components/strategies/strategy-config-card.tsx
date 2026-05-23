@@ -4,11 +4,16 @@
  */
 import { parseSymbol } from '../../lib/symbol-format'
 import { StartStopButton } from './start-stop-button'
-import { useStartStrategy, useStopStrategy } from '../../hooks/use-strategy-mutations'
+import {
+  useStartStrategy,
+  useStopStrategy,
+  useDeleteSubscription,
+} from '../../hooks/use-strategy-mutations'
 import type { Subscription } from '../../api/strategy-api'
 
 interface StrategyConfigCardProps {
   sub: Subscription
+  onDeleted?: () => void
 }
 
 const rowStyle: React.CSSProperties = {
@@ -27,14 +32,24 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: '0.05em',
 }
 
-export function StrategyConfigCard({ sub }: StrategyConfigCardProps) {
+export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) {
   const { code, exchange } = parseSymbol(sub.symbol)
   const isRunning = sub.backtest?.status === 'running'
 
   const startMut = useStartStrategy()
   const stopMut = useStopStrategy()
+  const deleteMut = useDeleteSubscription(sub.strategy_id)
 
-  const isLoading = startMut.isPending || stopMut.isPending
+  const isLoading = startMut.isPending || stopMut.isPending || deleteMut.isPending
+
+  function handleDelete() {
+    if (isRunning) return
+    const confirmed = window.confirm(
+      `Delete subscription ${code}${exchange ? ` (${exchange})` : ''} · ${sub.interval} · ${sub.strategy_id}?`,
+    )
+    if (!confirmed) return
+    deleteMut.mutate(sub.id, { onSuccess: () => onDeleted?.() })
+  }
 
   return (
     <div
@@ -53,12 +68,28 @@ export function StrategyConfigCard({ sub }: StrategyConfigCardProps) {
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           Subscription Config
         </span>
-        <StartStopButton
-          isRunning={isRunning}
-          isLoading={isLoading}
-          onStart={() => startMut.mutate(sub.strategy_id)}
-          onStop={() => stopMut.mutate(sub.strategy_id)}
-        />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <StartStopButton
+            isRunning={isRunning}
+            isLoading={isLoading}
+            onStart={() => startMut.mutate(sub.strategy_id)}
+            onStop={() => stopMut.mutate(sub.strategy_id)}
+          />
+          <button
+            type="button"
+            className="btn-sm"
+            onClick={handleDelete}
+            disabled={isLoading || isRunning}
+            title={isRunning ? 'Stop the strategy before deleting' : 'Delete subscription'}
+            style={{
+              color: '#ef5350',
+              borderColor: 'rgba(239,83,80,0.35)',
+              background: 'rgba(239,83,80,0.08)',
+            }}
+          >
+            {deleteMut.isPending ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
       </div>
 
       {/* Config rows */}
@@ -115,7 +146,7 @@ export function StrategyConfigCard({ sub }: StrategyConfigCardProps) {
       </div>
 
       {/* Mutation error feedback */}
-      {(startMut.isError || stopMut.isError) && (
+      {(startMut.isError || stopMut.isError || deleteMut.isError) && (
         <div
           style={{
             marginTop: 10,
@@ -127,8 +158,7 @@ export function StrategyConfigCard({ sub }: StrategyConfigCardProps) {
             fontSize: 11,
           }}
         >
-          {((startMut.error ?? stopMut.error) as Error)?.message ?? 'Action failed'}
-          {' — endpoint may not be available yet.'}
+          {((startMut.error ?? stopMut.error ?? deleteMut.error) as Error)?.message ?? 'Action failed'}
         </div>
       )}
     </div>
