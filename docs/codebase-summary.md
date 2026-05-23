@@ -544,8 +544,7 @@ Manual API smoke tests:
 
 The backtest strategy registry currently exposes:
 
-- `ma_crossover`
-- `hit_and_run`
+- `hitnrun2` — 1m breakdown buy / breakup sell with technical SL/TP capped by `max_loss_pct` (1% default) and `min_profit_pct` (2% default). PaperBroker auto-fills SL/TP on `BarCompletedEvent`.
 
 ## Files Worth Reading First
 

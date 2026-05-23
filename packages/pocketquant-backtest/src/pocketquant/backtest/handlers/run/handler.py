@@ -63,10 +63,12 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
             parameters={**config.parameters},
         )
 
-        # Create fresh broker for this backtest
+        # Create fresh broker for this backtest. event_bus enables SL/TP auto-fill
+        # on BarCompletedEvent — required for strategies that set sl_price/tp_price.
         broker = PaperBroker(
             initial_balance=request.initial_capital,
             slippage_percent=config.slippage_percent,
+            event_bus=self._event_bus,
         )
 
         # Register strategy instance on the shared StrategyAppService so it

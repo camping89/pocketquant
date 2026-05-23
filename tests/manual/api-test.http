@@ -110,13 +110,13 @@ curl -X POST http://localhost:41920/api/v1/quotes/stop
 
 curl -X POST http://localhost:41920/api/v1/backtest/run \
   -H "Content-Type: application/json" \
-  -d '{"strategy_id":"ma_crossover","exchange":"BINANCE","symbol":"BTCUSDT","interval":"1d","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000}'
+  -d '{"strategy_id":"hitnrun2","exchange":"BINANCE","symbol":"BTCUSDT","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"parameters":{"entry_lookback_bars":240,"sl_lookback_bars":480,"tp_lookback_bars":60,"max_loss_pct":0.01,"min_profit_pct":0.02,"direction":"both"}}'
 
 ###
 
 curl -X POST http://localhost:41920/api/v1/backtest/optimize \
   -H "Content-Type: application/json" \
-  -d '{"strategy_id":"ma_crossover","exchange":"BINANCE","symbol":"BTCUSDT","interval":"1d","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"param_grid":{"fast_period":[5,10,15],"slow_period":[20,30,50]}}'
+  -d '{"strategy_id":"hitnrun2","exchange":"BINANCE","symbol":"BTCUSDT","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"param_grid":{"entry_lookback_bars":[120,240,480],"sl_lookback_bars":[240,480,720],"tp_lookback_bars":[30,60,120]}}'
 
 ### ===========================================
 ### 6. UI Smoke Test
@@ -128,4 +128,4 @@ curl -X POST http://localhost:41920/api/v1/backtest/optimize \
 # 2. Open http://localhost:5173
 # 3. Confirm BTCUSDT loads
 # 4. Confirm synced intervals appear
-# 5. Choose ma_crossover and verify backtest markers appear
+# 5. Choose hitnrun2 and verify backtest markers appear

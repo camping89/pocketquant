@@ -1,7 +1,6 @@
 """Strategy feature - trading strategy management and execution."""
 
 from pocketquant.core.concepts.strategy.interfaces import IStrategy
-from pocketquant.core.concepts.strategy.services.ma_crossover import MACrossoverStrategy
 from pocketquant.core.concepts.strategy.value_objects import OrderConfig, StrategyConfig
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.app_services.yaml_strategy_loader import StrategyLoader
@@ -19,8 +18,6 @@ __all__ = [
     "StrategyConfig",
     # Engine
     "StrategyAppService",
-    # Examples
-    "MACrossoverStrategy",
     # Loader
     "StrategyLoader",
     # Handlers

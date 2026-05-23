@@ -52,7 +52,7 @@ curl http://localhost:41920/api/v1/docs -I
 Expected:
 
 - `/health` reports `healthy`
-- `/backtest/strategies` returns `["ma_crossover","hit_and_run"]`
+- `/backtest/strategies` returns `["hitnrun2"]`
 - `/api/v1/docs` responds `200`
 
 ## 4. Run The UI
@@ -105,7 +105,7 @@ After the sync passes:
 4. Confirm at least one interval button appears for the selected symbol
 5. Switch intervals and confirm the chart reloads
 6. Toggle indicators and confirm overlays update
-7. Open the strategy selector and choose `ma_crossover` or `hit_and_run`
+7. Open the strategy selector and choose `hitnrun2`
 8. Confirm a backtest request runs and markers/position overlays appear on the chart
 
 If the UI is empty:
