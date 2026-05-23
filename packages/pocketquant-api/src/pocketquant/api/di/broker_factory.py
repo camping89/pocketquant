@@ -1,15 +1,23 @@
 """Broker factory for creating broker instances."""
 
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.infrastructure.brokers.interface import IBroker
 from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
 
 
 class BrokerFactory:
-    """Factory for creating broker instances from configuration."""
+    """Factory for creating broker instances from configuration.
 
-    @staticmethod
-    def create(broker_type: str, config: dict) -> IBroker:
+    Holds the application ``EventBus`` so paper brokers can subscribe to
+    ``BarCompletedEvent`` and auto-fill SL/TP during live paper trading.
+    Real brokers (OKX) ignore the bus — they receive fills from the venue.
+    """
+
+    def __init__(self, event_bus: EventBus) -> None:
+        self._event_bus = event_bus
+
+    def create(self, broker_type: str, config: dict) -> IBroker:
         """Create broker instance from type and config.
 
         Args:
@@ -28,6 +36,7 @@ class BrokerFactory:
                 slippage_percent=config.get("slippage_percent", 0.001),
                 fill_delay_ms=config.get("fill_delay_ms", 50),
                 currency=config.get("currency", "USDT"),
+                event_bus=self._event_bus,
             )
 
         elif broker_type == "okx":

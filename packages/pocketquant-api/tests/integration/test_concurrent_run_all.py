@@ -32,7 +32,7 @@ from .app_factory import make_test_app
 pytestmark = pytest.mark.integration
 
 _API = "/api/v1/strategies"
-_STRATEGY_ID = "ma_crossover"
+_STRATEGY_ID = "hitnrun2"
 _SYMBOL = "BTC-USDT:BINANCE"
 _INTERVAL = "1h"
 
@@ -112,11 +112,15 @@ async def setup(app_client):
 
     config = StrategyConfig(
         id=_STRATEGY_ID,
-        name="MA Crossover Concurrent Test",
+        name="HitNRun2 Concurrent Test",
         symbol=_SYMBOL,
         interval=_INTERVAL,
         broker="paper",
-        parameters={"fast_period": 5, "slow_period": 20},
+        parameters={
+            "entry_lookback_bars": 5,
+            "sl_lookback_bars": 10,
+            "tp_lookback_bars": 3,
+        },
     )
     await svc.unload_strategy(_STRATEGY_ID)
     await svc.load_strategy(config)

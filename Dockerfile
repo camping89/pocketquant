@@ -44,6 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy venv from builder (uv sync creates .venv in workdir)
 COPY --from=builder /app/.venv /app/.venv
 
+# Copy one-time migration scripts so deploy.sh can run them inside the container
+COPY scripts/ scripts/
+
 # Set environment
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

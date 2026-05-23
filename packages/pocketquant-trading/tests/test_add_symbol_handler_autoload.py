@@ -47,26 +47,26 @@ async def test_autoload_uses_sub_id_as_instance_key() -> None:
 
     result = await handler.handle(
         AddSymbolCommand(
-            strategy_id="ma_crossover",
+            strategy_id="hitnrun2",
             symbol="BTCUSDT:BINANCE",
             interval="1h",
         )
     )
 
     expected_sub_id = StrategySubscription.deterministic_id(
-        "ma_crossover", "BTCUSDT:BINANCE", "1h"
+        "hitnrun2", "BTCUSDT:BINANCE", "1h"
     )
 
     svc.load_strategy.assert_awaited_once()
     cfg = svc.load_strategy.await_args.args[0]
     assert isinstance(cfg, StrategyConfig)
     assert cfg.id == expected_sub_id
-    assert cfg.name == "ma_crossover"
+    assert cfg.name == "hitnrun2"
     assert cfg.symbol == "BTCUSDT:BINANCE"
     assert cfg.interval == "1h"
     sub_add.assert_awaited_once()
     assert result["id"] == expected_sub_id
-    assert result["strategy_id"] == "ma_crossover"
+    assert result["strategy_id"] == "hitnrun2"
 
 
 @pytest.mark.asyncio
@@ -78,7 +78,7 @@ async def test_no_autoload_when_instance_already_loaded_for_sub_id() -> None:
 
     await handler.handle(
         AddSymbolCommand(
-            strategy_id="ma_crossover",
+            strategy_id="hitnrun2",
             symbol="BTCUSDT:BINANCE",
             interval="1h",
         )
@@ -111,7 +111,7 @@ async def test_404_when_symbol_not_tracked() -> None:
     with pytest.raises(NotFoundError) as exc:
         await handler.handle(
             AddSymbolCommand(
-                strategy_id="ma_crossover",
+                strategy_id="hitnrun2",
                 symbol="BTCUSDT:BINANCE",
                 interval="1h",
             )

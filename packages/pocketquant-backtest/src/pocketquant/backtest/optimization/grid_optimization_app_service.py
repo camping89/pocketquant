@@ -196,10 +196,11 @@ class GridOptimizationAppService:
                 parameters=params,
             )
 
-            # Create fresh broker for this backtest
+            # Create fresh broker for this backtest. event_bus enables SL/TP auto-fill.
             broker = PaperBroker(
                 initial_balance=config.initial_capital,
                 slippage_percent=backtest_config.slippage_percent,
+                event_bus=self._event_bus,
             )
 
             # Create runner (don't persist individual results during optimization)

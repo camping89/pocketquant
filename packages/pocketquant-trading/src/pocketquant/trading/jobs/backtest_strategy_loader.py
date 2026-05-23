@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.value_objects import Interval
@@ -73,6 +74,7 @@ async def load_strategy_for_backtest(
     sub_id: str,
     symbol: str,
     interval: str,
+    event_bus: EventBus | None = None,
 ) -> tuple[PaperBroker, str]:
     """Resolve strategy class, create instance, inject into StrategyAppService.
 
@@ -106,7 +108,7 @@ async def load_strategy_for_backtest(
         parameters=dict(base_config.parameters) if base_config.parameters else {},
     )
 
-    broker = PaperBroker(initial_balance=10_000.0)
+    broker = PaperBroker(initial_balance=10_000.0, event_bus=event_bus)
     strategy_instance = strategy_class(bt_strategy_cfg)
 
     # Clean up any stale run for this synthetic id (e.g. previous failed cleanup)
