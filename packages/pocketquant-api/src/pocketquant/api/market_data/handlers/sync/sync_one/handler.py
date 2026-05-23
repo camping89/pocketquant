@@ -52,6 +52,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             symbol=symbol,
             exchange=exchange,
             interval=interval.value,
+            source=request.source,
         )
 
         await self._sync_status_repo.upsert(symbol, exchange, interval, "syncing")
@@ -74,7 +75,9 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 records = drop_misaligned_bars(records, interval)
                 filtered_misaligned = pre_align - len(records)
 
-            inserted_count = await self._persist_bars(symbol, exchange, records)
+            inserted_count = await self._persist_bars(
+                symbol, exchange, records, request.source,
+            )
             total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
 
             # Genuine first-sync failure: provider returned nothing AND no prior bars.
@@ -144,10 +147,12 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         self._fetch_attempts = attempts
         return records
 
-    async def _persist_bars(self, symbol: str, exchange: str, records: list[Bar]) -> int:
+    async def _persist_bars(
+        self, symbol: str, exchange: str, records: list[Bar], source: str,
+    ) -> int:
         if not records:
             return 0
-        inserted_count = await self._bar_repo.insert_many(records)
+        inserted_count = await self._bar_repo.insert_many(records, source=source)
         await self._symbol_repo.upsert(Symbol.create(code=symbol, exchange=exchange))
         return inserted_count
 
