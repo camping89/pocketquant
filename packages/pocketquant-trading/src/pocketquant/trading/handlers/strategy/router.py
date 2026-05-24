@@ -5,8 +5,14 @@ from pocketquant.trading.handlers.strategy.add_symbol.route import router as add
 from pocketquant.trading.handlers.strategy.delete.route import router as delete_strategy_router
 from pocketquant.trading.handlers.strategy.get_all.route import router as get_strategies_router
 from pocketquant.trading.handlers.strategy.get_one.route import router as get_strategy_router
+from pocketquant.trading.handlers.strategy.get_positions.route import (
+    router as get_positions_router,
+)
 from pocketquant.trading.handlers.strategy.get_subscription_backtest.route import (
     router as get_subscription_backtest_router,
+)
+from pocketquant.trading.handlers.strategy.get_trades.route import (
+    router as get_trades_router,
 )
 from pocketquant.trading.handlers.strategy.list_symbols.route import router as list_symbols_router
 from pocketquant.trading.handlers.strategy.load.route import router as load_strategy_router
@@ -34,4 +40,6 @@ router.include_router(list_symbols_router)
 router.include_router(remove_symbol_router)
 router.include_router(run_all_backtests_router)
 router.include_router(get_subscription_backtest_router)
+router.include_router(get_positions_router)
+router.include_router(get_trades_router)
 router.include_router(delete_strategy_router)

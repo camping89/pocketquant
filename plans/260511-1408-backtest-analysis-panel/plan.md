@@ -6,13 +6,17 @@ priority: P2
 effort: "5-7d"
 branch: "develop"
 tags: [backtest, frontend, backend, refactor]
-blockedBy: []
+blockedBy: [260523-1850-backtest-storage-refactor]
 blocks: []
 created: "2026-05-11T07:12:09.818Z"
 createdBy: "ck:plan"
 source: skill
 brainstorm: plans/reports/brainstorm-260511-1408-backtest-analysis-panel.md
+related:
+  - plans/260523-1850-backtest-storage-refactor/  # upstream: schema refactor (Fill/Trade/Order/OrderEvent + 4-collection split) must land first
 ---
+
+> **⚠️ Schema migration pending (2026-05-23):** Phase 2-7 of this plan consume the embedded-array schema (`BacktestResult.trades[]`/`positions[]`) being refactored in `260523-1850-backtest-storage-refactor`. After that plan ships, Phase 2 (API Types) must be rewritten to consume `backtest_orders`+`backtest_trades` collections and slimmed `backtest_runs`. Phase 1 (Backend FIFO) is already complete in current codebase. Hold further work on this plan until upstream merges.
 
 # Backtest Analysis Panel - FIFO lot tracking + bottom panel
 

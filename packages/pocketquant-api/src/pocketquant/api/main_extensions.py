@@ -16,7 +16,9 @@ from pocketquant.api.market_data.handlers.router import router as market_data_ro
 from pocketquant.api.market_data.handlers.tracked_symbols import router as tracked_symbols_router
 from pocketquant.api.system_jobs.route import router as system_jobs_router
 from pocketquant.backtest.handlers import backtest_router
+from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.backtest.persistence.optimization_repository import (
     OptimizationRepository,
 )
@@ -52,6 +54,8 @@ _REPO_TYPES: list[type] = [
     OrderRepository,
     PositionRepository,
     BacktestRepository,
+    BacktestOrderRepository,
+    BacktestTradeRepository,
     BarRepository,
     SyncStatusRepository,
     SymbolRepository,

@@ -2,6 +2,10 @@
 
 Covers: long-only round-trip, short-only round-trip, scale-in/out, partial fills,
 flip LONG↔SHORT, open positions at end.
+
+After Phase 4 storage refactor: collector returns ``CollectedResults`` with
+``trades`` (closed round-trips) and ``run.open_positions`` (still-open lots)
+instead of a unified ``positions`` list of ``PositionRecord``.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ def config() -> BacktestConfig:
 
 @pytest.fixture
 def collector(config: BacktestConfig) -> BacktestResultCollector:
-    return BacktestResultCollector(config, initial_capital=config.initial_capital)
+    return BacktestResultCollector(config, initial_capital=config.initial_capital, run_id="r1")
 
 
 @pytest.fixture(autouse=True)
@@ -74,18 +78,24 @@ async def test_long_round_trip(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 100.0, "o1", sl=90, tp=120), t0)
     await _feed(collector, _fill(OrderSide.SELL, 1.0, 110.0, "o2"), t0 + timedelta(hours=1))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
-    assert len(result.positions) == 1
-    pos = result.positions[0]
-    assert pos.direction == "LONG"
-    assert pos.entry_price == 100.0
-    assert pos.exit_price == 110.0
-    assert pos.pnl == pytest.approx(10.0)  # (110-100)*1
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    assert len(collected.trades) == 1
+    t = collected.trades[0]
+    assert t.direction == "LONG"
+    assert t.entry_price == 100.0
+    assert t.exit_price == 110.0
+    assert t.pnl == pytest.approx(10.0)
     # Commission: 100*1*0.001 + 110*1*0.001 = 0.21
-    assert pos.commission == pytest.approx(0.21)
+    assert t.commission == pytest.approx(0.21)
     # Equity = 10000 + 10 - 0.21 = 10009.79
-    assert result.metrics.total_return == pytest.approx((10009.79 - 10000) / 10000)
-    assert result.metrics.total_commission == pytest.approx(0.21)
+    assert collected.run.metrics.total_return == pytest.approx((10009.79 - 10000) / 10000)
+    assert collected.run.metrics.total_commission == pytest.approx(0.21)
+    # Order link assertions: exit order has resulting_trade_id, entry order does not
+    orders = {o.order_id: o for o in collected.orders}
+    assert orders["o2"].resulting_trade_id == t.trade_id
+    assert orders["o1"].resulting_trade_id is None
+    assert t.entry_order_id == "o1"
+    assert t.exit_order_id == "o2"
 
 
 @pytest.mark.asyncio
@@ -94,13 +104,13 @@ async def test_short_round_trip(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.SELL, 1.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 90.0, "o2"), t0 + timedelta(hours=1))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
-    assert len(result.positions) == 1
-    pos = result.positions[0]
-    assert pos.direction == "SHORT"
-    assert pos.entry_price == 100.0
-    assert pos.exit_price == 90.0
-    assert pos.pnl == pytest.approx(10.0)  # (entry - exit) * qty
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    assert len(collected.trades) == 1
+    t = collected.trades[0]
+    assert t.direction == "SHORT"
+    assert t.entry_price == 100.0
+    assert t.exit_price == 90.0
+    assert t.pnl == pytest.approx(10.0)
 
 
 @pytest.mark.asyncio
@@ -111,13 +121,13 @@ async def test_fifo_two_buys_one_sell(collector: BacktestResultCollector) -> Non
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 110.0, "o2"), t0 + timedelta(minutes=5))
     await _feed(collector, _fill(OrderSide.SELL, 2.0, 120.0, "o3"), t0 + timedelta(hours=1))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
-    assert len(result.positions) == 2
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    assert len(collected.trades) == 2
     # FIFO: first close has entry 100, second has entry 110
-    assert result.positions[0].entry_price == 100.0
-    assert result.positions[0].pnl == pytest.approx(20.0)
-    assert result.positions[1].entry_price == 110.0
-    assert result.positions[1].pnl == pytest.approx(10.0)
+    assert collected.trades[0].entry_price == 100.0
+    assert collected.trades[0].pnl == pytest.approx(20.0)
+    assert collected.trades[1].entry_price == 110.0
+    assert collected.trades[1].pnl == pytest.approx(10.0)
 
 
 @pytest.mark.asyncio
@@ -128,12 +138,12 @@ async def test_partial_close_then_full(collector: BacktestResultCollector) -> No
     await _feed(collector, _fill(OrderSide.SELL, 4.0, 110.0, "o2"), t0 + timedelta(hours=1))
     await _feed(collector, _fill(OrderSide.SELL, 6.0, 120.0, "o3"), t0 + timedelta(hours=2))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=3))
-    assert len(result.positions) == 2
-    assert result.positions[0].quantity == pytest.approx(4.0)
-    assert result.positions[0].pnl == pytest.approx(40.0)  # (110-100)*4
-    assert result.positions[1].quantity == pytest.approx(6.0)
-    assert result.positions[1].pnl == pytest.approx(120.0)  # (120-100)*6
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=3))
+    assert len(collected.trades) == 2
+    assert collected.trades[0].quantity == pytest.approx(4.0)
+    assert collected.trades[0].pnl == pytest.approx(40.0)  # (110-100)*4
+    assert collected.trades[1].quantity == pytest.approx(6.0)
+    assert collected.trades[1].pnl == pytest.approx(120.0)  # (120-100)*6
 
 
 @pytest.mark.asyncio
@@ -143,17 +153,16 @@ async def test_flip_long_to_short(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.BUY, 10.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.SELL, 15.0, 90.0, "o2"), t0 + timedelta(hours=1))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
     # 1 closed LONG + 1 open SHORT
-    assert len(result.positions) == 2
-    closed = [p for p in result.positions if p.exit_price is not None]
-    opened = [p for p in result.positions if p.exit_price is None]
-    assert len(closed) == 1 and len(opened) == 1
-    assert closed[0].direction == "LONG"
-    assert closed[0].pnl == pytest.approx(-100.0)  # (90-100)*10
-    assert opened[0].direction == "SHORT"
-    assert opened[0].quantity == pytest.approx(5.0)
-    assert opened[0].entry_price == 90.0
+    assert len(collected.trades) == 1
+    assert collected.trades[0].direction == "LONG"
+    assert collected.trades[0].pnl == pytest.approx(-100.0)  # (90-100)*10
+    assert len(collected.run.open_positions) == 1
+    ol = collected.run.open_positions[0]
+    assert ol.direction == "SHORT"
+    assert ol.quantity == pytest.approx(5.0)
+    assert ol.entry_price == 90.0
 
 
 @pytest.mark.asyncio
@@ -162,31 +171,30 @@ async def test_flip_short_to_long(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.SELL, 5.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.BUY, 8.0, 90.0, "o2"), t0 + timedelta(hours=1))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
-    assert len(result.positions) == 2
-    closed = [p for p in result.positions if p.exit_price is not None]
-    opened = [p for p in result.positions if p.exit_price is None]
-    assert len(closed) == 1 and len(opened) == 1
-    assert closed[0].direction == "SHORT"
-    assert closed[0].pnl == pytest.approx(50.0)  # (100-90)*5
-    assert opened[0].direction == "LONG"
-    assert opened[0].quantity == pytest.approx(3.0)
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    assert len(collected.trades) == 1
+    assert collected.trades[0].direction == "SHORT"
+    assert collected.trades[0].pnl == pytest.approx(50.0)  # (100-90)*5
+    assert len(collected.run.open_positions) == 1
+    ol = collected.run.open_positions[0]
+    assert ol.direction == "LONG"
+    assert ol.quantity == pytest.approx(3.0)
 
 
 @pytest.mark.asyncio
 async def test_open_position_at_end(collector: BacktestResultCollector) -> None:
-    """1 BUY with no matching SELL → 1 open PositionRecord."""
+    """1 BUY with no matching SELL → 1 OpenLot in run.open_positions, 0 trades."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 2.0, 100.0, "o1", sl=90, tp=120), t0)
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
-    assert len(result.positions) == 1
-    pos = result.positions[0]
-    assert pos.direction == "LONG"
-    assert pos.exit_price is None
-    assert pos.exit_time is None
-    assert pos.quantity == 2.0
-    assert pos.sl_price == 90
-    assert pos.tp_price == 120
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    assert len(collected.trades) == 0
+    assert len(collected.run.open_positions) == 1
+    ol = collected.run.open_positions[0]
+    assert ol.direction == "LONG"
+    assert ol.quantity == 2.0
+    assert ol.sl_price == 90
+    assert ol.tp_price == 120
+    assert ol.entry_order_id == "o1"
 
 
 @pytest.mark.asyncio
@@ -214,10 +222,10 @@ async def test_legacy_fill_without_side_long_only_fallback(
     await _feed(collector, fill_open, t0)
     await _feed(collector, fill_close, t0 + timedelta(hours=1))
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=2))
-    assert len(result.positions) == 1
-    assert result.positions[0].direction == "LONG"
-    assert result.positions[0].pnl == pytest.approx(10.0)
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    assert len(collected.trades) == 1
+    assert collected.trades[0].direction == "LONG"
+    assert collected.trades[0].pnl == pytest.approx(10.0)
 
 
 @pytest.mark.asyncio
@@ -239,10 +247,10 @@ async def test_total_return_no_regression_for_long_only(
             t0 + timedelta(hours=2 * i + 1),
         )
 
-    result = collector.finalize("r1", t0, t0 + timedelta(hours=10))
-    # PnL: 10 - 5 + 10 = 15, commission 6 fills * 0.001 * (100+110+110+105+105+115) = 0.645
-    total_pnl = sum(p.pnl for p in result.positions)
+    collected = collector.finalize("r1", t0, t0 + timedelta(hours=10))
+    # PnL: 10 - 5 + 10 = 15
+    total_pnl = sum(t.pnl for t in collected.trades)
     assert total_pnl == pytest.approx(15.0)
-    assert result.metrics.total_commission == pytest.approx(0.645)
-    assert result.metrics.winning_trades == 2
-    assert result.metrics.losing_trades == 1
+    assert collected.run.metrics.total_commission == pytest.approx(0.645)
+    assert collected.run.metrics.winning_trades == 2
+    assert collected.run.metrics.losing_trades == 1

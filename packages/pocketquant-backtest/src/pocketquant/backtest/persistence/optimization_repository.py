@@ -1,14 +1,14 @@
 """Optimization repository for MongoDB persistence."""
 
 from pocketquant.backtest.domain import OptimizationResult
-from pocketquant.core.common.constants import COLLECTION_OPTIMIZATION_RUNS
+from pocketquant.core.common.constants import COLLECTION_BACKTEST_OPTIMIZATION_RUNS
 from pocketquant.core.persistence.base_repository import BaseRepository
 
 
 class OptimizationRepository(BaseRepository):
     """Repository for optimization run results."""
 
-    _collection_name = COLLECTION_OPTIMIZATION_RUNS
+    _collection_name = COLLECTION_BACKTEST_OPTIMIZATION_RUNS
 
     async def save(self, result: OptimizationResult) -> None:
         """Save or update optimization result."""

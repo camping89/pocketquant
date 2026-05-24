@@ -8,7 +8,9 @@ via BaseRepository.__init__(database: Database) type hint.
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
+from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.backtest.persistence.optimization_repository import (
     OptimizationRepository,
 )
@@ -51,6 +53,8 @@ class PersistenceProvider(Provider):
     order_repository = provide(OrderRepository, scope=Scope.APP)
     position_repository = provide(PositionRepository, scope=Scope.APP)
     backtest_repository = provide(BacktestRepository, scope=Scope.APP)
+    backtest_order_repository = provide(BacktestOrderRepository, scope=Scope.APP)
+    backtest_trade_repository = provide(BacktestTradeRepository, scope=Scope.APP)
     optimization_repository = provide(OptimizationRepository, scope=Scope.APP)
     symbol_repository = provide(SymbolRepository, scope=Scope.APP)
     sync_status_repository = provide(SyncStatusRepository, scope=Scope.APP)

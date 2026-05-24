@@ -37,6 +37,28 @@ class PositionRepository(BaseRepository):
         cursor = collection.find({"is_closed": False}).limit(limit)
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
 
+    async def find_open_by_strategy(
+        self, strategy_id: str, limit: int = 50
+    ) -> list[PositionAggregate]:
+        """Return all open positions for a strategy (typically 0 or 1)."""
+        collection = self._collection()
+        cursor = collection.find(
+            {"strategy_id": strategy_id, "is_closed": False}
+        ).limit(limit)
+        return [PositionAggregate.from_mongo(doc) async for doc in cursor]
+
+    async def find_closed_by_strategy(
+        self, strategy_id: str, limit: int = 100
+    ) -> list[PositionAggregate]:
+        """Return most-recently closed positions for a strategy, newest first."""
+        collection = self._collection()
+        cursor = (
+            collection.find({"strategy_id": strategy_id, "is_closed": True})
+            .sort("closed_at", -1)
+            .limit(limit)
+        )
+        return [PositionAggregate.from_mongo(doc) async for doc in cursor]
+
     async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""
         collection = self._collection()

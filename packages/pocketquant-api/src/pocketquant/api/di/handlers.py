@@ -42,8 +42,14 @@ from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHa
 from pocketquant.trading.handlers.strategy.delete.handler import DeleteStrategyHandler
 from pocketquant.trading.handlers.strategy.get_all.handler import GetStrategiesHandler
 from pocketquant.trading.handlers.strategy.get_one.handler import GetStrategyHandler
+from pocketquant.trading.handlers.strategy.get_positions.handler import (
+    GetStrategyPositionsHandler,
+)
 from pocketquant.trading.handlers.strategy.get_subscription_backtest.handler import (
     GetSubscriptionBacktestHandler,
+)
+from pocketquant.trading.handlers.strategy.get_trades.handler import (
+    GetStrategyTradesHandler,
 )
 from pocketquant.trading.handlers.strategy.list_symbols.handler import (
     ListSymbolsHandler as ListStrategySymbolsHandler,
@@ -95,6 +101,8 @@ class HandlerProvider(Provider):
     list_strategy_symbols_handler = provide(ListStrategySymbolsHandler, scope=Scope.APP)
     run_all_backtests_handler = provide(RunAllBacktestsHandler, scope=Scope.APP)
     get_subscription_backtest_handler = provide(GetSubscriptionBacktestHandler, scope=Scope.APP)
+    get_strategy_positions_handler = provide(GetStrategyPositionsHandler, scope=Scope.APP)
+    get_strategy_trades_handler = provide(GetStrategyTradesHandler, scope=Scope.APP)
     delete_strategy_handler = provide(DeleteStrategyHandler, scope=Scope.APP)
 
     # Backtesting (5)
@@ -137,6 +145,8 @@ ALL_HANDLER_TYPES: list[type] = [
     ListStrategySymbolsHandler,
     RunAllBacktestsHandler,
     GetSubscriptionBacktestHandler,
+    GetStrategyPositionsHandler,
+    GetStrategyTradesHandler,
     DeleteStrategyHandler,
     RunBacktestHandler,
     RunOptimizationHandler,

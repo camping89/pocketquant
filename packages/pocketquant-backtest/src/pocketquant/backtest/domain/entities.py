@@ -9,43 +9,46 @@ from typing import Any
 from pocketquant.backtest.domain.value_objects import (
     BacktestMetrics,
     EquityPoint,
+    OpenLot,
     OptimizationResultEntry,
-    PositionRecord,
-    TradeRecord,
 )
 
 
 @dataclass
 class BacktestResult:
-    """Complete result of a backtest run with metrics and equity curve."""
+    """Slim backtest run record — metrics + equity curve + open-lot snapshots.
+
+    After Phase 4 of the storage refactor, fills go to ``backtest_orders.fills[]``
+    and round-trip outcomes go to ``backtest_trades``. ``open_positions`` carries
+    the still-open lots at run-end so the run doc remains self-contained for
+    quick UI snapshots without a cross-collection join.
+    """
 
     id: str
     strategy_id: str
     config_snapshot: dict[str, Any]  # Serialized BacktestConfig
     metrics: BacktestMetrics
     equity_curve: list[EquityPoint]
-    trades: list[TradeRecord]
-    positions: list[PositionRecord]
     started_at: datetime
     completed_at: datetime
     status: str  # "completed", "failed"
     error_message: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)  # For optimizer
+    open_positions: list[OpenLot] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Alias for API serialization."""
         return self.to_mongo()
 
     def to_mongo(self) -> dict[str, Any]:
-        """Convert to dictionary for MongoDB storage."""
+        """Serialize to a slim ``backtest_runs`` document."""
         return {
             "_id": self.id,
             "strategy_id": self.strategy_id,
             "config_snapshot": self.config_snapshot,
             "metrics": self.metrics.to_mongo(),
             "equity_curve": [p.to_mongo() for p in self.equity_curve],
-            "trades": [t.to_mongo() for t in self.trades],
-            "positions": [p.to_mongo() for p in self.positions],
+            "open_positions": [p.to_mongo() for p in self.open_positions],
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "status": self.status,
@@ -55,15 +58,14 @@ class BacktestResult:
 
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> BacktestResult:
-        """Create from MongoDB document."""
+        """Create from MongoDB document. Tolerates pre-migration shape (ignores legacy keys)."""
         return cls(
             id=data["_id"],
             strategy_id=data["strategy_id"],
             config_snapshot=data["config_snapshot"],
             metrics=BacktestMetrics.from_mongo(data["metrics"]),
             equity_curve=[EquityPoint.from_mongo(p) for p in data.get("equity_curve", [])],
-            trades=[TradeRecord.from_mongo(t) for t in data.get("trades", [])],
-            positions=[PositionRecord.from_mongo(p) for p in data.get("positions", [])],
+            open_positions=[OpenLot.from_mongo(p) for p in data.get("open_positions", [])],
             started_at=data["started_at"],
             completed_at=data["completed_at"],
             status=data["status"],
