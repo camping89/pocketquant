@@ -1,7 +1,7 @@
 ---
 title: "Consolidate deployment assets into deploy/ folder"
 description: "Move Dockerfile, deploy.sh, verify.sh, docker/* (compose+mongo-init+scripts), .env, .env.example into single deploy/ folder. Delete docker/. Update CI, justfile, check_env.py, docs. Write VPS migration runbook."
-status: pending
+status: completed
 priority: P2
 branch: "develop"
 tags: [deploy, refactor, devops, docs]
@@ -41,14 +41,14 @@ pocketquant/
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Pre-flight cleanup & audit](./phase-01-pre-flight-cleanup-audit.md) | Pending |
-| 2 | [Move files (git mv)](./phase-02-move-files-git-mv.md) | Pending |
-| 3 | [Update shell scripts](./phase-03-update-shell-scripts.md) | Pending |
-| 4 | [Update Docker build & CI](./phase-04-update-docker-build-ci.md) | Pending |
-| 5 | [Update dev tooling](./phase-05-update-dev-tooling.md) | Pending |
-| 6 | [Update documentation](./phase-06-update-documentation.md) | Pending |
-| 7 | [Write VPS migration runbook](./phase-07-write-vps-migration-runbook.md) | Pending |
-| 8 | [Local validation](./phase-08-local-validation.md) | Pending |
+| 1 | [Pre-flight cleanup & audit](./phase-01-pre-flight-cleanup-audit.md) | Completed |
+| 2 | [Move files (git mv)](./phase-02-move-files-git-mv.md) | Completed |
+| 3 | [Update shell scripts](./phase-03-update-shell-scripts.md) | Completed |
+| 4 | [Update Docker build & CI](./phase-04-update-docker-build-ci.md) | Completed |
+| 5 | [Update dev tooling](./phase-05-update-dev-tooling.md) | Completed |
+| 6 | [Update documentation](./phase-06-update-documentation.md) | Completed |
+| 7 | [Write VPS migration runbook](./phase-07-write-vps-migration-runbook.md) | Completed |
+| 8 | [Local validation](./phase-08-local-validation.md) | Completed |
 
 ## Phase Dependencies
 

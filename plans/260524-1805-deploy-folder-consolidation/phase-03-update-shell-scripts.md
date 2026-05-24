@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Update shell scripts"
-status: pending
+status: completed
 priority: P1
 effort: "20m"
 dependencies: [2]

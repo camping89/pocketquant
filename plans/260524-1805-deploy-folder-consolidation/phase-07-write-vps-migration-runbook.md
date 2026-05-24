@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Write VPS migration runbook"
-status: pending
+status: completed
 priority: P1
 effort: "30m"
 dependencies: [6]

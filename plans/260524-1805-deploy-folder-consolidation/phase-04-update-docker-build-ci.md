@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Update Docker build & CI"
-status: pending
+status: completed
 priority: P1
 effort: "30m"
 dependencies: [2]

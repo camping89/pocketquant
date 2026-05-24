@@ -5,7 +5,7 @@ set -uo pipefail
 # Runs post-deploy checks and outputs a markdown report.
 #
 # Usage:
-#   ssh vps "cd /opt/pocketquant && bash verify.sh"
+#   ssh vps "cd /opt/pocketquant && bash deploy/verify.sh"
 #   # Report saved to ./reports/verify-<ISO-datetime>.md
 
 cd "$(dirname "$0")"
@@ -147,7 +147,7 @@ fi
 # ─── 8. Port listening ─────────────────────────────────────
 
 if command -v ss &>/dev/null; then
-  source docker/.env 2>/dev/null || true
+  source .env 2>/dev/null || true
   app_port="${APP_PORT:-41920}"
   if ss -tlnp | grep -q ":${app_port} "; then
     check "Port $app_port" "$PASS" "listening"

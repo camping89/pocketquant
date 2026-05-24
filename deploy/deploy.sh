@@ -5,11 +5,11 @@ set -euo pipefail
 # Handles first-time setup + subsequent deploys in one script.
 #
 # First time:
-#   scp deploy.sh docker/compose.prod.yml .env to VPS
-#   ssh vps "cd /opt/pocketquant && bash deploy.sh"
+#   scp deploy/deploy.sh deploy/compose.prod.yml deploy/.env to VPS:/opt/pocketquant/deploy/
+#   ssh vps "cd /opt/pocketquant && bash deploy/deploy.sh"
 #
 # Update:
-#   ssh vps "cd /opt/pocketquant && bash deploy.sh"
+#   ssh vps "cd /opt/pocketquant && bash deploy/deploy.sh"
 
 cd "$(dirname "$0")"
 
@@ -23,19 +23,19 @@ if ! command -v docker &>/dev/null; then
   exit 0
 fi
 
-if [ ! -f docker/.env ]; then
-  echo "ERROR: docker/.env not found. Copy .env.example, fill prod values, place at docker/.env"
+if [ ! -f .env ]; then
+  echo "ERROR: .env not found. Copy .env.example, fill prod values, place at deploy/.env"
   exit 1
 fi
 
 # ─── Validate required env vars ───────────────────────────────
 
-set -a && source docker/.env && set +a
+set -a && source .env && set +a
 
 REQUIRED_VARS="DOCKERHUB_USERNAME MONGO_PASSWORD APP_PORT MONGO_PORT REDIS_PORT PORTAINER_PORT"
 for var in $REQUIRED_VARS; do
   if [ -z "${!var:-}" ]; then
-    echo "ERROR: $var not set in docker/.env"
+    echo "ERROR: $var not set in deploy/.env"
     exit 1
   fi
 done
@@ -47,7 +47,7 @@ docker pull "${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}"
 docker pull "${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}"
 
 echo "=== Starting services ==="
-docker compose -f docker/compose.prod.yml --env-file docker/.env up -d --remove-orphans
+docker compose -f compose.prod.yml --env-file .env up -d --remove-orphans
 
 echo "=== Cleaning old images ==="
 docker image prune -f

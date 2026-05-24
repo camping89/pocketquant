@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Update dev tooling"
-status: pending
+status: completed
 priority: P1
 effort: "20m"
 dependencies: [2]

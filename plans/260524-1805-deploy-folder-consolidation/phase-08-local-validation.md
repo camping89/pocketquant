@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Local validation"
-status: pending
+status: completed
 priority: P1
 effort: "30m"
 dependencies: [1, 2, 3, 4, 5, 6, 7]

@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Update documentation"
-status: pending
+status: completed
 priority: P2
 effort: "45m"
 dependencies: [3, 4, 5]
