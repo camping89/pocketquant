@@ -2,7 +2,6 @@
 
 Composes API response from sync_status (status/error/last_sync_at) +
 bars (count/last_bar_at/is_stuck), same pattern as GetSyncStatusHandler.
-Previously this handler did not populate is_stuck at all (defaulted False).
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ def _iso_z(dt: datetime | None) -> str | None:
 
 @handles(GetSymbolSyncStatusQuery)
 class GetSymbolSyncStatusHandler(Handler[GetSymbolSyncStatusQuery, SyncStatusResult]):
-    """Handle getting sync status for a specific symbol, with bar-derived freshness."""
+    """Handle getting sync status for a specific composite symbol."""
 
     def __init__(
         self,
@@ -52,25 +51,16 @@ class GetSymbolSyncStatusHandler(Handler[GetSymbolSyncStatusQuery, SyncStatusRes
     async def handle(self, request: GetSymbolSyncStatusQuery) -> SyncStatusResult:
         interval = Interval(request.interval)
 
-        status = await self._sync_status_repo.find_one(
-            request.symbol, request.exchange, interval,
-        )
+        status = await self._sync_status_repo.find_one(request.symbol, interval)
         if not status:
-            raise NotFoundError(
-                f"No sync status found for {request.symbol}:{request.exchange}",
-            )
+            raise NotFoundError(f"No sync status found for {request.symbol}")
 
-        latest_bar = await self._bar_repo.get_latest(
-            status.symbol, status.exchange, interval,
-        )
-        bar_count = await self._bar_repo.count(
-            status.symbol, status.exchange, interval,
-        )
+        latest_bar = await self._bar_repo.get_latest(status.symbol, interval)
+        bar_count = await self._bar_repo.count(status.symbol, interval)
         latest_dt = latest_bar.datetime if latest_bar else None
 
         return SyncStatusResult(
             symbol=status.symbol,
-            exchange=status.exchange,
             interval=status.interval,
             status=status.status,
             bar_count=bar_count,

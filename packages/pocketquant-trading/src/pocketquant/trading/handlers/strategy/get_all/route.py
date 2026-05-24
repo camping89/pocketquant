@@ -15,7 +15,6 @@ class StrategyResponse(BaseModel):
     id: str
     name: str
     symbol: str
-    exchange: str
     interval: str
     broker: str
     is_running: bool

@@ -42,7 +42,4 @@ class PositionRepository(BaseRepository):
         collection = self._collection()
         await collection.create_index("strategy_id", name="ix_positions_strategy_id")
         await collection.create_index("is_closed", name="ix_positions_is_closed")
-        await collection.create_index(
-            [("symbol", 1), ("exchange", 1)],
-            name="ix_positions_symbol_exchange",
-        )
+        await collection.create_index("symbol", name="ix_positions_symbol")

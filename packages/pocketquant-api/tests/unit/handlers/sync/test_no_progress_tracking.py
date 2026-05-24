@@ -23,8 +23,7 @@ from pocketquant.core.domain.shared.enums import Interval
 
 def _bar(ts: datetime) -> Bar:
     return Bar(
-        symbol="BTCUSDT",
-        exchange="BINANCE",
+        symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15,
         datetime=ts,
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
@@ -104,7 +103,7 @@ def _stop(handler: SyncSymbolHandler) -> None:
 
 def _command() -> SyncSymbolCommand:
     return SyncSymbolCommand(
-        symbol="BTCUSDT", exchange="BINANCE",
+        symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15, n_bars=48,
         source="test",
     )

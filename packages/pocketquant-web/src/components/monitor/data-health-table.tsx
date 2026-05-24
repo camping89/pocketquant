@@ -22,12 +22,12 @@ interface IntegrityTotals {
 }
 
 interface DataHealthTableProps {
-  exchange: string
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
   onIntegrityUpdate?: (totals: IntegrityTotals | null) => void
 }
 
-export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHealthTableProps) {
+export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTableProps) {
   const { data, isLoading, error, dataUpdatedAt } = useSyncStatus()
   const repair = useIntegrityRepair()
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
@@ -37,14 +37,14 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
   const filtered = useMemo(() => {
     if (!data?.length) return []
     const rows = data
-      .filter((s) => s.exchange === exchange && s.symbol === symbol)
+      .filter((s) => s.symbol === symbol)
       .filter((s) => showInactive || isActiveInterval(s.interval))
     return rows.sort(
       (a, b) =>
         INTERVAL_ORDER.indexOf(a.interval as (typeof INTERVAL_ORDER)[number]) -
         INTERVAL_ORDER.indexOf(b.interval as (typeof INTERVAL_ORDER)[number]),
     )
-  }, [data, exchange, symbol, showInactive])
+  }, [data, symbol, showInactive])
 
   useEffect(() => {
     if (!onIntegrityUpdate) return
@@ -83,7 +83,7 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
     const key = s.interval
     updateRow(key, { checking: true })
     try {
-      const report = await checkIntegrity(s.symbol, s.exchange, s.interval, daysBack)
+      const report = await checkIntegrity(s.symbol, s.interval, daysBack)
       updateRow(key, { report, checking: false })
     } catch {
       updateRow(key, { checking: false })
@@ -95,7 +95,7 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
     const key = s.interval
     updateRow(key, { repairing: true })
     repair.mutate(
-      { symbol: s.symbol, exchange: s.exchange, interval: s.interval, daysBack },
+      { symbol: s.symbol, interval: s.interval, daysBack },
       {
         onSuccess: (result) => updateRow(key, { repair: result, repairing: false }),
         onError: () => updateRow(key, { repairing: false }),
@@ -158,7 +158,7 @@ export function DataHealthTable({ exchange, symbol, onIntegrityUpdate }: DataHea
         </div>
       </div>
       {filtered.length === 0 ? (
-        <div className="monitor-empty">No sync data for {exchange}:{symbol}</div>
+        <div className="monitor-empty">No sync data for {symbol}</div>
       ) : (
         <div className="table-wrap">
           <table className="monitor-table">

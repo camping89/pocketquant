@@ -19,7 +19,6 @@ _STUCK_STREAK_THRESHOLD = 3
 
 def emit_no_progress(
     symbol: str,
-    exchange: str,
     interval: Interval,
     *,
     bars_fetched: int,
@@ -29,7 +28,10 @@ def emit_no_progress(
     streak: int,
     latest_bar: Bar | None,
 ) -> None:
-    """Emit anomaly log for a no-progress sync (inserted == 0 with existing data)."""
+    """Emit anomaly log for a no-progress sync (inserted == 0 with existing data).
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
     cadence = INTERVAL_SECONDS.get(interval.value, 0)
     age_s = (
         int((datetime.now(UTC) - latest_bar.datetime).total_seconds())
@@ -38,7 +40,6 @@ def emit_no_progress(
     )
     payload: dict[str, object] = {
         "symbol": symbol,
-        "exchange": exchange,
         "interval": interval.value,
         "bars_fetched": bars_fetched,
         "filtered_misaligned": filtered_misaligned,

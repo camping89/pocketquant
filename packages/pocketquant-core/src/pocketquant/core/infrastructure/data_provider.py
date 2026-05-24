@@ -17,18 +17,16 @@ class IDataProvider(ABC):
     async def fetch_ohlcv(
         self,
         symbol: str,
-        exchange: str,
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        """Fetch OHLCV bars from data provider."""
+        """Fetch OHLCV bars from data provider. ``symbol`` is composite ``{code}:{exchange}``."""
         ...
 
     @abstractmethod
     async def search_symbols(
         self,
         query: str,
-        exchange: str | None = None,
     ) -> list[dict]:
         """Search available symbols."""
         ...

@@ -41,10 +41,12 @@ def filter_aligned_bars(bars: list[Bar], interval: Interval) -> tuple[list[Bar],
 
 @dataclass
 class BarBuilder:
-    """Builds OHLCV bars from incoming ticks. Pure domain logic, no I/O."""
+    """Builds OHLCV bars from incoming ticks. Pure domain logic, no I/O.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+    """
 
     symbol: str
-    exchange: str
     interval: Interval
     bar_start: datetime
     bar_end: datetime | None = None
@@ -101,7 +103,6 @@ class BarBuilder:
         """Convert to dictionary for serialization."""
         return {
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "interval": self.interval.value,
             "bar_start": self.bar_start.isoformat(),
             "bar_end": self.bar_end.isoformat() if self.bar_end else None,
@@ -115,13 +116,15 @@ class BarBuilder:
 
     @classmethod
     def create_for_tick(
-        cls, symbol: str, exchange: str, interval: Interval, timestamp: datetime
-    ) -> BarBuilder:
-        """Factory to create a bar builder aligned to the tick timestamp."""
+        cls, symbol: str, interval: Interval, timestamp: datetime
+    ) -> "BarBuilder":
+        """Factory to create a bar builder aligned to the tick timestamp.
+
+        ``symbol`` is composite ``{code}:{exchange}``.
+        """
         bar_start = get_bar_start(timestamp, interval)
         return cls(
             symbol=symbol,
-            exchange=exchange,
             interval=interval,
             bar_start=bar_start,
         )

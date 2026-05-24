@@ -173,7 +173,6 @@ class StrategyAppService:
                 "id": s.id,
                 "name": s.config.name,
                 "symbol": s.config.symbol,
-                "exchange": s.config.exchange,
                 "interval": s.config.interval,
                 "broker": s.config.broker,
                 "is_running": s.is_running,
@@ -189,14 +188,13 @@ class StrategyAppService:
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Handle bar completed event."""
         strategies = self._find_strategies(
-            event.symbol, event.exchange, event.interval, trigger="bar"
+            event.symbol, event.interval, trigger="bar"
         )
 
         for strategy in strategies:
             try:
                 bar = {
                     "symbol": event.symbol,
-                    "exchange": event.exchange,
                     "interval": event.interval,
                     "open": event.open,
                     "high": event.high,
@@ -221,13 +219,12 @@ class StrategyAppService:
     @event_handler(QuoteReceivedEvent)
     async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
         """Handle quote received event."""
-        strategies = self._find_strategies(event.symbol, event.exchange, trigger="tick")
+        strategies = self._find_strategies(event.symbol, trigger="tick")
 
         for strategy in strategies:
             try:
                 tick = {
                     "symbol": event.symbol,
-                    "exchange": event.exchange,
                     "price": event.price,
                     "volume": event.volume,
                     "timestamp": event.timestamp,
@@ -250,18 +247,15 @@ class StrategyAppService:
     def _find_strategies(
         self,
         symbol: str,
-        exchange: str,
         interval: str | None = None,
         trigger: str = "bar",
     ) -> list[IStrategy]:
-        """Find strategies matching symbol/exchange/interval."""
+        """Find strategies matching composite symbol/interval/trigger."""
         matches = []
         for strategy in self._strategies.values():
             if not strategy.is_running:
                 continue
             if strategy.config.symbol != symbol:
-                continue
-            if strategy.config.exchange != exchange:
                 continue
             if interval and strategy.config.interval != interval:
                 continue
@@ -351,7 +345,6 @@ class StrategyAppService:
         return OrderAggregate.create(
             strategy_id=strategy.id,
             symbol=signal.symbol,
-            exchange=signal.exchange,
             side=side,
             order_type=order_type,
             quantity=size,

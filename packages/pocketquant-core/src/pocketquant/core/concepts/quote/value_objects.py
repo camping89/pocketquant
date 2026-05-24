@@ -20,10 +20,12 @@ class Price:
 
 @dataclass(frozen=True)
 class QuoteTick:
-    """Immutable tick data from real-time feed."""
+    """Immutable tick data from real-time feed.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
 
     symbol: str
-    exchange: str
     timestamp: datetime
     price: float
     volume: float | None = None
@@ -35,8 +37,3 @@ class QuoteTick:
             raise ValueError("Price must be non-negative")
         if self.volume is not None and self.volume < 0:
             raise ValueError("Volume must be non-negative")
-
-    @property
-    def symbol_key(self) -> str:
-        """Return 'EXCHANGE:SYMBOL' format."""
-        return f"{self.exchange}:{self.symbol}"

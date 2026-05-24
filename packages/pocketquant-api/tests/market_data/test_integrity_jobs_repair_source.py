@@ -29,7 +29,7 @@ async def test_repair_integrity_sends_command_with_source() -> None:
     bar_repo.find_datetimes = AsyncMock(side_effect=fake_find_datetimes)
 
     result = await repair_integrity(
-        symbol="BTCUSDT", exchange="BINANCE", interval=Interval.MINUTE_1,
+        symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1,
         bar_repo=bar_repo, mediator=mediator, source=SOURCE_REST_REPAIR,
         days_back=1,
     )

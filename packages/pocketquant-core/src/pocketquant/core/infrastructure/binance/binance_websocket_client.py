@@ -41,13 +41,13 @@ class BinanceWebSocketClient:
 
     Usage:
         client = BinanceWebSocketClient()
-        await client.subscribe("BTCUSDT", "BINANCE", my_callback)
+        await client.subscribe("BTCUSDT:BINANCE", my_callback)
         await client.run_forever()   # blocks; reconnects on drop
     """
 
     def __init__(self) -> None:
-        # symbol_key -> (symbol, exchange, callback)
-        self._subscriptions: dict[str, tuple[str, str, Callable[[dict[str, Any]], Any]]] = {}
+        # composite_symbol -> (code, callback) — composite is e.g. "BTCUSDT:BINANCE"
+        self._subscriptions: dict[str, tuple[str, Callable[[dict[str, Any]], Any]]] = {}
         self._ws: Any = None  # websockets.ClientConnection | None
         self._running = False
         self._reconnect_delay = _RECONNECT_DELAY_INITIAL
@@ -80,23 +80,23 @@ class BinanceWebSocketClient:
     async def subscribe(
         self,
         symbol: str,
-        exchange: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Register a symbol subscription. Returns the symbol_key."""
-        validated = validate_symbol(symbol)
-        symbol_key = f"{exchange.upper()}:{validated}"
-        self._subscriptions[symbol_key] = (validated, exchange.upper(), callback)
-        logger.info("binance_ws.subscribed", symbol_key=symbol_key)
-        return symbol_key
+        """Register a symbol subscription. ``symbol`` is composite ``{code}:{exchange}``. Returns key."""
+        # Extract bare code for Binance API stream name (BINANCE-specific boundary)
+        code = symbol.split(":")[0] if ":" in symbol else symbol
+        validated = validate_symbol(code)
+        composite = symbol.upper()
+        self._subscriptions[composite] = (validated, callback)
+        logger.info("binance_ws.subscribed", symbol=composite)
+        return composite
 
-    async def unsubscribe(self, symbol: str, exchange: str) -> None:
-        """Remove a subscription. Does not reconnect automatically."""
-        validated = validate_symbol(symbol)
-        symbol_key = f"{exchange.upper()}:{validated}"
-        if symbol_key in self._subscriptions:
-            del self._subscriptions[symbol_key]
-            logger.info("binance_ws.unsubscribed", symbol_key=symbol_key)
+    async def unsubscribe(self, symbol: str) -> None:
+        """Remove a subscription. ``symbol`` is composite ``{code}:{exchange}``."""
+        composite = symbol.upper()
+        if composite in self._subscriptions:
+            del self._subscriptions[composite]
+            logger.info("binance_ws.unsubscribed", symbol=composite)
 
     async def run_forever(self) -> None:
         """Connect and receive messages, reconnecting with exponential backoff on failure.
@@ -166,8 +166,8 @@ class BinanceWebSocketClient:
         return len(self._subscriptions)
 
     @property
-    def subscriptions(self) -> dict[str, tuple[str, str, Callable[[dict[str, Any]], Any]]]:
-        """Return subscriptions dict: symbol_key -> (symbol, exchange, callback)."""
+    def subscriptions(self) -> dict[str, tuple[str, Callable[[dict[str, Any]], Any]]]:
+        """Return subscriptions dict: composite_symbol -> (code, callback)."""
         return self._subscriptions
 
     # ------------------------------------------------------------------
@@ -176,7 +176,7 @@ class BinanceWebSocketClient:
 
     def _build_url(self) -> str:
         """Build stream URL: single or combined depending on subscription count."""
-        streams = [f"{sym.lower()}@aggTrade" for sym, _exch, _cb in self._subscriptions.values()]
+        streams = [f"{code.lower()}@aggTrade" for code, _cb in self._subscriptions.values()]
         if len(streams) == 1:
             return f"{_WS_BASE}/ws/{streams[0]}"
         if len(streams) > 1:
@@ -200,20 +200,20 @@ class BinanceWebSocketClient:
             return
 
         raw_symbol: str = event.get("s", "")
-        # Find the matching subscription by symbol (case-insensitive)
-        for symbol_key, (sym, exch, callback) in self._subscriptions.items():
-            if sym.upper() == raw_symbol.upper():
-                quote_dict = aggtrade_to_quote_dict(event, sym, exch)
+        # Find the matching subscription by bare code (case-insensitive)
+        for composite, (code, callback) in self._subscriptions.items():
+            if code.upper() == raw_symbol.upper():
+                quote_dict = aggtrade_to_quote_dict(event, composite)
                 self.last_tick_at = datetime.now(UTC)
                 # DEBUG level: aggTrade fires 50–500 times/sec/symbol; INFO logging
                 # saturates event loop and blocks HTTP handlers.
                 logger.debug(
                     "binance_ws.aggtrade_received",
-                    symbol_key=symbol_key,
+                    symbol=composite,
                     last_price=quote_dict["last_price"],
                     volume=quote_dict["volume"],
                 )
-                await self._invoke_callback(callback, quote_dict, symbol_key)
+                await self._invoke_callback(callback, quote_dict, composite)
                 break
 
     async def _invoke_callback(

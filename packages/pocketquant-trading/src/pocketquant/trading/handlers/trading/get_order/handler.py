@@ -24,7 +24,6 @@ class GetOrderHandler(Handler[GetOrderQuery, dict]):
             "id": order.id,
             "strategy_id": order.strategy_id,
             "symbol": order.symbol,
-            "exchange": order.exchange,
             "side": order.side.value,
             "order_type": order.order_type.value,
             "quantity": order.quantity,

@@ -102,8 +102,7 @@ class TestThrottle:
         # First tick → write
         await bar_service._process_tick_for_interval(
             QuoteTick(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 price=100.0,
                 volume=1.0,
                 timestamp=1000.0,
@@ -117,8 +116,7 @@ class TestThrottle:
         # Second tick 100ms later → throttled, no write
         await bar_service._process_tick_for_interval(
             QuoteTick(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 price=101.0,
                 volume=2.0,
                 timestamp=1000.1,  # +100ms
@@ -138,8 +136,7 @@ class TestThrottle:
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         builder = BarBuilder(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
         )
@@ -164,8 +161,7 @@ class TestNoMongoWrite:
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         bar = BarBuilder(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
         )
@@ -187,8 +183,7 @@ class TestNoMongoWrite:
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         bar = BarBuilder(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             interval=Interval.MINUTE_5,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
         )
@@ -202,8 +197,7 @@ class TestNoMongoWrite:
         call_args = mock_event_bus.publish.call_args
         event = call_args[0][0]
         assert isinstance(event, BarCompletedEvent)
-        assert event.symbol == "BTC"
-        assert event.exchange == "BINANCE"
+        assert event.symbol == "BINANCE:BTC"
         assert event.interval == "5m"
 
 
@@ -215,8 +209,7 @@ class TestMultiTfState:
         """Each tf maintains independent in-progress bar state."""
         # Add tick for 1m and 5m simultaneously
         tick = QuoteTick(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
             timestamp=1000.0,
@@ -242,8 +235,7 @@ class TestMultiTfState:
 
         # Tick at 10:00 UTC
         tick1 = QuoteTick(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
             timestamp=datetime(2026, 5, 6, 10, 0, 0, tzinfo=UTC).timestamp(),
@@ -252,8 +244,7 @@ class TestMultiTfState:
 
         # Tick at 10:01 UTC (1 min later) — 1m bar rolls, but 5m does not
         tick2 = QuoteTick(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             price=101.0,
             volume=2.0,
             timestamp=datetime(2026, 5, 6, 10, 1, 0, tzinfo=UTC).timestamp(),
@@ -275,8 +266,7 @@ class TestMultiTfState:
     async def test_active_symbols_tracks_all_tfs(self, bar_service):
         """active_symbols lists all symbols with any in-progress bar."""
         tick = QuoteTick(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
             timestamp=1000.0,
@@ -298,8 +288,7 @@ class TestCacheKeyInjection:
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         builder = BarBuilder(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
         )
@@ -326,8 +315,7 @@ class TestFlushAllBars:
     async def test_flush_clears_state(self, bar_service, mock_event_bus):
         """flush_all_bars clears in-memory state."""
         tick = QuoteTick(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
             timestamp=1000.0,

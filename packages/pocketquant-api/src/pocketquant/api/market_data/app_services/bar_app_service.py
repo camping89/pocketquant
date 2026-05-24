@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from pocketquant.api.market_data.app_services.quote_dto import QuoteTick
-from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
+from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT, build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
@@ -44,6 +44,7 @@ class BarAppService:
     """Aggregates real-time ticks into bars at multiple intervals.
 
     In-memory state: _bars[symbol_key][interval] = BarBuilder (running OHLCV).
+    symbol_key is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
     Cron (P5 sync_1m + cascade) is the sole MongoDB writer — no upsert_bar here.
     On bar close: publish BarCompletedEvent (at-least-once) + force-flush Redis.
     BarRepository kept for get_current_bar DB fallback (P4 SSE).
@@ -70,7 +71,8 @@ class BarAppService:
         self._lock = asyncio.Lock()
 
     async def add_tick(self, tick: QuoteTick) -> None:
-        symbol_key = f"{tick.exchange}:{tick.symbol}".upper()
+        # tick.symbol is already composite ``{code}:{exchange}``
+        symbol_key = tick.symbol.upper()
 
         async with self._lock:
             for interval in self._intervals:
@@ -87,8 +89,7 @@ class BarAppService:
 
         if current_bar is None:
             current_bar = BarBuilder(
-                symbol=tick.symbol,
-                exchange=tick.exchange,
+                symbol=symbol_key,
                 interval=interval,
                 bar_start=bar_start,
             )
@@ -104,8 +105,7 @@ class BarAppService:
             await self._save_completed_bar(completed)
 
             current_bar = BarBuilder(
-                symbol=tick.symbol,
-                exchange=tick.exchange,
+                symbol=symbol_key,
                 interval=interval,
                 bar_start=bar_start,
             )
@@ -131,9 +131,9 @@ class BarAppService:
             return
 
         # Emit event — at-least-once delivery; strategy subscribers must be idempotent
+        # bar.symbol is composite ``{code}:{exchange}``
         event = BarCompletedEvent(
             symbol=bar.symbol,
-            exchange=bar.exchange,
             interval=bar.interval.value,
             bar_start=bar.bar_start,
             open=bar.open,
@@ -148,7 +148,6 @@ class BarAppService:
         # Delete the exact in-progress key for this (symbol, tf) so SSE stops
         # reporting a stale closed bar when no follow-up tick arrives (e.g. provider stall).
         exact_key = CACHE_KEY_BAR_CURRENT.format(
-            exchange=bar.exchange.upper(),
             symbol=bar.symbol.upper(),
             interval=bar.interval.value,
         )
@@ -157,7 +156,6 @@ class BarAppService:
         logger.info(
             "bar_completed_event_published",
             symbol=bar.symbol,
-            exchange=bar.exchange,
             interval=bar.interval.value,
             bar_start=bar.bar_start.isoformat(),
             tick_count=bar.tick_count,
@@ -172,7 +170,7 @@ class BarAppService:
         """
         try:
             existing = await self._bar_repo.get_latest(
-                bar.symbol, bar.exchange, bar.interval
+                bar.symbol, bar.interval
             )
         except Exception as exc:
             logger.error("bar_app_service.seed_failed", error=str(exc))
@@ -189,7 +187,6 @@ class BarAppService:
         logger.info(
             "bar_app_service.seeded_from_mongo",
             symbol=bar.symbol,
-            exchange=bar.exchange,
             interval=bar.interval.value,
             bar_start=bar.bar_start.isoformat(),
             open=bar.open,
@@ -216,9 +213,8 @@ class BarAppService:
             if now - last < BAR_CURRENT_FLUSH_MIN_INTERVAL_S:
                 return
 
-        exchange, symbol = symbol_key.split(":", 1)
         cache_key = CACHE_KEY_BAR_CURRENT.format(
-            exchange=exchange, symbol=symbol, interval=interval.value
+            symbol=symbol_key, interval=interval.value
         )
         ttl = _ttl_for_interval(interval)
         # Inject wall-clock last_update (Unix seconds) for SSE staleness_ms calc (P4)
@@ -230,11 +226,11 @@ class BarAppService:
     async def get_current_bar(
         self,
         symbol: str,
-        exchange: str,
         interval: Interval,
     ) -> dict[str, Any] | None:
+        """``symbol`` is composite ``{code}:{exchange}``."""
         cache_key = CACHE_KEY_BAR_CURRENT.format(
-            exchange=exchange.upper(), symbol=symbol.upper(), interval=interval.value
+            symbol=symbol.upper(), interval=interval.value
         )
         cached = await self._cache.get(cache_key)
         if cached is not None:
@@ -242,7 +238,7 @@ class BarAppService:
 
         # Fallback: no live feed — return latest bar from DB as current bar
         try:
-            bar = await self._bar_repo.get_latest(symbol, exchange, interval)
+            bar = await self._bar_repo.get_latest(symbol, interval)
         except Exception as exc:
             logger.error("bar_manager.get_latest_failed", error=str(exc))
             return None
@@ -251,7 +247,6 @@ class BarAppService:
 
         return {
             "symbol": bar.symbol,
-            "exchange": bar.exchange,
             "interval": interval.value,
             "bar_start": bar.datetime.isoformat() if bar.datetime else None,
             "open": bar.open,

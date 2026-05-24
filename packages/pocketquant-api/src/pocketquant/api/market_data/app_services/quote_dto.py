@@ -10,8 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class Quote(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    symbol: str = Field(..., description="Trading symbol")
-    exchange: str = Field(..., description="Exchange name")
+    # Composite symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``)
+    symbol: str = Field(..., description="Composite symbol {code}:{exchange}")
     timestamp: dt = Field(default_factory=utc_now, description="Quote timestamp")
 
     last_price: float = Field(..., alias="lp", description="Last traded price")
@@ -31,7 +31,6 @@ class Quote(BaseModel):
     def to_cache_dict(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "timestamp": self.timestamp.isoformat(),
             "last_price": self.last_price,
             "bid": self.bid,
@@ -46,24 +45,24 @@ class Quote(BaseModel):
         }
 
     @classmethod
-    def from_cache_dict(cls, data: dict[str, Any]) -> Quote:
+    def from_cache_dict(cls, data: dict[str, Any]) -> "Quote":
         if isinstance(data.get("timestamp"), str):
             data["timestamp"] = dt.fromisoformat(data["timestamp"])
         return cls(**data)
 
 
 class QuoteSubscription(BaseModel):
-    symbol: str = Field(..., description="Trading symbol")
-    exchange: str = Field(..., description="Exchange name")
+    # Composite symbol ``{code}:{exchange}``
+    symbol: str = Field(..., description="Composite symbol {code}:{exchange}")
 
     @property
     def key(self) -> str:
-        return f"{self.exchange}:{self.symbol}".upper()
+        return self.symbol.upper()
 
 
 class QuoteTick(BaseModel):
+    # Composite symbol ``{code}:{exchange}``
     symbol: str
-    exchange: str
     timestamp: dt
     price: float
     volume: float | None = None
@@ -71,7 +70,6 @@ class QuoteTick(BaseModel):
     def to_mongo(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol.upper(),
-            "exchange": self.exchange.upper(),
             "timestamp": self.timestamp,
             "price": self.price,
             "volume": self.volume,
@@ -79,8 +77,8 @@ class QuoteTick(BaseModel):
 
 
 class AggregatedBar(BaseModel):
+    # Composite symbol ``{code}:{exchange}``
     symbol: str
-    exchange: str
     interval: str
     bar_start: dt
     bar_end: dt
@@ -94,7 +92,6 @@ class AggregatedBar(BaseModel):
     def to_ohlcv_dict(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol.upper(),
-            "exchange": self.exchange.upper(),
             "interval": self.interval,
             "datetime": self.bar_start,
             "open": self.open,

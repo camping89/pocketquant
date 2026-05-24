@@ -42,7 +42,4 @@ class OrderRepository(BaseRepository):
         collection = self._collection()
         await collection.create_index("strategy_id", name="ix_orders_strategy_id")
         await collection.create_index("status", name="ix_orders_status")
-        await collection.create_index(
-            [("symbol", 1), ("exchange", 1)],
-            name="ix_orders_symbol_exchange",
-        )
+        await collection.create_index("symbol", name="ix_orders_symbol")

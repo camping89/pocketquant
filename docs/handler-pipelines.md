@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-05-08 | **Total Handlers:** 35 CQRS handlers across market data, strategy, backtest, trading, and subscriptions | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC | **Data Provider:** Binance (IDataProvider impl, 1200 weight/min rate limit)
 
-Current note: route names in this document are historical in a few places. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
+**STALE WARNING (2026-05-23):** This document contains pre-refactor API paths and symbol handling patterns. Exchange encapsulation refactor (composite symbol: `CODE:EXCHANGE`) landed 2026-05-23. Route paths use `/{symbol}` (not `/{exchange}/{symbol}`). Cache keys and handler signatures use composite symbol format. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
 
 This document details the complete pipeline for each of the 35 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
 

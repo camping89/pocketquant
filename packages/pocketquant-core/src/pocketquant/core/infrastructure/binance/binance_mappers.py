@@ -57,8 +57,10 @@ def validate_symbol(symbol: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def kline_to_bar(kline: list[Any], symbol: str, exchange: str, interval: Interval) -> Bar:
+def kline_to_bar(kline: list[Any], symbol: str, interval: Interval) -> Bar:
     """Map a Binance kline row to a Bar entity.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
 
     Binance kline positional schema:
       [0]  open time (ms UTC)
@@ -78,7 +80,6 @@ def kline_to_bar(kline: list[Any], symbol: str, exchange: str, interval: Interva
     bar_dt = datetime.fromtimestamp(open_time_ms / 1000, tz=UTC)
     return Bar(
         symbol=symbol.upper(),
-        exchange=exchange.upper(),
         interval=interval,
         datetime=bar_dt,
         open=float(kline[1]),
@@ -95,8 +96,10 @@ def kline_to_bar(kline: list[Any], symbol: str, exchange: str, interval: Interva
 # ---------------------------------------------------------------------------
 
 
-def aggtrade_to_quote_dict(event: dict[str, Any], symbol: str, exchange: str) -> dict[str, Any]:
+def aggtrade_to_quote_dict(event: dict[str, Any], symbol: str) -> dict[str, Any]:
     """Map a Binance @aggTrade event to the QuoteAppService callback dict.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
 
     aggTrade frame shape:
       {"e":"aggTrade","E":<event_time_ms>,"s":"BTCUSDT",
@@ -113,10 +116,9 @@ def aggtrade_to_quote_dict(event: dict[str, Any], symbol: str, exchange: str) ->
     """
     trade_time_ms = int(event["T"])
     timestamp = datetime.fromtimestamp(trade_time_ms / 1000, tz=UTC)
-    symbol_key = f"{exchange.upper()}:{symbol.upper()}"
 
     return {
-        "symbol_key": symbol_key,
+        "symbol": symbol.upper(),
         "timestamp": timestamp,
         "last_price": float(event["p"]),
         "volume": float(event["q"]),  # delta — raw per-trade quantity

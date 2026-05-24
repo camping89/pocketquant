@@ -7,10 +7,9 @@ from pocketquant.api.market_data.app_services.quote_dto import Quote
 
 @dataclass
 class QuoteResult:
-    """Result of a quote query."""
+    """Result of a quote query. ``symbol`` is composite ``{code}:{exchange}``."""
 
     symbol: str
-    exchange: str
     timestamp: str
     last_price: float
     bid: float | None = None
@@ -23,10 +22,9 @@ class QuoteResult:
     low_price: float | None = None
 
     @classmethod
-    def from_quote(cls, quote: Quote) -> QuoteResult:
+    def from_quote(cls, quote: Quote) -> "QuoteResult":
         return cls(
             symbol=quote.symbol,
-            exchange=quote.exchange,
             timestamp=quote.timestamp.isoformat(),
             last_price=quote.last_price,
             bid=quote.bid,

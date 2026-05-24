@@ -2,6 +2,10 @@
 
 Idempotent: safe to run on every restart. Uses upsert — no duplicates created.
 Logs 'tracked_symbols.seed_completed count=N' for observability.
+
+Legacy documents may store separate ``symbol`` + ``exchange`` fields or a
+composite ``symbol`` field (``{code}:{exchange}``). This seeder normalises both
+shapes to composite before upserting into tracked_symbols.
 """
 
 from dishka import AsyncContainer
@@ -19,8 +23,27 @@ logger = get_logger(__name__)
 _OPEN_ORDER_STATUSES = ["open", "partially_filled"]
 
 
+def _to_composite(doc: dict) -> str | None:
+    """Extract composite symbol from a mongo document.
+
+    Handles two shapes:
+    - New shape: ``symbol`` already composite ``{code}:{exchange}``
+    - Old shape: separate ``symbol`` (code) + ``exchange`` fields
+
+    Returns None if neither shape provides enough data.
+    """
+    raw_symbol = doc.get("symbol", "")
+    if raw_symbol and ":" in raw_symbol:
+        # Already composite
+        return raw_symbol.upper()
+    exchange = doc.get("exchange", "")
+    if raw_symbol and exchange:
+        return f"{raw_symbol.upper()}:{exchange.upper()}"
+    return None
+
+
 async def seed_tracked_symbols(container: AsyncContainer) -> None:
-    """Derive distinct (exchange, symbol) pairs from strategies + open orders, upsert all.
+    """Derive composite symbols from strategies + open orders, upsert all.
 
     Sources:
     - strategies collection: any status (all loaded strategies need live data)
@@ -29,15 +52,14 @@ async def seed_tracked_symbols(container: AsyncContainer) -> None:
     database: Database = await container.get(Database)
     repo: TrackedSymbolRepository = await container.get(TrackedSymbolRepository)
 
-    pairs: set[tuple[str, str]] = set()
+    symbols: set[str] = set()
 
     # Collect from strategies (all statuses)
     strat_collection = database.get_collection("strategies")
     async for doc in strat_collection.find({}, {"symbol": 1, "exchange": 1}):
-        symbol = doc.get("symbol")
-        exchange = doc.get("exchange")
-        if symbol and exchange:
-            pairs.add((exchange.upper(), symbol.upper()))
+        composite = _to_composite(doc)
+        if composite:
+            symbols.add(composite)
 
     # Collect from orders (open statuses only)
     orders_collection = database.get_collection("orders")
@@ -45,17 +67,15 @@ async def seed_tracked_symbols(container: AsyncContainer) -> None:
         {"status": {"$in": _OPEN_ORDER_STATUSES}},
         {"symbol": 1, "exchange": 1},
     ):
-        symbol = doc.get("symbol")
-        exchange = doc.get("exchange")
-        if symbol and exchange:
-            pairs.add((exchange.upper(), symbol.upper()))
+        composite = _to_composite(doc)
+        if composite:
+            symbols.add(composite)
 
-    # Upsert all discovered pairs
+    # Upsert all discovered composite symbols
     now = utc_now()
-    for exchange, symbol in pairs:
+    for composite in symbols:
         ts = TrackedSymbol(
-            exchange=exchange,
-            symbol=symbol,
+            symbol=composite,
             created_at=now,
             seeded_from="auto-seed",
         )
@@ -63,6 +83,6 @@ async def seed_tracked_symbols(container: AsyncContainer) -> None:
 
     logger.info(
         "tracked_symbols.seed_completed",
-        count=len(pairs),
+        count=len(symbols),
         source="strategies|orders",
     )

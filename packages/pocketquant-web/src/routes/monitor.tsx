@@ -28,13 +28,13 @@ function useUtcClock(): string {
 }
 
 function MonitorPage() {
-  const { exchange, symbol } = rootApi.useSearch()
+  const { symbol } = rootApi.useSearch()
   const { data: syncStatuses } = useSyncStatus()
   const { data: jobs } = useBackgroundJobs()
   const [integrityTotals, setIntegrityTotals] = useState<{ misaligned: number; gaps: number } | null>(null)
   const utcTime = useUtcClock()
 
-  const filtered = (syncStatuses ?? []).filter((s) => s.exchange === exchange && s.symbol === symbol)
+  const filtered = (syncStatuses ?? []).filter((s) => s.symbol === symbol)
 
   return (
     <div className="monitor-page">
@@ -48,7 +48,6 @@ function MonitorPage() {
         integrityTotals={integrityTotals}
       />
       <DataHealthTable
-        exchange={exchange}
         symbol={symbol}
         onIntegrityUpdate={setIntegrityTotals}
       />

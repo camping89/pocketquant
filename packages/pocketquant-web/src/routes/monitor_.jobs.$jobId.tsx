@@ -76,7 +76,7 @@ function JobDetailPage() {
             {stats?.p95_ms ?? '—'}ms
           </p>
         </div>
-        <button type="button" className="btn-sm" onClick={() => void navigate({ to: "/monitor", search: { exchange: "BINANCE", symbol: "BTCUSDT" } })}>
+        <button type="button" className="btn-sm" onClick={() => void navigate({ to: "/monitor", search: { symbol: "BTCUSDT:BINANCE" } })}>
           ← Back to monitor
         </button>
       </header>

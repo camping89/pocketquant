@@ -22,15 +22,14 @@ SOURCE_ONE_TIME_LEGACY = "one_time_legacy"
 class Bar(BaseModel):
     """Price bar with identity and MongoDB persistence.
 
-    Flat structure for direct field access. Used by repositories,
-    handlers, and backtesting engine.
+    Flat structure for direct field access. ``symbol`` stores composite
+    identifier ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
     """
 
     model_config = ConfigDict(populate_by_name=True)
 
     id: UUID = Field(default_factory=generate_id)
     symbol: str = ""
-    exchange: str = ""
     interval: Interval | None = None
     datetime: dt | None = None
     open: float = 0.0
@@ -62,7 +61,6 @@ class Bar(BaseModel):
         return {
             "_id": str(self.id),
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "interval": self.interval.value if self.interval else None,
             "datetime": self.datetime,
             "open": self.open,
@@ -84,7 +82,6 @@ class Bar(BaseModel):
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),
             symbol=doc.get("symbol", ""),
-            exchange=doc.get("exchange", ""),
             interval=interval_val,
             datetime=coerce_utc(doc.get("datetime")),
             open=doc.get("open", 0.0),
@@ -103,7 +100,6 @@ class Bar(BaseModel):
         return {
             "id": str(self.id),
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "interval": self.interval.value if self.interval else None,
             "datetime": self.datetime.isoformat() if self.datetime else None,
             "open": self.open,

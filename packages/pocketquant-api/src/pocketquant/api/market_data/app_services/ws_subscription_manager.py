@@ -3,6 +3,7 @@
 Runs as a background task (asyncio.Task) spawned in lifespan.
 Idempotent: subscribe/unsubscribe only diffs (desired vs current).
 Cancel-safe: CancelledError propagates cleanly so lifespan teardown works.
+``symbol`` keys are composite ``{code}:{exchange}`` throughout.
 """
 
 import asyncio
@@ -33,7 +34,7 @@ class WsSubscriptionManager:
         self,
         provider: IRealtimeQuoteProvider,
         tracked_symbol_repo: TrackedSymbolRepository,
-        quote_app_service: QuoteAppService,  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
+        quote_app_service: "QuoteAppService",  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
         interval_s: float = 5.0,
     ):
         self._provider = provider
@@ -61,8 +62,8 @@ class WsSubscriptionManager:
     async def _reconcile(self) -> None:
         """Diff desired vs current subscriptions and apply changes."""
         tracked = await self._repo.list_all()
-        # Build desired set as "EXCHANGE:SYMBOL" keys (uppercase — matches provider format)
-        desired: set[str] = {f"{ts.exchange}:{ts.symbol}".upper() for ts in tracked}
+        # tracked_symbols store composite symbol; uppercase to match provider format
+        desired: set[str] = {ts.symbol.upper() for ts in tracked}
         current: set[str] = set(self._provider.subscriptions.keys())
 
         to_add = desired - current
@@ -72,11 +73,9 @@ class WsSubscriptionManager:
             return
 
         for symbol_key in to_add:
-            exchange, symbol = symbol_key.split(":", 1)
             try:
                 await self._provider.subscribe(
-                    symbol=symbol,
-                    exchange=exchange,
+                    symbol=symbol_key,
                     callback=self._quote_app_service.on_quote_update,
                 )
                 # Rate-limit burst subscriptions to avoid provider IP-ban
@@ -89,9 +88,8 @@ class WsSubscriptionManager:
                 )
 
         for symbol_key in to_remove:
-            exchange, symbol = symbol_key.split(":", 1)
             try:
-                await self._provider.unsubscribe(symbol=symbol, exchange=exchange)
+                await self._provider.unsubscribe(symbol=symbol_key)
             except Exception as exc:
                 logger.warning(
                     "ws_subscription_manager.unsubscribe_failed",

@@ -22,16 +22,17 @@ class SubscriptionAlreadyExistsError(DomainError):
 
 @dataclass(frozen=True)
 class StrategySubscription:
-    """Immutable runtime mapping of a strategy to a (symbol, exchange, interval) tuple.
+    """Immutable runtime mapping of a strategy to a (symbol, interval) pair.
 
-    The ID is deterministic — derived from the 4-tuple — so the same subscription
+    ``symbol`` stores composite identifier ``{code}:{exchange}``.
+
+    The ID is deterministic — derived from the 3-tuple — so the same subscription
     cannot be inserted twice, and the ID is stable in URLs and cache keys.
     """
 
     id: str
     strategy_id: str
     symbol: str
-    exchange: str
     interval: Interval
     created_at: datetime
 
@@ -43,16 +44,15 @@ class StrategySubscription:
     def deterministic_id(
         strategy_id: str,
         symbol: str,
-        exchange: str,
         interval: str | Interval,
     ) -> str:
-        """Return 16 lowercase hex chars derived from sha256 of the 4-tuple.
+        """Return 16 lowercase hex chars derived from sha256 of the 3-tuple.
 
-        Inputs are normalized: symbol and exchange uppercased, interval as its
-        string value so the result is stable regardless of how callers pass it.
+        Inputs are normalized: symbol uppercased, interval as its string value
+        so the result is stable regardless of how callers pass it.
         """
         interval_val = interval.value if isinstance(interval, Interval) else str(interval)
-        raw = f"{strategy_id}|{symbol.upper()}|{exchange.upper()}|{interval_val}"
+        raw = f"{strategy_id}|{symbol.upper()}|{interval_val}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     # ------------------------------------------------------------------
@@ -65,7 +65,6 @@ class StrategySubscription:
             "_id": self.id,
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "interval": self.interval.value,
             "created_at": self.created_at,
         }
@@ -77,7 +76,6 @@ class StrategySubscription:
             id=doc["_id"],
             strategy_id=doc["strategy_id"],
             symbol=doc["symbol"],
-            exchange=doc["exchange"],
             interval=Interval(doc["interval"]),
             created_at=doc["created_at"],
         )

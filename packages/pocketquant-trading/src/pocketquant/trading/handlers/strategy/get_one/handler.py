@@ -22,7 +22,6 @@ class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
             "id": strategy.id,
             "name": strategy.config.name,
             "symbol": strategy.config.symbol,
-            "exchange": strategy.config.exchange,
             "interval": strategy.config.interval,
             "broker": strategy.config.broker,
             "is_running": strategy.is_running,

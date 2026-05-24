@@ -38,7 +38,6 @@ class ListSymbolsHandler(Handler[ListSymbolsQuery, list]):
                 "id": sub.id,
                 "strategy_id": sub.strategy_id,
                 "symbol": sub.symbol,
-                "exchange": sub.exchange,
                 "interval": sub.interval.value,
                 "created_at": sub.created_at.isoformat(),
                 "backtest": bt_statuses.get(sub.id),

@@ -15,7 +15,7 @@ def _make_1m_bars(n: int = 60) -> list[Bar]:
     base = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
     return [
         Bar(
-            symbol="BTCUSDT", exchange="BINANCE", interval=Interval.MINUTE_1,
+            symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1,
             datetime=base + timedelta(minutes=i),
             open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0, tick_count=1,
         )
@@ -30,7 +30,7 @@ async def test_cascade_for_symbol_passes_source_cascade() -> None:
     bar_repo.upsert_bar = AsyncMock()
 
     await cascade_for_symbol(
-        symbol="BTCUSDT", exchange="BINANCE",
+        symbol="BTCUSDT:BINANCE",
         lookback_minutes=60, bar_repo=bar_repo,
     )
 

@@ -10,6 +10,7 @@ Design:
   provider — so cascade output is deterministic and idempotent.
 - UTC-aligned bucket starts: 5m at minute%5==0, 1h at hour boundary, 1d at midnight.
 - Partial aggregate (< expected input count): logged as warning, still persisted.
+- ``symbol`` is composite ``{code}:{exchange}`` throughout.
 """
 
 from __future__ import annotations
@@ -141,11 +142,12 @@ def compute_boundaries(
 
 async def cascade_for_symbol(
     symbol: str,
-    exchange: str,
     lookback_minutes: int,
     bar_repo: BarRepository,
 ) -> dict[Interval, int]:
     """Aggregate 1m bars from MongoDB into higher-tf bars and upsert them.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
 
     For each tf in CASCADE_TFS:
       1. Determine UTC-aligned bucket boundaries within [now - lookback_minutes, now].
@@ -160,7 +162,6 @@ async def cascade_for_symbol(
     range_start = now - timedelta(minutes=lookback_minutes)
 
     sym = symbol.upper()
-    exch = exchange.upper()
 
     persisted_per_tf: dict[Interval, int] = {}
 
@@ -176,7 +177,6 @@ async def cascade_for_symbol(
             # Query 1m source bars for this bucket window (inclusive start, exclusive end).
             source_bars = await bar_repo.find(
                 symbol=sym,
-                exchange=exch,
                 interval=Interval.MINUTE_1,
                 start_date=boundary,
                 end_date=bucket_end - timedelta(seconds=1),
@@ -191,7 +191,6 @@ async def cascade_for_symbol(
                 logger.warning(
                     "cascade.partial_aggregate",
                     symbol=sym,
-                    exchange=exch,
                     tf=tf.value,
                     boundary=boundary.isoformat(),
                     expected=expected_count,
@@ -205,7 +204,6 @@ async def cascade_for_symbol(
 
             bar = Bar(
                 symbol=sym,
-                exchange=exch,
                 interval=tf,
                 datetime=boundary,
                 open=ohlcv["open"],
@@ -222,7 +220,6 @@ async def cascade_for_symbol(
                 logger.error(
                     "cascade.upsert_failed",
                     symbol=sym,
-                    exchange=exch,
                     tf=tf.value,
                     boundary=boundary.isoformat(),
                     exc_info=True,
@@ -233,7 +230,6 @@ async def cascade_for_symbol(
             logger.info(
                 "cascade.completed_tf",
                 symbol=sym,
-                exchange=exch,
                 tf=tf.value,
                 buckets=len(boundaries),
                 upserted=upserted,

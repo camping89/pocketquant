@@ -8,6 +8,7 @@ import type {
   ChartData,
   Interval,
 } from '../types/market-data'
+import { encodeSymbolForUrl } from '../lib/symbol-format'
 
 const VOLUME_UP = 'rgba(38, 166, 154, 0.3)'
 const VOLUME_DOWN = 'rgba(239, 83, 80, 0.3)'
@@ -21,15 +22,15 @@ function toUTCTimestamp(iso: string): UTCTimestamp {
   return (ms / 1000) as UTCTimestamp
 }
 
+/** Fetch OHLCV bars for a composite symbol (e.g. "BTCUSDT:BINANCE"). */
 export async function fetchOHLCV(
-  exchange: string,
   symbol: string,
   interval: Interval,
   limit = 1000,
 ): Promise<ChartData> {
   const res = await apiFetch<OHLCVResponse>(
-    `/api/v1/market-data/ohlcv/${exchange}/${symbol}`,
-    { interval, limit: String(limit) },
+    `/api/v1/market-data/ohlcv/${encodeSymbolForUrl(symbol)}/${interval}`,
+    { limit: String(limit) },
   )
 
   // API returns desc order; LC v5 requires ascending
@@ -55,19 +56,18 @@ export async function fetchOHLCV(
   return { candles, volumes, lastBarRaw }
 }
 
-export async function fetchSymbols(exchange?: string): Promise<SymbolInfo[]> {
-  const params: Record<string, string> = {}
-  if (exchange) params.exchange = exchange
-  return apiFetch<SymbolInfo[]>('/api/v1/market-data/symbols', params)
+/** Fetch all active symbols as composite strings (e.g. ["BTCUSDT:BINANCE", ...]). */
+export async function fetchSymbols(): Promise<SymbolInfo[]> {
+  return apiFetch<SymbolInfo[]>('/api/v1/market-data/symbols')
 }
 
+/** Fetch the current in-progress bar for a composite symbol. */
 export async function fetchCurrentBar(
-  exchange: string,
   symbol: string,
   interval: Interval,
 ): Promise<CurrentBarResponse> {
   return apiFetch<CurrentBarResponse>(
-    `/api/v1/quotes/current-bar/${exchange}/${symbol}`,
+    `/api/v1/quotes/current-bar/${encodeSymbolForUrl(symbol)}`,
     { interval },
   )
 }

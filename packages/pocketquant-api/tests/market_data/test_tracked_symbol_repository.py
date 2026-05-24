@@ -13,22 +13,22 @@ class TestTrackedSymbolRepository:
     @pytest.mark.asyncio
     async def test_upsert_idempotent(self, repo: TrackedSymbolRepository):
         """Upsert same symbol twice → idempotent (no duplicates)."""
-        symbol = TrackedSymbol(exchange="BINANCE", symbol="BTC", seeded_from="test")
+        symbol = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test")
 
         await repo.upsert(symbol)
         await repo.upsert(symbol)
 
         all_symbols = await repo.list_all()
-        btc_entries = [s for s in all_symbols if s.symbol == "BTC" and s.exchange == "BINANCE"]
+        btc_entries = [s for s in all_symbols if s.symbol == "BTC:BINANCE"]
         assert len(btc_entries) == 1
 
     @pytest.mark.asyncio
     async def test_list_all_returns_all(self, repo: TrackedSymbolRepository):
         """list_all returns all symbols."""
         symbols = [
-            TrackedSymbol(exchange="BINANCE", symbol="BTC", seeded_from="test"),
-            TrackedSymbol(exchange="BINANCE", symbol="ETH", seeded_from="test"),
-            TrackedSymbol(exchange="OKEX", symbol="BTC", seeded_from="test"),
+            TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test"),
+            TrackedSymbol(symbol="ETH:BINANCE", seeded_from="test"),
+            TrackedSymbol(symbol="BTC:OKEX", seeded_from="test"),
         ]
 
         for s in symbols:
@@ -40,42 +40,42 @@ class TestTrackedSymbolRepository:
     @pytest.mark.asyncio
     async def test_exists_returns_true_for_tracked(self, repo: TrackedSymbolRepository):
         """exists returns True for tracked symbol."""
-        symbol = TrackedSymbol(exchange="BINANCE", symbol="BTC", seeded_from="test")
+        symbol = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test")
         await repo.upsert(symbol)
 
-        exists = await repo.exists("BINANCE", "BTC")
+        exists = await repo.exists("BTC:BINANCE")
         assert exists
 
     @pytest.mark.asyncio
     async def test_exists_returns_false_for_untracked(self, repo: TrackedSymbolRepository):
         """exists returns False for untracked symbol."""
-        exists = await repo.exists("BINANCE", "NONEXISTENT")
+        exists = await repo.exists("NONEXISTENT:BINANCE")
         assert not exists
 
     @pytest.mark.asyncio
     async def test_delete_removes_symbol(self, repo: TrackedSymbolRepository):
         """delete removes symbol."""
-        symbol = TrackedSymbol(exchange="BINANCE", symbol="BTC", seeded_from="test")
+        symbol = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test")
         await repo.upsert(symbol)
 
-        await repo.delete("BINANCE", "BTC")
+        await repo.delete("BTC:BINANCE")
 
-        exists = await repo.exists("BINANCE", "BTC")
+        exists = await repo.exists("BTC:BINANCE")
         assert not exists
 
     @pytest.mark.asyncio
     async def test_unique_index_prevents_duplicates(self, repo: TrackedSymbolRepository):
-        """Unique compound index on (exchange, symbol) prevents duplicates."""
+        """Unique compound index on composite symbol prevents duplicates."""
         # This would be enforced by MongoDB unique index
-        symbol1 = TrackedSymbol(exchange="BINANCE", symbol="BTC", seeded_from="test1")
-        symbol2 = TrackedSymbol(exchange="BINANCE", symbol="BTC", seeded_from="test2")
+        symbol1 = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test1")
+        symbol2 = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test2")
 
         await repo.upsert(symbol1)
         # Second upsert should replace, not create duplicate
         await repo.upsert(symbol2)
 
         all_symbols = await repo.list_all()
-        btc_entries = [s for s in all_symbols if s.symbol == "BTC" and s.exchange == "BINANCE"]
+        btc_entries = [s for s in all_symbols if s.symbol == "BTC:BINANCE"]
         assert len(btc_entries) == 1
         # Latest seeded_from is preserved
         assert btc_entries[0].seeded_from == "test2"
@@ -86,8 +86,8 @@ async def repo(settings) -> TrackedSymbolRepository:
     """TrackedSymbolRepository connected to test MongoDB."""
     from pocketquant.core.persistence.mongodb import Database
 
-    db = Database(settings)
-    await db.connect()
+    db = Database()
+    await db.connect(settings)
     repo = TrackedSymbolRepository(db)
     yield repo
-    await db.close()
+    await db.disconnect()

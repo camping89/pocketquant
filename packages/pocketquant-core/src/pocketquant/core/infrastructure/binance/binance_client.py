@@ -34,7 +34,7 @@ class BinanceClient(IDataProvider):
 
     Usage:
         client = BinanceClient(settings)
-        bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, 500)
+        bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, 500)
         client.close()
     """
 
@@ -53,15 +53,17 @@ class BinanceClient(IDataProvider):
     async def fetch_ohlcv(
         self,
         symbol: str,
-        exchange: str,
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
         """Fetch n_bars OHLCV bars in ascending order.
 
+        ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         Paginates automatically when n_bars > 1000 (Binance limit per call).
         """
-        validated_symbol = validate_symbol(symbol)
+        # Extract the code part from composite symbol for Binance API calls (BINANCE-specific boundary)
+        code = symbol.split(":")[0] if ":" in symbol else symbol
+        validated_symbol = validate_symbol(code)
         binance_interval, bar_duration_ms = INTERVAL_TO_BINANCE[interval]
 
         logger.info(
@@ -102,7 +104,7 @@ class BinanceClient(IDataProvider):
                 break
 
             chunk_bars = [
-                kline_to_bar(k, validated_symbol, exchange, interval) for k in klines
+                kline_to_bar(k, symbol.upper(), interval) for k in klines
             ]
             # Defense-in-depth: drop any bar whose openTime >= cutoff in case Binance
             # returns one despite endTime cap (clock skew / server-side off-by-one).
@@ -136,7 +138,6 @@ class BinanceClient(IDataProvider):
     async def search_symbols(
         self,
         query: str,
-        exchange: str | None = None,
     ) -> list[dict]:
         """Stub — Binance symbol search not required for current use cases."""
         return []

@@ -93,7 +93,7 @@ class TestKlineToBarMapping:
         client = BinanceClient(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
-        await client.fetch_ohlcv("BTCUSDT", "BINANCE", interval, n_bars=1)
+        await client.fetch_ohlcv("BTCUSDT:BINANCE", interval, n_bars=1)
 
         call_kwargs = get_mock.call_args
         fallback = call_kwargs.args[1] if len(call_kwargs.args) > 1 else {}
@@ -117,12 +117,11 @@ class TestKlineToBarMapping:
         client = BinanceClient(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
-        bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=1)
+        bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1)
 
         assert len(bars) == 1
         bar = bars[0]
-        assert bar.symbol == "BTCUSDT"
-        assert bar.exchange == "BINANCE"
+        assert bar.symbol == "BTCUSDT:BINANCE"
         assert bar.interval == Interval.MINUTE_1
         assert bar.open == pytest.approx(50_000.0)
         assert bar.high == pytest.approx(51_000.0)
@@ -141,7 +140,7 @@ class TestKlineToBarMapping:
         client = BinanceClient(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
-        bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=5)
+        bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=5)
 
         assert all(b.high >= b.low for b in bars)
         assert all(b.volume > 0 for b in bars)
@@ -162,7 +161,7 @@ class TestPagination:
         client = BinanceClient(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
-        bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=10)
+        bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=10)
 
         assert get_mock.await_count == 1
         assert len(bars) == 10
@@ -190,7 +189,7 @@ class TestPagination:
         client._http.get = _side_effect  # type: ignore[method-assign]
 
         with patch("asyncio.sleep"):
-            bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=1200)
+            bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1200)
 
         assert call_count == 2
         assert len(bars) == 1200
@@ -220,7 +219,7 @@ class TestPagination:
         client._http.get = _side_effect  # type: ignore[method-assign]
 
         with patch("asyncio.sleep"):
-            await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=1500)
+            await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1500)
 
         assert len(start_times) == 2
         assert start_times[1] < start_times[0], "Window must slide back in time"
@@ -241,7 +240,7 @@ class TestErrorHandling:
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with pytest.raises(httpx.HTTPStatusError):
-            await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=10)
+            await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=10)
 
     @pytest.mark.asyncio
     async def test_invalid_symbol_raises_value_error(self) -> None:
@@ -251,7 +250,7 @@ class TestErrorHandling:
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with pytest.raises(ValueError, match="Invalid Binance symbol"):
-            await client.fetch_ohlcv("BTC-USDT", "BINANCE", Interval.MINUTE_1)
+            await client.fetch_ohlcv("BTC-USDT:BINANCE", Interval.MINUTE_1)
 
         assert get_mock.await_count == 0
 
@@ -262,7 +261,7 @@ class TestErrorHandling:
         client = BinanceClient(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
-        bars = await client.fetch_ohlcv("BTCUSDT", "BINANCE", Interval.MINUTE_1, n_bars=100)
+        bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=100)
 
         assert bars == []
 

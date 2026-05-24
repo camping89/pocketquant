@@ -92,8 +92,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         return
 
     strategy_id = sub.strategy_id
-    symbol = sub.symbol
-    exchange = sub.exchange
+    symbol = sub.symbol  # composite "{code}:{exchange}"
     interval = sub.interval.value  # string e.g. "1h"
 
     await bt_repo.upsert_status(subscription_id, strategy_id=strategy_id, status="running")
@@ -110,9 +109,9 @@ async def run_subscription_backtest(subscription_id: str) -> None:
                 "Load the strategy via LoadStrategyCommand before running backtest."
             )
 
-        start_date, end_date = await resolve_date_range(bar_repo, symbol, exchange, interval)
+        start_date, end_date = await resolve_date_range(bar_repo, symbol, interval)
         config = build_backtest_config(
-            base_config, strategy_id, symbol, exchange, interval, start_date, end_date
+            base_config, strategy_id, symbol, interval, start_date, end_date
         )
 
         # C2: load under a synthetic_id unique to this sub — no concurrent job clobber
@@ -122,7 +121,6 @@ async def run_subscription_backtest(subscription_id: str) -> None:
             strategy_id,
             subscription_id,
             symbol,
-            exchange,
             interval,
         )
 
@@ -151,7 +149,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
             "backtest_jobs.completed",
             sub_id=subscription_id,
             strategy_id=strategy_id,
-            symbol=symbol,
+            symbol=symbol,  # composite
             interval=interval,
             result_status=result.status,
         )

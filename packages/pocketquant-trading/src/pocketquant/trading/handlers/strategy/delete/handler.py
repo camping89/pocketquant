@@ -35,13 +35,19 @@ class DeleteStrategyHandler(Handler[DeleteStrategyCommand, None]):
 
     async def handle(self, request: DeleteStrategyCommand) -> None:
         """Execute cascade delete for the strategy and all associated data."""
-        # 1. Cancel any pending backtest jobs for this strategy's subscriptions
         subs = await self._sub_repo.list_by_strategy(request.strategy_id)
+
+        # 1. Cancel scheduled jobs and unload per-subscription strategy instances
         for sub in subs:
             try:
                 self._scheduler.remove_job(f"bt:{sub.id}")
             except Exception:
-                pass  # already finished or never scheduled
+                pass
+            if self._strategy_service.get_strategy(sub.id) is not None:
+                try:
+                    await self._strategy_service.unload_strategy(sub.id)
+                except Exception:
+                    pass
 
         # 2. Delete all cached backtest docs for this strategy
         await self._bt_repo.delete_by_strategy(request.strategy_id)
@@ -49,8 +55,9 @@ class DeleteStrategyHandler(Handler[DeleteStrategyCommand, None]):
         # 3. Delete all subscriptions
         await self._sub_repo.delete_by_strategy(request.strategy_id)
 
-        # 4. Unload from in-memory engine (no-op if not loaded — stop_strategy guards this)
-        try:
-            await self._strategy_service.unload_strategy(request.strategy_id)
-        except Exception:
-            pass
+        # 4. Also unload any legacy template-keyed instance (pre-refactor data)
+        if self._strategy_service.get_strategy(request.strategy_id) is not None:
+            try:
+                await self._strategy_service.unload_strategy(request.strategy_id)
+            except Exception:
+                pass

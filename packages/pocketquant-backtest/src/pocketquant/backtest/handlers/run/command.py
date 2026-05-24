@@ -7,12 +7,14 @@ from pydantic import BaseModel, Field
 
 
 class RunBacktestCommand(BaseModel):
-    """Command to execute a single backtest run."""
+    """Command to execute a single backtest run.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+    """
 
     strategy_id: str = Field(..., description="Strategy identifier")
-    symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT)")
-    exchange: str = Field(..., description="Exchange name (e.g., OKX)")
-    interval: str = Field(..., description="Bar interval (e.g., 5m, 1h)")
+    symbol: str = Field(..., description="Composite symbol (e.g. BTCUSDT:BINANCE)")
+    interval: str = Field(..., description="Bar interval (e.g. 5m, 1h)")
     start_date: date = Field(..., description="Backtest start date")
     end_date: date = Field(..., description="Backtest end date")
     initial_capital: float = Field(default=10_000.0, ge=100, description="Starting capital")

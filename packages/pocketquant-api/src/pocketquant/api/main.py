@@ -14,6 +14,7 @@ from pocketquant.api.main_extensions import (
     recover_stale_backtests,
     register_health_checks,
     register_routes,
+    rehydrate_strategies_from_subscriptions,
     start_background_jobs,
     start_quote_feed,
     stop_quote_feed,
@@ -43,6 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await seed_tracked_symbols(container)
+        await rehydrate_strategies_from_subscriptions(container)
         await register_health_checks(container, app)
         await start_background_jobs(container)
         await start_quote_feed(container, app)

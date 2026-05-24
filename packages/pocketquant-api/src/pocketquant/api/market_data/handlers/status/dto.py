@@ -5,10 +5,9 @@ from dataclasses import dataclass
 
 @dataclass
 class SyncStatusResult:
-    """Result of a sync status query."""
+    """Result of a sync status query. ``symbol`` is composite ``{code}:{exchange}``."""
 
     symbol: str
-    exchange: str
     interval: str
     status: str
     bar_count: int | None = None

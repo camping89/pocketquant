@@ -11,7 +11,7 @@ from pocketquant.core.persistence.repositories.tracked_symbol_repository import 
 
 @handles(ListTrackedSymbolsQuery)
 class ListTrackedSymbolsHandler(Handler[ListTrackedSymbolsQuery, list[dict]]):
-    """Return all tracked (exchange, symbol) pairs."""
+    """Return all tracked composite symbols."""
 
     def __init__(self, tracked_symbol_repository: TrackedSymbolRepository) -> None:
         self._repo = tracked_symbol_repository
@@ -20,7 +20,6 @@ class ListTrackedSymbolsHandler(Handler[ListTrackedSymbolsQuery, list[dict]]):
         symbols = await self._repo.list_all()
         return [
             {
-                "exchange": ts.exchange,
                 "symbol": ts.symbol,
                 "created_at": ts.created_at.isoformat(),
                 "seeded_from": ts.seeded_from,

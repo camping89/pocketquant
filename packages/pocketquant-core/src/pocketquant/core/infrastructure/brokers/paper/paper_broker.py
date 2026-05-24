@@ -207,7 +207,6 @@ class PaperBroker(IBroker):
                 self._positions[position_key] = PositionAggregate.open(
                     strategy_id=order.strategy_id,
                     symbol=order.symbol,
-                    exchange=order.exchange,
                     side=PositionSide.LONG,
                     entry_price=fill_price,
                     quantity=order.quantity,
@@ -229,7 +228,6 @@ class PaperBroker(IBroker):
                 self._positions[position_key] = PositionAggregate.open(
                     strategy_id=order.strategy_id,
                     symbol=order.symbol,
-                    exchange=order.exchange,
                     side=PositionSide.SHORT,
                     entry_price=fill_price,
                     quantity=order.quantity,
