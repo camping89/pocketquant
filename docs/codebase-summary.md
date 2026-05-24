@@ -106,8 +106,7 @@ The normal local path is:
 
 1. `just install`
 2. `just up`
-3. `just check`
-4. `just dev`
+3. `just dev`
 
 `just dev` runs:
 

@@ -24,10 +24,6 @@ down:
 reset:
     docker compose -f docker/compose.yml down -v
 
-# Check development environment (docker, mongodb, redis)
-check:
-    {{python}} scripts/check_env.py
-
 # Run all tests
 test:
     {{python}} -m pytest

@@ -249,13 +249,7 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis s
    LOG_FORMAT=console
    ```
 
-2. Verify connectivity:
-
-   ```bash
-   just check
-   ```
-
-   Expect Mongo + Redis healthy against `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>`.
+2. Verify connectivity to `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>` (mongo shell, redis-cli, or your IDE).
 
 3. Start servers (two terminals):
 
