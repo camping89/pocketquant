@@ -73,6 +73,7 @@ Routes use `FromDishka[Mediator]` + `DishkaRoute` (NOT `Depends()`)
 - **PaperBroker in core** — shared by backtest engine and paper trading mode
 - **Backtest repos in backtest package** — `backtest_repository.py`, `optimization_repository.py` live in backtest, not core (avoid circular deps)
 - **Namespace packages** — no `__init__.py` at `pocketquant/` level (PEP 420)
+- **Async suspension points** — every `await` is a preemption point (also `yield` in async generators, hidden awaits in `container.get()`, `async for` / `async with` / `gather`). Wire deps before consumers (publish-before-subscribe), finish setup before `yield` in `AsyncIterator` factories, no `await` inside atomic blocks, cleanup in `try/finally`. See `docs/code-standards.md` → "Async Suspension Points — Await Is Preemption" for the 6 sub-patterns.
 
 ## Schema Consolidation
 

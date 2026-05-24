@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-05-08 | **Version:** 4.0 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 334 files, ~16,815 LOC | **Market Data:** Binance public REST/WS (@aggTrade), no auth required
+**Last Updated:** 2026-05-24 | **Version:** 4.1 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 334 files, ~16,815 LOC | **Market Data:** Binance public REST/WS (@aggTrade), no auth required
 
 Current note: for local run/test steps and canonical route names, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document remains a deeper design reference.
 
@@ -674,9 +674,14 @@ Key pipelines at high level:
 5. `register_handlers(container)` resolves all 27 handlers, registers with Mediator
 6. `ensure_all_indexes()` creates MongoDB indexes
 7. `register_health_checks()` registers DB/Redis/job health probes
-8. `start_background_jobs()` registers APScheduler sync jobs
-9. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-10. Server ready on port 41920 (internal; host port via `APP_PORT` env var)
+8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`
+9. `recover_orphan_jobs()` detects and resets scheduler jobs stuck in `running` state (crash recovery)
+10. `seed_tracked_symbols()` ensures at least one symbol in registry
+11. `start_background_jobs()` registers APScheduler sync jobs (with per-job `misfire_grace_time` tuning)
+12. `setup_dishka(container, app)` integrates dishka with FastAPI routes
+13. Server ready on port 41920 (internal; host port via `APP_PORT` env var)
+
+> ⚠ **Adding new persistent jobs or async workers?** See `code-standards.md` → "Async Suspension Points — Await Is Preemption" before wiring. The rule: wire every dependency (globals, container handles, registrations) BEFORE the call that starts the worker. APScheduler replays `next_run_time` on startup; first tick fires within `misfire_grace_time` seconds of `start()`. Per-job grace time configured in `register_sync_jobs()`; adjust based on job criticality.
 
 ### Graceful Shutdown (container.close() in finally)
 

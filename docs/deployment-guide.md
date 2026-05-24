@@ -322,3 +322,39 @@ After migrating from the old GHCR-based setup, delete unused GitHub repo setting
 **Delete vars:** DEPLOY_HOST, DEPLOY_SSH_PORT, DEPLOY_USER
 
 **Keep secrets:** DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
+
+---
+
+## Sync Gap Repair
+
+When `job_history` shows `missed` events for `sync_backfill` (or after manual deploy windows that overlapped 03:00-04:00 UTC), verify whether bar-data gaps persist and repair them.
+
+The cascade in `sync_1m` already self-heals 100 min of missed 1m data per tick, so most missed-daily windows leave no residual gap — but always verify before assuming.
+
+### Step 1: Audit
+
+```bash
+ssh -i $KEY $VPS "cd /opt/pocketquant && uv run python scripts/audit_bar_gaps.py --dates 2026-05-08,2026-05-11,2026-05-21"
+```
+
+Exit code `0` = parity for every (date, symbol, interval). Exit code `1` = gaps found. The table is sorted by gap size, worst offenders first.
+
+### Step 2: Repair (only if audit shows gaps)
+
+For each `(symbol, interval)` row with a positive gap, hit the per-symbol sync endpoint with a deep `n_bars` window:
+
+```bash
+ssh -i $KEY $VPS "curl -X POST http://localhost:\$APP_PORT/api/v1/market-data/sync \
+  -H 'Content-Type: application/json' \
+  -d '{\"symbol\":\"BTCUSDT:BINANCE\",\"interval\":\"1m\",\"n_bars\":5000}'"
+```
+
+`n_bars=5000` covers >3 days of 1m bars — enough to repair any realistic missed-backfill window.
+
+### Step 3: Verify
+
+Re-run the audit script — expect exit code `0`. If any rows still show a gap, the source provider is missing data for that window (not a sync issue) and the gap is unrecoverable.
+
+### Catch-up at boot (automatic)
+
+As of the scheduler-resilience changes, `start_background_jobs` runs `enqueue_missed_catchups` after cron registration. If the last successful `sync_backfill` / `sync_integrity` was >25h ago (or `sync_repair` >12.5h ago), a `<job_id>_catchup` one-off run is enqueued automatically. Manual audit is still recommended after any restart spanning a daily window, until 30 days of clean `job_history` confirm the catch-up is reliable.

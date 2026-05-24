@@ -108,3 +108,90 @@ async def test_record_detail_appends_to_run(repo):
     assert d["symbol"] == "BINANCE:BTCUSDT"
     assert d["bars_fetched"] == 60
     assert d["bars_inserted"] == 3
+
+
+@pytest.mark.asyncio
+async def test_reconcile_orphan_running_flips_only_stale_running(repo):
+    """Only docs with status='running' AND started_at < cutoff are flipped.
+
+    Guards against false positives:
+      - recent 'running' doc (within grace) MUST stay running
+      - already-'completed' doc MUST be left untouched
+      - stale 'running' doc MUST flip to failed + error='orphan_running_recovered'
+    """
+    now = datetime.now(UTC)
+    coll = repo._collection()
+    await coll.insert_many(
+        [
+            # Recent running — within grace, must NOT flip.
+            {
+                "_id": "recent_running",
+                "job_id": "sync_5m",
+                "status": "running",
+                "started_at": now - timedelta(seconds=30),
+            },
+            # Stale running — must flip.
+            {
+                "_id": "stale_running",
+                "job_id": "sync_5m",
+                "status": "running",
+                "started_at": now - timedelta(minutes=15),
+            },
+            # Completed — must be left untouched (filter excludes it).
+            {
+                "_id": "completed",
+                "job_id": "sync_5m",
+                "status": "completed",
+                "started_at": now - timedelta(hours=1),
+            },
+        ]
+    )
+
+    n = await repo.reconcile_orphan_running(max_age_seconds=600)
+    assert n == 1
+
+    stale = await coll.find_one({"_id": "stale_running"})
+    assert stale["status"] == "failed"
+    assert stale["error"] == "orphan_running_recovered"
+    assert stale["finished_at"] is not None
+
+    # Negative-control: recent + completed docs untouched.
+    recent = await coll.find_one({"_id": "recent_running"})
+    assert recent["status"] == "running"
+    done = await coll.find_one({"_id": "completed"})
+    assert done["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_get_last_successful_started_at_returns_latest_completed(repo):
+    """Most-recent completed row wins. Non-completed statuses are ignored."""
+    now = datetime.now(UTC)
+    older_success = now - timedelta(days=2)
+    recent_success = now - timedelta(hours=1)
+    coll = repo._collection()
+    await coll.insert_many(
+        [
+            {"_id": "a", "job_id": "sync_backfill", "status": "completed",
+             "started_at": older_success},
+            {"_id": "b", "job_id": "sync_backfill", "status": "completed",
+             "started_at": recent_success},
+            # 'failed' rows must be ignored even when newer than any success.
+            {"_id": "c", "job_id": "sync_backfill", "status": "failed",
+             "started_at": now - timedelta(minutes=5)},
+            # 'running' rows must also be ignored.
+            {"_id": "d", "job_id": "sync_backfill", "status": "running",
+             "started_at": now - timedelta(minutes=1)},
+        ]
+    )
+
+    result = await repo.get_last_successful_started_at("sync_backfill")
+    assert result is not None
+    # Mongo stores ms-precision; compare with 1s tolerance.
+    assert abs((result - recent_success).total_seconds()) < 1
+
+
+@pytest.mark.asyncio
+async def test_get_last_successful_started_at_returns_none_for_no_history(repo):
+    """Fresh DB / no successful run yet → None so caller skips catch-up."""
+    result = await repo.get_last_successful_started_at("never_ran")
+    assert result is None

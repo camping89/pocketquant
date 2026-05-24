@@ -89,6 +89,23 @@ async def recover_stale_backtests(container: AsyncContainer) -> None:
         logger.info("stale_backtest_recovery", marked_failed=n)
 
 
+async def recover_orphan_jobs(container: AsyncContainer) -> None:
+    """Mark any job_history docs stuck at status='running' as 'failed' on startup.
+
+    Orphan rows arise when a job's wrapper writes record_start() but the
+    process is killed before record_finish() runs (e.g. mid-deploy
+    CancelledError). Without this sweep, dashboards show forever-running jobs.
+    Safe to call repeatedly — idempotent. Logs once if any docs were updated.
+
+    Must run AFTER ensure_all_indexes (proves DB connectivity) and BEFORE
+    start_background_jobs (so new runs aren't racing the reconcile sweep).
+    """
+    repo = await container.get(JobHistoryRepository)
+    n = await repo.reconcile_orphan_running(max_age_seconds=600)
+    if n:
+        logger.info("orphan_jobs_recovered", marked_failed=n)
+
+
 async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> None:
     """Re-load one strategy instance per persisted subscription on startup.
 
@@ -162,7 +179,7 @@ async def start_background_jobs(container: AsyncContainer) -> None:
     # un-initialized container. See plans/reports/debugger-260524-1324-*.md.
     set_sync_container(container)
 
-    register_sync_jobs(
+    await register_sync_jobs(
         container=container,
         job_scheduler=await container.get(JobScheduler),
     )
