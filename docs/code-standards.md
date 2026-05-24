@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-04-13 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Codebase:** 334 files, ~16,815 LOC
+**Last Updated:** 2026-05-24 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Codebase:** 334 files, ~16,815 LOC
 
 Current note: this document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md).
 
@@ -723,6 +723,156 @@ async with self._lock:
 # Bad: No protection against race conditions
 self._bar_builders[interval].update_ohlc(tick)
 ```
+
+### Async Suspension Points — "Await Is Preemption"
+
+**One-line rule:** every `await` is a preemption point. The event loop may resume any other ready coroutine here. State another coroutine reads must be valid **before** the suspension point that lets it run.
+
+Mental shortcut: `await` ≈ `Thread.yield()`. If you wouldn't trust a value across `Thread.yield()` in a threaded program, don't trust it across an `await`.
+
+**What counts as a suspension point (including the non-obvious ones):**
+
+| Construct | Suspension? | Notes |
+|---|---|---|
+| `await coro()` | Yes | The obvious one. |
+| `await asyncio.sleep(0)` | Yes | Explicit yield even with 0. |
+| `yield x` inside `async def` | **Yes** | Easy to miss. Async generators + `@asynccontextmanager` use this. |
+| `async for x in iterable` | Yes | Calls `await iterable.__anext__()` each loop. |
+| `async with cm:` | Yes (entry & exit) | Calls `await cm.__aenter__()` and `__aexit__()`. |
+| `await asyncio.gather(...)` | Yes | Children interleave between each other's awaits. |
+| `await container.get(X)` | Yes if provider does I/O | Dishka `AsyncIterator` factories hide awaits. |
+| Plain assignment, `if`, arithmetic | No | Synchronous between awaits — use this for atomic regions. |
+
+**Six sub-patterns to apply.** Same root cause, different shapes:
+
+**1. Publish-before-subscribe** — wire deps BEFORE the call that starts a worker (scheduler, queue consumer, websocket reader, background task). After the call returns, the worker is observable to the event loop and may dispatch at the next `await`.
+
+```python
+# Anti-pattern (racy)
+register_sync_jobs(
+    container=container,
+    job_scheduler=await container.get(JobScheduler),  # scheduler now LIVE
+)
+# set_sync_container() inside register_sync_jobs runs AFTER scheduler may dispatch
+
+# Fix
+set_sync_container(container)   # wire global FIRST
+register_sync_jobs(
+    container=container,
+    job_scheduler=await container.get(JobScheduler),
+)
+```
+
+Why it bites: APScheduler persists `next_run_time` across restarts. First tick dispatches anything due within `misfire_grace_time` (per-job setting, e.g. 120s for sync_1m, 3600s for daily jobs). If module-level globals not yet set → `RuntimeError` on first line of every dispatched job. Orphan recovery runs at startup via `recover_orphan_jobs()` to catch jobs stuck in `running` state (crash resilience).
+
+**2. Initialize-before-first-await** — never `await` on something that exposes a half-built object to other tasks. Construct fully, then publish.
+
+```python
+# Anti-pattern
+async def make_session():
+    sess = Session()
+    REGISTRY[sess.id] = sess          # published
+    sess.user = await load_user()     # other tasks see sess with no user
+
+# Fix
+async def make_session():
+    user = await load_user()           # all I/O first
+    sess = Session(user=user)          # construct atomically
+    REGISTRY[sess.id] = sess           # publish fully-formed
+```
+
+**3. TOCTOU across `await`** — the classic race condition, async edition.
+
+```python
+# Anti-pattern
+if user.balance >= amount:        # CHECK
+    await db.debit(user, amount)  # USE — balance may have changed → double-spend
+
+# Fix A: storage-layer atomicity (preferred)
+result = await db.try_debit(user, amount)  # WHERE balance >= amount
+
+# Fix B: per-key async lock
+async with user_locks[user.id]:
+    if user.balance >= amount:
+        await db.debit(user, amount)
+```
+
+General rule: re-read shared state after every `await`, hold a lock across the `await`, or push the invariant into the storage layer.
+
+**4. Atomic blocks must have no `await`** — between paired reads/writes of shared state, no suspension.
+
+```python
+# Anti-pattern: lost increment
+counter = counters[key]
+await some_io()
+counters[key] = counter + 1   # another coroutine may have done the same → lost update
+
+# Fix: atomic between awaits
+counters[key] = counters[key] + 1
+await some_io()
+```
+
+`dict[key] += 1` is atomic in CPython between awaits (single bytecode region under GIL). **Not** atomic across an `await`.
+
+**5. `yield` in `@asynccontextmanager` / `AsyncIterator` factory IS a suspension point.** All setup before `yield`, cleanup in `try/finally` after.
+
+```python
+# Anti-pattern (Dishka factory)
+@provide(scope=Scope.APP)
+async def my_service(self) -> AsyncIterator[Service]:
+    svc = Service()
+    GLOBAL_HANDLE = svc          # published before initialized
+    yield svc                    # caller now has svc and may use it
+    await svc.connect()          # NEVER runs at the right time
+
+# Fix
+@provide(scope=Scope.APP)
+async def my_service(self) -> AsyncIterator[Service]:
+    svc = Service()
+    await svc.connect()          # all setup BEFORE yield
+    try:
+        yield svc
+    finally:
+        await svc.aclose()       # cleanup in finally — survives cancellation
+```
+
+**6. Cancellation lands at any `await`.** `asyncio.CancelledError` may be raised at the next `await` after `task.cancel()`. Cleanup not in `try/finally` may not run.
+
+```python
+# Anti-pattern: money disappears if cancelled between debit and credit
+async def transfer():
+    await db.debit(src, amount)
+    await network.notify()        # cancellation here → credit never runs
+    await db.credit(dst, amount)
+
+# Fix: transactional storage (preferred)
+async with db.transaction():
+    await db.debit(src, amount)
+    await db.credit(dst, amount)
+
+# Or: try/finally + compensating action
+async def transfer():
+    debited = False
+    try:
+        await db.debit(src, amount)
+        debited = True
+        await db.credit(dst, amount)
+    except (asyncio.CancelledError, Exception):
+        if debited:
+            await db.credit(src, amount)  # compensate
+        raise
+```
+
+**Symmetry check:** when two adjacent subsystems do similar wiring (e.g. `backtest_jobs` and `sync_jobs`), diff their startup sequences. Asymmetric ordering is almost always a bug.
+
+**Pre-`await` checklist.** Before every `await`, ask:
+- Does this publish a handle / register a callback / start a worker? If yes, is the object fully initialized?
+- What invariants am I leaving in some intermediate state?
+- Did I just read a value that another coroutine could modify before my next line uses it?
+- If `CancelledError` lands here, will cleanup run? Should this be in a `try/finally` or `asyncio.shield`?
+- Does this `async for` / `async with` / `gather` hide more suspension points than I'm thinking about?
+
+**Worked-example reference:** `plans/reports/debugger-260524-1324-sync-jobs-container-race.md`
 
 ## Configuration & Secrets
 

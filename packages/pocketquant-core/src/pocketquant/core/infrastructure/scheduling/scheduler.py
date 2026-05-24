@@ -109,8 +109,22 @@ class JobScheduler:
 
     def _on_error(self, event: Any) -> None:
         """APScheduler EVENT_JOB_ERROR handler — captures exceptions raised
-        before the wrapper records anything (rare but possible on startup)."""
-        err = str(event.exception) if event.exception else None
+        before the wrapper records anything (rare but possible on startup).
+
+        Emits ``<ExcType>: <msg>`` or ``<ExcType>(no message)`` instead of bare
+        ``""``. Deploy-cancellations (CancelledError) carry an empty str(); the
+        old bare path masked them as "unknown failure".
+        """
+        exc = event.exception
+        if exc is None:
+            err = "unknown_error_no_exception"
+        else:
+            msg = str(exc)
+            err = (
+                f"{type(exc).__name__}: {msg}"
+                if msg
+                else f"{type(exc).__name__}(no message)"
+            )
         self._dispatch_skip(event.job_id, event.scheduled_run_time, "failed", err)
 
     def _dispatch_skip(
@@ -194,12 +208,17 @@ class JobScheduler:
         minute: str | int | None = None,
         second: str | int | None = None,
         day_of_week: str | None = None,
+        misfire_grace_time: int | None = None,
         **kwargs: Any,
     ) -> str:
         """Register a cron job. `func` must be a text reference (see add_interval_job).
 
         `second` defaults to 0 in APScheduler when omitted; pass an explicit value
         (e.g. ``second=2``) to offset bar-aligned jobs past provider publish lag.
+
+        `misfire_grace_time` (seconds) overrides the global default for this job.
+        Pass a larger value (e.g. 3600) for heavy daily jobs so a restart spanning
+        the global 300s window does not silently drop the run.
         """
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
@@ -222,13 +241,17 @@ class JobScheduler:
                 day_of_week=day_of_week,
             )
 
-        self._scheduler.add_job(
-            func,
-            trigger=trigger,
-            id=job_id,
-            replace_existing=True,
-            kwargs=kwargs,
-        )
+        # Only forward misfire_grace_time when explicitly set so APScheduler falls
+        # back to job_defaults["misfire_grace_time"] otherwise (backwards compat).
+        job_kwargs: dict[str, Any] = {
+            "id": job_id,
+            "replace_existing": True,
+            "kwargs": kwargs,
+        }
+        if misfire_grace_time is not None:
+            job_kwargs["misfire_grace_time"] = misfire_grace_time
+
+        self._scheduler.add_job(func, trigger=trigger, **job_kwargs)
 
         logger.info(
             "scheduler.registered_cron_job",
@@ -237,6 +260,7 @@ class JobScheduler:
             cron_minute=minute,
             cron_second=second,
             cron_day_of_week=day_of_week,
+            misfire_grace_time=misfire_grace_time,
         )
         return job_id
 

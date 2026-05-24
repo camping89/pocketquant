@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated:** 2026-05-08 | **Codebase Stats:** 334 files, ~16,815 LOC across 5 packages (core: 5.9k, backtest: 2.4k, trading: 3.5k, api: 3.1k, web: 2.0k) | **Market Data Provider:** Binance public REST/WS (no auth required)
+**Last Updated:** 2026-05-24 | **Codebase Stats:** 334 files, ~16,815 LOC across 5 packages (core: 5.9k, backtest: 2.4k, trading: 3.5k, api: 3.1k, web: 2.0k) | **Market Data Provider:** Binance public REST/WS (no auth required)
 
 High-level map of the PocketQuant monorepo structure, patterns, and architecture.
 
@@ -719,7 +719,15 @@ All settings via environment variables (`.env` file):
 - **API Documentation:** `http://localhost:41920/api/v1/docs` (local dev)
 - **Health Check:** `http://localhost:41920/health` (local dev)
 
-## Recent Changes (2026-04-13)
+## Recent Changes (2026-05-24)
+
+**Scheduler Resilience: Orphan Recovery + Configurable Misfire Grace Time (2026-05-24)**
+- **Orphan job recovery:** `JobHistoryRepository.reconcile_orphan_running()` detects jobs stuck in `running` state (e.g., crash during execution) and resets them. Called at startup via `recover_orphan_jobs()` in lifespan.
+- **Per-job grace time:** `JobScheduler.add_cron_job()` accepts optional `misfire_grace_time` kwarg. Sync jobs tuned per frequency (sync_1m: 120s, sync_verify_cascade: 600s, daily/12h jobs: 3600s). Prevents cascading failures on scheduler restart within grace window.
+- **Startup catch-up:** `register_sync_jobs()` enqueues immediate async catch-up for stale daily/12h jobs if last successful run >grace window (no waiting for next cron tick).
+- **Structured error messages:** `JobScheduler._on_error()` now emits structured strings (was bare `""` for exceptions without message text).
+- **Audit script:** New `scripts/audit_bar_gaps.py` CLI tool for standalone gap auditing with CSV export.
+- **Repository methods:** `JobHistoryRepository.get_last_successful_started_at()` queries last successful job start time (for catch-up logic).
 
 **Integrity Repair Verification & Scheduling (2026-04-13)**
 - **skip_filter flag:** `SyncSymbolCommand.skip_filter: bool` bypasses `_filter_new_bars` for gap-fill repair

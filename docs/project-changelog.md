@@ -1,6 +1,30 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-05-23 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-24 | **Format:** Semantic Versioning
+
+## [Unreleased] — 2026-05-24 — Scheduler Resilience: Orphan Recovery + Configurable Misfire Grace Time
+
+### Changed
+- **JobScheduler error reporting:** `_on_error()` now emits structured error messages (was bare `""` for exceptions without message text).
+- **JobScheduler.add_cron_job():** Accepts optional `misfire_grace_time: int | None` kwarg to tune grace window per job (default: 300s global).
+- **Sync job configuration:** Per-job `misfire_grace_time` tuned by sync frequency:
+  - `sync_1m`: 120s (tight grace for frequent syncs)
+  - `sync_verify_cascade`: 600s (aggregate job, loose grace)
+  - `sync_backfill`, `sync_integrity`, `sync_repair`: 3600s (daily jobs, allow 1h skew)
+- **FastAPI lifespan:** Added `recover_orphan_jobs()` call between `recover_stale_backtests()` and `seed_tracked_symbols()` to catch jobs stuck in running state.
+
+### Added
+- **JobHistoryRepository.reconcile_orphan_running():** Detect and reset jobs marked `status='running'` for >grace_time (e.g., crash during job execution).
+- **JobHistoryRepository.get_last_successful_started_at():** Query last successful job start time (for startup catch-up logic).
+- **Startup catch-up for stale daily/12h jobs:** `register_sync_jobs()` enqueues immediate async catch-up for `CATCHUP_TARGETS` (daily/12h syncs) if last successful run >grace window.
+- **CLI audit tool:** `scripts/audit_bar_gaps.py` — standalone script to audit bar gaps by symbol/interval/date range with CSV export.
+
+### Notes
+- Misfire grace times prevent cascading failures when scheduler restarts during grace window (e.g., job 09:05 skipped if restart 09:04–09:06).
+- Orphan recovery runs at startup; no manual intervention needed for stuck jobs.
+- Catch-up jobs fire immediately on startup if due (no waiting for next cron), then normal schedule resumes.
+
+---
 
 ## [Unreleased] — 2026-05-23 — Exchange Encapsulation + Strategy Dashboard
 

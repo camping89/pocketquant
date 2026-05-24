@@ -59,6 +59,20 @@ SYNC_INTERVALS = [
     Interval.DAY_1,
 ]
 
+# Catch-up targets — heavy daily/12h jobs that silently drop runs when a restart
+# spans their (per-job) misfire_grace_time window. (job_id, func_ref, max_gap_s).
+# Excludes sync_1m (cascade lookback heals) and sync_verify_cascade (read-only).
+#
+# max_gap = expected_interval + per-job grace, e.g. sync_backfill runs every 24h
+# with 1h grace → 25h gap means the daily run was definitely missed.
+_MODULE = "pocketquant.api.market_data.app_services.sync_jobs"
+
+CATCHUP_TARGETS: list[tuple[str, str, int]] = [
+    ("sync_backfill",  f"{_MODULE}:sync_backfill",  86400 + 3600),   # 24h + 1h
+    ("sync_integrity", f"{_MODULE}:sync_integrity", 86400 + 3600),
+    ("sync_repair",    f"{_MODULE}:sync_repair",    43200 + 1800),   # 12h + 30min
+]
+
 # ---------------------------------------------------------------------------
 # Module-level container reference. Set once at startup by register_sync_jobs.
 # Job functions resolve their dependencies via this container at execution time.
@@ -607,14 +621,58 @@ async def sync_repair() -> None:
 # ---------------------------------------------------------------------------
 
 
-_MODULE = "pocketquant.api.market_data.app_services.sync_jobs"
+async def enqueue_missed_catchups(
+    history_repo: JobHistoryRepository,
+    job_scheduler: JobScheduler,
+) -> None:
+    """Enqueue a one-off catch-up run for each CATCHUP_TARGETS job whose last
+    success exceeds its per-job ``max_gap``.
+
+    Multi-instance safe: ``add_one_off_job`` uses ``replace_existing=True`` with
+    a stable ``_catchup`` suffix, so a simultaneous resolve on VPS + local-dev
+    overwrites the first call — only one execution. Fresh DB (``last is None``)
+    is treated as "no catch-up needed"; the next cron tick handles the first run.
+
+    Assumes ``scheduler.start()`` has already run by call time (the JobScheduler
+    Dishka factory starts the scheduler inside its async-gen yield, which
+    completes before ``container.get(JobScheduler)`` returns in the caller). If
+    that ever inverts, the one-off persists with ``next_run_time=now`` and fires
+    on the first post-start tick — harmlessly deferred, never dropped.
+
+    Note on history-doc naming: the catchup's APScheduler job_id is
+    ``<job_id>_catchup``, but the wrapper inside (``_run_sync`` etc.) writes a
+    ``job_history`` doc keyed by the ORIGINAL job_id. That's intentional — the
+    next boot's ``get_last_successful_started_at(<job_id>)`` then sees the
+    recent success and skips re-enqueueing.
+    """
+    now = datetime.now(UTC)
+    for job_id, func_ref, max_gap in CATCHUP_TARGETS:
+        last = await history_repo.get_last_successful_started_at(job_id)
+        if last is None:
+            continue
+        gap = (now - last).total_seconds()
+        if gap > max_gap:
+            job_scheduler.add_one_off_job(
+                func_ref,
+                job_id=f"{job_id}_catchup",
+            )
+            logger.info(
+                "scheduler.catchup_enqueued",
+                job_id=job_id,
+                gap_seconds=int(gap),
+            )
 
 
-def register_sync_jobs(
+async def register_sync_jobs(
     container: AsyncContainer,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Wire container reference + register 5 sync/integrity jobs as text refs."""
+    """Wire container reference + register 5 sync/integrity jobs as text refs.
+
+    Per-job ``misfire_grace_time`` matches each cadence (tight for high-frequency,
+    1h for heavy daily). After registration, scans ``job_history`` for missed
+    daily/12h runs and enqueues one-off catch-ups.
+    """
     set_container(container)
 
     # UTC wall-clock anchored — bar-aligned crons eliminate phase drift on restart.
@@ -624,22 +682,40 @@ def register_sync_jobs(
     # sync_1m runs at +2s from bar close. Gives the data provider time to settle the
     # just-closed bar. Cascade runs in-process after 1m upsert — no extra API calls.
     # coalesce + max_instances=1 are APScheduler defaults — overlap prevention built-in.
+    #
+    # Per-job grace rationale (overrides global 300s default):
+    #   sync_1m            120s  — tight; cascade lookback (100min) heals missed ticks
+    #   sync_verify_cascade 600s — 10min slip OK for read-only check
+    #   sync_backfill     3600s — 1h recovery for heavy daily 03:00 UTC run
+    #   sync_integrity    3600s — same
+    #   sync_repair       1800s — 30min slip on bi-daily 12h cron
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_1m", job_id="sync_1m",
         cron_expression="*/1 * * * *", second=2,
+        misfire_grace_time=120,
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_verify_cascade", job_id="sync_verify_cascade",
         cron_expression="0 * * * *",
+        misfire_grace_time=600,
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_backfill", job_id="sync_backfill", hour=3, minute=0,
+        misfire_grace_time=3600,
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_integrity", job_id="sync_integrity", hour=4, minute=0,
+        misfire_grace_time=3600,
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_repair", job_id="sync_repair", cron_expression="0 */12 * * *",
+        misfire_grace_time=1800,
     )
+
+    # Catch-up sweep: enqueue one-off runs for any daily/12h job whose last
+    # success exceeds its per-job max_gap. Must run AFTER cron registration so
+    # any catch-up's _catchup suffix lives alongside the real cron schedule.
+    history_repo = await container.get(JobHistoryRepository)
+    await enqueue_missed_catchups(history_repo, job_scheduler)
 
     logger.info("market_data.registered_sync_jobs", job_count=5)

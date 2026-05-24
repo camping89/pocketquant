@@ -14,12 +14,12 @@ Beyond that, split to a child collection — deferred follow-up.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pocketquant.core.common.constants import COLLECTION_JOB_HISTORY
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.time import to_utc_iso
+from pocketquant.core.common.time import coerce_utc, to_utc_iso
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.persistence.base_repository import BaseRepository
 
@@ -142,6 +142,55 @@ class JobHistoryRepository(BaseRepository):
                 }
             },
         )
+
+    async def reconcile_orphan_running(self, max_age_seconds: int = 600) -> int:
+        """Flip stale ``status="running"`` docs to ``"failed"`` on startup.
+
+        Orphan rows arise when a job's wrapper writes ``record_start()`` but the
+        process is killed before ``record_finish()`` runs (e.g. mid-deploy
+        CancelledError). Without this sweep, dashboards show forever-running jobs.
+
+        Filter is ``status="running" AND started_at < now - max_age_seconds`` so
+        a wrapper that legitimately completes mid-reconcile is safe: its
+        ``record_finish()`` writes against ``_id`` (not status), and the doc is
+        already excluded from this filter once status flips to ``completed``.
+
+        Returns count of docs updated.
+        """
+        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
+        result = await self._collection().update_many(
+            {"status": "running", "started_at": {"$lt": cutoff}},
+            {
+                "$set": {
+                    "status": "failed",
+                    "finished_at": datetime.now(UTC),
+                    "error": "orphan_running_recovered",
+                }
+            },
+        )
+        return result.modified_count
+
+    async def get_last_successful_started_at(
+        self, job_id: str
+    ) -> datetime | None:
+        """Return ``started_at`` of the most recent ``completed`` run for ``job_id``.
+
+        Used by startup catch-up logic to decide whether the gap since the last
+        success exceeds the per-job cadence. Returns ``None`` if the job has no
+        successful history (e.g. fresh DB) — caller should treat as "no catch-up
+        needed" and let the next cron tick handle it.
+
+        ``coerce_utc`` wrap: motor returns naive datetimes from Mongo. The caller
+        in ``enqueue_missed_catchups`` subtracts against ``datetime.now(UTC)``,
+        which raises ``TypeError: can't subtract offset-naive and offset-aware
+        datetimes`` without this coercion.
+        """
+        doc = await self._collection().find_one(
+            {"job_id": job_id, "status": "completed"},
+            sort=[("started_at", -1)],
+            projection={"started_at": 1},
+        )
+        return coerce_utc(doc["started_at"]) if doc else None
 
     async def get_latest_by_job_ids(self, job_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Get the latest execution record per job_id. Returns {job_id: doc}."""
