@@ -22,15 +22,11 @@ npm ci
 
 ```bash
 just up
-just check
 ```
 
-Expected result:
+Expected result: MongoDB + Redis containers up and healthy (check via `docker ps`).
 
-- MongoDB healthy
-- Redis healthy
-
-If `just check` fails, compare `.env` with Docker ports:
+If they fail to start, compare `.env` with Docker ports:
 
 - `MONGODB_URL` must match `MONGO_PORT`
 - `REDIS_URL` must match `REDIS_PORT`

@@ -42,7 +42,6 @@ web → api
 cp .env.example .env
 just install
 just up
-just check
 just dev
 ```
 
@@ -52,7 +51,7 @@ Backend URLs:
 - OpenAPI JSON: `http://localhost:41920/api/v1/openapi.json`
 - Health check: `http://localhost:41920/health`
 
-If `just check` fails, verify that `.env` is internally consistent:
+If services fail to start, verify that `.env` is internally consistent:
 
 - `MONGODB_URL` must point to the same host/port exposed by `MONGO_PORT`
 - `REDIS_URL` must point to the same host/port exposed by `REDIS_PORT`

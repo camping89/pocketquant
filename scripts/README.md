@@ -5,7 +5,6 @@ Operational scripts. Run from repository root.
 - `audit_bar_quality.py` — diagnostic, no writes. Flat-bar / zero-volume / abnormal-volume sweep across tracked symbols, outputs Markdown report.
 - `backfill_1m_from_binance.py` — backfill missing 1m bars.
 - `backfill_regression_window.py` — backfill specific date ranges.
-- `check_env.py` — environment sanity check (MongoDB, Redis, settings). Wired to `just check`.
 - `resync_2y_from_binance.py` — resync 2-year history per symbol.
 
 ## Conventions
