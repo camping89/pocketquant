@@ -284,7 +284,8 @@ def mock_bar_repo():
         def __init__(self):
             self.bars: list[Bar] = []
 
-        async def upsert_bar(self, bar: Bar) -> None:
+        async def upsert_bar(self, bar: Bar, *, source: str) -> None:  # noqa: ARG002
+
             # Remove existing bar with same key
             self.bars = [
                 b

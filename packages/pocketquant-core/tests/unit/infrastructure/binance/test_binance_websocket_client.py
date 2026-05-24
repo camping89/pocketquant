@@ -17,6 +17,8 @@ from pocketquant.core.infrastructure.binance.binance_websocket_client import (
     BinanceWebSocketClient,
 )
 
+_WS_MODULE = "pocketquant.core.infrastructure.binance.binance_websocket_client"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -300,13 +302,104 @@ class TestReconnectBackoff:
         async def _mock_sleep(delay: float) -> None:
             sleep_delays.append(delay)
 
-        ws_module = "pocketquant.core.infrastructure.binance.binance_websocket_client"
         with (
-            patch(f"{ws_module}.websockets.connect", side_effect=_mock_connect),
-            patch(f"{ws_module}.asyncio.sleep", side_effect=_mock_sleep),
+            patch(f"{_WS_MODULE}.websockets.connect", side_effect=_mock_connect),
+            patch(f"{_WS_MODULE}.asyncio.sleep", side_effect=_mock_sleep),
         ):
             await client.run_forever()
 
         assert connect_count == 2
-        assert len(sleep_delays) == 1
-        assert sleep_delays[0] == _RECONNECT_DELAY_INITIAL
+        # Only backoff sleep is recorded (watchdog cancelled before its first await runs).
+        backoff_delays = [d for d in sleep_delays if d == _RECONNECT_DELAY_INITIAL]
+        assert len(backoff_delays) == 1
+
+
+# ---------------------------------------------------------------------------
+# Silent exit + watchdog (regression: websockets 16.0 + Python 3.14)
+# ---------------------------------------------------------------------------
+
+
+class TestSilentExitAndWatchdog:
+    """Tests for silent-exit handling and stale-socket watchdog."""
+
+    @pytest.mark.asyncio
+    async def test_silent_iterator_exit_triggers_reconnect(self):
+        """When `async for` exits silently (close 1000/1001), run_forever reconnects."""
+        client = BinanceWebSocketClient()
+        await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
+
+        connect_count = 0
+        backoff_calls: list[float] = []
+
+        async def _mock_connect(*args, **kwargs):
+            nonlocal connect_count
+            connect_count += 1
+
+            async def _empty_iter():
+                # Silent exit — websockets behavior for close codes 1000/1001
+                return
+                yield  # pragma: no cover
+
+            mock_ws = MagicMock()
+            mock_ws.__aiter__ = lambda self: _empty_iter()
+            mock_ws.close = AsyncMock()
+            if connect_count >= 2:
+                # Stop after second silent exit so the test terminates
+                client._running = False
+            return mock_ws
+
+        async def _mock_backoff(self):
+            backoff_calls.append(self._reconnect_delay)
+
+        with (
+            patch(f"{_WS_MODULE}.websockets.connect", side_effect=_mock_connect),
+            patch.object(BinanceWebSocketClient, "_backoff_sleep", _mock_backoff),
+        ):
+            await client.run_forever()
+
+        # Two connects: first silent-exit triggers reconnect, second sets _running=False
+        assert connect_count == 2
+        # Backoff invoked once after the first silent exit
+        assert len(backoff_calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_watchdog_force_closes_stale_socket(self):
+        """Watchdog calls _close_ws when last_tick_at lags beyond timeout."""
+        client = BinanceWebSocketClient()
+        client._ws = MagicMock()
+        client._ws.close = AsyncMock()
+        # Force lag > threshold by backdating last_tick_at
+        client.last_tick_at = datetime(2000, 1, 1, tzinfo=UTC)
+
+        # Patch sleep so the watchdog wakes up immediately
+        with patch(f"{_WS_MODULE}.asyncio.sleep", new_callable=AsyncMock):
+            await client._stale_connection_watchdog()
+
+        # _close_ws was invoked — ws closed and reference cleared
+        assert client._ws is None
+
+    @pytest.mark.asyncio
+    async def test_watchdog_skips_when_last_tick_is_none(self):
+        """Watchdog must not trip before any tick arrives — avoids killing fresh connection."""
+        client = BinanceWebSocketClient()
+        client._ws = MagicMock()
+        client._ws.close = AsyncMock()
+        client.last_tick_at = None
+
+        sleeps = 0
+
+        async def _mock_sleep(_delay: float) -> None:
+            nonlocal sleeps
+            sleeps += 1
+            if sleeps >= 3:
+                # Break the watchdog loop by setting last_tick_at to recent
+                client.last_tick_at = datetime.now(UTC)
+                # Then backdate to trigger close on next iteration
+                client.last_tick_at = datetime(2000, 1, 1, tzinfo=UTC)
+
+        with patch(f"{_WS_MODULE}.asyncio.sleep", side_effect=_mock_sleep):
+            await client._stale_connection_watchdog()
+
+        # Watchdog tolerated None for 3 ticks before tripping
+        assert sleeps >= 3
+        assert client._ws is None

@@ -101,7 +101,7 @@ async def setup(app_client):
     bar_repo: BarRepository = await container.get(BarRepository)
     sub_repo: StrategySubscriptionRepository = await container.get(StrategySubscriptionRepository)
 
-    await bar_repo.insert_many(_minimal_bars())
+    await bar_repo.insert_many(_minimal_bars(), source="test")
 
     config = StrategyConfig(
         id=_STRATEGY_ID,

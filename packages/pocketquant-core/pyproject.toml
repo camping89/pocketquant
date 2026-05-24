@@ -17,6 +17,7 @@ dependencies = [
     "structlog>=24.1.0",
     "httpx>=0.26.0",
     "rich>=13.0.0",
+    "cachetools>=5.0.0",
 ]
 
 [build-system]

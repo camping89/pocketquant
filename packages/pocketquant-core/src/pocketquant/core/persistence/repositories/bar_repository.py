@@ -3,14 +3,35 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from cachetools import TTLCache
 from pocketquant.core.common.constants import COLLECTION_BARS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.persistence.base_repository import BaseRepository
-from pymongo.errors import BulkWriteError
 
 logger = get_logger(__name__)
+
+# Module-level cache to deduplicate writes across cascade re-runs.
+# Process-local — restart triggers a cold window (~5 cascade ticks to warm up).
+# Key:   (symbol_upper, exchange_upper, interval_value, datetime_iso_utc)
+# Value: (open, high, low, close, volume)  — tick_count excluded by design.
+_BAR_VALUE_CACHE: TTLCache = TTLCache(maxsize=20_000, ttl=3600)
+
+
+def _cache_key(bar: Bar) -> tuple[str, str, str, str]:
+    interval_val = bar.interval.value if bar.interval else ""
+    dt_iso = bar.datetime.isoformat() if bar.datetime else ""
+    return (
+        bar.symbol.upper(),
+        bar.exchange.upper(),
+        interval_val,
+        dt_iso,
+    )
+
+
+def _cache_value(bar: Bar) -> tuple[float, float, float, float, float]:
+    return (bar.open, bar.high, bar.low, bar.close, bar.volume)
 
 
 class BarRepository(BaseRepository):
@@ -18,71 +39,110 @@ class BarRepository(BaseRepository):
 
     _collection_name = COLLECTION_BARS
 
-    async def insert_many(self, records: list[Bar]) -> int:
-        """Bulk insert OHLCV bars, skipping duplicates. Returns count of newly inserted."""
+    async def insert_many(self, records: list[Bar], *, source: str) -> int:
+        """Upsert each bar via upsert_bar. Returns count of upserts attempted successfully.
+
+        Loop ensures in-progress bars (e.g. building 1m) get refreshed, unlike the
+        previous insert_many(ordered=False) which silently skipped duplicates.
+        """
         if not records:
             return 0
+        count = 0
+        for bar in records:
+            try:
+                await self.upsert_bar(bar, source=source)
+                count += 1
+            except Exception:
+                logger.error(
+                    "bar_repo.insert_many.upsert_failed",
+                    symbol=bar.symbol,
+                    datetime=str(bar.datetime),
+                    source=source,
+                    exc_info=True,
+                )
+        logger.info(
+            "bar_repo.insert_many.completed",
+            attempted=len(records),
+            upserted=count,
+            source=source,
+        )
+        return count
+
+    async def upsert_bar(self, bar: Bar, *, source: str) -> None:
+        """Diff-aware upsert. Only bumps updated_at when OHLCV actually changes.
+
+        Three branches:
+        1. Cache hit + same OHLCV   → no DB IO.
+        2. DB miss (new doc)        → $setOnInsert _id/created_at, $set OHLCV+updated_at+source.
+        3. DB has same OHLCV        → warm cache, no write.
+        4. DB has different OHLCV   → $set OHLCV+updated_at+source (created_at preserved).
+        """
+        key = _cache_key(bar)
+        new_value = _cache_value(bar)
+
+        cached = _BAR_VALUE_CACHE.get(key)
+        if cached == new_value:
+            return
 
         collection = self._collection()
         now = datetime.now(UTC)
-        docs = []
-        for bar in records:
+        filter_q = {
+            "symbol": bar.symbol.upper(),
+            "exchange": bar.exchange.upper(),
+            "interval": bar.interval.value if bar.interval else None,
+            "datetime": bar.datetime,
+        }
+
+        existing = await collection.find_one(
+            filter_q,
+            {"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1},
+        )
+
+        if existing is None:
             doc = bar.to_mongo()
-            doc["created_at"] = now
-            doc["updated_at"] = now
-            docs.append(doc)
-
-        try:
-            # ordered=False: continues past duplicate key errors,
-            # inserts all non-duplicate docs, skips existing ones
-            result = await collection.insert_many(docs, ordered=False)
-            inserted = len(result.inserted_ids)
-            logger.info(
-                "data_sync.inserted",
-                inserted_count=inserted,
-                total_submitted=len(docs),
+            bar_id = doc.pop("_id")
+            created_at = doc.pop("created_at")
+            await collection.update_one(
+                filter_q,
+                {
+                    "$setOnInsert": {
+                        "_id": bar_id,
+                        "created_at": created_at,
+                    },
+                    "$set": {**doc, "updated_at": now, "source": source},
+                },
+                upsert=True,
             )
-            return inserted
-        except BulkWriteError as e:
-            # BulkWriteError is raised even for partial success with ordered=False.
-            # nInserted tells us how many actually made it in.
-            inserted = e.details.get("nInserted", 0)
-            skipped = len(docs) - inserted
-            logger.info(
-                "data_sync.inserted_with_skips",
-                inserted_count=inserted,
-                skipped_duplicates=skipped,
-            )
-            return inserted
+            _BAR_VALUE_CACHE[key] = new_value
+            return
 
-    async def upsert_bar(self, bar: Bar) -> None:
-        """Upsert a single OHLCV bar from a domain Bar entity."""
-        collection = self._collection()
-
-        doc = bar.to_mongo()
-        bar_id = doc.pop("_id", None)
-        created_at = doc.pop("created_at", None)
-        doc["updated_at"] = datetime.now(UTC)
-
-        update_ops: dict = {"$set": doc}
-        set_on_insert: dict = {}
-        if created_at:
-            set_on_insert["created_at"] = created_at
-        if bar_id:
-            set_on_insert["_id"] = bar_id
-        if set_on_insert:
-            update_ops["$setOnInsert"] = set_on_insert
+        existing_value = (
+            existing.get("open", 0.0),
+            existing.get("high", 0.0),
+            existing.get("low", 0.0),
+            existing.get("close", 0.0),
+            existing.get("volume", 0.0),
+        )
+        if existing_value == new_value:
+            _BAR_VALUE_CACHE[key] = new_value
+            return
 
         await collection.update_one(
+            filter_q,
             {
-                "symbol": doc["symbol"],
-                "exchange": doc["exchange"],
-                "interval": doc["interval"],
-                "datetime": doc["datetime"],
+                "$set": {
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "volume": bar.volume,
+                    "tick_count": bar.tick_count,
+                    "updated_at": now,
+                    "source": source,
+                },
             },
-            update_ops,
-            upsert=True,
         )
+        _BAR_VALUE_CACHE[key] = new_value
 
     async def find(
         self,

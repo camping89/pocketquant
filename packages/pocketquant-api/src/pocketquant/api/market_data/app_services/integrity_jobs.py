@@ -80,6 +80,8 @@ async def repair_integrity(
     interval: Interval,
     bar_repo: BarRepository,
     mediator: Mediator,
+    *,
+    source: str,
     days_back: int = 7,
 ) -> dict:
     """Delete misaligned bars + resync gaps via sync pipeline (skip_filter=True)."""
@@ -94,7 +96,7 @@ async def repair_integrity(
         try:
             command = SyncSymbolCommand(
                 symbol=symbol, exchange=exchange, interval=interval,
-                n_bars=5000, skip_filter=True,
+                n_bars=5000, skip_filter=True, source=source,
             )
             await mediator.send(command)
             resynced = len(report["gap_ranges"])

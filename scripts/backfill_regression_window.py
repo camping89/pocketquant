@@ -33,6 +33,7 @@ from pocketquant.api.market_data.app_services.cascade_aggregator import cascade_
 from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
+from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
@@ -82,6 +83,7 @@ async def _backfill_symbol(
     )
     cmd = SyncSymbolCommand(
         symbol=symbol, exchange=exchange, interval=Interval.MINUTE_1, n_bars=n_bars,
+        source=SOURCE_REST_BACKFILL,
     )
     sync_result = await mediator.send(cmd)
     cascade_counts = await cascade_for_symbol(
