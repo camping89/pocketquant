@@ -1,9 +1,7 @@
 /**
- * Fetch open position(s) for a strategy subscription.
- * TODO(backend): implement GET /api/v1/strategies/{id}/positions endpoint.
- * Returns null until endpoint exists. Polling is OFF to avoid console-error
- * spam against the missing endpoint; re-enable refetchInterval once the
- * backend route ships.
+ * Fetch the open position for a strategy subscription instance.
+ * Backend: GET /api/v1/strategies/{strategy_id}/positions — returns an array
+ * (empty when no open position).
  */
 import { useQuery } from '@tanstack/react-query'
 
@@ -25,12 +23,9 @@ export interface OpenPosition {
 
 async function fetchOpenPosition(strategyId: string): Promise<OpenPosition | null> {
   const res = await fetch(`/api/v1/strategies/${strategyId}/positions`)
-  if (res.status === 404) return null
   if (!res.ok) throw new Error(`Positions fetch failed: ${res.status}`)
-  const data = await res.json() as OpenPosition[] | OpenPosition | null
-  if (!data) return null
-  // Handle both array and single object responses
-  return Array.isArray(data) ? (data[0] ?? null) : data
+  const data = await res.json() as OpenPosition[]
+  return data[0] ?? null
 }
 
 export function useOpenPosition(strategyId: string | null) {
@@ -38,11 +33,7 @@ export function useOpenPosition(strategyId: string | null) {
     queryKey: ['open-position', strategyId],
     queryFn: () => fetchOpenPosition(strategyId!),
     enabled: !!strategyId,
-    retry: (count, err: unknown) => {
-      const msg = (err as Error)?.message ?? ''
-      return !msg.includes('404') && count < 2
-    },
-    // refetchInterval intentionally disabled until backend ships /positions.
-    staleTime: 10_000,
+    refetchInterval: 5_000,
+    staleTime: 2_000,
   })
 }

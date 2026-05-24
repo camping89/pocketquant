@@ -1,20 +1,26 @@
-"""Backtest domain - backtesting results and metrics."""
+"""Backtest domain — backtesting results and metrics."""
 
 from pocketquant.backtest.domain.entities import BacktestResult, OptimizationResult
 from pocketquant.backtest.domain.value_objects import (
     BacktestMetrics,
     EquityPoint,
+    Fill,
+    OpenLot,
     OptimizationResultEntry,
-    PositionRecord,
-    TradeRecord,
+    Order,
+    OrderEvent,
+    Trade,
 )
 
 __all__ = [
     "BacktestMetrics",
     "BacktestResult",
     "EquityPoint",
+    "Fill",
+    "OpenLot",
     "OptimizationResult",
     "OptimizationResultEntry",
-    "PositionRecord",
-    "TradeRecord",
+    "Order",
+    "OrderEvent",
+    "Trade",
 ]

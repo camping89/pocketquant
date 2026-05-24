@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react'
 import { useSubscriptionBacktest } from '../../hooks/use-subscriptions'
 import { useOpenPosition } from '../../hooks/use-open-position'
+import { useStrategyTrades } from '../../hooks/use-strategy-trades'
 import { PnlBadge } from './pnl-badge'
 import { EquitySparkline } from './equity-sparkline'
 import { RecentTradesTable, type StrategyTrade } from './recent-trades-table'
@@ -34,13 +35,15 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
     sub.id,
   )
   const { data: openPos } = useOpenPosition(sub.id)
+  const { data: liveTrades = [] } = useStrategyTrades(sub.id)
 
   const equityCurve = backtest?.equity_curve ?? []
   const unrealizedPnl = openPos?.unrealized_pnl ?? 0
 
-  // Derive trades from backtest positions until a live /trades endpoint ships.
-  // A backtest position with exit_time set is a completed trade.
+  // Prefer live closed positions; fall back to backtest positions for sandbox
+  // subscriptions that have only been backtested.
   const trades = useMemo<StrategyTrade[]>(() => {
+    if (liveTrades.length > 0) return liveTrades
     const positions = (backtest?.positions ?? []) as BacktestPosition[]
     return positions.map((p, idx) => ({
       id: `${idx}-${p.entry_time}`,
@@ -52,7 +55,7 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
       pnl: p.pnl,
       quantity: p.quantity,
     }))
-  }, [backtest?.positions])
+  }, [liveTrades, backtest?.positions])
 
   return (
     <div

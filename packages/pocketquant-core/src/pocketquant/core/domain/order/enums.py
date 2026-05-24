@@ -25,6 +25,7 @@ class OrderStatus(Enum):
     State machine:
     PENDING → SUBMITTED → PARTIALLY_FILLED → FILLED
                        → CANCELLED
+                       → EXPIRED   (LIMIT/STOP pending at end of run / TTL)
            → REJECTED
     """
 
@@ -34,6 +35,7 @@ class OrderStatus(Enum):
     FILLED = "filled"
     CANCELLED = "cancelled"
     REJECTED = "rejected"
+    EXPIRED = "expired"
 
     @property
     def is_terminal(self) -> bool:
@@ -42,6 +44,7 @@ class OrderStatus(Enum):
             OrderStatus.FILLED,
             OrderStatus.CANCELLED,
             OrderStatus.REJECTED,
+            OrderStatus.EXPIRED,
         )
 
     @property

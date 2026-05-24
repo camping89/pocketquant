@@ -6,10 +6,11 @@ tests in this package work both standalone and in the full workspace suite.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from pocketquant.core.config import Settings
+from pocketquant.core.persistence.mongodb import Database
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
@@ -64,3 +65,28 @@ def settings(
         log_format="console",
         enable_jobs=False,
     )
+
+
+@pytest.fixture
+async def database(settings: Settings) -> AsyncIterator[Database]:
+    """Per-test Mongo Database connected to the testcontainer.
+
+    Drops the test DB on teardown so collections don't leak between tests.
+    """
+    db = Database()
+    await db.connect(settings)
+    try:
+        yield db
+    finally:
+        # Drop collections used by Phase 3+ repos.
+        for coll in (
+            "backtest_runs",
+            "backtest_orders",
+            "backtest_trades",
+            "backtest_optimization_runs",
+        ):
+            try:
+                await db.get_collection(coll).drop()
+            except Exception:  # noqa: BLE001
+                pass
+        await db.disconnect()

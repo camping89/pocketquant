@@ -1,4 +1,4 @@
-"""Backtest runner - orchestrates single backtest execution with broker and strategy."""
+"""Backtest runner — orchestrates single backtest execution with broker and strategy."""
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -9,7 +9,9 @@ from pocketquant.backtest.engine.historical_replay_app_service import (
 )
 from pocketquant.backtest.engine.result_collector import BacktestResultCollector
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
@@ -23,7 +25,7 @@ logger = get_logger(__name__)
 
 
 class BacktestAppService:
-    """Orchestrates a single backtest run with metrics collection and persistence.
+    """Orchestrates a single backtest run with metrics collection and 3-collection persistence.
 
     Responsibilities:
     - Reset broker state before run
@@ -31,12 +33,9 @@ class BacktestAppService:
     - Load OHLCV data from MongoDB
     - Set current price on broker before each bar
     - Execute replay through HistoricalReplayAppService
-    - Calculate metrics and persist results
+    - Expire any still-pending LIMITs at end of run (forward-test parity)
+    - Persist 3 lists in order: orders → trades → run
     - Clean up simulation time after run
-
-    Usage:
-        runner = BacktestAppService(event_bus, paper_broker)
-        result = await runner.run(config)
     """
 
     def __init__(
@@ -45,11 +44,15 @@ class BacktestAppService:
         broker: PaperBroker,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
+        order_repository: BacktestOrderRepository | None = None,
+        trade_repository: BacktestTradeRepository | None = None,
         persist_results: bool = True,
     ) -> None:
         self._event_bus = event_bus
         self._broker = broker
         self._backtest_repo = backtest_repository
+        self._order_repo = order_repository
+        self._trade_repo = trade_repository
         self._bar_repo = bar_repository
         self._replay_engine = HistoricalReplayAppService(event_bus)
         self._persist_results = persist_results
@@ -57,11 +60,9 @@ class BacktestAppService:
     async def run(self, config: BacktestConfig) -> BacktestResult:
         """Execute a single backtest run with full metrics collection.
 
-        Args:
-            config: Backtest configuration with strategy, symbol, date range.
-
-        Returns:
-            BacktestResult with metrics, equity curve, and trade history.
+        Returns the slim BacktestResult (metrics + equity_curve + open_positions);
+        Orders and Trades are persisted to ``backtest_orders`` and ``backtest_trades``
+        respectively and must be queried via their dedicated repositories.
         """
         run_id = generate_id_str()
         started_at = datetime.now(UTC)
@@ -75,32 +76,29 @@ class BacktestAppService:
             end_date=config.end_date.isoformat(),
         )
 
-        # Create result collector
-        collector = BacktestResultCollector(config, config.initial_capital)
+        collector = BacktestResultCollector(config, config.initial_capital, run_id=run_id)
 
         try:
-            # Reset broker to initial state
             self._broker.reset()
-
-            # Configure broker slippage from config
             self._broker.slippage = config.slippage_percent
 
-            # Subscribe collector to broker fills
+            # Subscribe to BOTH channels — fills for trade-building, events for audit log.
             await self._broker.subscribe_order_updates(collector.on_fill)
+            await self._broker.subscribe_order_event(collector.on_event)
 
-            # Load OHLCV bars from MongoDB
             bars = self._load_bars(config)
-
-            # Create bar wrapper that sets price before yielding
             bars_with_price = self._wrap_bars_with_price_update(config, bars)
 
-            # Execute replay
             replay_stats = await self._replay_engine.replay(config, bars_with_price)
+
+            # Expire any LIMIT-like orders still pending (forward-test parity)
+            expired = await self._broker.expire_pending_orders()
+            if expired:
+                logger.info("backtest_pending_expired", run_id=run_id, expired=expired)
 
             completed_at = datetime.now(UTC)
 
-            # Finalize and calculate metrics
-            result = collector.finalize(
+            collected = collector.finalize(
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
@@ -111,23 +109,27 @@ class BacktestAppService:
                 "backtest_completed",
                 run_id=run_id,
                 bars=replay_stats.bars_processed,
-                trades=result.metrics.total_trades,
-                sharpe=round(result.metrics.sharpe_ratio, 2),
-                return_pct=round(result.metrics.total_return * 100, 2),
+                trades=collected.run.metrics.total_trades,
+                orders=len(collected.orders),
+                sharpe=round(collected.run.metrics.sharpe_ratio, 2),
+                return_pct=round(collected.run.metrics.total_return * 100, 2),
             )
 
-            # Persist results if enabled
             if self._persist_results:
-                await self._backtest_repo.save(result)
+                # Order matters: orders → trades → run.
+                if self._order_repo is not None:
+                    await self._order_repo.save_many(collected.orders)
+                if self._trade_repo is not None:
+                    await self._trade_repo.save_many(collected.trades)
+                await self._backtest_repo.save(collected.run)
 
-            return result
+            return collected.run
 
         except Exception as e:
             completed_at = datetime.now(UTC)
             logger.error("backtest_failed", run_id=run_id, error=str(e))
 
-            # Create failed result with error details (validated requirement)
-            result = collector.finalize(
+            collected = collector.finalize(
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
@@ -135,15 +137,22 @@ class BacktestAppService:
                 error_message=str(e),
             )
 
-            # Persist failed result for debugging audit trail (validated requirement)
             if self._persist_results:
-                await self._backtest_repo.save(result)
+                # Best-effort partial persistence for audit trail
+                try:
+                    if self._order_repo is not None:
+                        await self._order_repo.save_many(collected.orders)
+                    if self._trade_repo is not None:
+                        await self._trade_repo.save_many(collected.trades)
+                except Exception as persist_err:  # noqa: BLE001
+                    logger.warning("backtest_partial_persist_failed", error=str(persist_err))
+                await self._backtest_repo.save(collected.run)
 
-            return result
+            return collected.run
 
         finally:
-            # Always clean up
             await self._broker.unsubscribe_order_updates()
+            await self._broker.unsubscribe_order_event()
             clear_simulation_time()
 
     async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[Bar]:
@@ -159,10 +168,7 @@ class BacktestAppService:
     async def _wrap_bars_with_price_update(
         self, config: BacktestConfig, bars: AsyncIterator[Bar]
     ) -> AsyncIterator[Bar]:
-        """Wrap bar iterator to set broker price before each bar.
-
-        This ensures market orders fill at bar close price.
-        """
+        """Wrap bar iterator to set broker price before each bar (market orders use bar close)."""
         async for bar in bars:
             self._broker.set_current_price(config.symbol, bar.close)
             yield bar

@@ -4,7 +4,9 @@ from pocketquant.backtest.domain import BacktestResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
@@ -22,11 +24,15 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         self,
         event_bus: EventBus,
         backtest_repository: BacktestRepository,
+        backtest_order_repository: BacktestOrderRepository,
+        backtest_trade_repository: BacktestTradeRepository,
         bar_repository: BarRepository,
         strategy_app_service: StrategyAppService,
     ) -> None:
         self._event_bus = event_bus
         self._backtest_repo = backtest_repository
+        self._order_repo = backtest_order_repository
+        self._trade_repo = backtest_trade_repository
         self._bar_repo = bar_repository
         self._strategy_app_service = strategy_app_service
 
@@ -82,6 +88,8 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
                 broker=broker,
                 backtest_repository=self._backtest_repo,
                 bar_repository=self._bar_repo,
+                order_repository=self._order_repo,
+                trade_repository=self._trade_repo,
             )
             return await runner.run(config)
         finally:

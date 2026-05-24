@@ -110,13 +110,13 @@ curl -X POST http://localhost:41920/api/v1/quotes/stop
 
 curl -X POST http://localhost:41920/api/v1/backtest/run \
   -H "Content-Type: application/json" \
-  -d '{"strategy_id":"hitnrun2","exchange":"BINANCE","symbol":"BTCUSDT","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"parameters":{"entry_lookback_bars":240,"sl_lookback_bars":480,"tp_lookback_bars":60,"max_loss_pct":0.01,"min_profit_pct":0.02,"direction":"both"}}'
+  -d '{"strategy_id":"hitnrun2","symbol":"BTCUSDT:BINANCE","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"parameters":{"entry_lookback_bars":240,"sl_lookback_bars":480,"tp_lookback_bars":60,"max_loss_pct":0.01,"min_profit_pct":0.02,"direction":"both"}}'
 
 ###
 
 curl -X POST http://localhost:41920/api/v1/backtest/optimize \
   -H "Content-Type: application/json" \
-  -d '{"strategy_id":"hitnrun2","exchange":"BINANCE","symbol":"BTCUSDT","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"param_grid":{"entry_lookback_bars":[120,240,480],"sl_lookback_bars":[240,480,720],"tp_lookback_bars":[30,60,120]}}'
+  -d '{"strategy_id":"hitnrun2","symbol":"BTCUSDT:BINANCE","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"parameter_grid":{"entry_lookback_bars":[120,240,480],"sl_lookback_bars":[240,480,720],"tp_lookback_bars":[30,60,120]}}'
 
 ### ===========================================
 ### 6. UI Smoke Test
