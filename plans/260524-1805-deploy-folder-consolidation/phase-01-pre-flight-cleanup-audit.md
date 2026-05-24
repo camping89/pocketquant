@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Pre-flight cleanup & audit"
-status: pending
+status: completed
 priority: P1
 effort: "30m"
 dependencies: []

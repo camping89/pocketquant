@@ -39,10 +39,10 @@ web → api
 ## Backend Quick Start
 
 ```bash
-cp .env.example .env
+cp deploy/.env.example deploy/.env
 just install
 just up
-just dev
+just be
 ```
 
 Backend URLs:

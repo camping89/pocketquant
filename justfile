@@ -14,15 +14,15 @@ install:
 
 # Start infrastructure (MongoDB + Redis)
 up:
-    docker compose -f docker/compose.yml up -d
+    docker compose -f deploy/compose.yml up -d
 
 # Stop infrastructure
 down:
-    docker compose -f docker/compose.yml down
+    docker compose -f deploy/compose.yml down
 
 # Reset everything: stop containers and delete all data volumes
 reset:
-    docker compose -f docker/compose.yml down -v
+    docker compose -f deploy/compose.yml down -v
 
 # Run all tests
 test:
@@ -49,7 +49,7 @@ qa: lint fmt types
 
 # Start Redis only (when using remote MongoDB)
 redis:
-    docker compose -f docker/compose.yml up -d redis
+    docker compose -f deploy/compose.yml up -d redis
 
 # Start backend dev server with hot reload
 be:

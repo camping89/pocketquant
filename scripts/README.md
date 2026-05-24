@@ -1,5 +1,8 @@
 # scripts/
 
+> **Scope:** Data-ops scripts (audit, backfill, resync). NOT deployment.
+> For deployment & VPS migration scripts, see `deploy/scripts/`.
+
 Operational scripts. Run from repository root.
 
 - `audit_bar_quality.py` — diagnostic, no writes. Flat-bar / zero-volume / abnormal-volume sweep across tracked symbols, outputs Markdown report.

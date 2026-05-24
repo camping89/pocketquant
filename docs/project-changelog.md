@@ -2,6 +2,25 @@
 
 **Last Updated:** 2026-05-24 | **Format:** Semantic Versioning
 
+## [Unreleased] — 2026-05-24 — Deployment Layout Consolidation (BREAKING for VPS deploys)
+
+### Refactor
+- **Consolidated** all deployment assets into `deploy/`:
+  - Moved from repo root: `Dockerfile`, `deploy.sh`, `verify.sh`, `.env`, `.env.example`
+  - Moved from `docker/`: `compose.yml`, `compose.prod.yml`
+  - Moved from `docker/scripts/`: `cleanup.sh`, `server-setup.sh`
+  - **Deleted:** `docker/` folder (empty after moves; stale empty `docker/mongo-init.js/` dir also removed)
+- **New folder:** `deploy/scripts/patches/` for future one-time `one_time_*` migrations (placeholder README explains convention)
+- **Updated:** `justfile` (4 compose paths), `.github/workflows/ci.yml` (added `file: deploy/Dockerfile`), `.dockerignore` (`docker/` → `deploy/`)
+- **Unchanged:** root `.dockerignore` location, `scripts/` data-ops Python (not deployment), `packages/pocketquant-web/Dockerfile` (lives with package)
+
+### Migration Required
+
+- **Local dev:** Pull this change, then verify `deploy/.env` exists (file was moved from repo root). If your local copy lost it, `cp deploy/.env.example deploy/.env` and re-fill secrets.
+- **VPS (BREAKING):** see [`docs/deployment-guide.md` → "VPS Migration Runbook"](./deployment-guide.md#vps-migration-runbook) — requires one-time `mv` on `/opt/pocketquant`. Rollback runbook published.
+
+---
+
 ## [Unreleased] — 2026-05-24 — Scheduler Resilience: Orphan Recovery + Configurable Misfire Grace Time
 
 ### Changed

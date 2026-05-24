@@ -506,7 +506,7 @@ Follow conventional commits:
 uv sync
 
 # 2. Start infrastructure (MongoDB + Redis)
-docker compose -f docker/compose.yml up -d
+docker compose -f deploy/compose.yml up -d
 
 # 3. Run app (F5 in VS Code for debugging, or terminal)
 uvicorn pocketquant.api.main:app --reload --port 41920
@@ -514,7 +514,7 @@ uvicorn pocketquant.api.main:app --reload --port 41920
 
 **Production:**
 ```bash
-docker compose -f docker/compose.yml up -d
+docker compose -f deploy/compose.yml up -d
 uv sync
 uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920 --workers 4
 ```

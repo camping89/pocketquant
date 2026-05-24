@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Move files (git mv)"
-status: pending
+status: completed
 priority: P1
 effort: "20m"
 dependencies: [1]

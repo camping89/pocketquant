@@ -98,7 +98,7 @@ systemctl enable fail2ban
 systemctl restart fail2ban
 
 echo "=== Creating app directory ==="
-mkdir -p /opt/pocketquant/docker
+mkdir -p /opt/pocketquant/deploy/scripts/patches
 chown -R deploy:deploy /opt/pocketquant
 
 echo -e "${GREEN}=== Setup Complete ===${NC}"
@@ -107,8 +107,8 @@ echo "Ports: SSH=${SSH_PORT}, HTTP=${HTTP_PORT}, HTTPS=${HTTPS_PORT}"
 echo ""
 echo "Next steps:"
 echo "1. Test SSH: ssh -p ${SSH_PORT} deploy@$(hostname -I | awk '{print $1}')"
-echo "2. Copy docker/ folder to /opt/pocketquant/docker/"
-echo "3. Create /opt/pocketquant/docker/.env.prod"
+echo "2. Copy deploy/ folder to /opt/pocketquant/deploy/"
+echo "3. Create /opt/pocketquant/deploy/.env"
 echo ""
 echo "GitHub Secrets required:"
 echo "  DEPLOY_HOST=$(hostname -I | awk '{print $1}')"
