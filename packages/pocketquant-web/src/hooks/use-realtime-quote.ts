@@ -13,19 +13,15 @@ const STALE_THRESHOLD_MS = 10_000
 const STALE_CHECK_INTERVAL_MS = 2_000
 
 // REST fallback: fetch initial quote to avoid blank first render
-async function fetchInitialQuote(
-  exchange: string,
-  symbol: string,
-): Promise<QuoteStreamPayload | null> {
+async function fetchInitialQuote(symbol: string): Promise<QuoteStreamPayload | null> {
   try {
     const res = await fetch(new URL(
-      `/api/v1/quotes/latest/${exchange}/${symbol}`,
+      `/api/v1/quotes/latest/${encodeURIComponent(symbol)}`,
       window.location.origin,
     ))
     if (!res.ok) return null
     const data = await res.json() as {
       symbol: string
-      exchange: string
       last_price: number
       bid: number | null
       ask: number | null
@@ -37,7 +33,6 @@ async function fetchInitialQuote(
     // Map REST field `timestamp` → SSE field `ts`
     return {
       symbol: data.symbol,
-      exchange: data.exchange,
       last_price: data.last_price,
       bid: data.bid,
       ask: data.ask,
@@ -51,7 +46,8 @@ async function fetchInitialQuote(
   }
 }
 
-export function useRealtimeQuote(exchange: string, symbol: string): RealtimeQuoteState {
+/** Subscribe to real-time quote updates for a composite symbol (e.g. "BTCUSDT:BINANCE"). */
+export function useRealtimeQuote(symbol: string): RealtimeQuoteState {
   const [quote, setQuote] = useState<QuoteStreamPayload | null>(null)
   const [lastUpdateTs, setLastUpdateTs] = useState<number | null>(null)
   const [isStale, setIsStale] = useState(false)
@@ -70,7 +66,7 @@ export function useRealtimeQuote(exchange: string, symbol: string): RealtimeQuot
     let cancelled = false
 
     // Kick off initial REST fetch so the widget populates before the first SSE event
-    fetchInitialQuote(exchange, symbol).then((initial) => {
+    fetchInitialQuote(symbol).then((initial) => {
       if (cancelled || initial === null) return
       const now = Date.now()
       lastPriceRef.current = initial.last_price
@@ -80,7 +76,7 @@ export function useRealtimeQuote(exchange: string, symbol: string): RealtimeQuot
       setLastUpdateTs(now)
     })
 
-    const url = `/api/v1/quotes/stream/${exchange}/${symbol}`
+    const url = `/api/v1/quotes/stream/${encodeURIComponent(symbol)}`
     const es = new EventSource(url)
 
     es.onmessage = (event) => {
@@ -117,7 +113,7 @@ export function useRealtimeQuote(exchange: string, symbol: string): RealtimeQuot
       es.close()
       clearInterval(staleTimer)
     }
-  }, [exchange, symbol])
+  }, [symbol])
 
   return { quote, isStale, lastUpdateTs }
 }

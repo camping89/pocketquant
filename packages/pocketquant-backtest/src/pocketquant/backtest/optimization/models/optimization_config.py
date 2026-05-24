@@ -16,8 +16,7 @@ class OptimizationConfig:
 
     Attributes:
         strategy_id: Strategy identifier to optimize.
-        symbol: Trading symbol.
-        exchange: Exchange name.
+        symbol: Composite trading symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         interval: Bar interval.
         start_date: Start date for backtests.
         end_date: End date for backtests.
@@ -31,7 +30,6 @@ class OptimizationConfig:
 
     strategy_id: str
     symbol: str
-    exchange: str
     interval: str
     start_date: date
     end_date: date

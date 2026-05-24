@@ -22,8 +22,7 @@ BAR_END = BAR_START + timedelta(seconds=60)  # 1m bar
 def builder() -> BarBuilder:
     """Fresh 1-minute BarBuilder aligned to BAR_START."""
     return BarBuilder(
-        symbol="BTC",
-        exchange="BINANCE",
+        symbol="BTC:BINANCE",
         interval=Interval.MINUTE_1,
         bar_start=BAR_START,
     )

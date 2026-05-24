@@ -22,12 +22,14 @@ logger = get_logger(__name__)
 async def resolve_date_range(
     bar_repo: BarRepository,
     symbol: str,
-    exchange: str,
     interval: str,
 ) -> tuple[date, date]:
-    """Return (start_date, end_date) from bar history, falling back to 365d window."""
+    """Return (start_date, end_date) from bar history, falling back to 365d window.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
     try:
-        docs = await bar_repo.find_datetimes(symbol, exchange, Interval(interval), None, None)
+        docs = await bar_repo.find_datetimes(symbol, Interval(interval), None, None)
         if docs:
             start_dt = docs[0]["datetime"]
             end_dt = docs[-1]["datetime"]
@@ -45,16 +47,17 @@ def build_backtest_config(
     base_config: StrategyConfig,
     strategy_id: str,
     symbol: str,
-    exchange: str,
     interval: str,
     start_date: date,
     end_date: date,
 ) -> BacktestConfig:
-    """Build a BacktestConfig from base strategy config overriding symbol/exchange/interval."""
+    """Build a BacktestConfig from base strategy config overriding symbol/interval.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
     return BacktestConfig(
         strategy_id=strategy_id,
         symbol=symbol,
-        exchange=exchange,
         interval=interval,
         start_date=start_date,
         end_date=end_date,
@@ -69,10 +72,11 @@ async def load_strategy_for_backtest(
     strategy_id: str,
     sub_id: str,
     symbol: str,
-    exchange: str,
     interval: str,
 ) -> tuple[PaperBroker, str]:
     """Resolve strategy class, create instance, inject into StrategyAppService.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
 
     Uses a synthetic strategy_id scoped to this subscription so concurrent jobs
     never clobber each other and the user's live strategy entry is untouched.
@@ -96,7 +100,6 @@ async def load_strategy_for_backtest(
         id=synthetic_id,
         name=base_config.name,
         symbol=symbol,
-        exchange=exchange,
         interval=interval,
         trigger=base_config.trigger,
         broker="paper",

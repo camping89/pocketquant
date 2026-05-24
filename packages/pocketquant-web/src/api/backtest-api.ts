@@ -70,8 +70,8 @@ export async function fetchStrategies(): Promise<string[]> {
 
 export async function runBacktest(params: {
   strategy_id: string
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
-  exchange: string
   interval: string
   start_date: string
   end_date: string

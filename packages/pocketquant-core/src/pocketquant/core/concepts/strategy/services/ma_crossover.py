@@ -139,7 +139,6 @@ class MACrossoverStrategy(IStrategy):
 
         return Signal(
             symbol=self.config.symbol,
-            exchange=self.config.exchange,
             direction=direction,
             confidence=0.8,  # Fixed confidence for this strategy
             timestamp=bar.get("timestamp") or datetime.now(UTC),

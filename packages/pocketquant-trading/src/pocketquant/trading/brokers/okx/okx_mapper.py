@@ -83,8 +83,12 @@ def map_okx_position_to_domain(pos_data: dict, strategy_id: str) -> PositionAggr
     avg_px = float(pos_data.get("avgPx", "0"))
     inst_id = pos_data.get("instId", "")
 
-    # Parse instrument ID (e.g., "BTC-USDT" -> "BTC")
-    symbol = inst_id.split("-")[0] if "-" in inst_id else inst_id
+    # Parse instrument ID (e.g., "BTC-USDT-SWAP") and build composite symbol.
+    # OKX-specific boundary: compose "{CODE}{QUOTE}:OKX" from instId parts.
+    parts = inst_id.split("-")
+    code = parts[0] if parts else inst_id
+    quote = parts[1] if len(parts) > 1 else "USDT"
+    composite_symbol = f"{code}{quote}:OKX"
 
     # Determine side from position amount
     side = PositionSide.LONG if pos_amt > 0 else PositionSide.SHORT
@@ -94,8 +98,7 @@ def map_okx_position_to_domain(pos_data: dict, strategy_id: str) -> PositionAggr
 
     position = PositionAggregate.open(
         strategy_id=strategy_id,
-        symbol=symbol,
-        exchange="OKX",
+        symbol=composite_symbol,
         side=side,
         entry_price=avg_px,
         quantity=quantity,

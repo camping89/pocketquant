@@ -13,7 +13,6 @@ class PositionOpenedEvent(DomainEvent):
     position_id: str = ""
     strategy_id: str = ""
     symbol: str = ""
-    exchange: str = ""
     side: PositionSide = PositionSide.LONG
     entry_price: float = 0.0
     quantity: float = 0.0
@@ -37,7 +36,6 @@ class PositionClosedEvent(DomainEvent):
     position_id: str = ""
     strategy_id: str = ""
     symbol: str = ""
-    exchange: str = ""
     side: PositionSide = PositionSide.LONG
     entry_price: float = 0.0
     exit_price: float = 0.0

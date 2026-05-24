@@ -34,7 +34,6 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
         config = OptimizationConfig(
             strategy_id=request.strategy_id,
             symbol=request.symbol,
-            exchange=request.exchange,
             interval=request.interval,
             start_date=request.start_date,
             end_date=request.end_date,

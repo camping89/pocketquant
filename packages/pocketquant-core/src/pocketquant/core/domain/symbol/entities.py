@@ -1,25 +1,49 @@
-"""Symbol entity - Pydantic model with MongoDB persistence."""
+"""Symbol entity - Pydantic model with MongoDB persistence.
 
+Composite symbol format ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``) is the
+single identity field. Exchange is encoded as opaque postfix; business logic
+never decomposes it. Decomposition is presentation-layer-only.
+"""
+
+from __future__ import annotations
+
+import re
 from datetime import datetime
 from typing import Any
 
 from pocketquant.core.common.time import utc_now
 from pocketquant.core.common.uuid import UUID, generate_id
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+COMPOSITE_SYMBOL_RE = re.compile(r"^[A-Z0-9_-]+:[A-Z0-9_-]+$")
 
 
 class Symbol(BaseModel):
-    """Tradeable instrument - persisted to MongoDB."""
+    """Tradeable instrument - persisted to MongoDB.
+
+    ``symbol`` stores composite identifier ``{code}:{exchange}``.
+    """
 
     model_config = ConfigDict(populate_by_name=True)
 
     id: UUID = Field(default_factory=generate_id)
-    code: str = ""
-    exchange: str = ""
+    symbol: str = ""
     name: str | None = None
     asset_type: str | None = None
     is_active: bool = True
     created_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("symbol")
+    @classmethod
+    def _validate_symbol(cls, v: str) -> str:
+        if v == "":
+            return v
+        up = v.upper()
+        if not COMPOSITE_SYMBOL_RE.match(up):
+            raise ValueError(
+                f"Invalid composite symbol {v!r}; expected format '{{CODE}}:{{EXCHANGE}}'"
+            )
+        return up
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Symbol):
@@ -32,13 +56,12 @@ class Symbol(BaseModel):
     @classmethod
     def create(
         cls,
-        code: str,
-        exchange: str,
+        symbol: str,
         name: str | None = None,
         asset_type: str | None = None,
     ) -> Symbol:
-        """Factory method to create a new symbol."""
-        return cls(code=code.upper(), exchange=exchange.upper(), name=name, asset_type=asset_type)
+        """Factory method to create a new symbol from composite identifier."""
+        return cls(symbol=symbol.upper(), name=name, asset_type=asset_type)
 
     def deactivate(self) -> None:
         self.is_active = False
@@ -46,17 +69,11 @@ class Symbol(BaseModel):
     def activate(self) -> None:
         self.is_active = True
 
-    @property
-    def symbol_key(self) -> str:
-        """Return 'EXCHANGE:CODE' format."""
-        return f"{self.exchange}:{self.code}"
-
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to MongoDB document. 'code' maps to 'symbol' field for backward compat."""
+        """Serialize to MongoDB document."""
         return {
             "_id": str(self.id),
-            "symbol": self.code,  # MongoDB field "symbol" maps from entity field "code"
-            "exchange": self.exchange,
+            "symbol": self.symbol,
             "name": self.name,
             "asset_type": self.asset_type,
             "is_active": self.is_active,
@@ -69,8 +86,7 @@ class Symbol(BaseModel):
         raw_id = doc.get("_id", "")
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),
-            code=doc.get("symbol", ""),
-            exchange=doc.get("exchange", ""),
+            symbol=doc.get("symbol", ""),
             name=doc.get("name"),
             asset_type=doc.get("asset_type"),
             is_active=doc.get("is_active", True),

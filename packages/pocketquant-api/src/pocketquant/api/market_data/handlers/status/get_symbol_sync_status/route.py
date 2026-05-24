@@ -1,7 +1,12 @@
-"""Route for getting sync status for a specific symbol."""
+"""Route for getting sync status for a specific composite symbol.
+
+Path: GET /sync-status/{symbol}
+``{symbol}`` is URL-encoded composite, e.g. ``BTCUSDT%3ABINANCE``.
+"""
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
+from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.api.market_data.handlers.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )
@@ -11,19 +16,18 @@ from pocketquant.core.domain.shared.value_objects import Interval
 router = APIRouter(route_class=DishkaRoute)
 
 
-@router.get("/sync-status/{exchange}/{symbol}")
+@router.get("/sync-status/{symbol}")
 async def get_symbol_sync_status(
-    exchange: str,
     symbol: str,
     mediator: FromDishka[Mediator],
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
-    query = GetSymbolSyncStatusQuery(symbol=symbol, exchange=exchange, interval=interval.value)
+    symbol = validate_composite_symbol(symbol)
+    query = GetSymbolSyncStatusQuery(symbol=symbol, interval=interval.value)
     status = await mediator.send(query)
 
     return {
         "symbol": status.symbol,
-        "exchange": status.exchange,
         "interval": status.interval,
         "status": status.status,
         "bar_count": status.bar_count,

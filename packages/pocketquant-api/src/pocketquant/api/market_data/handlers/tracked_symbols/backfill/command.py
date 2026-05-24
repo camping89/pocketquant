@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import re
-
+from pocketquant.api.common.symbol_validation import COMPOSITE_SYMBOL_PATTERN
 from pocketquant.core.domain.shared.enums import Interval
 from pydantic import BaseModel, Field, field_validator
-
-_SYMBOL_RE = re.compile(r"^[A-Z0-9._-]+$")
 
 # Intervals that default to cascade mode (derived from 1m source).
 _CASCADE_DEFAULT_TFS = {
@@ -20,7 +17,9 @@ _CASCADE_DEFAULT_TFS = {
 
 
 class BackfillTrackedSymbolCommand(BaseModel):
-    """Backfill historical bars for one tracked symbol.
+    """Backfill historical bars for one composite symbol.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
 
     mode=cascade  — REST-fetch 1m bars (n * tf_minutes), upsert, then cascade aggregate.
                     Default for tfs >= 5m.
@@ -28,18 +27,22 @@ class BackfillTrackedSymbolCommand(BaseModel):
                     Default for 1m; always used when tf=1m regardless of mode param.
     """
 
-    exchange: str = Field(..., min_length=1, max_length=32)
-    symbol: str = Field(..., min_length=1, max_length=32)
+    symbol: str = Field(
+        ...,
+        min_length=3,
+        max_length=65,
+        description="Composite symbol e.g. BTCUSDT:BINANCE",
+    )
     interval: Interval
     n: int = Field(default=100, ge=1, le=5000, description="Number of bars to backfill")
     mode: str = Field(default="auto", description="cascade | direct | auto")
 
-    @field_validator("exchange", "symbol", mode="before")
+    @field_validator("symbol", mode="before")
     @classmethod
     def upper_and_validate(cls, v: str) -> str:
         v = v.strip().upper()
-        if not _SYMBOL_RE.match(v):
-            raise ValueError("Must match ^[A-Z0-9._-]+$")
+        if not COMPOSITE_SYMBOL_PATTERN.match(v):
+            raise ValueError("Must be composite {CODE}:{EXCHANGE} format")
         return v
 
     @field_validator("mode", mode="before")

@@ -11,18 +11,17 @@ from pocketquant.core.persistence.redis import Cache
 
 @handles(GetAllQuotesQuery)
 class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
-    """Handle getting all active quotes."""
+    """Handle getting all active quotes. Subscription keys are composite symbols."""
 
     def __init__(self, quote_app_service: QuoteAppService, cache: Cache):
         self._quote_app_service = quote_app_service
         self._cache = cache
 
     async def handle(self, request: GetAllQuotesQuery) -> list[QuoteResult]:
+        # provider.subscriptions keys are composite symbols (e.g. BTCUSDT:BINANCE)
         symbol_keys = list(self._quote_app_service.provider.subscriptions.keys())
         cache_keys = [
-            CACHE_KEY_QUOTE_LATEST.format(
-                exchange=key.split(":", 1)[0], symbol=key.split(":", 1)[1]
-            )
+            CACHE_KEY_QUOTE_LATEST.format(symbol=key)
             for key in symbol_keys
         ]
 

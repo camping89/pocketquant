@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
@@ -18,7 +20,7 @@ from pocketquant.trading.persistence.strategy_subscription_repository import (
 
 @handles(AddSymbolCommand)
 class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
-    """Handle AddSymbolCommand — validate strategy loaded, persist subscription."""
+    """Handle AddSymbolCommand — auto-load template if needed, then persist subscription."""
 
     def __init__(
         self,
@@ -31,30 +33,48 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
         self._tracked_repo = tracked_symbol_repository
 
     async def handle(self, request: AddSymbolCommand) -> dict:
-        """Validate strategy is in memory and symbol is tracked, then persist subscription."""
-        if self._strategy_service.get_strategy(request.strategy_id) is None:
-            raise NotFoundError(
-                f"Strategy '{request.strategy_id}' is not loaded. "
-                "Call LoadStrategyCommand first."
-            )
+        """Persist subscription and load a dedicated strategy instance.
 
+        Each subscription owns its own ``IStrategy`` instance keyed by ``sub.id``
+        so that subscribing the same template to multiple (symbol, interval)
+        pairs results in independent runtime instances. ``request.strategy_id``
+        is the template name (matched against ``STRATEGY_REGISTRY``).
+
+        ``request.symbol`` must be composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+        """
         symbol = request.symbol.upper()
-        exchange = request.exchange.upper()
-        if not await self._tracked_repo.exists(exchange, symbol):
+        if not await self._tracked_repo.exists(symbol):
             raise NotFoundError(
-                f"Symbol '{exchange}:{symbol}' is not tracked. "
+                f"Symbol '{symbol}' is not tracked. "
                 "Admin must add it to tracked_symbols first.",
                 error_code="SYMBOL_NOT_TRACKED",
             )
 
+        strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
+        if strategy_class is None:
+            raise NotFoundError(
+                f"Strategy template '{request.strategy_id}' not found in registry."
+            )
+
         sub_id = StrategySubscription.deterministic_id(
-            request.strategy_id, request.symbol, request.exchange, request.interval
+            request.strategy_id, symbol, request.interval
         )
+
+        if self._strategy_service.get_strategy(sub_id) is None:
+            await self._strategy_service.load_strategy(
+                StrategyConfig(
+                    id=sub_id,
+                    name=request.strategy_id,
+                    symbol=symbol,
+                    interval=request.interval,
+                ),
+                strategy_class=strategy_class,
+            )
+
         sub = StrategySubscription(
             id=sub_id,
             strategy_id=request.strategy_id,
-            symbol=request.symbol.upper(),
-            exchange=request.exchange.upper(),
+            symbol=symbol,
             interval=Interval(request.interval),
             created_at=datetime.now(UTC),
         )
@@ -63,7 +83,6 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
             "id": sub.id,
             "strategy_id": sub.strategy_id,
             "symbol": sub.symbol,
-            "exchange": sub.exchange,
             "interval": sub.interval.value,
             "created_at": sub.created_at.isoformat(),
         }

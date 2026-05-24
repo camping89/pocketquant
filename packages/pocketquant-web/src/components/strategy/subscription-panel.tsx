@@ -56,7 +56,7 @@ function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
         errorMsg={bt?.error_msg}
       />
       <span style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {sub.symbol} <span style={{ color: 'var(--text-secondary)' }}>• {sub.exchange.toLowerCase()} • {sub.interval}</span>
+        {sub.symbol} <span style={{ color: 'var(--text-secondary)' }}>• {sub.interval}</span>
       </span>
       <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
         {relTime(bt?.last_run_at)}

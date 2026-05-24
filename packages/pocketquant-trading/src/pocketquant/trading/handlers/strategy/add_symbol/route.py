@@ -10,10 +10,12 @@ router = APIRouter(route_class=DishkaRoute)
 
 
 class AddSymbolBody(BaseModel):
-    """Request body for adding a symbol subscription."""
+    """Request body for adding a symbol subscription.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+    """
 
     symbol: str
-    exchange: str
     interval: str
 
 
@@ -23,12 +25,14 @@ async def add_symbol(
     body: AddSymbolBody,
     mediator: FromDishka[Mediator],
 ) -> dict:
-    """Subscribe a loaded strategy to a (symbol, exchange, interval) tuple."""
+    """Subscribe a loaded strategy to a (symbol, interval) pair.
+
+    ``symbol`` must be composite ``{code}:{exchange}``.
+    """
     return await mediator.send(
         AddSymbolCommand(
             strategy_id=strategy_id,
             symbol=body.symbol,
-            exchange=body.exchange,
             interval=body.interval,
         )
     )

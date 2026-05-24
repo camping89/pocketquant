@@ -1,6 +1,7 @@
 """Route for backfilling historical bars for a tracked symbol — admin only.
 
-POST /api/v1/market-data/tracked-symbols/{exchange}/{symbol}/backfill
+POST /api/v1/market-data/tracked-symbols/{symbol}/backfill
+  ``symbol`` path param is URL-encoded composite ``{code}:{exchange}`` (e.g. BTCUSDT%3ABINANCE).
 Query params:
   interval  — timeframe (1m, 5m, 15m, 1h, 4h, 1d)
   n         — number of bars (default 100, max 5000)
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Depends, Query
-from pocketquant.api.common.symbol_validation import validate_symbol_pair
+from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.api.market_data.handlers.tracked_symbols.backfill.command import (
     BackfillTrackedSymbolCommand,
 )
@@ -29,11 +30,10 @@ router = APIRouter(route_class=DishkaRoute)
 
 
 @router.post(
-    "/tracked-symbols/{exchange}/{symbol}/backfill",
+    "/tracked-symbols/{symbol}/backfill",
     response_model=dict,
 )
 async def backfill_tracked_symbol(
-    exchange: str,
     symbol: str,
     provider: FromDishka[IDataProvider],
     bar_repository: FromDishka[BarRepository],
@@ -44,13 +44,13 @@ async def backfill_tracked_symbol(
 ) -> dict:
     """Backfill historical bars for one tracked symbol. Requires X-Admin-Token.
 
+    ``symbol`` is composite ``{code}:{exchange}`` — URL-encode ``:`` as ``%3A``.
     mode=cascade: REST-fetch 1m bars, upsert, cascade to requested tf (default for >=5m).
     mode=direct:  REST-fetch the requested tf directly (default for 1m).
     mode=auto:    select mode based on interval (cascade for >=5m, direct for 1m).
     """
-    exchange, symbol = validate_symbol_pair(exchange, symbol)
+    symbol = validate_composite_symbol(symbol)
     cmd = BackfillTrackedSymbolCommand(
-        exchange=exchange,
         symbol=symbol,
         interval=interval,
         n=n,

@@ -13,8 +13,7 @@ class BacktestConfig:
 
     Attributes:
         strategy_id: Unique identifier for the strategy to backtest.
-        symbol: Trading symbol (e.g., "BTCUSDT").
-        exchange: Exchange name (e.g., "OKX", "BINANCE").
+        symbol: Composite trading symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         interval: Bar interval (e.g., "5m", "1h", "1d").
         start_date: Start date for historical replay.
         end_date: End date for historical replay.
@@ -27,7 +26,6 @@ class BacktestConfig:
 
     strategy_id: str
     symbol: str
-    exchange: str
     interval: str
     start_date: date
     end_date: date
@@ -42,7 +40,6 @@ class BacktestConfig:
         return BacktestConfig(
             strategy_id=self.strategy_id,
             symbol=self.symbol,
-            exchange=self.exchange,
             interval=self.interval,
             start_date=self.start_date,
             end_date=self.end_date,

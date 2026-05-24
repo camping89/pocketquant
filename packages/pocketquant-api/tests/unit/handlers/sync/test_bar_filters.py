@@ -21,14 +21,12 @@ from pocketquant.api.market_data.handlers.sync.sync_one.bar_filters import (
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 
-SYMBOL = "BTCUSDT"
-EXCHANGE = "BINANCE"
+SYMBOL = "BTCUSDT:BINANCE"
 
 
 def _bar(ts: datetime) -> Bar:
     return Bar(
         symbol=SYMBOL,
-        exchange=EXCHANGE,
         interval=Interval.MINUTE_1,
         datetime=ts,
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
@@ -72,7 +70,7 @@ async def test_continuous_db_keeps_only_new(bar_repo: AsyncMock) -> None:
         [base + timedelta(minutes=i) for i in range(99)]
     )
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert len(result) == 1
     assert result[0].datetime == base + timedelta(minutes=99)
@@ -91,7 +89,7 @@ async def test_tail_gap_keeps_all_below_latest(bar_repo: AsyncMock) -> None:
     tail_existing = [tail_base, tail_base + timedelta(minutes=1), tail_base + timedelta(minutes=2)]
     bar_repo.find_datetimes.return_value = _existing_docs(tail_existing)
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert len(result) == 4997
     kept_dts = {r.datetime for r in result}
@@ -113,7 +111,7 @@ async def test_middle_hole_keeps_hole_bars(bar_repo: AsyncMock) -> None:
     span_b = [base + timedelta(minutes=60 + i) for i in range(39)]  # 03:00..03:38
     bar_repo.find_datetimes.return_value = _existing_docs(span_a + span_b)
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     kept_dts = {r.datetime for r in result}
     expected_hole = {base + timedelta(minutes=31 + i) for i in range(29)}  # 02:31..02:59
@@ -131,7 +129,7 @@ async def test_empty_db_keeps_all(bar_repo: AsyncMock) -> None:
     records = _series(base, 100)
     bar_repo.find_datetimes.return_value = []
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert len(result) == 100
 
@@ -143,7 +141,7 @@ async def test_empty_db_keeps_all(bar_repo: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_empty_records_returns_empty(bar_repo: AsyncMock) -> None:
-    result = await filter_new_bars([], SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars([], SYMBOL, Interval.MINUTE_1, bar_repo)
     assert result == []
     bar_repo.find_datetimes.assert_not_called()
 
@@ -154,14 +152,15 @@ async def test_records_with_none_datetime_passthrough(bar_repo: AsyncMock) -> No
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     valid = _bar(base)
     invalid = Bar(
-        symbol=SYMBOL, exchange=EXCHANGE, interval=Interval.MINUTE_1,
+        symbol=SYMBOL,
+        interval=Interval.MINUTE_1,
         datetime=None,
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
     )
     records = [valid, invalid]
     bar_repo.find_datetimes.return_value = _existing_docs([base])  # valid IS existing
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert len(result) == 1
     assert result[0].datetime is None  # only the None-datetime bar survives
@@ -171,13 +170,14 @@ async def test_records_with_none_datetime_passthrough(bar_repo: AsyncMock) -> No
 async def test_all_none_datetimes_skip_query(bar_repo: AsyncMock) -> None:
     """If no record has datetime, skip DB query entirely and return as-is."""
     invalid = Bar(
-        symbol=SYMBOL, exchange=EXCHANGE, interval=Interval.MINUTE_1,
+        symbol=SYMBOL,
+        interval=Interval.MINUTE_1,
         datetime=None,
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
     )
     records = [invalid, invalid]
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert result == records
     bar_repo.find_datetimes.assert_not_called()
@@ -194,7 +194,7 @@ async def test_naive_mongo_datetime_matches_aware_record(bar_repo: AsyncMock) ->
         naive=True,
     )
 
-    result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert result == []  # all 5 filtered as existing
 
@@ -209,7 +209,7 @@ async def test_logs_filtered_existing_when_skipped(bar_repo: AsyncMock) -> None:
     )
 
     with structlog.testing.capture_logs() as logs:
-        result = await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+        result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert len(result) == 3
     matching = [
@@ -231,7 +231,7 @@ async def test_no_log_when_nothing_skipped(bar_repo: AsyncMock) -> None:
     bar_repo.find_datetimes.return_value = []
 
     with structlog.testing.capture_logs() as logs:
-        await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+        await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     matching = [e for e in logs if e.get("event") == "market_data.sync.filtered_existing"]
     assert matching == []
@@ -244,7 +244,7 @@ async def test_query_uses_min_max_of_record_datetimes(bar_repo: AsyncMock) -> No
     records = _series(base, 10)
     bar_repo.find_datetimes.return_value = []
 
-    await filter_new_bars(records, SYMBOL, EXCHANGE, Interval.MINUTE_1, bar_repo)
+    await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     bar_repo.find_datetimes.assert_called_once()
     kwargs = bar_repo.find_datetimes.call_args.kwargs

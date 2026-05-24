@@ -64,7 +64,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         received: list[dict] = []
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda d: received.append(d))
+        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
         await client._handle_frame(_aggtrade_frame(qty="0.01"))
 
         assert len(received) == 1
@@ -76,7 +76,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         received: list[dict] = []
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda d: received.append(d))
+        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
         await client._handle_frame(_aggtrade_frame(price="50000.00"))
 
         assert received[0]["last_price"] == pytest.approx(50_000.0)
@@ -88,7 +88,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         received: list[dict] = []
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda d: received.append(d))
+        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
         await client._handle_frame(_aggtrade_frame(trade_time_ms=ts_ms))
 
         expected_dt = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
@@ -100,7 +100,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         volumes: list[float] = []
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda d: volumes.append(d["volume"]))
+        await client.subscribe("BTCUSDT:BINANCE", lambda d: volumes.append(d["volume"]))
         await client._handle_frame(_aggtrade_frame(qty="0.5", agg_id=1))
         await client._handle_frame(_aggtrade_frame(qty="0.3", agg_id=2))
 
@@ -114,7 +114,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         received: list[dict] = []
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda d: received.append(d))
+        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
         inner = json.loads(_aggtrade_frame(qty="0.05"))
         await client._handle_frame(_combined_frame(inner))
 
@@ -127,7 +127,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         received: list[dict] = []
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda d: received.append(d))
+        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
         other_event = json.dumps({"e": "trade", "s": "BTCUSDT", "p": "50000", "q": "0.1"})
         await client._handle_frame(other_event)
 
@@ -142,7 +142,7 @@ class TestAggTradeFrameParsing:
         async def async_cb(d: dict) -> None:
             received.append(d)
 
-        await client.subscribe("BTCUSDT", "BINANCE", async_cb)
+        await client.subscribe("BTCUSDT:BINANCE", async_cb)
         await client._handle_frame(_aggtrade_frame())
 
         assert len(received) == 1
@@ -153,7 +153,7 @@ class TestAggTradeFrameParsing:
         client = BinanceWebSocketClient()
         assert client.last_tick_at is None
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
+        await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
         await client._handle_frame(_aggtrade_frame())
 
         assert client.last_tick_at is not None
@@ -172,34 +172,34 @@ class TestSubscriptionManagement:
         client = BinanceWebSocketClient()
         assert client.subscription_count == 0
 
-        await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
+        await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
         assert client.subscription_count == 1
 
-        await client.subscribe("ETHUSDT", "BINANCE", lambda _: None)
+        await client.subscribe("ETHUSDT:BINANCE", lambda _: None)
         assert client.subscription_count == 2
 
     @pytest.mark.asyncio
     async def test_unsubscribe_decrements_count(self):
         client = BinanceWebSocketClient()
-        await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
-        await client.subscribe("ETHUSDT", "BINANCE", lambda _: None)
+        await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
+        await client.subscribe("ETHUSDT:BINANCE", lambda _: None)
         assert client.subscription_count == 2
 
-        await client.unsubscribe("BTCUSDT", "BINANCE")
+        await client.unsubscribe("BTCUSDT:BINANCE")
         assert client.subscription_count == 1
 
     @pytest.mark.asyncio
     async def test_unsubscribe_nonexistent_no_error(self):
         client = BinanceWebSocketClient()
         # Should not raise
-        await client.unsubscribe("BTCUSDT", "BINANCE")
+        await client.unsubscribe("BTCUSDT:BINANCE")
         assert client.subscription_count == 0
 
     @pytest.mark.asyncio
     async def test_subscribe_returns_symbol_key(self):
         client = BinanceWebSocketClient()
-        key = await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
-        assert key == "BINANCE:BTCUSDT"
+        key = await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
+        assert key == "BTCUSDT:BINANCE"
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +258,7 @@ class TestReconnectBackoff:
 
         ws_module = "pocketquant.core.infrastructure.binance.binance_websocket_client"
         with patch(f"{ws_module}.websockets.connect", side_effect=_fake_connect):
-            await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
+            await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
             await client.connect()
 
         assert client._reconnect_delay == _RECONNECT_DELAY_INITIAL
@@ -269,7 +269,7 @@ class TestReconnectBackoff:
         import websockets as _ws
 
         client = BinanceWebSocketClient()
-        await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
+        await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
 
         connect_count = 0
         sleep_delays: list[float] = []
@@ -326,7 +326,7 @@ class TestSilentExitAndWatchdog:
     async def test_silent_iterator_exit_triggers_reconnect(self):
         """When `async for` exits silently (close 1000/1001), run_forever reconnects."""
         client = BinanceWebSocketClient()
-        await client.subscribe("BTCUSDT", "BINANCE", lambda _: None)
+        await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
 
         connect_count = 0
         backoff_calls: list[float] = []

@@ -20,8 +20,7 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
 
-SYMBOL = "BTCUSDT"
-EXCHANGE = "BINANCE"
+SYMBOL = "BINANCE:BTCUSDT"
 NOW = datetime.now(UTC)
 
 
@@ -29,7 +28,6 @@ def _status(interval: str, last_bar_age_seconds: int, bar_count: int = 1000) -> 
     """Build SyncStatus with last_bar_at set to NOW - age."""
     return SyncStatus(
         symbol=SYMBOL,
-        exchange=EXCHANGE,
         interval=interval,
         status="completed",
         bar_count=bar_count,
@@ -40,7 +38,7 @@ def _status(interval: str, last_bar_age_seconds: int, bar_count: int = 1000) -> 
 
 def _bar(dt: datetime, interval: Interval) -> Bar:
     return Bar(
-        symbol=SYMBOL, exchange=EXCHANGE, interval=interval,
+        symbol=SYMBOL, interval=interval,
         datetime=dt,
         open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
     )
@@ -129,12 +127,12 @@ async def test_per_row_exception_isolated_with_fallback(
 
     fresh_bar = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_15)
 
-    async def get_latest_side_effect(symbol, exchange, interval):
+    async def get_latest_side_effect(symbol, interval):
         if interval == Interval.MINUTE_5:
             raise RuntimeError("boom")
         return fresh_bar
 
-    async def count_side_effect(symbol, exchange, interval):
+    async def count_side_effect(symbol, interval):
         if interval == Interval.MINUTE_5:
             raise RuntimeError("boom")
         return 999

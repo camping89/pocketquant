@@ -83,7 +83,7 @@ React 19 + Vite frontend:
 - chart rendering with `lightweight-charts`
 - symbol selector backed by `/market-data/symbols`
 - interval availability backed by `/market-data/sync-status`
-- OHLCV chart data backed by `/market-data/ohlcv/{exchange}/{symbol}`
+- OHLCV chart data backed by `/market-data/bar/{symbol}` (composite symbol, URL-encoded `:`)
 - backtest overlay backed by `/backtest/run`
 - subscription panel sidebar (280px) with polling, status badges, cascade delete UI
 
@@ -133,6 +133,7 @@ On startup the API:
 
 **Routes:**
 - `/` (Charts) - Trading chart with symbol/interval/strategy selectors, technical indicators, backtest runner
+- `/strategies` - Operator dashboard (3-pane: list/start/stop strategies, config+chart embed, positions/metrics) — NEW 2026-05-23
 - `/monitor` - System monitoring dashboard (sync status, data integrity checks, background jobs)
 
 **Components:**
@@ -209,6 +210,8 @@ On startup the API:
 ### pocketquant.core.domain (~900 LOC entities + concepts, 39 files) — Pure Business Logic + Persistence
 
 **Rules:** No I/O imports (pymongo, redis, aiohttp). **Pydantic BaseModel with MongoDB persistence.** Aggregates have `to_mongo()` and `from_mongo()` methods. Immutable value objects. Domain events. Validation in `__post_init__`.
+
+**Composite Symbol (2026-05-23):** All entities use `symbol: str` (format `CODE:EXCHANGE`) instead of separate `(code, exchange)` fields. Exchange encapsulated as opaque postfix.
 
 **Statistics:**
 - domain/ folder: ~355 LOC (Bar 382, Order 382, Position 298, Symbol 81, SyncStatus 51, shared 63)
@@ -478,8 +481,8 @@ Historical sync flow:
 
 Read flow:
 
-1. `GET /api/v1/market-data/ohlcv/{exchange}/{symbol}`
-2. handler queries `BarRepository`
+1. `GET /api/v1/market-data/bar/{symbol}` (composite symbol: `BTCUSDT:BINANCE` or URL-encoded `BTCUSDT%3ABINANCE`)
+2. handler queries `BarRepository` with composite symbol
 3. API returns bars in descending order
 4. frontend reverses them for chart rendering
 
@@ -487,9 +490,9 @@ Live quote flow:
 
 1. `POST /api/v1/quotes/start`
 2. `POST /api/v1/quotes/subscribe`
-3. quote service ingests TradingView ticks
+3. quote service ingests Binance @aggTrade ticks
 4. bar aggregation updates in-progress candles
-5. the UI listens to `/api/v1/market-data/bars/stream/{exchange}/{symbol}`
+5. the UI listens to `/api/v1/market-data/bar/{symbol}` for latest bar (composite symbol)
 
 ### UI Expectations
 

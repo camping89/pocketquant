@@ -1,10 +1,16 @@
-"""Route for getting OHLCV data."""
+"""Route for getting OHLCV data.
+
+Path: GET /ohlcv/{symbol}/{interval}
+``{symbol}`` is URL-encoded composite, e.g. ``BTCUSDT%3ABINANCE``.
+FastAPI auto-decodes ``%3A`` → ``:`` before the handler sees the value.
+"""
 
 from datetime import datetime
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
+from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
 from pocketquant.core.common.constants import LIMIT_OHLCV_QUERY_MAX
 from pocketquant.core.common.mediator import Mediator
@@ -13,8 +19,9 @@ from pydantic import BaseModel
 
 
 class OHLCVResponse(BaseModel):
+    """``symbol`` is composite ``{code}:{exchange}``."""
+
     symbol: str
-    exchange: str
     interval: str
     data: list[dict[str, Any]]
     count: int
@@ -23,19 +30,18 @@ class OHLCVResponse(BaseModel):
 router = APIRouter(route_class=DishkaRoute)
 
 
-@router.get("/ohlcv/{exchange}/{symbol}", response_model=OHLCVResponse)
+@router.get("/ohlcv/{symbol}/{interval}", response_model=OHLCVResponse)
 async def get_ohlcv(
-    exchange: str,
     symbol: str,
+    interval: Interval,
     mediator: FromDishka[Mediator],
-    interval: Interval = Query(default=Interval.DAY_1),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
     limit: int = Query(default=1000, ge=1, le=LIMIT_OHLCV_QUERY_MAX),
 ) -> OHLCVResponse:
+    symbol = validate_composite_symbol(symbol)
     query = GetOHLCVQuery(
         symbol=symbol,
-        exchange=exchange,
         interval=interval.value,
         start_date=start_date,
         end_date=end_date,
@@ -45,8 +51,7 @@ async def get_ohlcv(
     bars = await mediator.send(query)
 
     return OHLCVResponse(
-        symbol=symbol.upper(),
-        exchange=exchange.upper(),
+        symbol=symbol,
         interval=interval.value,
         data=bars,
         count=len(bars),

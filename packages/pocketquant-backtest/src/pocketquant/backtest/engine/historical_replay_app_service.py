@@ -78,7 +78,6 @@ class HistoricalReplayAppService:
             # Create and emit BarCompletedEvent
             event = BarCompletedEvent(
                 symbol=bar.symbol,
-                exchange=bar.exchange,
                 interval=config.interval,
                 bar_start=bar_time,
                 open=bar.open,

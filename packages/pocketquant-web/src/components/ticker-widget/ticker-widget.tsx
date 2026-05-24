@@ -1,8 +1,9 @@
 import { useRealtimeQuote } from '../../hooks/use-realtime-quote'
+import { parseSymbol } from '../../lib/symbol-format'
 import { TickerStaleIndicator } from './ticker-stale-indicator'
 
 interface TickerWidgetProps {
-  exchange: string
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
 }
 
@@ -19,8 +20,9 @@ function formatChange(change: number | null, pct: number | null): string {
   return `${arrow} ${sign}${change.toFixed(2)} (${sign}${pct.toFixed(2)}%)`
 }
 
-export function TickerWidget({ exchange, symbol }: TickerWidgetProps) {
-  const { quote, lastUpdateTs } = useRealtimeQuote(exchange, symbol)
+export function TickerWidget({ symbol }: TickerWidgetProps) {
+  const { quote, lastUpdateTs } = useRealtimeQuote(symbol)
+  const { code, exchange } = parseSymbol(symbol)
 
   const isLive = quote !== null
   // No data yet and no timestamp → symbol not tracked or not yet received
@@ -46,7 +48,7 @@ export function TickerWidget({ exchange, symbol }: TickerWidgetProps) {
     return (
       <div className="ticker-widget" style={containerStyle}>
         <TickerStaleIndicator lastUpdateTs={lastUpdateTs} />
-        <span style={{ color: '#8b8b9a', fontSize: 12 }}>{symbol} — loading…</span>
+        <span style={{ color: '#8b8b9a', fontSize: 12 }}>{code} — loading…</span>
       </div>
     )
   }
@@ -54,8 +56,8 @@ export function TickerWidget({ exchange, symbol }: TickerWidgetProps) {
   return (
     <div className="ticker-widget" style={containerStyle}>
       <TickerStaleIndicator lastUpdateTs={lastUpdateTs} />
-      <span style={{ color: '#8b8b9a', fontSize: 11, marginRight: 2 }}>{exchange}</span>
-      <span style={{ fontWeight: 600, fontSize: 13, color: '#e8e8f0' }}>{symbol}</span>
+      {exchange && <span style={{ color: '#8b8b9a', fontSize: 11, marginRight: 2 }}>{exchange}</span>}
+      <span style={{ fontWeight: 600, fontSize: 13, color: '#e8e8f0' }}>{code}</span>
       <span style={{ fontWeight: 700, fontSize: 14, color: priceColor, marginLeft: 6 }}>
         {formatPrice(quote.last_price)}
       </span>

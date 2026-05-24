@@ -46,6 +46,18 @@ class StrategyLoader:
             if "id" not in data:
                 data["id"] = path.stem
 
+            # Forward-compat shim: legacy configs may have separate symbol + exchange fields.
+            # If symbol is already composite (contains ":") leave it as-is.
+            # Otherwise combine: "{symbol}:{exchange}" if exchange present, else use symbol bare.
+            symbol_raw = data.get("symbol", "")
+            if symbol_raw and ":" not in str(symbol_raw):
+                exchange_raw = data.pop("exchange", None)
+                if exchange_raw:
+                    data["symbol"] = f"{str(symbol_raw).upper()}:{str(exchange_raw).upper()}"
+            elif "exchange" in data:
+                # symbol already composite — drop the now-redundant exchange key
+                data.pop("exchange", None)
+
             config = StrategyConfig.from_dict(data)
 
             # Validate configuration

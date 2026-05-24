@@ -96,7 +96,7 @@ async def test_record_detail_appends_to_run(repo):
     doc_id = await repo.record_start("sync_5m")
     await repo.record_detail(
         doc_id,
-        symbol="BTCUSDT", exchange="BINANCE", interval="5m",
+        symbol="BINANCE:BTCUSDT", interval="5m",
         bars_fetched=60, bars_inserted=3,
         filtered_existing=54, filtered_misaligned=0,
         status="completed",
@@ -105,6 +105,6 @@ async def test_record_detail_appends_to_run(repo):
     assert len(runs) == 1
     assert len(runs[0]["details"]) == 1
     d = runs[0]["details"][0]
-    assert d["symbol"] == "BTCUSDT"
+    assert d["symbol"] == "BINANCE:BTCUSDT"
     assert d["bars_fetched"] == 60
     assert d["bars_inserted"] == 3

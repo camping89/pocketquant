@@ -1,4 +1,7 @@
-"""Integrity check and repair functions for bar data."""
+"""Integrity check and repair functions for bar data.
+
+All functions accept composite ``symbol`` (``{code}:{exchange}``) — no separate exchange param.
+"""
 
 from datetime import UTC, datetime, timedelta
 
@@ -33,12 +36,13 @@ def _group_gaps(
 
 async def check_integrity(
     symbol: str,
-    exchange: str,
     interval: Interval,
     bar_repo: BarRepository,
     days_back: int = 7,
 ) -> dict:
-    """Check bar alignment + gaps. Returns misaligned docs, missing count, gap ranges.
+    """Check bar alignment + gaps for composite ``symbol``.
+
+    Returns misaligned docs, missing count, gap ranges.
 
     Note: Only reliable for 24/7 markets (crypto). Equity symbols with market hours
     will produce false-positive gap detections on weekends/holidays.
@@ -47,7 +51,7 @@ async def check_integrity(
     now = datetime.now(UTC).replace(tzinfo=None)
     end = get_bar_start(now, interval)
     start = end - timedelta(days=days_back)
-    docs = await bar_repo.find_datetimes(symbol, exchange, interval, start, end)
+    docs = await bar_repo.find_datetimes(symbol, interval, start, end)
 
     misaligned, aligned_times = [], set()
     for d in docs:
@@ -64,7 +68,6 @@ async def check_integrity(
 
     return {
         "symbol": symbol.upper(),
-        "exchange": exchange.upper(),
         "interval": interval.value,
         "total": len(docs),
         "misaligned_count": len(misaligned),
@@ -76,7 +79,6 @@ async def check_integrity(
 
 async def repair_integrity(
     symbol: str,
-    exchange: str,
     interval: Interval,
     bar_repo: BarRepository,
     mediator: Mediator,
@@ -84,8 +86,11 @@ async def repair_integrity(
     source: str,
     days_back: int = 7,
 ) -> dict:
-    """Delete misaligned bars + resync gaps via sync pipeline (skip_filter=True)."""
-    report = await check_integrity(symbol, exchange, interval, bar_repo, days_back)
+    """Delete misaligned bars + resync gaps via sync pipeline (skip_filter=True).
+
+    ``symbol`` is composite ``{code}:{exchange}``.
+    """
+    report = await check_integrity(symbol, interval, bar_repo, days_back)
 
     deleted = 0
     if report["misaligned_ids"]:
@@ -95,7 +100,7 @@ async def repair_integrity(
     if report["gap_ranges"]:
         try:
             command = SyncSymbolCommand(
-                symbol=symbol, exchange=exchange, interval=interval,
+                symbol=symbol, interval=interval,
                 n_bars=5000, skip_filter=True, source=source,
             )
             await mediator.send(command)
@@ -107,20 +112,19 @@ async def repair_integrity(
             )
 
     # Verify: re-check integrity after repair
-    verify = await check_integrity(symbol, exchange, interval, bar_repo, days_back)
+    verify = await check_integrity(symbol, interval, bar_repo, days_back)
     still_missing = verify["missing_count"]
     still_missing_ranges = verify["gap_ranges"]
 
     if still_missing > 0:
         logger.warning(
             "integrity.repair.still_missing",
-            symbol=symbol, exchange=exchange, interval=interval.value,
+            symbol=symbol, interval=interval.value,
             still_missing=still_missing, ranges=still_missing_ranges,
         )
 
     return {
         "symbol": symbol.upper(),
-        "exchange": exchange.upper(),
         "interval": interval.value,
         "deleted": deleted,
         "gaps_resynced": resynced,

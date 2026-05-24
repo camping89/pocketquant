@@ -39,8 +39,7 @@ class TestAggregateOhlcv:
 
     def test_single_bar(self):
         bar = Bar(
-            symbol="BTC",
-            exchange="BINANCE",
+            symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             datetime=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
             open=100.0,
@@ -61,8 +60,7 @@ class TestAggregateOhlcv:
     def test_five_bars_5m_aggregation(self):
         bars = [
             Bar(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 interval=Interval.MINUTE_1,
                 datetime=datetime(2026, 5, 6, 10, i, tzinfo=UTC),
                 open=100.0 + i,
@@ -84,8 +82,7 @@ class TestAggregateOhlcv:
         """Partial aggregate (3 of 5 expected) still computes correctly."""
         bars = [
             Bar(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 interval=Interval.MINUTE_1,
                 datetime=datetime(2026, 5, 6, 10, i, tzinfo=UTC),
                 open=100.0,
@@ -104,8 +101,7 @@ class TestAggregateOhlcv:
         """aggregate_ohlcv sorts bars by datetime before extracting first/last."""
         bars = [
             Bar(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 interval=Interval.MINUTE_1,
                 datetime=datetime(2026, 5, 6, 10, 2, tzinfo=UTC),  # out of order
                 open=100.0,
@@ -115,8 +111,7 @@ class TestAggregateOhlcv:
                 volume=1000.0,
             ),
             Bar(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 interval=Interval.MINUTE_1,
                 datetime=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
                 open=110.0,
@@ -126,8 +121,7 @@ class TestAggregateOhlcv:
                 volume=1000.0,
             ),
             Bar(
-                symbol="BTC",
-                exchange="BINANCE",
+                symbol="BINANCE:BTC",
                 interval=Interval.MINUTE_1,
                 datetime=datetime(2026, 5, 6, 10, 4, tzinfo=UTC),
                 open=90.0,
@@ -262,7 +256,7 @@ class TestCascadeForSymbol:
     @pytest.mark.asyncio
     async def test_cascade_no_1m_bars_returns_zeros(self, mock_bar_repo):
         """Cascade on empty 1m data produces zero counts for all tfs."""
-        result = await cascade_for_symbol("BTC", "BINANCE", 60, mock_bar_repo)
+        result = await cascade_for_symbol("BINANCE:BTC", 60, mock_bar_repo)
 
         for tf in CASCADE_TFS:
             assert result[tf] == 0
@@ -292,7 +286,6 @@ def mock_bar_repo():
                 for b in self.bars
                 if not (
                     b.symbol == bar.symbol
-                    and b.exchange == bar.exchange
                     and b.interval == bar.interval
                     and b.datetime == bar.datetime
                 )
@@ -302,29 +295,27 @@ def mock_bar_repo():
         async def find(
             self,
             symbol: str,
-            exchange: str,
             interval: Interval,
-            start_date: datetime,
-            end_date: datetime,
-            limit: int = 1000,
+            start_date: datetime = None,
+            end_date: datetime = None,
+            limit: int = 5000,
         ) -> list[Bar]:
             matching = [
                 b
                 for b in self.bars
                 if b.symbol == symbol
-                and b.exchange == exchange
                 and b.interval == interval
-                and b.datetime
-                and start_date <= b.datetime <= end_date
             ]
+            if start_date and end_date:
+                matching = [b for b in matching if start_date <= b.datetime <= end_date]
             # Sort by datetime and return limited results
-            return sorted(matching, key=lambda b: b.datetime)[:limit]
+            return sorted(matching, key=lambda b: b.datetime, reverse=True)[:limit]
 
-        async def get_latest(self, symbol: str, exchange: str, interval: Interval):
+        async def get_latest(self, symbol: str, interval: Interval):
             matching = [
                 b
                 for b in self.bars
-                if b.symbol == symbol and b.exchange == exchange and b.interval == interval
+                if b.symbol == symbol and b.interval == interval
             ]
             return max(matching, key=lambda b: b.datetime) if matching else None
 

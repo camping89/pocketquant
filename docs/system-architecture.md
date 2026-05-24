@@ -130,6 +130,9 @@ All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mo
 **Example - Symbol Entity (Flattened from SymbolAggregate):**
 Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
 
+**Composite Symbol Format (2026-05-23):**
+Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, StrategySubscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
+
 **Example - Domain Service (Pure Logic):**
 BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
 
@@ -509,7 +512,7 @@ Route Response
 ### Query Flow (Read-Only)
 
 ```
-HTTP Request (GET /market-data/bar/{exchange}/{symbol}?interval=1d&limit=100)
+HTTP Request (GET /market-data/bar/{symbol}?interval=1d&limit=100)
   ↓
 Middleware Stack
   ├─ CorrelationIdMiddleware → inject correlation_id
@@ -517,7 +520,7 @@ Middleware Stack
   └─ (No idempotency for GET)
   ↓
 Route (features/market_data/bar/get_bars/route.py)
-  ├─ Parse query params
+  ├─ Parse query params (symbol as composite: BTCUSDT:BINANCE or URL-encoded %3A)
   ├─ Build GetBarsQuery
   └─ Call Mediator.send(query)
   ↓
@@ -543,14 +546,14 @@ Route Response
 
 | Collection | Repository | Purpose |
 |-----------|-----------|---------|
-| `bars` | BarRepository | Market OHLCV bars |
-| `orders` | OrderRepository | Order lifecycle |
-| `positions` | PositionRepository | Position tracking |
+| `bars` | BarRepository | Market OHLCV bars (composite symbol identifier) |
+| `orders` | OrderRepository | Order lifecycle (composite symbol identifier) |
+| `positions` | PositionRepository | Position tracking (composite symbol identifier) |
 | `backtests` | BacktestRepository | Backtest results + subscription cache (dual-purpose via `subscription_id` field) |
 | `optimizations` | OptimizationRepository | Parameter optimization |
 | `symbols` | SymbolRepository | Symbol metadata |
-| `sync_status` | SyncStatusRepository | Data sync progress |
-| `strategy_subscriptions` | StrategySubscriptionRepository | Strategy ↔ (symbol/exchange/interval) subscriptions |
+| `sync_status` | SyncStatusRepository | Data sync progress (composite symbol identifier) |
+| `strategy_subscriptions` | StrategySubscriptionRepository | Strategy ↔ (symbol/exchange/interval) subscriptions (composite symbol) |
 | `job_history` | JobHistoryRepository | Background job execution history |
 
 **All repositories:**

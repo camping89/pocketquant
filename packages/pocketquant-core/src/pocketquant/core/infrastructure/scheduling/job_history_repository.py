@@ -112,7 +112,6 @@ class JobHistoryRepository(BaseRepository):
         doc_id: str,
         *,
         symbol: str,
-        exchange: str,
         interval: str,
         bars_fetched: int,
         bars_inserted: int,
@@ -121,14 +120,16 @@ class JobHistoryRepository(BaseRepository):
         status: str,
         error: str | None = None,
     ) -> None:
-        """Append a per-(symbol, interval) detail to the parent run doc."""
+        """Append a per-(symbol, interval) detail to the parent run doc.
+
+        ``symbol`` is composite ``{code}:{exchange}``.
+        """
         await self._collection().update_one(
             {"_id": doc_id},
             {
                 "$push": {
                     "details": {
                         "symbol": symbol,
-                        "exchange": exchange,
                         "interval": interval,
                         "bars_fetched": bars_fetched,
                         "bars_inserted": bars_inserted,

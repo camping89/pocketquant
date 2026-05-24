@@ -17,7 +17,6 @@ class Signal:
     """
 
     symbol: str
-    exchange: str
     direction: Direction
     confidence: float  # 0.0 - 1.0
     timestamp: datetime
@@ -74,8 +73,7 @@ class StrategyConfig:
     Example YAML:
         id: ma-cross-btc-5m
         name: "MA Crossover BTC/USDT"
-        symbol: BTCUSDT
-        exchange: OKX
+        symbol: BTCUSDT:OKX   # composite {code}:{exchange}
         interval: 5m
         trigger: bar
         broker: paper
@@ -90,7 +88,6 @@ class StrategyConfig:
     id: str
     name: str
     symbol: str
-    exchange: str
     interval: str
     trigger: Literal["bar", "tick"] = "bar"
     broker: str = "paper"
@@ -132,7 +129,6 @@ class StrategyConfig:
             id=data.get("id", ""),
             name=data.get("name", ""),
             symbol=data.get("symbol", ""),
-            exchange=data.get("exchange", ""),
             interval=data.get("interval", ""),
             trigger=data.get("trigger", "bar"),
             broker=data.get("broker", "paper"),
@@ -151,8 +147,6 @@ class StrategyConfig:
             errors.append("Strategy name is required")
         if not self.symbol:
             errors.append("Symbol is required")
-        if not self.exchange:
-            errors.append("Exchange is required")
         if not self.interval:
             errors.append("Interval is required")
         if self.trigger not in ("bar", "tick"):

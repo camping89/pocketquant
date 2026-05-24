@@ -14,17 +14,16 @@ logger = get_logger(__name__)
 
 # Module-level cache to deduplicate writes across cascade re-runs.
 # Process-local — restart triggers a cold window (~5 cascade ticks to warm up).
-# Key:   (symbol_upper, exchange_upper, interval_value, datetime_iso_utc)
+# Key:   (symbol_composite_upper, interval_value, datetime_iso_utc)
 # Value: (open, high, low, close, volume)  — tick_count excluded by design.
 _BAR_VALUE_CACHE: TTLCache = TTLCache(maxsize=20_000, ttl=3600)
 
 
-def _cache_key(bar: Bar) -> tuple[str, str, str, str]:
+def _cache_key(bar: Bar) -> tuple[str, str, str]:
     interval_val = bar.interval.value if bar.interval else ""
     dt_iso = bar.datetime.isoformat() if bar.datetime else ""
     return (
         bar.symbol.upper(),
-        bar.exchange.upper(),
         interval_val,
         dt_iso,
     )
@@ -35,7 +34,7 @@ def _cache_value(bar: Bar) -> tuple[float, float, float, float, float]:
 
 
 class BarRepository(BaseRepository):
-    """Repository for bar data operations."""
+    """Repository for bar data operations. ``symbol`` is composite ``{code}:{exchange}``."""
 
     _collection_name = COLLECTION_BARS
 
@@ -88,7 +87,6 @@ class BarRepository(BaseRepository):
         now = datetime.now(UTC)
         filter_q = {
             "symbol": bar.symbol.upper(),
-            "exchange": bar.exchange.upper(),
             "interval": bar.interval.value if bar.interval else None,
             "datetime": bar.datetime,
         }
@@ -147,7 +145,6 @@ class BarRepository(BaseRepository):
     async def find(
         self,
         symbol: str,
-        exchange: str,
         interval: Interval,
         start_date=None,
         end_date=None,
@@ -158,7 +155,6 @@ class BarRepository(BaseRepository):
 
         query: dict = {
             "symbol": symbol.upper(),
-            "exchange": exchange.upper(),
             "interval": interval.value,
         }
 
@@ -180,7 +176,6 @@ class BarRepository(BaseRepository):
     async def stream(
         self,
         symbol: str,
-        exchange: str,
         interval: Interval,
         start_datetime: datetime,
         end_datetime: datetime,
@@ -190,7 +185,6 @@ class BarRepository(BaseRepository):
 
         query = {
             "symbol": symbol.upper(),
-            "exchange": exchange.upper(),
             "interval": interval.value,
             "datetime": {"$gte": start_datetime, "$lte": end_datetime},
         }
@@ -203,24 +197,22 @@ class BarRepository(BaseRepository):
         finally:
             await cursor.close()
 
-    async def count(self, symbol: str, exchange: str, interval: Interval) -> int:
-        """Count documents for given symbol/exchange/interval."""
+    async def count(self, symbol: str, interval: Interval) -> int:
+        """Count documents for given symbol/interval."""
         collection = self._collection()
         return await collection.count_documents(
             {
                 "symbol": symbol.upper(),
-                "exchange": exchange.upper(),
                 "interval": interval.value,
             }
         )
 
-    async def get_latest(self, symbol: str, exchange: str, interval: Interval) -> Bar | None:
-        """Get latest bar for symbol/exchange/interval."""
+    async def get_latest(self, symbol: str, interval: Interval) -> Bar | None:
+        """Get latest bar for symbol/interval."""
         collection = self._collection()
         doc = await collection.find_one(
             {
                 "symbol": symbol.upper(),
-                "exchange": exchange.upper(),
                 "interval": interval.value,
             },
             sort=[("datetime", -1)],
@@ -230,7 +222,6 @@ class BarRepository(BaseRepository):
     async def find_datetimes(
         self,
         symbol: str,
-        exchange: str,
         interval: Interval,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
@@ -238,7 +229,6 @@ class BarRepository(BaseRepository):
         """Return lightweight [{_id, datetime}] sorted asc for integrity scanning."""
         query: dict = {
             "symbol": symbol.upper(),
-            "exchange": exchange.upper(),
             "interval": interval.value,
         }
         if start_date or end_date:
@@ -265,24 +255,22 @@ class BarRepository(BaseRepository):
     async def delete_many_by_range(
         self,
         symbol: str,
-        exchange: str,
         intervals: list[Interval],
         start_dt: datetime,
         end_dt: datetime,
     ) -> int:
-        """Delete bars for symbol+exchange within [start_dt, end_dt) for the given intervals.
+        """Delete bars for symbol within [start_dt, end_dt) for the given intervals.
 
         Returns the total deleted_count. Passing an empty intervals list is a no-op (returns 0).
         Uses $in filter so multiple intervals are deleted in a single round-trip.
         """
         if not intervals:
-            logger.warning("delete_many_by_range.no_intervals", symbol=symbol, exchange=exchange)
+            logger.warning("delete_many_by_range.no_intervals", symbol=symbol)
             return 0
 
         result = await self._collection().delete_many(
             {
                 "symbol": symbol.upper(),
-                "exchange": exchange.upper(),
                 "interval": {"$in": [i.value for i in intervals]},
                 "datetime": {"$gte": start_dt, "$lt": end_dt},
             }
@@ -291,7 +279,6 @@ class BarRepository(BaseRepository):
         logger.info(
             "bar_repo.delete_many_by_range",
             symbol=symbol,
-            exchange=exchange,
             intervals=[i.value for i in intervals],
             start_dt=start_dt.isoformat(),
             end_dt=end_dt.isoformat(),
@@ -300,10 +287,10 @@ class BarRepository(BaseRepository):
         return deleted
 
     async def ensure_indexes(self) -> None:
-        """Create compound index on (symbol, exchange, interval, datetime)."""
+        """Create unique compound index on (symbol, interval, datetime)."""
         collection = self._collection()
         await collection.create_index(
-            [("symbol", 1), ("exchange", 1), ("interval", 1), ("datetime", 1)],
+            [("symbol", 1), ("interval", 1), ("datetime", 1)],
             unique=True,
-            name="ix_ohlcv_symbol_exchange_interval_datetime",
+            name="ix_ohlcv_symbol_interval_datetime",
         )

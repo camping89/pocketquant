@@ -15,7 +15,7 @@ class StrategySubscriptionRepository(BaseRepository):
     """MongoDB repository for StrategySubscription persistence.
 
     Collection: strategy_subscriptions
-    PK: _id = deterministic_id(strategy_id, symbol, exchange, interval)
+    PK: _id = deterministic_id(strategy_id, symbol, interval)  — symbol is composite
     """
 
     _collection_name = "strategy_subscriptions"
@@ -41,6 +41,12 @@ class StrategySubscriptionRepository(BaseRepository):
         """Return all subscriptions for a given strategy."""
         collection = self._collection()
         cursor = collection.find({"strategy_id": strategy_id})
+        return [StrategySubscription.from_mongo(doc) async for doc in cursor]
+
+    async def list_all(self) -> list[StrategySubscription]:
+        """Return every subscription in the collection — used for startup rehydration."""
+        collection = self._collection()
+        cursor = collection.find({})
         return [StrategySubscription.from_mongo(doc) async for doc in cursor]
 
     async def delete(self, sub_id: str) -> int:

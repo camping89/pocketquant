@@ -43,22 +43,21 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         self._sync_status_repo = sync_status_repository
 
     async def handle(self, request: SyncSymbolCommand) -> SyncResponse:
+        # ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``)
         symbol = request.symbol.upper()
-        exchange = request.exchange.upper()
         interval = request.interval
 
         logger.info(
             "market_data.sync.started",
             symbol=symbol,
-            exchange=exchange,
             interval=interval.value,
             source=request.source,
         )
 
-        await self._sync_status_repo.upsert(symbol, exchange, interval, "syncing")
+        await self._sync_status_repo.upsert(symbol, interval, "syncing")
 
         try:
-            records = await self._fetch_bars(symbol, exchange, interval, request.n_bars)
+            records = await self._fetch_bars(symbol, interval, request.n_bars)
             bars_fetched = len(records)
             filtered_existing = 0
             filtered_misaligned = 0
@@ -68,7 +67,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 if not request.skip_filter:
                     pre = len(records)
                     records = await filter_new_bars(
-                        records, symbol, exchange, interval, self._bar_repo,
+                        records, symbol, interval, self._bar_repo,
                     )
                     filtered_existing = pre - len(records)
                 pre_align = len(records)
@@ -76,35 +75,32 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 filtered_misaligned = pre_align - len(records)
 
             inserted_count = await self._persist_bars(
-                symbol, exchange, records, request.source,
+                symbol, records, request.source,
             )
-            total_bars, latest_bar = await self._get_bar_stats(symbol, exchange, interval)
+            total_bars, latest_bar = await self._get_bar_stats(symbol, interval)
 
             # Genuine first-sync failure: provider returned nothing AND no prior bars.
             if bars_fetched == 0 and total_bars == 0:
                 return await self._fail(
-                    symbol, exchange, interval, "No data returned from provider",
+                    symbol, interval, "No data returned from provider",
                 )
 
-            await self._mark_completed(symbol, exchange, interval, total_bars, latest_bar)
-            await self._invalidate_cache(symbol, exchange, interval)
+            await self._mark_completed(symbol, interval, total_bars, latest_bar)
+            await self._invalidate_cache(symbol, interval)
 
             # Single bump/reset decision: covers empty-fetch, all-misaligned,
             # and all-already-existing cases uniformly.
             if inserted_count > 0:
-                await self._sync_status_repo.reset_empty_fetch(symbol, exchange, interval)
+                await self._sync_status_repo.reset_empty_fetch(symbol, interval)
                 logger.info(
                     "market_data.sync.completed",
                     symbol=symbol,
-                    exchange=exchange,
                     bars_inserted=inserted_count,
                 )
             else:
-                streak = await self._sync_status_repo.bump_empty_fetch(
-                    symbol, exchange, interval,
-                )
+                streak = await self._sync_status_repo.bump_empty_fetch(symbol, interval)
                 emit_no_progress(
-                    symbol, exchange, interval,
+                    symbol, interval,
                     bars_fetched=bars_fetched,
                     filtered_misaligned=filtered_misaligned,
                     filtered_existing=filtered_existing,
@@ -114,7 +110,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 )
 
             return build_success(
-                symbol, exchange, interval,
+                symbol, interval,
                 bars_synced=inserted_count, bars_fetched=bars_fetched,
                 filtered_existing=filtered_existing,
                 filtered_misaligned=filtered_misaligned,
@@ -125,74 +121,69 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             logger.error(
                 "market_data.sync.failed",
                 symbol=symbol,
-                exchange=exchange,
                 interval=interval.value,
                 error=str(e),
             )
-            return await self._fail(symbol, exchange, interval, str(e))
+            return await self._fail(symbol, interval, str(e))
 
     # -- Private helpers (each does one thing) --
 
     async def _fetch_bars(
         self,
         symbol: str,
-        exchange: str,
         interval: DomainInterval,
         n_bars: int,
     ) -> list[Bar]:
         records, attempts = await fetch_with_retry(
-            self.provider, symbol, exchange, interval, n_bars,
+            self.provider, symbol, interval, n_bars,
         )
         # Exposed to handle() / Phase 2 anomaly log via getattr fallback.
         self._fetch_attempts = attempts
         return records
 
     async def _persist_bars(
-        self, symbol: str, exchange: str, records: list[Bar], source: str,
+        self, symbol: str, records: list[Bar], source: str,
     ) -> int:
         if not records:
             return 0
         inserted_count = await self._bar_repo.insert_many(records, source=source)
-        await self._symbol_repo.upsert(Symbol.create(code=symbol, exchange=exchange))
+        await self._symbol_repo.upsert(Symbol.create(symbol=symbol))
         return inserted_count
 
     async def _get_bar_stats(
-        self, symbol: str, exchange: str, interval: DomainInterval
+        self, symbol: str, interval: DomainInterval
     ) -> tuple[int, Bar | None]:
-        total_bars = await self._bar_repo.count(symbol, exchange, interval)
-        latest_bar = await self._bar_repo.get_latest(symbol, exchange, interval)
+        total_bars = await self._bar_repo.count(symbol, interval)
+        latest_bar = await self._bar_repo.get_latest(symbol, interval)
         return total_bars, latest_bar
 
     async def _mark_completed(
         self,
         symbol: str,
-        exchange: str,
         interval: DomainInterval,
         bar_count: int,
         latest_bar: Bar | None,
     ) -> None:
         await self._sync_status_repo.upsert(
             symbol,
-            exchange,
             interval,
             "completed",
             bar_count=bar_count,
             last_bar_at=latest_bar.datetime if latest_bar else None,
         )
 
-    async def _invalidate_cache(self, symbol: str, exchange: str, interval: DomainInterval) -> None:
-        cache_key = build_bar_cache_key(symbol, exchange, interval.value)
+    async def _invalidate_cache(self, symbol: str, interval: DomainInterval) -> None:
+        cache_key = build_bar_cache_key(symbol, interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")
 
     async def _fail(
-        self, symbol: str, exchange: str, interval: DomainInterval, message: str
+        self, symbol: str, interval: DomainInterval, message: str
     ) -> SyncResponse:
         await self._sync_status_repo.upsert(
-            symbol, exchange, interval, "error", error_message=message
+            symbol, interval, "error", error_message=message
         )
         return SyncResponse(
             symbol=symbol,
-            exchange=exchange,
             interval=interval.value,
             status="error",
             message=message,

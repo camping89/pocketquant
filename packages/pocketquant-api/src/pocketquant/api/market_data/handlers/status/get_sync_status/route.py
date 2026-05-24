@@ -18,7 +18,6 @@ async def get_sync_statuses(
     return [
         {
             "symbol": s.symbol,
-            "exchange": s.exchange,
             "interval": s.interval,
             "status": s.status,
             "bar_count": s.bar_count,

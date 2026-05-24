@@ -21,17 +21,14 @@ class UpdateTrackedSymbolHandler(Handler[UpdateTrackedSymbolCommand, dict]):
         self._repo = tracked_symbol_repository
 
     async def handle(self, request: UpdateTrackedSymbolCommand) -> dict:
-        # Currently no mutable metadata beyond exchange/symbol — update is a no-op
-        # placeholder that validates existence. Extend fields in command when needed.
-        found = await self._repo.update(request.exchange, request.symbol, {})
+        # Currently no mutable metadata beyond the composite symbol itself —
+        # update is a no-op placeholder that validates existence.
+        # Extend fields in command when needed.
+        found = await self._repo.update(request.symbol, {})
         if not found:
             raise NotFoundError(
-                f"Tracked symbol '{request.exchange}:{request.symbol}' not found",
+                f"Tracked symbol '{request.symbol}' not found",
                 error_code="TRACKED_SYMBOL_NOT_FOUND",
             )
-        logger.info(
-            "tracked_symbols.updated",
-            exchange=request.exchange,
-            symbol=request.symbol,
-        )
-        return {"exchange": request.exchange, "symbol": request.symbol, "status": "updated"}
+        logger.info("tracked_symbols.updated", symbol=request.symbol)
+        return {"symbol": request.symbol, "status": "updated"}

@@ -39,13 +39,12 @@ async def repo(settings):
 # ---------------------------------------------------------------------------
 
 
-def _make_sub(strategy_id: str, symbol: str, exchange: str, interval: Interval) -> StrategySubscription:
-    sub_id = StrategySubscription.deterministic_id(strategy_id, symbol, exchange, interval)
+def _make_sub(strategy_id: str, symbol: str, interval: Interval) -> StrategySubscription:
+    sub_id = StrategySubscription.deterministic_id(strategy_id, symbol, interval)
     return StrategySubscription(
         id=sub_id,
         strategy_id=strategy_id,
         symbol=symbol.upper(),
-        exchange=exchange.upper(),
         interval=interval,
         created_at=datetime.now(UTC),
     )
@@ -58,7 +57,7 @@ def _make_sub(strategy_id: str, symbol: str, exchange: str, interval: Interval) 
 
 @pytest.mark.asyncio
 async def test_add_get_delete_round_trip(repo):
-    sub = _make_sub("strat-1", "BTC-USDT", "BINANCE", Interval.HOUR_1)
+    sub = _make_sub("strat-1", "BTC-USDT:BINANCE", Interval.HOUR_1)
     await repo.add(sub)
 
     fetched = await repo.get(sub.id)
@@ -66,7 +65,6 @@ async def test_add_get_delete_round_trip(repo):
     assert fetched.id == sub.id
     assert fetched.strategy_id == sub.strategy_id
     assert fetched.symbol == sub.symbol
-    assert fetched.exchange == sub.exchange
     assert fetched.interval == sub.interval
 
     deleted = await repo.delete(sub.id)
@@ -77,7 +75,7 @@ async def test_add_get_delete_round_trip(repo):
 
 @pytest.mark.asyncio
 async def test_add_duplicate_raises(repo):
-    sub = _make_sub("strat-dup", "ETH-USDT", "OKX", Interval.MINUTE_5)
+    sub = _make_sub("strat-dup", "ETH-USDT:OKX", Interval.MINUTE_5)
     await repo.add(sub)
 
     with pytest.raises(SubscriptionAlreadyExistsError):
@@ -86,9 +84,9 @@ async def test_add_duplicate_raises(repo):
 
 @pytest.mark.asyncio
 async def test_list_by_strategy_filters_correctly(repo):
-    sub_a1 = _make_sub("strat-a", "BTC-USDT", "BINANCE", Interval.HOUR_1)
-    sub_a2 = _make_sub("strat-a", "ETH-USDT", "BINANCE", Interval.HOUR_1)
-    sub_b1 = _make_sub("strat-b", "SOL-USDT", "OKX", Interval.MINUTE_15)
+    sub_a1 = _make_sub("strat-a", "BTC-USDT:BINANCE", Interval.HOUR_1)
+    sub_a2 = _make_sub("strat-a", "ETH-USDT:BINANCE", Interval.HOUR_1)
+    sub_b1 = _make_sub("strat-b", "SOL-USDT:OKX", Interval.MINUTE_15)
 
     await repo.add(sub_a1)
     await repo.add(sub_a2)
@@ -108,10 +106,10 @@ async def test_list_by_strategy_filters_correctly(repo):
 
 @pytest.mark.asyncio
 async def test_delete_by_strategy_bulk(repo):
-    sub_a1 = _make_sub("strat-bulk-a", "BTC-USDT", "BINANCE", Interval.HOUR_1)
-    sub_a2 = _make_sub("strat-bulk-a", "ETH-USDT", "BINANCE", Interval.HOUR_1)
-    sub_a3 = _make_sub("strat-bulk-a", "SOL-USDT", "BINANCE", Interval.HOUR_1)
-    sub_b1 = _make_sub("strat-bulk-b", "XRP-USDT", "OKX", Interval.DAY_1)
+    sub_a1 = _make_sub("strat-bulk-a", "BTC-USDT:BINANCE", Interval.HOUR_1)
+    sub_a2 = _make_sub("strat-bulk-a", "ETH-USDT:BINANCE", Interval.HOUR_1)
+    sub_a3 = _make_sub("strat-bulk-a", "SOL-USDT:BINANCE", Interval.HOUR_1)
+    sub_b1 = _make_sub("strat-bulk-b", "XRP-USDT:OKX", Interval.DAY_1)
 
     for sub in (sub_a1, sub_a2, sub_a3, sub_b1):
         await repo.add(sub)

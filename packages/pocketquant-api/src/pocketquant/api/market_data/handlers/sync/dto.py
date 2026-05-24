@@ -4,10 +4,9 @@ from pydantic import BaseModel
 
 
 class SyncResponse(BaseModel):
-    """Result of sync operation - used as handler return and API response."""
+    """Result of sync operation. ``symbol`` is composite ``{code}:{exchange}``."""
 
     symbol: str
-    exchange: str
     interval: str
     status: str
     bars_synced: int = 0
@@ -20,3 +19,4 @@ class SyncResponse(BaseModel):
     total_bars: int | None = None
     last_bar_at: str | None = None
     message: str | None = None
+

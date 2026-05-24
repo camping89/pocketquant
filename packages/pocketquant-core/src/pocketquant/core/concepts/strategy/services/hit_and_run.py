@@ -126,7 +126,6 @@ class HitAndRunStrategy(IStrategy):
         tp = max(highs) * (1 + self.tp_offset_pct)
         return Signal(
             symbol=self.config.symbol,
-            exchange=self.config.exchange,
             direction=Direction.LONG,
             confidence=0.75,
             timestamp=bar.get("timestamp") or datetime.now(UTC),
@@ -144,7 +143,6 @@ class HitAndRunStrategy(IStrategy):
         tp = min(lows) * (1 - self.tp_offset_pct)
         return Signal(
             symbol=self.config.symbol,
-            exchange=self.config.exchange,
             direction=Direction.SHORT,
             confidence=0.75,
             timestamp=bar.get("timestamp") or datetime.now(UTC),

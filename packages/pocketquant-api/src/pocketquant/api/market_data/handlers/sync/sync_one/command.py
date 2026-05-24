@@ -6,10 +6,12 @@ from pydantic import BaseModel, Field
 
 
 class SyncSymbolCommand(BaseModel):
-    """Sync historical OHLCV data for a single symbol."""
+    """Sync historical OHLCV data for a single composite symbol.
 
-    symbol: str = Field(..., description="Trading symbol (e.g., AAPL, BTCUSD)")
-    exchange: str = Field(..., description="Exchange name (e.g., NASDAQ, BINANCE)")
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+    """
+
+    symbol: str = Field(..., description="Composite symbol (e.g., BTCUSDT:BINANCE)")
     interval: Interval = Field(default=Interval.DAY_1, description="Time interval")
     n_bars: int = Field(
         default=LIMIT_TVDATAFEED_MAX_BARS,

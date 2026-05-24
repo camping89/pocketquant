@@ -68,6 +68,9 @@ input, select {
 
 /* Symbol selector */
 .symbol-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -80,6 +83,21 @@ input, select {
 }
 .symbol-btn:hover {
   border-color: var(--accent);
+}
+
+/* Exchange badge — small chip next to the bare code */
+.exchange-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
 
 .symbol-dropdown {
@@ -1371,4 +1389,95 @@ input, select {
   padding: 6px 12px;
   font-size: 11px;
   border-top: 1px solid var(--border-color);
+}
+
+/* ===== Strategies Page ===== */
+
+/* Desktop 3-pane grid — always visible on md+ */
+.strategies-layout {
+  display: none;
+  height: calc(100vh - 41px); /* subtract app-nav height */
+  overflow: hidden;
+}
+
+/* Mobile single-pane tab layout */
+.strategies-mobile {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 41px);
+  overflow: hidden;
+}
+
+.strategies-mobile__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+}
+
+.strategies-mobile__tab {
+  flex: 1;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.strategies-mobile__tab:hover {
+  color: var(--text-primary);
+}
+
+.strategies-mobile__tab--active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+.strategies-mobile__pane {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .strategies-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr 360px;
+    grid-template-rows: 1fr;
+  }
+
+  .strategies-mobile {
+    display: none;
+  }
+}
+
+.strategies-sidebar {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.strategies-main {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+}
+
+.strategies-dashboard {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Status dot pulse animation (used by StatusDot component) */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
 }

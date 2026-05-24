@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, PrivateAttr
 class PositionAggregate(BaseModel):
     """Position aggregate root tracking entry, quantity, and P&L.
 
+    ``symbol`` is composite ``{code}:{exchange}``.
     Handles position lifecycle from open to close with proper
     average price calculation on adds and realized P&L on reduces.
     """
@@ -26,7 +27,6 @@ class PositionAggregate(BaseModel):
     id: str
     strategy_id: str
     symbol: str
-    exchange: str
     side: PositionSide
     entry_price: float
     quantity: float
@@ -42,7 +42,6 @@ class PositionAggregate(BaseModel):
         cls,
         strategy_id: str,
         symbol: str,
-        exchange: str,
         side: PositionSide,
         entry_price: float,
         quantity: float,
@@ -57,7 +56,6 @@ class PositionAggregate(BaseModel):
             id=generate_id_str(),
             strategy_id=strategy_id,
             symbol=symbol,
-            exchange=exchange,
             side=side,
             entry_price=entry_price,
             quantity=quantity,
@@ -68,7 +66,6 @@ class PositionAggregate(BaseModel):
                 position_id=position.id,
                 strategy_id=strategy_id,
                 symbol=symbol,
-                exchange=exchange,
                 side=side,
                 entry_price=entry_price,
                 quantity=quantity,
@@ -154,7 +151,6 @@ class PositionAggregate(BaseModel):
                 position_id=self.id,
                 strategy_id=self.strategy_id,
                 symbol=self.symbol,
-                exchange=self.exchange,
                 side=self.side,
                 entry_price=self.entry_price,
                 exit_price=exit_price,
@@ -205,7 +201,6 @@ class PositionAggregate(BaseModel):
             "_id": self.id,
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
-            "exchange": self.exchange,
             "side": self.side.value,
             "entry_price": self.entry_price,
             "quantity": self.quantity,
@@ -223,7 +218,6 @@ class PositionAggregate(BaseModel):
             id=doc["_id"],
             strategy_id=doc["strategy_id"],
             symbol=doc["symbol"],
-            exchange=doc["exchange"],
             side=PositionSide(doc["side"]),
             entry_price=doc["entry_price"],
             quantity=doc["quantity"],

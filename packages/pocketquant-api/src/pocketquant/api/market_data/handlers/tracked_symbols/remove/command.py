@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 
 
 class RemoveTrackedSymbolCommand(BaseModel):
-    """Remove (exchange, symbol) from tracked_symbols."""
+    """Remove composite symbol from tracked_symbols."""
 
-    exchange: str = Field(..., description="Exchange of the symbol to remove")
-    symbol: str = Field(..., description="Symbol to remove")
+    symbol: str = Field(..., description="Composite symbol to remove, e.g. BTCUSDT:BINANCE")

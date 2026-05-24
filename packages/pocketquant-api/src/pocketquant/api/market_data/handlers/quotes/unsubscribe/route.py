@@ -10,8 +10,7 @@ router = APIRouter(route_class=DishkaRoute)
 
 
 class UnsubscribeRequest(BaseModel):
-    symbol: str = Field(..., description="Trading symbol (e.g., AAPL)")
-    exchange: str = Field(..., description="Exchange name (e.g., NASDAQ)")
+    symbol: str = Field(..., description="Composite symbol (e.g., BTCUSDT:BINANCE)")
 
 
 @router.post("/unsubscribe")
@@ -19,5 +18,5 @@ async def unsubscribe_from_symbol(
     request: UnsubscribeRequest,
     mediator: FromDishka[Mediator],
 ) -> dict:
-    cmd = UnsubscribeCommand(symbol=request.symbol, exchange=request.exchange)
+    cmd = UnsubscribeCommand(symbol=request.symbol)
     return await mediator.send(cmd)

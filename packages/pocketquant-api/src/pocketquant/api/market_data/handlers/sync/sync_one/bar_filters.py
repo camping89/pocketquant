@@ -3,7 +3,7 @@
 Two concerns:
 
 - Existence filter (DB-aware): drop only bars whose datetime already exists
-  in DB for (symbol, exchange, interval). Lets non-contiguous gaps fill on
+  in DB for (symbol, interval). Lets non-contiguous gaps fill on
   next sync. Insert pipeline still handles dedup via unique index as safety
   net, but pre-filtering cuts wire/log noise.
 - Misalignment filter (pure): drop bars whose timestamps don't sit on the
@@ -23,11 +23,12 @@ logger = get_logger(__name__)
 async def filter_new_bars(
     records: list[Bar],
     symbol: str,
-    exchange: str,
     interval: Interval,
     bar_repo: BarRepository,
 ) -> list[Bar]:
     """Drop records whose datetime already exists in DB for this key.
+
+    ``symbol`` is composite ``{code}:{exchange}``.
 
     Queries existing datetimes within [min(records.dt), max(records.dt)] via
     indexed range scan and excludes them. Bars with `datetime=None` pass through
@@ -45,7 +46,7 @@ async def filter_new_bars(
         return records
 
     existing_docs = await bar_repo.find_datetimes(
-        symbol, exchange, interval,
+        symbol, interval,
         start_date=min(times),
         end_date=max(times),
     )

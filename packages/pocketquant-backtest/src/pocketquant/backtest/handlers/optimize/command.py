@@ -7,11 +7,13 @@ from pydantic import BaseModel, Field
 
 
 class RunOptimizationCommand(BaseModel):
-    """Command to run grid optimization across parameter combinations."""
+    """Command to run grid optimization across parameter combinations.
+
+    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+    """
 
     strategy_id: str = Field(..., description="Strategy identifier")
-    symbol: str = Field(..., description="Trading symbol")
-    exchange: str = Field(..., description="Exchange name")
+    symbol: str = Field(..., description="Composite symbol (e.g. BTCUSDT:BINANCE)")
     interval: str = Field(..., description="Bar interval")
     start_date: date = Field(..., description="Backtest start date")
     end_date: date = Field(..., description="Backtest end date")

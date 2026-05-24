@@ -24,7 +24,7 @@ import type { BacktestPosition } from '../../api/backtest-api'
 import { PositionBoxPrimitive, type PositionData } from './position-box-primitive'
 
 interface TradingChartProps {
-  exchange: string
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
   interval: Interval
   indicators: IndicatorConfig
@@ -35,7 +35,6 @@ interface TradingChartProps {
 }
 
 export function TradingChart({
-  exchange,
   symbol,
   interval,
   indicators,
@@ -46,7 +45,7 @@ export function TradingChart({
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useChart(containerRef)
-  const { data, error, isLoading } = useOHLCV(exchange, symbol, interval)
+  const { data, error, isLoading } = useOHLCV(symbol, interval)
   const indicatorData = useIndicators(data?.candles, indicators)
 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -146,7 +145,7 @@ export function TradingChart({
     }
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useRealtimeBar(exchange, symbol, interval, candleRef, volumeRef)
+  useRealtimeBar(symbol, interval, candleRef, volumeRef)
 
   // Indicator series
   useEffect(() => {

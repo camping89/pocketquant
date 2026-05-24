@@ -62,7 +62,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - POST `/api/v1/quotes/subscribe` - Register symbol
 - POST `/api/v1/quotes/unsubscribe` - Deregister symbol
 - GET `/api/v1/market-data/status` - Connection status
-- GET `/api/v1/quotes/latest/{exchange}/{symbol}` - Latest quote
+- GET `/api/v1/quotes/latest/{symbol}` - Latest quote (composite symbol: `BTCUSDT:BINANCE`, URL-encoded `%3A`)
 - GET `/api/v1/quotes/all` - All cached quotes
 
 ### F3: Multi-interval Bar Aggregation
@@ -94,7 +94,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Support flexible time ranges
 
 **API Endpoints:**
-- GET `/api/v1/market-data/ohlcv/{exchange}/{symbol}` - Bars with query params
+- GET `/api/v1/market-data/bar/{symbol}` - Bars with query params (composite symbol: `BTCUSDT:BINANCE`, URL-encoded `%3A`)
 
 ### F5: Symbol Registry
 
