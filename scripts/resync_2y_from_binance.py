@@ -39,6 +39,7 @@ from pocketquant.api.market_data.app_services.cascade_aggregator import (
 )
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
+from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
 from pocketquant.core.persistence.mongodb import Database
@@ -144,8 +145,8 @@ async def _resync_symbol(
     bars = [b for b in bars if b.datetime < end_dt]
     logger.info("resync.fetched", symbol=symbol, bar_count=len(bars))
 
-    # 3. Insert 1m bars (ordered=False = skip duplicates, idempotent)
-    inserted = await bar_repo.insert_many(bars)
+    # 3. Insert 1m bars (diff-aware upsert loop, idempotent)
+    inserted = await bar_repo.insert_many(bars, source=SOURCE_REST_BACKFILL)
 
     elapsed = time.monotonic() - t0
     pct_done = inserted / max(n_bars, 1) * 100

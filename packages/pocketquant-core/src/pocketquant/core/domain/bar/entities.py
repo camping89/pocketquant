@@ -8,6 +8,16 @@ from pocketquant.core.common.uuid import UUID, generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pydantic import BaseModel, ConfigDict, Field
 
+# Source labels — identify which write path produced/updated a bar.
+# KISS: str literals, no Enum. Use constants for refactor safety.
+SOURCE_REST_SYNC_1M = "rest_sync_1m"
+SOURCE_REST_BACKFILL = "rest_backfill"
+SOURCE_REST_REPAIR = "rest_repair"
+SOURCE_CASCADE = "cascade"
+SOURCE_TRACKED_SYMBOL_BACKFILL = "tracked_symbol_backfill"
+SOURCE_BULK_SYNC = "bulk_sync_api"
+SOURCE_ONE_TIME_LEGACY = "one_time_legacy"
+
 
 class Bar(BaseModel):
     """Price bar with identity and MongoDB persistence.
@@ -30,6 +40,10 @@ class Bar(BaseModel):
     volume: float = 0.0
     tick_count: int = 0
     created_at: dt = Field(default_factory=utc_now)
+    # Audit fields — repository is single writer. Entity treats them as read-only:
+    # populated by from_mongo(), NOT serialized by to_mongo() (BarRepository writes via $set).
+    updated_at: dt | None = None
+    source: str | None = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Bar):
@@ -80,6 +94,8 @@ class Bar(BaseModel):
             volume=doc.get("volume", 0.0),
             tick_count=doc.get("tick_count", 0),
             created_at=coerce_utc(doc.get("created_at")) or utc_now(),
+            updated_at=coerce_utc(doc.get("updated_at")),
+            source=doc.get("source"),
         )
 
     def to_dict(self) -> dict:
@@ -96,4 +112,6 @@ class Bar(BaseModel):
             "close": self.close,
             "volume": self.volume,
             "tick_count": self.tick_count,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "source": self.source,
         }

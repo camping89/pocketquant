@@ -21,3 +21,7 @@ class SyncSymbolCommand(BaseModel):
         default=False,
         description="Bypass _filter_new_bars — used by repair to fill gaps",
     )
+    source: str = Field(
+        ...,
+        description="Audit label identifying write path (rest_sync_1m, rest_backfill, ...).",
+    )

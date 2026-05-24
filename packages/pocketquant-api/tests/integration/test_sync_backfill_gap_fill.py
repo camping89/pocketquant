@@ -71,7 +71,7 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
     span_a = _series(base, 31)                          # 02:00..02:30
     span_b = _series(base + timedelta(minutes=60), 39)  # 03:00..03:38
     seeded = span_a + span_b
-    await bar_repo.insert_many(seeded)
+    await bar_repo.insert_many(seeded, source="test")
 
     pre_count = await bar_repo.count(SYMBOL, EXCHANGE, Interval.MINUTE_1)
     assert pre_count == 70
@@ -93,7 +93,7 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
     assert expected_tail.issubset(kept_dts)
 
     # Persist filtered bars and confirm hole is now filled.
-    inserted = await bar_repo.insert_many(filtered)
+    inserted = await bar_repo.insert_many(filtered, source="test")
     assert inserted == 30
 
     post_count = await bar_repo.count(SYMBOL, EXCHANGE, Interval.MINUTE_1)
@@ -120,7 +120,7 @@ async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) ->
 
     # Seed only the 3 most recent bars.
     tail = _series(base, 3)  # 03:35..03:37
-    await bar_repo.insert_many(tail)
+    await bar_repo.insert_many(tail, source="test")
 
     # Backfill simulates 1000 bars from 1000-min-back through 03:37.
     fetch_start = base - timedelta(minutes=997)
@@ -133,7 +133,7 @@ async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) ->
     # 997 should be new (everything except the 3 already-existing tail bars).
     assert len(filtered) == 997
 
-    inserted = await bar_repo.insert_many(filtered)
+    inserted = await bar_repo.insert_many(filtered, source="test")
     assert inserted == 997
 
     final = await bar_repo.count(SYMBOL, EXCHANGE, Interval.MINUTE_1)
@@ -146,7 +146,7 @@ async def test_continuous_db_filter_drops_overlap(bar_repo: BarRepository) -> No
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
 
     seeded = _series(base, 99)  # 00:00..01:38
-    await bar_repo.insert_many(seeded)
+    await bar_repo.insert_many(seeded, source="test")
 
     fetched = _series(base, 100)  # 00:00..01:39 (+1 new tail)
 

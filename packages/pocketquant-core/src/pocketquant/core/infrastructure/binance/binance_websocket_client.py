@@ -10,6 +10,7 @@ volume in callback dict = raw per-trade quantity (delta, NOT cumulative).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 from collections.abc import Callable
@@ -28,6 +29,11 @@ logger = get_logger(__name__)
 _WS_BASE = "wss://stream.binance.com:9443"
 _RECONNECT_DELAY_INITIAL = 1.0
 _RECONNECT_DELAY_MAX = 60.0
+# Watchdog: force-reconnect if no frame received for this long.
+# Defends against websockets/asyncio bugs where `async for` neither yields
+# nor raises after the underlying socket has died.
+_STALE_TICK_TIMEOUT_S = 30.0
+_WATCHDOG_INTERVAL_S = 5.0
 
 
 class BinanceWebSocketClient:
@@ -93,30 +99,56 @@ class BinanceWebSocketClient:
             logger.info("binance_ws.unsubscribed", symbol_key=symbol_key)
 
     async def run_forever(self) -> None:
-        """Connect and receive messages, reconnecting with exponential backoff on failure."""
+        """Connect and receive messages, reconnecting with exponential backoff on failure.
+
+        Handles three exit modes:
+        - `ConnectionClosed` raised by the iterator (abnormal close codes).
+        - Silent iterator exit on normal close (1000/1001) — websockets does NOT
+          raise in this case, so the silent-exit branch forces a reconnect.
+        - Stale socket where the iterator neither yields nor raises (observed with
+          websockets 16.0 + Python 3.14): a watchdog closes `_ws` after
+          `_STALE_TICK_TIMEOUT_S` of no ticks, unblocking the iterator.
+        """
         self._running = True
 
         while self._running:
+            watchdog: asyncio.Task[None] | None = None
             try:
                 if self._ws is None:
                     await self.connect()
+                    # Reset baseline so the watchdog doesn't trip immediately
+                    self.last_tick_at = datetime.now(UTC)
+
+                watchdog = asyncio.create_task(self._stale_connection_watchdog())
 
                 async for raw_frame in self._ws:
                     if not self._running:
                         break
                     await self._handle_frame(raw_frame)
 
+                # `async for` exited silently (close 1000/1001) — treat as disconnect
+                logger.warning("binance_ws.iterator_exited_silently")
+                await self._close_ws()
+                if self._running:
+                    await self._backoff_sleep()
+
             except websockets.ConnectionClosed as exc:
                 logger.warning("binance_ws.connection_closed", code=exc.code, reason=exc.reason)
-                self._ws = None
+                await self._close_ws()
                 if self._running:
                     await self._backoff_sleep()
 
             except Exception as exc:
                 logger.error("binance_ws.error", error=str(exc))
-                self._ws = None
+                await self._close_ws()
                 if self._running:
                     await self._backoff_sleep()
+
+            finally:
+                if watchdog is not None:
+                    watchdog.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await watchdog
 
     def is_connected(self) -> bool:
         """Return True when the underlying WebSocket is open."""
@@ -204,3 +236,30 @@ class BinanceWebSocketClient:
         logger.info("binance_ws.reconnecting", delay=self._reconnect_delay)
         await asyncio.sleep(self._reconnect_delay)
         self._reconnect_delay = min(self._reconnect_delay * 2, _RECONNECT_DELAY_MAX)
+
+    async def _close_ws(self) -> None:
+        """Best-effort close + clear `_ws`. Idempotent."""
+        if self._ws is None:
+            return
+        with contextlib.suppress(Exception):
+            await self._ws.close()
+        self._ws = None
+
+    async def _stale_connection_watchdog(self) -> None:
+        """Force-close `_ws` if no frame has arrived for `_STALE_TICK_TIMEOUT_S`.
+
+        Runs as a sibling task to the `async for` consumer. Closing the socket
+        from outside causes the iterator to raise/return so `run_forever` can
+        recover. Without this, a dead-but-not-closed socket spins the event
+        loop indefinitely (observed with websockets 16.0 + Python 3.14).
+        """
+        while True:
+            await asyncio.sleep(_WATCHDOG_INTERVAL_S)
+            last = self.last_tick_at
+            if last is None:
+                continue
+            lag = (datetime.now(UTC) - last).total_seconds()
+            if lag > _STALE_TICK_TIMEOUT_S:
+                logger.warning("binance_ws.stale_detected", lag_seconds=lag)
+                await self._close_ws()
+                return

@@ -5,6 +5,7 @@ from pocketquant.api.market_data.handlers.sync.sync_bulk.command import BulkSync
 from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pocketquant.api.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC
 
 
 @handles(BulkSyncCommand)
@@ -22,6 +23,7 @@ class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ig
                 exchange=symbol_entry["exchange"],
                 interval=request.interval,
                 n_bars=request.n_bars,
+                source=SOURCE_BULK_SYNC,
             )
             result = await self._sync_symbol_handler.handle(sync_cmd)
             results.append(result)

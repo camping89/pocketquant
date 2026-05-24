@@ -107,7 +107,7 @@ async def setup_strategy_and_bars(app_client):
     bt_repo: BacktestRepository = await container.get(BacktestRepository)
 
     # Seed synthetic bar data
-    await bar_repo.insert_many(_synthetic_bars(_N_BARS))
+    await bar_repo.insert_many(_synthetic_bars(_N_BARS), source="test")
 
     config = StrategyConfig(
         id=_STRATEGY_ID,
