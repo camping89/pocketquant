@@ -1,0 +1,68 @@
+# Enforce consistent line endings across all platforms.
+# Without this, Windows clones can produce CRLF in shell scripts,
+# which breaks `set -euo pipefail` and similar bash constructs on Linux VPS.
+
+* text=auto eol=lf
+
+# Text — always LF (Linux/macOS native; safe in WSL/Git-Bash on Windows)
+*.sh         text eol=lf
+*.bash       text eol=lf
+*.py         text eol=lf
+*.pyi        text eol=lf
+*.toml       text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.json       text eol=lf
+*.md         text eol=lf
+*.txt        text eol=lf
+*.cfg        text eol=lf
+*.ini        text eol=lf
+*.env        text eol=lf
+*.env.example text eol=lf
+Dockerfile   text eol=lf
+Dockerfile.* text eol=lf
+.dockerignore text eol=lf
+.gitignore   text eol=lf
+.gitattributes text eol=lf
+justfile     text eol=lf
+Makefile     text eol=lf
+
+# Frontend
+*.ts         text eol=lf
+*.tsx        text eol=lf
+*.js         text eol=lf
+*.jsx        text eol=lf
+*.mjs        text eol=lf
+*.cjs        text eol=lf
+*.css        text eol=lf
+*.scss       text eol=lf
+*.html       text eol=lf
+*.svg        text eol=lf
+
+# Windows-only files keep CRLF
+*.ps1        text eol=crlf
+*.bat        text eol=crlf
+*.cmd        text eol=crlf
+
+# Binaries — never touch
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.ico        binary
+*.webp       binary
+*.pdf        binary
+*.zip        binary
+*.tar        binary
+*.tar.gz     binary
+*.tgz        binary
+*.gz         binary
+*.woff       binary
+*.woff2      binary
+*.ttf        binary
+*.eot        binary
+
+# Lockfiles — treat as text but skip diff/merge noise
+*.lock       -text -diff
+uv.lock      text -diff
+package-lock.json text -diff
