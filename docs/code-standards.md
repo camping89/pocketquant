@@ -492,7 +492,6 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 - JSON/database: raw `:` preserved (no encoding inside payloads)
 - Cache keys: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`, etc.
 - Affected entities: Bar, Order, Position, Symbol, SyncStatus, StrategySubscription, TrackedSymbol
-- Migration: `scripts/one_time_consolidate_exchange_into_symbol.py` (idempotent, dry-run safe)
 
 **Example Repository Usage:**
 ```python

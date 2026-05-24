@@ -333,15 +333,27 @@ The cascade in `sync_1m` already self-heals 100 min of missed 1m data per tick, 
 
 ### Step 1: Audit
 
+Use the integrity endpoint per `(symbol, interval)`:
+
 ```bash
-ssh -i $KEY $VPS "cd /opt/pocketquant && uv run python scripts/audit_bar_gaps.py --dates 2026-05-08,2026-05-11,2026-05-21"
+ssh -i $KEY $VPS "curl -s -X POST http://localhost:\$APP_PORT/api/v1/market-data/integrity/check \
+  -H 'Content-Type: application/json' \
+  -d '{\"symbol\":\"BTCUSDT:BINANCE\",\"interval\":\"1m\",\"days_back\":7}' | jq ."
 ```
 
-Exit code `0` = parity for every (date, symbol, interval). Exit code `1` = gaps found. The table is sorted by gap size, worst offenders first.
+Response includes `missing_count`, `gap_ranges` (start/end timestamps), and `misaligned_ids`. The web Monitor view (`/monitor`) renders the same data across all tracked symbols.
 
 ### Step 2: Repair (only if audit shows gaps)
 
-For each `(symbol, interval)` row with a positive gap, hit the per-symbol sync endpoint with a deep `n_bars` window:
+Either call the repair endpoint (deletes misaligned + auto-resyncs gap ranges):
+
+```bash
+ssh -i $KEY $VPS "curl -s -X POST http://localhost:\$APP_PORT/api/v1/market-data/integrity/repair \
+  -H 'Content-Type: application/json' \
+  -d '{\"symbol\":\"BTCUSDT:BINANCE\",\"interval\":\"1m\",\"days_back\":7}' | jq ."
+```
+
+Or hit the per-symbol sync endpoint directly with a deep `n_bars` window:
 
 ```bash
 ssh -i $KEY $VPS "curl -X POST http://localhost:\$APP_PORT/api/v1/market-data/sync \
@@ -353,7 +365,7 @@ ssh -i $KEY $VPS "curl -X POST http://localhost:\$APP_PORT/api/v1/market-data/sy
 
 ### Step 3: Verify
 
-Re-run the audit script — expect exit code `0`. If any rows still show a gap, the source provider is missing data for that window (not a sync issue) and the gap is unrecoverable.
+Re-run Step 1 — expect `missing_count == 0` and empty `gap_ranges`. Any residual gap means the source provider is missing data for that window (not a sync issue) and the gap is unrecoverable.
 
 ### Catch-up at boot (automatic)
 
