@@ -726,7 +726,6 @@ All settings via environment variables (`.env` file):
 - **Per-job grace time:** `JobScheduler.add_cron_job()` accepts optional `misfire_grace_time` kwarg. Sync jobs tuned per frequency (sync_1m: 120s, sync_verify_cascade: 600s, daily/12h jobs: 3600s). Prevents cascading failures on scheduler restart within grace window.
 - **Startup catch-up:** `register_sync_jobs()` enqueues immediate async catch-up for stale daily/12h jobs if last successful run >grace window (no waiting for next cron tick).
 - **Structured error messages:** `JobScheduler._on_error()` now emits structured strings (was bare `""` for exceptions without message text).
-- **Audit script:** New `scripts/audit_bar_gaps.py` CLI tool for standalone gap auditing with CSV export.
 - **Repository methods:** `JobHistoryRepository.get_last_successful_started_at()` queries last successful job start time (for catch-up logic).
 
 **Integrity Repair Verification & Scheduling (2026-04-13)**

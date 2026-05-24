@@ -49,21 +49,6 @@ docker pull "${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}"
 echo "=== Starting services ==="
 docker compose -f docker/compose.prod.yml --env-file docker/.env up -d --remove-orphans
 
-# ─── One-time migrations (idempotent — safe to re-run every deploy) ───
-echo "=== Running one-time migrations ==="
-# Wait for app container to be healthy (depends on mongodb being healthy already).
-for i in {1..30}; do
-  if docker inspect --format='{{.State.Health.Status}}' pocketquant-app 2>/dev/null | grep -q healthy; then
-    break
-  fi
-  sleep 2
-done
-
-# Purge MongoDB data for legacy strategies (ma_crossover, hit_and_run) deleted
-# in the hitnrun2 migration. Idempotent: no-op once collections are clean.
-docker compose -f docker/compose.prod.yml --env-file docker/.env exec -T app \
-  python -m scripts.one_time_purge_legacy_strategies || true
-
 echo "=== Cleaning old images ==="
 docker image prune -f
 
