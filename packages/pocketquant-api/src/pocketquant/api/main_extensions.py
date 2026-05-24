@@ -150,7 +150,17 @@ async def start_background_jobs(container: AsyncContainer) -> None:
         logger.info("background_jobs_disabled")
         return
 
-    from pocketquant.api.market_data.app_services.sync_jobs import register_sync_jobs
+    from pocketquant.api.market_data.app_services.sync_jobs import (
+        register_sync_jobs,
+        set_container as set_sync_container,
+    )
+
+    # Wire sync_jobs container BEFORE resolving JobScheduler. The scheduler's
+    # Dishka factory calls scheduler.start() inside the async-gen yield; any
+    # persisted MongoDBJobStore job whose next_run_time falls within
+    # misfire_grace_time can dispatch during that await point and crash on an
+    # un-initialized container. See plans/reports/debugger-260524-1324-*.md.
+    set_sync_container(container)
 
     register_sync_jobs(
         container=container,
