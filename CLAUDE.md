@@ -1,20 +1,21 @@
 # CLAUDE.md — PocketQuant
 
-**Last Updated:** 2026-03-21 | **Status:** v1.0 production | **Architecture:** 4-package uv workspace monorepo
+**Last Updated:** 2026-05-25 | **Status:** v2.0.1 production | **Architecture:** 5-package monorepo (4 Python uv workspace + 1 Node frontend)
 
 ## Monorepo Structure
 
-4 packages under `packages/`, sharing `pocketquant.*` namespace:
+5 packages under `packages/`. The 4 Python packages share the `pocketquant.*` namespace and form the uv workspace. `pocketquant-web` is a separate Node/Vite SPA, **excluded from the uv workspace** (see `pyproject.toml` → `[tool.uv.workspace] exclude`).
 
 ```
 packages/
 ├── pocketquant-core/       # 0 deps — domain, common, persistence, infra ports
 ├── pocketquant-backtest/   # → core — backtest engine, optimization, PaperBroker
 ├── pocketquant-trading/    # → core — live trading, OKX broker, strategy orchestration
-└── pocketquant-api/        # → core + backtest + trading — FastAPI, DI, composition root
+├── pocketquant-api/        # → core + backtest + trading — FastAPI, DI, composition root
+└── pocketquant-web/        # Node/Vite SPA — TanStack Router, lightweight-charts; consumes pocketquant-api HTTP
 ```
 
-**Dependency graph:** core ← {backtest, trading} ← api
+**Dependency graph:** core ← {backtest, trading} ← api ← web (HTTP only)
 
 ## Package Imports
 
