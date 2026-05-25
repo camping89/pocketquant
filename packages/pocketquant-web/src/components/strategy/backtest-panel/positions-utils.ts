@@ -1,4 +1,5 @@
 import type { BacktestPosition } from '../../../api/backtest-api'
+import { formatDateTime, parseIso, type TimezoneMode } from '../../../lib/datetime'
 
 export type FilterKey = 'all' | 'wins' | 'losses' | 'open'
 
@@ -35,15 +36,19 @@ export function applyFilter(positions: IndexedPosition[], filter: FilterKey): In
   }
 }
 
+function isoMs(iso: string): number {
+  return parseIso(iso)?.valueOf() ?? 0
+}
+
 function durationSeconds(p: BacktestPosition): number {
   if (!p.exit_time) return Number.POSITIVE_INFINITY
-  return (new Date(p.exit_time).getTime() - new Date(p.entry_time).getTime()) / 1000
+  return (isoMs(p.exit_time) - isoMs(p.entry_time)) / 1000
 }
 
 function valueFor(p: BacktestPosition, key: SortKey, fallbackIndex: number): number | string {
   switch (key) {
     case 'index': return fallbackIndex
-    case 'entry_time': return new Date(p.entry_time).getTime()
+    case 'entry_time': return isoMs(p.entry_time)
     case 'direction': return p.direction ?? 'LONG'
     case 'entry_price': return p.entry_price
     case 'exit_price': return p.exit_price ?? Number.NEGATIVE_INFINITY
@@ -93,10 +98,8 @@ export function fmtPrice(n: number | null): string {
   return n.toFixed(2)
 }
 
-export function fmtDateTime(s: string): string {
-  const d = new Date(s)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+export function fmtDateTime(s: string, mode: TimezoneMode): string {
+  return formatDateTime(s, mode, 'YYYY-MM-DD HH:mm')
 }
 
 export function aggregatePnl(positions: IndexedPosition[]): number {

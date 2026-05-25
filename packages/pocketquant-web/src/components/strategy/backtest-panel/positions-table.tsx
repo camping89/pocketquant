@@ -7,6 +7,7 @@ import {
   type SortDir,
   type SortKey,
 } from './positions-utils'
+import { useTimezone } from '../../../lib/use-timezone'
 
 interface PositionsTableProps {
   rows: IndexedPosition[]
@@ -48,6 +49,7 @@ export function PositionsTable({
   onRowMouseEnter,
   onRowMouseLeave,
 }: PositionsTableProps) {
+  const { mode } = useTimezone()
   return (
     <table className="positions-table">
       <thead>
@@ -81,7 +83,7 @@ export function PositionsTable({
               onMouseLeave={onRowMouseLeave}
             >
               <td className="positions-table__td--num">{item.index + 1}</td>
-              <td>{fmtDateTime(p.entry_time)}</td>
+              <td>{fmtDateTime(p.entry_time, mode)}</td>
               <td>
                 <span className={`direction-badge direction-badge--${dir.toLowerCase()}`}>{dir}</span>
               </td>

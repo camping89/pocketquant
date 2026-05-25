@@ -22,6 +22,8 @@ import { toUTCTimestamp } from '../../api/market-data-api'
 import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { BacktestPosition } from '../../api/backtest-api'
 import { PositionBoxPrimitive, type PositionData } from './position-box-primitive'
+import { useTimezone } from '../../lib/use-timezone'
+import { makeChartTimeFormatter, type TimezoneMode } from '../../lib/datetime'
 
 interface TradingChartProps {
   /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
@@ -44,9 +46,18 @@ export function TradingChart({
   onChartReady,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useChart(containerRef)
+  const { mode } = useTimezone()
+  const chartRef = useChart(containerRef, undefined, mode)
   const { data, error, isLoading } = useOHLCV(symbol, interval)
   const indicatorData = useIndicators(data?.candles, indicators)
+
+  // Ref pattern: subscribed crosshair handler reads fresh mode without resubscribing.
+  const modeRef = useRef<TimezoneMode>(mode)
+  useEffect(() => { modeRef.current = mode }, [mode])
+
+  // Live-update legend timestamp when mode flips (ohlcv state may already hold a
+  // formatted string from previous mode — reformat from the current hovered time).
+  const hoveredTimeRef = useRef<number | null>(null)
 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null)
@@ -116,17 +127,19 @@ export function TradingChart({
 
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.seriesData) {
+        hoveredTimeRef.current = null
         setOhlcv(null)
         return
       }
       const candle = param.seriesData.get(candleSeries) as { open: number; high: number; low: number; close: number } | undefined
       const vol = param.seriesData.get(volumeSeries) as { value: number } | undefined
       if (candle) {
-        const d = new Date((param.time as number) * 1000)
-        const pad = (n: number) => String(n).padStart(2, '0')
-        const t = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
-        setOhlcv({ o: candle.open, h: candle.high, l: candle.low, c: candle.close, v: vol?.value ?? 0, t })
+        const t = param.time as number
+        hoveredTimeRef.current = t
+        const text = makeChartTimeFormatter(modeRef.current)(t)
+        setOhlcv({ o: candle.open, h: candle.high, l: candle.low, c: candle.close, v: vol?.value ?? 0, t: text })
       } else {
+        hoveredTimeRef.current = null
         setOhlcv(null)
       }
     })
@@ -146,6 +159,15 @@ export function TradingChart({
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useRealtimeBar(symbol, interval, candleRef, volumeRef)
+
+  // Reformat parked legend timestamp on mode toggle (crosshair handler only
+  // fires on movement — without this, a stationary crosshair stays in old tz).
+  useEffect(() => {
+    const t = hoveredTimeRef.current
+    if (t == null) return
+    const text = makeChartTimeFormatter(mode)(t)
+    setOhlcv((prev) => (prev ? { ...prev, t: text } : prev))
+  }, [mode])
 
   // Indicator series
   useEffect(() => {

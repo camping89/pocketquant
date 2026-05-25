@@ -1,5 +1,5 @@
 import type { JobInfo, SyncStatus } from '../../types/market-data'
-import { INTERVAL_MS } from './format-helpers'
+import { INTERVAL_MS, parseIso } from './format-helpers'
 
 type PillVariant = 'ok' | 'warn' | 'error' | 'neutral'
 
@@ -9,8 +9,9 @@ function syncHealth(statuses: SyncStatus[]): { variant: PillVariant; label: stri
   let hasError = false
   for (const s of statuses) {
     if (s.error_message) { hasError = true; continue }
-    if (s.last_bar_at) {
-      const age = Date.now() - new Date(s.last_bar_at.endsWith('Z') ? s.last_bar_at : s.last_bar_at + 'Z').getTime()
+    const lastBar = parseIso(s.last_bar_at)
+    if (lastBar) {
+      const age = Date.now() - lastBar.valueOf()
       const ivMs = INTERVAL_MS[s.interval] ?? 300_000
       if (age < ivMs * 2) fresh++
     }
@@ -33,8 +34,9 @@ function jobHealth(jobs: JobInfo[]): { variant: PillVariant; label: string } {
   let ok = 0
   for (const j of jobs) {
     if (j.last_run?.status === 'failed') return { variant: 'error', label: `Jobs: failed` }
-    if (j.next_run) {
-      const overdue = Date.now() - new Date(j.next_run.endsWith('Z') ? j.next_run : j.next_run + 'Z').getTime()
+    const nextRun = parseIso(j.next_run)
+    if (nextRun) {
+      const overdue = Date.now() - nextRun.valueOf()
       if (overdue > 300_000) return { variant: 'error', label: `Jobs: overdue` }
       if (overdue > 60_000) continue
     }

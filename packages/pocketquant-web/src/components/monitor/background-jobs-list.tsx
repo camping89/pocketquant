@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useBackgroundJobs } from '../../hooks/use-background-jobs'
 import type { JobInfo } from '../../types/market-data'
-import { formatDuration, formatHumanizedNextRun, formatNextRun, formatUtcTime } from './format-helpers'
+import { useFmt } from '../../lib/use-timezone'
+import { parseIso, formatDuration, formatHumanizedNextRun } from '../../lib/datetime'
 import { JobInsightsPanel } from './job-insights-panel'
 import { SparklineStrip } from './sparkline-strip'
 import { StatusPill } from './status-pill'
@@ -11,7 +12,9 @@ function jobStatus(job: JobInfo): { variant: 'ok' | 'warn' | 'error' | 'neutral'
   if (last === 'failed' || last === 'missed' || last === 'skipped_max_instances')
     return { variant: 'error', label: last === 'failed' ? 'failed' : last.replace('_', ' ') }
   if (!job.next_run) return { variant: 'neutral', label: 'never' }
-  const overdue = Date.now() - new Date(job.next_run.endsWith('Z') ? job.next_run : job.next_run + 'Z').getTime()
+  const nextRun = parseIso(job.next_run)
+  if (!nextRun) return { variant: 'neutral', label: 'pending' }
+  const overdue = Date.now() - nextRun.valueOf()
   if (overdue > 60_000) return { variant: 'warn', label: 'overdue' }
   if (!job.last_run) return { variant: 'neutral', label: 'pending' }
   return { variant: 'ok', label: 'OK' }
@@ -21,6 +24,7 @@ export function BackgroundJobsList() {
   const { data, isLoading, error } = useBackgroundJobs()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [, setTick] = useState(0)
+  const fmt = useFmt()
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000)
@@ -69,14 +73,14 @@ export function BackgroundJobsList() {
                       {isOpen ? '▼' : '▶'} {job.id}
                     </td>
                     <td>{job.trigger}</td>
-                    <td className="mono">{formatUtcTime(job.last_run?.started_at ?? null)}</td>
+                    <td className="mono">{fmt.hmsTime(job.last_run?.started_at ?? null)}</td>
                     <td className="mono">{formatDuration(job.last_run?.duration_ms ?? null)}</td>
                     <td className="recent-cell">
                       <SparklineStrip jobId={job.id} cellCount={5} compact />
                     </td>
                     <td className="mono next-run-cell">
                       <div className="next-run-humanized">{formatHumanizedNextRun(job.next_run)}</div>
-                      <div className="next-run-time">{formatNextRun(job.next_run)}</div>
+                      <div className="next-run-time">{fmt.nextRun(job.next_run)}</div>
                     </td>
                     <td>
                       <StatusPill variant={s.variant} label={s.label} />

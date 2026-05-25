@@ -5,6 +5,7 @@ import {
   useRemoveSymbol,
   useDeleteStrategy,
 } from '../../hooks/use-subscriptions'
+import { parseIso } from '../../lib/datetime'
 import { BacktestStatusBadge } from './backtest-status-badge'
 import { AddSymbolDialog } from './add-symbol-dialog'
 import type { Subscription } from '../../api/strategy-api'
@@ -16,8 +17,9 @@ interface SubscriptionPanelProps {
 }
 
 function relTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const ms = Date.now() - new Date(iso).getTime()
+  const parsed = parseIso(iso)
+  if (!parsed) return '—'
+  const ms = Date.now() - parsed.valueOf()
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`

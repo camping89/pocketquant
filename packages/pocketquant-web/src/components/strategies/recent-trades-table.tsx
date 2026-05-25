@@ -2,6 +2,7 @@
  * Compact table showing last N trades for the selected strategy subscription.
  * Accepts a generic trade shape; renders direction, entry/exit price, pnl.
  */
+import { useFmt } from '../../lib/use-timezone'
 
 export interface StrategyTrade {
   id: string
@@ -22,13 +23,6 @@ interface RecentTradesTableProps {
 function fmtPrice(v: number | null): string {
   if (v == null) return '—'
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-}
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
-    ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
 const thStyle: React.CSSProperties = {
@@ -54,6 +48,7 @@ const tdStyle: React.CSSProperties = {
 }
 
 export function RecentTradesTable({ trades, isLoading = false }: RecentTradesTableProps) {
+  const fmt = useFmt()
   if (isLoading) {
     return (
       <div style={{ padding: '12px 0', color: 'var(--text-secondary)', fontSize: 12 }}>
@@ -104,7 +99,7 @@ export function RecentTradesTable({ trades, isLoading = false }: RecentTradesTab
                 {t.pnl >= 0 ? '+' : ''}{t.pnl.toFixed(2)}
               </td>
               <td style={{ ...tdStyle, color: 'var(--text-secondary)' }}>
-                {fmtTime(t.entry_time)}
+                {fmt.barDate(t.entry_time)}
               </td>
             </tr>
           ))}

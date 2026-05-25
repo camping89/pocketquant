@@ -1,5 +1,7 @@
 // Stateless dot indicating SSE freshness: green = live, yellow = warn (>10s), red = stale (>30s)
 
+import { useFmt } from '../../lib/use-timezone'
+
 interface TickerStaleIndicatorProps {
   lastUpdateTs: number | null
 }
@@ -17,9 +19,14 @@ function getColor(lastUpdateTs: number | null): string {
 
 export function TickerStaleIndicator({ lastUpdateTs }: TickerStaleIndicatorProps) {
   const color = getColor(lastUpdateTs)
+  const fmt = useFmt()
+  const title =
+    lastUpdateTs === null
+      ? 'No data'
+      : `Last update: ${fmt.hmsTime(new Date(lastUpdateTs).toISOString())}`
   return (
     <span
-      title={lastUpdateTs === null ? 'No data' : `Last update: ${new Date(lastUpdateTs).toLocaleTimeString()}`}
+      title={title}
       style={{
         display: 'inline-block',
         width: 8,

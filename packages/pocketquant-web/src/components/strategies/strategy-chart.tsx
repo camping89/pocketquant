@@ -23,6 +23,7 @@ import {
 import { useChart } from '../chart/use-chart'
 import { useOHLCV } from '../../hooks/use-ohlcv'
 import { tradesToMarkers } from '../../lib/trades-to-markers'
+import { useTimezone } from '../../lib/use-timezone'
 import type { Trade, OpenPosition } from '../../types/strategy'
 import type { Interval } from '../../types/market-data'
 
@@ -39,7 +40,8 @@ interface StrategyChartProps {
 
 export function StrategyChart({ symbol, interval, trades, openPosition }: StrategyChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useChart(containerRef)
+  const { mode } = useTimezone()
+  const chartRef = useChart(containerRef, undefined, mode)
   const { data, isLoading, error } = useOHLCV(symbol, interval)
 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)

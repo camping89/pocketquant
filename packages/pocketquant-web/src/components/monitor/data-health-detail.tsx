@@ -1,5 +1,5 @@
 import type { IntegrityReport, RepairResult, SyncStatus } from '../../types/market-data'
-import { formatBarDate } from './format-helpers'
+import { useFmt } from '../../lib/use-timezone'
 
 interface DataHealthDetailProps {
   syncStatus: SyncStatus
@@ -8,11 +8,12 @@ interface DataHealthDetailProps {
 }
 
 export function DataHealthDetail({ syncStatus, report, repair }: DataHealthDetailProps) {
+  const fmt = useFmt()
   return (
     <div className="detail-panel">
       <dl>
         <dt>Last Sync</dt>
-        <dd>{formatBarDate(syncStatus.last_sync_at)}</dd>
+        <dd>{fmt.barDate(syncStatus.last_sync_at)}</dd>
 
         <dt>Total Bars</dt>
         <dd>{syncStatus.bar_count?.toLocaleString() ?? '—'}</dd>
@@ -32,7 +33,7 @@ export function DataHealthDetail({ syncStatus, report, repair }: DataHealthDetai
                 ? 'None'
                 : report.gap_ranges.map(([from, to], i) => (
                     <div key={i} className="mono">
-                      {formatBarDate(from)} → {formatBarDate(to)}
+                      {fmt.barDate(from)} → {fmt.barDate(to)}
                     </div>
                   ))}
             </dd>
