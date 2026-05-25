@@ -1,6 +1,6 @@
 ---
 title: "Fix sync_jobs container init race during container restart"
-status: in_progress
+status: completed
 priority: P1
 branch: develop
 tags: [bugfix, scheduler, deploy]
