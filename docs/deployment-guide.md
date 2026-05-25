@@ -144,6 +144,23 @@ Background sync jobs are scheduled via APScheduler with a **MongoDBJobStore** ba
    - `DOCKERHUB_USERNAME` — your Docker Hub username
    - `DOCKERHUB_TOKEN` — the access token from step 1
 
+## Credentials & Config Layout
+
+All operator-side credentials live OUTSIDE this repo, in a sibling
+`pocketquant-config/` directory. None of these files should ever be
+committed here.
+
+| File | Purpose |
+|------|---------|
+| `pocketquant-config/sandbox/vultr` | OpenSSH private key for the VPS (`root@<vps-ip>`) |
+| `pocketquant-config/sandbox/vultr.pub` | Matching public key |
+| `pocketquant-config/sandbox/ssh` | Plain-text: VPS IP + SSH usage snippets (PowerShell + Git Bash + Linux) |
+| `pocketquant-config/sandbox/portainer` | Portainer URL + admin password |
+| `pocketquant-config/sandbox/secrets` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` for image pulls |
+| `pocketquant-config/sandbox/plans/` | Operator-side ops journals (not implementation plans) |
+
+Set `$KEY` and `$VPS` from these files (see next section).
+
 ## SSH Session Variables
 
 Set these in each terminal session before running deploy commands:
@@ -157,6 +174,27 @@ $VPS = "root@<vps-ip>"
 # $VPS = "root@207.148.79.60"
 ```
 
+### Git Bash on Windows
+
+`icacls` is PowerShell-only. From Git Bash, copy the key out of the (read-only,
+CRLF-tainted) config directory and fix line endings + perms:
+
+```bash
+mkdir -p ~/.ssh-pq
+cp /d/w/_me/algo-bot/pocketquant-config/sandbox/vultr ~/.ssh-pq/vultr_key
+sed -i 's/\r$//' ~/.ssh-pq/vultr_key
+chmod 600 ~/.ssh-pq/vultr_key
+
+export KEY=~/.ssh-pq/vultr_key
+export VPS=root@207.148.79.60
+```
+
+Adjust the source path if your checkout lives elsewhere. Verify with:
+
+```bash
+ssh -i "$KEY" "$VPS" 'echo OK'
+```
+
 All commands below use `ssh -i $KEY $VPS` pattern.
 
 ## Port Map
@@ -164,6 +202,7 @@ All commands below use `ssh -i $KEY $VPS` pattern.
 | Service | Env Var | Container Port |
 |---------|---------|----------------|
 | App API | `APP_PORT` | 41920 |
+| Web (SPA + reverse proxy to API) | `WEB_PORT` | 80 |
 | MongoDB | `MONGO_PORT` | 27017 |
 | Redis | `REDIS_PORT` | 6379 |
 | Portainer | `PORTAINER_PORT` | 9000 |
@@ -193,6 +232,7 @@ IMAGE_TAG=latest
 MONGO_USER=pocketquant
 MONGO_PASSWORD=your_strong_random_password
 APP_PORT=58921
+WEB_PORT=58922
 MONGO_PORT=52017
 REDIS_PORT=53679
 PORTAINER_PORT=54900
@@ -241,7 +281,7 @@ ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy/deploy.sh /opt/pocket
 ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/verify.sh"
 ```
 
-Runs 15 checks (containers, health, HTTP, MongoDB, Redis, disk, memory, ports, image, logs) and outputs a markdown report to `reports/verify-<UTC-timestamp>.md` on the VPS.
+Runs 18 checks (containers, health, HTTP, web SPA routes, MongoDB, Redis, disk, memory, ports, image, logs) and outputs a markdown report to `reports/verify-<UTC-timestamp>.md` on the VPS.
 
 Quick check without full report:
 
@@ -259,9 +299,16 @@ Portainer UI: `http://vps-ip:$PORTAINER_PORT`
 After pushing code (CI triggers on `master` and `develop`):
 
 ```bash
-# 1. CI builds + pushes image automatically (check GitHub Actions tab)
+# 0. Verify working tree is clean for the slice you're pushing.
+#    Anything still showing in `git status` will NOT be in the deploy.
+git status
+
+# 1. Wait for CI to push images. Grab the run ID and watch:
+RUN_ID=$(gh run list --workflow=ci.yml --branch=develop --limit=1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --exit-status
+
 # 2. Pull and restart on VPS:
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/deploy.sh"
+ssh -i "$KEY" "$VPS" "cd /opt/pocketquant && bash deploy/deploy.sh"
 ```
 
 If compose file changed, re-scp it first:
