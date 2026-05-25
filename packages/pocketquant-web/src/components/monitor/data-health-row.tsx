@@ -58,6 +58,7 @@ export function DataHealthRow({
   return (
     <>
       <tr className={rowClass} onClick={onToggle} style={{ cursor: 'pointer' }}>
+        <td className="mono">{s.symbol}</td>
         <td className="mono">
           {expanded ? '\u25BC' : '\u25B6'} {s.interval}
         </td>
@@ -87,7 +88,7 @@ export function DataHealthRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={7} style={{ padding: 0 }}>
+          <td colSpan={8} style={{ padding: 0 }}>
             <DataHealthDetail syncStatus={s} report={report} repair={repair} />
           </td>
         </tr>

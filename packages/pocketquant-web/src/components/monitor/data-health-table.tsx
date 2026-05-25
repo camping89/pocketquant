@@ -22,12 +22,10 @@ interface IntegrityTotals {
 }
 
 interface DataHealthTableProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
-  symbol: string
   onIntegrityUpdate?: (totals: IntegrityTotals | null) => void
 }
 
-export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTableProps) {
+export function DataHealthTable({ onIntegrityUpdate }: DataHealthTableProps) {
   const { data, isLoading, error, dataUpdatedAt } = useSyncStatus()
   const repair = useIntegrityRepair()
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
@@ -36,15 +34,18 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
 
   const filtered = useMemo(() => {
     if (!data?.length) return []
-    const rows = data
-      .filter((s) => s.symbol === symbol)
-      .filter((s) => showInactive || isActiveInterval(s.interval))
-    return rows.sort(
-      (a, b) =>
+    const rows = data.filter((s) => showInactive || isActiveInterval(s.interval))
+    return rows.sort((a, b) => {
+      const symCmp = a.symbol.localeCompare(b.symbol)
+      if (symCmp !== 0) return symCmp
+      return (
         INTERVAL_ORDER.indexOf(a.interval as (typeof INTERVAL_ORDER)[number]) -
-        INTERVAL_ORDER.indexOf(b.interval as (typeof INTERVAL_ORDER)[number]),
-    )
-  }, [data, symbol, showInactive])
+        INTERVAL_ORDER.indexOf(b.interval as (typeof INTERVAL_ORDER)[number])
+      )
+    })
+  }, [data, showInactive])
+
+  const rowKey = (s: { symbol: string; interval: string }) => `${s.symbol}-${s.interval}`
 
   useEffect(() => {
     if (!onIntegrityUpdate) return
@@ -80,7 +81,7 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
   }
 
   async function handleCheck(s: typeof filtered[0]) {
-    const key = s.interval
+    const key = rowKey(s)
     updateRow(key, { checking: true })
     try {
       const report = await checkIntegrity(s.symbol, s.interval, daysBack)
@@ -92,7 +93,7 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
 
   function handleRepair(s: typeof filtered[0]) {
     if (!confirm(`Repair ${s.symbol} ${s.interval}? This deletes misaligned bars and resyncs gaps.`)) return
-    const key = s.interval
+    const key = rowKey(s)
     updateRow(key, { repairing: true })
     repair.mutate(
       { symbol: s.symbol, interval: s.interval, daysBack },
@@ -103,17 +104,17 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
     )
   }
 
-  const isCheckingAny = filtered.some((s) => getRow(s.interval).checking)
+  const isCheckingAny = filtered.some((s) => getRow(rowKey(s)).checking)
 
   function handleCheckAll() {
     for (const s of filtered) {
-      if (!getRow(s.interval).checking) handleCheck(s)
+      if (!getRow(rowKey(s)).checking) handleCheck(s)
     }
   }
 
   const totals = filtered.reduce(
     (acc, s) => {
-      const rs = getRow(s.interval)
+      const rs = getRow(rowKey(s))
       if (rs.report) {
         acc.misaligned += rs.report.misaligned_count
         acc.gaps += rs.report.missing_count
@@ -158,12 +159,13 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
         </div>
       </div>
       {filtered.length === 0 ? (
-        <div className="monitor-empty">No sync data for {symbol}</div>
+        <div className="monitor-empty">No sync data yet</div>
       ) : (
         <div className="table-wrap">
           <table className="monitor-table">
             <thead>
               <tr>
+                <th>Symbol</th>
                 <th>TF</th>
                 <th className="num">Bars</th>
                 <th className="num">Last Bar</th>
@@ -175,7 +177,7 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
             </thead>
             <tbody>
               {filtered.map((s) => {
-                const key = s.interval
+                const key = rowKey(s)
                 const rs = getRow(key)
                 return (
                   <DataHealthRow
@@ -196,7 +198,7 @@ export function DataHealthTable({ symbol, onIntegrityUpdate }: DataHealthTablePr
             {totals.checked > 0 && (
               <tfoot>
                 <tr>
-                  <td colSpan={4} />
+                  <td colSpan={5} />
                   <td>
                     {totals.misaligned + totals.gaps === 0
                       ? 'All OK'
