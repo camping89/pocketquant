@@ -1,6 +1,21 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-05-24 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-25 | **Format:** Semantic Versioning
+
+## [Unreleased] — 2026-05-25 — `scripts-to-deploy/` split + WEB_PORT public stance (BREAKING for VPS deploys)
+
+### Refactor
+- **New folder:** `deploy/scripts-to-deploy/` for all VPS-bound shell scripts. Moved into it: `deploy.sh`, `verify.sh`, `cleanup.sh`, `server-setup.sh`, `patches/`.
+- **Repurposed:** `deploy/scripts/` is now reserved for LOCAL operator-side helpers (see `deploy/scripts/README.md`). Empty by default.
+- **Updated:** `deploy.sh` + `verify.sh` `cd "$(dirname "$0")/.."` so `.env` and `compose.prod.yml` still resolve relatively after the move.
+- **Updated:** `server-setup.sh` line 101 stale path `deploy/scripts/patches` → `deploy/scripts-to-deploy/patches`.
+- **Docs:** `docs/deployment-guide.md` — `.env` example now `WEB_PORT=80` (matches prod). Port Map note clarifies: `WEB_PORT` is public; obscure-port rule applies only to `APP_PORT`/`MONGO_PORT`/`REDIS_PORT`/`PORTAINER_PORT`.
+- **Docs:** "Updating" section adds explicit re-scp step for `scripts-to-deploy/*.sh` (closes a silent-failure mode where CI doesn't push shell scripts).
+
+### Migration Required
+- **VPS (BREAKING):** see [`docs/deployment-guide.md` → "VPS Migration Runbook"](./deployment-guide.md#vps-migration-runbook) — Step 2 idempotent `mv` block covers both 2026-05-24 and 2026-05-25 migrations in one pass.
+
+---
 
 ## [Unreleased] — 2026-05-24 — Deployment Layout Consolidation (BREAKING for VPS deploys)
 

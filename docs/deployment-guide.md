@@ -1,8 +1,10 @@
 # Production Deployment Guide
 
-**Last Updated:** 2026-05-24 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via deploy/deploy.sh
+**Last Updated:** 2026-05-25 | **CI:** GitHub Actions → Docker Hub | **CD:** Manual via `deploy/scripts-to-deploy/deploy.sh`
 
-> **Breaking change (2026-05-24):** Deployment layout reorganized — all deploy assets now live under `deploy/`. See [VPS Migration Runbook](#vps-migration-runbook) before deploying to existing VPS.
+> **Breaking change (2026-05-25):** VPS-bound shell scripts moved from `deploy/` + `deploy/scripts/` into a single `deploy/scripts-to-deploy/` folder. The local-only `deploy/scripts/` folder is now reserved for operator-side helpers (see `deploy/scripts/README.md`). See [VPS Migration Runbook](#vps-migration-runbook) — Step 2 covers BOTH this migration and the prior 2026-05-24 `docker/` → `deploy/` migration idempotently.
+>
+> **Prior breaking change (2026-05-24):** All deploy assets moved under `deploy/`.
 
 ## VPS Migration Runbook
 
@@ -23,9 +25,9 @@ docker cp pocketquant-mongodb:/tmp/pre-deploy-layout.archive ./backups/
 
 ```bash
 cd /opt/pocketquant
-mkdir -p deploy/scripts/patches
+mkdir -p deploy/scripts-to-deploy/patches
 
-# Move files if old layout still present (idempotent guards)
+# 2026-05-24 migration: docker/ -> deploy/  (idempotent guards)
 [ -f deploy.sh ] && mv deploy.sh deploy/deploy.sh
 [ -f verify.sh ] && mv verify.sh deploy/verify.sh
 [ -d docker ] && {
@@ -34,10 +36,17 @@ mkdir -p deploy/scripts/patches
   mv docker/.env             deploy/.env             2>/dev/null || true
   mv docker/scripts/cleanup.sh      deploy/scripts/cleanup.sh      2>/dev/null || true
   mv docker/scripts/server-setup.sh deploy/scripts/server-setup.sh 2>/dev/null || true
-  # Remove now-empty docker/ folder
   rmdir docker/scripts 2>/dev/null || true
   rmdir docker         2>/dev/null || true
 }
+
+# 2026-05-25 migration: VPS-bound .sh moves into deploy/scripts-to-deploy/ (idempotent guards)
+[ -f deploy/deploy.sh ] && mv deploy/deploy.sh deploy/scripts-to-deploy/deploy.sh
+[ -f deploy/verify.sh ] && mv deploy/verify.sh deploy/scripts-to-deploy/verify.sh
+[ -f deploy/scripts/cleanup.sh ]      && mv deploy/scripts/cleanup.sh      deploy/scripts-to-deploy/cleanup.sh
+[ -f deploy/scripts/server-setup.sh ] && mv deploy/scripts/server-setup.sh deploy/scripts-to-deploy/server-setup.sh
+[ -d deploy/scripts/patches ] && mv deploy/scripts/patches deploy/scripts-to-deploy/patches
+rmdir deploy/scripts 2>/dev/null || true
 ```
 
 ### Step 3: Sync new files from local
@@ -45,10 +54,10 @@ mkdir -p deploy/scripts/patches
 From your laptop (replace `$KEY` and `$VPS`):
 
 ```bash
-scp -i $KEY deploy/deploy.sh deploy/verify.sh deploy/compose.prod.yml \
-    deploy/.env.example $VPS:/opt/pocketquant/deploy/
-scp -i $KEY deploy/scripts/cleanup.sh deploy/scripts/server-setup.sh \
-    $VPS:/opt/pocketquant/deploy/scripts/
+scp -i $KEY deploy/compose.prod.yml deploy/.env.example \
+    $VPS:/opt/pocketquant/deploy/
+scp -i $KEY deploy/scripts-to-deploy/*.sh \
+    $VPS:/opt/pocketquant/deploy/scripts-to-deploy/
 
 # .env is git-ignored — ensure local deploy/.env has prod values, then:
 scp -i $KEY deploy/.env $VPS:/opt/pocketquant/deploy/.env
@@ -57,24 +66,20 @@ scp -i $KEY deploy/.env $VPS:/opt/pocketquant/deploy/.env
 ### Step 4: Fix CRLF if scp'd from Windows
 
 ```bash
-ssh -i $KEY $VPS "
-  sed -i 's/\r$//' /opt/pocketquant/deploy/deploy.sh
-  sed -i 's/\r$//' /opt/pocketquant/deploy/verify.sh
-  sed -i 's/\r$//' /opt/pocketquant/deploy/scripts/*.sh
-"
+ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy/scripts-to-deploy/*.sh"
 ```
 
 ### Step 5: Deploy
 
 ```bash
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 ```
 
 ### Step 6: Verify
 
 ```bash
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/verify.sh"
-# Inspect report (lives next to script in new layout):
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/verify.sh"
+# Inspect report (saved to deploy/reports/ — verify.sh cd's up one level):
 ssh -i $KEY $VPS "ls -lt /opt/pocketquant/deploy/reports/ | head"
 ```
 
@@ -93,16 +98,16 @@ cd /opt/pocketquant
 # Stop new-layout containers
 docker compose -f deploy/compose.prod.yml --env-file deploy/.env down || true
 
-# Restore old layout
+# Restore old layout (reverses both 2026-05-25 and 2026-05-24 migrations)
 mkdir -p docker/scripts
-mv deploy/deploy.sh                  deploy.sh
-mv deploy/verify.sh                  verify.sh
-mv deploy/compose.prod.yml           docker/compose.prod.yml
-mv deploy/compose.yml                docker/compose.yml         2>/dev/null || true
-mv deploy/.env                       docker/.env
-mv deploy/scripts/cleanup.sh         docker/scripts/cleanup.sh
-mv deploy/scripts/server-setup.sh    docker/scripts/server-setup.sh
-rmdir deploy/scripts/patches deploy/scripts deploy 2>/dev/null || true
+mv deploy/scripts-to-deploy/deploy.sh        deploy.sh
+mv deploy/scripts-to-deploy/verify.sh        verify.sh
+mv deploy/compose.prod.yml                   docker/compose.prod.yml
+mv deploy/compose.yml                        docker/compose.yml         2>/dev/null || true
+mv deploy/.env                               docker/.env
+mv deploy/scripts-to-deploy/cleanup.sh       docker/scripts/cleanup.sh
+mv deploy/scripts-to-deploy/server-setup.sh  docker/scripts/server-setup.sh
+rmdir deploy/scripts-to-deploy/patches deploy/scripts-to-deploy deploy/scripts deploy 2>/dev/null || true
 
 # Pull OLD images (use last-known-good SHA, NOT :latest — :latest will already be overwritten by CI)
 docker pull <DOCKERHUB_USERNAME>/pocketquant:sha-<LAST_GOOD_SHA>
@@ -128,7 +133,7 @@ Current note: for local development and UI testing, use [README](../README.md) a
 
 ```
 GitHub push → CI builds Docker image → Docker Hub
-VPS: deploy/deploy.sh pulls image → docker compose up (app + web + mongodb + redis + portainer)
+VPS: deploy/scripts-to-deploy/deploy.sh pulls image → docker compose up (app + web + mongodb + redis + portainer)
 ```
 
 ### Distributed Scheduling
@@ -207,7 +212,7 @@ All commands below use `ssh -i $KEY $VPS` pattern.
 | Redis | `REDIS_PORT` | 6379 |
 | Portainer | `PORTAINER_PORT` | 9000 |
 
-No default ports — you MUST set them in `.env`. Pick obscure values to avoid scanning.
+No default ports — you MUST set them in `.env`. **`WEB_PORT` is the public entry point** (default `80`; use `443` if you terminate TLS directly). All other ports (`APP_PORT`, `MONGO_PORT`, `REDIS_PORT`, `PORTAINER_PORT`) MUST use obscure values — they aren't meant for direct public access and obfuscation cuts bot-scanner noise.
 
 ---
 
@@ -231,8 +236,8 @@ DOCKERHUB_USERNAME=your-dockerhub-username
 IMAGE_TAG=latest
 MONGO_USER=pocketquant
 MONGO_PASSWORD=your_strong_random_password
-APP_PORT=58921
-WEB_PORT=58922
+APP_PORT=58921       # obscure — API is not the public entry point
+WEB_PORT=80          # public SPA entry point (use 443 if terminating TLS directly)
 MONGO_PORT=52017
 REDIS_PORT=53679
 PORTAINER_PORT=54900
@@ -250,35 +255,35 @@ OKX_DEMO_MODE=false
 ### Step 2: Copy files to VPS
 
 ```bash
-ssh -i $KEY $VPS "mkdir -p /opt/pocketquant/deploy/scripts/patches"
-scp -i $KEY deploy/deploy.sh deploy/verify.sh deploy/compose.prod.yml ${VPS}:/opt/pocketquant/deploy/
-scp -i $KEY deploy/scripts/cleanup.sh deploy/scripts/server-setup.sh ${VPS}:/opt/pocketquant/deploy/scripts/
+ssh -i $KEY $VPS "mkdir -p /opt/pocketquant/deploy/scripts-to-deploy/patches"
+scp -i $KEY deploy/compose.prod.yml ${VPS}:/opt/pocketquant/deploy/
+scp -i $KEY deploy/scripts-to-deploy/*.sh ${VPS}:/opt/pocketquant/deploy/scripts-to-deploy/
 scp -i $KEY deploy/.env ${VPS}:/opt/pocketquant/deploy/.env
 ```
 
 ### Step 3: Run deploy
 
 ```bash
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 ```
 
-`deploy/deploy.sh` will:
+`deploy/scripts-to-deploy/deploy.sh` will:
 - Install Docker if missing (then exit — re-run after logging back in)
 - Validate all required env vars
 - Pull image from Docker Hub
-- Start all 4 services
+- Start all 5 services (app, web, mongodb, redis, portainer)
 - Prune old images
 
-**Windows users:** If deploy/deploy.sh fails with `invalid option`, fix CRLF line endings first:
+**Windows users:** If the script fails with `invalid option`, fix CRLF line endings first:
 
 ```bash
-ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy/deploy.sh /opt/pocketquant/deploy/verify.sh /opt/pocketquant/deploy/scripts/*.sh"
+ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy/scripts-to-deploy/*.sh"
 ```
 
 ### Step 4: Verify
 
 ```bash
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/verify.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/verify.sh"
 ```
 
 Runs 18 checks (containers, health, HTTP, web SPA routes, MongoDB, Redis, disk, memory, ports, image, logs) and outputs a markdown report to `reports/verify-<UTC-timestamp>.md` on the VPS.
@@ -308,21 +313,29 @@ RUN_ID=$(gh run list --workflow=ci.yml --branch=develop --limit=1 --json databas
 gh run watch "$RUN_ID" --exit-status
 
 # 2. Pull and restart on VPS:
-ssh -i "$KEY" "$VPS" "cd /opt/pocketquant && bash deploy/deploy.sh"
+ssh -i "$KEY" "$VPS" "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
+```
+
+**If `deploy/scripts-to-deploy/*.sh` changed (deploy.sh / verify.sh / cleanup.sh / server-setup.sh), re-scp them FIRST** — CI does not sync shell scripts to the VPS, only Docker images. Skipping this step silently runs the OLD scripts on the VPS:
+
+```bash
+scp -i $KEY deploy/scripts-to-deploy/*.sh ${VPS}:/opt/pocketquant/deploy/scripts-to-deploy/
+ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy/scripts-to-deploy/*.sh"  # Windows-only CRLF fix
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 ```
 
 If compose file changed, re-scp it first:
 
 ```bash
 scp -i $KEY deploy/compose.prod.yml ${VPS}:/opt/pocketquant/deploy/
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 ```
 
 If .env changed:
 
 ```bash
 scp -i $KEY deploy/.env ${VPS}:/opt/pocketquant/deploy/.env
-ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 ```
 
 ---
@@ -463,7 +476,7 @@ ssh -i $KEY $VPS "docker exec pocketquant-app curl -s http://localhost:41920/hea
 ssh -i $KEY $VPS "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env restart"
 
 # Wipe everything and redeploy (destroys database)
-ssh -i $KEY $VPS "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env down -v && bash deploy/deploy.sh"
+ssh -i $KEY $VPS "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env down -v && bash deploy/scripts-to-deploy/deploy.sh"
 ```
 
 ---
