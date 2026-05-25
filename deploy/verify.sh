@@ -102,6 +102,19 @@ else
   check "API /health" "$FAIL" "no response from app"
 fi
 
+# ─── 3b. Web container: SPA routes ─────────────────────────
+
+source .env 2>/dev/null || true
+WEB_PORT_VAL="${WEB_PORT:-80}"
+for path in "/" "/strategies" "/monitor"; do
+  http=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${WEB_PORT_VAL}${path}" || echo "000")
+  if [ "$http" = "200" ]; then
+    check "Web ${path}" "$PASS" "HTTP 200"
+  else
+    check "Web ${path}" "$FAIL" "HTTP ${http}"
+  fi
+done
+
 # ─── 4. MongoDB direct check ───────────────────────────────
 
 mongo_ok=$(docker exec pocketquant-mongodb mongosh --quiet --eval "db.adminCommand('ping').ok" 2>/dev/null || echo "0")
