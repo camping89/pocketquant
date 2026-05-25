@@ -20,11 +20,13 @@ from pocketquant.api.main_extensions import (
     start_quote_feed,
     stop_quote_feed,
 )
+from pocketquant.api.market_data.app_services.sync_jobs import set_container as set_sync_container
 from pocketquant.api.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.redis import Cache
+from pocketquant.trading.jobs.backtest_jobs import set_container as set_backtest_container
 
 logger = get_logger(__name__)
 
@@ -35,6 +37,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("application_starting", environment=settings.environment)
 
     container: AsyncContainer = app.state.dishka_container
+
+    # Wire job-module containers BEFORE any await. JobScheduler is APP-scoped and
+    # may resolve+start inside any subsequent `await container.get(...)` chain
+    # (e.g. via StrategyAppService during rehydrate). Once started, persisted
+    # MongoDBJobStore jobs whose next_run_time is within misfire_grace_time can
+    # dispatch and call sync_jobs._get_container() / backtest_jobs._get_container().
+    # Synchronous global assignments — no await means no preemption point.
+    set_sync_container(container)
+    set_backtest_container(container)
 
     try:
         # Expose DB/Cache on app.state for middleware hot-path access

@@ -155,29 +155,18 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
 
 
 async def start_background_jobs(container: AsyncContainer) -> None:
-    """Register background sync jobs with the scheduler and wire backtest job container."""
-    from pocketquant.trading.jobs.backtest_jobs import set_container as set_backtest_container
+    """Register background sync jobs with the scheduler.
 
-    # Always wire backtest jobs container so one-off jobs can resolve dependencies
-    set_backtest_container(container)
-    logger.info("backtest_jobs_container_wired")
-
+    NOTE: sync_jobs and backtest_jobs module-level containers are wired at the
+    top of lifespan() in main.py — before any `await` — to win the race against
+    persisted MongoDBJobStore jobs that may dispatch during early Dishka resolves.
+    """
     settings = await container.get(Settings)
     if not settings.enable_jobs:
         logger.info("background_jobs_disabled")
         return
 
-    from pocketquant.api.market_data.app_services.sync_jobs import (
-        register_sync_jobs,
-        set_container as set_sync_container,
-    )
-
-    # Wire sync_jobs container BEFORE resolving JobScheduler. The scheduler's
-    # Dishka factory calls scheduler.start() inside the async-gen yield; any
-    # persisted MongoDBJobStore job whose next_run_time falls within
-    # misfire_grace_time can dispatch during that await point and crash on an
-    # un-initialized container. See plans/reports/debugger-260524-1324-*.md.
-    set_sync_container(container)
+    from pocketquant.api.market_data.app_services.sync_jobs import register_sync_jobs
 
     await register_sync_jobs(
         container=container,
