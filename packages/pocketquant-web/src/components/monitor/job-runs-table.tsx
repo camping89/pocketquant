@@ -1,4 +1,5 @@
 import type { JobRun } from '../../types/job-history'
+import { useFmt } from '../../lib/use-timezone'
 import { statusColor, statusLabel } from './job-status-palette'
 
 interface JobRunsTableProps {
@@ -7,12 +8,8 @@ interface JobRunsTableProps {
   onSelect: (runId: string) => void
 }
 
-function fmt(iso: string | null): string {
-  if (!iso) return '—'
-  return iso.replace('T', ' ').replace(/\.\d+Z?$/, '').replace('Z', '')
-}
-
 export function JobRunsTable({ runs, selectedRunId, onSelect }: JobRunsTableProps) {
+  const fmt = useFmt()
   if (!runs.length) return <div className="monitor-empty">No runs in window</div>
   return (
     <div className="table-wrap">
@@ -39,7 +36,7 @@ export function JobRunsTable({ runs, selectedRunId, onSelect }: JobRunsTableProp
                 style={{ cursor: 'pointer' }}
                 onClick={() => onSelect(r._id)}
               >
-                <td className="mono">{fmt(r.started_at)}</td>
+                <td className="mono">{fmt.fullDateTime(r.started_at)}</td>
                 <td className="mono num">{r.duration_ms ?? '—'} ms</td>
                 <td>
                   <span

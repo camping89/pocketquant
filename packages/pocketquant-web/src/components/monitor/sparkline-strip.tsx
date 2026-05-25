@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useJobRuns } from '../../hooks/use-job-runs'
 import type { JobRun } from '../../types/job-history'
+import { useFmt } from '../../lib/use-timezone'
 import { statusColor, statusLabel } from './job-status-palette'
 
 interface SparklineStripProps {
@@ -9,17 +10,10 @@ interface SparklineStripProps {
   compact?: boolean
 }
 
-function fmtTime(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso.endsWith('Z') ? iso : `${iso}Z`)
-  const hh = String(d.getUTCHours()).padStart(2, '0')
-  const mm = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
-
 export function SparklineStrip({ jobId, cellCount = 20, compact = false }: SparklineStripProps) {
   const navigate = useNavigate()
   const { data, isLoading, error } = useJobRuns(jobId, { limit: cellCount })
+  const fmt = useFmt()
 
   const wrapCls = compact ? 'sparkline-wrap sparkline-compact' : 'sparkline-wrap'
   const stripCls = compact ? 'sparkline-strip sparkline-strip-compact' : 'sparkline-strip'
@@ -43,7 +37,7 @@ export function SparklineStrip({ jobId, cellCount = 20, compact = false }: Spark
         ))}
         {runs.map((r) => {
           const cls = r.status === 'running' ? 'spark-cell spark-pulse' : 'spark-cell'
-          const tip = `${fmtTime(r.started_at)} · ${statusLabel(r.status)} · ${r.duration_ms ?? '?'}ms`
+          const tip = `${fmt.format(r.started_at, 'HH:mm')} · ${statusLabel(r.status)} · ${r.duration_ms ?? '?'}ms`
           return (
             <button
               key={r._id}

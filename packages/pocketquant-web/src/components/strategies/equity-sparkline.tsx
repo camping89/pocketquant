@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react'
 import { createChart, LineSeries, type IChartApi, type ISeriesApi, type LineData } from 'lightweight-charts'
 import type { EquityPoint } from '../../api/backtest-api'
+import { parseIso } from '../../lib/datetime'
 
 interface EquitySparklineProps {
   equityCurve: EquityPoint[]
@@ -57,8 +58,8 @@ export function EquitySparkline({ equityCurve, width = 340 }: EquitySparklinePro
   useEffect(() => {
     if (!seriesRef.current || equityCurve.length === 0) return
     const data: LineData[] = equityCurve.map((pt) => ({
-      // lightweight-charts expects unix timestamp in seconds
-      time: (new Date(pt.timestamp).getTime() / 1000) as LineData['time'],
+      // lightweight-charts expects unix timestamp in seconds; treat naive ISO as UTC
+      time: ((parseIso(pt.timestamp)?.valueOf() ?? 0) / 1000) as LineData['time'],
       value: pt.equity,
     }))
     seriesRef.current.setData(data)

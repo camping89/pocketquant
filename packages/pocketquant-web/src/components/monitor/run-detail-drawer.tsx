@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { JobRun } from '../../types/job-history'
+import { useFmt } from '../../lib/use-timezone'
 import { statusColor, statusLabel } from './job-status-palette'
 
 interface RunDetailDrawerProps {
@@ -7,13 +8,9 @@ interface RunDetailDrawerProps {
   onClose: () => void
 }
 
-function fmt(iso: string | null): string {
-  if (!iso) return '—'
-  return iso.replace('T', ' ').replace(/\.\d+Z?$/, '').replace('Z', '')
-}
-
 export function RunDetailDrawer({ run, onClose }: RunDetailDrawerProps) {
   const closeRef = useRef<HTMLButtonElement>(null)
+  const fmt = useFmt()
 
   useEffect(() => {
     if (!run) return
@@ -62,11 +59,11 @@ export function RunDetailDrawer({ run, onClose }: RunDetailDrawerProps) {
         </header>
         <dl className="drawer-meta">
           <dt>Started</dt>
-          <dd className="mono">{fmt(run.started_at)}</dd>
+          <dd className="mono">{fmt.fullDateTime(run.started_at)}</dd>
           <dt>Finished</dt>
-          <dd className="mono">{fmt(run.finished_at)}</dd>
+          <dd className="mono">{fmt.fullDateTime(run.finished_at)}</dd>
           <dt>Scheduled</dt>
-          <dd className="mono">{fmt(run.scheduled_run_time)}</dd>
+          <dd className="mono">{fmt.fullDateTime(run.scheduled_run_time)}</dd>
           <dt>Duration</dt>
           <dd className="mono">{run.duration_ms ?? '—'} ms</dd>
           <dt>Inserted / Fetched</dt>

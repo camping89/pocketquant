@@ -3,11 +3,11 @@ import { DataHealthDetail } from './data-health-detail'
 import {
   ageColorClass,
   formatAge,
-  formatBarDate,
   formatIntegrity,
   integrityColorClass,
   statusVariant,
 } from './format-helpers'
+import { useFmt } from '../../lib/use-timezone'
 import { StatusPill } from './status-pill'
 import { StuckBadge } from './stuck-badge'
 
@@ -34,6 +34,7 @@ export function DataHealthRow({
   onCheck,
   onRepair,
 }: DataHealthRowProps) {
+  const fmt = useFmt()
   const hasIssues = report && (report.misaligned_count > 0 || report.missing_count > 0)
   const rowClass = [
     expanded ? 'row-expanded' : '',
@@ -63,7 +64,7 @@ export function DataHealthRow({
           {expanded ? '\u25BC' : '\u25B6'} {s.interval}
         </td>
         <td className="num">{s.bar_count?.toLocaleString() ?? '—'}</td>
-        <td className="num">{formatBarDate(s.last_bar_at)}</td>
+        <td className="num">{fmt.barDate(s.last_bar_at)}</td>
         <td className={`num ${ageColorClass(s.last_bar_at, s.interval)}`}>{formatAge(s.last_bar_at)}</td>
         <td className={integrityColorClass(report)}>{formatIntegrity(report)}</td>
         <td>

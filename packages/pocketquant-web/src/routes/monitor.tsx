@@ -6,37 +6,34 @@ import { DataHealthTable } from '../components/monitor/data-health-table'
 import { HealthBanner } from '../components/monitor/health-banner'
 import { useBackgroundJobs } from '../hooks/use-background-jobs'
 import { useSyncStatus } from '../hooks/use-sync-status'
+import { useFmt } from '../lib/use-timezone'
 
 export const Route = createFileRoute('/monitor')({
   component: MonitorPage,
 })
 
-function useUtcClock(): string {
-  const fmt = (d: Date) => {
-    const hh = String(d.getUTCHours()).padStart(2, '0')
-    const mm = String(d.getUTCMinutes()).padStart(2, '0')
-    const ss = String(d.getUTCSeconds()).padStart(2, '0')
-    return `${hh}:${mm}:${ss}`
-  }
-  const [time, setTime] = useState(() => fmt(new Date()))
+/** Live HH:mm:ss clock rendered in the active tz mode. */
+function useClock(): string {
+  const [now, setNow] = useState(() => new Date().toISOString())
   useEffect(() => {
-    const id = setInterval(() => setTime(fmt(new Date())), 1000)
+    const id = setInterval(() => setNow(new Date().toISOString()), 1000)
     return () => clearInterval(id)
   }, [])
-  return time
+  const fmt = useFmt()
+  return fmt.hmsTime(now)
 }
 
 function MonitorPage() {
   const { data: syncStatuses } = useSyncStatus()
   const { data: jobs } = useBackgroundJobs()
   const [integrityTotals, setIntegrityTotals] = useState<{ misaligned: number; gaps: number } | null>(null)
-  const utcTime = useUtcClock()
+  const clock = useClock()
 
   return (
     <div className="monitor-page">
       <div className="monitor-header">
         <h2>System Monitor</h2>
-        <span className="utc-clock mono">{utcTime} UTC</span>
+        <span className="utc-clock mono">{clock}</span>
       </div>
       <HealthBanner
         syncStatuses={syncStatuses ?? []}

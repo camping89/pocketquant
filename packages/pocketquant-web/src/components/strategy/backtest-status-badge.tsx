@@ -1,3 +1,5 @@
+import { useFmt } from '../../lib/use-timezone'
+
 interface BacktestStatusBadgeProps {
   status: 'running' | 'completed' | 'failed' | null
   lastRunAt?: string | null
@@ -11,17 +13,14 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }
   none:      { bg: 'rgba(139,139,154,0.12)', color: '#8b8b9a', label: 'none' },
 }
 
-function formatTitle(lastRunAt?: string | null, errorMsg?: string | null): string {
-  const parts: string[] = []
-  if (lastRunAt) parts.push(`Last run: ${new Date(lastRunAt).toLocaleString()}`)
-  if (errorMsg)  parts.push(`Error: ${errorMsg}`)
-  return parts.join('\n')
-}
-
 export function BacktestStatusBadge({ status, lastRunAt, errorMsg }: BacktestStatusBadgeProps) {
   const key = status ?? 'none'
   const s = STATUS_STYLES[key]
-  const title = formatTitle(lastRunAt, errorMsg)
+  const fmt = useFmt()
+  const parts: string[] = []
+  if (lastRunAt) parts.push(`Last run: ${fmt.fullDateTime(lastRunAt)}`)
+  if (errorMsg)  parts.push(`Error: ${errorMsg}`)
+  const title = parts.join('\n')
 
   return (
     <span

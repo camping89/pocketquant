@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
 import type { JobRun } from '../../types/job-history'
+import { useFmt } from '../../lib/use-timezone'
 import { statusColor, statusLabel } from './job-status-palette'
 
 interface JobTimelineChartProps {
@@ -10,6 +11,7 @@ interface JobTimelineChartProps {
 
 export function JobTimelineChart({ runs, onRunClick }: JobTimelineChartProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const fmt = useFmt()
 
   useEffect(() => {
     if (!ref.current) return
@@ -23,12 +25,15 @@ export function JobTimelineChart({ runs, onRunClick }: JobTimelineChartProps) {
     }))
     chart.setOption({
       grid: { left: 56, right: 16, top: 16, bottom: 32 },
+      // useUTC controls how echarts formats axis ticks for `type: 'time'`.
+      // True = UTC; false = browser-local. Matches selected tz mode.
+      useUTC: fmt.mode === 'utc',
       xAxis: { type: 'time' },
       yAxis: { type: 'value', name: 'duration (ms)' },
       tooltip: {
         trigger: 'item',
         formatter: (p: { value: [string, number]; data: { runId: string; status: string; total_inserted: number | null } }) =>
-          `<b>${p.value[0]}</b><br/>` +
+          `<b>${fmt.fullDateTime(p.value[0])}</b><br/>` +
           `${statusLabel(p.data.status)} · ${p.value[1]}ms<br/>` +
           `inserted: ${p.data.total_inserted ?? '—'}<br/>` +
           `<small>${p.data.runId}</small>`,
@@ -55,7 +60,7 @@ export function JobTimelineChart({ runs, onRunClick }: JobTimelineChartProps) {
       window.removeEventListener('resize', onResize)
       chart.dispose()
     }
-  }, [runs, onRunClick])
+  }, [runs, onRunClick, fmt])
 
   return <div ref={ref} className="job-timeline-chart" style={{ width: '100%', height: 280 }} />
 }

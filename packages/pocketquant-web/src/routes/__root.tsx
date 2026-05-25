@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- TanStack Router requires Route export alongside components */
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
+import { TimezoneSwitcher } from '../components/layout/timezone-switcher'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -23,6 +24,10 @@ function RootLayout() {
         <Link to="/monitor" activeProps={{ className: 'active' }}>
           Monitor
         </Link>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', paddingRight: 4 }}>
+          <TimezoneSwitcher />
+        </div>
       </nav>
       <Outlet />
     </div>
