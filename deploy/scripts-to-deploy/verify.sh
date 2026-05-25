@@ -5,10 +5,11 @@ set -uo pipefail
 # Runs post-deploy checks and outputs a markdown report.
 #
 # Usage:
-#   ssh vps "cd /opt/pocketquant && bash deploy/verify.sh"
-#   # Report saved to ./reports/verify-<ISO-datetime>.md
+#   ssh vps "cd /opt/pocketquant && bash deploy/scripts-to-deploy/verify.sh"
+#   # Report saved to deploy/reports/verify-<ISO-datetime>.md
 
-cd "$(dirname "$0")"
+# cd to deploy/ (one level up from scripts-to-deploy/) so .env, reports/ resolve relatively
+cd "$(dirname "$0")/.."
 
 REPORT_DIR="./reports"
 mkdir -p "$REPORT_DIR"

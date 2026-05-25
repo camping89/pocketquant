@@ -5,13 +5,15 @@ set -euo pipefail
 # Handles first-time setup + subsequent deploys in one script.
 #
 # First time:
-#   scp deploy/deploy.sh deploy/compose.prod.yml deploy/.env to VPS:/opt/pocketquant/deploy/
-#   ssh vps "cd /opt/pocketquant && bash deploy/deploy.sh"
+#   scp deploy/scripts-to-deploy/deploy.sh deploy/compose.prod.yml deploy/.env \
+#     to VPS:/opt/pocketquant/deploy/{scripts-to-deploy/,,}
+#   ssh vps "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 #
 # Update:
-#   ssh vps "cd /opt/pocketquant && bash deploy/deploy.sh"
+#   ssh vps "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
 
-cd "$(dirname "$0")"
+# cd to deploy/ (one level up from scripts-to-deploy/) so .env + compose.prod.yml resolve relatively
+cd "$(dirname "$0")/.."
 
 # ─── Setup (runs only if needed) ──────────────────────────────
 
