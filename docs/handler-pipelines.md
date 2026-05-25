@@ -2,17 +2,17 @@
 
 **Last Updated:** 2026-05-08 | **Total Handlers:** 35 CQRS handlers across market data, strategy, backtest, trading, and subscriptions | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC | **Data Provider:** Binance (IDataProvider impl, 1200 weight/min rate limit)
 
-**STALE WARNING (2026-05-23):** This document contains pre-refactor API paths and symbol handling patterns. Exchange encapsulation refactor (composite symbol: `CODE:EXCHANGE`) landed 2026-05-23. Route paths use `/{symbol}` (not `/{exchange}/{symbol}`). Cache keys and handler signatures use composite symbol format. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a request path here disagrees with the live app.
+**Updated (2026-05-25):** API paths corrected for composite-symbol refactor (2026-05-23). Route paths now use `/{symbol}` where symbol is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`, URL-encoded as `BTCUSDT%3ABINANCE`). Handlers 4 and 5 marked STALE (start/stop feed endpoints removed — feed is auto-managed at lifespan). Handler class names updated to match code. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a path disagrees with the live app.
 
 This document details the complete pipeline for each of the 35 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
 
 ## Handler Categories
 
-- **Market Data (13):** Sync, Bar retrieval, quotes, symbols, status
+- **Market Data (13):** Sync, OHLCV retrieval, quotes, symbols, status (handlers 1-13; handlers 4-5 STALE — removed)
 - **Backtesting (5):** Run, optimize, get results
-- **Strategy (11):** Load, start, stop, get one, get all, add subscription, list subscriptions, delete subscription, run-all backtest, get subscription backtest, delete strategy cascade
+- **Strategy (11):** Load, start, stop, get one, get all, add symbol, list symbols, remove symbol, run-all backtest, get subscription backtest, delete strategy cascade
 - **Trading (4):** List/get orders, list/get positions
-- **Subscriptions (2):** Integrated into Strategy handlers (24-29)
+- **Subscriptions:** Integrated into Strategy handlers (24-29)
 
 ## A. Market Data Handlers (13)
 
@@ -120,19 +120,21 @@ Collect results: BulkSyncResponse(results: List[SyncResult])
 
 ---
 
-### 3. GetBarsHandler (GetBarsQuery)
+### 3. GetOHLCVHandler (GetOHLCVQuery)
 
-**Request:** GET `/api/v1/market-data/bar/{exchange}/{symbol}?interval=1d&limit=100`
+**Request:** GET `/api/v1/market-data/ohlcv/{symbol}/{interval}?limit=1000&start_date=...&end_date=...`
+
+> `{symbol}` is composite e.g. `BTCUSDT%3ABINANCE` (URL-encoded `BTCUSDT:BINANCE`).
 
 **Pipeline:**
 ```
-GetBarsQuery(symbol, exchange, interval, limit)
+GetOHLCVQuery(symbol, interval, limit, start_date, end_date)
   ↓
-Check cache: Cache.get(f"bar:{symbol}:{exchange}:{interval}:{limit}")
-  ├─ Cache HIT: Return BarsDTO immediately
+Check cache: Cache.get(build_bar_cache_key(symbol, interval, limit))
+  ├─ Cache HIT: Return OHLCVResponse immediately
   └─ Cache MISS:
       ↓
-      Fetch: BarRepository.get_bars(symbol, exchange, interval, limit)
+      Fetch: BarRepository.get_bars(symbol, interval, limit, start_date, end_date)
       └─ MongoDB bars collection, sorted by timestamp (desc)
       ↓
       Validate: Bar value objects immutable, to_mongo()/from_mongo()
@@ -140,7 +142,7 @@ Check cache: Cache.get(f"bar:{symbol}:{exchange}:{interval}:{limit}")
       Cache: Cache.set(key, result, ttl=300)
       └─ Redis TTL 5 minutes, key: build_bar_cache_key()
       ↓
-Response: BarsDTO (never return domain entities)
+Response: OHLCVResponse(symbol, interval, data, count)
 ```
 
 **Cache Management:** Query results cached with 300s TTL using `build_bar_cache_key()`
@@ -149,7 +151,9 @@ Response: BarsDTO (never return domain entities)
 
 ### 4. StartQuoteFeedHandler (StartQuoteFeedCommand)
 
-**Request:** POST `/api/v1/market-data/quotes/start`
+> ⚠️ STALE — handler removed (verify before deleting). WS feed is now auto-started at app lifespan (`start_quote_feed` in `main_extensions.py`). `POST /quotes/start` endpoint no longer exists.
+
+**Request:** ~~POST `/api/v1/market-data/quotes/start`~~ — **REMOVED**
 
 **Pipeline:**
 ```
@@ -173,7 +177,9 @@ Response: QuoteServiceStatus(status='connected')
 
 ### 5. StopQuoteFeedHandler (StopQuoteFeedCommand)
 
-**Request:** POST `/api/v1/market-data/quotes/stop`
+> ⚠️ STALE — handler removed (verify before deleting). WS feed teardown now handled at app lifespan (`stop_quote_feed` in `main_extensions.py`). `POST /quotes/stop` endpoint no longer exists.
+
+**Request:** ~~POST `/api/v1/market-data/quotes/stop`~~ — **REMOVED**
 
 **Pipeline:**
 ```
@@ -195,62 +201,64 @@ Response: QuoteServiceStatus(status='disconnected')
 
 ### 6. SubscribeHandler (SubscribeCommand)
 
-**Request:** POST `/api/v1/market-data/quotes/subscribe`
+**Request:** POST `/api/v1/quotes/subscribe`
 
 **Pipeline:**
 ```
-SubscribeCommand(symbol, exchange)
+SubscribeCommand(symbol)
   ↓
 Validate feed running (if not, return error)
   ↓
-Provider.subscribe(symbol, exchange, callback=on_quote_update)
-  └─ Registers callback for this symbol
+Provider.subscribe(symbol, callback=on_quote_update)
+  └─ Registers callback for this composite symbol
   ↓
-Cache subscription: QuoteAppService._subscriptions[key] = True
+Cache subscription: QuoteAppService._subscriptions[symbol] = True
   ↓
-Response: SubscriptionStatus(symbol, exchange, subscribed=True)
+Response: SubscribeResponse(symbol, subscribed=True)
 ```
 
 ---
 
 ### 7. UnsubscribeHandler (UnsubscribeCommand)
 
-**Request:** POST `/api/v1/market-data/quotes/unsubscribe`
+**Request:** POST `/api/v1/quotes/unsubscribe`
 
 **Pipeline:**
 ```
-UnsubscribeCommand(symbol, exchange)
+UnsubscribeCommand(symbol)
   ↓
-Provider.unsubscribe(symbol, exchange)
+Provider.unsubscribe(symbol)
   ↓
-Delete cache: Cache.delete(f"QUOTE_LATEST:{exchange}:{symbol}")
+Delete cache: Cache.delete(f"QUOTE_LATEST:{symbol}")
   ↓
-Response: SubscriptionStatus(subscribed=False)
+Response: SubscribeResponse(subscribed=False)
 ```
 
 ---
 
 ### 8. GetLatestQuoteHandler (GetLatestQuoteQuery)
 
-**Request:** GET `/api/v1/market-data/quotes/latest/{exchange}/{symbol}`
+**Request:** GET `/api/v1/quotes/latest/{symbol}`
+
+> `{symbol}` is composite e.g. `BTCUSDT%3ABINANCE`.
 
 **Pipeline:**
 ```
-GetLatestQuoteQuery(exchange, symbol)
+GetLatestQuoteQuery(symbol)
   ↓
-Fetch: Cache.get(f"QUOTE_LATEST:{exchange}:{symbol}")
+Fetch: Cache.get(f"QUOTE_LATEST:{symbol}")
   └─ Redis (TTL 5s, updated on each tick)
   ↓
 Deserialize: QuoteTick(price, volume, timestamp)
   ↓
-Response: QuoteDTO
+Response: QuoteResponse
 ```
 
 ---
 
 ### 9. GetAllQuotesHandler (GetAllQuotesQuery)
 
-**Request:** GET `/api/v1/market-data/quotes`
+**Request:** GET `/api/v1/quotes/all`
 
 **Pipeline:**
 ```
@@ -259,11 +267,11 @@ GetAllQuotesQuery()
 Query all subscriptions: QuoteAppService._subscriptions.keys()
   ↓
 For each subscription:
-  └─ Cache.get(f"QUOTE_LATEST:{exchange}:{symbol}")
+  └─ Cache.get(f"QUOTE_LATEST:{symbol}")
   ↓
-Serialize list: List[QuoteDTO]
+Serialize list: list[QuoteResponse]
   ↓
-Response: AllQuotesDTO
+Response: list[QuoteResponse]
 ```
 
 ---
@@ -304,32 +312,34 @@ Response: SyncStatusDTO(status, bars_synced, error_message)
 
 ### 12. GetSymbolSyncStatusHandler (GetSymbolSyncStatusQuery)
 
-**Request:** GET `/api/v1/market-data/sync-status/{symbol}/{exchange}`
+**Request:** GET `/api/v1/market-data/sync-status/{symbol}?interval=1d`
+
+> `{symbol}` is composite e.g. `BTCUSDT%3ABINANCE`. Optional `interval` query param (default `1d`).
 
 **Pipeline:**
 ```
-GetSymbolSyncStatusQuery(symbol, exchange)
+GetSymbolSyncStatusQuery(symbol, interval)
   ↓
-Fetch: SyncStatusRepository.find_by_symbol(symbol, exchange)
+Fetch: SyncStatusRepository.find_by_symbol(symbol, interval)
   ↓
 Response: SyncStatusDTO
 ```
 
 ---
 
-### 13. GetQuoteServiceStatusHandler (GetQuoteServiceStatusQuery)
+### 13. GetQuotesStatusHandler (GetQuotesStatusQuery)
 
-**Request:** GET `/api/v1/market-data/quotes/status`
+**Request:** GET `/api/v1/quotes/status`
 
 **Pipeline:**
 ```
-GetQuoteServiceStatusQuery()
+GetQuotesStatusQuery()
   ↓
 Check QuoteAppService.is_running
   ↓
 Count subscriptions: len(QuoteAppService._subscriptions)
   ↓
-Response: QuoteServiceStatusDTO(is_running, subscription_count)
+Response: QuotesStatusResponse(is_running, subscription_count)
 ```
 
 ---
@@ -530,61 +540,62 @@ Response: StrategyStatusDTO(status='stopped')
 
 ---
 
-### 22. GetOneStrategyHandler (GetOneStrategyQuery)
+### 22. GetStrategyHandler (GetStrategyQuery)
 
-**Request:** GET `/api/v1/strategies/{id}`
+**Request:** GET `/api/v1/strategies/{strategy_id}`
 
 **Pipeline:**
 ```
-GetOneStrategyQuery(strategy_id)
+GetStrategyQuery(strategy_id)
   ↓
 Fetch: StrategyAppService.get_strategy(strategy_id)
   └─ In-memory lookup by ID
   ↓
-Response: StrategyDTO(id, name, status, config)
+Response: StrategyResponse(id, name, status, config)
 ```
 
 ---
 
-### 23. GetAllStrategiesHandler (GetAllStrategiesQuery)
+### 23. GetStrategiesHandler (GetStrategiesQuery)
 
-**Request:** GET `/api/v1/strategies`
+**Request:** GET `/api/v1/strategies/`
 
 **Pipeline:**
 ```
-GetAllStrategiesQuery()
+GetStrategiesQuery()
   ↓
 Fetch: StrategyAppService.list_all()
   └─ In-memory loaded strategies
   ↓
-Serialize: List[StrategyDTO](id, name, status)
+Serialize: list[StrategyResponse](id, name, status)
   ↓
-Response: StrategiesDTO
+Response: list[StrategyResponse]
 ```
 
 ---
 
-### 24. AddSubscriptionHandler (AddSubscriptionCommand) [NEW]
+### 24. AddSymbolHandler (AddSymbolCommand) [NEW]
 
 **Request:** POST `/api/v1/strategies/{strategy_id}/symbols`
 
 **Pipeline:**
 ```
-AddSubscriptionCommand(strategy_id, symbol, exchange, interval)
+AddSymbolCommand(strategy_id, symbol, interval)
   ↓
 Handler.handle():
   1. Validate: StrategyAppService.get_strategy(strategy_id) exists
   ↓
-  2. Compute ID: subscription_id = sha256(f"{strategy_id}:{symbol}:{exchange}:{interval}")[:16]
+  2. Compute ID: subscription_id = sha256(f"{strategy_id}:{symbol}:{interval}")[:16]
   ↓
   3. Check Duplicate: StrategySubscriptionRepository.find_by_id(subscription_id)
      └─ If exists, return 409 Conflict → mapped to 400 DomainError
   ↓
-  4. Create: StrategySubscription(strategy_id, symbol, exchange, interval, subscription_id)
+  4. Create: StrategySubscription(strategy_id, symbol, interval, subscription_id)
+     └─ symbol is composite e.g. BTCUSDT:BINANCE
   ↓
   5. Persist: StrategySubscriptionRepository.save(subscription)
   ↓
-Response: SubscriptionDTO(subscription_id, strategy_id, symbol, exchange, interval)
+Response: SubscriptionDTO(subscription_id, strategy_id, symbol, interval)
 ```
 
 **Side Effects:**
@@ -592,27 +603,27 @@ Response: SubscriptionDTO(subscription_id, strategy_id, symbol, exchange, interv
 
 ---
 
-### 25. ListSubscriptionsHandler (ListSubscriptionsQuery) [NEW]
+### 25. ListSymbolsHandler (ListSymbolsQuery) [NEW]
 
 **Request:** GET `/api/v1/strategies/{strategy_id}/symbols`
 
 **Pipeline:**
 ```
-ListSubscriptionsQuery(strategy_id)
+ListSymbolsQuery(strategy_id)
   ↓
 Validate: StrategyAppService.get_strategy(strategy_id) exists
   ↓
 Fetch: StrategySubscriptionRepository.find_by_strategy_id(strategy_id)
   └─ MongoDB query on `strategy_subscriptions` index: strategy_id
   ↓
-Serialize: List[SubscriptionDTO]
+Serialize: list[SubscriptionDTO]
   ↓
-Response: SubscriptionsDTO(subscriptions=[...])
+Response: list[SubscriptionDTO]
 ```
 
 ---
 
-### 26. DeleteSubscriptionHandler (DeleteSubscriptionCommand) [NEW]
+### 26. RemoveSymbolHandler (RemoveSymbolCommand) [NEW]
 
 **Request:** DELETE `/api/v1/strategies/{strategy_id}/symbols/{sub_id}`
 
@@ -732,12 +743,20 @@ Response: DeletionDTO(deleted=True, strategy_id)
 
 Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 
+**Routes:**
+```
+30. ListOrdersHandler:    GET /api/v1/trading/orders                  → list[OrderDTO]
+31. GetOrderHandler:      GET /api/v1/trading/orders/{order_id}       → OrderDTO
+32. ListPositionsHandler: GET /api/v1/trading/positions               → list[PositionDTO]
+33. GetPositionHandler:   GET /api/v1/trading/positions/{strategy_id} → PositionDTO
+```
+
 **Pipelines:**
 ```
-30. ListOrdersHandler:    OrderAppService.list_all() → List[OrderDTO]
-31. GetOrderHandler:      OrderAppService.get_by_id(order_id) → OrderDTO
-32. ListPositionsHandler: PositionAppService.list_all() → List[PositionDTO]
-33. GetPositionHandler:   PositionAppService.get_by_id(position_id) → PositionDTO
+30. ListOrdersHandler:    OrderAppService.list_all() → list[dict]
+31. GetOrderHandler:      OrderAppService.get_by_id(order_id) → dict
+32. ListPositionsHandler: PositionAppService.list_all() → list[dict]
+33. GetPositionHandler:   PositionAppService.get_by_strategy_id(strategy_id) → dict
 ```
 
 ---
@@ -752,7 +771,7 @@ WebSocket aggTrade event from Binance @aggTrade
 BinanceWebSocketClient.parse_aggTrade_event()
   ↓
 QuoteAppService._on_quote_update(quote)
-  ├─ Cache.set(f"quote:latest:{exchange}:{symbol}", quote, ttl=60)
+  ├─ Cache.set(f"quote:latest:{symbol}", quote, ttl=60)  # symbol is composite e.g. BTCUSDT:BINANCE
   └─ BarAppService.process_tick(quote)
       ├─ For each interval (1m, 5m, ..., 1M):
       │   └─ Update BarBuilder[interval]

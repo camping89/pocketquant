@@ -1,150 +1,108 @@
 # DDD Strategic Map
 
-**Last Updated:** 2026-04-10 | **Status:** v1.0 Complete | **Bounded Contexts:** 6 (Market Data, Trading, Strategy, Risk, Symbol, Backtest)
+**Last Updated:** 2026-05-25 | **Scope:** Bounded contexts, context relationships, ubiquitous language
+**For tactical detail** (aggregates, entities, VOs per context) → see [system-architecture.md](./system-architecture.md) § Domain Layer.
 
-Current note: the repo now includes `pocketquant-web` as a separate frontend package in addition to the backend bounded contexts discussed here.
+---
 
-## Bounded Contexts
+## 6 Bounded Contexts
 
-### Market Data
-Data ingestion, storage, and real-time streaming.
+| Context | Responsibility | Owns | Package |
+|---|---|---|---|
+| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `pocketquant-core` (domain) + `pocketquant-api` (sync jobs) |
+| **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `pocketquant-core` (domain) + `pocketquant-trading` (orchestration) |
+| **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `pocketquant-core` (interfaces) + `pocketquant-trading` (registry, services) |
+| **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `pocketquant-core` (pure calculations) |
+| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity since 2026-03-15) | `pocketquant-core` |
+| **Backtest** | Historical replay + performance analysis | `BacktestResult`, `TradeRecord`, `PerformanceCalculator` | `pocketquant-backtest` (engine, persistence) |
 
-| Type | Name | Persisted | Status |
-|------|------|-----------|--------|
-| Entity | `Bar` | MongoDB (bars) | Active — bar price data with `to_mongo()`/`from_mongo()`, `symbol_key`, interval |
-| Model | `SyncStatus` | MongoDB (sync_status) | Active — tracks sync progress per symbol/interval |
-| VO | `Interval`, `OHLCV`, `BarRange`, `Price` | — | Active |
-| Service | `BarBuilder` | — | Active — aggregates ticks into bars |
-| DTO | `Quote`, `QuoteTick`, `AggregatedBar`, `QuoteSubscription` | Redis | Active — application-layer cache DTOs |
-| Event | `BarCompletedEvent` | — | Active (backtesting via HistoricalReplay, real-time: TODO) |
-| Event | `HistoricalDataSyncedEvent` | — | Active (fired after historical sync) |
-| ~~Aggregate~~ | ~~`OHLCVAggregate`~~ | No | **DELETED 2026-03-15** — was event factory shell, no state, no invariants |
-| ~~Aggregate~~ | ~~`QuoteAggregate`~~ | No | **DELETED 2026-03-15** — zero instantiations, dead code |
+> A 7th container — `pocketquant-web` (Node/Vite SPA) — is a **UI surface**, not a bounded context. It consumes the API HTTP boundary; no domain logic lives there.
 
-### Trading
-Order execution and position lifecycle management.
+---
 
-| Type | Name | Persisted | Status |
-|------|------|-----------|--------|
-| Aggregate | `OrderAggregate` | MongoDB | **Legit** — full state machine, 5 event types |
-| Aggregate | `PositionAggregate` | MongoDB | **Legit** — lifecycle, P&L, scale in/out |
-| VO | `OrderSide`, `OrderType`, `OrderStatus` | — | Active |
-| VO | `PositionSide`, `PnL` | — | Active |
-| Event | `Order*Event` (5 types) | — | Active, consumed by `PositionAppService` |
-| Event | `Position*Event` (3 types) | — | Active |
-
-### Strategy
-Trading logic interfaces and signal generation.
-
-| Type | Name | Persisted | Status |
-|------|------|-----------|--------|
-| Interface | `IStrategy` | — | Active — `on_bar()`, `on_tick()`, `on_fill()` |
-| VO | `Signal`, `Direction`, `StrategyConfig` | — | Active |
-| VO | `StopLossConfig`, `TakeProfitConfig`, `OrderConfig` | — | Active |
-| Event | `SignalGeneratedEvent` | — | Active |
-| Impl | `HitNRun2Strategy` | — | Active — 1m breakdown/breakup with capped technical SL/TP |
-
-### Risk
-Position sizing and risk validation.
-
-| Type | Name | Persisted | Status |
-|------|------|-----------|--------|
-| VO | `RiskModel` (enum), `RiskConfig` | — | Active |
-| Service | `PositionSizer` | — | Active — pure calculation service |
-
-### Symbol
-Tradeable asset metadata.
-
-| Type | Name | Persisted | Status |
-|------|------|-----------|--------|
-| Entity | `Symbol` | MongoDB (symbols) | Active (FLATTENED 2026-03-15) — flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active`, `create()`, `symbol_key`, `to_mongo()`/`from_mongo()` |
-| ~~Aggregate~~ | ~~`SymbolAggregate`~~ | No | **DELETED 2026-03-15** — flattened to Symbol entity, no aggregate needed |
-| ~~VO~~ | ~~`SymbolInfo`~~ | — | **DELETED 2026-03-15** — wrapped by SymbolAggregate, no longer needed |
-
-### Backtest
-Historical replay and performance analysis.
-
-| Type | Name | Persisted | Status |
-|------|------|-----------|--------|
-| Service | `PerformanceCalculator` | — | Active — Sharpe, Sortino, max drawdown |
-| Model | `BacktestResult`, `BacktestMetrics`, `TradeRecord` | MongoDB | Active |
-
-## Event Flow
-
-### Wired (Working)
+## Context Map (Relationships)
 
 ```
-Historical Sync:
-  TradingView API → Bar entities → MongoDB bars collection
-  → HistoricalDataSyncedEvent (inline in sync handler)
-
-Backtesting (Events Fully Wired):
-  MongoDB bars → Bar stream → HistoricalReplayAppService
-  → BarCompletedEvent → StrategyAppService._on_bar_completed()
-  → Strategy.on_bar() → Signal → RiskCheck → OrderAggregate
-  → OrderFilledEvent → PositionAppService → PositionAggregate
-
-Order→Position (Events Fully Wired):
-  OrderAggregate state transitions
-  → OrderFilledEvent → PositionAppService._on_order_filled()
-  → PositionAggregate.open() / add_quantity() / reduce_quantity()
+                                    ┌──────────────┐
+                                    │  Backtest    │
+                                    │ (replays MD) │
+                                    └──────┬───────┘
+                                           │ consumes Bar
+                                           ▼
+┌──────────────┐   BarCompletedEvent ┌──────────────┐    SignalGeneratedEvent  ┌──────────────┐
+│ Market Data  │────────────────────▶│  Strategy    │─────────────────────────▶│   Trading    │
+│   (Bar)      │                     │  (IStrategy) │                          │ (OrderAgg,   │
+└──────┬───────┘                     └──────┬───────┘                          │  PositionAgg)│
+       │ Quote (DTO/Redis)                  │ Symbol lookup                    └──────┬───────┘
+       │                                    ▼                                          │
+       │                            ┌──────────────┐         RiskConfig                │
+       │                            │   Symbol     │◀─────────────────────────────────┤
+       │                            │   (entity)   │                                   │
+       │                            └──────────────┘         ┌──────────────┐          │
+       │                                                     │     Risk     │◀─────────┘
+       │                                                     │ (PositionSizer)         (pre-trade check)
+       │                                                     └──────────────┘
+       ▼
+   (no upstream)
 ```
 
-### Fully Wired (All Events Complete)
+**Relationship types:**
+- **Market Data → Strategy** — *Customer/Supplier* via published events (`BarCompletedEvent`, `QuoteReceivedEvent`)
+- **Strategy → Trading** — *Customer/Supplier* via `SignalGeneratedEvent`
+- **Trading → Position lifecycle** — internal aggregate-to-aggregate event chain (`OrderFilledEvent` → `PositionAggregate`)
+- **Risk → Trading** — *Shared Kernel* (risk calculations consumed pre-trade)
+- **Symbol → all** — *Conformist* (everyone reads `Symbol`; no one mutates without ownership)
+- **Backtest → Market Data** — *Customer* (replays historical Bars)
 
-```
-Real-time bars (IMPLEMENTED ✅):
-  QuoteTick → BarBuilder → Bar saved to MongoDB bars collection
-  → BarCompletedEvent emitted from _save_completed_bar()
-  → StrategyAppService._on_bar_completed() → live strategy execution
+---
 
-Real-time quotes (IMPLEMENTED ✅):
-  WebSocket → Quote DTO cached in Redis
-  → QuoteReceivedEvent emitted from _on_quote_update()
-  → StrategyAppService._on_quote_received() → tick handlers
-```
+## Ubiquitous Language
 
-**Status:** All event wiring complete. Backtesting fully functional. Real-time event streams implemented (BarCompletedEvent, QuoteReceivedEvent). Live trading event infrastructure production-ready.
+| Term | Meaning in this codebase | Common false synonyms to avoid |
+|---|---|---|
+| **Symbol** | Composite identifier `BTCUSDT:BINANCE` — code + exchange in one string | "Ticker", "pair", "instrument" |
+| **Bar** | Time-bucketed OHLCV record. **Not** "candle", "kline", "ohlcv-row" | "Candle" (UI term only); use "Bar" in domain code |
+| **Quote** | Latest tick (price + size + timestamp), cached in Redis. Not persisted long-term | "Tick" (used only inside `BarBuilder` aggregation) |
+| **Subscription** | Strategy's registration for `(symbol, exchange, interval)` → drives feed routing | "Watch", "follow" |
+| **Sync** | Bringing local Bar storage up-to-date from an external source (TradingView, Binance) | "Backfill" (specific to one-off historical loads), "refresh" |
+| **Strategy** | A pluggable trading-logic class implementing `IStrategy`. Loaded by id, not file path | "Algorithm" (too broad), "bot" (UI term) |
+| **Aggregate** | DDD construct: entity with invariants + lifecycle + event emission. Earn this name. | Don't apply to data records (e.g. Bar isn't an aggregate) |
+| **Composite symbol** | The `CODE:EXCHANGE` format. Replaced earlier `(exchange, code)` 2-tuple API | "Exchange-prefixed symbol" |
+| **In-progress bar** | Bar currently being built from live ticks; `is_complete=False` | "Open bar", "partial bar" |
+
+---
 
 ## DDD Classification Guide
 
-### When to Use an Aggregate
-- Entity has **invariants** to protect (e.g., OrderAggregate state machine)
-- Entity has **lifecycle behavior** (e.g., PositionAggregate open→close)
+### When to use an Aggregate
+- Entity has **invariants** to protect (e.g. `OrderAggregate` state machine)
+- Entity has **lifecycle behavior** (e.g. `PositionAggregate` open → scale → close)
 - Entity **owns other entities** within a consistency boundary
 - Entity **emits domain events** from business operations
 
-### When NOT to Use an Aggregate
-- Entity is a **data record** (e.g., Bar — just OHLCV data, no behavior beyond serialization)
-- Class is just an **event factory** with no state (e.g., OHLCVAggregate)
-- Class is **never instantiated** (e.g., QuoteAggregate)
-- Behavior is **CRUD-only** (persist/query) — use a plain entity or model
+### When NOT to use an Aggregate
+- Entity is a **data record** (e.g. `Bar` — just OHLCV data, serialization only)
+- Class is an **event factory** with no state (anti-pattern, deleted 2026-03-15)
+- Class is **never instantiated** in practice
+- Behavior is **CRUD-only** — use a plain entity or model
 
-### Pragmatic Rules for This Project
-1. Aggregates earn their complexity — if it has no invariants, it's not an aggregate
-2. Events can be created directly where they're needed — no wrapper aggregate required
-3. Value objects stay as frozen dataclasses — simple, immutable, no persistence
-4. DTOs live in application layer — they're infrastructure concerns, not domain
+### Project Rules
+1. Aggregates earn their complexity — no invariants, no aggregate.
+2. Events can be created directly where needed — no wrapper aggregate required.
+3. Value objects stay as frozen dataclasses — simple, immutable, no persistence.
+4. DTOs live in the application layer — they're infrastructure, not domain.
 
-## Resolved Items (2026-03-15 Refactoring)
+---
 
-1. ✅ **OHLCVAggregate deleted** — Event factory shell with no state/invariants, removed dead code
-2. ✅ **QuoteAggregate deleted** — Zero instantiations, never used
-3. ✅ **SymbolAggregate flattened to Symbol entity** — Reduced indirection, removed SymbolInfo VO
-4. ✅ **domain/ohlcv/ → domain/bar/** — Clearer naming, better semantics
-5. ✅ **OHLCVRepository → BarRepository** — Consistent naming with domain
-6. ✅ **MongoDB collection ohlcv → bars** — Aligns with domain entity names
-7. ✅ **Schemas directory deleted** — Domain entities now handle MongoDB persistence directly via `to_mongo()`/`from_mongo()`
+## Open Strategic Questions
 
-## Resolved Questions (2026-03-22)
+1. **Event sourcing** — events are fire-and-forget via `EventBus`. If we need audit/replay at scale, should events be persisted in an event store?
+2. **Multi-strategy broker isolation** — each strategy gets its own broker instance. At 50+ strategies, do we need a shared order router?
+3. **Distributed scheduling** — APScheduler is in-memory; for horizontal scaling, switch to a distributed scheduler (Celery, etc.)?
+4. **Risk as a service** — currently `PositionSizer` is a pure-function dependency of Trading. If risk grows policies (max-concurrent-positions, daily loss limits, correlation caps), should it become its own service with its own state?
 
-1. ✅ **Real-time event wiring**: BarCompletedEvent and QuoteReceivedEvent emission now implemented in live trading pipeline
-2. ✅ **4-package monorepo**: Restructured with clean dependency graph (core ← {backtest, trading} ← api)
-3. ✅ **Dishka DI integration**: All 6 providers configured, handler registration automated
+---
 
-## Open Questions (Future Phases)
+## Historical Note
 
-1. **Event sourcing**: Current events are fire-and-forget via EventBus. If scaling, should events be persisted (event store) for audit/replay?
-2. **Multi-strategy broker isolation**: Each strategy gets own broker instance. At scale (50+ strategies), should there be a shared order router?
-3. **SyncStatus compound key**: Currently upserts by `(symbol, exchange, interval)`. Should get dedicated `_id` UUID for consistency?
-4. **Distributed job scheduling**: APScheduler is in-memory. For multiple workers, should use distributed scheduler (Celery, etc.)?
+For the 2026-03-15 refactoring history (deletions of `OHLCVAggregate`, `QuoteAggregate`, `SymbolAggregate`, ohlcv→bar rename, schemas-directory removal) → see `journals/` and git history. Removed from this doc to keep it strategic-only.

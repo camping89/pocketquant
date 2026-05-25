@@ -1,14 +1,14 @@
 # Monorepo Migration — Notes
 
-**Date:** 2026-03-21 | **Status:** All items resolved
+**Date:** 2026-03-21 | **Last reviewed:** 2026-05-25 | **Status:** All migration items resolved; 2 deferred YAGNI notes remain
 
 All 7 migration concerns resolved during cleanup. See git history for details.
 
-## Remaining Notes
+## Remaining Notes (Deferred — YAGNI)
 
 - Strategy YAML path resolution uses CWD-relative — may need project-root resolution for Docker/production.
 
-- **`Bar.tick_count` semantics inconsistent across data sources** (decided 2026-05-07: defer per YAGNI).
+- **`Bar.tick_count` semantics inconsistent across data sources** (decided 2026-05-07: defer per YAGNI; still deferred as of 2026-05-25).
   Three shapes coexist in the `bars` collection:
   | Source | `tick_count` written | Where |
   |---|---|---|

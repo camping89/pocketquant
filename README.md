@@ -126,8 +126,6 @@ Current backtest strategy IDs exposed by the API:
 
 - `hitnrun2` — 1m breakdown/breakup with capped technical SL/TP (entry 4h window, SL 8h technical with 1% account cap, TP 1h technical with 2% account minimum)
 
-YAML strategy loading via `POST /api/v1/strategies/load` is still supported, but no example files are shipped in `strategies/examples/` (deleted during the hitnrun2 migration).
-
 ## Test Commands
 
 Backend:

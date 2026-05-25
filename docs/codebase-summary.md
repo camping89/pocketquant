@@ -2,795 +2,277 @@
 
 **Last Updated:** 2026-05-24 | **Codebase Stats:** 334 files, ~16,815 LOC across 5 packages (core: 5.9k, backtest: 2.4k, trading: 3.5k, api: 3.1k, web: 2.0k) | **Market Data Provider:** Binance public REST/WS (no auth required)
 
-High-level map of the PocketQuant monorepo structure, patterns, and architecture.
+Quick package map for PocketQuant monorepo. For architectural depth, see [system-architecture.md](./system-architecture.md).
 
-## Packages
+---
+
+## Package Overview
 
 ### `packages/pocketquant-core`
 
-Shared backend foundation:
+Shared backend foundation — consumed by all other backend packages.
 
-- domain entities and value objects
-- common utilities such as logging, mediator, event bus, middleware, cache keys
-- infrastructure adapters for TradingView, brokers, scheduling, HTTP
-- MongoDB and Redis persistence abstractions
+Contains: domain entities and value objects; CQRS mediator, event bus, middleware; infrastructure adapters (Binance, OKX, HTTP); MongoDB and Redis persistence abstractions; UUID7 utilities, structured logging, APScheduler wrapper.
 
-Key folders:
-
-- `src/pocketquant/core/domain`
-- `src/pocketquant/core/common`
-- `src/pocketquant/core/infrastructure`
-- `src/pocketquant/core/persistence`
+Key source roots:
+- `src/pocketquant/core/domain/` — pure business logic (zero I/O)
+- `src/pocketquant/core/common/` — CQRS, event bus, middleware, tracing
+- `src/pocketquant/core/infrastructure/` — brokers, data providers, scheduling, webhooks
+- `src/pocketquant/core/persistence/` — repositories, MongoDB/Redis connections
 
 ### `packages/pocketquant-backtest`
 
-Backtest feature package:
+Backtest feature package. Owns backtest and optimization execution logic.
 
-- `/backtest/strategies`
-- `/backtest/run`
-- `/backtest/optimize`
-- `/backtest/{run_id}`
-- `/backtest/optimization/{optimization_id}`
-- `/backtest/strategy/{strategy_id}`
+Contains: `BacktestAppService` (execute strategy on historical bars), `GridOptimizationAppService` (multiprocessing parameter search), `HistoricalReplayAppService`, `ResultCollector`, `PerformanceCalculator`.
 
-Key folders:
-
-- `src/pocketquant/backtest/handlers`
-- `src/pocketquant/backtest/persistence`
-- `src/pocketquant/backtest/domain`
+Key source roots:
+- `src/pocketquant/backtest/handlers/` — CQRS handlers for backtest operations
+- `src/pocketquant/backtest/persistence/` — `BacktestRepository`, `OptimizationRepository`
+- `src/pocketquant/backtest/domain/` — backtest domain concepts
 
 ### `packages/pocketquant-trading`
 
-Trading and strategy runtime package:
+Trading and live strategy runtime package.
 
-- strategy load/start/stop/list/get handlers
-- strategy subscription handlers (add/list/delete symbols, run-all backtest, delete strategy cascade)
-- order and position application services
-- YAML strategy loading
-- broker integration and strategy orchestration
-- async job worker: `run_subscription_backtest()` enqueued via APScheduler
+Contains: strategy load/start/stop handlers; subscription handlers (add/list/delete symbols, run-all backtest, cascade delete); `OrderAppService`, `PositionAppService`, `StrategyAppService`; YAML strategy loading; broker integration; async backtest job worker via APScheduler.
 
-Key folders:
-
-- `src/pocketquant/trading/handlers`
-- `src/pocketquant/trading/app_services`
-- `src/pocketquant/trading/persistence`
-- `src/pocketquant/trading/jobs` (NEW: backtest_jobs.py)
+Key source roots:
+- `src/pocketquant/trading/handlers/` — CQRS handlers
+- `src/pocketquant/trading/app_services/` — order, position, strategy orchestration
+- `src/pocketquant/trading/persistence/` — trading-specific repositories
+- `src/pocketquant/trading/jobs/` — `backtest_jobs.py` (subscription backtest worker)
 
 ### `packages/pocketquant-api`
 
-FastAPI composition root:
+FastAPI composition root. Wires everything together — no business logic here.
 
-- `main.py` creates the app
-- `main_extensions.py` wires middleware, routes, health, jobs, and SPA serving
-- `di/` owns Dishka container setup
-- `market_data/` owns sync, OHLCV, quote, and status handlers
+Contains: `main.py` (app creation), `main_extensions.py` (middleware, routes, health, jobs, SPA serving), `di/` (Dishka container with 6 providers), `market_data/` (sync, OHLCV, quote, status handlers).
 
-Important route groups:
-
+Route groups:
 - `/health`
-- `/api/v1/market-data/*`
+- `/api/v1/market-data/*` (sync, bars, integrity, status)
 - `/api/v1/quotes/*`
-- `/api/v1/strategies/*`
-- `/api/v1/trading/*`
+- `/api/v1/strategies/*` (CRUD + subscriptions)
+- `/api/v1/trading/*` (orders, positions)
 - `/api/v1/backtest/*`
 - `/api/v1/system/jobs`
 
 ### `packages/pocketquant-web`
 
-React 19 + Vite frontend:
+React 19 + Vite frontend. Three routes: `/` (Charts), `/strategies` (Operator Dashboard), `/monitor` (System Monitoring).
 
-- chart rendering with `lightweight-charts`
-- symbol selector backed by `/market-data/symbols`
-- interval availability backed by `/market-data/sync-status`
-- OHLCV chart data backed by `/market-data/bar/{symbol}` (composite symbol, URL-encoded `:`)
-- backtest overlay backed by `/backtest/run`
-- subscription panel sidebar (280px) with polling, status badges, cascade delete UI
+Tech stack: Vite 8, React 19, TypeScript 5.9, TanStack Router (file-based), TanStack Query 5.95, Lightweight Charts 5.1.
 
-Important files:
+Key files:
+- `src/App.tsx`, `src/main.tsx`
+- `src/components/chart/trading-chart.tsx` — candlestick + volume + 5 indicators
+- `src/components/subscription-panel.tsx`
+- `src/api/market-data-api.ts`, `src/api/backtest-api.ts`, `src/api/strategy-subscription-api.ts`
+- `src/hooks/useSubscriptions.ts`, `src/hooks/useOHLCV.ts`, `src/hooks/useBacktest.ts`
+- `vite.config.ts` — proxies `/api/*` to `http://localhost:41920`
 
-- `src/App.tsx`
-- `src/components/chart/trading-chart.tsx`
-- `src/components/subscription-panel.tsx` (NEW)
-- `src/api/market-data-api.ts`
-- `src/api/backtest-api.ts`
-- `src/api/strategy-subscription-api.ts` (NEW)
-- `src/hooks/useSubscriptions.ts` (NEW)
-- `vite.config.ts`
+---
+
+## Cross-Package Dependency Graph
+
+```
+pocketquant-core
+    ↑               ↑
+pocketquant-backtest  pocketquant-trading
+    ↑               ↑
+       pocketquant-api
+              ↑
+       pocketquant-web  (HTTP only, no Python imports)
+```
+
+Enforced dependency rule: `core ← {backtest, trading} ← api`. No reverse dependencies. Domain layer never imports from features or infrastructure.
+
+---
 
 ## Runtime Model
 
 ### Backend Startup
 
-The normal local path is:
-
-1. `just install`
-2. `just up`
-3. `just dev`
-
-`just dev` runs:
-
 ```bash
-.venv/bin/python -m uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920
+just install   # uv sync all packages
+just up        # docker compose (MongoDB + Redis)
+just dev       # uvicorn on :41920 with --reload
 ```
 
-On startup the API:
-
-1. loads settings from `.env`
-2. connects MongoDB and Redis
-3. registers all CQRS handlers
-4. ensures repository indexes
-5. registers health checks
-6. starts background jobs if `ENABLE_JOBS=true`
-7. mounts the built SPA if `packages/pocketquant-web/dist` exists
+Startup sequence (full detail in [system-architecture.md § Startup Sequence](./system-architecture.md#startup-sequence)):
+1. Load `.env` settings
+2. Connect MongoDB + Redis
+3. Build Dishka container (6 providers: Core → Persistence → Infrastructure → MarketData → Trading → Handler)
+4. Register all 27 CQRS handlers with Mediator
+5. Ensure MongoDB indexes
+6. Recover orphan jobs and stale backtests
+7. Start 8 background sync/integrity jobs (if `ENABLE_JOBS=true`)
+8. Mount built SPA from `packages/pocketquant-web/dist` if present
 
 ### Frontend Startup
 
-**Purpose:** Real-time charting UI for market data visualization with technical indicators, backtest visualization, and system monitoring.
+Dev: `cd packages/pocketquant-web && npm run dev` (Vite HMR, proxies API to :41920).
+Prod: `npm run build` → `dist/` served as static assets by FastAPI.
 
-**Tech Stack:** Vite 8, React 19, TypeScript 5.9, TanStack Router (file-based routing), Lightweight Charts 5.1, TanStack Query 5.95, SMA/EMA indicators
+UI assumptions: backend on `:41920`, at least one symbol synced, interval buttons derived from sync statuses.
+If UI looks empty: check `GET /api/v1/market-data/sync-status` and `GET /api/v1/market-data/symbols`.
 
-**Routes:**
-- `/` (Charts) - Trading chart with symbol/interval/strategy selectors, technical indicators, backtest runner
-- `/strategies` - Operator dashboard (3-pane: list/start/stop strategies, config+chart embed, positions/metrics) — NEW 2026-05-23
-- `/monitor` - System monitoring dashboard (sync status, data integrity checks, background jobs)
+---
 
-**Components:**
-- **Chart Page:** TradingChart + SymbolSelector + IntervalSelector + StrategySelector + IndicatorToggles + AppHeader
-- **TradingChart:** Candlestick + volume + 5 technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
-- **Monitor Dashboard:** HealthBanner (aggregate status) + DataHealthTable (unified sync/integrity, expandable rows, check/repair) + BackgroundJobsList (with last run, duration, job health status) — auto-poll 30s
+## Where Does X Live?
 
-**Hooks:**
-- `useOHLCV()` - Fetch historical bars via TanStack Query with caching
-- `useBacktest()` - Execute and track backtest runs
-- `useSymbols()` - List available symbols
-- `useAvailableIntervals()` - Get compatible timeframes
-- `useRealTimeBar()` - Poll API for latest bar (5-10s interval)
-- `useIndicators()` - Calculate indicator values from bars
-- `useSyncStatus()` - Poll sync status (30s interval)
-- `useIntegrityCheck()` / `useIntegrityRepair()` - Data integrity mutations
-- `useBackgroundJobs()` - Poll background job list (30s interval)
+| Topic | Location |
+|-------|----------|
+| Domain entities (Bar, Order, Position, Symbol) | `core/domain/{bar,order,position,symbol}/entities.py` |
+| Value objects (OHLCV, Signal, PnL, QuoteTick) | `core/domain/{bar,concepts}/value_objects.py` |
+| Domain events (11 events) | `core/domain/{bar,order,position,concepts}/events.py` |
+| Enums (OrderStatus, Interval, Direction, etc.) | `core/domain/{bar,order,position,shared}/enums.py` |
+| CQRS Mediator + Handler base | `core/common/mediator/` |
+| Event bus + @event_handler decorator | `core/common/messaging/` |
+| Middleware (correlation, rate limit, idempotency) | `core/common/middleware/` |
+| MongoDB connection | `core/persistence/mongodb.py` |
+| Redis connection | `core/persistence/redis.py` |
+| All 8 repositories | `core/persistence/repositories/` |
+| Binance REST + WS clients | `core/infrastructure/binance/` |
+| OKX broker + WS + reconnection | `core/infrastructure/brokers/okx/` |
+| PaperBroker (simulation) | `core/infrastructure/brokers/paper/` |
+| APScheduler wrapper | `core/infrastructure/scheduling/` + `core/common/jobs.py` |
+| Dishka DI container (6 providers) | `api/di/` |
+| FastAPI app + middleware wiring | `api/main.py`, `api/main_extensions.py` |
+| All CQRS feature operations | `api/features/{backtesting,market_data,strategy,trading,risk}/` |
+| Backtest execution engine | `backtest/app_services/backtest_app_service.py` |
+| Grid optimization engine | `backtest/app_services/grid_optimization_app_service.py` |
+| Strategy runtime dispatch | `trading/app_services/strategy_app_service.py` |
+| Order state machine | `trading/app_services/order_app_service.py` |
+| Position tracking + P&L | `trading/app_services/position_app_service.py` |
+| YAML strategy loader | `trading/app_services/strategy_loader.py` |
+| HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2.py` |
+| Background sync job registration | `api/main_extensions.py` → `register_sync_jobs()` |
+| Subscription backtest job worker | `trading/jobs/backtest_jobs.py` |
+| UUID7 generation | `core/common/uuid.py` |
+| Cache keys, TTLs, constants | `core/common/constants.py` |
+| Frontend API client layer | `web/src/api/` |
+| Frontend custom hooks | `web/src/hooks/` |
+| Chart + indicator components | `web/src/components/chart/` |
+| Domain purity test (AST check) | `core/tests/unit/domain/test_domain_purity.py` |
 
-**API Layer:** `apiFetch()` / `apiPost()` wrappers for fetch + error handling; proxies `/api/*` to `:41920`.
+---
 
-**Deployment:** Vite builds to `dist/`, served as static assets via FastAPI (SPA fallback for `/monitor` route).
+## Dishka DI Providers (Quick Ref)
 
-### pocketquant.core.common (993 LOC, 32 files)
+| Provider | Provides |
+|----------|----------|
+| `CoreProvider` | Settings, EventBus (50-event history), Mediator |
+| `PersistenceProvider` | Database (PyMongo), Cache (Redis), 8 repositories |
+| `InfrastructureProvider` | PaperBroker, OKXBroker, BinanceClient, BinanceWebSocketClient, JobScheduler, HTTP client, WebhookDispatcher |
+| `MarketDataProvider` | BarAppService, QuoteAppService, 8 sync/integrity background jobs |
+| `TradingProvider` | OrderAppService, PositionAppService, StrategyAppService |
+| `HandlerProvider` | All 27 CQRS handlers (market data ×13, trading ×4, strategy ×5, backtesting ×5) |
 
-**CQRS & Mediator:**
-- **Mediator:** CQRS dispatcher, routes commands/queries to handlers
-  - `register(request_type, handler)` - Register handler
-  - `send(request)` - Dispatch to handler, raises HandlerNotFoundError if missing
-- **HandlerRegistry** - Batch register multiple handlers
-  - `register_all(mediator, handlers)` - Register handler list at startup
-- **EventBus:** In-memory async event bus (FIFO, **50 event max history**)
-  - `subscribe(event_type, handler)` - Register event subscriber
-  - `publish(event)` - Notify all subscribers sequentially
-  - `publish_all(events)` - Batch publish multiple events
+For full provider details see [system-architecture.md § Dependency Injection](./system-architecture.md#dependency-injection-dishka).
 
-**Event Handling & Auto-Discovery:**
-- **@event_handler decorator** - Mark methods as event subscribers
-- **EventRegistry** - Auto-discover and bind decorated handlers
-  - `register_instance(obj, event_bus)` - Scan obj for decorated methods, subscribe all
-  - Supports single or multiple event types per handler
+---
 
-**Tracing & Middleware:**
-- **CorrelationIDMiddleware** - Inject correlation_id into context for request tracking
-- **RequestLoggingMiddleware** - Log all requests/responses with correlation IDs
-- `get_correlation_id()` - Access current correlation ID in async context
-- **IdempotencyMiddleware** - Cache POST responses by idempotency_key header (24h TTL)
-- **RateLimitMiddleware** - Token bucket (100 capacity, 10 tokens/sec refill) per IP
+## Configuration
 
-**UUID Utilities:**
-- **uuid.py** - UUID7 generation (19 LOC)
-  - `generate_id()` - Return UUID v7 (time-ordered)
-  - `generate_id_str()` - Return UUID v7 as string
-  - Replaces UUID4 for better database performance (chronological sorting)
+Environment variables (`.env`):
 
-**Infrastructure Singletons:**
-- **Database** - Async MongoDB singleton (PyMongo native async API)
-  - `get_collection(name)` - Access collection
-  - `connect(settings)` - Initialize connection pool (5-50 connections)
-  - `disconnect()` - Clean shutdown (called by dishka provider cleanup)
-- **Cache** - Async Redis singleton (redis-py async)
-  - `get(key)`, `set(key, value, ttl=None)`, `delete(key)`
-  - `delete_pattern(pattern)` - Pattern-based deletion via SCAN
-  - `get_or_set(key, func, ttl)` - Cache-aside pattern
-  - `disconnect()` - Clean shutdown (called by dishka provider cleanup)
-- **HealthCoordinator** - Parallel health checks (database, redis, jobs)
-- **JobScheduler** - APScheduler wrapper (AsyncIOExecutor)
-  - `shutdown(wait=True)` - Clean shutdown (called by dishka provider cleanup)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MONGODB_URL` | MongoDB DSN | — |
+| `REDIS_URL` | Redis DSN | — |
+| `LOG_FORMAT` | `json` (prod) or `console` (dev) | — |
+| `LOG_LEVEL` | `debug`, `info`, `warning`, `error` | — |
+| `ENVIRONMENT` | `development` or `production` | — |
+| `APP_PORT` | Host-mapped port (container always 41920) | `58921` |
+| `ENABLE_JOBS` | Enable background sync/integrity jobs | `false` |
+| `OKX_API_KEY` | OKX live trading credential (optional) | — |
+| `OKX_API_SECRET` | OKX live trading credential (optional) | — |
+| `OKX_PASSPHRASE` | OKX live trading credential (optional) | — |
+| `OKX_DEMO_MODE` | OKX sandbox mode | `true` |
 
-**Logging & Constants:**
-- `setup_logging()` - structlog with JSON/console output
-- `get_correlation_id()` - Thread/async-safe context variable access
-- **constants.py** - Centralized cache keys, TTLs, limits, headers, interval mappings
+---
 
-### pocketquant.core.domain (~900 LOC entities + concepts, 39 files) — Pure Business Logic + Persistence
+## Dependencies
 
-**Rules:** No I/O imports (pymongo, redis, aiohttp). **Pydantic BaseModel with MongoDB persistence.** Aggregates have `to_mongo()` and `from_mongo()` methods. Immutable value objects. Domain events. Validation in `__post_init__`.
+| Package | Purpose |
+|---------|---------|
+| `fastapi` | Web framework |
+| `pydantic` | Settings + Features layer (commands/queries); domain uses stdlib dataclasses |
+| `pymongo` | MongoDB driver — native async API (NOT Motor) |
+| `redis` | Async Redis client (redis-py) |
+| `structlog` | Structured logging |
+| `apscheduler` | Job scheduling |
+| `aiohttp` | Async HTTP + WebSocket (Binance REST/WS) |
+| `dishka` | Dependency injection |
+| `pytest` | Testing framework |
+| `ruff` | Linting and formatting |
+| `pyright` | Type checking |
 
-**Composite Symbol (2026-05-23):** All entities use `symbol: str` (format `CODE:EXCHANGE`) instead of separate `(code, exchange)` fields. Exchange encapsulated as opaque postfix.
-
-**Statistics:**
-- domain/ folder: ~355 LOC (Bar 382, Order 382, Position 298, Symbol 81, SyncStatus 51, shared 63)
-- concepts/ folder: ~545 LOC (quote 70, risk 167, strategy 383 including MACrossover 159, HitAndRun 156)
-
-**Domain Structure (Three-Tier DDD):**
-- **Top-level** (collection-backed): bar/, order/, position/, symbol/, sync_status/, backtest/
-- **concepts/** (non-persisted): quote/, risk/, strategy/
-- **shared/** (cross-cutting): enums.py, events.py, value_objects.py
-
-**Aggregates (2, Pydantic + MongoDB):**
-- **OrderAggregate** - Order state machine with `to_mongo()` / `from_mongo()`
-- **PositionAggregate** - Position tracking + P&L with `to_mongo()` / `from_mongo()`
-
-**Entities (5, Pydantic + MongoDB):**
-- **Bar** - OHLCV price bar (renamed from OHLCVAggregate)
-- **Symbol** - Tradeable instruments (flattened from SymbolAggregate)
-- **SyncStatus** - Data sync progress tracking
-- **BacktestResult** - Backtest run results
-- **OptimizationResult** - Parameter optimization results
-
-**Deleted (Dead Code, 2026-03-15):**
-- OHLCVAggregate, QuoteAggregate, SymbolAggregate (no state/invariants)
-- persistence/schemas/ directory (logic moved to entities)
-
-**Value Objects (Frozen Dataclasses, @dataclass(frozen=True)):**
-- **OHLCV** - (open, high, low, close, volume, timestamp) with validation in __post_init__
-- **BarRange** - (start_time, end_time) for bar alignment
-- **PnL** - (unrealized, realized, total)
-- **Signal** - Buy/sell signal with quantity
-- **Price** - Decimal price wrapper
-- **QuoteTick** - Real-time price update
-- **RiskConfig** - Risk model + parameters
-
-**Enums:**
-- **OrderType** - MARKET, LIMIT, STOP_LIMIT, STOP_MARKET
-- **OrderSide** - BUY, SELL
-- **OrderStatus** - PENDING, PARTIAL_FILL, FILLED, CANCELLED, REJECTED, ERROR (6 states with is_terminal, is_active)
-- **PositionSide** - LONG, SHORT
-- **Direction** - LONG, SHORT, EXIT, FLAT
-- **RiskModel** - PERCENT_RISK, KELLY, FIXED
-- **Interval** - 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M (13 timeframes)
-
-**Domain Events (11, Frozen Dataclasses with @dataclass(frozen=True, eq=False)):**
-- **Bar:** HistoricalDataSyncedEvent, BarCompletedEvent (emitted from live BarAppService._save_completed_bar())
-- **Order:** OrderSubmittedEvent, OrderFilledEvent, OrderPartiallyFilledEvent, OrderCancelledEvent, OrderRejectedEvent
-- **Position:** PositionOpenedEvent, PositionUpdatedEvent, PositionClosedEvent
-- **Quote:** QuoteReceivedEvent
-- **Strategy:** SignalGeneratedEvent
-- All events extend DomainEvent base (frozen dataclass with custom __eq__ by event_id)
-
-**Domain Services:**
-- **BarBuilder** - Incremental OHLCV bar construction from ticks
-  - `add_tick(price, volume)` - Update bar with new tick
-  - `is_complete()` - Check if bar period elapsed
-  - `to_dict()` - Export bar as dict
-- **PositionSizer** - Calculate position size by risk model
-  - `calculate_size(account_balance, signal)` - Returns quantity
-  - Supports: PERCENT_RISK, KELLY, FIXED
-
-### pocketquant.backtest (submodule) + pocketquant.trading (submodule) (2,559 LOC, 21 files) — Orchestrators
-
-Stateful services that coordinate domain logic + infrastructure:
-- **BacktestAppService:** Execute strategy on historical bars
-- **GridOptimizationAppService:** Parameter optimization (multiprocessing)
-- **BarAppService:** Real-time multi-interval bar aggregation
-- **QuoteAppService:** WebSocket lifecycle, tick distribution
-- **StrategyAppService:** Strategy dispatch (on_bar, on_tick, on_fill)
-- **OrderAppService:** Order state machine + recovery
-- **PositionAppService:** Position state, P&L calculation
-- **StrategyLoader:** YAML → IStrategy instantiation
-
-No CQRS in this layer. These are business orchestrators called by CQRS handlers.
-
-### pocketquant.core.infrastructure (2,883 LOC, 28 files) — External I/O & Brokers
-
-**Brokers (Pluggable Execution):**
-- **IBroker** - Abstract contract
-  - `connect()`, `disconnect()` - Lifecycle
-  - `submit_order(symbol, side, type, quantity, price)` - Place order
-  - `cancel_order(order_id)` - Cancel by ID
-  - `get_balance()` - Account balance
-  - `get_positions()` - Open positions
-- **PaperBroker** - In-memory simulation
-  - Slippage simulation (configurable % or fixed points)
-  - Fill delay (configurable milliseconds)
-  - Position tracking with entry/exit prices
-  - P&L calculations
-  - `set_current_price(symbol, price)` - Update price for fills
-- **OKXBroker** - OKX live trading
-  - REST API + WebSocket integration
-  - HMAC-SHA256 authentication
-  - Demo mode support
-- **BrokerFactory** - Factory pattern
-  - `create(type, config)` → IBroker (paper, okx)
-
-**OKX WebSocket Integration:**
-- **OkxWebSocketClient** - Low-level WebSocket handler
-  - HMAC login authentication
-  - Heartbeat (25s ping)
-  - Binary frame parsing
-  - Async iterator interface
-- **OkxReconnectionHandler** - Resilient connection management
-  - Exponential backoff (1s → 30s max)
-  - Circuit breaker (10 failures → 5m pause)
-  - Automatic re-subscription on reconnect
-- **Mappers:** OkxOrderMapper, OkxPositionMapper for state translation
-
-**Data Providers (IDataProvider Extension Points):**
-- **BinanceClient** - Implements IDataProvider protocol
-  - Public REST API (no auth required)
-  - `fetch_ohlcv(symbol, exchange, interval, n_bars)` - Fetch historical bars with delta-volume per tick
-  - **Excludes the in-progress bar** (v2.0.1) — endTime caps at last closed-bar boundary; a second-tier filter drops any kline `openTime >= cutoff`. Authoritative behaviour in `tests/unit/infrastructure/binance/test_binance_client_in_progress_filter.py`.
-  - Rate limits: Binance 1200 weight/min (typical: 10 weight per request)
-  - Returns bars with **per-tick delta volumes** (required by BarBuilder cumulative aggregation)
-- **BinanceWebSocketClient** - Implements IRealtimeQuoteProvider protocol
-  - @aggTrade stream for real-time quote ingestion
-  - Event-driven updates to BarAppService for multi-interval aggregation
-  - Auto-reconnection with exponential backoff
-- **IDataProvider / IRealtimeQuoteProvider** - Abstraction protocols
-  - Enable future implementations (OKX, stocks providers, etc.)
-
-**Scheduling:**
-- **JobScheduler** - APScheduler wrapper
-  - AsyncIOExecutor for async jobs
-  - In-memory job store (non-persistent)
-  - `add_interval_job(func, interval)` - Periodic execution
-  - `add_cron_job(func, cron_expr)` - Scheduled execution
-  - Coalesce=True (skip missed runs)
-
-**HTTP & Webhooks:**
-- Generic async HTTP client (aiohttp)
-- **WebhookDispatcher** - Event notifications
-  - HMAC-SHA256 signing
-  - Resilient delivery with retry
-
-### pocketquant.core.persistence (1,214 LOC, 18 files) — Data Access Layer
-
-**Database Connections (Instance-Based via DI):**
-- **Database** - Async MongoDB wrapper
-  - PyMongo native async API (NOT Motor)
-  - Connection pooling (5-50 connections, configurable)
-  - Single `get_collection()` entry point
-  - Constructed in lifespan, stored in Services dataclass
-- **Cache** - Async Redis client
-  - JSON serialization with custom date handling
-  - TTL support (60s quotes, 300s bars, 86400s idempotency)
-  - Pattern-based deletion via SCAN
-  - Constructed in lifespan, stored in Services dataclass
-
-**BaseRepository Mixin:**
-- `_collection(name)` - Get MongoDB collection safely
-- Ensures all repositories use connection pooling
-- Zero direct `Database.get_collection()` calls outside persistence/
-
-**Repositories (8, instance-based via DI):**
-1. **BarRepository** - Market bar persistence (renamed from OHLCVRepository)
-   - Uses `Bar.to_mongo()` / `Bar.from_mongo()` for serialization
-   - `get_bars(symbol, exchange, interval, limit)` - Query bars
-   - `upsert_many(records)` - Bulk insert/update (unique on timestamp)
-   - `find_datetimes(symbol, exchange, interval, start, end)` - Query by time range (for integrity checks)
-   - `delete_many_by_ids(ids)` - Bulk delete misaligned bars
-2. **OrderRepository** - Order lifecycle with OrderAggregate persistence
-   - `save(order)` - Persist order state
-   - `find_pending()` - Recover non-terminal orders on startup
-   - `get_by_id(order_id)` - Fetch single order
-3. **PositionRepository** - Position tracking with PositionAggregate persistence
-   - `save(position)` - Persist position state
-   - `find_open()` - Recover open positions on startup
-   - `get_by_id(position_id)` - Fetch single position
-4. **BacktestRepository** - Backtest result storage
-   - `save(result)` - Store completed backtest
-   - `find_by_id(run_id)` - Retrieve backtest
-   - `list_by_strategy(strategy_id)` - Query strategy backtests
-5. **OptimizationRepository** - Parameter optimization results
-   - `save(result)` - Store optimization result
-   - `find_by_id(optimization_id)` - Retrieve result
-6. **SymbolRepository** - Symbol metadata with Symbol entity persistence
-   - `find_by_code(code, exchange)` - Lookup symbol
-   - `find_all()` - Get all symbols
-7. **SyncStatusRepository** - Data sync progress tracking
-   - `save(status)` - Record sync status
-   - `find_by_symbol(symbol, exchange)` - Get last sync
-   - `update_status(status_id, progress, error)` - Update progress
-8. **JobHistoryRepository** - Background job execution history (MongoDB-backed, 7-day TTL)
-   - `record_start(job_id)` - Insert running record, return doc_id
-   - `record_finish(doc_id, status, duration_ms, error)` - Update with completion
-   - `get_latest_by_job_ids(job_ids)` - Get latest execution per job_id
-   - Auto-prune via TTL index on started_at
-
-**Persistence Consolidation (2026-03-15):**
-- `persistence/schemas/` directory DELETED
-- All persistence logic consolidated into domain entities via `to_mongo()` / `from_mongo()`
-- Repositories import domain entities directly: `from pocketquant.core.domain.bar.entities import Bar`
-- Result: Single source of truth (entities), no schema duplication
-- Database uses PyMongo (native async), NOT Motor
-
-### pocketquant.api.features (3,016 LOC, 134 files) — CQRS Operation Routes
-
-**Vertical Slice Architecture (Operation-First Pattern):**
-Each feature is self-contained. Operations are the primary organizational unit. Routes are thin (parse request, call handler, return response). All business logic delegated to handlers.
-
-**Dependency:** Features depend on Application + Domain + Infrastructure.
-**No reverse dependencies:** Domain never imports from Features.
-
-**sync_one Refactor (2026-05-05):** Handler folder split into focused modules:
-- `provider_fetch.py` — Bounded retry (backoff 0/3/8s; 15s budget) + aligned-bar detection
-- `bar_filters.py` — Filter existing + misaligned bars
-- `bar_alignment.py` — Alignment validation utility
-- `anomaly_log.py` — Structured logs (market_data.sync.no_progress WARN, stuck_threshold_crossed ERROR)
-- `responses.py` — Success/error response builders
-Handler.py now 195 LOC (was 261), each private helper does one task.
-
-**backtesting/ (626 LOC, 22 files)**
-
-Structure:
-```
-backtesting/
-├── base/                 # Shared infrastructure
-│   ├── engine/          # BacktestAppService, HistoricalReplayAppService
-│   ├── metrics/         # PerformanceCalculator
-│   ├── models/          # DTOs
-│   ├── optimizer/       # GridOptimizationAppService
-│   └── repository/      # BacktestRepository
-├── run/                 # Operation: Execute backtest
-│   ├── command.py
-│   ├── handler.py
-│   └── route.py
-├── optimize/            # Operation: Optimize parameters
-│   ├── command.py
-│   ├── handler.py
-│   └── route.py
-├── get_result/          # Operation: Retrieve backtest
-│   ├── query.py
-│   ├── handler.py
-│   └── route.py
-├── get_optimization/    # Operation: Get optimization
-│   ├── query.py
-│   └── handler.py
-├── list_results/        # Operation: List backtests
-│   ├── query.py
-│   └── handler.py
-└── router.py            # Main feature router
-```
-
-`vite.config.ts` proxies `/api/*` to `http://localhost:41920`.
-
-Built frontend workflow:
-
-```bash
-cd packages/pocketquant-web
-npm run build
-```
-
-After that, FastAPI serves the generated `dist` bundle at `/`.
-
-### Market Data Flow
-
-Historical sync flow:
-
-1. `POST /api/v1/market-data/sync`
-2. `SyncSymbolHandler` fetches bars from `BinanceClient` (implements IDataProvider)
-3. bars are filtered against the latest stored bar
-4. `BarRepository.insert_many()` stores new bars (requires delta-volume per tick)
-5. `SyncStatusRepository` is updated
-6. Redis OHLCV caches are invalidated
-
-Read flow:
-
-1. `GET /api/v1/market-data/bar/{symbol}` (composite symbol: `BTCUSDT:BINANCE` or URL-encoded `BTCUSDT%3ABINANCE`)
-2. handler queries `BarRepository` with composite symbol
-3. API returns bars in descending order
-4. frontend reverses them for chart rendering
-
-Live quote flow:
-
-1. `POST /api/v1/quotes/start`
-2. `POST /api/v1/quotes/subscribe`
-3. quote service ingests Binance @aggTrade ticks
-4. bar aggregation updates in-progress candles
-5. the UI listens to `/api/v1/market-data/bar/{symbol}` for latest bar (composite symbol)
-
-### UI Expectations
-
-The current UI assumes:
-
-- the backend is running on `:41920`
-- at least one symbol has already been synced
-- interval buttons are derived from completed sync statuses
-- selecting a strategy triggers an immediate backtest over the last 30 days
-
-If the UI looks empty, check these first:
-
-- `GET /api/v1/market-data/sync-status`
-- `GET /api/v1/market-data/symbols`
-- `GET /api/v1/backtest/strategies`
+---
 
 ## Test Assets
 
-Backend automated tests:
-
-- `packages/pocketquant-core/tests`
-- `packages/pocketquant-backtest/tests`
-- `packages/pocketquant-trading/tests`
-- `packages/pocketquant-api/tests`
-
-Current test commands:
-
+Commands:
 ```bash
-just test
-just test-pkg core
+just test           # all packages
+just test-pkg core  # single package
 just lint
 just types
 ```
 
+Test locations:
+- `packages/pocketquant-core/tests/`
+- `packages/pocketquant-backtest/tests/`
+- `packages/pocketquant-trading/tests/`
+- `packages/pocketquant-api/tests/`
+
+Manual smoke tests: `tests/http/` (Bruno), `tests/manual/api-test.http` (curl).
+
 Frontend validation:
-
 ```bash
-cd packages/pocketquant-web
-npm run lint
-npm run build
+cd packages/pocketquant-web && npm run lint && npm run build
 ```
 
-Manual API smoke tests:
-
-- `tests/http/` for Bruno
-- `tests/manual/api-test.http` for curl-based checks
-
-## Current Strategy IDs
-
-The backtest strategy registry currently exposes:
-
-- `hitnrun2` — 1m breakdown buy / breakup sell with technical SL/TP capped by `max_loss_pct` (1% default) and `min_profit_pct` (2% default). PaperBroker auto-fills SL/TP on `BarCompletedEvent`.
-
-## Files Worth Reading First
-
-**CoreProvider** - App-level singletons
-- Settings (from config)
-- EventBus (max_history=**50**)
-- Mediator
-
-**PersistenceProvider** - Data access layer
-- Database (MongoDB, PyMongo native async)
-- Cache (Redis, redis-py)
-- 8 Repositories (BarRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository, JobHistoryRepository)
-
-**InfrastructureProvider** - External integrations
-- IBroker implementations (PaperBroker, OKXBroker)
-- BrokerFactory (creates broker by type)
-- BinanceClient (implements IDataProvider; REST data fetching)
-- BinanceWebSocketClient (implements IRealtimeQuoteProvider; @aggTrade real-time quotes)
-- OkxWebSocketClient + OkxReconnectionHandler (OKX integration)
-- HTTP client (generic async HTTP)
-- WebhookDispatcher
-
-**MarketDataProvider** - Real-time data services
-- BarAppService (multi-interval aggregation)
-- QuoteAppService (WebSocket lifecycle)
-- Sync background jobs: 8 jobs registered (sync_5m, sync_15m, sync_all_1h, sync_all_1d, sync_1w, sync_1M, sync_integrity, sync_repair)
-
-**TradingProvider** - Order/position management
-- OrderAppService (order state machine)
-- PositionAppService (position tracking + P&L)
-
-**HandlerProvider** - All 27 CQRS handlers
-- Market data handlers (13): SyncSymbolHandler, GetBarsHandler, etc.
-- Trading handlers (4): ListOrdersHandler, GetOrderHandler, ListPositionsHandler, GetPositionHandler
-- Strategy handlers (5): LoadStrategyHandler, StartStrategyHandler, StopStrategyHandler, GetOneHandler, GetAllHandler
-- Backtesting handlers (5): RunBacktestHandler, OptimizeHandler, GetResultHandler, GetOptimizationHandler, ListResultsHandler
-
-### Container Factory
-
-**packages/pocketquant-api/src/pocketquant/api/di/container.py:**
-- `PROVIDERS` list defines initialization order (CoreProvider → ... → HandlerProvider)
-- `create_container()` - Returns AsyncContainer with all providers combined
-- `register_handlers(container)` - Resolves all handlers, registers with Mediator
-
-### Route Integration
-
-```python
-# Routes use FromDishka for injection (via setup_dishka)
-from dishka.integrations.fastapi import FromDishka
-from pocketquant.core.common.mediator import Mediator
-
-@router.post("/sync")
-async def sync_route(mediator: FromDishka[Mediator], command: SyncSymbolCommand):
-    return await mediator.send(command)
-```
-
-## CQRS Flow
-
-```
-HTTP Request → Route (DishkaRoute + FromDishka[Mediator])
-  ↓
-Build Command/Query
-  ↓
-Mediator.send(request)
-  ↓
-Handler.handle() (from HandlerProvider)
-  - Fetch: Infrastructure (TradingView, Database, Cache)
-  - Validate: Domain layer (Bar.from_mongo())
-  - Persist: Infrastructure (BarRepository.upsert_many())
-  - Invalidate: Cache.delete_pattern()
-  - Publish: EventBus.publish(event)
-  ↓
-Handler returns DTO (never entities)
-  ↓
-Route → HTTP Response (JSON)
-```
-
-## Data Pipelines
-
-See [system-architecture.md](./system-architecture.md) for diagram and [handler-pipelines.md](./handler-pipelines.md) for detailed 27-handler flows.
-
-**8 Background Jobs** (scheduled in `register_sync_jobs()`):
-- sync_5m, sync_15m, sync_hourly, sync_swing, sync_daily (frequent intervals, +2s cron offset to dodge bar-close race) — Sync all symbols per interval
-- sync_backfill (03:00 UTC) — Full backfill (5000 bars) across all intervals
-- sync_integrity (04:00 UTC) — Check bar alignment + gaps (7 days back)
-- sync_repair (every 12h) — Delete misaligned, resync gaps, verify still_missing count
-- Each sub-daily sync uses bounded retry inside handler (no provider hiccups leak to cron)
-
-## Key Patterns
-
-**CQRS (Command Query Responsibility Segregation):**
-- Commands mutate state, Queries read-only
-- Separate handlers for each command/query type
-- Routes build requests, Mediator dispatches to handlers
-- Returns DTOs (not entities)
-
-**Event Bus Pattern:** Decoupled domain events
-- Handlers publish domain events to EventBus
-- Subscribers react asynchronously (FIFO order)
-- In-memory with bounded history (**100 events**)
-- No direct coupling between features
-
-**Value Objects:** Immutable domain primitives
-- Interval, OHLCV, BarRange, QuoteTick, Price, Signal
-- Frozen dataclasses for immutability
-- Validation in `__post_init__`
-- 20+ immutable value objects in codebase
-
-**Mediator Pattern:** Single entry point for all requests
-- Routes only parse requests and call Mediator
-- Decouples routes from handlers
-- Testable in isolation
-- Centralized handler registration
-
-**Broker Abstraction:** Pluggable execution layer
-- IBroker interface for order execution
-- PaperBroker: in-memory simulation with slippage/delays
-- OKXBroker: live trading via OKX WebSocket
-- StrategyAppService routes signals to broker
-
-**Domain Purity:** Zero I/O in domain layer
-- Domain layer contains only business rules
-- No pymongo, redis, aiohttp imports allowed
-- Validation via test_domain_purity.py (AST check)
-- Pure, testable, reusable logic
-
-## Testing Strategy
-
-**Unit Tests:**
-- `tests/unit/common/` - Mediator, EventBus, middleware
-- `tests/unit/domain/` - Value objects, aggregates, services
-- `tests/unit/features/` - Handler tests with mocks
-
-**Domain Purity Test:**
-- AST parser checks for forbidden imports in `pocketquant.core.domain`
-- Forbidden: pymongo, redis, aiohttp, src.infrastructure imports
-- Ensures domain layer has zero I/O dependencies
-
-**Integration Tests:**
-- Route tests with real DB/Cache (mocked)
-- CQRS flow validation
-
-## Configuration
-
-All settings via environment variables (`.env` file):
-- `MONGODB_URL` - MongoDB DSN
-- `REDIS_URL` - Redis DSN
-- `LOG_FORMAT` - "json" (prod) or "console" (dev)
-- `LOG_LEVEL` - log level (debug, info, warning, error)
-- `ENVIRONMENT` - "development" or "production"
-- `APP_PORT` - Host-mapped API port (default: **58921**, container always 41920)
-- `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_PASSPHRASE` - OKX live trading credentials (optional)
-- `OKX_DEMO_MODE` - Boolean for OKX sandbox (default: true)
-
-## Dependencies
-
-- **fastapi** - Web framework
-- **pydantic** - Settings validation + Features layer (commands/queries). Domain layer uses stdlib dataclasses instead.
-- **pymongo** - MongoDB driver (native async API, NOT Motor)
-- **redis** - Async Redis client (redis-py)
-- **structlog** - Structured logging
-- **apscheduler** - Job scheduling (APScheduler)
-- **aiohttp** - Async HTTP + WebSocket (Binance REST/WS)
-- **pytest** - Testing framework
-- **ruff** - Linting & formatting
-- **pyright** - Type checking
+---
 
 ## Entry Points
 
-- **Development:** `just dev` (uvicorn on port 41920, local)
-- **Production:** Docker compose with `APP_PORT` env var mapping to container port 41920
-- **API Documentation:** `http://localhost:41920/api/v1/docs` (local dev)
-- **Health Check:** `http://localhost:41920/health` (local dev)
+| Mode | Command | Notes |
+|------|---------|-------|
+| Development | `just dev` | uvicorn on `:41920`, hot reload |
+| Production | `docker compose up` | `APP_PORT` maps to container `:41920` |
+| API docs | `http://localhost:41920/api/v1/docs` | Swagger UI |
+| Health check | `http://localhost:41920/health` | Aggregate status |
 
-## Recent Changes (2026-05-24)
+---
 
-**Scheduler Resilience: Orphan Recovery + Configurable Misfire Grace Time (2026-05-24)**
-- **Orphan job recovery:** `JobHistoryRepository.reconcile_orphan_running()` detects jobs stuck in `running` state (e.g., crash during execution) and resets them. Called at startup via `recover_orphan_jobs()` in lifespan.
-- **Per-job grace time:** `JobScheduler.add_cron_job()` accepts optional `misfire_grace_time` kwarg. Sync jobs tuned per frequency (sync_1m: 120s, sync_verify_cascade: 600s, daily/12h jobs: 3600s). Prevents cascading failures on scheduler restart within grace window.
-- **Startup catch-up:** `register_sync_jobs()` enqueues immediate async catch-up for stale daily/12h jobs if last successful run >grace window (no waiting for next cron tick).
-- **Structured error messages:** `JobScheduler._on_error()` now emits structured strings (was bare `""` for exceptions without message text).
-- **Repository methods:** `JobHistoryRepository.get_last_successful_started_at()` queries last successful job start time (for catch-up logic).
+## Current Strategies
 
-**Integrity Repair Verification & Scheduling (2026-04-13)**
-- **skip_filter flag:** `SyncSymbolCommand.skip_filter: bool` bypasses `_filter_new_bars` for gap-fill repair
-- **Verify step:** `repair_integrity()` now re-checks integrity after resync, returns `still_missing` count + ranges
-- **Interval change:** `sync_repair` moved from cron daily 04:30 UTC → interval every 12h for faster repairs
-- **Job History:** New `JobHistoryRepository` (MongoDB-backed, 7-day TTL) tracks job execution (started_at, finished_at, duration_ms, status, error)
-- **UI updates:** Monitor page components refactored — new `data-health-table`, `data-health-row`, `health-banner`, `status-pill` + format helpers
+| ID | Description |
+|----|-------------|
+| `hitnrun2` | 1m breakdown-buy / breakup-sell with SL/TP capped by `max_loss_pct` (1% default) and `min_profit_pct` (2% default). PaperBroker auto-fills on `BarCompletedEvent`. |
 
-**Bar Integrity System (2026-04-11)**
-- **Alignment validator:** `is_bar_aligned()` and `filter_aligned_bars()` in `bar_builder.py` — drops misaligned bars at ingestion time in `SyncSymbolHandler`
-- **Integrity check/repair:** `check_integrity()` and `repair_integrity()` functions in `integrity_jobs.py`
-- **2 new repo methods:** `find_datetimes()` and `delete_many_by_ids()` on `BarRepository`
-- **2 API endpoints:** `POST /api/v1/market-data/integrity/check` and `POST /api/v1/market-data/integrity/repair`
-
-**4-Package Monorepo Restructuring (2026-03-21)**
-- Reorganized codebase: packages/{core, backtest, trading, api} using uv workspace
-- Dependency graph enforced: core ← {backtest, trading} ← api
-- Namespace packages (PEP 420): no __init__.py at pocketquant/ level
-
-**DDD Aggregate Cleanup (2026-03-15)**
-- `OHLCVRepository` → `BarRepository` (consistent naming)
-- `SymbolAggregate` flattened to `Symbol` entity
-- `OHLCVAggregate`, `QuoteAggregate` deleted (dead code)
-- UUID7 time-ordered IDs throughout (B-tree friendly)
-
-**CRITICAL: Domain Persistence Consolidation (2026-03-15)**
-- `persistence/schemas/` directory DELETED
-- All MongoDB persistence logic moved into domain entities (Pydantic BaseModel)
-- Each aggregate now has `to_mongo()` → dict and `@classmethod from_mongo(doc)` → entity
-- Repositories import directly from domain: `from pocketquant.core.domain.bar.entities import Bar`
-- Result: Domain entities are now complete, self-contained units with built-in persistence
-
-**Handler Extract-Method Pattern:**
-- Complex handlers use private helpers (_fetch_bars, _persist_bars, _fail, _success, etc.)
-- SyncSymbolHandler: 8 private helpers, GetOHLCVHandler: _build_cache_key, StopQuoteFeedHandler: _cancel_ws_task
-- Guideline: Extract when handle() exceeds ~30 lines with 8+ operations
-
-**Naming Standardization (2026-03-14):**
-- DI providers consistently named (CoreProvider, PersistenceProvider, etc.)
-- Application services standardized across layer
-- Infrastructure clients follow unified naming pattern
-
-**Dishka DI Migration (2026-03-13):**
-- Replaced plain Python constructors + Services dataclass with dishka library
-- Created 6 providers: CoreProvider, PersistenceProvider, InfrastructureProvider, MarketDataProvider, TradingProvider, HandlerProvider
-- Lifespan now uses `create_container()` and `setup_dishka(container, app)` in pocketquant.api.main
-- Routes use FromDishka[T] for injection
-- Handler registration via `register_handlers(container)` in pocketquant.api.di.container
-
-**Previous Changes (2026-02-14):**
-- Clean Architecture Refactor Complete: Domain → Application → Features, Infrastructure ← Domain
-- Persistence Layer Refactor: `pocketquant.core.persistence` package with 7 repositories
-- Domain purity enforced via AST checks
-- Auto-discovery: @handles + @event_handler decorators
-
-**Earlier Changes (2026-02-12):**
-- Event handler auto-discovery: `@event_handler` decorator + `EventRegistry`
-- UUID7 migration: All aggregates use time-ordered UUIDs
-- QuoteAggregate field rename: `last_update` → `updated_at`
+---
 
 ## Known Limitations
 
-- In-memory EventBus (events lost on crash; use for non-critical events)
-- In-memory job store (jobs lost on restart; reschedule on startup)
-- No persistent outbox pattern (consider for mission-critical systems)
-- Rate limiting state lost on Redis restart (acceptable for burst protection)
-- Single-threaded strategy execution (one strategy per process)
-- Domain purity enforced via AST check (cannot use I/O in domain/)
+- In-memory EventBus — events lost on crash; suitable for non-critical events only
+- In-memory APScheduler job store — jobs reschedule on startup; no persistent history beyond `job_history` MongoDB collection
+- No persistent outbox pattern — consider for mission-critical event delivery
+- Rate limiting state lost on Redis restart — acceptable for burst protection
+- Single-threaded strategy execution — one strategy per process
+- Domain purity enforced via AST check — I/O imports forbidden in `domain/`
+
+---
+
+## Deep Dives
+
+| Topic | Doc |
+|-------|-----|
+| Layer-by-layer architecture, CQRS flows, request lifecycle | [system-architecture.md](./system-architecture.md) |
+| All 27 handler pipelines in detail | [handler-pipelines.md](./handler-pipelines.md) |
+| Local run steps, canonical route names | [run-and-test-guide.md](./run-and-test-guide.md) |
+| Project history and version notes | [project-changelog.md](./project-changelog.md) |
+| Code standards, naming, file-size rules | [code-standards.md](./code-standards.md) |

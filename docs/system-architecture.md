@@ -458,6 +458,11 @@ src/
 └── main.tsx             # Vite entry point
 ```
 
+**Routes:**
+- `/` — Charts: TradingChart + SymbolSelector + IntervalSelector + StrategySelector + IndicatorToggles + AppHeader
+- `/strategies` — Operator Dashboard: 3-pane layout (list/start/stop strategies, config+chart embed, positions/metrics)
+- `/monitor` — System Monitoring: HealthBanner + DataHealthTable (sync/integrity, expandable rows, check/repair) + BackgroundJobsList (auto-poll 30s)
+
 **Key Features:**
 - **Candlestick Chart:** Real-time OHLCV visualization via Lightweight Charts
 - **Volume Overlay:** Trading volume as histogram below price
@@ -465,6 +470,23 @@ src/
 - **Symbol/Interval Selectors:** Switch data without page reload
 - **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
 - **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41920`
+
+**Custom Hooks:**
+
+| Hook | Purpose | Interval |
+|------|---------|----------|
+| `useOHLCV()` | Fetch historical bars (TanStack Query + cache) | on-demand |
+| `useBacktest()` | Execute and track backtest runs | on-demand |
+| `useSymbols()` | List available symbols | on-demand |
+| `useAvailableIntervals()` | Get compatible timeframes from sync status | on-demand |
+| `useRealTimeBar()` | Poll API for latest bar | 5–10s |
+| `useIndicators()` | Calculate SMA/EMA/RSI/MACD/BB from bars | derived |
+| `useSyncStatus()` | Poll sync status | 30s |
+| `useIntegrityCheck()` / `useIntegrityRepair()` | Data integrity mutations | manual |
+| `useBackgroundJobs()` | Poll background job list | 30s |
+| `useSubscriptions()` | Poll strategy subscription list | polling |
+
+**API Layer:** `apiFetch()` / `apiPost()` wrappers in `src/api/api-client.ts`; modules: `market-data-api.ts`, `backtest-api.ts`, `strategy-subscription-api.ts`.
 
 **Deployment:** Vite `dist/` served as static assets behind FastAPI (no separate server).
 
@@ -655,13 +677,37 @@ Key pipelines at high level:
 
 **6 Providers:**
 - **CoreProvider** - Settings, EventBus (max_history=**50**), Mediator
-- **PersistenceProvider** - Database (PyMongo), Cache (Redis), 7 repositories
-- **InfrastructureProvider** - Brokers (Paper, OKX), BinanceClient, JobScheduler
+- **PersistenceProvider** - Database (PyMongo), Cache (Redis), 8 repositories (BarRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository, JobHistoryRepository)
+- **InfrastructureProvider** - PaperBroker, OKXBroker, BrokerFactory, BinanceClient (IDataProvider), BinanceWebSocketClient (IRealtimeQuoteProvider), OkxWebSocketClient, OkxReconnectionHandler, HTTP client, WebhookDispatcher, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
 - **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
 - **HandlerProvider** - All 27 CQRS handlers (via @handles decorator)
 
+**27 CQRS Handlers by Category:**
+
+| Category | Count | Handlers |
+|----------|-------|----------|
+| Market data | 13 | SyncSymbolHandler, SyncBulkHandler, GetBarsHandler, StartQuoteFeedHandler, StopQuoteFeedHandler, SubscribeQuoteHandler, GetAllQuotesHandler, GetSyncStatusHandler, ListSymbolsHandler, CheckIntegrityHandler, RepairIntegrityHandler, GetSystemJobsHandler, *(1 more)* |
+| Backtesting | 5 | RunBacktestHandler, OptimizeHandler, GetResultHandler, GetOptimizationHandler, ListResultsHandler |
+| Strategy | 5 | LoadStrategyHandler, StartStrategyHandler, StopStrategyHandler, GetOneHandler, GetAllHandler |
+| Trading | 4 | ListOrdersHandler, GetOrderHandler, ListPositionsHandler, GetPositionHandler |
+
 **Handler Registration:** `register_handlers(container)` resolves all 27 handler types and registers with Mediator.
+
+**8 Background Jobs** (registered in `register_sync_jobs()`):
+
+| Job ID | Schedule | Purpose | Grace Time |
+|--------|----------|---------|-----------|
+| `sync_5m` | every 5m (+2s offset) | Sync all symbols at 5m interval | 120s |
+| `sync_15m` | every 15m (+2s offset) | Sync all symbols at 15m interval | 120s |
+| `sync_hourly` | every 1h (+2s offset) | Sync all symbols at 1h/4h intervals | 300s |
+| `sync_swing` | every 4h (+2s offset) | Sync all symbols at swing intervals | 600s |
+| `sync_daily` | cron 00:05 UTC | Sync all symbols at 1d/1w/1M intervals | 3600s |
+| `sync_backfill` | cron 03:00 UTC | Full backfill (5000 bars) all intervals | 3600s |
+| `sync_integrity` | cron 04:00 UTC | Check bar alignment + gaps (7 days back) | 3600s |
+| `sync_repair` | every 12h | Delete misaligned bars, resync gaps, verify `still_missing` count | 3600s |
+
+Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded retry inside handler (backoff 0/3/8s, 15s budget). Catch-up fires immediately on startup if last successful run > grace window.
 
 ## Resource Lifecycle
 
@@ -719,3 +765,50 @@ Key pipelines at high level:
 **Characteristics:** Sync 1-5s per 5k bars | Quote <100ms | Bar aggregation <1ms/tick | Mediator <0.1ms | Quote throughput 1000+/sec
 
 **Security:** Credentials via env vars only | Rate limit 200 req/10s per IP | Idempotency cache 24h TTL | MongoDB/Redis auth via DSN
+
+## Recent Significant Changes
+
+### Scheduler Resilience (2026-05-24)
+- **Orphan job recovery:** `JobHistoryRepository.reconcile_orphan_running()` resets jobs stuck in `running` (e.g., crash mid-execution). Called at startup via `recover_orphan_jobs()`.
+- **Per-job misfire grace time:** `JobScheduler.add_cron_job()` accepts `misfire_grace_time` kwarg. Configured per job frequency (120s–3600s).
+- **Startup catch-up:** `register_sync_jobs()` immediately enqueues stale daily/12h jobs if last successful run > grace window.
+- **Structured error messages:** `JobScheduler._on_error()` now emits structured strings (was bare `""` for exceptions without text).
+- **New repo method:** `JobHistoryRepository.get_last_successful_started_at()` for catch-up logic.
+
+### Strategy Subscriptions (2026-05-23)
+- `StrategySubscriptionRepository` + `strategy_subscriptions` MongoDB collection.
+- Composite symbol format (`CODE:EXCHANGE`) replaces `(code, exchange)` pairs across all entities.
+- New feature group: `api/features/strategy/subscriptions/` (add/list/delete symbol, run-all backtest, get subscription backtest).
+- `trading/jobs/backtest_jobs.py` — `run_subscription_backtest()` async job via APScheduler.
+- Frontend: `subscription-panel.tsx`, `strategy-subscription-api.ts`, `useSubscriptions.ts`.
+
+### Integrity Repair Verification (2026-04-13)
+- `SyncSymbolCommand.skip_filter: bool` — bypass `_filter_new_bars` for gap-fill repair.
+- `repair_integrity()` now re-checks post-resync, returns `still_missing` count + ranges.
+- `sync_repair` moved from daily cron → every 12h.
+- `JobHistoryRepository` (MongoDB-backed, 7-day TTL via index on `started_at`).
+- Monitor page: `data-health-table`, `data-health-row`, `health-banner`, `status-pill` components.
+
+### Bar Integrity System (2026-04-11)
+- `is_bar_aligned()` / `filter_aligned_bars()` in `bar_builder.py` — drop misaligned bars at ingestion.
+- `check_integrity()` / `repair_integrity()` in `integrity_jobs.py`.
+- `BarRepository.find_datetimes()` and `delete_many_by_ids()`.
+- `POST /api/v1/market-data/integrity/check` and `/repair` endpoints.
+
+### `sync_one` Handler Refactor (2026-05-05)
+- Handler folder split: `provider_fetch.py`, `bar_filters.py`, `bar_alignment.py`, `anomaly_log.py`, `responses.py`.
+- Handler.py reduced from 261 → 195 LOC.
+
+### 4-Package Monorepo (2026-03-21)
+- Reorganized: `packages/{core,backtest,trading,api}` using uv workspace.
+- Dependency graph enforced: `core ← {backtest, trading} ← api`.
+- Namespace packages (PEP 420): no `__init__.py` at `pocketquant/` level.
+
+### DDD + Persistence Cleanup (2026-03-15)
+- `persistence/schemas/` deleted; all MongoDB persistence moved into domain entities via `to_mongo()`/`from_mongo()`.
+- `OHLCVRepository` → `BarRepository`; `SymbolAggregate` → `Symbol`; `OHLCVAggregate` and `QuoteAggregate` deleted.
+- UUID7 time-ordered IDs throughout (B-tree friendly).
+
+### Dishka DI Migration (2026-03-13)
+- Replaced plain Python constructors + Services dataclass with dishka library.
+- 6 providers created; routes use `FromDishka[T]` injection; handler registration via `register_handlers(container)`.

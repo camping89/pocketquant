@@ -1,0 +1,494 @@
+# Strategy Lifecycle
+
+**Last Updated:** 2026-05-25 | **Status:** Reflects v1.0 production code
+**Scope:** End-to-end strategy lifecycle as implemented in `pocketquant-*` packages.
+**Source of truth:** code paths listed inline (no speculation).
+
+The PocketQuant strategy model is **template-based**:
+
+- A **template** is a Python class registered in `STRATEGY_REGISTRY` (e.g. `hitnrun2`)
+  — `packages/pocketquant-core/src/pocketquant/core/concepts/strategy/services/__init__.py:5`
+- A **subscription** binds a template to a `(symbol, interval)` pair and is the
+  unit that lives in MongoDB. Each subscription owns its own in-memory
+  `IStrategy` instance keyed by the subscription's deterministic ID
+  — `packages/pocketquant-trading/.../trading/domain/subscription.py:24`
+
+That distinction drives everything below.
+
+---
+
+## Part A — User-facing operations
+
+### 1. How a strategy is created
+
+Two creation paths exist:
+
+#### 1.1 Subscription-based (the FE path, recommended)
+
+`POST /api/v1/strategies/{template_id}/symbols` with body `{symbol, interval}`.
+
+- Route: `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py:22`
+- Handler: `.../add_symbol/handler.py:35`
+- Flow:
+  1. Validate symbol is tracked — `TrackedSymbolRepository.exists()`; otherwise 404
+     `SYMBOL_NOT_TRACKED`.
+  2. Lookup template class in `STRATEGY_REGISTRY[template_id]`; 404 if missing.
+  3. Compute `sub_id = sha256(f"{template_id}|{symbol}|{interval}")[:16]`
+     — deterministic, idempotent.
+     `packages/pocketquant-trading/.../trading/domain/subscription.py:44`
+  4. If no in-memory `IStrategy` exists for `sub_id`, instantiate one through
+     `StrategyAppService.load_strategy(StrategyConfig(id=sub_id, name=template_id,
+     symbol=symbol, interval=interval), strategy_class=...)`.
+  5. Persist `StrategySubscription` to MongoDB `strategy_subscriptions`. Mongo
+     unique `_id=sub_id` enforces dedup → `SubscriptionAlreadyExistsError` (400).
+  6. Returns `{id, strategy_id, symbol, interval, created_at}` with HTTP 201.
+
+FE entry point: `+ New` button in left sidebar opens `NewSubscriptionDialog`
+which posts via `useCreateSubscription` mutation
+— `packages/pocketquant-web/src/components/strategies/new-subscription-dialog.tsx`
+and `packages/pocketquant-web/src/hooks/use-strategy-mutations.ts:71`.
+
+#### 1.2 YAML load (legacy / scripted path)
+
+`POST /api/v1/strategies/load` with body `{path: "<path-to-yaml>"}`.
+
+- Route: `packages/pocketquant-trading/.../handlers/strategy/load/route.py:21`
+- Handler delegates to `StrategyAppService.load_strategy(config)` directly with
+  the YAML-parsed `StrategyConfig`. Reads the file via `StrategyLoader.load()`
+  — `packages/pocketquant-trading/.../app_services/yaml_strategy_loader.py:20`.
+- The README notes: `YAML strategy loading via POST /api/v1/strategies/load
+  is still supported, but no example files are shipped in strategies/examples/`
+  — `pocketquant/README.md:129`.
+- This path does NOT create a `StrategySubscription` row in Mongo; the loaded
+  instance disappears on the next restart. Use only for ad-hoc loading.
+
+### 2. How to update or change config
+
+There is **no edit endpoint**. To change a subscription's config:
+
+1. `DELETE /api/v1/strategies/{template_id}/symbols/{sub_id}` to remove the
+   subscription. Cascade-deletes the cached backtest and unloads the in-memory
+   instance — `packages/pocketquant-trading/.../handlers/strategy/remove_symbol/handler.py:29`.
+2. Re-create with the new `(symbol, interval)` pair via `add_symbol` (§1.1).
+
+To change strategy-level parameters (e.g. `entry_lookback_bars`):
+
+- Currently parameters are hardcoded in the strategy class (`HitNRun2Strategy`)
+  or come from `StrategyConfig.parameters` which is set to `{}` in
+  `AddSymbolHandler` — handler builds `StrategyConfig(id, name, symbol, interval)`
+  with no parameters override. The runtime parameters override path requires
+  editing code or using the YAML loader (§1.2) and is not exposed via API.
+- FE shows config as **read-only**:
+  `packages/pocketquant-web/src/components/strategies/strategy-config-card.tsx`
+  exposes only Start / Stop / Delete — no edit form.
+
+To delete an entire strategy (all subscriptions + cached backtests + scheduled
+jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
+`packages/pocketquant-trading/.../handlers/strategy/delete/handler.py:36`.
+
+### 3. How to rerun
+
+**Backtest rerun** (the only "rerun" exposed today):
+
+`POST /api/v1/strategies/{template_id}/backtest/run-all` → 202 Accepted.
+
+- Route: `packages/pocketquant-trading/.../handlers/strategy/run_all_backtests/route.py:11`
+- Handler: `.../run_all_backtests/handler.py:26`
+- Behavior: fans out one `JobScheduler.add_one_off_job(...)` per subscription of
+  the strategy, with `job_id = f"bt:{sub.id}"` and module reference
+  `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest`. Returns
+  `{job_ids: [...]}`. `replace_existing=True` so repeat calls cancel the
+  previous tick safely.
+- The job persists to `apscheduler_jobs` MongoDB collection (so it survives
+  restarts) and executes via `AsyncIOExecutor` immediately
+  (`DateTrigger(run_date=now)`).
+
+**Live trading start/stop** (separate from backtests):
+
+- `POST /api/v1/strategies/{sub_id}/start` — route
+  `packages/pocketquant-trading/.../handlers/strategy/start/route.py:11`,
+  handler delegates to `StrategyAppService.start_strategy(sub_id)` which calls
+  `IStrategy.on_start()` and connects the broker if needed.
+- `POST /api/v1/strategies/{sub_id}/stop` — symmetric stop, calls `on_stop()`.
+- Note: `sub_id` is what the FE calls `strategyId` here because each
+  subscription has its own loaded instance. The handler takes whatever ID was
+  passed to `load_strategy(config)` — see §1.1 step 4.
+
+### 4. How to see it on the UI
+
+Open the chart UI (`http://localhost:5173` in dev, `http://localhost:41920/`
+when the FastAPI serves the built bundle). The strategies dashboard is a
+**3-pane layout**
+— `packages/pocketquant-web/src/components/strategies/strategies-page-layout.tsx`:
+
+| Pane | Component | Purpose |
+|---|---|---|
+| Left (240px) | `StrategyListSidebar` | Lists all subscriptions across all templates. `+ New` button opens `NewSubscriptionDialog`. Aggregates `GET /strategies/{id}/symbols` for every template id returned by `GET /backtest/strategies`. |
+| Center (flex) | `StrategyChart` + `StrategyConfigCard` | Chart pinned to the subscription's `(symbol, interval)`; config card shows symbol/interval/template + Start/Stop/Delete buttons. Read-only. |
+| Right (360px) | `DashboardColumn` | Unrealized PnL badge, equity sparkline, tabs for Metrics / Positions / Trades. Sources data from the cached backtest doc (§5.6) plus live `GET /strategies/{sub_id}/positions` and `/trades`. |
+
+Endpoints feeding the UI:
+
+- `GET /api/v1/backtest/strategies` — list of registered template IDs
+  (`packages/pocketquant-backtest/.../handlers/router.py:10`)
+- `GET /api/v1/strategies/{template_id}/symbols` — subscriptions enriched with
+  backtest status
+  (`packages/pocketquant-trading/.../handlers/strategy/list_symbols/handler.py:23`)
+- `GET /api/v1/strategies/{template_id}/symbols/{sub_id}/backtest` — cached
+  result (`.../get_subscription_backtest/handler.py:25`)
+- `GET /api/v1/strategies/{sub_id}/positions` — open positions
+  (`.../get_positions/handler.py:17`)
+- `GET /api/v1/strategies/{sub_id}/trades` — closed positions as trades
+  (`.../get_trades/handler.py:17`)
+- `GET /api/v1/system/jobs` — APScheduler job listing for ops visibility
+  (`packages/pocketquant-api/.../main_extensions.py:280`)
+
+---
+
+## Part B — What happens behind the hood
+
+### 5. Runtime architecture
+
+#### 5.1 Composition root + DI lifecycle
+
+`packages/pocketquant-api/src/pocketquant/api/main.py:34` defines the FastAPI
+`lifespan` context manager. At startup, in order:
+
+1. `set_sync_container(container)` and `set_backtest_container(container)`
+   are called **synchronously before any `await`** so persisted MongoDB jobs
+   that fire during early Dishka resolves can find their container
+   (`main.py:47-48` — explicit comment on the publish-before-subscribe pattern).
+2. Resolve `Database` and `Cache` and stash on `app.state`.
+3. `register_handlers(container)` — wires CQRS handlers into the `Mediator`.
+4. `ensure_all_indexes(container)` — creates all Mongo indexes.
+5. `recover_stale_backtests(container)` — marks any doc stuck in
+   `status=running` older than 10 min as `failed`
+   (`BacktestRepository.mark_stale_running_as_failed`).
+6. `recover_orphan_jobs(container)` — same idea for `job_history`.
+7. `seed_tracked_symbols(container)`.
+8. `rehydrate_strategies_from_subscriptions(container)` — replays §1.1 step 4
+   for every persisted `StrategySubscription`: loads one `IStrategy` instance
+   per subscription, keyed by `sub.id`. Subscriptions whose template_id is no
+   longer in `STRATEGY_REGISTRY` are skipped with a warning. Code:
+   `main_extensions.py:109`.
+9. `start_background_jobs(container)` — starts `JobScheduler.start()` and
+   registers the cron sync jobs.
+10. `start_quote_feed(container, app)` — boots WebSocket aggregator.
+
+On shutdown, `container.close()` runs `AsyncIterator` factories' cleanup in
+reverse order: StrategyAppService.stop → JobScheduler.shutdown →
+Cache/Database.disconnect (`main.py:73-74`).
+
+#### 5.2 In-memory state held by `StrategyAppService`
+
+`packages/pocketquant-trading/.../app_services/strategy_app_service.py:24`.
+
+Per-process dicts (NOT shared across replicas):
+
+```python
+self._strategies: dict[str, IStrategy]   # sub_id → strategy instance
+self._brokers:    dict[str, IBroker]     # sub_id → broker (may be reused by name)
+self._configs:    dict[str, StrategyConfig]  # sub_id → config
+```
+
+Key invariants:
+
+- Loading the same `sub_id` twice raises `ValueError("Strategy already loaded")`.
+- `_brokers` reuses a broker if its `.name` matches `broker_type` or
+  `"{broker_type}-demo"` — so multiple strategies on the same broker share one
+  connection (`_get_or_create_broker`, line 356).
+- `StrategyAppService.start()` registers decorated event handlers via
+  `get_event_registry().register_instance(self, self._event_bus)` — auto-binds
+  `_on_bar_completed` to `BarCompletedEvent` and `_on_quote_received` to
+  `QuoteReceivedEvent`.
+
+#### 5.3 Event-driven signal flow
+
+```
+@BarCompletedEvent ──┐
+                     ├─▶ StrategyAppService._find_strategies(symbol, interval, trigger)
+@QuoteReceivedEvent ─┘                       │
+                                             ▼
+                              strategy.on_bar(bar) / strategy.on_tick(tick)
+                                             │
+                                  Signal? ───┴─── None → no-op
+                                             ▼
+                              StrategyAppService._process_signal(...)
+                                  1. broker.get_balance()
+                                  2. position_app_service.get(sub_id)
+                                  3. RiskCheckHandler.validate(signal, balance, pos, risk)
+                                  4. PositionSizer.calculate_size(...)
+                                  5. _create_order(...) → OrderAggregate
+                                  6. order_app_service.submit(order, broker)
+```
+
+Strategies are only triggered if `is_running=True` AND
+`config.symbol == event.symbol` AND (`config.interval == event.interval`
+when triggered by bar) AND `config.trigger == "bar" | "tick"`
+— `_find_strategies` at line 247.
+
+#### 5.4 Backtest job execution
+
+When `POST .../backtest/run-all` fires:
+
+1. `RunAllBacktestsHandler` calls `JobScheduler.add_one_off_job("pocketquant
+   .trading.jobs.backtest_jobs:run_subscription_backtest", job_id="bt:{sub.id}",
+   subscription_id=sub.id)`. APScheduler serializes this as a `DateTrigger`
+   row in `apscheduler_jobs` Mongo collection.
+2. The AsyncIOExecutor picks it up; `run_subscription_backtest(subscription_id)`
+   — `packages/pocketquant-trading/.../jobs/backtest_jobs.py:52` — runs:
+   a. Resolve deps via module-level `_container` (`_get_container()`).
+   b. Load `StrategySubscription` from Mongo; bail silently if deleted mid-flight.
+   c. `BacktestRepository.upsert_status(sub_id, status='running')`.
+   d. Read base `StrategyConfig` from `strategy_app_service._configs[strategy_id]`.
+      Raises a clear error if not in memory (e.g. after restart, before
+      rehydration completes for that template).
+   e. `resolve_date_range(bar_repo, symbol, interval)` — derives backtest range
+      from available bar data.
+   f. `load_strategy_for_backtest(...)` — loads a **synthetic** strategy
+      instance under a job-scoped id so concurrent jobs cannot clobber each
+      other (the comment in code labels this "C2 concurrency fix").
+   g. `BacktestAppService.run(config)` executes against historical bars
+      (PaperBroker, `persist_results=False`).
+   h. **TOCTOU re-check**: re-fetch the subscription; if deleted while running,
+      do NOT write the result (labeled "M1 TOCTOU" in the code).
+   i. `BacktestRepository.save_for_subscription(sub_id, result)` — upserts the
+      full `BacktestResult` doc with `_id = sub_id`. Status mapped:
+      `'failed' → 'failed' + error_msg`; anything else → `'completed'`.
+3. `finally:` unload the synthetic strategy id only — the user's live strategy
+   instance is untouched.
+
+Failures: writes `status='failed', error_msg=str(exc)[:500]` and re-raises so
+the scheduler's `EVENT_JOB_ERROR` listener also records to `job_history`.
+
+#### 5.5 Risk + sizing pipeline
+
+`_process_signal` calls `RiskCheckHandler.validate(signal, balance, position,
+risk_config)`. If it returns `(False, reason)`, the signal is logged as rejected
+and dropped. Otherwise `PositionSizer.calculate_size(available_balance,
+current_price, stop_loss, risk_config)` returns size; if `≤ 0` the trade is
+skipped. The resulting `OrderAggregate` is created with deterministic side
+mapping (`LONG → BUY`, `SHORT → SELL`), `order_type` from
+`config.orders.entry_type`, and `sl_price`/`tp_price` from the signal.
+
+---
+
+### 6. MongoDB collections (the durable state)
+
+Sources: `packages/pocketquant-core/src/pocketquant/core/common/constants.py`
+(collection names) and each repository's `_collection_name` plus `to_mongo()`
+serializers.
+
+| Collection | Owner repo | `_id` | Purpose | Indexes |
+|---|---|---|---|---|
+| `strategy_subscriptions` | `StrategySubscriptionRepository` | `deterministic_id(strategy_id, symbol, interval)` | One row per subscription. Source of truth for what runs after restart (rehydration). | `_id`, `strategy_id` (`ix_strategy_subscriptions_strategy_id`) |
+| `backtest_runs` | `BacktestRepository` | `sub_id` (subscription-scoped) OR backtest `result.id` (ad-hoc) | One cached backtest result per subscription. Holds `metrics`, `equity_curve`, `open_positions`, `config_snapshot`, `status`, `last_run_at`, `error_msg`. Also holds non-subscription runs from `/backtest/run`. | `strategy_id`, `started_at`, `status`, `(strategy_id, started_at desc)`, `(strategy_id, metrics.sharpe_ratio desc)`, `(strategy_id, metrics.sortino_ratio desc)`, `(strategy_id, metrics.win_rate desc)`, `subscription_id unique sparse` |
+| `backtest_orders` | `BacktestOrderRepository` | order id | Per-run order fills array. |  |
+| `backtest_trades` | `BacktestTradeRepository` | trade id | Round-trip trade outcomes from backtests. |  |
+| `backtest_optimization_runs` | `OptimizationRepository` | run id | Optimizer grid results. |  |
+| `orders` | `OrderRepository` | order id | Live orders. Doc keys: `_id, strategy_id, symbol, side, order_type, quantity, price, stop_price, status, filled_quantity, filled_price, broker_order_id, created_at, updated_at`. |  |
+| `positions` | `PositionRepository` | position id | Live positions. Doc keys: `_id, strategy_id, symbol, side, entry_price, quantity, current_price, realized_pnl, is_closed, opened_at, closed_at, sl_price, tp_price`. Queries: `find_open_by_strategy(strategy_id)` filters `is_closed=False`; `find_closed_by_strategy` sorts `closed_at desc`. |  |
+| `bars` | `BarRepository` | bar id | Historical OHLCV. Consumed by `BacktestAppService` and strategies via `BarCompletedEvent`. |  |
+| `sync_status` | `SyncStatusRepository` | symbol+interval | Per-symbol sync progress for the market-data sync jobs. |  |
+| `symbols` | `SymbolRepository` | symbol | Symbol metadata. |  |
+| `tracked_symbols` | `TrackedSymbolRepository` | symbol | Symbols the platform tracks. `AddSymbolHandler` gates on `exists()`. |  |
+| `job_history` | `JobHistoryRepository` | row id | Per-tick scheduler history — `started`, `completed`, `failed`, `missed`, `skipped_max_instances`. Surfaces silent skips. |  |
+| `apscheduler_jobs` | APScheduler `MongoDBJobStore` | `job_id` | Serialized scheduled jobs (interval/cron/one-off). Drives cross-process coordination via `next_run_time` updates. |  |
+
+Document shape for the most relevant collection (`strategy_subscriptions`):
+
+```jsonc
+{
+  "_id":         "<16-hex deterministic id>",
+  "strategy_id": "hitnrun2",          // template name in STRATEGY_REGISTRY
+  "symbol":      "BTCUSDT:BINANCE",   // composite "{code}:{exchange}"
+  "interval":    "1h",
+  "created_at":  ISODate("...")
+}
+```
+
+Backtest cache doc shape (`backtest_runs` keyed by `sub_id`):
+
+```jsonc
+{
+  "_id":             "<sub_id>",
+  "subscription_id": "<sub_id>",
+  "strategy_id":     "hitnrun2",
+  "status":          "completed" | "running" | "failed",
+  "last_run_at":     ISODate("..."),
+  "error_msg":       null | "<truncated 500 chars>",
+  // when status='completed' the full BacktestResult fields are present:
+  "config_snapshot": { ... },
+  "metrics":         { "sharpe_ratio": ..., "win_rate": ..., ... },
+  "equity_curve":    [ { "ts": ..., "equity": ... }, ... ],
+  "open_positions":  [ ... ],
+  "started_at":      ISODate("..."),
+  "completed_at":    ISODate("..."),
+  "parameters":      { ... }   // optimizer-only
+}
+```
+
+---
+
+### 7. Redis cache contents
+
+`Cache` wraps `redis.asyncio.Redis` and is DI-scoped APP. See
+`packages/pocketquant-core/src/pocketquant/core/persistence/redis.py` and
+the constants at
+`packages/pocketquant-core/src/pocketquant/core/common/constants.py:27-41`.
+
+**Strategy code itself touches no Redis keys directly.** The cache is used
+upstream of strategies by market-data and middleware layers:
+
+| Key pattern | Set by | Read by | TTL |
+|---|---|---|---|
+| `quote:latest:{symbol}` | `QuoteAppService` on `QuoteReceivedEvent` (`packages/pocketquant-api/.../quote_app_service.py:65`) | `GetLatestQuoteHandler`, `GetAllQuotesHandler`, `/quotes/stream` SSE route | 60s (`TTL_QUOTE_LATEST`) |
+| `bar:current:{symbol}:{interval}` | `BarAppService` (`packages/pocketquant-api/.../bar_app_service.py:216`) | `BarAppService.get_current_bar` | 300s (`TTL_BAR_CURRENT`) |
+| `ohlcv:{symbol}:{interval}:{limit}[:from:...][:to:...]` | `GetOHLCVHandler` (`packages/pocketquant-api/.../ohlcv/get_ohlcv/handler.py:46`) | same handler — query-result cache | 300s (`TTL_OHLCV_QUERY`) |
+| `ohlcv:{SYMBOL}:{interval}:*` (delete-pattern) | `SyncOneHandler` after sync completion (`.../sync/sync_one/handler.py:176`) | Cache invalidation — drops every limit variant for that symbol/interval. | n/a (delete) |
+| Idempotency keys | `IdempotencyMiddleware` (`packages/pocketquant-core/.../middleware.py`) | same | request-scoped |
+| Rate-limit tokens | `RateLimitMiddleware` | same | window-scoped |
+| Health-check liveness | `checks.py` | health endpoint | short |
+
+Implications for strategies:
+
+- Backtest jobs read bars directly from `BarRepository` (Mongo), not from
+  Redis. The OHLCV cache only short-circuits the `/market-data/ohlcv` REST
+  endpoint.
+- Live strategy `on_bar` / `on_tick` is fed by **events** (`BarCompletedEvent`,
+  `QuoteReceivedEvent`) over the in-process `EventBus`, not via Redis pub/sub.
+- The `quote:latest` cache key is what the `/quotes` SSE stream returns to
+  the FE chart — it does NOT gate strategy execution.
+
+---
+
+### 8. How storage and operation tie together
+
+The lifecycle is best read as: **subscription is the source of truth →
+everything else is derived**.
+
+```
+                       ┌─────────────────────────────────────────────────┐
+                       │ MongoDB: strategy_subscriptions (durable)       │
+                       │  _id = sha256(template|symbol|interval)[:16]    │
+                       └─────────┬───────────────────────────────────────┘
+                                 │
+       ┌─────────────────────────┼──────────────────────────┐
+       │                         │                          │
+       │ on startup              │ on add_symbol            │ on delete
+       ▼                         ▼                          ▼
+ rehydrate_from_           AddSymbolHandler          DeleteStrategy /
+ _subscriptions           (load + insert)           RemoveSymbol cascade
+       │                         │                          │
+       ▼                         ▼                          ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ StrategyAppService (in-memory, per process)                       │
+│   _strategies[sub_id] = IStrategy instance                        │
+│   _brokers[sub_id]    = IBroker                                   │
+│   _configs[sub_id]    = StrategyConfig                            │
+└──────────┬──────────────────────────────────────────────┬─────────┘
+           │                                              │
+           │ EventBus subscription                        │ start_strategy
+           ▼                                              ▼
+   BarCompletedEvent / QuoteReceivedEvent          broker.connect()
+           │                                              │
+           ▼                                              │
+   _on_bar_completed / _on_quote_received                 │
+           │                                              │
+           ▼                                              │
+   strategy.on_bar() → Signal                             │
+           │                                              │
+           ▼                                              │
+   _process_signal: risk → size → OrderAggregate          │
+           │                                              │
+           ▼                                              │
+   OrderAppService.submit(order, broker)  ───────────────▶│
+                                                          ▼
+                                          MongoDB: orders, positions
+                                          (live state)
+
+
+Backtest path is parallel and isolated:
+  POST run-all → JobScheduler.add_one_off_job → apscheduler_jobs (Mongo)
+              → AsyncIOExecutor picks up DateTrigger
+              → run_subscription_backtest(sub_id):
+                  resolve_date_range → bars (Mongo)
+                  load synthetic strategy id → PaperBroker
+                  BacktestAppService.run(config) → BacktestResult
+                  save_for_subscription(sub_id, result) → backtest_runs (Mongo)
+```
+
+**State machine for a subscription's cached backtest** (collection
+`backtest_runs`, `_id = sub_id`):
+
+```
+   (no doc)
+      │ first run-all
+      ▼
+   running ────error────▶ failed (error_msg set)
+      │                     │
+      │ run completes       │ next run-all (replace_existing=True)
+      ▼                     ▼
+   completed ◀───────── running
+```
+
+**Restart semantics:**
+
+| State | Persisted? | Recovered on restart |
+|---|---|---|
+| Subscription template + (symbol, interval) | Yes (`strategy_subscriptions`) | Re-loaded via `rehydrate_strategies_from_subscriptions` |
+| Running/stopped flag for live trading | No (in-memory `strategy.is_running`) | Resets to stopped — must POST `/start` again |
+| Cached backtest result | Yes (`backtest_runs`) | Available immediately after rehydration |
+| In-flight backtest in `running` state | Yes (status row) | `recover_stale_backtests` flips `running` older than 10 min to `failed` |
+| Scheduled jobs (cron/interval/one-off) | Yes (`apscheduler_jobs`) | Picked up automatically; missed ticks within `misfire_grace_time=300s` still fire |
+| Job history (per-tick records) | Yes (`job_history`) | Orphans stuck in `running` older than 600s flipped to `failed` by `recover_orphan_jobs` |
+| Redis OHLCV / quote caches | TTL'd | Auto-rebuild on first request after expiry |
+
+---
+
+## Quick-reference: HTTP API surface for strategies
+
+| Method | Path | Purpose | File |
+|---|---|---|---|
+| GET  | `/api/v1/backtest/strategies` | List template IDs in `STRATEGY_REGISTRY` | `pocketquant-backtest/.../handlers/router.py:10` |
+| POST | `/api/v1/strategies/load` | Load a `StrategyConfig` from a YAML file path | `strategy/load/route.py` |
+| GET  | `/api/v1/strategies/` | List in-memory loaded strategies | `strategy/get_all/route.py` |
+| GET  | `/api/v1/strategies/{id}` | Get one loaded strategy | `strategy/get_one/route.py` |
+| POST | `/api/v1/strategies/{id}/start` | Start a loaded strategy instance | `strategy/start/route.py` |
+| POST | `/api/v1/strategies/{id}/stop` | Stop a loaded strategy instance | `strategy/stop/route.py` |
+| DELETE | `/api/v1/strategies/{template_id}` | Cascade delete template + subs + backtests | `strategy/delete/route.py` |
+| POST | `/api/v1/strategies/{template_id}/symbols` | Create a subscription | `strategy/add_symbol/route.py` |
+| GET  | `/api/v1/strategies/{template_id}/symbols` | List subscriptions with backtest status | `strategy/list_symbols/route.py` |
+| DELETE | `/api/v1/strategies/{template_id}/symbols/{sub_id}` | Remove a subscription (cascade) | `strategy/remove_symbol/route.py` |
+| POST | `/api/v1/strategies/{template_id}/backtest/run-all` | Enqueue one-off backtest per subscription | `strategy/run_all_backtests/route.py` |
+| GET  | `/api/v1/strategies/{template_id}/symbols/{sub_id}/backtest` | Read cached backtest doc | `strategy/get_subscription_backtest/route.py` |
+| GET  | `/api/v1/strategies/{sub_id}/positions` | Open positions for a sub_id | `strategy/get_positions/route.py` |
+| GET  | `/api/v1/strategies/{sub_id}/trades` | Closed positions for a sub_id | `strategy/get_trades/route.py` |
+
+---
+
+## Unresolved Questions
+
+1. **Edit-config endpoint missing.** The only way to "change config" is
+   delete + re-create. Is an `UpdateSubscriptionCommand` planned that would
+   either update `StrategyConfig.parameters` in place (and persist them on the
+   subscription row) or hot-reload the in-memory instance?
+2. **`config.parameters` is `{}` for FE-created subscriptions.** `AddSymbolHandler`
+   builds `StrategyConfig` without passing any `parameters` dict, so the
+   strategy class falls back to whatever defaults it hard-codes. Should
+   parameters be (a) persisted on the subscription, (b) part of the template
+   registration, or (c) sent in the `AddSymbol` body?
+3. **`POST /strategies/{sub_id}/start` semantics** — `start_strategy` is keyed
+   by the value the loader passed to `load_strategy(config)`. For
+   subscription-based loads that value is `sub_id`. The FE
+   `useStartStrategy` hook passes `subscription.id` (sub_id) which matches —
+   but the URL parameter is named `strategy_id`. Worth renaming to `sub_id`
+   for clarity? (The label is purely API-surface; behavior is correct.)
+4. **Redis use for strategies is currently zero.** Worth caching the
+   `strategy_subscriptions` rehydration list, recent signal counts, or
+   per-strategy live PnL snapshots in Redis to avoid Mongo round-trips on
+   every `/positions` poll?
+5. **Backtest stale-recovery threshold = 10 min** vs **orphan job recovery =
+   600s**. Inconsistent; if a real backtest legitimately runs longer than 10
+   min it gets force-failed. Should the threshold be derived from
+   `BacktestConfig` or made configurable per template?
