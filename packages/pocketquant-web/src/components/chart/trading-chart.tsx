@@ -239,7 +239,7 @@ export function TradingChart({
     const lastCandleTime = data?.candles.at(-1)?.time ?? null
 
     const posData: PositionData[] = positions
-      .map((p, idx) => {
+      .map((p, idx): PositionData | null => {
         const x2 = p.exit_time != null
           ? toUTCTimestamp(p.exit_time) as Time
           : lastCandleTime as Time
@@ -256,7 +256,7 @@ export function TradingChart({
           commission: p.commission,
           direction: p.direction ?? 'LONG',
           index: idx,
-        } satisfies PositionData
+        }
       })
       .filter((p): p is PositionData => p !== null)
 

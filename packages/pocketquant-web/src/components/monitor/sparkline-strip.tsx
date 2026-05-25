@@ -1,4 +1,4 @@
-import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { useJobRuns } from '../../hooks/use-job-runs'
 import type { JobRun } from '../../types/job-history'
 import { statusColor, statusLabel } from './job-status-palette'
@@ -19,7 +19,6 @@ function fmtTime(iso: string | null): string {
 
 export function SparklineStrip({ jobId, cellCount = 20, compact = false }: SparklineStripProps) {
   const navigate = useNavigate()
-  const rootSearch = useSearch({ from: '__root__' })
   const { data, isLoading, error } = useJobRuns(jobId, { limit: cellCount })
 
   const wrapCls = compact ? 'sparkline-wrap sparkline-compact' : 'sparkline-wrap'
@@ -59,7 +58,7 @@ export function SparklineStrip({ jobId, cellCount = 20, compact = false }: Spark
                 navigate({
                   to: '/monitor/jobs/$jobId',
                   params: { jobId },
-                  search: { ...rootSearch, run: r._id, window: '24h' },
+                  search: { run: r._id, window: '24h' },
                 })
               }}
             />
@@ -75,7 +74,7 @@ export function SparklineStrip({ jobId, cellCount = 20, compact = false }: Spark
             navigate({
               to: '/monitor/jobs/$jobId',
               params: { jobId },
-              search: { ...rootSearch, window: '24h' },
+              search: { window: '24h' },
             })
           }}
         >

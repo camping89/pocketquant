@@ -3,7 +3,7 @@
  * 60px height, no axes, no legend — pure visual trend indicator.
  */
 import { useEffect, useRef } from 'react'
-import { createChart, type IChartApi, type ISeriesApi, type LineData } from 'lightweight-charts'
+import { createChart, LineSeries, type IChartApi, type ISeriesApi, type LineData } from 'lightweight-charts'
 import type { EquityPoint } from '../../api/backtest-api'
 
 interface EquitySparklineProps {
@@ -36,7 +36,7 @@ export function EquitySparkline({ equityCurve, width = 340 }: EquitySparklinePro
       handleScale: false,
     })
 
-    const series = chart.addLineSeries({
+    const series = chart.addSeries(LineSeries, {
       color: '#26a69a',
       lineWidth: 1,
       priceLineVisible: false,

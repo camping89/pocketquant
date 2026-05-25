@@ -2,7 +2,7 @@
  * Modal dialog for creating a new strategy subscription.
  * Symbol selector + interval picker + strategy template selector + submit.
  */
-import { useEffect, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useStrategiesList } from '../../hooks/use-strategies'
 import { useCreateSubscription } from '../../hooks/use-strategy-mutations'
 import { useSymbols } from '../../hooks/use-symbols'
@@ -37,19 +37,18 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
   const { data: strategies, isLoading: strategiesLoading } = useStrategiesList()
   const { data: symbols, isLoading: symbolsLoading } = useSymbols()
 
-  const activeSymbols = symbols?.filter((s) => s.is_active) ?? []
+  const activeSymbols = useMemo(
+    () => symbols?.filter((s) => s.is_active) ?? [],
+    [symbols],
+  )
 
   const [strategyId, setStrategyId] = useState('')
-  const [symbol, setSymbol] = useState('')
+  const [symbolInput, setSymbolInput] = useState('')
   const [interval, setInterval] = useState('1h')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Default symbol to the first active one once symbols load.
-  useEffect(() => {
-    if (!symbol && activeSymbols.length > 0) {
-      setSymbol(activeSymbols[0].symbol)
-    }
-  }, [activeSymbols, symbol])
+  // Derive effective symbol: user selection wins, otherwise first active.
+  const symbol = symbolInput || activeSymbols[0]?.symbol || ''
 
   // strategyId drives which subscription we create under
   const createSub = useCreateSubscription(strategyId || null)
@@ -122,7 +121,7 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
             <select
               style={inputStyle}
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
+              onChange={(e) => setSymbolInput(e.target.value)}
               disabled={symbolsLoading || activeSymbols.length === 0}
               autoFocus
             >

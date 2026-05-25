@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- TanStack Router requires Route export alongside components */
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo } from 'react'
 import { JobFiltersBar } from '../components/monitor/job-filters-bar'
@@ -76,7 +77,7 @@ function JobDetailPage() {
             {stats?.p95_ms ?? '—'}ms
           </p>
         </div>
-        <button type="button" className="btn-sm" onClick={() => void navigate({ to: "/monitor", search: { symbol: "BTCUSDT:BINANCE" } })}>
+        <button type="button" className="btn-sm" onClick={() => void navigate({ to: "/monitor" })}>
           ← Back to monitor
         </button>
       </header>

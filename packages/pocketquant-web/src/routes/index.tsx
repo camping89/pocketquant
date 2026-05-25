@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- TanStack Router requires Route export alongside components */
 import { useState, useMemo, useCallback } from 'react'
-import { createFileRoute, getRouteApi } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { AppHeader } from '../components/layout/app-header'
 import { TradingChart } from '../components/chart/trading-chart'
 import { TickerWidget } from '../components/ticker-widget'
@@ -8,11 +8,20 @@ import { useAvailableIntervals } from '../hooks/use-available-intervals'
 import { useOHLCV } from '../hooks/use-ohlcv'
 import type { Interval, IndicatorConfig } from '../types/market-data'
 
+interface ChartSearchParams {
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
+  symbol: string
+}
+
 export const Route = createFileRoute('/')({
+  validateSearch: (search: Record<string, unknown>): ChartSearchParams => ({
+    symbol:
+      typeof search.symbol === 'string' && search.symbol
+        ? search.symbol
+        : 'BTCUSDT:BINANCE',
+  }),
   component: ChartPage,
 })
-
-const rootApi = getRouteApi('__root__')
 
 const DEFAULT_INTERVAL: Interval = '5m'
 const DEFAULT_INDICATORS: IndicatorConfig = {
@@ -46,10 +55,11 @@ function writePersistedInterval(symbol: string, interval: Interval): void {
 interface ChartPageInnerProps {
   /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
+  onSymbolChange: (v: string) => void
 }
 
 // Inner component remounted on symbol change via key — cleanly resets all local state
-function ChartPageInner({ symbol }: ChartPageInnerProps) {
+function ChartPageInner({ symbol, onSymbolChange }: ChartPageInnerProps) {
   const [selectedInterval, setSelectedInterval] = useState<Interval>(
     () => readPersistedInterval(symbol) ?? DEFAULT_INTERVAL,
   )
@@ -80,6 +90,8 @@ function ChartPageInner({ symbol }: ChartPageInnerProps) {
   return (
     <div className="app-layout">
       <AppHeader
+        symbol={symbol}
+        onSymbolChange={onSymbolChange}
         intervals={availableIntervals}
         interval={interval}
         onIntervalChange={handleIntervalChange}
@@ -106,8 +118,15 @@ function ChartPageInner({ symbol }: ChartPageInnerProps) {
 }
 
 function ChartPage() {
-  const { symbol } = rootApi.useSearch()
+  const { symbol } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const handleSymbolChange = useCallback(
+    (v: string) => {
+      void navigate({ search: { symbol: v } })
+    },
+    [navigate],
+  )
   // key={symbol} remounts ChartPageInner on symbol switch,
   // cleanly resetting selectedInterval to localStorage value for the new symbol
-  return <ChartPageInner key={symbol} symbol={symbol} />
+  return <ChartPageInner key={symbol} symbol={symbol} onSymbolChange={handleSymbolChange} />
 }
