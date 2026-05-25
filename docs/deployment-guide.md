@@ -157,12 +157,12 @@ committed here.
 
 | File | Purpose |
 |------|---------|
-| `pocketquant-config/sandbox/vultr` | OpenSSH private key for the VPS (`root@<vps-ip>`) |
-| `pocketquant-config/sandbox/vultr.pub` | Matching public key |
-| `pocketquant-config/sandbox/ssh` | Plain-text: VPS IP + SSH usage snippets (PowerShell + Git Bash + Linux) |
-| `pocketquant-config/sandbox/portainer` | Portainer URL + admin password |
-| `pocketquant-config/sandbox/secrets` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` for image pulls |
-| `pocketquant-config/sandbox/plans/` | Operator-side ops journals (not implementation plans) |
+| `pocketquant-config/vps/vultr` | OpenSSH private key for the VPS (`root@<vps-ip>`) |
+| `pocketquant-config/vps/vultr.pub` | Matching public key |
+| `pocketquant-config/vps/ssh` | Plain-text: VPS IP + SSH usage snippets (PowerShell + Git Bash + Linux) |
+| `pocketquant-config/vps/portainer` | Portainer URL + admin password |
+| `pocketquant-config/vps/secrets` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` for image pulls |
+| `pocketquant-config/vps/plans/` | Operator-side ops journals (not implementation plans) |
 
 Set `$KEY` and `$VPS` from these files (see next section).
 
@@ -175,7 +175,7 @@ $KEY = "path\to\your\vps-private-key"
 $VPS = "root@<vps-ip>"
 
 # Example:
-# $KEY = "C:\w\_me\pocketquant-config\sandbox\vultr"
+# $KEY = "C:\w\_me\pocketquant-config\vps\vultr"
 # $VPS = "root@207.148.79.60"
 ```
 
@@ -186,7 +186,7 @@ CRLF-tainted) config directory and fix line endings + perms:
 
 ```bash
 mkdir -p ~/.ssh-pq
-cp /d/w/_me/algo-bot/pocketquant-config/sandbox/vultr ~/.ssh-pq/vultr_key
+cp /d/w/_me/algo-bot/pocketquant-config/vps/vultr ~/.ssh-pq/vultr_key
 sed -i 's/\r$//' ~/.ssh-pq/vultr_key
 chmod 600 ~/.ssh-pq/vultr_key
 
@@ -420,7 +420,7 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis s
 
 ### Setup
 
-1. Copy VPS connection settings from `pocketquant-config/.env.prod` into your local `D:\w\_me\pocketquant\.env`. Override these for local-friendly behaviour:
+1. Copy VPS connection settings from `pocketquant-config/.env` (the production env source; local-only overrides live in `pocketquant-config/.env.local`) into your local `D:\w\_me\pocketquant\.env`. Override these for local-friendly behaviour:
 
    ```env
    ENVIRONMENT=development
