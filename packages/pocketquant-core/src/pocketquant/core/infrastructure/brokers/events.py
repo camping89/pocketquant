@@ -17,7 +17,6 @@ from typing import Any
 
 from pocketquant.core.domain.order.enums import OrderStatus
 
-
 # Reason codes — string constants kept here for single source of truth.
 REASON_SUBMIT = "submit"
 REASON_MARKET_FILL = "market_fill"

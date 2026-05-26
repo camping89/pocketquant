@@ -31,7 +31,7 @@ class QuoteResponse(BaseModel):
     low_price: float | None = None
 
     @classmethod
-    def from_result(cls, result) -> "QuoteResponse":
+    def from_result(cls, result) -> QuoteResponse:
         return cls(
             symbol=result.symbol,
             timestamp=result.timestamp,
