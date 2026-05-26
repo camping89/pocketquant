@@ -1,4 +1,4 @@
-"""AddSymbol API route — POST /{strategy_id}/symbols."""
+"""CreateSubscription API route — POST /strategies/{strategy_code}/subscriptions."""
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
@@ -9,8 +9,8 @@ from pydantic import BaseModel
 router = APIRouter(route_class=DishkaRoute)
 
 
-class AddSymbolBody(BaseModel):
-    """Request body for adding a symbol subscription.
+class CreateSubscriptionBody(BaseModel):
+    """Request body for creating a subscription under a strategy template.
 
     ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
     """
@@ -19,19 +19,19 @@ class AddSymbolBody(BaseModel):
     interval: str
 
 
-@router.post("/{strategy_id}/symbols", status_code=201)
-async def add_symbol(
-    strategy_id: str,
-    body: AddSymbolBody,
+@router.post("/{strategy_code}/subscriptions", status_code=201)
+async def create_subscription(
+    strategy_code: str,
+    body: CreateSubscriptionBody,
     mediator: FromDishka[Mediator],
 ) -> dict:
-    """Subscribe a loaded strategy to a (symbol, interval) pair.
+    """Create a subscription that binds a strategy template to (symbol, interval).
 
     ``symbol`` must be composite ``{code}:{exchange}``.
     """
     return await mediator.send(
         AddSymbolCommand(
-            strategy_id=strategy_id,
+            strategy_id=strategy_code,
             symbol=body.symbol,
             interval=body.interval,
         )

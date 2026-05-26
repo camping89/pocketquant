@@ -1,4 +1,4 @@
-"""AddSymbolHandler — persist a new StrategySubscription for a loaded strategy."""
+"""AddSymbolHandler — persist a new Subscription for a loaded strategy template."""
 
 from datetime import UTC, datetime
 
@@ -11,10 +11,10 @@ from pocketquant.core.persistence.repositories.tracked_symbol_repository import 
     TrackedSymbolRepository,
 )
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.domain.subscription import StrategySubscription
+from pocketquant.trading.domain.subscription import Subscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
-from pocketquant.trading.persistence.strategy_subscription_repository import (
-    StrategySubscriptionRepository,
+from pocketquant.trading.persistence.subscription_repository import (
+    SubscriptionRepository,
 )
 
 
@@ -25,11 +25,11 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
     def __init__(
         self,
         strategy_app_service: StrategyAppService,
-        strategy_subscription_repository: StrategySubscriptionRepository,
+        subscription_repository: SubscriptionRepository,
         tracked_symbol_repository: TrackedSymbolRepository,
     ) -> None:
         self._strategy_service = strategy_app_service
-        self._sub_repo = strategy_subscription_repository
+        self._sub_repo = subscription_repository
         self._tracked_repo = tracked_symbol_repository
 
     async def handle(self, request: AddSymbolCommand) -> dict:
@@ -38,7 +38,7 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
         Each subscription owns its own ``IStrategy`` instance keyed by ``sub.id``
         so that subscribing the same template to multiple (symbol, interval)
         pairs results in independent runtime instances. ``request.strategy_id``
-        is the template name (matched against ``STRATEGY_REGISTRY``).
+        is the template code (matched against ``STRATEGY_REGISTRY``).
 
         ``request.symbol`` must be composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         """
@@ -56,7 +56,7 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
                 f"Strategy template '{request.strategy_id}' not found in registry."
             )
 
-        sub_id = StrategySubscription.deterministic_id(
+        sub_id = Subscription.deterministic_id(
             request.strategy_id, symbol, request.interval
         )
 
@@ -71,9 +71,9 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
                 strategy_class=strategy_class,
             )
 
-        sub = StrategySubscription(
+        sub = Subscription(
             id=sub_id,
-            strategy_id=request.strategy_id,
+            strategy_code=request.strategy_id,
             symbol=symbol,
             interval=Interval(request.interval),
             created_at=datetime.now(UTC),
@@ -81,7 +81,7 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
         await self._sub_repo.add(sub)
         return {
             "id": sub.id,
-            "strategy_id": sub.strategy_id,
+            "strategy_code": sub.strategy_code,
             "symbol": sub.symbol,
             "interval": sub.interval.value,
             "created_at": sub.created_at.isoformat(),

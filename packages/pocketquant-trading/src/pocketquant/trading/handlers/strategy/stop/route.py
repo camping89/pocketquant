@@ -1,4 +1,4 @@
-"""Stop strategy API route."""
+"""Stop subscription API route — POST /subscriptions/{sub_id}/stop."""
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
@@ -8,11 +8,11 @@ from pocketquant.trading.handlers.strategy.stop.command import StopStrategyComma
 router = APIRouter(route_class=DishkaRoute)
 
 
-@router.post("/{strategy_id}/stop")
-async def stop_strategy(
-    strategy_id: str,
+@router.post("/{sub_id}/stop")
+async def stop_subscription(
+    sub_id: str,
     mediator: FromDishka[Mediator],
 ) -> dict:
-    """Stop a running strategy."""
-    await mediator.send(StopStrategyCommand(strategy_id=strategy_id))
-    return {"strategy_id": strategy_id, "status": "stopped"}
+    """Stop the strategy instance bound to this subscription."""
+    await mediator.send(StopStrategyCommand(subscription_id=sub_id))
+    return {"subscription_id": sub_id, "status": "stopped"}

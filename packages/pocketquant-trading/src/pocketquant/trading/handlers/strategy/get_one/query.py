@@ -1,10 +1,10 @@
-"""Get strategy query definition."""
+"""Get strategy template query definition."""
 
 from dataclasses import dataclass
 
 
 @dataclass
 class GetStrategyQuery:
-    """Get a specific strategy by ID."""
+    """Get template metadata for a specific strategy code."""
 
-    strategy_id: str
+    strategy_code: str

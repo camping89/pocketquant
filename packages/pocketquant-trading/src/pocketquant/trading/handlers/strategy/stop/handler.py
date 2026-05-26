@@ -14,5 +14,5 @@ class StopStrategyHandler(Handler[StopStrategyCommand, bool]):
 
     async def handle(self, request: StopStrategyCommand) -> bool:
         """Stop a running strategy."""
-        await self._strategy_app_service.stop_strategy(request.strategy_id)
+        await self._strategy_app_service.stop_strategy(request.subscription_id)
         return True

@@ -14,5 +14,5 @@ class StartStrategyHandler(Handler[StartStrategyCommand, bool]):
 
     async def handle(self, request: StartStrategyCommand) -> bool:
         """Start a loaded strategy."""
-        await self._strategy_app_service.start_strategy(request.strategy_id)
+        await self._strategy_app_service.start_strategy(request.subscription_id)
         return True

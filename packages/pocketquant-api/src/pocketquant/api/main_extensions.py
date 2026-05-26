@@ -39,12 +39,12 @@ from pocketquant.core.persistence.repositories.sync_status_repository import Syn
 from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
-from pocketquant.trading.handlers.strategy import strategy_router
+from pocketquant.trading.handlers.strategy import strategy_router, subscription_router
 from pocketquant.trading.handlers.trading import trading_router
 from pocketquant.trading.persistence.order_repository import OrderRepository
 from pocketquant.trading.persistence.position_repository import PositionRepository
-from pocketquant.trading.persistence.strategy_subscription_repository import (
-    StrategySubscriptionRepository,
+from pocketquant.trading.persistence.subscription_repository import (
+    SubscriptionRepository,
 )
 
 logger = get_logger(__name__)
@@ -61,7 +61,7 @@ _REPO_TYPES: list[type] = [
     SymbolRepository,
     OptimizationRepository,
     JobHistoryRepository,
-    StrategySubscriptionRepository,
+    SubscriptionRepository,
     TrackedSymbolRepository,
 ]
 
@@ -76,6 +76,164 @@ async def ensure_all_indexes(container: AsyncContainer) -> None:
     repos = [await container.get(rt) for rt in _REPO_TYPES]
     await asyncio.gather(*(repo.ensure_indexes() for repo in repos))
     logger.info("database_indexes_ensured")
+
+
+# ---------------------------------------------------------------------------
+# One-shot Mongo migration: strategy_id disambiguation
+# ---------------------------------------------------------------------------
+#
+# Reverse migration (for rollback):
+#     db.subscriptions.updateMany({}, {$rename: {strategy_code: "strategy_id"}})
+#     db.subscriptions.renameCollection("strategy_subscriptions")
+#     db.orders.updateMany({}, {$rename: {subscription_id: "strategy_id"}})
+#     db.positions.updateMany({}, {$rename: {subscription_id: "strategy_id"}})
+#     db.backtest_runs.updateMany({}, {$rename: {strategy_code: "strategy_id"}})
+#     db.backtest_orders.updateMany({}, {$rename: {strategy_code: "strategy_id"}})
+#     db.backtest_trades.updateMany({}, {$rename: {strategy_code: "strategy_id"}})
+#     db.backtest_optimization_runs.updateMany({}, {$rename: {strategy_code: "strategy_id"}})
+#
+# Field rename matrix:
+#     strategy_subscriptions → subscriptions:    strategy_id → strategy_code
+#     orders:                                    strategy_id → subscription_id
+#     positions:                                 strategy_id → subscription_id
+#     backtest_runs:                             strategy_id → strategy_code
+#     backtest_orders:                           strategy_id → strategy_code
+#     backtest_trades:                           strategy_id → strategy_code
+#     backtest_optimization_runs:                strategy_id → strategy_code
+
+
+_LEGACY_INDEX_NAMES: dict[str, list[str]] = {
+    "subscriptions": ["ix_strategy_subscriptions_strategy_id"],
+    "orders": ["ix_orders_strategy_id"],
+    "positions": ["ix_positions_strategy_id"],
+    "backtest_runs": [
+        "ix_backtests_strategy_id",
+        "ix_backtests_strategy_started",
+        "ix_backtests_strategy_sharpe",
+        "ix_backtests_strategy_sortino",
+        "ix_backtests_strategy_winrate",
+    ],
+    "backtest_orders": ["ix_btorders_strategy_status"],
+    "backtest_trades": ["ix_bttrades_strategy_direction"],
+    "backtest_optimization_runs": ["ix_optimizations_strategy_id"],
+}
+
+_FIELD_RENAME_MATRIX: list[tuple[str, str]] = [
+    ("subscriptions", "strategy_code"),
+    ("orders", "subscription_id"),
+    ("positions", "subscription_id"),
+    ("backtest_runs", "strategy_code"),
+    ("backtest_orders", "strategy_code"),
+    ("backtest_trades", "strategy_code"),
+    ("backtest_optimization_runs", "strategy_code"),
+]
+
+
+async def _rename_collection_if_needed(db, old: str, new: str) -> bool:
+    """Rename ``old`` collection to ``new`` if migration is pending. Idempotent.
+
+    Returns True if a rename happened, False if already migrated.
+    Raises RuntimeError if both collections exist (manual intervention required).
+    """
+    existing = await db.database.list_collection_names()
+    old_exists = old in existing
+    new_exists = new in existing
+
+    if old_exists and new_exists:
+        raise RuntimeError(
+            f"Both '{old}' and '{new}' collections exist — "
+            "manual cleanup required before migration can proceed."
+        )
+    if old_exists and not new_exists:
+        await db.database[old].rename(new)
+        logger.info("mongo_migration.collection_renamed", old=old, new=new)
+        return True
+    logger.info("mongo_migration.skipped", collection=old, reason="already_migrated")
+    return False
+
+
+async def _rename_field_if_needed(db, collection: str, old_field: str, new_field: str) -> int:
+    """`$rename` ``old_field`` → ``new_field`` on docs that still have the legacy key.
+
+    Returns the count of modified docs (0 if migration already ran on this collection).
+    """
+    coll = db.database[collection]
+    pending = await coll.count_documents({old_field: {"$exists": True}})
+    if pending == 0:
+        logger.info(
+            "mongo_migration.skipped",
+            collection=collection,
+            field=old_field,
+            reason="already_migrated",
+        )
+        return 0
+    result = await coll.update_many(
+        {old_field: {"$exists": True}},
+        {"$rename": {old_field: new_field}},
+    )
+    logger.info(
+        "mongo_migration.renamed",
+        collection=collection,
+        old_field=old_field,
+        new_field=new_field,
+        modified_count=result.modified_count,
+    )
+    return result.modified_count
+
+
+async def _drop_legacy_indexes(db, collection: str, index_names: list[str]) -> None:
+    """Drop legacy named indexes; tolerate IndexNotFound for idempotency."""
+    coll = db.database[collection]
+    for name in index_names:
+        try:
+            await coll.drop_index(name)
+            logger.info("mongo_migration.dropped_index", collection=collection, index=name)
+        except Exception as exc:
+            # IndexNotFound (code 27) is benign — already dropped on a prior run.
+            msg = str(exc)
+            if "IndexNotFound" in msg or "index not found" in msg.lower() or "27" in msg:
+                continue
+            logger.warning(
+                "mongo_migration.drop_index_failed",
+                collection=collection,
+                index=name,
+                error=msg,
+            )
+
+
+async def migrate_strategy_id_fields(container: AsyncContainer) -> None:
+    """Idempotent boot-time migration: rename ``strategy_id`` → ``strategy_code`` / ``subscription_id``.
+
+    Runs BEFORE ``rehydrate_strategies_from_subscriptions`` so the rehydrate
+    reads the new field name. Safe to call repeatedly — each step checks
+    pending state before doing work.
+
+    Steps:
+      1. Rename collection ``strategy_subscriptions`` → ``subscriptions``.
+      2. Per-collection ``$rename`` of the legacy ``strategy_id`` field.
+      3. Drop legacy named indexes. ``ensure_all_indexes`` re-creates the new ones.
+    """
+    from pocketquant.core.persistence.mongodb import Database
+
+    database = await container.get(Database)
+
+    total_renamed = 0
+    try:
+        await _rename_collection_if_needed(
+            database, old="strategy_subscriptions", new="subscriptions"
+        )
+        for collection, new_field in _FIELD_RENAME_MATRIX:
+            renamed = await _rename_field_if_needed(
+                database, collection, old_field="strategy_id", new_field=new_field
+            )
+            total_renamed += renamed
+        for collection, names in _LEGACY_INDEX_NAMES.items():
+            await _drop_legacy_indexes(database, collection, names)
+    except Exception:
+        logger.exception("mongo_migration.failed")
+        raise
+
+    logger.info("mongo_migration.completed", total_renamed=total_renamed)
 
 
 async def recover_stale_backtests(container: AsyncContainer) -> None:
@@ -120,7 +278,7 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
     from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
     from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 
-    sub_repo = await container.get(StrategySubscriptionRepository)
+    sub_repo = await container.get(SubscriptionRepository)
     strategy_service = await container.get(StrategyAppService)
 
     subs = await sub_repo.list_all()
@@ -131,18 +289,18 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
     for sub in subs:
         if strategy_service.get_strategy(sub.id) is not None:
             continue
-        strategy_class = STRATEGY_REGISTRY.get(sub.strategy_id)
+        strategy_class = STRATEGY_REGISTRY.get(sub.strategy_code)
         if strategy_class is None:
             logger.warning(
                 "rehydrate_skipped_unknown_template",
                 sub_id=sub.id,
-                strategy_id=sub.strategy_id,
+                strategy_code=sub.strategy_code,
             )
             continue
         await strategy_service.load_strategy(
             StrategyConfig(
                 id=sub.id,
-                name=sub.strategy_id,
+                name=sub.strategy_code,
                 symbol=sub.symbol,
                 interval=sub.interval.value,
             ),
@@ -286,6 +444,7 @@ def register_routes(app: FastAPI, settings) -> None:
     api.include_router(quote_router)
     api.include_router(system_jobs_router)
     api.include_router(strategy_router)
+    api.include_router(subscription_router)
     api.include_router(trading_router)
     api.include_router(backtest_router)
 

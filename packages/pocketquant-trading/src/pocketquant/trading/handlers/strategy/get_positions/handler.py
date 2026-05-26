@@ -15,7 +15,7 @@ class GetStrategyPositionsHandler(Handler[GetStrategyPositionsQuery, list[dict]]
         self._position_repo = position_repository
 
     async def handle(self, request: GetStrategyPositionsQuery) -> list[dict]:
-        positions = await self._position_repo.find_open_by_strategy(request.strategy_id)
+        positions = await self._position_repo.find_open_by_subscription(request.subscription_id)
         return [
             {
                 "symbol": p.symbol,
