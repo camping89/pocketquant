@@ -76,7 +76,7 @@ class GridOptimizationAppService:
         logger.info(
             "optimization_starting",
             optimization_id=optimization_id,
-            strategy_id=config.strategy_id,
+            strategy_code=config.strategy_code,
             total_combinations=total_combinations,
             max_workers=config.max_workers,
         )
@@ -118,7 +118,7 @@ class GridOptimizationAppService:
             )
             return OptimizationResult(
                 id=optimization_id,
-                strategy_id=config.strategy_id,
+                strategy_code=config.strategy_code,
                 config_snapshot=self._serialize_config(config),
                 target_metric=config.target_metric,
                 total_combinations=total_combinations,
@@ -159,7 +159,7 @@ class GridOptimizationAppService:
 
         return OptimizationResult(
             id=optimization_id,
-            strategy_id=config.strategy_id,
+            strategy_code=config.strategy_code,
             config_snapshot=self._serialize_config(config),
             target_metric=config.target_metric,
             total_combinations=total_combinations,
@@ -184,7 +184,7 @@ class GridOptimizationAppService:
         async with semaphore:
             # Create backtest config with these parameters
             backtest_config = BacktestConfig(
-                strategy_id=config.strategy_id,
+                strategy_code=config.strategy_code,
                 symbol=config.symbol,
                 interval=config.interval,
                 start_date=config.start_date,
@@ -243,7 +243,7 @@ class GridOptimizationAppService:
     def _serialize_config(self, config: OptimizationConfig) -> dict[str, Any]:
         """Serialize optimization config for storage."""
         return {
-            "strategy_id": config.strategy_id,
+            "strategy_code": config.strategy_code,
             "symbol": config.symbol,
             "interval": config.interval,
             "start_date": config.start_date.isoformat(),

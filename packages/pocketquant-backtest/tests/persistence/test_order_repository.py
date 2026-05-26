@@ -14,7 +14,7 @@ from pocketquant.core.persistence.mongodb import Database
 NOW = datetime(2026, 1, 5, 10, 0, 0)
 
 
-def _make_order(*, order_id: str, run_id: str, strategy_id: str = "s1",
+def _make_order(*, order_id: str, run_id: str, strategy_code: str = "s1",
                 status: OrderStatus = OrderStatus.FILLED) -> Order:
     fill = Fill(fill_id=f"f-{order_id}", order_id=order_id, symbol="BTC:BIN",
                 side=OrderSide.BUY, quantity=1.0, price=100.0,
@@ -25,7 +25,7 @@ def _make_order(*, order_id: str, run_id: str, strategy_id: str = "s1",
                    reason="market_fill" if status == OrderStatus.FILLED else "end_of_run"),
     ]
     return Order(
-        order_id=order_id, run_id=run_id, strategy_id=strategy_id,
+        order_id=order_id, run_id=run_id, strategy_code=strategy_code,
         symbol="BTC:BIN", side=OrderSide.BUY, order_type=OrderType.MARKET,
         quantity=1.0, price=None, sl_price=None, tp_price=None,
         status=status, submitted_at=NOW, last_updated_at=NOW,
@@ -76,11 +76,11 @@ async def test_list_by_run_returns_only_matching(database: Database) -> None:
 async def test_list_by_strategy_status_filters(database: Database) -> None:
     repo = BacktestOrderRepository(database)
     await repo.save_many([
-        _make_order(order_id="o1", run_id="r1", strategy_id="A", status=OrderStatus.FILLED),
-        _make_order(order_id="o2", run_id="r1", strategy_id="A", status=OrderStatus.EXPIRED),
-        _make_order(order_id="o3", run_id="r1", strategy_id="B", status=OrderStatus.FILLED),
+        _make_order(order_id="o1", run_id="r1", strategy_code="A", status=OrderStatus.FILLED),
+        _make_order(order_id="o2", run_id="r1", strategy_code="A", status=OrderStatus.EXPIRED),
+        _make_order(order_id="o3", run_id="r1", strategy_code="B", status=OrderStatus.FILLED),
     ])
-    expired = await repo.list_by_strategy_status("A", "expired")
+    expired = await repo.list_by_strategy_code_status("A", "expired")
     assert [o.order_id for o in expired] == ["o2"]
 
 
@@ -103,6 +103,6 @@ async def test_ensure_indexes_creates_all_four(database: Database) -> None:
     await repo.ensure_indexes()
     coll = database.get_collection("backtest_orders")
     indexes = await coll.index_information()
-    expected = {"ix_btorders_run_id", "ix_btorders_strategy_status",
+    expected = {"ix_btorders_run_id", "ix_btorders_strategy_code_status",
                 "ix_btorders_submitted_at", "ix_btorders_run_status"}
     assert expected.issubset(set(indexes))

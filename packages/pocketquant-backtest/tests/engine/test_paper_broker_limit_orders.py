@@ -36,7 +36,7 @@ async def test_unreachable_limit_remains_submitted_then_expires_at_end_of_run(
     broker, _ = setup
     # BUY LIMIT below current price → would be reachable. Use unreachable: below current.
     # Wait — BUY LIMIT fills when market <= limit. To be UNREACHABLE for BUY: limit < market.
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.LIMIT, quantity=0.01, price=50000)
     r = await broker.submit_order(o)
     assert r.status == OrderStatus.SUBMITTED
@@ -54,7 +54,7 @@ async def test_unreachable_limit_remains_submitted_then_expires_at_end_of_run(
 async def test_reachable_limit_fills_immediately(setup: tuple[PaperBroker, EventBus]) -> None:
     broker, _ = setup
     # BUY LIMIT at 70000 when current is 65000: 65000 <= 70000, fills immediately.
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.LIMIT, quantity=0.01, price=70000)
     r = await broker.submit_order(o)
     assert r.status == OrderStatus.FILLED
@@ -67,7 +67,7 @@ async def test_pending_limit_fills_on_later_bar_with_limit_cross_reason(
 ) -> None:
     broker, bus = setup
     # BUY LIMIT @ 60000 (below current 65000) → pending.
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.LIMIT, quantity=0.01, price=60000)
     await broker.submit_order(o)
     # Bar with low 59000 crosses BUY LIMIT 60000.
@@ -83,7 +83,7 @@ async def test_pending_limit_fills_on_later_bar_with_limit_cross_reason(
 @pytest.mark.asyncio
 async def test_cancel_pending_limit(setup: tuple[PaperBroker, EventBus]) -> None:
     broker, _ = setup
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.LIMIT, quantity=0.01, price=50000)
     r = await broker.submit_order(o)
     ok = await broker.cancel_order(r.broker_order_id)
@@ -105,7 +105,7 @@ async def test_pending_limit_doesnt_cross_in_neutral_bar(
     setup: tuple[PaperBroker, EventBus],
 ) -> None:
     broker, bus = setup
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.LIMIT, quantity=0.01, price=50000)
     await broker.submit_order(o)
     # Bar low 60000 > limit 50000 — doesn't cross
@@ -122,7 +122,7 @@ async def test_pending_limit_doesnt_cross_in_neutral_bar(
 async def test_sell_limit_fills_on_high_crossing(setup: tuple[PaperBroker, EventBus]) -> None:
     broker, bus = setup
     # SELL LIMIT @ 70000, current 65000 (pending: not crossed yet)
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.SELL,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.SELL,
                               order_type=OrderType.LIMIT, quantity=0.01, price=70000)
     r = await broker.submit_order(o)
     assert r.status == OrderStatus.SUBMITTED

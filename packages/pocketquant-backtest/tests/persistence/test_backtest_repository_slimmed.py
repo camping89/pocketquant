@@ -15,7 +15,7 @@ NOW = datetime(2026, 1, 5, 10, 0, 0)
 
 def _result() -> BacktestResult:
     return BacktestResult(
-        id="r1", strategy_id="s1",
+        id="r1", strategy_code="s1",
         config_snapshot={"symbol": "BTC:BIN", "interval": "1m"},
         metrics=BacktestMetrics.empty(),
         equity_curve=[EquityPoint(timestamp=NOW, equity=10_000.0, drawdown=0.0)],
@@ -61,7 +61,7 @@ async def test_from_mongo_tolerates_legacy_doc_with_trades_positions(database: D
     coll = database.get_collection("backtest_runs")
     legacy_doc = {
         "_id": "legacy-1",
-        "strategy_id": "s1",
+        "strategy_code": "s1",
         "config_snapshot": {"symbol": "BTC:BIN", "interval": "1m"},
         "metrics": BacktestMetrics.empty().to_mongo(),
         "equity_curve": [],

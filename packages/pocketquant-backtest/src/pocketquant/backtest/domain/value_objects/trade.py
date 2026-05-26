@@ -20,7 +20,7 @@ class Trade:
 
     trade_id: str
     run_id: str
-    strategy_id: str
+    strategy_code: str
     symbol: str
     direction: str  # "LONG" | "SHORT"
     entry_order_id: str | None
@@ -40,7 +40,7 @@ class Trade:
         return {
             "_id": self.trade_id,
             "run_id": self.run_id,
-            "strategy_id": self.strategy_id,
+            "strategy_code": self.strategy_code,
             "symbol": self.symbol,
             "direction": self.direction,
             "entry_order_id": self.entry_order_id,
@@ -62,7 +62,7 @@ class Trade:
         return cls(
             trade_id=data["_id"],
             run_id=data["run_id"],
-            strategy_id=data["strategy_id"],
+            strategy_code=data["strategy_code"],
             symbol=data["symbol"],
             direction=data["direction"],
             entry_order_id=data.get("entry_order_id"),

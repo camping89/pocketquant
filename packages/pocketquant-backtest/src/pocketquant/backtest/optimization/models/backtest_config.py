@@ -12,7 +12,7 @@ class BacktestConfig:
     """Configuration for a single backtest run.
 
     Attributes:
-        strategy_id: Unique identifier for the strategy to backtest.
+        strategy_code: Unique identifier for the strategy to backtest.
         symbol: Composite trading symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         interval: Bar interval (e.g., "5m", "1h", "1d").
         start_date: Start date for historical replay.
@@ -24,7 +24,7 @@ class BacktestConfig:
         parameters: Strategy-specific parameters for optimization.
     """
 
-    strategy_id: str
+    strategy_code: str
     symbol: str
     interval: str
     start_date: date
@@ -38,7 +38,7 @@ class BacktestConfig:
     def with_parameters(self, params: dict[str, Any]) -> BacktestConfig:
         """Create new config with updated parameters (for grid optimizer)."""
         return BacktestConfig(
-            strategy_id=self.strategy_id,
+            strategy_code=self.strategy_code,
             symbol=self.symbol,
             interval=self.interval,
             start_date=self.start_date,

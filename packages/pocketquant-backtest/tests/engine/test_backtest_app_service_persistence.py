@@ -79,13 +79,13 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     async def scripted_strategy(event: BarCompletedEvent) -> None:
         nonlocal sent_open, sent_close
         if not sent_open:
-            o = OrderAggregate.create(strategy_id="scripted", symbol=_SYM,
+            o = OrderAggregate.create(subscription_id="scripted", symbol=_SYM,
                                       side=OrderSide.BUY, order_type=OrderType.MARKET,
                                       quantity=1.0)
             await broker.submit_order(o)
             sent_open = True
         elif sent_open and not sent_close and event.bar_start >= t0 + timedelta(minutes=3):
-            o = OrderAggregate.create(strategy_id="scripted", symbol=_SYM,
+            o = OrderAggregate.create(subscription_id="scripted", symbol=_SYM,
                                       side=OrderSide.SELL, order_type=OrderType.MARKET,
                                       quantity=1.0)
             await broker.submit_order(o)
@@ -94,7 +94,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     bus.subscribe(BarCompletedEvent, scripted_strategy)
 
     config = BacktestConfig(
-        strategy_id="scripted", symbol=_SYM, interval="1m",
+        strategy_code="scripted", symbol=_SYM, interval="1m",
         start_date=date(2026, 1, 1), end_date=date(2026, 1, 31),
         initial_capital=100_000.0, slippage_bps=0.0, commission_bps=10.0,
     )
@@ -166,7 +166,7 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     async def scripted(event: BarCompletedEvent) -> None:
         nonlocal entered
         if not entered:
-            o = OrderAggregate.create(strategy_id="sl-test", symbol=_SYM,
+            o = OrderAggregate.create(subscription_id="sl-test", symbol=_SYM,
                                       side=OrderSide.BUY, order_type=OrderType.MARKET,
                                       quantity=1.0, sl_price=95.0)
             await broker.submit_order(o)
@@ -175,7 +175,7 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     bus.subscribe(BarCompletedEvent, scripted)
 
     config = BacktestConfig(
-        strategy_id="sl-test", symbol=_SYM, interval="1m",
+        strategy_code="sl-test", symbol=_SYM, interval="1m",
         start_date=date(2026, 1, 1), end_date=date(2026, 1, 31),
         initial_capital=100_000.0, slippage_bps=0.0, commission_bps=0.0,
     )

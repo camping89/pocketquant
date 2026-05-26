@@ -12,10 +12,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from pocketquant.backtest.domain.value_objects.fill import Fill
 from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
 from pocketquant.core.infrastructure.brokers.events import OrderEvent
-
-from pocketquant.backtest.domain.value_objects.fill import Fill
 
 __all__ = ["Order", "OrderEvent"]
 
@@ -30,7 +29,7 @@ class Order:
 
     order_id: str
     run_id: str
-    strategy_id: str
+    strategy_code: str
     symbol: str
     side: OrderSide
     order_type: OrderType
@@ -49,7 +48,7 @@ class Order:
         return {
             "_id": self.order_id,
             "run_id": self.run_id,
-            "strategy_id": self.strategy_id,
+            "strategy_code": self.strategy_code,
             "symbol": self.symbol,
             "side": self.side.value,
             "order_type": self.order_type.value,
@@ -71,7 +70,7 @@ class Order:
         return cls(
             order_id=order_id,
             run_id=data["run_id"],
-            strategy_id=data["strategy_id"],
+            strategy_code=data["strategy_code"],
             symbol=data["symbol"],
             side=OrderSide(data["side"]),
             order_type=OrderType(data["order_type"]),

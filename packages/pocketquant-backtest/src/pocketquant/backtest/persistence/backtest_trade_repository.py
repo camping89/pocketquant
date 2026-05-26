@@ -37,20 +37,20 @@ class BacktestTradeRepository(BaseRepository):
         cursor = collection.find({"run_id": run_id}).sort("entry_time", 1)
         return [Trade.from_mongo(doc) async for doc in cursor]
 
-    async def list_by_strategy(self, strategy_id: str, limit: int = 200) -> list[Trade]:
+    async def list_by_strategy_code(self, strategy_code: str, limit: int = 200) -> list[Trade]:
         collection = self._collection()
         cursor = (
-            collection.find({"strategy_id": strategy_id}).sort("entry_time", -1).limit(limit)
+            collection.find({"strategy_code": strategy_code}).sort("entry_time", -1).limit(limit)
         )
         return [Trade.from_mongo(doc) async for doc in cursor]
 
     async def list_top_pnl(
-        self, strategy_id: str, top: int = 10, ascending: bool = False
+        self, strategy_code: str, top: int = 10, ascending: bool = False
     ) -> list[Trade]:
         """Top biggest winners (default) or losers (ascending=True)."""
         collection = self._collection()
         order = 1 if ascending else -1
-        cursor = collection.find({"strategy_id": strategy_id}).sort("pnl", order).limit(top)
+        cursor = collection.find({"strategy_code": strategy_code}).sort("pnl", order).limit(top)
         return [Trade.from_mongo(doc) async for doc in cursor]
 
     async def delete_by_run(self, run_id: str) -> int:
@@ -58,9 +58,9 @@ class BacktestTradeRepository(BaseRepository):
         result = await collection.delete_many({"run_id": run_id})
         return result.deleted_count
 
-    async def delete_by_strategy(self, strategy_id: str) -> int:
+    async def delete_by_strategy_code(self, strategy_code: str) -> int:
         collection = self._collection()
-        result = await collection.delete_many({"strategy_id": strategy_id})
+        result = await collection.delete_many({"strategy_code": strategy_code})
         return result.deleted_count
 
     async def ensure_indexes(self) -> None:
@@ -68,7 +68,7 @@ class BacktestTradeRepository(BaseRepository):
         collection = self._collection()
         await collection.create_index("run_id", name="ix_bttrades_run_id")
         await collection.create_index(
-            [("strategy_id", 1), ("direction", 1)], name="ix_bttrades_strategy_direction"
+            [("strategy_code", 1), ("direction", 1)], name="ix_bttrades_strategy_code_direction"
         )
         await collection.create_index("entry_time", name="ix_bttrades_entry_time")
         await collection.create_index("pnl", name="ix_bttrades_pnl")

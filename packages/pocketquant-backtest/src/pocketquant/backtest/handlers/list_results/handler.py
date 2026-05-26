@@ -15,8 +15,8 @@ class ListBacktestsHandler(Handler[ListBacktestsQuery, list[BacktestResult]]):
 
     async def handle(self, request: ListBacktestsQuery) -> list[BacktestResult]:
         """Fetch backtest results from repository."""
-        return await self._backtest_repo.list_by_strategy(
-            strategy_id=request.strategy_id,
+        return await self._backtest_repo.list_by_strategy_code(
+            strategy_code=request.strategy_id,
             limit=request.limit,
             include_failed=request.include_failed,
         )

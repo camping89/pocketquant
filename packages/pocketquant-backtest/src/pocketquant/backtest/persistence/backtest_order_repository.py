@@ -41,12 +41,12 @@ class BacktestOrderRepository(BaseRepository):
         cursor = collection.find({"run_id": run_id}).sort("submitted_at", 1)
         return [Order.from_mongo(doc) async for doc in cursor]
 
-    async def list_by_strategy_status(
-        self, strategy_id: str, status: str, limit: int = 100
+    async def list_by_strategy_code_status(
+        self, strategy_code: str, status: str, limit: int = 100
     ) -> list[Order]:
         collection = self._collection()
         cursor = (
-            collection.find({"strategy_id": strategy_id, "status": status})
+            collection.find({"strategy_code": strategy_code, "status": status})
             .sort("submitted_at", -1)
             .limit(limit)
         )
@@ -57,9 +57,9 @@ class BacktestOrderRepository(BaseRepository):
         result = await collection.delete_many({"run_id": run_id})
         return result.deleted_count
 
-    async def delete_by_strategy(self, strategy_id: str) -> int:
+    async def delete_by_strategy_code(self, strategy_code: str) -> int:
         collection = self._collection()
-        result = await collection.delete_many({"strategy_id": strategy_id})
+        result = await collection.delete_many({"strategy_code": strategy_code})
         return result.deleted_count
 
     async def ensure_indexes(self) -> None:
@@ -67,7 +67,7 @@ class BacktestOrderRepository(BaseRepository):
         collection = self._collection()
         await collection.create_index("run_id", name="ix_btorders_run_id")
         await collection.create_index(
-            [("strategy_id", 1), ("status", 1)], name="ix_btorders_strategy_status"
+            [("strategy_code", 1), ("status", 1)], name="ix_btorders_strategy_code_status"
         )
         await collection.create_index("submitted_at", name="ix_btorders_submitted_at")
         await collection.create_index(

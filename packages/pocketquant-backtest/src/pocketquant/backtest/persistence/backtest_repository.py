@@ -21,7 +21,7 @@ class BacktestRepository(BaseRepository):
         collection = self._collection()
         doc = result.to_mongo()
         await collection.replace_one({"_id": result.id}, doc, upsert=True)
-        logger.debug("backtest_result_saved", run_id=result.id, strategy_id=result.strategy_id)
+        logger.debug("backtest_result_saved", run_id=result.id, strategy_code=result.strategy_code)
         return result.id
 
     async def get(self, run_id: str) -> BacktestResult | None:
@@ -32,13 +32,13 @@ class BacktestRepository(BaseRepository):
             return None
         return BacktestResult.from_mongo(doc)
 
-    async def list_by_strategy(
-        self, strategy_id: str, limit: int = 20, include_failed: bool = False
+    async def list_by_strategy_code(
+        self, strategy_code: str, limit: int = 20, include_failed: bool = False
     ) -> list[BacktestResult]:
-        """List recent backtest runs for a strategy."""
+        """List recent backtest runs for a strategy template."""
         collection = self._collection()
 
-        query: dict[str, Any] = {"strategy_id": strategy_id}
+        query: dict[str, Any] = {"strategy_code": strategy_code}
         if not include_failed:
             query["status"] = "completed"
 
@@ -50,13 +50,13 @@ class BacktestRepository(BaseRepository):
         return results
 
     async def get_best_by_metric(
-        self, strategy_id: str, metric: str = "sharpe_ratio", limit: int = 10
+        self, strategy_code: str, metric: str = "sharpe_ratio", limit: int = 10
     ) -> list[BacktestResult]:
         """Get top backtest results ranked by a specific metric."""
         collection = self._collection()
 
         cursor = (
-            collection.find({"strategy_id": strategy_id, "status": "completed"})
+            collection.find({"strategy_code": strategy_code, "status": "completed"})
             .sort(f"metrics.{metric}", -1)
             .limit(limit)
         )
@@ -88,7 +88,7 @@ class BacktestRepository(BaseRepository):
         self,
         sub_id: str,
         *,
-        strategy_id: str,
+        strategy_code: str,
         status: str,
         error_msg: str | None = None,
     ) -> None:
@@ -105,7 +105,7 @@ class BacktestRepository(BaseRepository):
             {
                 "$set": {
                     "subscription_id": sub_id,
-                    "strategy_id": strategy_id,
+                    "strategy_code": strategy_code,
                     "status": status,
                     "last_run_at": now,
                     "error_msg": error_msg,
@@ -154,13 +154,13 @@ class BacktestRepository(BaseRepository):
         logger.debug("backtest_deleted_by_subscription", sub_id=sub_id, count=result.deleted_count)
         return result.deleted_count
 
-    async def delete_by_strategy(self, strategy_id: str) -> int:
-        """Delete all backtest docs for a strategy. Returns deleted_count."""
+    async def delete_by_strategy_code(self, strategy_code: str) -> int:
+        """Delete all backtest docs for a strategy template. Returns deleted_count."""
         collection = self._collection()
-        result = await collection.delete_many({"strategy_id": strategy_id})
+        result = await collection.delete_many({"strategy_code": strategy_code})
         logger.debug(
-            "backtests_deleted_by_strategy",
-            strategy_id=strategy_id,
+            "backtests_deleted_by_strategy_code",
+            strategy_code=strategy_code,
             count=result.deleted_count,
         )
         return result.deleted_count
@@ -248,24 +248,24 @@ class BacktestRepository(BaseRepository):
     async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""
         collection = self._collection()
-        await collection.create_index("strategy_id", name="ix_backtests_strategy_id")
+        await collection.create_index("strategy_code", name="ix_backtests_strategy_code")
         await collection.create_index("started_at", name="ix_backtests_started_at")
         await collection.create_index("status", name="ix_backtests_status")
         await collection.create_index(
-            [("strategy_id", 1), ("started_at", -1)],
-            name="ix_backtests_strategy_started",
+            [("strategy_code", 1), ("started_at", -1)],
+            name="ix_backtests_strategy_code_started",
         )
         await collection.create_index(
-            [("strategy_id", 1), ("metrics.sharpe_ratio", -1)],
-            name="ix_backtests_strategy_sharpe",
+            [("strategy_code", 1), ("metrics.sharpe_ratio", -1)],
+            name="ix_backtests_strategy_code_sharpe",
         )
         await collection.create_index(
-            [("strategy_id", 1), ("metrics.sortino_ratio", -1)],
-            name="ix_backtests_strategy_sortino",
+            [("strategy_code", 1), ("metrics.sortino_ratio", -1)],
+            name="ix_backtests_strategy_code_sortino",
         )
         await collection.create_index(
-            [("strategy_id", 1), ("metrics.win_rate", -1)],
-            name="ix_backtests_strategy_winrate",
+            [("strategy_code", 1), ("metrics.win_rate", -1)],
+            name="ix_backtests_strategy_code_winrate",
         )
         # Sparse unique index so legacy docs without subscription_id are unaffected
         await collection.create_index(
