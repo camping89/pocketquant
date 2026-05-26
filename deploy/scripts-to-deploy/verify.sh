@@ -186,6 +186,17 @@ else
   check "App logs (last 100)" "$WARN" "${error_count} error(s) found"
 fi
 
+# ─── 11. Boot integrity (hard fail on fatal startup signatures) ─
+# Generic signatures that any release would emit on lifespan/migration failure.
+# Not tied to specific endpoints or domain logic so this check survives feature churn.
+BOOT_PATTERNS='"levelname":"CRITICAL"|"level":"critical"|Startup Failed|Application startup failed|lifespan.*(failed|error)|RuntimeError.*lifespan|migration\.failed|migration_failed'
+boot_failures=$(docker logs pocketquant-app --tail 200 2>&1 | grep -cE "$BOOT_PATTERNS" || true)
+if [ "$boot_failures" -eq 0 ]; then
+  check "Boot integrity" "$PASS" "no fatal startup signatures"
+else
+  check "Boot integrity" "$FAIL" "${boot_failures} fatal startup signature(s) in logs"
+fi
+
 # ─── Summary ────────────────────────────────────────────────
 
 if [ "$failed" -gt 0 ]; then
@@ -220,6 +231,18 @@ if [ "$error_count" -gt 0 ]; then
 
 \`\`\`
 $(docker logs pocketquant-app --tail 100 2>&1 | grep -i '"levelname":"ERROR"\|"level":"error"\|Traceback' | tail -10)
+\`\`\`
+EOF
+fi
+
+# Append fatal startup signatures if any
+if [ "$boot_failures" -gt 0 ]; then
+  cat >> "$REPORT" <<EOF
+
+## Fatal Startup Signatures (last 200 log lines)
+
+\`\`\`
+$(docker logs pocketquant-app --tail 200 2>&1 | grep -E "$BOOT_PATTERNS" | tail -20)
 \`\`\`
 EOF
 fi
