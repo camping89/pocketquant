@@ -23,7 +23,7 @@ def _order(
     tp: float | None = None,
 ) -> OrderAggregate:
     return OrderAggregate.create(
-        strategy_id="t",
+        subscription_id="t",
         symbol=_SYM,
         side=side,
         order_type=OrderType.MARKET,

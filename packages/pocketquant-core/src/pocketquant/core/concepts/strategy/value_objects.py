@@ -20,7 +20,7 @@ class Signal:
     direction: Direction
     confidence: float  # 0.0 - 1.0
     timestamp: datetime
-    strategy_id: str
+    subscription_id: str
     entry_price: float | None = None
     stop_loss_price: float | None = None
     take_profit_price: float | None = None

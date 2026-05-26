@@ -67,7 +67,7 @@ async def _strategy(
 
 def _exit_order(side: OrderSide) -> OrderAggregate:
     return OrderAggregate.create(
-        strategy_id="hitnrun2-test",
+        subscription_id="hitnrun2-test",
         symbol="BTCUSDT:BINANCE",
         side=side,
         order_type=OrderType.MARKET,

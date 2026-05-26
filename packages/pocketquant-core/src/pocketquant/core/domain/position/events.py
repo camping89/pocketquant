@@ -11,7 +11,7 @@ class PositionOpenedEvent(DomainEvent):
     """Event raised when a new position is opened."""
 
     position_id: str = ""
-    strategy_id: str = ""
+    subscription_id: str = ""
     symbol: str = ""
     side: PositionSide = PositionSide.LONG
     entry_price: float = 0.0
@@ -23,7 +23,7 @@ class PositionUpdatedEvent(DomainEvent):
     """Event raised when position quantity or price is updated."""
 
     position_id: str = ""
-    strategy_id: str = ""
+    subscription_id: str = ""
     quantity: float = 0.0
     average_price: float = 0.0
     unrealized_pnl: float = 0.0
@@ -34,7 +34,7 @@ class PositionClosedEvent(DomainEvent):
     """Event raised when a position is fully closed."""
 
     position_id: str = ""
-    strategy_id: str = ""
+    subscription_id: str = ""
     symbol: str = ""
     side: PositionSide = PositionSide.LONG
     entry_price: float = 0.0

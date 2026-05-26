@@ -25,7 +25,7 @@ class PositionAggregate(BaseModel):
     """
 
     id: str
-    strategy_id: str
+    subscription_id: str
     symbol: str
     side: PositionSide
     entry_price: float
@@ -43,7 +43,7 @@ class PositionAggregate(BaseModel):
     @classmethod
     def open(
         cls,
-        strategy_id: str,
+        subscription_id: str,
         symbol: str,
         side: PositionSide,
         entry_price: float,
@@ -59,7 +59,7 @@ class PositionAggregate(BaseModel):
 
         position = cls(
             id=generate_id_str(),
-            strategy_id=strategy_id,
+            subscription_id=subscription_id,
             symbol=symbol,
             side=side,
             entry_price=entry_price,
@@ -71,7 +71,7 @@ class PositionAggregate(BaseModel):
         position._events.append(
             PositionOpenedEvent(
                 position_id=position.id,
-                strategy_id=strategy_id,
+                subscription_id=subscription_id,
                 symbol=symbol,
                 side=side,
                 entry_price=entry_price,
@@ -105,7 +105,7 @@ class PositionAggregate(BaseModel):
         self._events.append(
             PositionUpdatedEvent(
                 position_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 quantity=self.quantity,
                 average_price=self.entry_price,
                 unrealized_pnl=self.unrealized_pnl,
@@ -135,7 +135,7 @@ class PositionAggregate(BaseModel):
         self._events.append(
             PositionUpdatedEvent(
                 position_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 quantity=self.quantity,
                 average_price=self.entry_price,
                 unrealized_pnl=self.unrealized_pnl,
@@ -156,7 +156,7 @@ class PositionAggregate(BaseModel):
         self._events.append(
             PositionClosedEvent(
                 position_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 symbol=self.symbol,
                 side=self.side,
                 entry_price=self.entry_price,
@@ -206,7 +206,7 @@ class PositionAggregate(BaseModel):
         """Serialize to MongoDB document."""
         return {
             "_id": self.id,
-            "strategy_id": self.strategy_id,
+            "subscription_id": self.subscription_id,
             "symbol": self.symbol,
             "side": self.side.value,
             "entry_price": self.entry_price,
@@ -225,7 +225,7 @@ class PositionAggregate(BaseModel):
         """Reconstruct from MongoDB document."""
         return cls(
             id=doc["_id"],
-            strategy_id=doc["strategy_id"],
+            subscription_id=doc["subscription_id"],
             symbol=doc["symbol"],
             side=PositionSide(doc["side"]),
             entry_price=doc["entry_price"],

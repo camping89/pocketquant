@@ -10,7 +10,7 @@ from pocketquant.core.domain.shared.events import DomainEvent
 class SignalGeneratedEvent(DomainEvent):
     """Event raised when a strategy generates a trading signal."""
 
-    strategy_id: str = ""
+    subscription_id: str = ""
     symbol: str = ""
     direction: Direction = Direction.FLAT
     confidence: float = 0.0
