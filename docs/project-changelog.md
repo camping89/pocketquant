@@ -1,6 +1,32 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-05-25 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-26 | **Format:** Semantic Versioning
+
+## [Unreleased] — 2026-05-26 — Strategy ID Disambiguation: `strategy_code` + `subscription_id` (REFACTOR)
+
+### Refactor
+- **BREAKING (API surface):** Route split `/strategies/{id}/symbols` → `/strategies/{strategy_code}/subscriptions` + `/subscriptions/{sub_id}/*`
+- **BREAKING (Mongo):** Collection rename `strategy_subscriptions` → `subscriptions` (boot migration at startup, idempotent)
+- **BREAKING (Field semantics):** 
+  - Subscription doc: `strategy_id` (was template code) → `strategy_code`
+  - Order/Position docs: `strategy_id` (was subscription ID) → `subscription_id`
+  - Backtest doc: `strategy_id` (was template code) → `strategy_code`
+- **BREAKING (Indexes):** Renamed: `ix_strategy_subscriptions_strategy_id` → `ix_subscriptions_strategy_code`; `ix_orders_strategy_id` → `ix_orders_subscription_id`; `ix_positions_strategy_id` → `ix_positions_subscription_id`; etc.
+- **Repository methods renamed:** `list_by_strategy` → `list_by_strategy_code`, `find_by_strategy` → `find_by_subscription`, `get_by_strategy` → `get_by_subscription`, etc.
+- **New response field:** Subscription list items now include `is_running: bool` (computed from live strategy state, closes bug where FE used backtest status)
+- **Commits:** 95c64f8..c68c02c (7 commits)
+
+### Migration
+- **At boot:** `migrate_strategy_id_fields(container)` runs before `ensure_all_indexes`, idempotent (renames collection + fields + drops old indexes, aborts if both old+new coexist)
+- **Hash stability:** `Subscription.deterministic_id()` input unchanged (still uses `strategy_code|symbol|interval` value); existing PKs unaffected
+- **Backward-compat test:** `test_subscription_deterministic_id.py:test_back_compat_known_id_hitnrun2_btc_1m` verifies migration does not change IDs
+
+### Notes
+- Refactors away 5-year naming ambiguity: `strategy_id` meant different things in different contexts (template vs instance)
+- HTTP routes now clearly separate template-level (`/strategies/{strategy_code}`) from instance-level (`/subscriptions/{sub_id}`)
+- No data loss; all subscriptions, orders, positions migrated in-place
+
+---
 
 ## [Unreleased] — 2026-05-25 — `scripts-to-deploy/` split + WEB_PORT public stance (BREAKING for VPS deploys)
 

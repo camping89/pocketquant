@@ -131,7 +131,7 @@ All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mo
 Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
 
 **Composite Symbol Format (2026-05-23):**
-Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, StrategySubscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
+Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
 
 **Example - Domain Service (Pure Logic):**
 BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
@@ -244,13 +244,17 @@ features/
 │   ├── start/              # Operation: Start strategy
 │   ├── stop/               # Operation: Stop strategy
 │   ├── subscriptions/       # NEW: Nested group for strategy subscriptions
-│   │   ├── add_symbol/     # Operation: POST /strategies/{strategy_id}/symbols
-│   │   ├── list_symbols/   # Operation: GET /strategies/{strategy_id}/symbols
-│   │   ├── delete_symbol/  # Operation: DELETE /strategies/{strategy_id}/symbols/{sub_id}
-│   │   ├── run_all_backtest/ # Operation: POST /strategies/{strategy_id}/backtest/run-all
-│   │   ├── get_subscription_backtest/ # Operation: GET /strategies/{strategy_id}/symbols/{sub_id}/backtest
+│   │   ├── add_symbol/     # Operation: POST /strategies/{strategy_code}/subscriptions
+│   │   ├── list_symbols/   # Operation: GET /subscriptions/?strategy_code=...
+│   │   ├── remove_symbol/  # Operation: DELETE /subscriptions/{sub_id}
+│   │   ├── run_all_backtests/ # Operation: POST /strategies/{strategy_code}/run-all-backtests
+│   │   ├── get_subscription_backtest/ # Operation: GET /subscriptions/{sub_id}/backtest
+│   │   ├── start/          # Operation: POST /subscriptions/{sub_id}/start
+│   │   ├── stop/           # Operation: POST /subscriptions/{sub_id}/stop
+│   │   ├── get_positions/  # Operation: GET /subscriptions/{sub_id}/positions
+│   │   ├── get_trades/     # Operation: GET /subscriptions/{sub_id}/trades
 │   │   └── router.py
-│   ├── delete/             # Operation: DELETE /strategies/{strategy_id} (cascade)
+│   ├── delete/             # Operation: DELETE /strategies/{strategy_code} (cascade)
 │   └── router.py
 ├── trading/                  # Trading feature (3 operations)
 │   ├── list_orders/        # Operation: List orders
@@ -347,7 +351,7 @@ persistence/                           # Data access (MongoDB, Redis, repositori
     ├── backtest_repository.py  # Backtest results + subscription-scoped upsert
     ├── optimization_repository.py  # Parameter optimization
     ├── symbol_repository.py    # Symbol metadata
-    ├── strategy_subscription_repository.py  # Strategy ↔ subscriptions (NEW)
+    ├── subscription_repository.py  # Subscription ↔ Mongo (NEW)
     └── sync_status_repository.py   # Data sync status
 # NOTE: schemas/ directory deleted (2026-03-15)
 # Persistence logic consolidated into domain entities via to_mongo()/from_mongo()
@@ -575,7 +579,7 @@ Route Response
 | `optimizations` | OptimizationRepository | Parameter optimization |
 | `symbols` | SymbolRepository | Symbol metadata |
 | `sync_status` | SyncStatusRepository | Data sync progress (composite symbol identifier) |
-| `strategy_subscriptions` | StrategySubscriptionRepository | Strategy ↔ (symbol/exchange/interval) subscriptions (composite symbol) |
+| `subscriptions` | SubscriptionRepository | Subscription ↔ (symbol/interval) storage (composite symbol identifier) |
 | `job_history` | JobHistoryRepository | Background job execution history |
 
 **All repositories:**
@@ -775,12 +779,12 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 - **Structured error messages:** `JobScheduler._on_error()` now emits structured strings (was bare `""` for exceptions without text).
 - **New repo method:** `JobHistoryRepository.get_last_successful_started_at()` for catch-up logic.
 
-### Strategy Subscriptions (2026-05-23)
-- `StrategySubscriptionRepository` + `strategy_subscriptions` MongoDB collection.
+### Strategy Subscriptions (2026-05-23, renamed 2026-05-26)
+- `SubscriptionRepository` + `subscriptions` MongoDB collection (renamed at 2026-05-26 from `StrategySubscriptionRepository` / `strategy_subscriptions`).
 - Composite symbol format (`CODE:EXCHANGE`) replaces `(code, exchange)` pairs across all entities.
-- New feature group: `api/features/strategy/subscriptions/` (add/list/delete symbol, run-all backtest, get subscription backtest).
+- Routes split (2026-05-26): template-scoped under `/strategies/{strategy_code}`, instance-scoped under `/subscriptions/{sub_id}`.
 - `trading/jobs/backtest_jobs.py` — `run_subscription_backtest()` async job via APScheduler.
-- Frontend: `subscription-panel.tsx`, `strategy-subscription-api.ts`, `useSubscriptions.ts`.
+- Frontend: `subscription-panel.tsx`, `strategy-api.ts`, `useSubscriptions.ts`.
 
 ### Integrity Repair Verification (2026-04-13)
 - `SyncSymbolCommand.skip_filter: bool` — bypass `_filter_new_bars` for gap-fill repair.

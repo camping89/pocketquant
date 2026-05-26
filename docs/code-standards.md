@@ -491,7 +491,7 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 - URL-encoded: `:` serialized as `%3A` in path segments (e.g., `/api/v1/bar/BTCUSDT%3ABINANCE`)
 - JSON/database: raw `:` preserved (no encoding inside payloads)
 - Cache keys: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`, etc.
-- Affected entities: Bar, Order, Position, Symbol, SyncStatus, StrategySubscription, TrackedSymbol
+- Affected entities: Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol
 
 **Example Repository Usage:**
 ```python
@@ -501,6 +501,43 @@ await bar_repo.find(symbol="BTCUSDT", exchange="BINANCE", interval="1d")
 # New: composite symbol
 await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
 ```
+
+## Strategy ID Disambiguation (2026-05-26)
+
+**CRITICAL DISTINCTION:** Three IDs must never be confused.
+
+| ID | Type | Meaning | Example | Persistence | Notes |
+|---|---|---|---|---|---|
+| `strategy_code` | string | Template name registered in `STRATEGY_REGISTRY` | `"hitnrun2"` | Class name (immutable) | Identifies which strategy class to instantiate. Used to look up the class and load from persistent subscriptions. |
+| `subscription_id` | string (16-char hex) | Deterministic ID of one (strategy_code, symbol, interval) binding | `"a1b2c3d4e5f6g7h8"` | MongoDB `subscriptions._id` (immutable after creation) | Computed as `sha256(f"{strategy_code}\|{symbol}\|{interval}")[:16]`. Uniquely keys in-memory strategy instance, order, position, backtest result docs. |
+| `template_id` | **DEPRECATED** | Old name for path param that held strategy_code | was `"hitnrun2"` in URL | — | Removed 2026-05-26. Use `strategy_code` in new code. Legacy references in old docs should be treated as `strategy_code`. |
+
+**Field Renames (Live Refactor):**
+- MongoDB `strategy_subscriptions` → `subscriptions` (collection name)
+- Subscription doc: `strategy_id: "{code}"` → `strategy_code: "{code}"` (field name + semantics)
+- Order doc: `strategy_id: "{subscription_id}"` → `subscription_id: "{subscription_id}"` (field name + semantics)
+- Position doc: `strategy_id: "{subscription_id}"` → `subscription_id: "{subscription_id}"` (field name + semantics)
+- Backtest doc: `strategy_id: "{code}"` → `strategy_code: "{code}"`; `subscription_id` preserved
+
+**Repository Method Renames:**
+- `SubscriptionRepository.list_by_strategy(strategy_id)` → `list_by_strategy_code(strategy_code)`
+- `OrderRepository.find_by_strategy(strategy_id)` → `find_by_subscription(subscription_id)`
+- `PositionRepository.get_by_strategy(strategy_id)` → `get_by_subscription(subscription_id)`
+- `BacktestRepository.list_by_strategy(strategy_id)` → `list_by_strategy_code(strategy_code)`
+
+**HTTP Route Semantics (Post-Refactor):**
+- `POST /strategies/{strategy_code}/subscriptions` — create subscription for this template
+- `POST /subscriptions/{sub_id}/start` — start this subscription instance
+- `GET /subscriptions/?strategy_code=X` — filter subscriptions by template (optional)
+
+**Hash Stability Invariant (CRITICAL):**
+The deterministic subscription ID is computed from the **value**, not the parameter name:
+```python
+subscription_id = sha256(f"{strategy_code}|{symbol.upper()}|{interval_val}")[:16]
+```
+Renaming `strategy_id` → `strategy_code` does NOT change existing subscription IDs.
+Existing subscriptions with hash `a1b2c3...` continue to use that hash even after migration.
+Backward-compatibility test: `packages/pocketquant-trading/tests/test_subscription_deterministic_id.py:test_back_compat_known_id_hitnrun2_btc_1m`
 
 ## Code Organization Guidelines
 

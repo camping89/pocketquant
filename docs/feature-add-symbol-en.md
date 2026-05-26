@@ -42,21 +42,20 @@ Register a `(symbol, exchange, interval)` combo for a running strategy so the st
 |---|---|
 | Frontend | React + TanStack Query (`pocketquant-web`) |
 | Backend | FastAPI + Mediator (CQRS) + Dishka DI (`pocketquant-trading`) |
-| Storage | MongoDB collection `strategy_subscriptions`, sparse unique index on `(strategy_id, symbol, exchange, interval)` |
+| Storage | MongoDB collection `subscriptions`, deterministic PK on `(strategy_code, symbol, interval)` |
 
 ### Frontend
 
 | File | Role |
 |---|---|
-| `packages/pocketquant-web/src/components/strategy/add-symbol-dialog.tsx` | Modal component — local state for `symbol`, `exchange`, `interval`, `errorMsg` |
-| `packages/pocketquant-web/src/hooks/use-subscriptions.ts` | `useAddSymbol(strategyId)` — TanStack mutation + cache invalidation |
+| `packages/pocketquant-web/src/components/strategy/add-symbol-dialog.tsx` | Modal component — local state for `symbol`, `interval`, `errorMsg` |
+| `packages/pocketquant-web/src/hooks/use-subscriptions.ts` | `useAddSymbol(strategyCode)` — TanStack mutation + cache invalidation |
 | `packages/pocketquant-web/src/api/strategy-api.ts` | `addSymbol()` — POST client wrapper |
 
 **Constants:**
-- `EXCHANGES = ['OKX', 'BINANCE']`
-- `INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']`
+- `INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']` (exchange is derived from symbol's composite format `CODE:EXCHANGE`)
 
-**Cache invalidation:** On success, the hook runs `qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] })` → list re-fetches immediately.
+**Cache invalidation:** On success, the hook runs `qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })` → list re-fetches immediately.
 
 ### Backend (CQRS)
 
@@ -66,28 +65,33 @@ HTTP Route → Command → Handler → Domain → Repository → MongoDB
 
 | File | Role |
 |---|---|
-| `packages/pocketquant-trading/.../strategy/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_id}/symbols`, builds `AddSymbolCommand`, dispatches via Mediator |
-| `packages/pocketquant-trading/.../strategy/add_symbol/handler.py` | Validates strategy is loaded → creates `StrategySubscription` → persists |
-| `packages/pocketquant-trading/.../domain/subscription.py` | `StrategySubscription` aggregate with deterministic ID |
-| `packages/pocketquant-trading/.../persistence/strategy_subscription_repository.py` | Mongo upsert + duplicate detection |
+| `packages/pocketquant-api/.../strategy/subscriptions/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, builds `AddSymbolCommand`, dispatches via Mediator |
+| `packages/pocketquant-api/.../strategy/subscriptions/add_symbol/handler.py` | Validates strategy is loaded → creates `Subscription` → persists |
+| `packages/pocketquant-core/.../domain/subscription/entities.py` | `Subscription` aggregate with deterministic ID |
+| `packages/pocketquant-core/.../persistence/subscription_repository.py` | Mongo persistence + duplicate detection via deterministic hash |
 
 ### Deterministic ID
 
 ```
-subscription_id = sha256(f"{strategy_id}|{symbol}|{exchange}|{interval}")[:16]
+subscription_id = sha256(f"{strategy_code}|{symbol.upper()}|{interval_val}")[:16]
 ```
 
+**Where:**
+- `strategy_code`: e.g. `hitnrun2`
+- `symbol`: composite format `{CODE}:{EXCHANGE}` e.g. `BTC-USDT:OKX` (uppercased and colon-separated)
+- `interval_val`: integer-valued interval e.g. `60` for `1m`
+
 **Why:**
-- Idempotency — calling twice with the same combo collides on the Mongo unique index
-- No distributed lock needed; business logic doesn't need a pre-check
-- DB constraint enforces duplicate detection
+- Idempotency — calling twice with the same combo produces same ID
+- No distributed lock needed; deterministic collision provides implicit uniqueness
+- Back-compatible: hash input is the value of `strategy_code` (not changed by rename), verified at `test_subscription_deterministic_id.py:test_back_compat_known_id_hitnrun2_btc_1m`
 
 ### Error mapping
 
 | Exception | HTTP | Trigger |
 |---|---|---|
-| `NotFoundError` | 404 | `StrategyService.get_strategy()` returns None |
-| `SubscriptionAlreadyExistsError` (extends `DomainError`) | 400 | `DuplicateKeyError` from Mongo unique index |
+| `NotFoundError` | 404 | `StrategyAppService.get_strategy()` returns None |
+| `DomainError` (duplicate) | 400 | MongoDB insert collision on deterministic ID (should be rare due to idempotency) |
 | `AppError` (base) | 400 | Generic domain validation failure |
 
 A global handler maps `AppError` → JSON `{error: {code, message}}`.
@@ -101,8 +105,8 @@ A global handler maps `AppError` → JSON `{error: {code, message}}`.
 │ User clicks  │
 │   "Add"      │
 └──────┬───────┘
-       │ POST /api/v1/strategies/{id}/symbols
-       │ body: {symbol, exchange, interval}
+       │ POST /api/v1/strategies/{strategy_code}/subscriptions
+       │ body: {symbol, interval}  (e.g., symbol="BTC-USDT:OKX")
        ▼
 ┌──────────────────────┐
 │ FastAPI route        │
@@ -111,24 +115,25 @@ A global handler maps `AppError` → JSON `{error: {code, message}}`.
        │ AddSymbolCommand
        ▼
 ┌──────────────────────┐    ┌─────────────────────┐
-│ AddSymbolHandler     │───▶│ StrategyService     │
+│ AddSymbolHandler     │───▶│ StrategyAppService  │
 │                      │    │ .get_strategy()     │
 │                      │◀───│ → None? raise 404   │
 └──────┬───────────────┘    └─────────────────────┘
-       │ build StrategySubscription
-       │ id = sha256(...)[:16]
+       │ build Subscription
+       │ id = sha256(strategy_code|symbol|interval)[:16]
        ▼
 ┌──────────────────────────┐    ┌─────────────────┐
 │ SubscriptionRepository   │───▶│ MongoDB         │
-│ .save()                  │    │ unique idx fail │
-│                          │◀───│ → 400           │
+│ .save()                  │    │ collision rare  │
+│                          │◀───│ (idempotent)    │
 └──────┬───────────────────┘    └─────────────────┘
        │ 201 + subscription
        ▼
 ┌──────────────────────┐
 │ TanStack Query       │
 │ invalidate           │
-│ ['subscriptions',id] │
+│ ['subscriptions',    │
+│  strategy_code]      │
 └──────────────────────┘
 ```
 
@@ -161,7 +166,8 @@ A global handler maps `AppError` → JSON `{error: {code, message}}`.
 ## 5. Related Docs
 
 - [Handler Pipelines](./handler-pipelines.md) — CQRS pipeline pattern details
-- [System Architecture](./system-architecture.md) — backend/frontend overview
+- [System Architecture](./system-architecture.md) — backend/frontend overview, subscription entity
+- [Debug Audit Order Execution](./debug-audit-order-execution.md) — live trading flow with subscription IDs
 - [Code Standards](./code-standards.md) — CQRS naming conventions
 - [Journal: Strategy Subscriptions Shipped](./journals/strategy-subscriptions-cached-backtest-260505.md) — implementation history & bug fixes
 
@@ -169,6 +175,5 @@ A global handler maps `AppError` → JSON `{error: {code, message}}`.
 
 ## Unresolved Questions
 
-- Should we validate symbol-exchange compatibility? (e.g. block `BTC-USDT` on exchanges that don't list that pair)
-- Should removing a subscription also clean up the market-data feed?
-- `400 vs 409` for duplicates — which approach do we pick? (see journal § Unresolved)
+- Should we validate symbol-exchange compatibility at the API boundary? (e.g. reject invalid pairs before persisting)
+- Should removing a subscription also clean up cached backtests for that subscription?

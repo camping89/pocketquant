@@ -451,11 +451,13 @@ Response: OptimizationResultDTO
 
 **Request:** GET `/api/v1/backtest/strategy/{strategy_id}`
 
+> Note: Path param `strategy_id` semantically holds a template code (from the YAML loader). The underlying handler maps this to `list_by_strategy_code()` internally. Phase 2 did not rename the backtest API surface — only its entity fields use the `subscription_id` for per-subscription instances.
+
 **Pipeline:**
 ```
 ListBacktestsQuery(strategy_id)
   ↓
-Query: BacktestRepository.list_by_strategy(strategy_id)
+Query: BacktestRepository.list_by_strategy_code(strategy_id)
   └─ MongoDB query with pagination
   ↓
 Response: List[BacktestResultDTO]
@@ -493,14 +495,15 @@ Response: LoadStrategyResponse(strategy_id, name, status='loaded')
 
 ### 20. StartStrategyHandler (StartStrategyCommand)
 
-**Request:** POST `/api/v1/strategies/{id}/start`
+**Request:** POST `/api/v1/subscriptions/{sub_id}/start`
 
 **Pipeline:**
 ```
-StartStrategyCommand(strategy_id)
+StartStrategyCommand(subscription_id)
   ↓
 Handler.handle():
-  1. Fetch: StrategyAppService.get_strategy(strategy_id)
+  1. Fetch: StrategyAppService.get_strategy(subscription_id)
+     └─ Per-subscription strategy instance
   ↓
   2. Connect broker: IBroker.connect()
      └─ OKXBroker or PaperBroker
@@ -508,7 +511,7 @@ Handler.handle():
   3. Initialize: await strategy.on_start()
      └─ Strategy can subscribe to quotes, set initial state
   ↓
-  4. Set running: StrategyAppService.set_running(strategy_id, True)
+  4. Set running: StrategyAppService.set_running(subscription_id, True)
   ↓
   5. Start listening: Subscribe to BarCompletedEvent, QuoteReceivedEvent
   ↓
@@ -519,11 +522,11 @@ Response: StrategyStatusDTO(status='running')
 
 ### 21. StopStrategyHandler (StopStrategyCommand)
 
-**Request:** POST `/api/v1/strategies/{id}/stop`
+**Request:** POST `/api/v1/subscriptions/{sub_id}/stop`
 
 **Pipeline:**
 ```
-StopStrategyCommand(strategy_id)
+StopStrategyCommand(subscription_id)
   ↓
 Handler.handle():
   1. Call: await strategy.on_stop()
@@ -533,30 +536,30 @@ Handler.handle():
   ↓
   3. Unsubscribe: Remove BarCompletedEvent subscriber
   ↓
-  4. Set running: StrategyAppService.set_running(strategy_id, False)
+  4. Set running: StrategyAppService.set_running(subscription_id, False)
   ↓
 Response: StrategyStatusDTO(status='stopped')
 ```
 
 ---
 
-### 22. GetStrategyHandler (GetStrategyQuery)
+### 22. GetStrategyHandler (GetStrategyQuery) — template metadata
 
-**Request:** GET `/api/v1/strategies/{strategy_id}`
+**Request:** GET `/api/v1/strategies/{strategy_code}`
 
 **Pipeline:**
 ```
-GetStrategyQuery(strategy_id)
+GetStrategyQuery(strategy_code)
   ↓
-Fetch: StrategyAppService.get_strategy(strategy_id)
-  └─ In-memory lookup by ID
+Lookup: STRATEGY_REGISTRY.get(strategy_code)
+  └─ Returns the registered template class or None
   ↓
-Response: StrategyResponse(id, name, status, config)
+Response: {strategy_code, class_name, description} or 404
 ```
 
 ---
 
-### 23. GetStrategiesHandler (GetStrategiesQuery)
+### 23. GetStrategiesHandler (GetStrategiesQuery) — list templates
 
 **Request:** GET `/api/v1/strategies/`
 
@@ -564,176 +567,174 @@ Response: StrategyResponse(id, name, status, config)
 ```
 GetStrategiesQuery()
   ↓
-Fetch: StrategyAppService.list_all()
-  └─ In-memory loaded strategies
+Iterate: STRATEGY_REGISTRY.keys()
   ↓
-Serialize: list[StrategyResponse](id, name, status)
-  ↓
-Response: list[StrategyResponse]
+Response: list[{strategy_code}]
 ```
 
 ---
 
-### 24. AddSymbolHandler (AddSymbolCommand) [NEW]
+### 24. AddSymbolHandler (AddSymbolCommand) — create subscription
 
-**Request:** POST `/api/v1/strategies/{strategy_id}/symbols`
+**Request:** POST `/api/v1/strategies/{strategy_code}/subscriptions`
 
 **Pipeline:**
 ```
-AddSymbolCommand(strategy_id, symbol, interval)
+AddSymbolCommand(strategy_id=strategy_code, symbol, interval)
   ↓
 Handler.handle():
-  1. Validate: StrategyAppService.get_strategy(strategy_id) exists
+  1. Validate: TrackedSymbolRepository.exists(symbol) → 404 SYMBOL_NOT_TRACKED if missing
   ↓
-  2. Compute ID: subscription_id = sha256(f"{strategy_id}:{symbol}:{interval}")[:16]
+  2. Resolve template: STRATEGY_REGISTRY.get(strategy_code) → 404 if unknown
   ↓
-  3. Check Duplicate: StrategySubscriptionRepository.find_by_id(subscription_id)
-     └─ If exists, return 409 Conflict → mapped to 400 DomainError
+  3. Compute sub_id: Subscription.deterministic_id(strategy_code, symbol, interval)
+     └─ sha256(f"{strategy_code}|{symbol.upper()}|{interval_val}")[:16]
   ↓
-  4. Create: StrategySubscription(strategy_id, symbol, interval, subscription_id)
-     └─ symbol is composite e.g. BTCUSDT:BINANCE
+  4. Auto-load instance: if StrategyAppService.get_strategy(sub_id) is None
+     └─ StrategyAppService.load_strategy(StrategyConfig(id=sub_id, name=strategy_code, ...))
   ↓
-  5. Persist: StrategySubscriptionRepository.save(subscription)
+  5. Persist: SubscriptionRepository.add(Subscription(id=sub_id, strategy_code, symbol, interval))
+     └─ DuplicateKeyError → SubscriptionAlreadyExistsError (400 DomainError)
   ↓
-Response: SubscriptionDTO(subscription_id, strategy_id, symbol, interval)
+Response: {id, strategy_code, symbol, interval, created_at}
 ```
 
 **Side Effects:**
-- MongoDB: document inserted into `strategy_subscriptions` collection
+- MongoDB: document inserted into `subscriptions` collection
+- In-process: new IStrategy instance loaded into `StrategyAppService._strategies[sub_id]`
 
 ---
 
-### 25. ListSymbolsHandler (ListSymbolsQuery) [NEW]
+### 25. ListSymbolsHandler (ListSymbolsQuery) — list subscriptions
 
-**Request:** GET `/api/v1/strategies/{strategy_id}/symbols`
+**Request:** GET `/api/v1/subscriptions/?strategy_code=...` (filter optional)
 
 **Pipeline:**
 ```
-ListSymbolsQuery(strategy_id)
+ListSymbolsQuery(strategy_code: str | None)
   ↓
-Validate: StrategyAppService.get_strategy(strategy_id) exists
+Fetch: SubscriptionRepository.list_all() if filter None
+       else SubscriptionRepository.list_by_strategy_code(strategy_code)
+  └─ MongoDB query: subscriptions {strategy_code} (index: ix_subscriptions_strategy_code)
   ↓
-Fetch: StrategySubscriptionRepository.find_by_strategy_id(strategy_id)
-  └─ MongoDB query on `strategy_subscriptions` index: strategy_id
+Enrich (single batched call): BacktestRepository.get_subscription_statuses([sub_ids])
   ↓
-Serialize: list[SubscriptionDTO]
+Compute is_running per sub: StrategyAppService.get_strategy(sub.id).is_running
   ↓
-Response: list[SubscriptionDTO]
+Response: list[{id, strategy_code, symbol, interval, created_at, is_running, backtest}]
 ```
 
 ---
 
-### 26. RemoveSymbolHandler (RemoveSymbolCommand) [NEW]
+### 26. RemoveSymbolHandler (RemoveSymbolCommand) — delete one subscription
 
-**Request:** DELETE `/api/v1/strategies/{strategy_id}/symbols/{sub_id}`
+**Request:** DELETE `/api/v1/subscriptions/{sub_id}`
 
 **Pipeline:**
 ```
-DeleteSubscriptionCommand(strategy_id, subscription_id)
+RemoveSymbolCommand(sub_id)
   ↓
 Handler.handle():
-  1. Validate: StrategySubscriptionRepository.find_by_id(subscription_id)
+  1. Cancel scheduled job: JobScheduler.remove_job(f"bt:{sub_id}") (suppress errors)
   ↓
-  2. Delete subscription: StrategySubscriptionRepository.delete_by_id(subscription_id)
+  2. Unload runtime instance: StrategyAppService.unload_strategy(sub_id) if loaded
   ↓
-  3. Delete cached backtest: BacktestRepository.delete_by_subscription_id(subscription_id)
-     └─ Uses sparse unique index on `subscription_id`
+  3. Delete cached backtest: BacktestRepository.delete_by_subscription(sub_id)
   ↓
-Response: DeletionDTO(deleted=True, subscription_id)
+  4. Delete subscription: SubscriptionRepository.delete(sub_id)
+  ↓
+Response: 204 No Content
 ```
 
 **Side Effects:**
-- MongoDB: document deleted from `strategy_subscriptions`
-- MongoDB: backtest document with matching `subscription_id` deleted (if exists)
+- MongoDB: document deleted from `subscriptions`
+- MongoDB: backtest doc with `_id=sub_id` in `backtest_runs` deleted (if exists)
+- APScheduler: any pending `bt:{sub_id}` job cancelled
+- In-process: `StrategyAppService._strategies[sub_id]` and friends popped
 
 ---
 
-### 27. RunAllBacktestsHandler (RunAllBacktestsCommand) [NEW]
+### 27. RunAllBacktestsHandler (RunAllBacktestsCommand) — fan-out backtests
 
-**Request:** POST `/api/v1/strategies/{strategy_id}/backtest/run-all`
+**Request:** POST `/api/v1/strategies/{strategy_code}/run-all-backtests`
 
 **Pipeline:**
 ```
-RunAllBacktestsCommand(strategy_id)
+RunAllBacktestsCommand(strategy_id=strategy_code)
   ↓
 Handler.handle():
-  1. Validate: StrategyAppService.get_strategy(strategy_id) exists
+  1. Fetch subscriptions: SubscriptionRepository.list_by_strategy_code(strategy_code)
+     └─ 404 NotFoundError if no subscriptions exist for the template
   ↓
-  2. Load strategy YAML: StrategyLoader.load_yaml(strategy_id)
-  ↓
-  3. Fetch subscriptions: StrategySubscriptionRepository.find_by_strategy_id(strategy_id)
-  ↓
-  4. For each subscription (parallel or sequential):
+  2. For each subscription:
      └─ JobScheduler.add_one_off_job(
-          run_subscription_backtest,
-          args=(strategy_id, subscription_id),
-          trigger=DateTrigger(run_date=now)
+          "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest",
+          job_id=f"bt:{sub.id}",
+          subscription_id=sub.id,
         )
   ↓
-Response: RunAllDTO(job_ids=[...], count=N)
+Response: {job_ids: [...]} (HTTP 202)
 ```
 
-**Job Worker:** `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest(strategy_id, subscription_id)`
-- Loads bars for (symbol, exchange, interval)
-- Executes backtest via BacktestAppService
-- Synthetic strategy id: `f"{strategy_id}::bt::{subscription_id}"` (prevents live strategy clobber)
-- Persists to `backtests` collection with `_id=subscription_id` (upsert)
-- Marks doc `status='completed'` or `status='failed'`
-- Re-checks subscription exists before persist (TOCTOU protection)
+**Job Worker:** `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest(subscription_id)`
+- Resolve subscription → `sub.strategy_code`, `sub.symbol`, `sub.interval`
+- `BacktestRepository.upsert_status(sub_id, strategy_code=..., status='running')`
+- Load synthetic instance under `f"{strategy_code}::bt::{sub_id}"` (concurrency-safe)
+- `BacktestAppService.run(BacktestConfig(strategy_code, symbol, interval, ...))` (PaperBroker)
+- TOCTOU recheck: skip persist if subscription was deleted mid-run
+- Persist via `BacktestRepository.save_for_subscription(sub_id, result)` → `_id = sub_id`
+- Maps `result.status`: `'failed' → 'failed' + error_msg`; otherwise `'completed'`
 
 **Side Effects:**
-- APScheduler: one-off job enqueued per subscription
-- MongoDB: async backtest documents created/updated with `status='running'`
+- APScheduler: one-off job enqueued per subscription (`apscheduler_jobs` collection)
+- MongoDB `backtest_runs`: status doc created/updated with `status='running'` then terminal status
 
 ---
 
-### 28. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery) [NEW]
+### 28. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery)
 
-**Request:** GET `/api/v1/strategies/{strategy_id}/symbols/{sub_id}/backtest`
+**Request:** GET `/api/v1/subscriptions/{sub_id}/backtest`
 
 **Pipeline:**
 ```
-GetSubscriptionBacktestQuery(strategy_id, subscription_id)
+GetSubscriptionBacktestQuery(sub_id)
   ↓
-Validate: Subscription exists (StrategySubscriptionRepository)
+Fetch: BacktestRepository.find_doc_by_subscription(sub_id)
+  └─ MongoDB query: backtest_runs {_id: sub_id} (sparse unique on subscription_id)
+  └─ Returns raw doc including status='running'|'failed'|'completed'
   ↓
-Fetch: BacktestRepository.find_by_subscription_id(subscription_id)
-  └─ MongoDB query on sparse index: subscription_id
-  └─ Returns cached backtest result (if completed)
-  ↓
-Serialize: BacktestResultDTO(status, metrics, trades, last_run_at)
-  ↓
-Response: BacktestResultDTO | NotFoundDTO (if not yet run)
+Response: raw doc | 404 NotFoundError ("trigger a run via run-all-backtests first")
 ```
 
 ---
 
-### 29. DeleteStrategyHandler (DeleteStrategyCommand) [NEW]
+### 29. DeleteStrategyHandler (DeleteStrategyCommand) — cascade by template
 
-**Request:** DELETE `/api/v1/strategies/{strategy_id}`
+**Request:** DELETE `/api/v1/strategies/{strategy_code}`
 
 **Pipeline:**
 ```
-DeleteStrategyCommand(strategy_id)
+DeleteStrategyCommand(strategy_id=strategy_code)
   ↓
 Handler.handle():
-  1. Validate: StrategyAppService.get_strategy(strategy_id)
+  1. Fetch subs: SubscriptionRepository.list_by_strategy_code(strategy_code)
   ↓
-  2. Unload strategy: StrategyAppService.unload(strategy_id)
-     └─ Stop if running, cleanup
+  2. For each sub: cancel JobScheduler job f"bt:{sub.id}" + unload instance from StrategyAppService
   ↓
-  3. Delete subscriptions: StrategySubscriptionRepository.delete_by_strategy_id(strategy_id)
+  3. Delete cached backtests: BacktestRepository.delete_by_strategy_code(strategy_code)
   ↓
-  4. Delete backtest_runs: BacktestRepository.delete_by_strategy_id(strategy_id)
-     └─ Cascade via strategy_id index
+  4. Delete subscriptions: SubscriptionRepository.delete_by_strategy_code(strategy_code)
   ↓
-Response: DeletionDTO(deleted=True, strategy_id)
+  5. Also unload any legacy template-keyed instance (pre-refactor data)
+  ↓
+Response: 204 No Content
 ```
 
 **Side Effects:**
-- In-memory: strategy unloaded from StrategyAppService
-- MongoDB: all `strategy_subscriptions` docs with matching strategy_id deleted
-- MongoDB: all `backtests` docs with matching strategy_id deleted (cascade)
+- In-memory: every `sub.id`-keyed instance for this template unloaded from StrategyAppService
+- MongoDB `subscriptions`: all docs with matching `strategy_code` deleted
+- MongoDB `backtest_runs`: all docs with matching `strategy_code` deleted
+- APScheduler: all `bt:{sub.id}` jobs for this template cancelled
 
 ---
 
@@ -748,7 +749,7 @@ Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 30. ListOrdersHandler:    GET /api/v1/trading/orders                  → list[OrderDTO]
 31. GetOrderHandler:      GET /api/v1/trading/orders/{order_id}       → OrderDTO
 32. ListPositionsHandler: GET /api/v1/trading/positions               → list[PositionDTO]
-33. GetPositionHandler:   GET /api/v1/trading/positions/{strategy_id} → PositionDTO
+33. GetPositionHandler:   GET /api/v1/trading/positions/{subscription_id} → PositionDTO
 ```
 
 **Pipelines:**
@@ -756,7 +757,7 @@ Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 30. ListOrdersHandler:    OrderAppService.list_all() → list[dict]
 31. GetOrderHandler:      OrderAppService.get_by_id(order_id) → dict
 32. ListPositionsHandler: PositionAppService.list_all() → list[dict]
-33. GetPositionHandler:   PositionAppService.get_by_strategy_id(strategy_id) → dict
+33. GetPositionHandler:   PositionAppService.get_async(subscription_id) → dict
 ```
 
 ---

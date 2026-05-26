@@ -62,7 +62,7 @@ Current note: `pocketquant-web` is now part of the repo and sits alongside the b
   ║  PERSISTENCE  (src/persistence/)                      ║
   ║  Database(MongoDB)  Cache(Redis)  8 Repositories     ║
   ║  Bar · Order · Position · Backtest · Optimization    ║
-  ║  Symbol · SyncStatus · StrategySubscription           ║
+  ║  Symbol · SyncStatus · Subscription                   ║
   ╚══════════╤══════════════════╤═════════════════════════╝
              │                  │
              ▼                  ▼
@@ -91,6 +91,7 @@ Current note: `pocketquant-web` is now part of the repo and sits alongside the b
   │   ├── order/          OrderAggregate, OrderStatus/Type/Side enums, 5 events
   │   ├── position/       PositionAggregate, PositionSide enum, PnL VO, 3 events
   │   ├── symbol/         Symbol entity (flattened from SymbolAggregate)
+  │   │   (Note: Subscription entity actually lives in pocketquant-trading/domain/subscription.py)
   │   ├── sync_status/    SyncStatus entity
   │   └── backtest/       BacktestResult, OptimizationResult entities
   │
@@ -131,7 +132,7 @@ graph TB
 
     subgraph DOMAIN["Domain Layer — Pure Logic, No I/O"]
         subgraph TOPLEVEL["Top-Level (collection-backed)"]
-            BarEnt["Bar · Symbol · SyncStatus · BacktestResult · StrategySubscription"]
+            BarEnt["Bar · Symbol · SyncStatus · BacktestResult · Subscription"]
             Aggregates["OrderAggregate · PositionAggregate"]
         end
         subgraph CONCEPTS["Concepts (non-persisted)"]

@@ -1,8 +1,12 @@
 # Monorepo Migration — Notes
 
-**Date:** 2026-03-21 | **Last reviewed:** 2026-05-25 | **Status:** All migration items resolved; 2 deferred YAGNI notes remain
+**Date:** 2026-03-21 | **Last reviewed:** 2026-05-26 | **Status:** All migration items resolved; boot migration for strategy_id refactor shipped 2026-05-26; 2 deferred YAGNI notes remain
 
 All 7 migration concerns resolved during cleanup. See git history for details.
+
+## Migration Complete (2026-05-26)
+
+**Strategy ID Refactor:** 7 commits (95c64f8..c68c02c) shipped. Mongo collection renamed `strategy_subscriptions` → `subscriptions`, fields `strategy_id` → `strategy_code` (subscriptions) and `strategy_id` → `subscription_id` (orders/positions). Boot migration `migrate_strategy_id_fields()` idempotent at startup (before `ensure_all_indexes`). Subscription hash deterministic IDs stable (no change). See `docs/code-standards.md` → "Strategy ID Disambiguation" and `docs/strategy-lifecycle.md` for field mapping tables.
 
 ## Remaining Notes (Deferred — YAGNI)
 
