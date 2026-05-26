@@ -432,7 +432,7 @@ class PaperBroker(IBroker):
         symbol_upper = order.symbol.upper()
         if symbol_upper in self._current_prices:
             return self._current_prices[symbol_upper]
-        position_key = f"{order.strategy_id}:{order.symbol}"
+        position_key = f"{order.subscription_id}:{order.symbol}"
         if position_key in self._positions:
             pos = self._positions[position_key]
             if pos.current_price > 0:
@@ -466,7 +466,7 @@ class PaperBroker(IBroker):
 
     def _execute_fill(self, order: OrderAggregate, fill_price: float) -> None:
         """Update balance and positions based on fill. MUST be called under lock."""
-        position_key = f"{order.strategy_id}:{order.symbol}"
+        position_key = f"{order.subscription_id}:{order.symbol}"
         order_value = fill_price * order.quantity
 
         if order.side == OrderSide.BUY:
@@ -480,7 +480,7 @@ class PaperBroker(IBroker):
                     self._balance += pos.realized_pnl
             else:
                 self._positions[position_key] = PositionAggregate.open(
-                    strategy_id=order.strategy_id,
+                    subscription_id=order.subscription_id,
                     symbol=order.symbol,
                     side=PositionSide.LONG,
                     entry_price=fill_price,
@@ -499,7 +499,7 @@ class PaperBroker(IBroker):
                     pos.add_quantity(order.quantity, fill_price)
             else:
                 self._positions[position_key] = PositionAggregate.open(
-                    strategy_id=order.strategy_id,
+                    subscription_id=order.subscription_id,
                     symbol=order.symbol,
                     side=PositionSide.SHORT,
                     entry_price=fill_price,
@@ -661,7 +661,7 @@ class PaperBroker(IBroker):
         """Build a synthetic market exit + emit SUBMITTED→FILLED event pair."""
         fill_price = self._apply_slippage(trigger_price, exit_side)
         exit_order = OrderAggregate.create(
-            strategy_id=pos.strategy_id,
+            subscription_id=pos.subscription_id,
             symbol=pos.symbol,
             side=exit_side,
             order_type=OrderType.MARKET,

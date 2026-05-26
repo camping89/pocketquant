@@ -140,7 +140,7 @@ class HitNRun2Strategy(IStrategy):
             direction=direction,
             confidence=0.7,
             timestamp=timestamp,
-            strategy_id=self.id,
+            subscription_id=self.id,
             entry_price=close,
             stop_loss_price=sl,
             take_profit_price=tp,

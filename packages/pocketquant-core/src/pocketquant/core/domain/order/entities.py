@@ -29,7 +29,7 @@ class OrderAggregate(BaseModel):
     """
 
     id: str
-    strategy_id: str
+    subscription_id: str
     symbol: str
     side: OrderSide
     order_type: OrderType
@@ -58,7 +58,7 @@ class OrderAggregate(BaseModel):
     @classmethod
     def create(
         cls,
-        strategy_id: str,
+        subscription_id: str,
         symbol: str,
         side: OrderSide,
         order_type: OrderType,
@@ -78,7 +78,7 @@ class OrderAggregate(BaseModel):
 
         return cls(
             id=generate_id_str(),
-            strategy_id=strategy_id,
+            subscription_id=subscription_id,
             symbol=symbol,
             side=side,
             order_type=order_type,
@@ -98,7 +98,7 @@ class OrderAggregate(BaseModel):
         self._events.append(
             OrderSubmittedEvent(
                 order_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 symbol=self.symbol,
                 side=self.side,
                 quantity=self.quantity,
@@ -131,7 +131,7 @@ class OrderAggregate(BaseModel):
         self._events.append(
             OrderPartiallyFilledEvent(
                 order_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 filled_quantity=quantity,
                 filled_price=price,
                 remaining_quantity=self.quantity - self.filled_quantity,
@@ -166,7 +166,7 @@ class OrderAggregate(BaseModel):
         self._events.append(
             OrderFilledEvent(
                 order_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 symbol=self.symbol,
                 side=self.side,
                 filled_quantity=self.quantity,
@@ -186,7 +186,7 @@ class OrderAggregate(BaseModel):
         self._events.append(
             OrderCancelledEvent(
                 order_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 reason=reason,
             )
         )
@@ -200,7 +200,7 @@ class OrderAggregate(BaseModel):
         self._events.append(
             OrderRejectedEvent(
                 order_id=self.id,
-                strategy_id=self.strategy_id,
+                subscription_id=self.subscription_id,
                 reason=reason,
             )
         )
@@ -227,7 +227,7 @@ class OrderAggregate(BaseModel):
         """Serialize to MongoDB document."""
         return {
             "_id": self.id,
-            "strategy_id": self.strategy_id,
+            "subscription_id": self.subscription_id,
             "symbol": self.symbol,
             "side": self.side.value,
             "order_type": self.order_type.value,
@@ -247,7 +247,7 @@ class OrderAggregate(BaseModel):
         """Reconstruct from MongoDB document."""
         return cls(
             id=doc["_id"],
-            strategy_id=doc["strategy_id"],
+            subscription_id=doc["subscription_id"],
             symbol=doc["symbol"],
             side=OrderSide(doc["side"]),
             order_type=OrderType(doc["order_type"]),
