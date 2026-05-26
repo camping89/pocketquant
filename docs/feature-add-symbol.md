@@ -66,21 +66,23 @@ HTTP Route → Command → Handler → Domain → Repository → MongoDB
 
 | File | Vai trò |
 |------|---------|
-| `packages/pocketquant-trading/.../strategy/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_id}/symbols`, build `AddSymbolCommand`, gửi qua Mediator |
-| `packages/pocketquant-trading/.../strategy/add_symbol/handler.py` | Validate strategy loaded → tạo `StrategySubscription` → persist |
-| `packages/pocketquant-trading/.../domain/subscription.py` | Aggregate `StrategySubscription` với deterministic ID |
-| `packages/pocketquant-trading/.../persistence/strategy_subscription_repository.py` | Mongo upsert + duplicate detection |
+| `packages/pocketquant-trading/.../strategy/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, build `AddSymbolCommand`, gửi qua Mediator |
+| `packages/pocketquant-trading/.../strategy/add_symbol/handler.py` | Validate strategy loaded → tạo `Subscription` → persist |
+| `packages/pocketquant-trading/.../domain/subscription.py` | Aggregate `Subscription` với deterministic ID |
+| `packages/pocketquant-trading/.../persistence/subscription_repository.py` | Mongo upsert + duplicate detection (collection: `subscriptions`, renamed from `strategy_subscriptions` in 2026-05-26) |
 
 ### Deterministic ID
 
 ```
-subscription_id = sha256(f"{strategy_id}|{symbol}|{exchange}|{interval}")[:16]
+subscription_id = sha256(f"{strategy_code}|{symbol}|{interval}")[:16]
 ```
 
 **Lý do:**
 - Idempotency — gọi 2 lần cùng combo collide ở Mongo unique index
 - Không cần distributed lock, business logic không cần check trước
 - DB constraint enforce duplicate detection
+
+**Lưu ý:** (2026-05-26) Thay đổi parameter name `strategy_id` → `strategy_code` nhưng hash input vẫn là value, vì vậy existing subscription IDs không đổi.
 
 ### Error mapping
 
@@ -101,8 +103,8 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 │ User clicks  │
 │   "Add"      │
 └──────┬───────┘
-       │ POST /api/v1/strategies/{id}/symbols
-       │ body: {symbol, exchange, interval}
+       │ POST /api/v1/strategies/{strategy_code}/subscriptions
+       │ body: {symbol, interval}
        ▼
 ┌──────────────────────┐
 │ FastAPI route        │
@@ -115,7 +117,7 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 │                      │    │ .get_strategy()     │
 │                      │◀───│ → None? raise 404   │
 └──────┬───────────────┘    └─────────────────────┘
-       │ build StrategySubscription
+       │ build Subscription
        │ id = sha256(...)[:16]
        ▼
 ┌──────────────────────────┐    ┌─────────────────┐
@@ -123,7 +125,7 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 │ .save()                  │    │ unique idx fail │
 │                          │◀───│ → 400           │
 └──────┬───────────────────┘    └─────────────────┘
-       │ 201 + subscription
+       │ 201 + subscription (includes is_running)
        ▼
 ┌──────────────────────┐
 │ TanStack Query       │

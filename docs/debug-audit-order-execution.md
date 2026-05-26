@@ -37,7 +37,7 @@
 
 ### Step 2 — Start Strategy
 
-**API:** `POST /api/v1/strategy/{strategy_id}/start`
+**API:** `POST /api/v1/subscriptions/{sub_id}/start`
 
 - `OKXBroker.connect()` initializes OKX SDK (`Trade.TradeAPI`, `Account.AccountAPI`). `PaperBroker.connect()` is a no-op.
 - `EventRegistry` scans `StrategyAppService` for `@event_handler` methods and subscribes them to `EventBus`: `_on_bar_completed` → `BarCompletedEvent`; `_on_quote_received` → `QuoteReceivedEvent`. `PositionAppService._on_order_filled` → `OrderFilledEvent`.
@@ -88,14 +88,14 @@
 
 ### Step 6 — Fill → Position Update
 
-- `OrderFilledEvent` carries: order ID, strategy ID, symbol, exchange, side, filled qty, filled price.
+- `OrderFilledEvent` carries: order ID, subscription ID, symbol, side, filled qty, filled price.
 - `PositionAppService._on_order_filled()` (under lock):
   - No position → `PositionAggregate.open()` → `PositionOpenedEvent`.
   - Same direction → `add_quantity()`, updates weighted-average entry price.
   - Opposite direction → `reduce_quantity()`, realizes P&L; if fully closed → `position.close()` → `PositionClosedEvent`.
-  - Persists to MongoDB (`positions` collection) via `trading/persistence/position_repository.py`.
+  - Persists to MongoDB (`positions` collection) via `persistence/position_repository.py`.
 
-**Expected:** MongoDB `positions` doc created/updated with correct entry price. **Unexpected:** no position doc → check `OrderFilledEvent` was published; wrong P&L → verify side mapping.
+**Expected:** MongoDB `positions` doc created/updated with correct entry price and `subscription_id` field. **Unexpected:** no position doc → check `OrderFilledEvent` was published; wrong P&L → verify side mapping.
 
 ---
 
@@ -106,9 +106,9 @@ Check all three stores are consistent:
 ```bash
 # MongoDB — order FILLED, position OPEN
 mongosh "mongodb://localhost:52017"
-db.orders.find({strategy_id: "your-strategy-id"}).sort({created_at: -1}).limit(5)
-db.positions.find({strategy_id: "your-strategy-id"})
-db.bars.find({symbol: "BTC-USDT", exchange: "OKX"}).sort({datetime: -1}).limit(5)
+db.orders.find({subscription_id: "your-sub-id"}).sort({created_at: -1}).limit(5)
+db.positions.find({subscription_id: "your-sub-id"})
+db.bars.find({symbol: "BTC-USDT:OKX"}).sort({datetime: -1}).limit(5)
 ```
 
 ```bash
@@ -118,7 +118,7 @@ KEYS quote:*
 KEYS bar:*
 ```
 
-**Expected:** order `status=FILLED`, position `status=OPEN` with correct `entry_price`; Redis bar keys only for current incomplete bars. **Unexpected:** see [Appendix B](#appendix-b-diagnostic-commands).
+**Expected:** order `status=FILLED`, position `status=OPEN` with correct `entry_price`; subscription fields populated; Redis bar keys only for current incomplete bars. **Unexpected:** see [Appendix B](#appendix-b-diagnostic-commands).
 
 ---
 
@@ -161,16 +161,16 @@ In-memory state (loaded strategies, brokers, in-flight orders) is lost on restar
 mongosh "mongodb://localhost:52017"
 
 # Full order detail
-db.orders.findOne({strategy_id: "your-id"}, {_id:0})
+db.orders.findOne({subscription_id: "your-sub-id"}, {_id:0})
 
 # Orders stuck in non-terminal state
 db.orders.find({status: {$in: ["PENDING","SUBMITTED","PARTIALLY_FILLED"]}})
 
 # Position P&L check
-db.positions.findOne({strategy_id: "your-id"}, {entry_price:1, realized_pnl:1, unrealized_pnl:1, status:1, _id:0})
+db.positions.findOne({subscription_id: "your-sub-id"}, {entry_price:1, realized_pnl:1, unrealized_pnl:1, status:1, _id:0})
 
-# Last 10 bars for a symbol
-db.bars.find({symbol:"BTC-USDT", exchange:"OKX", interval:"1m"}).sort({datetime:-1}).limit(10)
+# Last 10 bars for a symbol (composite symbol format: CODE:EXCHANGE)
+db.bars.find({symbol:"BTC-USDT:OKX", interval:"1m"}).sort({datetime:-1}).limit(10)
 ```
 
 ### Redis Inspection
@@ -178,9 +178,9 @@ db.bars.find({symbol:"BTC-USDT", exchange:"OKX", interval:"1m"}).sort({datetime:
 ```bash
 redis-cli -p 53679   # or $REDIS_PORT
 
-KEYS quote:*         # cached latest quotes (should have entries if feed running)
+KEYS quote:*         # cached latest quotes (should have entries if feed running; composite symbol format)
 KEYS bar:*           # current incomplete bars (cleared when bar completes)
-GET quote:BTC-USDT:OKX
+GET quote:BTC-USDT:OKX    # composite symbol as key
 TTL quote:BTC-USDT:OKX
 ```
 

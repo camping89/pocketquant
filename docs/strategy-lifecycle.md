@@ -13,6 +13,10 @@ The PocketQuant strategy model is **template-based**:
   `IStrategy` instance keyed by the subscription's deterministic ID
   — `packages/pocketquant-trading/.../trading/domain/subscription.py:24`
 
+**Key terminology (post 2026-05-26):**
+- `strategy_code`: the template name (e.g., `"hitnrun2"`), used to identify which strategy class to instantiate
+- `subscription_id`: the deterministic 16-char ID of a live subscription instance (e.g., `"a1b2c3d4e5f6g7h8"`)
+
 That distinction drives everything below.
 
 ---
@@ -25,23 +29,26 @@ Two creation paths exist:
 
 #### 1.1 Subscription-based (the FE path, recommended)
 
-`POST /api/v1/strategies/{template_id}/symbols` with body `{symbol, interval}`.
+`POST /api/v1/strategies/{strategy_code}/subscriptions` with body `{symbol, interval}`.
 
 - Route: `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py:22`
 - Handler: `.../add_symbol/handler.py:35`
 - Flow:
   1. Validate symbol is tracked — `TrackedSymbolRepository.exists()`; otherwise 404
      `SYMBOL_NOT_TRACKED`.
-  2. Lookup template class in `STRATEGY_REGISTRY[template_id]`; 404 if missing.
-  3. Compute `sub_id = sha256(f"{template_id}|{symbol}|{interval}")[:16]`
+  2. Lookup template class in `STRATEGY_REGISTRY[strategy_code]`; 404 if missing.
+  3. Compute `sub_id = sha256(f"{strategy_code}|{symbol}|{interval}")[:16]`
      — deterministic, idempotent.
      `packages/pocketquant-trading/.../trading/domain/subscription.py:44`
   4. If no in-memory `IStrategy` exists for `sub_id`, instantiate one through
-     `StrategyAppService.load_strategy(StrategyConfig(id=sub_id, name=template_id,
+     `StrategyAppService.load_strategy(StrategyConfig(id=sub_id, name=strategy_code,
      symbol=symbol, interval=interval), strategy_class=...)`.
-  5. Persist `StrategySubscription` to MongoDB `strategy_subscriptions`. Mongo
-     unique `_id=sub_id` enforces dedup → `SubscriptionAlreadyExistsError` (400).
-  6. Returns `{id, strategy_id, symbol, interval, created_at}` with HTTP 201.
+  5. Persist `Subscription` to MongoDB `subscriptions` collection (renamed from
+     `strategy_subscriptions`). Mongo unique `_id=sub_id` enforces dedup
+     → `SubscriptionAlreadyExistsError` (400).
+  6. Returns `{id, strategy_code, symbol, interval, created_at, is_running}` with HTTP 201.
+     (The new `is_running` field is computed from `StrategyAppService.get_strategy(sub.id).is_running`
+     and fixes the bug where FE mistakenly used backtest status to display live state.)
 
 FE entry point: `+ New` button in left sidebar opens `NewSubscriptionDialog`
 which posts via `useCreateSubscription` mutation
@@ -59,17 +66,18 @@ and `packages/pocketquant-web/src/hooks/use-strategy-mutations.ts:71`.
 - The README notes: `YAML strategy loading via POST /api/v1/strategies/load
   is still supported, but no example files are shipped in strategies/examples/`
   — `pocketquant/README.md:129`.
-- This path does NOT create a `StrategySubscription` row in Mongo; the loaded
+- This path does NOT create a `Subscription` row in Mongo; the loaded
   instance disappears on the next restart. Use only for ad-hoc loading.
 
 ### 2. How to update or change config
 
 There is **no edit endpoint**. To change a subscription's config:
 
-1. `DELETE /api/v1/strategies/{template_id}/symbols/{sub_id}` to remove the
-   subscription. Cascade-deletes the cached backtest and unloads the in-memory
-   instance — `packages/pocketquant-trading/.../handlers/strategy/remove_symbol/handler.py:29`.
-2. Re-create with the new `(symbol, interval)` pair via `add_symbol` (§1.1).
+1. `DELETE /api/v1/subscriptions/{sub_id}` to remove the subscription.
+   Cascade-deletes the cached backtest and unloads the in-memory instance
+   — `packages/pocketquant-trading/.../handlers/strategy/remove_symbol/handler.py:29`.
+2. Re-create with the new `(symbol, interval)` pair via POST
+   `/api/v1/strategies/{strategy_code}/subscriptions` (§1.1).
 
 To change strategy-level parameters (e.g. `entry_lookback_bars`):
 
@@ -90,7 +98,7 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
 
 **Backtest rerun** (the only "rerun" exposed today):
 
-`POST /api/v1/strategies/{template_id}/backtest/run-all` → 202 Accepted.
+`POST /api/v1/strategies/{strategy_code}/run-all-backtests` → 202 Accepted.
 
 - Route: `packages/pocketquant-trading/.../handlers/strategy/run_all_backtests/route.py:11`
 - Handler: `.../run_all_backtests/handler.py:26`
@@ -105,14 +113,13 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
 
 **Live trading start/stop** (separate from backtests):
 
-- `POST /api/v1/strategies/{sub_id}/start` — route
+- `POST /api/v1/subscriptions/{sub_id}/start` — route
   `packages/pocketquant-trading/.../handlers/strategy/start/route.py:11`,
   handler delegates to `StrategyAppService.start_strategy(sub_id)` which calls
   `IStrategy.on_start()` and connects the broker if needed.
-- `POST /api/v1/strategies/{sub_id}/stop` — symmetric stop, calls `on_stop()`.
-- Note: `sub_id` is what the FE calls `strategyId` here because each
-  subscription has its own loaded instance. The handler takes whatever ID was
-  passed to `load_strategy(config)` — see §1.1 step 4.
+- `POST /api/v1/subscriptions/{sub_id}/stop` — symmetric stop, calls `on_stop()`.
+- Note: `sub_id` is the subscription's deterministic ID (e.g., `"a1b2c3d4e5f6g7h8"`).
+  The handler takes whatever ID was passed to `load_strategy(config)` — see §1.1 step 4.
 
 ### 4. How to see it on the UI
 
@@ -123,22 +130,25 @@ when the FastAPI serves the built bundle). The strategies dashboard is a
 
 | Pane | Component | Purpose |
 |---|---|---|
-| Left (240px) | `StrategyListSidebar` | Lists all subscriptions across all templates. `+ New` button opens `NewSubscriptionDialog`. Aggregates `GET /strategies/{id}/symbols` for every template id returned by `GET /backtest/strategies`. |
+| Left (240px) | `StrategyListSidebar` | Lists all subscriptions across all templates. `+ New` button opens `NewSubscriptionDialog`. Single `GET /subscriptions/` call returns all subs with `is_running` + backtest status. |
 | Center (flex) | `StrategyChart` + `StrategyConfigCard` | Chart pinned to the subscription's `(symbol, interval)`; config card shows symbol/interval/template + Start/Stop/Delete buttons. Read-only. |
 | Right (360px) | `DashboardColumn` | Unrealized PnL badge, equity sparkline, tabs for Metrics / Positions / Trades. Sources data from the cached backtest doc (§5.6) plus live `GET /strategies/{sub_id}/positions` and `/trades`. |
 
 Endpoints feeding the UI:
 
-- `GET /api/v1/backtest/strategies` — list of registered template IDs
+- `GET /api/v1/strategies/` — list of registered template IDs with metadata
+  (returns `[{strategy_code, class_name, description}, ...]`)
   (`packages/pocketquant-backtest/.../handlers/router.py:10`)
-- `GET /api/v1/strategies/{template_id}/symbols` — subscriptions enriched with
-  backtest status
+- `GET /api/v1/strategies/{strategy_code}` — template metadata
+  (`.../get_one/handler.py`)
+- `GET /api/v1/subscriptions/?strategy_code=...` — subscriptions enriched with
+  backtest status + `is_running` field (optional filter; defaults to all)
   (`packages/pocketquant-trading/.../handlers/strategy/list_symbols/handler.py:23`)
-- `GET /api/v1/strategies/{template_id}/symbols/{sub_id}/backtest` — cached
-  result (`.../get_subscription_backtest/handler.py:25`)
-- `GET /api/v1/strategies/{sub_id}/positions` — open positions
+- `GET /api/v1/subscriptions/{sub_id}/backtest` — cached backtest result
+  (`.../get_subscription_backtest/handler.py:25`)
+- `GET /api/v1/subscriptions/{sub_id}/positions` — open positions
   (`.../get_positions/handler.py:17`)
-- `GET /api/v1/strategies/{sub_id}/trades` — closed positions as trades
+- `GET /api/v1/subscriptions/{sub_id}/trades` — closed positions as trades
   (`.../get_trades/handler.py:17`)
 - `GET /api/v1/system/jobs` — APScheduler job listing for ops visibility
   (`packages/pocketquant-api/.../main_extensions.py:280`)
@@ -160,20 +170,26 @@ Endpoints feeding the UI:
    (`main.py:47-48` — explicit comment on the publish-before-subscribe pattern).
 2. Resolve `Database` and `Cache` and stash on `app.state`.
 3. `register_handlers(container)` — wires CQRS handlers into the `Mediator`.
-4. `ensure_all_indexes(container)` — creates all Mongo indexes.
-5. `recover_stale_backtests(container)` — marks any doc stuck in
+4. `migrate_strategy_id_fields(container)` — idempotent Mongo boot migration:
+   renames collection `strategy_subscriptions` → `subscriptions`,
+   renames legacy fields `strategy_id` → `strategy_code` and `strategy_id` → `subscription_id`
+   per the field semantics table below, drops legacy indexes. Aborts if both
+   old and new collections coexist. Code: `main_extensions.py` (lifespan sequence).
+5. `ensure_all_indexes(container)` — creates all Mongo indexes (including new
+   `ix_subscriptions_strategy_code`, `ix_orders_subscription_id`, `ix_positions_subscription_id`, etc.).
+6. `recover_stale_backtests(container)` — marks any doc stuck in
    `status=running` older than 10 min as `failed`
    (`BacktestRepository.mark_stale_running_as_failed`).
-6. `recover_orphan_jobs(container)` — same idea for `job_history`.
-7. `seed_tracked_symbols(container)`.
-8. `rehydrate_strategies_from_subscriptions(container)` — replays §1.1 step 4
-   for every persisted `StrategySubscription`: loads one `IStrategy` instance
-   per subscription, keyed by `sub.id`. Subscriptions whose template_id is no
+7. `recover_orphan_jobs(container)` — same idea for `job_history`.
+8. `seed_tracked_symbols(container)`.
+9. `rehydrate_strategies_from_subscriptions(container)` — replays §1.1 step 4
+   for every persisted `Subscription`: loads one `IStrategy` instance
+   per subscription, keyed by `sub.id`. Subscriptions whose strategy_code is no
    longer in `STRATEGY_REGISTRY` are skipped with a warning. Code:
    `main_extensions.py:109`.
-9. `start_background_jobs(container)` — starts `JobScheduler.start()` and
-   registers the cron sync jobs.
-10. `start_quote_feed(container, app)` — boots WebSocket aggregator.
+10. `start_background_jobs(container)` — starts `JobScheduler.start()` and
+    registers the cron sync jobs.
+11. `start_quote_feed(container, app)` — boots WebSocket aggregator.
 
 On shutdown, `container.close()` runs `AsyncIterator` factories' cleanup in
 reverse order: StrategyAppService.stop → JobScheduler.shutdown →
@@ -229,7 +245,7 @@ when triggered by bar) AND `config.trigger == "bar" | "tick"`
 
 #### 5.4 Backtest job execution
 
-When `POST .../backtest/run-all` fires:
+When `POST .../run-all-backtests` fires:
 
 1. `RunAllBacktestsHandler` calls `JobScheduler.add_one_off_job("pocketquant
    .trading.jobs.backtest_jobs:run_subscription_backtest", job_id="bt:{sub.id}",
@@ -238,9 +254,9 @@ When `POST .../backtest/run-all` fires:
 2. The AsyncIOExecutor picks it up; `run_subscription_backtest(subscription_id)`
    — `packages/pocketquant-trading/.../jobs/backtest_jobs.py:52` — runs:
    a. Resolve deps via module-level `_container` (`_get_container()`).
-   b. Load `StrategySubscription` from Mongo; bail silently if deleted mid-flight.
-   c. `BacktestRepository.upsert_status(sub_id, status='running')`.
-   d. Read base `StrategyConfig` from `strategy_app_service._configs[strategy_id]`.
+   b. Load `Subscription` from Mongo; bail silently if deleted mid-flight.
+   c. `BacktestRepository.upsert_status(sub_id, status_code='running', strategy_code=sub.strategy_code)`.
+   d. Read base `StrategyConfig` from `strategy_app_service._configs[sub_id]`.
       Raises a clear error if not in memory (e.g. after restart, before
       rehydration completes for that template).
    e. `resolve_date_range(bar_repo, symbol, interval)` — derives backtest range
@@ -281,13 +297,13 @@ serializers.
 
 | Collection | Owner repo | `_id` | Purpose | Indexes |
 |---|---|---|---|---|
-| `strategy_subscriptions` | `StrategySubscriptionRepository` | `deterministic_id(strategy_id, symbol, interval)` | One row per subscription. Source of truth for what runs after restart (rehydration). | `_id`, `strategy_id` (`ix_strategy_subscriptions_strategy_id`) |
-| `backtest_runs` | `BacktestRepository` | `sub_id` (subscription-scoped) OR backtest `result.id` (ad-hoc) | One cached backtest result per subscription. Holds `metrics`, `equity_curve`, `open_positions`, `config_snapshot`, `status`, `last_run_at`, `error_msg`. Also holds non-subscription runs from `/backtest/run`. | `strategy_id`, `started_at`, `status`, `(strategy_id, started_at desc)`, `(strategy_id, metrics.sharpe_ratio desc)`, `(strategy_id, metrics.sortino_ratio desc)`, `(strategy_id, metrics.win_rate desc)`, `subscription_id unique sparse` |
-| `backtest_orders` | `BacktestOrderRepository` | order id | Per-run order fills array. |  |
-| `backtest_trades` | `BacktestTradeRepository` | trade id | Round-trip trade outcomes from backtests. |  |
-| `backtest_optimization_runs` | `OptimizationRepository` | run id | Optimizer grid results. |  |
-| `orders` | `OrderRepository` | order id | Live orders. Doc keys: `_id, strategy_id, symbol, side, order_type, quantity, price, stop_price, status, filled_quantity, filled_price, broker_order_id, created_at, updated_at`. |  |
-| `positions` | `PositionRepository` | position id | Live positions. Doc keys: `_id, strategy_id, symbol, side, entry_price, quantity, current_price, realized_pnl, is_closed, opened_at, closed_at, sl_price, tp_price`. Queries: `find_open_by_strategy(strategy_id)` filters `is_closed=False`; `find_closed_by_strategy` sorts `closed_at desc`. |  |
+| `subscriptions` | `SubscriptionRepository` | `deterministic_id(strategy_code, symbol, interval)` | One row per subscription. Source of truth for what runs after restart (rehydration). Renamed from `strategy_subscriptions` (2026-05-26 boot migration). | `_id`, `strategy_code` (`ix_subscriptions_strategy_code`) |
+| `backtest_runs` | `BacktestRepository` | `sub_id` (subscription-scoped) OR backtest `result.id` (ad-hoc) | One cached backtest result per subscription. Holds `metrics`, `equity_curve`, `open_positions`, `config_snapshot`, `status`, `last_run_at`, `error_msg`. Also holds non-subscription runs from `/backtest/run`. | `strategy_code`, `started_at`, `status`, `(strategy_code, started_at desc)`, `(strategy_code, metrics.sharpe_ratio desc)`, `(strategy_code, metrics.sortino_ratio desc)`, `(strategy_code, metrics.win_rate desc)`, `subscription_id unique sparse` |
+| `backtest_orders` | `BacktestOrderRepository` | order id | Per-run order fills array. Indexes: `(strategy_code, status)` |  |
+| `backtest_trades` | `BacktestTradeRepository` | trade id | Round-trip trade outcomes from backtests. Indexes: `(strategy_code, direction)` |  |
+| `backtest_optimization_runs` | `OptimizationRepository` | run id | Optimizer grid results. Indexes: `strategy_code` |  |
+| `orders` | `OrderRepository` | order id | Live orders. Doc keys: `_id, subscription_id, symbol, side, order_type, quantity, price, stop_price, status, filled_quantity, filled_price, broker_order_id, created_at, updated_at`. | `subscription_id` (`ix_orders_subscription_id`) |
+| `positions` | `PositionRepository` | position id | Live positions. Doc keys: `_id, subscription_id, symbol, side, entry_price, quantity, current_price, realized_pnl, is_closed, opened_at, closed_at, sl_price, tp_price`. Queries: `find_open_by_subscription(subscription_id)` filters `is_closed=False`; `find_closed_by_subscription` sorts `closed_at desc`. | `subscription_id` (`ix_positions_subscription_id`) |
 | `bars` | `BarRepository` | bar id | Historical OHLCV. Consumed by `BacktestAppService` and strategies via `BarCompletedEvent`. |  |
 | `sync_status` | `SyncStatusRepository` | symbol+interval | Per-symbol sync progress for the market-data sync jobs. |  |
 | `symbols` | `SymbolRepository` | symbol | Symbol metadata. |  |
@@ -295,15 +311,15 @@ serializers.
 | `job_history` | `JobHistoryRepository` | row id | Per-tick scheduler history — `started`, `completed`, `failed`, `missed`, `skipped_max_instances`. Surfaces silent skips. |  |
 | `apscheduler_jobs` | APScheduler `MongoDBJobStore` | `job_id` | Serialized scheduled jobs (interval/cron/one-off). Drives cross-process coordination via `next_run_time` updates. |  |
 
-Document shape for the most relevant collection (`strategy_subscriptions`):
+Document shape for the most relevant collection (`subscriptions`):
 
 ```jsonc
 {
-  "_id":         "<16-hex deterministic id>",
-  "strategy_id": "hitnrun2",          // template name in STRATEGY_REGISTRY
-  "symbol":      "BTCUSDT:BINANCE",   // composite "{code}:{exchange}"
-  "interval":    "1h",
-  "created_at":  ISODate("...")
+  "_id":           "<16-hex deterministic id>",
+  "strategy_code": "hitnrun2",        // template name in STRATEGY_REGISTRY
+  "symbol":        "BTCUSDT:BINANCE", // composite "{code}:{exchange}"
+  "interval":      "1h",
+  "created_at":    ISODate("...")
 }
 ```
 
@@ -313,7 +329,7 @@ Backtest cache doc shape (`backtest_runs` keyed by `sub_id`):
 {
   "_id":             "<sub_id>",
   "subscription_id": "<sub_id>",
-  "strategy_id":     "hitnrun2",
+  "strategy_code":   "hitnrun2",        // renamed from "strategy_id"
   "status":          "completed" | "running" | "failed",
   "last_run_at":     ISODate("..."),
   "error_msg":       null | "<truncated 500 chars>",
@@ -327,6 +343,10 @@ Backtest cache doc shape (`backtest_runs` keyed by `sub_id`):
   "parameters":      { ... }   // optimizer-only
 }
 ```
+
+Live order and position docs (collections `orders` and `positions`) now use
+`subscription_id` (the 16-char deterministic ID) instead of `strategy_id`
+(which held the subscription ID in v1, causing confusion).
 
 ---
 
@@ -369,8 +389,8 @@ everything else is derived**.
 
 ```
                        ┌─────────────────────────────────────────────────┐
-                       │ MongoDB: strategy_subscriptions (durable)       │
-                       │  _id = sha256(template|symbol|interval)[:16]    │
+                       │ MongoDB: subscriptions (durable)                │
+                       │  _id = sha256(strategy_code|symbol|interval)    │
                        └─────────┬───────────────────────────────────────┘
                                  │
        ┌─────────────────────────┼──────────────────────────┐
@@ -409,13 +429,13 @@ everything else is derived**.
 
 
 Backtest path is parallel and isolated:
-  POST run-all → JobScheduler.add_one_off_job → apscheduler_jobs (Mongo)
-              → AsyncIOExecutor picks up DateTrigger
-              → run_subscription_backtest(sub_id):
-                  resolve_date_range → bars (Mongo)
-                  load synthetic strategy id → PaperBroker
-                  BacktestAppService.run(config) → BacktestResult
-                  save_for_subscription(sub_id, result) → backtest_runs (Mongo)
+  POST run-all-backtests → JobScheduler.add_one_off_job → apscheduler_jobs (Mongo)
+                       → AsyncIOExecutor picks up DateTrigger
+                       → run_subscription_backtest(sub_id):
+                           resolve_date_range → bars (Mongo)
+                           load synthetic strategy id → PaperBroker
+                           BacktestAppService.run(config) → BacktestResult
+                           save_for_subscription(sub_id, result) → backtest_runs (Mongo)
 ```
 
 **State machine for a subscription's cached backtest** (collection
@@ -436,7 +456,7 @@ Backtest path is parallel and isolated:
 
 | State | Persisted? | Recovered on restart |
 |---|---|---|
-| Subscription template + (symbol, interval) | Yes (`strategy_subscriptions`) | Re-loaded via `rehydrate_strategies_from_subscriptions` |
+| Subscription template + (symbol, interval) | Yes (`subscriptions` collection) | Re-loaded via `rehydrate_strategies_from_subscriptions` |
 | Running/stopped flag for live trading | No (in-memory `strategy.is_running`) | Resets to stopped — must POST `/start` again |
 | Cached backtest result | Yes (`backtest_runs`) | Available immediately after rehydration |
 | In-flight backtest in `running` state | Yes (status row) | `recover_stale_backtests` flips `running` older than 10 min to `failed` |
@@ -450,20 +470,19 @@ Backtest path is parallel and isolated:
 
 | Method | Path | Purpose | File |
 |---|---|---|---|
-| GET  | `/api/v1/backtest/strategies` | List template IDs in `STRATEGY_REGISTRY` | `pocketquant-backtest/.../handlers/router.py:10` |
+| GET  | `/api/v1/strategies/` | List template IDs with metadata `{strategy_code, class_name, description}` | `pocketquant-backtest/.../handlers/router.py:10` |
+| GET  | `/api/v1/strategies/{strategy_code}` | Get template metadata | `strategy/get_one/route.py` |
 | POST | `/api/v1/strategies/load` | Load a `StrategyConfig` from a YAML file path | `strategy/load/route.py` |
-| GET  | `/api/v1/strategies/` | List in-memory loaded strategies | `strategy/get_all/route.py` |
-| GET  | `/api/v1/strategies/{id}` | Get one loaded strategy | `strategy/get_one/route.py` |
-| POST | `/api/v1/strategies/{id}/start` | Start a loaded strategy instance | `strategy/start/route.py` |
-| POST | `/api/v1/strategies/{id}/stop` | Stop a loaded strategy instance | `strategy/stop/route.py` |
-| DELETE | `/api/v1/strategies/{template_id}` | Cascade delete template + subs + backtests | `strategy/delete/route.py` |
-| POST | `/api/v1/strategies/{template_id}/symbols` | Create a subscription | `strategy/add_symbol/route.py` |
-| GET  | `/api/v1/strategies/{template_id}/symbols` | List subscriptions with backtest status | `strategy/list_symbols/route.py` |
-| DELETE | `/api/v1/strategies/{template_id}/symbols/{sub_id}` | Remove a subscription (cascade) | `strategy/remove_symbol/route.py` |
-| POST | `/api/v1/strategies/{template_id}/backtest/run-all` | Enqueue one-off backtest per subscription | `strategy/run_all_backtests/route.py` |
-| GET  | `/api/v1/strategies/{template_id}/symbols/{sub_id}/backtest` | Read cached backtest doc | `strategy/get_subscription_backtest/route.py` |
-| GET  | `/api/v1/strategies/{sub_id}/positions` | Open positions for a sub_id | `strategy/get_positions/route.py` |
-| GET  | `/api/v1/strategies/{sub_id}/trades` | Closed positions for a sub_id | `strategy/get_trades/route.py` |
+| POST | `/api/v1/strategies/{strategy_code}/subscriptions` | Create a subscription | `strategy/add_symbol/route.py` |
+| GET  | `/api/v1/subscriptions/?strategy_code=...` | List subscriptions with backtest status (optional filter; defaults to all) | `strategy/list_symbols/route.py` |
+| DELETE | `/api/v1/subscriptions/{sub_id}` | Remove a subscription (cascade) | `strategy/remove_symbol/route.py` |
+| POST | `/api/v1/subscriptions/{sub_id}/start` | Start a live subscription instance | `strategy/start/route.py` |
+| POST | `/api/v1/subscriptions/{sub_id}/stop` | Stop a live subscription instance | `strategy/stop/route.py` |
+| POST | `/api/v1/strategies/{strategy_code}/run-all-backtests` | Enqueue one-off backtest per subscription | `strategy/run_all_backtests/route.py` |
+| GET  | `/api/v1/subscriptions/{sub_id}/backtest` | Read cached backtest doc | `strategy/get_subscription_backtest/route.py` |
+| GET  | `/api/v1/subscriptions/{sub_id}/positions` | Open positions for a subscription | `strategy/get_positions/route.py` |
+| GET  | `/api/v1/subscriptions/{sub_id}/trades` | Closed positions for a subscription | `strategy/get_trades/route.py` |
+| DELETE | `/api/v1/strategies/{strategy_code}` | Cascade delete template + all subs + backtests | `strategy/delete/route.py` |
 
 ---
 
@@ -478,16 +497,13 @@ Backtest path is parallel and isolated:
    strategy class falls back to whatever defaults it hard-codes. Should
    parameters be (a) persisted on the subscription, (b) part of the template
    registration, or (c) sent in the `AddSymbol` body?
-3. **`POST /strategies/{sub_id}/start` semantics** — `start_strategy` is keyed
-   by the value the loader passed to `load_strategy(config)`. For
-   subscription-based loads that value is `sub_id`. The FE
-   `useStartStrategy` hook passes `subscription.id` (sub_id) which matches —
-   but the URL parameter is named `strategy_id`. Worth renaming to `sub_id`
-   for clarity? (The label is purely API-surface; behavior is correct.)
+3. **RESOLVED (2026-05-26):** URL parameter `sub_id` vs `strategy_id` — refactor
+   renamed routes to `/subscriptions/{sub_id}/start` and `/subscriptions/{sub_id}/stop`.
+   API surface now reflects the semantic: `subscription_id` is the 16-char deterministic ID.
 4. **Redis use for strategies is currently zero.** Worth caching the
-   `strategy_subscriptions` rehydration list, recent signal counts, or
-   per-strategy live PnL snapshots in Redis to avoid Mongo round-trips on
-   every `/positions` poll?
+   `subscriptions` rehydration list, recent signal counts, or
+   per-subscription live PnL snapshots in Redis to avoid Mongo round-trips on
+   every `/subscriptions/{sub_id}/positions` poll?
 5. **Backtest stale-recovery threshold = 10 min** vs **orphan job recovery =
    600s**. Inconsistent; if a real backtest legitimately runs longer than 10
    min it gets force-failed. Should the threshold be derived from
