@@ -65,10 +65,10 @@ HTTP Route → Command → Handler → Domain → Repository → MongoDB
 
 | File | Role |
 |---|---|
-| `packages/pocketquant-api/.../strategy/subscriptions/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, builds `AddSymbolCommand`, dispatches via Mediator |
-| `packages/pocketquant-api/.../strategy/subscriptions/add_symbol/handler.py` | Validates strategy is loaded → creates `Subscription` → persists |
-| `packages/pocketquant-core/.../domain/subscription/entities.py` | `Subscription` aggregate with deterministic ID |
-| `packages/pocketquant-core/.../persistence/subscription_repository.py` | Mongo persistence + duplicate detection via deterministic hash |
+| `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, builds `AddSymbolCommand`, dispatches via Mediator |
+| `packages/pocketquant-trading/.../handlers/strategy/add_symbol/handler.py` | Auto-loads strategy template if needed → creates `Subscription` → persists |
+| `packages/pocketquant-trading/.../domain/subscription.py` | `Subscription` aggregate with deterministic ID |
+| `packages/pocketquant-trading/.../persistence/subscription_repository.py` | Mongo persistence on `subscriptions` collection (renamed from `strategy_subscriptions` at 2026-05-26 boot) |
 
 ### Deterministic ID
 
@@ -127,7 +127,7 @@ A global handler maps `AppError` → JSON `{error: {code, message}}`.
 │ .save()                  │    │ collision rare  │
 │                          │◀───│ (idempotent)    │
 └──────┬───────────────────┘    └─────────────────┘
-       │ 201 + subscription
+       │ 201 + subscription (includes is_running)
        ▼
 ┌──────────────────────┐
 │ TanStack Query       │
