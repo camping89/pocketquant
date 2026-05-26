@@ -42,7 +42,7 @@ export type BacktestStatus = 'pending' | 'running' | 'completed' | 'failed'
 export interface SubscriptionBacktest {
   _id?: string
   subscription_id?: string
-  strategy_id?: string
+  strategy_code?: string
   status: BacktestStatus | string
   metrics: BacktestMetrics | null
   positions: BacktestPosition[]

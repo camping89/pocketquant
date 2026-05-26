@@ -34,18 +34,18 @@ const labelStyle: React.CSSProperties = {
 
 export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) {
   const { code, exchange } = parseSymbol(sub.symbol)
-  const isRunning = sub.backtest?.status === 'running'
+  const isRunning = sub.is_running
 
   const startMut = useStartStrategy()
   const stopMut = useStopStrategy()
-  const deleteMut = useDeleteSubscription(sub.strategy_id)
+  const deleteMut = useDeleteSubscription(sub.strategy_code)
 
   const isLoading = startMut.isPending || stopMut.isPending || deleteMut.isPending
 
   function handleDelete() {
     if (isRunning) return
     const confirmed = window.confirm(
-      `Delete subscription ${code}${exchange ? ` (${exchange})` : ''} · ${sub.interval} · ${sub.strategy_id}?`,
+      `Delete subscription ${code}${exchange ? ` (${exchange})` : ''} · ${sub.interval} · ${sub.strategy_code}?`,
     )
     if (!confirmed) return
     deleteMut.mutate(sub.id, { onSuccess: () => onDeleted?.() })
@@ -124,7 +124,7 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
 
       <div style={rowStyle}>
         <span style={labelStyle}>Strategy</span>
-        <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{sub.strategy_id}</span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{sub.strategy_code}</span>
       </div>
 
       <div style={{ ...rowStyle, borderBottom: 'none' }}>

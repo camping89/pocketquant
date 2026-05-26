@@ -1,24 +1,52 @@
 /**
- * Mutations for strategy lifecycle: start, stop, delete, create subscription.
- * Start/stop endpoints are stubbed — backend phase 6 will implement them.
- * TODO(phase-6): replace stub URLs with real /api/v1/strategies/{id}/start|stop
+ * Mutations for subscription lifecycle: start, stop, delete; template-scoped delete.
+ *
+ * Routes are split:
+ *   /strategies/{strategy_code}/...     template-scoped
+ *   /subscriptions/{sub_id}/...         instance-scoped
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { addSymbol, removeSymbol, deleteStrategy } from '../api/strategy-api'
+import { addSymbol, removeSubscription, deleteStrategy } from '../api/strategy-api'
 import { ApiError } from '../api/strategy-api'
 
 // ---------------------------------------------------------------------------
-// Stub helpers — endpoints don't exist yet, will 404 gracefully
+// Backend error envelope: { error: { code: string, message: string } }
 // ---------------------------------------------------------------------------
 
-async function startStrategy(strategyId: string): Promise<void> {
-  const res = await fetch(`/api/v1/strategies/${strategyId}/start`, { method: 'POST' })
-  if (!res.ok) throw new ApiError(`Start failed: ${res.status}`, res.status)
+async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.clone().json()) as
+      | { error?: { code?: string; message?: string }; detail?: unknown }
+      | undefined
+    const msg = body?.error?.message
+    if (msg) return msg
+    if (typeof body?.detail === 'string') return body.detail
+  } catch {
+    // not JSON — try text
+    try {
+      const text = await res.text()
+      if (text) return text.slice(0, 300)
+    } catch {
+      // ignore
+    }
+  }
+  return fallback
 }
 
-async function stopStrategy(strategyId: string): Promise<void> {
-  const res = await fetch(`/api/v1/strategies/${strategyId}/stop`, { method: 'POST' })
-  if (!res.ok) throw new ApiError(`Stop failed: ${res.status}`, res.status)
+async function startSubscription(subId: string): Promise<void> {
+  const res = await fetch(`/api/v1/subscriptions/${subId}/start`, { method: 'POST' })
+  if (!res.ok) {
+    const detail = await extractErrorMessage(res, res.statusText || 'Unknown error')
+    throw new ApiError(`Start failed (${res.status}): ${detail}`, res.status)
+  }
+}
+
+async function stopSubscription(subId: string): Promise<void> {
+  const res = await fetch(`/api/v1/subscriptions/${subId}/stop`, { method: 'POST' })
+  if (!res.ok) {
+    const detail = await extractErrorMessage(res, res.statusText || 'Unknown error')
+    throw new ApiError(`Stop failed (${res.status}): ${detail}`, res.status)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -28,9 +56,9 @@ async function stopStrategy(strategyId: string): Promise<void> {
 export function useStartStrategy() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (strategyId: string) => startStrategy(strategyId),
-    onSuccess: (_, strategyId) => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] })
+    mutationFn: (subId: string) => startSubscription(subId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscriptions'] })
     },
   })
 }
@@ -38,20 +66,20 @@ export function useStartStrategy() {
 export function useStopStrategy() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (strategyId: string) => stopStrategy(strategyId),
-    onSuccess: (_, strategyId) => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] })
+    mutationFn: (subId: string) => stopSubscription(subId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscriptions'] })
     },
   })
 }
 
-export function useDeleteSubscription(strategyId: string | null) {
+export function useDeleteSubscription(strategyCode: string | null) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (subId: string) => removeSymbol(strategyId!, subId),
+    mutationFn: (subId: string) => removeSubscription(subId),
     onSuccess: (_, subId) => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] })
-      qc.invalidateQueries({ queryKey: ['subscription-backtest', strategyId, subId] })
+      qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
+      qc.invalidateQueries({ queryKey: ['subscription-backtest', subId] })
     },
   })
 }
@@ -59,22 +87,22 @@ export function useDeleteSubscription(strategyId: string | null) {
 export function useDeleteStrategyById() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (strategyId: string) => deleteStrategy(strategyId),
-    onSuccess: (_, strategyId) => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] })
-      qc.removeQueries({ queryKey: ['subscription-backtest', strategyId] })
+    mutationFn: (strategyCode: string) => deleteStrategy(strategyCode),
+    onSuccess: (_, strategyCode) => {
+      qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
+      qc.removeQueries({ queryKey: ['subscription-backtest'] })
       qc.invalidateQueries({ queryKey: ['strategies'] })
     },
   })
 }
 
-export function useCreateSubscription(strategyId: string | null) {
+export function useCreateSubscription(strategyCode: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: { symbol: string; interval: string }) =>
-      addSymbol(strategyId!, body),
+      addSymbol(strategyCode!, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyId] })
+      qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
     },
   })
 }

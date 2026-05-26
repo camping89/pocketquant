@@ -22,47 +22,49 @@ export interface SubscriptionBacktestStatus {
 
 export interface Subscription {
   id: string
-  strategy_id: string
+  strategy_code: string
   /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
   interval: string
   created_at: string
+  is_running: boolean
   backtest: SubscriptionBacktestStatus | null
 }
 
-export async function listSymbols(strategyId: string): Promise<Subscription[]> {
-  return apiFetch<Subscription[]>(`/api/v1/strategies/${strategyId}/symbols`)
+export async function listSubscriptions(strategyCode?: string): Promise<Subscription[]> {
+  const qs = strategyCode ? `?strategy_code=${encodeURIComponent(strategyCode)}` : ''
+  return apiFetch<Subscription[]>(`/api/v1/subscriptions/${qs}`)
 }
 
 export async function addSymbol(
-  strategyId: string,
+  strategyCode: string,
   body: { symbol: string; interval: string },
 ): Promise<Subscription> {
-  return apiPost<Subscription>(`/api/v1/strategies/${strategyId}/symbols`, body)
+  return apiPost<Subscription>(`/api/v1/strategies/${strategyCode}/subscriptions`, body)
 }
 
-export async function removeSymbol(strategyId: string, subId: string): Promise<void> {
-  const res = await fetch(`/api/v1/strategies/${strategyId}/symbols/${subId}`, {
+export async function removeSubscription(subId: string): Promise<void> {
+  const res = await fetch(`/api/v1/subscriptions/${subId}`, {
     method: 'DELETE',
   })
-  if (!res.ok) throw new ApiError(`DELETE symbol failed: ${res.status}`, res.status)
+  if (!res.ok) throw new ApiError(`DELETE subscription failed: ${res.status}`, res.status)
 }
 
-export async function runAllBacktests(strategyId: string): Promise<{ job_ids: string[] }> {
-  return apiPost<{ job_ids: string[] }>(`/api/v1/strategies/${strategyId}/backtest/run-all`, {})
+export async function runAllBacktests(strategyCode: string): Promise<{ job_ids: string[] }> {
+  return apiPost<{ job_ids: string[] }>(
+    `/api/v1/strategies/${strategyCode}/run-all-backtests`,
+    {},
+  )
 }
 
-export async function getSubscriptionBacktest(
-  strategyId: string,
-  subId: string,
-): Promise<SubscriptionBacktest> {
-  const res = await fetch(`/api/v1/strategies/${strategyId}/symbols/${subId}/backtest`)
+export async function getSubscriptionBacktest(subId: string): Promise<SubscriptionBacktest> {
+  const res = await fetch(`/api/v1/subscriptions/${subId}/backtest`)
   if (!res.ok) throw new ApiError(`GET backtest failed: ${res.status}`, res.status)
   return res.json()
 }
 
-export async function deleteStrategy(strategyId: string): Promise<void> {
-  const res = await fetch(`/api/v1/strategies/${strategyId}`, {
+export async function deleteStrategy(strategyCode: string): Promise<void> {
+  const res = await fetch(`/api/v1/strategies/${strategyCode}`, {
     method: 'DELETE',
   })
   if (!res.ok) throw new ApiError(`DELETE strategy failed: ${res.status}`, res.status)
