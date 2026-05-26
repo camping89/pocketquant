@@ -51,6 +51,21 @@ docker pull "${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}"
 echo "=== Starting services ==="
 docker compose -f compose.prod.yml --env-file .env up -d --remove-orphans
 
+echo "=== Waiting for app health (timeout 60s) ==="
+deadline=$(( $(date +%s) + 60 ))
+until docker exec pocketquant-app curl -fsS --max-time 2 http://localhost:41920/health >/dev/null 2>&1; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "ERROR: app did not become healthy within 60s"
+    echo "--- last 30 log lines ---"
+    docker logs pocketquant-app --tail 30 2>&1 || true
+    echo "--- container status ---"
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep pocketquant || true
+    exit 1
+  fi
+  sleep 2
+done
+echo "App is healthy."
+
 echo "=== Cleaning old images ==="
 docker image prune -f
 

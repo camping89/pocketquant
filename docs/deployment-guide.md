@@ -272,6 +272,9 @@ ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh
 - Validate all required env vars
 - Pull image from Docker Hub
 - Start all 5 services (app, web, mongodb, redis, portainer)
+- **Wait up to 60s for `pocketquant-app` /health to return 200.** Exits non-zero
+  with the last 30 log lines + container status if the app never becomes healthy.
+  Catches lifespan/migration failures that crash the app during startup.
 - Prune old images
 
 **Windows users:** If the script fails with `invalid option`, fix CRLF line endings first:
@@ -286,7 +289,13 @@ ssh -i $KEY $VPS "sed -i 's/\r$//' /opt/pocketquant/deploy/scripts-to-deploy/*.s
 ssh -i $KEY $VPS "cd /opt/pocketquant && bash deploy/scripts-to-deploy/verify.sh"
 ```
 
-Runs 18 checks (containers, health, HTTP, web SPA routes, MongoDB, Redis, disk, memory, ports, image, logs) and outputs a markdown report to `reports/verify-<UTC-timestamp>.md` on the VPS.
+Runs ~19 checks (containers, health, HTTP, web SPA routes, MongoDB, Redis, disk, memory, ports, image, logs, **boot integrity**) and outputs a markdown report to `reports/verify-<UTC-timestamp>.md` on the VPS.
+
+The **Boot integrity** check is a hard FAIL gate that greps the last 200 log lines
+for generic fatal startup signatures: `CRITICAL` level, `Startup Failed`,
+`Application startup failed`, `lifespan ... failed/error`, `RuntimeError ... lifespan`,
+`migration.failed`. Pattern is endpoint-agnostic, so it keeps catching boot failures
+as features churn without needing updates per release.
 
 Quick check without full report:
 
