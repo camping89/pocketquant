@@ -1,4 +1,4 @@
-"""Get strategies API route."""
+"""List strategy templates — GET /strategies/."""
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
@@ -9,20 +9,15 @@ from pydantic import BaseModel
 router = APIRouter(route_class=DishkaRoute)
 
 
-class StrategyResponse(BaseModel):
-    """Strategy information response."""
+class StrategyTemplateResponse(BaseModel):
+    """Strategy template entry (from STRATEGY_REGISTRY)."""
 
-    id: str
-    name: str
-    symbol: str
-    interval: str
-    broker: str
-    is_running: bool
+    strategy_code: str
 
 
-@router.get("/", response_model=list[StrategyResponse])
-async def list_strategies(
+@router.get("/", response_model=list[StrategyTemplateResponse])
+async def list_strategy_templates(
     mediator: FromDishka[Mediator],
 ) -> list[dict]:
-    """Get all loaded strategies."""
+    """List registered strategy templates from STRATEGY_REGISTRY."""
     return await mediator.send(GetStrategiesQuery())

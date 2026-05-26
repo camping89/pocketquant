@@ -1,29 +1,21 @@
-"""Get strategy query handler."""
+"""Get strategy template metadata handler."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.trading.handlers.strategy.get_one.query import GetStrategyQuery
 
 
 @handles(GetStrategyQuery)
 class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
-    """Handle GetStrategyQuery."""
-
-    def __init__(self, strategy_app_service: StrategyAppService) -> None:
-        self._strategy_app_service = strategy_app_service
+    """Handle GetStrategyQuery — return template metadata for a strategy code."""
 
     async def handle(self, request: GetStrategyQuery) -> dict | None:
-        """Get a specific strategy by ID."""
-        strategy = self._strategy_app_service.get_strategy(request.strategy_id)
-        if not strategy:
+        """Return template metadata or None if the code is unknown."""
+        strategy_class = STRATEGY_REGISTRY.get(request.strategy_code)
+        if strategy_class is None:
             return None
-
         return {
-            "id": strategy.id,
-            "name": strategy.config.name,
-            "symbol": strategy.config.symbol,
-            "interval": strategy.config.interval,
-            "broker": strategy.config.broker,
-            "is_running": strategy.is_running,
-            "parameters": strategy.config.parameters,
+            "strategy_code": request.strategy_code,
+            "class_name": strategy_class.__name__,
+            "description": (strategy_class.__doc__ or "").strip().split("\n")[0] if strategy_class.__doc__ else "",
         }

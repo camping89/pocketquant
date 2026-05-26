@@ -1,4 +1,4 @@
-"""ListSymbols API route — GET /{strategy_id}/symbols."""
+"""ListSubscriptions API route — GET /subscriptions/."""
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
@@ -8,10 +8,10 @@ from pocketquant.trading.handlers.strategy.list_symbols.query import ListSymbols
 router = APIRouter(route_class=DishkaRoute)
 
 
-@router.get("/{strategy_id}/symbols")
-async def list_symbols(
-    strategy_id: str,
+@router.get("/")
+async def list_subscriptions(
     mediator: FromDishka[Mediator],
+    strategy_code: str | None = None,
 ) -> list:
-    """List all symbol subscriptions for a strategy with their backtest status."""
-    return await mediator.send(ListSymbolsQuery(strategy_id=strategy_id))
+    """List subscriptions (optionally filter by strategy_code) with backtest + live status."""
+    return await mediator.send(ListSymbolsQuery(strategy_code=strategy_code))

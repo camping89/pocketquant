@@ -1,14 +1,14 @@
-"""Query: list completed trades (closed positions) for a strategy instance."""
+"""Query: list completed trades (closed positions) for a subscription."""
 
 from pydantic import BaseModel
 
 
 class GetStrategyTradesQuery(BaseModel):
-    """Read-side query — returns the N most-recent closed positions for ``strategy_id``.
+    """Read-side query — returns the N most-recent closed positions for ``subscription_id``.
 
     Closed positions are the canonical 'completed trade' record (entry + exit
     + realized PnL). Returning them avoids pairing raw fills client-side.
     """
 
-    strategy_id: str
+    subscription_id: str
     limit: int = 100

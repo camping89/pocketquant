@@ -1,13 +1,9 @@
-"""Query: list open positions for a strategy/subscription instance id."""
+"""Query: list open positions for a subscription instance."""
 
 from pydantic import BaseModel
 
 
 class GetStrategyPositionsQuery(BaseModel):
-    """Read-side query — returns open positions tied to ``strategy_id``.
+    """Read-side query — returns open positions for ``subscription_id``."""
 
-    For the per-subscription model, ``strategy_id`` is the subscription's
-    deterministic id; for legacy YAML-loaded strategies it is the YAML id.
-    """
-
-    strategy_id: str
+    subscription_id: str

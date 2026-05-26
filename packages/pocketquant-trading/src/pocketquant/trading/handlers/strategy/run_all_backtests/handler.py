@@ -4,8 +4,8 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.trading.handlers.strategy.run_all_backtests.command import RunAllBacktestsCommand
-from pocketquant.trading.persistence.strategy_subscription_repository import (
-    StrategySubscriptionRepository,
+from pocketquant.trading.persistence.subscription_repository import (
+    SubscriptionRepository,
 )
 
 _JOB_MODULE = "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest"
@@ -17,15 +17,15 @@ class RunAllBacktestsHandler(Handler[RunAllBacktestsCommand, dict]):
 
     def __init__(
         self,
-        strategy_subscription_repository: StrategySubscriptionRepository,
+        subscription_repository: SubscriptionRepository,
         job_scheduler: JobScheduler,
     ) -> None:
-        self._sub_repo = strategy_subscription_repository
+        self._sub_repo = subscription_repository
         self._scheduler = job_scheduler
 
     async def handle(self, request: RunAllBacktestsCommand) -> dict:
         """Enqueue a date-triggered (immediate) backtest job for each subscription."""
-        subs = await self._sub_repo.list_by_strategy(request.strategy_id)
+        subs = await self._sub_repo.list_by_strategy_code(request.strategy_id)
         if not subs:
             raise NotFoundError(
                 f"No subscriptions found for strategy '{request.strategy_id}'. "

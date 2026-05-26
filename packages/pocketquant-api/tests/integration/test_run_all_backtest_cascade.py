@@ -131,14 +131,14 @@ async def setup_strategy_and_bars(app_client):
     await svc.unload_strategy(_STRATEGY_ID)
     await svc.load_strategy(config)
 
-    from pocketquant.trading.persistence.strategy_subscription_repository import (
-        StrategySubscriptionRepository,
+    from pocketquant.trading.persistence.subscription_repository import (
+        SubscriptionRepository,
     )
 
     # Clean prior test data
-    sub_repo: StrategySubscriptionRepository = await container.get(StrategySubscriptionRepository)
-    await bt_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
-    await sub_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
+    sub_repo: SubscriptionRepository = await container.get(SubscriptionRepository)
+    await bt_repo._collection().delete_many({"strategy_code": _STRATEGY_ID})
+    await sub_repo._collection().delete_many({"strategy_code": _STRATEGY_ID})
 
     yield
 
@@ -146,7 +146,7 @@ async def setup_strategy_and_bars(app_client):
     await bar_repo._collection().delete_many(
         {"symbol": _SYMBOL, "interval": _INTERVAL}
     )
-    await bt_repo.delete_by_strategy(_STRATEGY_ID)
+    await bt_repo.delete_by_strategy_code(_STRATEGY_ID)
 
 
 # ---------------------------------------------------------------------------
@@ -165,14 +165,14 @@ async def test_run_all_backtest_cascade_delete(app_client):
 
     # 1. Add subscription
     add_r = await app_client.post(
-        f"{_API}/{_STRATEGY_ID}/symbols",
+        f"{_API}/{_STRATEGY_ID}/subscriptions",
         json={"symbol": _SYMBOL, "interval": _INTERVAL},
     )
     assert add_r.status_code == 201, add_r.text
     sub_id = add_r.json()["id"]
 
     # 2. Trigger run-all
-    run_r = await app_client.post(f"{_API}/{_STRATEGY_ID}/backtest/run-all")
+    run_r = await app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests")
     assert run_r.status_code == 202, run_r.text
     job_ids = run_r.json()["job_ids"]
     assert len(job_ids) == 1
@@ -193,7 +193,7 @@ async def test_run_all_backtest_cascade_delete(app_client):
     )
 
     # 4. GET backtest via API
-    bt_r = await app_client.get(f"{_API}/{_STRATEGY_ID}/symbols/{sub_id}/backtest")
+    bt_r = await app_client.get(f"/api/v1/subscriptions/{sub_id}/backtest")
     assert bt_r.status_code == 200, bt_r.text
     assert bt_r.json()["status"] == "completed"
 

@@ -1,9 +1,9 @@
-"""Start strategy command definition."""
+"""Start subscription command definition."""
 
 from pydantic import BaseModel, Field
 
 
 class StartStrategyCommand(BaseModel):
-    """Start a loaded strategy."""
+    """Start the strategy instance for a subscription."""
 
-    strategy_id: str = Field(..., description="Strategy identifier")
+    subscription_id: str = Field(..., description="Deterministic subscription identifier")

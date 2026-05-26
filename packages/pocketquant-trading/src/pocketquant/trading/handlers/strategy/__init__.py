@@ -7,7 +7,12 @@ from pocketquant.trading.app_services.yaml_strategy_loader import StrategyLoader
 from pocketquant.trading.handlers.strategy.get_all import GetStrategiesHandler, GetStrategiesQuery
 from pocketquant.trading.handlers.strategy.get_one import GetStrategyHandler, GetStrategyQuery
 from pocketquant.trading.handlers.strategy.load import LoadStrategyCommand, LoadStrategyHandler
-from pocketquant.trading.handlers.strategy.router import router as strategy_router
+from pocketquant.trading.handlers.strategy.router import (
+    router as strategy_router,
+)
+from pocketquant.trading.handlers.strategy.router import (
+    subscription_router,
+)
 from pocketquant.trading.handlers.strategy.start import StartStrategyCommand, StartStrategyHandler
 from pocketquant.trading.handlers.strategy.stop import StopStrategyCommand, StopStrategyHandler
 
@@ -33,4 +38,5 @@ __all__ = [
     "StopStrategyHandler",
     # API
     "strategy_router",
+    "subscription_router",
 ]

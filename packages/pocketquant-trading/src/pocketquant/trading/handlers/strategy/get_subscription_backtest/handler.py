@@ -28,6 +28,6 @@ class GetSubscriptionBacktestHandler(Handler[GetSubscriptionBacktestQuery, dict]
         if doc is None:
             raise NotFoundError(
                 f"No backtest found for subscription '{request.sub_id}'. "
-                "Trigger a run via POST /{strategy_id}/backtest/run-all first."
+                "Trigger a run via POST /strategies/{strategy_code}/run-all-backtests first."
             )
         return doc

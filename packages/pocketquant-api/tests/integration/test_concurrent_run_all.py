@@ -23,8 +23,8 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.persistence.strategy_subscription_repository import (
-    StrategySubscriptionRepository,
+from pocketquant.trading.persistence.subscription_repository import (
+    SubscriptionRepository,
 )
 
 from .app_factory import make_test_app
@@ -102,7 +102,7 @@ async def setup(app_client):
     container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     svc: StrategyAppService = await container.get(StrategyAppService)
     bar_repo: BarRepository = await container.get(BarRepository)
-    sub_repo: StrategySubscriptionRepository = await container.get(StrategySubscriptionRepository)
+    sub_repo: SubscriptionRepository = await container.get(SubscriptionRepository)
     tracked_repo: TrackedSymbolRepository = await container.get(TrackedSymbolRepository)
 
     # Track the symbol
@@ -126,7 +126,7 @@ async def setup(app_client):
     await svc.load_strategy(config)
 
     # Clean prior state
-    await sub_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
+    await sub_repo._collection().delete_many({"strategy_code": _STRATEGY_ID})
 
     yield
 
@@ -134,7 +134,7 @@ async def setup(app_client):
     await bar_repo._collection().delete_many(
         {"symbol": _SYMBOL, "interval": _INTERVAL}
     )
-    await sub_repo._collection().delete_many({"strategy_id": _STRATEGY_ID})
+    await sub_repo._collection().delete_many({"strategy_code": _STRATEGY_ID})
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ async def test_concurrent_run_all_no_duplicate_jobs(app_client):
 
     # Add a subscription
     add_r = await app_client.post(
-        f"{_API}/{_STRATEGY_ID}/symbols",
+        f"{_API}/{_STRATEGY_ID}/subscriptions",
         json={"symbol": _SYMBOL, "interval": _INTERVAL},
     )
     assert add_r.status_code == 201, add_r.text
@@ -160,8 +160,8 @@ async def test_concurrent_run_all_no_duplicate_jobs(app_client):
 
     # Fire two run-all requests concurrently
     r1, r2 = await asyncio.gather(
-        app_client.post(f"{_API}/{_STRATEGY_ID}/backtest/run-all"),
-        app_client.post(f"{_API}/{_STRATEGY_ID}/backtest/run-all"),
+        app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
+        app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
     )
     assert r1.status_code == 202, r1.text
     assert r2.status_code == 202, r2.text

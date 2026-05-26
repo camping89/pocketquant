@@ -15,8 +15,8 @@ class GetStrategyTradesHandler(Handler[GetStrategyTradesQuery, list[dict]]):
         self._position_repo = position_repository
 
     async def handle(self, request: GetStrategyTradesQuery) -> list[dict]:
-        closed = await self._position_repo.find_closed_by_strategy(
-            request.strategy_id, limit=request.limit
+        closed = await self._position_repo.find_closed_by_subscription(
+            request.subscription_id, limit=request.limit
         )
         return [
             {

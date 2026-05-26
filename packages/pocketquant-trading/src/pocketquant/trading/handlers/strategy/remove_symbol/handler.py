@@ -5,8 +5,8 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.strategy.remove_symbol.command import RemoveSymbolCommand
-from pocketquant.trading.persistence.strategy_subscription_repository import (
-    StrategySubscriptionRepository,
+from pocketquant.trading.persistence.subscription_repository import (
+    SubscriptionRepository,
 )
 
 
@@ -18,12 +18,12 @@ class RemoveSymbolHandler(Handler[RemoveSymbolCommand, None]):
         self,
         job_scheduler: JobScheduler,
         backtest_repository: BacktestRepository,
-        strategy_subscription_repository: StrategySubscriptionRepository,
+        subscription_repository: SubscriptionRepository,
         strategy_app_service: StrategyAppService,
     ) -> None:
         self._scheduler = job_scheduler
         self._bt_repo = backtest_repository
-        self._sub_repo = strategy_subscription_repository
+        self._sub_repo = subscription_repository
         self._strategy_service = strategy_app_service
 
     async def handle(self, request: RemoveSymbolCommand) -> None:

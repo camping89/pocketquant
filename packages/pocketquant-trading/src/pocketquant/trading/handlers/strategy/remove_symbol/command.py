@@ -1,10 +1,9 @@
-"""RemoveSymbolCommand — delete a single subscription and its cached backtest."""
+"""RemoveSubscriptionCommand — delete a single subscription and its cached backtest."""
 
 from pydantic import BaseModel
 
 
 class RemoveSymbolCommand(BaseModel):
-    """Command to remove a symbol subscription from a strategy."""
+    """Command to remove a subscription by sub_id."""
 
-    strategy_id: str
     sub_id: str
