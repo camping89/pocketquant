@@ -74,12 +74,12 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         load_strategy_for_backtest,
         resolve_date_range,
     )
-    from pocketquant.trading.persistence.strategy_subscription_repository import (
-        StrategySubscriptionRepository,
+    from pocketquant.trading.persistence.subscription_repository import (
+        SubscriptionRepository,
     )
 
     container = _get_container()
-    sub_repo: StrategySubscriptionRepository = await container.get(StrategySubscriptionRepository)
+    sub_repo: SubscriptionRepository = await container.get(SubscriptionRepository)
     bt_repo: BacktestRepository = await container.get(BacktestRepository)
     bar_repo: BarRepository = await container.get(BarRepository)
     event_bus: EventBus = await container.get(EventBus)
@@ -91,34 +91,34 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         logger.warning("backtest_jobs.subscription_not_found", sub_id=subscription_id)
         return
 
-    strategy_id = sub.strategy_id
+    strategy_code = sub.strategy_code
     symbol = sub.symbol  # composite "{code}:{exchange}"
     interval = sub.interval.value  # string e.g. "1h"
 
-    await bt_repo.upsert_status(subscription_id, strategy_id=strategy_id, status="running")
+    await bt_repo.upsert_status(subscription_id, strategy_code=strategy_code, status="running")
 
     # synthetic_id is set inside the try block; track it for finally cleanup
     synthetic_id: str | None = None
 
     try:
         # 2. Validate strategy config is in memory
-        base_config = strategy_app_service._configs.get(strategy_id)  # pyright: ignore[reportPrivateUsage]
+        base_config = strategy_app_service._configs.get(strategy_code)  # pyright: ignore[reportPrivateUsage]
         if base_config is None:
             raise ValueError(
-                f"Strategy config for '{strategy_id}' not in memory. "
+                f"Strategy config for '{strategy_code}' not in memory. "
                 "Load the strategy via LoadStrategyCommand before running backtest."
             )
 
         start_date, end_date = await resolve_date_range(bar_repo, symbol, interval)
         config = build_backtest_config(
-            base_config, strategy_id, symbol, interval, start_date, end_date
+            base_config, strategy_code, symbol, interval, start_date, end_date
         )
 
         # C2: load under a synthetic_id unique to this sub — no concurrent job clobber
         broker, synthetic_id = await load_strategy_for_backtest(
             strategy_app_service,
             base_config,
-            strategy_id,
+            strategy_code,
             subscription_id,
             symbol,
             interval,
@@ -139,7 +139,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
             logger.warning(
                 "backtest_jobs.subscription_deleted_during_run",
                 sub_id=subscription_id,
-                strategy_id=strategy_id,
+                strategy_code=strategy_code,
             )
             return
 
@@ -149,7 +149,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         logger.info(
             "backtest_jobs.completed",
             sub_id=subscription_id,
-            strategy_id=strategy_id,
+            strategy_code=strategy_code,
             symbol=symbol,  # composite
             interval=interval,
             result_status=result.status,
@@ -159,7 +159,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         logger.error(
             "backtest_jobs.failed",
             sub_id=subscription_id,
-            strategy_id=strategy_id,
+            strategy_code=strategy_code,
             error=str(exc),
             exc_info=True,
         )
@@ -167,7 +167,7 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         if await sub_repo.get(subscription_id) is not None:
             await bt_repo.upsert_status(
                 subscription_id,
-                strategy_id=strategy_id,
+                strategy_code=strategy_code,
                 status="failed",
                 error_msg=str(exc)[:500],
             )
@@ -175,12 +175,12 @@ async def run_subscription_backtest(subscription_id: str) -> None:
             logger.warning(
                 "backtest_jobs.subscription_deleted_during_run",
                 sub_id=subscription_id,
-                strategy_id=strategy_id,
+                strategy_code=strategy_code,
             )
         raise
 
     finally:
-        # C2: unload the synthetic entry only — user's base strategy_id is untouched
+        # C2: unload the synthetic entry only — user's base strategy_code is untouched
         if synthetic_id is not None:
             try:
                 await strategy_app_service.unload_strategy(synthetic_id)

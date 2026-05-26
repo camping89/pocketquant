@@ -69,7 +69,7 @@ class OrderAppService:
                         await self._event_bus.publish(
                             OrderFilledEvent(
                                 order_id=order.id,
-                                strategy_id=order.strategy_id,
+                                subscription_id=order.subscription_id,
                                 symbol=order.symbol,
                                 side=order.side,
                                 filled_quantity=result.filled_quantity,
@@ -80,7 +80,7 @@ class OrderAppService:
                         logger.info(
                             "order_filled",
                             order_id=order.id,
-                            strategy_id=order.strategy_id,
+                            subscription_id=order.subscription_id,
                             filled_price=result.filled_price,
                         )
                     else:
@@ -173,7 +173,7 @@ class OrderAppService:
     def get_orders_by_strategy(self, strategy_id: str) -> list[OrderAggregate]:
         """Get all orders for a strategy."""
         all_orders = list(self._orders.values()) + list(self._pending.values())
-        return [o for o in all_orders if o.strategy_id == strategy_id]
+        return [o for o in all_orders if o.subscription_id == strategy_id]
 
     async def on_order_update(self, result: OrderResult) -> None:
         """Handle order update from broker callback.
@@ -195,7 +195,7 @@ class OrderAppService:
                 await self._event_bus.publish(
                     OrderFilledEvent(
                         order_id=order.id,
-                        strategy_id=order.strategy_id,
+                        subscription_id=order.subscription_id,
                         symbol=order.symbol,
                         side=order.side,
                         filled_quantity=result.filled_quantity,
@@ -226,5 +226,5 @@ class OrderAppService:
         return await self._order_repo.get(order_id)
 
     async def get_orders_by_strategy_async(self, strategy_id: str) -> list[OrderAggregate]:
-        """Get all orders for a strategy from database."""
-        return await self._order_repo.find_by_strategy(strategy_id)
+        """Get all orders for a subscription from database."""
+        return await self._order_repo.find_by_subscription(strategy_id)

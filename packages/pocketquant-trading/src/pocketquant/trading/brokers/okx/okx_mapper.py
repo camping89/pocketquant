@@ -65,12 +65,12 @@ def map_order_to_okx_params(order: OrderAggregate, inst_suffix: str = "USDT") ->
     return params
 
 
-def map_okx_position_to_domain(pos_data: dict, strategy_id: str) -> PositionAggregate | None:
+def map_okx_position_to_domain(pos_data: dict, subscription_id: str) -> PositionAggregate | None:
     """Map OKX position response to domain PositionAggregate.
 
     Args:
         pos_data: OKX position data from API
-        strategy_id: Strategy ID to associate with position
+        subscription_id: Subscription ID to associate with position
 
     Returns:
         PositionAggregate or None if no position
@@ -97,7 +97,7 @@ def map_okx_position_to_domain(pos_data: dict, strategy_id: str) -> PositionAggr
     # Note: upl (unrealized P&L) available in pos_data.get("upl", "0")
 
     position = PositionAggregate.open(
-        strategy_id=strategy_id,
+        subscription_id=subscription_id,
         symbol=composite_symbol,
         side=side,
         entry_price=avg_px,

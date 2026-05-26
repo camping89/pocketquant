@@ -20,7 +20,7 @@ class ListOrdersHandler(Handler[ListOrdersQuery, list[dict]]):
         return [
             {
                 "id": o.id,
-                "strategy_id": o.strategy_id,
+                "subscription_id": o.subscription_id,
                 "symbol": o.symbol,
                 "side": o.side.value,
                 "order_type": o.order_type.value,

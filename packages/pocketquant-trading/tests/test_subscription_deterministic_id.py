@@ -1,7 +1,12 @@
-"""Unit tests for StrategySubscription.deterministic_id — no Mongo, pure hashing."""
+"""Unit tests for Subscription.deterministic_id — no Mongo, pure hashing.
+
+Includes hash STABILITY assertion: the deterministic_id formula must produce
+the SAME id for the same inputs regardless of refactors. Existing subscription
+IDs in production depend on the exact hash recipe.
+"""
 
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.trading.domain.subscription import StrategySubscription
+from pocketquant.trading.domain.subscription import Subscription
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -10,8 +15,19 @@ from pocketquant.trading.domain.subscription import StrategySubscription
 _HEX_CHARS = frozenset("0123456789abcdef")
 
 
-def _id(strategy_id: str, symbol: str, interval) -> str:
-    return StrategySubscription.deterministic_id(strategy_id, symbol, interval)
+def _id(strategy_code: str, symbol: str, interval) -> str:
+    return Subscription.deterministic_id(strategy_code, symbol, interval)
+
+
+# Snapshot of a known good id — locks the hash formula so a future refactor
+# can't silently change subscription PKs in production.
+def test_back_compat_known_id_hitnrun2_btc_1m():
+    """sha256('hitnrun2|BTCUSDT:BINANCE|1m')[:16] must equal this value forever."""
+    import hashlib
+
+    raw = "hitnrun2|BTCUSDT:BINANCE|1m"
+    expected = hashlib.sha256(raw.encode()).hexdigest()[:16]
+    assert Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", "1m") == expected
 
 
 # ---------------------------------------------------------------------------

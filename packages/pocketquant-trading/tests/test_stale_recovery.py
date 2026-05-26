@@ -40,7 +40,7 @@ async def _insert_running(repo: BacktestRepository, sub_id: str, age_minutes: fl
         {
             "_id": sub_id,
             "subscription_id": sub_id,
-            "strategy_id": "strat-test",
+            "strategy_code": "strat-test",
             "status": "running",
             "last_run_at": now - timedelta(minutes=age_minutes),
         }

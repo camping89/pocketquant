@@ -23,10 +23,12 @@ class OrderRepository(BaseRepository):
             return None
         return OrderAggregate.from_mongo(doc)
 
-    async def find_by_strategy(self, strategy_id: str, limit: int = 1000) -> list[OrderAggregate]:
-        """Get all orders for a strategy."""
+    async def find_by_subscription(
+        self, subscription_id: str, limit: int = 1000
+    ) -> list[OrderAggregate]:
+        """Get all orders for a subscription."""
         collection = self._collection()
-        cursor = collection.find({"strategy_id": strategy_id}).limit(limit)
+        cursor = collection.find({"subscription_id": subscription_id}).limit(limit)
         return [OrderAggregate.from_mongo(doc) async for doc in cursor]
 
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
@@ -40,6 +42,6 @@ class OrderRepository(BaseRepository):
     async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""
         collection = self._collection()
-        await collection.create_index("strategy_id", name="ix_orders_strategy_id")
+        await collection.create_index("subscription_id", name="ix_orders_subscription_id")
         await collection.create_index("status", name="ix_orders_status")
         await collection.create_index("symbol", name="ix_orders_symbol")
