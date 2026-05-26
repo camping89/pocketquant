@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from pocketquant.api.market_data.app_services.quote_dto import QuoteTick
-from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT, build_bar_cache_key
+from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent

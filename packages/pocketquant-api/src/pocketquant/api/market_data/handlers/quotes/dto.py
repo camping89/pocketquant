@@ -22,7 +22,7 @@ class QuoteResult:
     low_price: float | None = None
 
     @classmethod
-    def from_quote(cls, quote: Quote) -> "QuoteResult":
+    def from_quote(cls, quote: Quote) -> QuoteResult:
         return cls(
             symbol=quote.symbol,
             timestamp=quote.timestamp.isoformat(),

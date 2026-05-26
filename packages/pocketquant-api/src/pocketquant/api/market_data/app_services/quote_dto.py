@@ -45,7 +45,7 @@ class Quote(BaseModel):
         }
 
     @classmethod
-    def from_cache_dict(cls, data: dict[str, Any]) -> "Quote":
+    def from_cache_dict(cls, data: dict[str, Any]) -> Quote:
         if isinstance(data.get("timestamp"), str):
             data["timestamp"] = dt.fromisoformat(data["timestamp"])
         return cls(**data)

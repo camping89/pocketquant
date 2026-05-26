@@ -34,7 +34,7 @@ class WsSubscriptionManager:
         self,
         provider: IRealtimeQuoteProvider,
         tracked_symbol_repo: TrackedSymbolRepository,
-        quote_app_service: "QuoteAppService",  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
+        quote_app_service: QuoteAppService,  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
         interval_s: float = 5.0,
     ):
         self._provider = provider
