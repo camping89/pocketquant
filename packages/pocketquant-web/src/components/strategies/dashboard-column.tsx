@@ -30,10 +30,7 @@ const TAB_LABELS: { key: DashTab; label: string }[] = [
 export function DashboardColumn({ sub }: DashboardColumnProps) {
   const [activeTab, setActiveTab] = useState<DashTab>('metrics')
 
-  const { data: backtest, isLoading: btLoading } = useSubscriptionBacktest(
-    sub.strategy_id,
-    sub.id,
-  )
+  const { data: backtest, isLoading: btLoading } = useSubscriptionBacktest(sub.id)
   const { data: openPos } = useOpenPosition(sub.id)
   const { data: liveTrades = [] } = useStrategyTrades(sub.id)
 

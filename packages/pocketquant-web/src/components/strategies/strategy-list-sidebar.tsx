@@ -3,11 +3,10 @@
  * Lists all subscriptions across all loaded strategies with filter + New button.
  */
 import { useState, useMemo } from 'react'
-import { useQueries } from '@tanstack/react-query'
-import { useStrategiesList } from '../../hooks/use-strategies'
+import { useQuery } from '@tanstack/react-query'
 import { StrategyCard } from './strategy-card'
 import { NewSubscriptionDialog } from './new-subscription-dialog'
-import { listSymbols } from '../../api/strategy-api'
+import { listSubscriptions } from '../../api/strategy-api'
 import type { Subscription } from '../../api/strategy-api'
 
 interface StrategyListSidebarProps {
@@ -15,26 +14,16 @@ interface StrategyListSidebarProps {
   onSelect: (sub: Subscription) => void
 }
 
-/** Aggregates subscriptions from every strategy id in parallel via useQueries. */
-function useAllSubscriptions(strategyIds: string[]) {
-  const results = useQueries({
-    queries: strategyIds.map((id) => ({
-      queryKey: ['subscriptions', id],
-      queryFn: () => listSymbols(id),
-      staleTime: 10_000,
-    })),
-  })
-  const subs = results.flatMap((r) => r.data ?? [])
-  const isLoading = results.some((r) => r.isLoading)
-  return { subs, isLoading }
-}
-
 export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSidebarProps) {
   const [showDialog, setShowDialog] = useState(false)
   const [filter, setFilter] = useState('')
 
-  const { data: strategyIds = [], isLoading: strategiesLoading } = useStrategiesList()
-  const { subs, isLoading: subsLoading } = useAllSubscriptions(strategyIds)
+  const { data: subs = [], isLoading } = useQuery({
+    queryKey: ['subscriptions'],
+    queryFn: () => listSubscriptions(),
+    staleTime: 10_000,
+    refetchInterval: 5_000,
+  })
 
   const filtered = useMemo(() => {
     if (!filter) return subs
@@ -42,12 +31,10 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
     return subs.filter(
       (s) =>
         s.symbol.toLowerCase().includes(lc) ||
-        s.strategy_id.toLowerCase().includes(lc) ||
+        s.strategy_code.toLowerCase().includes(lc) ||
         s.interval.toLowerCase().includes(lc),
     )
   }, [subs, filter])
-
-  const isLoading = strategiesLoading || subsLoading
 
   return (
     <div
@@ -110,13 +97,13 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
           </div>
         )}
 
-        {!isLoading && strategyIds.length === 0 && (
+        {!isLoading && subs.length === 0 && (
           <div style={{ padding: '12px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
-            No strategies loaded. Click + New to add one.
+            No subscriptions yet. Click + New to add one.
           </div>
         )}
 
-        {!isLoading && strategyIds.length > 0 && filtered.length === 0 && (
+        {!isLoading && subs.length > 0 && filtered.length === 0 && (
           <div style={{ padding: '12px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
             No subscriptions match "{filter}".
           </div>
@@ -132,7 +119,7 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         ))}
       </div>
 
-      {/* Footer: strategy count */}
+      {/* Footer: subscription count */}
       {!isLoading && subs.length > 0 && (
         <div
           style={{

@@ -68,7 +68,7 @@ export function StrategyCard({ sub, selected, onClick }: StrategyCardProps) {
           )}
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-          {sub.interval} · {sub.strategy_id}
+          {sub.interval} · {sub.strategy_code}
         </div>
       </div>
     </button>
