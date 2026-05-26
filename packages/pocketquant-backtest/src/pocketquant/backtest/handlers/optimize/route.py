@@ -15,7 +15,7 @@ class OptimizationSummaryResponse(BaseModel):
     """Summary of optimization run."""
 
     id: str
-    strategy_id: str
+    strategy_code: str
     status: str
     total_combinations: int
     completed_combinations: int
@@ -39,7 +39,7 @@ async def run_optimization(
 
     return {
         "id": result.id,
-        "strategy_id": result.strategy_id,
+        "strategy_code": result.strategy_code,
         "status": result.status,
         "total_combinations": result.total_combinations,
         "completed_combinations": result.completed_combinations,

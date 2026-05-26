@@ -39,7 +39,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
     async def handle(self, request: RunBacktestCommand) -> BacktestResult:
         """Execute backtest and return result."""
         config = BacktestConfig(
-            strategy_id=request.strategy_id,
+            strategy_code=request.strategy_id,
             symbol=request.symbol,
             interval=request.interval,
             start_date=request.start_date,

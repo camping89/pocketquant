@@ -29,7 +29,7 @@ async def list_backtests(
     return [
         {
             "id": r.id,
-            "strategy_id": r.strategy_id,
+            "strategy_code": r.strategy_code,
             "status": r.status,
             "metrics": r.metrics.to_dict(),
             "started_at": r.started_at.isoformat(),

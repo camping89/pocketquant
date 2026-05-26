@@ -32,7 +32,7 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
     async def handle(self, request: RunOptimizationCommand) -> OptimizationResult:
         """Execute optimization and return result."""
         config = OptimizationConfig(
-            strategy_id=request.strategy_id,
+            strategy_code=request.strategy_id,
             symbol=request.symbol,
             interval=request.interval,
             start_date=request.start_date,

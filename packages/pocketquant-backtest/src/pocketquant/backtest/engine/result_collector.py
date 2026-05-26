@@ -168,7 +168,7 @@ class BacktestResultCollector:
         order = Order(
             order_id=result.order_id,
             run_id=self._run_id,
-            strategy_id=self._config.strategy_id,
+            strategy_code=self._config.strategy_code,
             symbol=self._config.symbol,
             side=side,
             order_type=OrderType.MARKET,  # MARKET assumption; LIMIT path also fills as MARKET-on-cross
@@ -203,7 +203,7 @@ class BacktestResultCollector:
         return Order(
             order_id=order_id,
             run_id=self._run_id,
-            strategy_id=self._config.strategy_id,
+            strategy_code=self._config.strategy_code,
             symbol=self._config.symbol,
             side=OrderSide.BUY,  # unknown until fill; placeholder
             order_type=OrderType.MARKET,
@@ -256,7 +256,7 @@ class BacktestResultCollector:
             trade = Trade(
                 trade_id=generate_id_str(),
                 run_id=self._run_id,
-                strategy_id=self._config.strategy_id,
+                strategy_code=self._config.strategy_code,
                 symbol=self._config.symbol,
                 direction=consumed.lot.direction,
                 entry_order_id=consumed.lot.entry_order_id,
@@ -354,7 +354,7 @@ class BacktestResultCollector:
         )
 
         config_snapshot = {
-            "strategy_id": self._config.strategy_id,
+            "strategy_code": self._config.strategy_code,
             "symbol": self._config.symbol,
             "interval": self._config.interval,
             "start_date": self._config.start_date.isoformat(),
@@ -367,7 +367,7 @@ class BacktestResultCollector:
 
         run = BacktestResult(
             id=run_id,
-            strategy_id=self._config.strategy_id,
+            strategy_code=self._config.strategy_code,
             config_snapshot=config_snapshot,
             metrics=metrics,
             equity_curve=self._equity_curve,

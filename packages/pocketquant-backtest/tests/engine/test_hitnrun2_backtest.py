@@ -50,8 +50,8 @@ class _InMemoryOrderRepo:
     async def get(self, order_id: str) -> OrderAggregate | None:
         return self._items.get(order_id)
 
-    async def find_by_strategy(self, strategy_id: str, limit: int = 1000) -> list[OrderAggregate]:
-        return [o for o in self._items.values() if o.strategy_id == strategy_id][:limit]
+    async def find_by_subscription(self, subscription_id: str, limit: int = 1000) -> list[OrderAggregate]:
+        return [o for o in self._items.values() if o.subscription_id == subscription_id][:limit]
 
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
         return []
@@ -67,9 +67,9 @@ class _InMemoryPositionRepo:
     async def get(self, position_id: str) -> PositionAggregate | None:
         return self._items.get(position_id)
 
-    async def get_by_strategy(self, strategy_id: str) -> PositionAggregate | None:
+    async def get_by_subscription(self, subscription_id: str) -> PositionAggregate | None:
         for p in self._items.values():
-            if p.strategy_id == strategy_id and not p.is_closed:
+            if p.subscription_id == subscription_id and not p.is_closed:
                 return p
         return None
 
@@ -265,7 +265,7 @@ async def _run_backtest(
     )
 
     config = BacktestConfig(
-        strategy_id="hitnrun2",
+        strategy_code="hitnrun2",
         symbol=_SYM,
         interval="1m",
         start_date=date(2026, 1, 1),

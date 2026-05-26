@@ -14,9 +14,9 @@ T0 = datetime(2026, 1, 5, 10, 0, 0)
 
 
 def _trade(*, trade_id: str, run_id: str, pnl: float = 10.0, direction: str = "LONG",
-           strategy_id: str = "s1") -> Trade:
+           strategy_code: str = "s1") -> Trade:
     return Trade(
-        trade_id=trade_id, run_id=run_id, strategy_id=strategy_id, symbol="BTC:BIN",
+        trade_id=trade_id, run_id=run_id, strategy_code=strategy_code, symbol="BTC:BIN",
         direction=direction, entry_order_id="o-entry", entry_price=100.0,
         entry_time=T0, quantity=1.0, exit_order_id="o-exit",
         exit_price=100.0 + pnl, exit_time=T0 + timedelta(hours=1),
@@ -78,6 +78,6 @@ async def test_ensure_indexes_creates_all_five(database: Database) -> None:
     await repo.ensure_indexes()
     coll = database.get_collection("backtest_trades")
     indexes = await coll.index_information()
-    expected = {"ix_bttrades_run_id", "ix_bttrades_strategy_direction",
+    expected = {"ix_bttrades_run_id", "ix_bttrades_strategy_code_direction",
                 "ix_bttrades_entry_time", "ix_bttrades_pnl", "ix_bttrades_run_entry"}
     assert expected.issubset(set(indexes))

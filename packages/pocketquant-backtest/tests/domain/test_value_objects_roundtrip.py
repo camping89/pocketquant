@@ -69,7 +69,7 @@ def test_order_roundtrip_with_embedded_events_and_fills() -> None:
         OrderEvent(timestamp=NOW, from_status=OrderStatus.SUBMITTED, to_status=OrderStatus.FILLED, reason="market_fill"),
     ]
     o = Order(
-        order_id="o1", run_id="r1", strategy_id="s1", symbol="BTC:BIN",
+        order_id="o1", run_id="r1", strategy_code="s1", symbol="BTC:BIN",
         side=OrderSide.BUY, order_type=OrderType.MARKET, quantity=0.01,
         price=None, sl_price=64000, tp_price=67000, status=OrderStatus.FILLED,
         submitted_at=NOW, last_updated_at=NOW, events=events, fills=[fill],
@@ -80,7 +80,7 @@ def test_order_roundtrip_with_embedded_events_and_fills() -> None:
 
 def test_trade_roundtrip_flat_entry_exit_prefix() -> None:
     t = Trade(
-        trade_id="t1", run_id="r1", strategy_id="s1", symbol="BTC:BIN",
+        trade_id="t1", run_id="r1", strategy_code="s1", symbol="BTC:BIN",
         direction="LONG", entry_order_id="o1", entry_price=65000.0, entry_time=NOW,
         quantity=0.01, exit_order_id="o2", exit_price=67000.0,
         exit_time=NOW + timedelta(hours=1), sl_price=64000, tp_price=67000,
@@ -92,7 +92,7 @@ def test_trade_roundtrip_flat_entry_exit_prefix() -> None:
 def test_trade_nullable_order_ids_round_trip() -> None:
     """Migrated trades have None entry/exit_order_id — must round-trip cleanly."""
     t = Trade(
-        trade_id="t1", run_id="r1", strategy_id="s1", symbol="BTC:BIN",
+        trade_id="t1", run_id="r1", strategy_code="s1", symbol="BTC:BIN",
         direction="LONG", entry_order_id=None, entry_price=100.0, entry_time=NOW,
         quantity=1.0, exit_order_id=None, exit_price=110.0,
         exit_time=NOW, sl_price=None, tp_price=None,

@@ -36,7 +36,7 @@ async def broker() -> PaperBroker:
 async def test_market_fill_emits_submitted_then_filled(broker: PaperBroker) -> None:
     events: list = []
     await broker.subscribe_order_event(lambda oid, ev: events.append((oid, ev)))
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.MARKET, quantity=0.01)
     await broker.submit_order(o)
     log = broker.get_order_events(o.id)
@@ -50,7 +50,7 @@ async def test_market_fill_emits_submitted_then_filled(broker: PaperBroker) -> N
 async def test_reject_insufficient_balance_emits_submitted_then_rejected(
     broker: PaperBroker,
 ) -> None:
-    huge = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    huge = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                                  order_type=OrderType.MARKET, quantity=999.0)
     result = await broker.submit_order(huge)
     assert result.status == OrderStatus.REJECTED
@@ -63,7 +63,7 @@ async def test_reject_insufficient_balance_emits_submitted_then_rejected(
 async def test_event_timestamps_use_simulation_time(broker: PaperBroker) -> None:
     sim_t = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     set_simulation_time(sim_t)
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.MARKET, quantity=0.01)
     await broker.submit_order(o)
     log = broker.get_order_events(o.id)
@@ -79,7 +79,7 @@ async def test_sl_autofill_synthetic_order_carries_auto_sl_reason() -> None:
     broker.set_current_price("BTC:BIN", 65000)
     events: list = []
     await broker.subscribe_order_event(lambda oid, ev: events.append((oid, ev)))
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.MARKET, quantity=0.01,
                               sl_price=63000, tp_price=70000)
     await broker.submit_order(o)
@@ -97,7 +97,7 @@ async def test_sl_autofill_synthetic_order_carries_auto_sl_reason() -> None:
 async def test_subscribe_callback_receives_every_event_in_order(broker: PaperBroker) -> None:
     received: list = []
     await broker.subscribe_order_event(lambda oid, ev: received.append(ev.to_status))
-    o = OrderAggregate.create(strategy_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
+    o = OrderAggregate.create(subscription_id="s", symbol="BTC:BIN", side=OrderSide.BUY,
                               order_type=OrderType.MARKET, quantity=0.01)
     await broker.submit_order(o)
     assert received == [OrderStatus.SUBMITTED, OrderStatus.FILLED]

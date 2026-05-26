@@ -25,7 +25,7 @@ class BacktestResult:
     """
 
     id: str
-    strategy_id: str
+    strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized BacktestConfig
     metrics: BacktestMetrics
     equity_curve: list[EquityPoint]
@@ -44,7 +44,7 @@ class BacktestResult:
         """Serialize to a slim ``backtest_runs`` document."""
         return {
             "_id": self.id,
-            "strategy_id": self.strategy_id,
+            "strategy_code": self.strategy_code,
             "config_snapshot": self.config_snapshot,
             "metrics": self.metrics.to_mongo(),
             "equity_curve": [p.to_mongo() for p in self.equity_curve],
@@ -61,7 +61,7 @@ class BacktestResult:
         """Create from MongoDB document. Tolerates pre-migration shape (ignores legacy keys)."""
         return cls(
             id=data["_id"],
-            strategy_id=data["strategy_id"],
+            strategy_code=data["strategy_code"],
             config_snapshot=data["config_snapshot"],
             metrics=BacktestMetrics.from_mongo(data["metrics"]),
             equity_curve=[EquityPoint.from_mongo(p) for p in data.get("equity_curve", [])],
@@ -79,7 +79,7 @@ class OptimizationResult:
     """Complete result of a grid optimization run."""
 
     id: str
-    strategy_id: str
+    strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized OptimizationConfig
     target_metric: str
     total_combinations: int
@@ -101,7 +101,7 @@ class OptimizationResult:
         """Convert to dictionary for MongoDB storage."""
         return {
             "_id": self.id,
-            "strategy_id": self.strategy_id,
+            "strategy_code": self.strategy_code,
             "config_snapshot": self.config_snapshot,
             "target_metric": self.target_metric,
             "total_combinations": self.total_combinations,
@@ -121,7 +121,7 @@ class OptimizationResult:
         """Create from MongoDB document."""
         return cls(
             id=data["_id"],
-            strategy_id=data["strategy_id"],
+            strategy_code=data["strategy_code"],
             config_snapshot=data["config_snapshot"],
             target_metric=data["target_metric"],
             total_combinations=data["total_combinations"],

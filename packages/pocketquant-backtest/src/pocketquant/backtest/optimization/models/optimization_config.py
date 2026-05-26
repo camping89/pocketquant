@@ -15,7 +15,7 @@ class OptimizationConfig:
     Extends BacktestConfig concept with parameter grid and target metric.
 
     Attributes:
-        strategy_id: Strategy identifier to optimize.
+        strategy_code: Strategy identifier to optimize.
         symbol: Composite trading symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         interval: Bar interval.
         start_date: Start date for backtests.
@@ -28,7 +28,7 @@ class OptimizationConfig:
         max_workers: Maximum concurrent backtests.
     """
 
-    strategy_id: str
+    strategy_code: str
     symbol: str
     interval: str
     start_date: date

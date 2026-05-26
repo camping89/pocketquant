@@ -70,7 +70,7 @@ class BacktestAppService:
         logger.info(
             "backtest_starting",
             run_id=run_id,
-            strategy_id=config.strategy_id,
+            strategy_code=config.strategy_code,
             symbol=config.symbol,
             start_date=config.start_date.isoformat(),
             end_date=config.end_date.isoformat(),
