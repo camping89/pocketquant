@@ -57,7 +57,7 @@ def build_backtest_config(
     ``symbol`` is composite ``{code}:{exchange}``.
     """
     return BacktestConfig(
-        strategy_id=strategy_id,
+        strategy_code=strategy_id,
         symbol=symbol,
         interval=interval,
         start_date=start_date,

@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
-from pocketquant.trading.domain.subscription import StrategySubscription
+from pocketquant.trading.domain.subscription import Subscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 
@@ -35,7 +35,7 @@ def _make_handler(
 
     handler = AddSymbolHandler(
         strategy_app_service=strategy_service,
-        strategy_subscription_repository=sub_repo,
+        subscription_repository=sub_repo,
         tracked_symbol_repository=tracked_repo,
     )
     return handler, strategy_service, sub_repo.add, tracked_repo.exists
@@ -53,7 +53,7 @@ async def test_autoload_uses_sub_id_as_instance_key() -> None:
         )
     )
 
-    expected_sub_id = StrategySubscription.deterministic_id(
+    expected_sub_id = Subscription.deterministic_id(
         "hitnrun2", "BTCUSDT:BINANCE", "1h"
     )
 
@@ -66,7 +66,7 @@ async def test_autoload_uses_sub_id_as_instance_key() -> None:
     assert cfg.interval == "1h"
     sub_add.assert_awaited_once()
     assert result["id"] == expected_sub_id
-    assert result["strategy_id"] == "hitnrun2"
+    assert result["strategy_code"] == "hitnrun2"
 
 
 @pytest.mark.asyncio

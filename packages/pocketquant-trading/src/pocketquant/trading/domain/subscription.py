@@ -1,4 +1,4 @@
-"""StrategySubscription — runtime mapping of a strategy to a market symbol/interval."""
+"""Subscription — runtime mapping of a strategy template to a market symbol/interval."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ class SubscriptionAlreadyExistsError(DomainError):
 
 
 @dataclass(frozen=True)
-class StrategySubscription:
-    """Immutable runtime mapping of a strategy to a (symbol, interval) pair.
+class Subscription:
+    """Immutable runtime mapping of a strategy template to a (symbol, interval) pair.
 
     ``symbol`` stores composite identifier ``{code}:{exchange}``.
 
@@ -31,7 +31,7 @@ class StrategySubscription:
     """
 
     id: str
-    strategy_id: str
+    strategy_code: str
     symbol: str
     interval: Interval
     created_at: datetime
@@ -42,7 +42,7 @@ class StrategySubscription:
 
     @staticmethod
     def deterministic_id(
-        strategy_id: str,
+        strategy_code: str,
         symbol: str,
         interval: str | Interval,
     ) -> str:
@@ -50,9 +50,14 @@ class StrategySubscription:
 
         Inputs are normalized: symbol uppercased, interval as its string value
         so the result is stable regardless of how callers pass it.
+
+        Hash stability: the hash input is the *value* of ``strategy_code``
+        (e.g. ``"hitnrun2"``), not the parameter name. Renaming this parameter
+        does NOT change existing PKs. Do not "improve" the hash formula —
+        existing subscription IDs in production depend on this exact recipe.
         """
         interval_val = interval.value if isinstance(interval, Interval) else str(interval)
-        raw = f"{strategy_id}|{symbol.upper()}|{interval_val}"
+        raw = f"{strategy_code}|{symbol.upper()}|{interval_val}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     # ------------------------------------------------------------------
@@ -63,18 +68,18 @@ class StrategySubscription:
         """Serialise to a MongoDB document. Uses _id = id for dedup by PK."""
         return {
             "_id": self.id,
-            "strategy_id": self.strategy_id,
+            "strategy_code": self.strategy_code,
             "symbol": self.symbol,
             "interval": self.interval.value,
             "created_at": self.created_at,
         }
 
     @classmethod
-    def from_mongo(cls, doc: dict) -> StrategySubscription:
+    def from_mongo(cls, doc: dict) -> Subscription:
         """Deserialise from a MongoDB document."""
         return cls(
             id=doc["_id"],
-            strategy_id=doc["strategy_id"],
+            strategy_code=doc["strategy_code"],
             symbol=doc["symbol"],
             interval=Interval(doc["interval"]),
             created_at=doc["created_at"],

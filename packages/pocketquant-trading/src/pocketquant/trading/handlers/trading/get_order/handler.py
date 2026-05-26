@@ -22,7 +22,7 @@ class GetOrderHandler(Handler[GetOrderQuery, dict]):
 
         return {
             "id": order.id,
-            "strategy_id": order.strategy_id,
+            "subscription_id": order.subscription_id,
             "symbol": order.symbol,
             "side": order.side.value,
             "order_type": order.order_type.value,

@@ -1,4 +1,4 @@
-"""Integration tests for StrategySubscriptionRepository — CRUD + bulk ops."""
+"""Integration tests for SubscriptionRepository — CRUD + bulk ops."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ import pytest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.trading.domain.subscription import (
-    StrategySubscription,
+    Subscription,
     SubscriptionAlreadyExistsError,
 )
-from pocketquant.trading.persistence.strategy_subscription_repository import (
-    StrategySubscriptionRepository,
+from pocketquant.trading.persistence.subscription_repository import (
+    SubscriptionRepository,
 )
 
 pytestmark = pytest.mark.integration
@@ -27,8 +27,8 @@ pytestmark = pytest.mark.integration
 async def repo(settings):
     db = Database()
     await db.connect(settings)
-    await db.get_collection(StrategySubscriptionRepository._collection_name).drop()
-    r = StrategySubscriptionRepository(db)
+    await db.get_collection(SubscriptionRepository._collection_name).drop()
+    r = SubscriptionRepository(db)
     await r.ensure_indexes()
     yield r
     await db.disconnect()
@@ -39,11 +39,11 @@ async def repo(settings):
 # ---------------------------------------------------------------------------
 
 
-def _make_sub(strategy_id: str, symbol: str, interval: Interval) -> StrategySubscription:
-    sub_id = StrategySubscription.deterministic_id(strategy_id, symbol, interval)
-    return StrategySubscription(
+def _make_sub(strategy_code: str, symbol: str, interval: Interval) -> Subscription:
+    sub_id = Subscription.deterministic_id(strategy_code, symbol, interval)
+    return Subscription(
         id=sub_id,
-        strategy_id=strategy_id,
+        strategy_code=strategy_code,
         symbol=symbol.upper(),
         interval=interval,
         created_at=datetime.now(UTC),
@@ -63,7 +63,7 @@ async def test_add_get_delete_round_trip(repo):
     fetched = await repo.get(sub.id)
     assert fetched is not None
     assert fetched.id == sub.id
-    assert fetched.strategy_id == sub.strategy_id
+    assert fetched.strategy_code == sub.strategy_code
     assert fetched.symbol == sub.symbol
     assert fetched.interval == sub.interval
 
@@ -83,7 +83,7 @@ async def test_add_duplicate_raises(repo):
 
 
 @pytest.mark.asyncio
-async def test_list_by_strategy_filters_correctly(repo):
+async def test_list_by_strategy_code_filters_correctly(repo):
     sub_a1 = _make_sub("strat-a", "BTC-USDT:BINANCE", Interval.HOUR_1)
     sub_a2 = _make_sub("strat-a", "ETH-USDT:BINANCE", Interval.HOUR_1)
     sub_b1 = _make_sub("strat-b", "SOL-USDT:OKX", Interval.MINUTE_15)
@@ -92,20 +92,20 @@ async def test_list_by_strategy_filters_correctly(repo):
     await repo.add(sub_a2)
     await repo.add(sub_b1)
 
-    results_a = await repo.list_by_strategy("strat-a")
+    results_a = await repo.list_by_strategy_code("strat-a")
     ids_a = {s.id for s in results_a}
     assert ids_a == {sub_a1.id, sub_a2.id}
 
-    results_b = await repo.list_by_strategy("strat-b")
+    results_b = await repo.list_by_strategy_code("strat-b")
     assert len(results_b) == 1
     assert results_b[0].id == sub_b1.id
 
     # Non-existent strategy returns empty list
-    assert await repo.list_by_strategy("strat-c") == []
+    assert await repo.list_by_strategy_code("strat-c") == []
 
 
 @pytest.mark.asyncio
-async def test_delete_by_strategy_bulk(repo):
+async def test_delete_by_strategy_code_bulk(repo):
     sub_a1 = _make_sub("strat-bulk-a", "BTC-USDT:BINANCE", Interval.HOUR_1)
     sub_a2 = _make_sub("strat-bulk-a", "ETH-USDT:BINANCE", Interval.HOUR_1)
     sub_a3 = _make_sub("strat-bulk-a", "SOL-USDT:BINANCE", Interval.HOUR_1)
@@ -114,10 +114,10 @@ async def test_delete_by_strategy_bulk(repo):
     for sub in (sub_a1, sub_a2, sub_a3, sub_b1):
         await repo.add(sub)
 
-    deleted = await repo.delete_by_strategy("strat-bulk-a")
+    deleted = await repo.delete_by_strategy_code("strat-bulk-a")
     assert deleted == 3
 
-    assert await repo.list_by_strategy("strat-bulk-a") == []
-    remaining = await repo.list_by_strategy("strat-bulk-b")
+    assert await repo.list_by_strategy_code("strat-bulk-a") == []
+    remaining = await repo.list_by_strategy_code("strat-bulk-b")
     assert len(remaining) == 1
     assert remaining[0].id == sub_b1.id

@@ -343,7 +343,7 @@ class StrategyAppService:
         price = signal.entry_price if order_type == OrderType.LIMIT else current_price
 
         return OrderAggregate.create(
-            strategy_id=strategy.id,
+            subscription_id=strategy.id,
             symbol=signal.symbol,
             side=side,
             order_type=order_type,

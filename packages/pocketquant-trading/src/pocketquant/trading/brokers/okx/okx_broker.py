@@ -243,7 +243,7 @@ class OKXBroker(IBroker):
 
             positions = []
             for pos_data in response.get("data", []):
-                pos = map_okx_position_to_domain(pos_data, strategy_id="okx")
+                pos = map_okx_position_to_domain(pos_data, subscription_id="okx")
                 if pos:
                     positions.append(pos)
 

@@ -36,7 +36,7 @@ class PositionAppService:
         positions = await self._position_repo.find_open()
         async with self._lock:
             for pos in positions:
-                self._positions[pos.strategy_id] = pos
+                self._positions[pos.subscription_id] = pos
         logger.info("loaded_open_positions", count=len(positions))
 
     async def stop(self) -> None:
@@ -47,21 +47,21 @@ class PositionAppService:
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Handle order fill by updating position."""
         async with self._lock:
-            position = self._positions.get(event.strategy_id)
+            position = self._positions.get(event.subscription_id)
 
             if position is None:
                 # New position
                 side = PositionSide.LONG if event.side == OrderSide.BUY else PositionSide.SHORT
 
                 position = PositionAggregate.open(
-                    strategy_id=event.strategy_id,
+                    subscription_id=event.subscription_id,
                     symbol=event.symbol,
                     side=side,
                     entry_price=event.filled_price,
                     quantity=event.filled_quantity,
                 )
 
-                self._positions[event.strategy_id] = position
+                self._positions[event.subscription_id] = position
 
                 # Persist new position
                 await self._position_repo.save(position)
@@ -69,7 +69,7 @@ class PositionAppService:
                 await self._event_bus.publish(
                     PositionOpenedEvent(
                         position_id=position.id,
-                        strategy_id=event.strategy_id,
+                        subscription_id=event.subscription_id,
                         symbol=event.symbol,
                         side=side,
                         entry_price=event.filled_price,
@@ -79,7 +79,7 @@ class PositionAppService:
 
                 logger.info(
                     "position_opened",
-                    strategy_id=event.strategy_id,
+                    subscription_id=event.subscription_id,
                     symbol=event.symbol,
                     side=side.value,
                     entry_price=event.filled_price,
@@ -100,7 +100,7 @@ class PositionAppService:
 
                     logger.info(
                         "position_increased",
-                        strategy_id=event.strategy_id,
+                        subscription_id=event.subscription_id,
                         quantity=position.quantity,
                     )
                 else:
@@ -112,17 +112,17 @@ class PositionAppService:
 
                     if position.is_closed:
                         # Position fully closed
-                        del self._positions[event.strategy_id]
+                        del self._positions[event.subscription_id]
 
                         logger.info(
                             "position_closed",
-                            strategy_id=event.strategy_id,
+                            subscription_id=event.subscription_id,
                             realized_pnl=position.realized_pnl,
                         )
                     else:
                         logger.info(
                             "position_reduced",
-                            strategy_id=event.strategy_id,
+                            subscription_id=event.subscription_id,
                             remaining=position.quantity,
                             realized_pnl=position.realized_pnl,
                         )
@@ -143,7 +143,7 @@ class PositionAppService:
 
         return {
             "id": position.id,
-            "strategy_id": position.strategy_id,
+            "subscription_id": position.subscription_id,
             "symbol": position.symbol,
             "side": position.side.value,
             "quantity": position.quantity,
@@ -177,4 +177,4 @@ class PositionAppService:
         position = self._positions.get(strategy_id)
         if position:
             return position
-        return await self._position_repo.get_by_strategy(strategy_id)
+        return await self._position_repo.get_by_subscription(strategy_id)

@@ -23,10 +23,10 @@ class PositionRepository(BaseRepository):
             return None
         return PositionAggregate.from_mongo(doc)
 
-    async def get_by_strategy(self, strategy_id: str) -> PositionAggregate | None:
-        """Get open position for a strategy."""
+    async def get_by_subscription(self, subscription_id: str) -> PositionAggregate | None:
+        """Get open position for a subscription."""
         collection = self._collection()
-        doc = await collection.find_one({"strategy_id": strategy_id, "is_closed": False})
+        doc = await collection.find_one({"subscription_id": subscription_id, "is_closed": False})
         if not doc:
             return None
         return PositionAggregate.from_mongo(doc)
@@ -37,23 +37,23 @@ class PositionRepository(BaseRepository):
         cursor = collection.find({"is_closed": False}).limit(limit)
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
 
-    async def find_open_by_strategy(
-        self, strategy_id: str, limit: int = 50
+    async def find_open_by_subscription(
+        self, subscription_id: str, limit: int = 50
     ) -> list[PositionAggregate]:
-        """Return all open positions for a strategy (typically 0 or 1)."""
+        """Return all open positions for a subscription (typically 0 or 1)."""
         collection = self._collection()
         cursor = collection.find(
-            {"strategy_id": strategy_id, "is_closed": False}
+            {"subscription_id": subscription_id, "is_closed": False}
         ).limit(limit)
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
 
-    async def find_closed_by_strategy(
-        self, strategy_id: str, limit: int = 100
+    async def find_closed_by_subscription(
+        self, subscription_id: str, limit: int = 100
     ) -> list[PositionAggregate]:
-        """Return most-recently closed positions for a strategy, newest first."""
+        """Return most-recently closed positions for a subscription, newest first."""
         collection = self._collection()
         cursor = (
-            collection.find({"strategy_id": strategy_id, "is_closed": True})
+            collection.find({"subscription_id": subscription_id, "is_closed": True})
             .sort("closed_at", -1)
             .limit(limit)
         )
@@ -62,6 +62,6 @@ class PositionRepository(BaseRepository):
     async def ensure_indexes(self) -> None:
         """Create indexes for efficient queries."""
         collection = self._collection()
-        await collection.create_index("strategy_id", name="ix_positions_strategy_id")
+        await collection.create_index("subscription_id", name="ix_positions_subscription_id")
         await collection.create_index("is_closed", name="ix_positions_is_closed")
         await collection.create_index("symbol", name="ix_positions_symbol")

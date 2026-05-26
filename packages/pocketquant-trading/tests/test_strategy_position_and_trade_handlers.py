@@ -22,10 +22,10 @@ from pocketquant.trading.handlers.strategy.get_trades.query import (
 )
 
 
-def _open_position(strategy_id: str = "strat-1") -> PositionAggregate:
+def _open_position(subscription_id: str = "strat-1") -> PositionAggregate:
     return PositionAggregate(
         id="pos-open",
-        strategy_id=strategy_id,
+        subscription_id=subscription_id,
         symbol="BTCUSDT:BINANCE",
         side=PositionSide.LONG,
         entry_price=100.0,
@@ -37,10 +37,10 @@ def _open_position(strategy_id: str = "strat-1") -> PositionAggregate:
     )
 
 
-def _closed_position(idx: int, *, strategy_id: str = "strat-1") -> PositionAggregate:
+def _closed_position(idx: int, *, subscription_id: str = "strat-1") -> PositionAggregate:
     return PositionAggregate(
         id=f"pos-closed-{idx}",
-        strategy_id=strategy_id,
+        subscription_id=subscription_id,
         symbol="BTCUSDT:BINANCE",
         side=PositionSide.SHORT,
         entry_price=200.0,
@@ -56,12 +56,12 @@ def _closed_position(idx: int, *, strategy_id: str = "strat-1") -> PositionAggre
 @pytest.mark.asyncio
 async def test_positions_handler_returns_open_only_as_dicts() -> None:
     repo = MagicMock()
-    repo.find_open_by_strategy = AsyncMock(return_value=[_open_position()])
+    repo.find_open_by_subscription = AsyncMock(return_value=[_open_position()])
 
     handler = GetStrategyPositionsHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyPositionsQuery(strategy_id="strat-1"))
+    result = await handler.handle(GetStrategyPositionsQuery(subscription_id="strat-1"))
 
-    repo.find_open_by_strategy.assert_awaited_once_with("strat-1")
+    repo.find_open_by_subscription.assert_awaited_once_with("strat-1")
     assert len(result) == 1
     row = result[0]
     assert row["symbol"] == "BTCUSDT:BINANCE"
@@ -77,10 +77,10 @@ async def test_positions_handler_returns_open_only_as_dicts() -> None:
 @pytest.mark.asyncio
 async def test_positions_handler_returns_empty_list_when_none_open() -> None:
     repo = MagicMock()
-    repo.find_open_by_strategy = AsyncMock(return_value=[])
+    repo.find_open_by_subscription = AsyncMock(return_value=[])
 
     handler = GetStrategyPositionsHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyPositionsQuery(strategy_id="strat-1"))
+    result = await handler.handle(GetStrategyPositionsQuery(subscription_id="strat-1"))
 
     assert result == []
 
@@ -88,16 +88,16 @@ async def test_positions_handler_returns_empty_list_when_none_open() -> None:
 @pytest.mark.asyncio
 async def test_trades_handler_maps_closed_positions_to_strategy_trade_shape() -> None:
     repo = MagicMock()
-    repo.find_closed_by_strategy = AsyncMock(
+    repo.find_closed_by_subscription = AsyncMock(
         return_value=[_closed_position(1), _closed_position(2)]
     )
 
     handler = GetStrategyTradesHandler(position_repository=repo)
     result = await handler.handle(
-        GetStrategyTradesQuery(strategy_id="strat-1", limit=50)
+        GetStrategyTradesQuery(subscription_id="strat-1", limit=50)
     )
 
-    repo.find_closed_by_strategy.assert_awaited_once_with("strat-1", limit=50)
+    repo.find_closed_by_subscription.assert_awaited_once_with("strat-1", limit=50)
     assert len(result) == 2
     row = result[0]
     assert row["id"] == "pos-closed-1"
@@ -112,9 +112,9 @@ async def test_trades_handler_maps_closed_positions_to_strategy_trade_shape() ->
 @pytest.mark.asyncio
 async def test_trades_handler_empty_when_no_closed_positions() -> None:
     repo = MagicMock()
-    repo.find_closed_by_strategy = AsyncMock(return_value=[])
+    repo.find_closed_by_subscription = AsyncMock(return_value=[])
 
     handler = GetStrategyTradesHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyTradesQuery(strategy_id="strat-1"))
+    result = await handler.handle(GetStrategyTradesQuery(subscription_id="strat-1"))
 
     assert result == []
