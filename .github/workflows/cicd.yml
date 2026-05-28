@@ -164,8 +164,12 @@ jobs:
       - name: Write prod .env from config
         env:
           ENV_CONTENT: ${{ steps.cfg.outputs.env_content }}
+          DH_U: ${{ steps.cfg.outputs.dockerhub_username }}
         run: |
-          printf '%s\n' "$ENV_CONTENT" > deploy/.env
+          {
+            printf '%s\n' "$ENV_CONTENT"
+            printf 'DOCKERHUB_USERNAME=%s\n' "$DH_U"
+          } > deploy/.env
 
       - name: Sync compose + .env + VPS scripts
         env:
