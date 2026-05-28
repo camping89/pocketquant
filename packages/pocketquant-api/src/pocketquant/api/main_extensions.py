@@ -135,7 +135,7 @@ async def _rename_collection_if_needed(db, old: str, new: str) -> bool:
     Returns True if a rename happened, False if already migrated.
     Raises RuntimeError if both collections exist (manual intervention required).
     """
-    existing = await db.database.list_collection_names()
+    existing = await db.get_database().list_collection_names()
     old_exists = old in existing
     new_exists = new in existing
 
@@ -145,7 +145,7 @@ async def _rename_collection_if_needed(db, old: str, new: str) -> bool:
             "manual cleanup required before migration can proceed."
         )
     if old_exists and not new_exists:
-        await db.database[old].rename(new)
+        await db.get_database()[old].rename(new)
         logger.info("mongo_migration.collection_renamed", old=old, new=new)
         return True
     logger.info("mongo_migration.skipped", collection=old, reason="already_migrated")
@@ -157,7 +157,7 @@ async def _rename_field_if_needed(db, collection: str, old_field: str, new_field
 
     Returns the count of modified docs (0 if migration already ran on this collection).
     """
-    coll = db.database[collection]
+    coll = db.get_database()[collection]
     pending = await coll.count_documents({old_field: {"$exists": True}})
     if pending == 0:
         logger.info(
@@ -183,7 +183,7 @@ async def _rename_field_if_needed(db, collection: str, old_field: str, new_field
 
 async def _drop_legacy_indexes(db, collection: str, index_names: list[str]) -> None:
     """Drop legacy named indexes; tolerate IndexNotFound for idempotency."""
-    coll = db.database[collection]
+    coll = db.get_database()[collection]
     for name in index_names:
         try:
             await coll.drop_index(name)
