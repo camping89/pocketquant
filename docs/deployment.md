@@ -73,7 +73,12 @@ Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape
 | `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_PASSPHRASE` | No | Only for OKX live trading |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
 
-Validated by `deploy/vps/deploy.sh` on the VPS before `docker compose up`. App also reads these locally — Pydantic uses `extra="ignore"`.
+Required-key list is tracked at `deploy/vps/required-env-vars.txt` — the **single source of truth**. CI/CD's `Validate prod .env` step fails the deploy job before rsync if any key is missing; `deploy.sh` on the VPS re-validates as a belt-and-braces check. App reads these locally too — Pydantic uses `extra="ignore"`.
+
+Adding a new required env var:
+1. Append the key to `deploy/vps/required-env-vars.txt` in `pocketquant`.
+2. Set its value in `pocketquant-config/vps/default/.env`, `git push` from `pocketquant-config`.
+3. Push any commit to `pocketquant` to redeploy.
 
 **Where credentials live:** SSH key + prod `.env` + Docker Hub token + Portainer admin all live in the sibling `pocketquant-config/` directory — see [Credentials & Config Layout](#credentials--config-layout). CI/CD reads them at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY` secret (the only secret this repo needs).
 

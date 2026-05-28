@@ -30,13 +30,26 @@ fi
 
 set -a && source .env && set +a
 
-REQUIRED_VARS="DOCKERHUB_USERNAME MONGO_PASSWORD APP_PORT WEB_PORT MONGO_PORT REDIS_PORT PORTAINER_PORT"
-for var in $REQUIRED_VARS; do
+REQUIRED_VARS_FILE="$(dirname "$0")/required-env-vars.txt"
+if [ ! -f "$REQUIRED_VARS_FILE" ]; then
+  echo "ERROR: $REQUIRED_VARS_FILE not found"
+  exit 1
+fi
+
+missing=()
+while IFS= read -r var; do
+  [[ -z "$var" || "$var" =~ ^[[:space:]]*# ]] && continue
   if [ -z "${!var:-}" ]; then
-    echo "ERROR: $var not set in deploy/.env"
-    exit 1
+    missing+=("$var")
   fi
-done
+done < "$REQUIRED_VARS_FILE"
+
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "ERROR: missing required vars in deploy/.env:"
+  printf '  - %s\n' "${missing[@]}"
+  echo "Source of truth: deploy/vps/required-env-vars.txt"
+  exit 1
+fi
 
 # ─── Deploy ───────────────────────────────────────────────────
 
