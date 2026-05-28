@@ -41,7 +41,7 @@ gh workflow run cicd.yml --ref develop
 
 1. `build-api` + `build-web` (parallel, ~3-5 min) — build + push Docker images, tagged `:latest` and `:sha-<short>`.
 2. `cleanup-tags` — prune old Docker Hub SHA tags.
-3. `deploy` (needs both builds green): setup SSH → write `deploy/.env` from `PROD_ENV` secret → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/verify.sh` (19 checks) → upload verify report as artifact.
+3. `deploy` (needs both builds green): `get-vps-config` composite action fetches config from `pocketquant-config` → setup SSH → write `deploy/.env` → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/verify.sh` (19 checks) → upload verify report as artifact.
 
 **Concurrency:** `concurrency: deploy / cancel-in-progress: true`. A new push cancels an in-flight deploy — newest wins.
 
@@ -49,25 +49,15 @@ gh workflow run cicd.yml --ref develop
 
 ## Environment Variables
 
-Production env lives as a single GitHub Actions secret (`PROD_ENV`) and is materialized as `deploy/.env` on the VPS each deploy. Local dev uses repo-root `.env` (Pydantic Settings).
+Production config (host, SSH key, prod `.env`, Docker Hub creds, Portainer creds) lives in the sibling `pocketquant-config/` repo. CI/CD fetches it at run time via a single read-only deploy key — see [Prerequisites](#prerequisites) and [Credentials & Config Layout](#credentials--config-layout).
 
-### GitHub Actions secrets
+### Production config source-of-truth
 
-Add via repo Settings → Secrets and variables → Actions → New repository secret.
-
-| Secret | Content | Notes |
-|---|---|---|
-| `VPS_HOST` | `root@<vps-ip>` | The `user@host` string for SSH |
-| `VPS_SSH_KEY` | Full contents of `pocketquant-config/vps/vultr` | Multi-line; GitHub preserves newlines |
-| `PROD_ENV` | Full contents of your prod `.env` | Multi-line; becomes `deploy/.env` on the VPS each deploy |
-| `DOCKERHUB_USERNAME` | (already configured) | |
-| `DOCKERHUB_TOKEN` | (already configured) | |
-
-`PROD_ENV` is the **single source of truth** for prod runtime env. Any manual `.env` on the VPS is overwritten by `rsync` on every deploy — update the secret, push, done.
+`pocketquant-config/vps/default/.env` is the **single source of truth** for prod runtime env. The CI/CD `deploy` job materializes it as `deploy/.env` on the VPS each run via `rsync`. Any manual `.env` on the VPS is overwritten — edit the file in `pocketquant-config/`, `git push`, then push a commit to `pocketquant` (or `gh workflow run cicd.yml`).
 
 ### `<repo>/.env` — app + Docker/compose vars (local dev only)
 
-Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape lives at `/opt/pocketquant/deploy/.env`, regenerated each deploy from `PROD_ENV`.
+Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape lives at `/opt/pocketquant/deploy/.env`, regenerated each deploy from `pocketquant-config/vps/default/.env`.
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -85,16 +75,16 @@ Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape
 
 Validated by `deploy/vps/deploy.sh` on the VPS before `docker compose up`. App also reads these locally — Pydantic uses `extra="ignore"`.
 
-**Where credentials live:** SSH key + prod `.env` source-of-truth + Docker Hub token + Portainer admin all belong in the sibling `pocketquant-config/` directory — see [Credentials & Config Layout](#credentials--config-layout). The 3 GitHub Actions secrets are pasted from there.
+**Where credentials live:** SSH key + prod `.env` + Docker Hub token + Portainer admin all live in the sibling `pocketquant-config/` directory — see [Credentials & Config Layout](#credentials--config-layout). CI/CD reads them at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY` secret (the only secret this repo needs).
 
 ## Custom Domain
 
 Not configured by default — the VPS is reached by IP. To add a domain:
 
 1. Point an A record at `<vps-ip>`.
-2. Update the `PROD_ENV` GitHub secret: set `WEB_PORT=443`.
+2. Edit `pocketquant-config/vps/default/.env`: set `WEB_PORT=443`. `git push` from `pocketquant-config`.
 3. Add Caddy or nginx + certbot in front of the `web` container, OR enable Cloudflare proxy (orange cloud) and let it terminate TLS.
-4. Push any commit (or `gh workflow run cicd.yml`) — CI/CD re-deploys with the new env.
+4. Push any commit to `pocketquant` (or `gh workflow run cicd.yml`) — CI/CD re-deploys with the new env.
 
 ## Rollback
 
@@ -110,7 +100,7 @@ CI/CD runs from the reverted HEAD. ~5-8 min from push to VPS healthy on old code
 ### Emergency: manual SSH (CI/CD unavailable, or need a specific SHA fast)
 
 ```bash
-ssh -i pocketquant-config/vps/vultr <VPS_HOST> "cd /opt/pocketquant && \
+ssh -i pocketquant-config/vps/default/id_rsa "$(cat pocketquant-config/vps/default/host)" "cd /opt/pocketquant && \
   IMAGE_TAG=sha-<last-good-short> bash deploy/vps/deploy.sh && \
   bash deploy/vps/verify.sh"
 ```
@@ -161,8 +151,9 @@ git push origin develop (or master)
         ├─ build-web      (Docker build + push :latest + :sha-<short>)
         ├─ cleanup-tags   (prune old Docker Hub SHA tags)
         └─ deploy         (needs: build-api + build-web; concurrency: deploy)
-              ├─ setup SSH (key from VPS_SSH_KEY secret)
-              ├─ write deploy/.env from PROD_ENV secret
+              ├─ get-vps-config composite action (clones pocketquant-config via deploy key)
+              ├─ setup SSH (key from cfg.outputs.ssh_key)
+              ├─ write deploy/.env from cfg.outputs.env_content
               ├─ rsync deploy/{compose.prod.yml,.env,vps/} → VPS:/opt/pocketquant/
               ├─ ssh → bash deploy/vps/deploy.sh    (pull, up, ≤60s health gate, prune)
               ├─ ssh → bash deploy/vps/verify.sh    (19 checks → report)
@@ -177,38 +168,43 @@ Background sync jobs are scheduled via APScheduler with a **MongoDBJobStore** ba
 
 ## Prerequisites
 
-**One-time GitHub Actions secrets setup** (Settings → Secrets and variables → Actions → New repository secret):
+**One-time setup** — bootstrap the deploy key via the script in `pocketquant-config`:
 
-| Secret | Value source |
+```bash
+cd ../pocketquant-config
+bash scripts/bootstrap-gh.sh
+```
+
+The script generates an ed25519 deploy key, attaches it to `camping89/pocketquant-config` (read-only), and pushes the private half as `POCKETQUANT_CONFIG_DEPLOY_KEY` in `camping89/pocketquant`. Idempotent — re-run anytime to rotate.
+
+Required GH Actions secrets in `camping89/pocketquant`:
+
+| Secret | Source |
 |---|---|
-| `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | hub.docker.com → Account Settings → Security → New Access Token |
-| `VPS_HOST` | `root@<vps-ip>` |
-| `VPS_SSH_KEY` | Full contents of `pocketquant-config/vps/vultr` (paste with newlines) |
-| `PROD_ENV` | Full contents of your prod `.env` (paste with newlines). Must include `ENVIRONMENT=production`, `LOG_FORMAT=json`. |
+| `POCKETQUANT_CONFIG_DEPLOY_KEY` | Set by `pocketquant-config/scripts/bootstrap-gh.sh` |
 
 That's it for the operator. No laptop-side setup is required for deploys.
 
 **Optional laptop setup (for emergency rollback or debug ssh):**
 
-- SSH key at `pocketquant-config/vps/vultr` (the same content as the `VPS_SSH_KEY` secret).
+- SSH key at `pocketquant-config/vps/default/id_rsa`.
 - Standard tools: `ssh`, `scp` (macOS/Linux ships them).
 
 ## Credentials & Config Layout
 
-All operator-side credentials live OUTSIDE this repo, in a sibling `pocketquant-config/` directory:
+All operator-side credentials live OUTSIDE this repo, in a sibling `pocketquant-config/` directory. Each VPS gets its own folder under `vps/`:
 
-| File | Purpose |
+| File (under `pocketquant-config/`) | Purpose |
 |------|---------|
-| `pocketquant-config/vps/vultr` | OpenSSH private key (`root@<vps-ip>`) — paste into `VPS_SSH_KEY` GH secret |
-| `pocketquant-config/vps/vultr.pub` | Matching public key |
-| `pocketquant-config/vps/ssh` | Plain-text: VPS IP + SSH usage snippets |
-| `pocketquant-config/vps/portainer` | Portainer URL + admin password |
-| `pocketquant-config/vps/secrets` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` |
-| `pocketquant-config/.env` | Prod `.env` source-of-truth — paste into `PROD_ENV` GH secret |
-| `pocketquant-config/vps/plans/` | Operator-side ops journals |
+| `vps/default/id_rsa` | OpenSSH private key — fetched by CI/CD as `cfg.outputs.ssh_key` |
+| `vps/default/id_rsa.pub` | Matching public key (installed on VPS authorized_keys) |
+| `vps/default/host` | Single line: `user@ip` — fetched as `cfg.outputs.vps_host` |
+| `vps/default/.env` | Prod `.env` — fetched as `cfg.outputs.env_content` |
+| `vps/default/docker-hub.env` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` |
+| `vps/default/portainer.env` | Portainer admin credentials |
+| `scripts/bootstrap-gh.sh` | Idempotent deploy-key setup + rotation |
 
-GH Actions secrets are populated by pasting from these files. Updates flow one-way: change the file → update the secret → push to redeploy.
+CI/CD reads all of the above at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY` GH secret + the `get-vps-config` composite action (`.github/actions/get-vps-config/`). Updates flow one-way: edit the file → `git push` from `pocketquant-config` → next CI/CD run picks it up.
 
 ## Port Map
 
@@ -226,13 +222,14 @@ No default values in `.env` — you MUST set them. **`WEB_PORT` is the public en
 
 ## First Deploy
 
-1. Add the 5 GH secrets per [Prerequisites](#prerequisites). `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` already exist; add `VPS_HOST`, `VPS_SSH_KEY`, `PROD_ENV`.
+1. One-time: `bash pocketquant-config/scripts/bootstrap-gh.sh` (creates `POCKETQUANT_CONFIG_DEPLOY_KEY`).
 2. Push (or `gh workflow run cicd.yml --ref develop`).
 
 The `deploy` job will:
 
+- Fetch VPS config from `pocketquant-config` via the `get-vps-config` composite action.
 - Setup SSH (write key + `ssh-keyscan` the VPS IP).
-- Write `deploy/.env` from `PROD_ENV` secret.
+- Write `deploy/.env` from `cfg.outputs.env_content`.
 - `rsync` `compose.prod.yml` + `.env` + `deploy/vps/` to `/opt/pocketquant/`.
 - ssh `bash deploy/vps/deploy.sh`:
   - Installs Docker if missing (then exits — re-run after logging back in).
@@ -380,7 +377,7 @@ ssh <VPS> "cd /opt/pocketquant && python scripts/audit_bar_quality.py --days 730
 ### SSH Tunnel (if firewall blocks DB ports)
 
 ```bash
-ssh -i <VPS_SSH_KEY> -L 52017:localhost:52017 -L 53679:localhost:53679 <VPS_HOST>
+ssh -i pocketquant-config/vps/default/id_rsa -L 52017:localhost:52017 -L 53679:localhost:53679 "$(cat pocketquant-config/vps/default/host)"
 # Then connect DataGrip to localhost:52017
 ```
 
@@ -392,7 +389,7 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 
 ### Setup
 
-1. Copy VPS connection settings from `pocketquant-config/.env` (the production env source; local-only overrides live in `pocketquant-config/.env.local`) into your local `.env`. Override for local-friendly behaviour:
+1. Copy VPS connection settings from `pocketquant-config/vps/default/.env` (the production env source; local-only overrides live in `pocketquant-config/.env.local`) into your local `.env`. Override for local-friendly behaviour:
 
    ```env
    ENVIRONMENT=development
@@ -435,7 +432,7 @@ sudo ufw enable
 VPS is disposable. To move to a new VPS:
 
 1. Provision the new VPS, run `deploy/vps/server-setup.sh` once (it bootstraps Docker, firewall, fail2ban, deploy user). Run manually over SSH from your laptop on first install.
-2. Update the `VPS_HOST` GH secret with the new `user@ip`.
+2. Update `pocketquant-config/vps/default/host` with the new `user@ip` (and `id_rsa` / `id_rsa.pub` if regenerated). `git push` from `pocketquant-config`.
 3. Push (or `gh workflow run cicd.yml`) — CI/CD performs the first deploy on the new VPS.
 
 Database will be fresh — everything can be re-synced via the [2-Year Bar Re-Sync Procedure](#2-year-bar-re-sync-procedure).
