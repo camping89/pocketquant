@@ -1,0 +1,11 @@
+# Required environment variables for deploy/vps/deploy.sh.
+# One key per line. Comments (lines starting with #) and blank lines ignored.
+# pocketquant-config/vps/<name>/.env MUST set every key listed here (otherwise
+# the deploy job's Validate step fails early with a clear list of missing keys).
+DOCKERHUB_USERNAME
+MONGO_PASSWORD
+APP_PORT
+WEB_PORT
+MONGO_PORT
+REDIS_PORT
+PORTAINER_PORT
