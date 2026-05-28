@@ -1,0 +1,210 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cfg
+        uses: ./.github/actions/get-vps-config
+        with:
+          deploy-key: ${{ secrets.POCKETQUANT_CONFIG_DEPLOY_KEY }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ steps.cfg.outputs.dockerhub_username }}
+          password: ${{ steps.cfg.outputs.dockerhub_token }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.cfg.outputs.dockerhub_username }}/pocketquant
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify pushed images
+        env:
+          DH_U: ${{ steps.cfg.outputs.dockerhub_username }}
+        run: |
+          echo "=== Docker Hub Push Summary ==="
+          echo "Repository: $DH_U/pocketquant"
+          echo "Tags pushed:"
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/  - /'
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cfg
+        uses: ./.github/actions/get-vps-config
+        with:
+          deploy-key: ${{ secrets.POCKETQUANT_CONFIG_DEPLOY_KEY }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ steps.cfg.outputs.dockerhub_username }}
+          password: ${{ steps.cfg.outputs.dockerhub_token }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.cfg.outputs.dockerhub_username }}/pocketquant-web
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./packages/pocketquant-web
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify pushed images
+        env:
+          DH_U: ${{ steps.cfg.outputs.dockerhub_username }}
+        run: |
+          echo "=== Docker Hub Push Summary ==="
+          echo "Repository: $DH_U/pocketquant-web"
+          echo "Tags pushed:"
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | sed 's/^/  - /'
+
+  cleanup-tags:
+    runs-on: ubuntu-latest
+    needs: [build-api, build-web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cfg
+        uses: ./.github/actions/get-vps-config
+        with:
+          deploy-key: ${{ secrets.POCKETQUANT_CONFIG_DEPLOY_KEY }}
+
+      - name: Prune old Docker Hub tags (keep latest 7)
+        env:
+          DH_U: ${{ steps.cfg.outputs.dockerhub_username }}
+          DH_T: ${{ steps.cfg.outputs.dockerhub_token }}
+        run: |
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST -d "{\"username\":\"$DH_U\",\"password\":\"$DH_T\"}" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "Warning: Could not authenticate for tag cleanup."
+            exit 0
+          fi
+
+          for REPO in pocketquant pocketquant-web; do
+            echo "=== Cleaning $REPO ==="
+            curl -s -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/$DH_U/$REPO/tags/?page_size=100&ordering=-last_updated" \
+              | jq -r '.results[] | select(.name | startswith("sha-")) | .name' \
+              | tail -n +8 \
+              | while read tag; do
+                  curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+                    "https://hub.docker.com/v2/repositories/$DH_U/$REPO/tags/$tag/"
+                  echo "Deleted: $REPO:$tag"
+                done
+          done
+          echo "Tag cleanup complete."
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-api, build-web]
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    env:
+      REMOTE_ROOT: /opt/pocketquant
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cfg
+        uses: ./.github/actions/get-vps-config
+        with:
+          deploy-key: ${{ secrets.POCKETQUANT_CONFIG_DEPLOY_KEY }}
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ steps.cfg.outputs.ssh_key }}
+          VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          VPS_IP="${VPS_HOST#*@}"
+          ssh-keyscan -H "$VPS_IP" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write prod .env from config
+        env:
+          ENV_CONTENT: ${{ steps.cfg.outputs.env_content }}
+        run: |
+          printf '%s' "$ENV_CONTENT" > deploy/.env
+
+      - name: Sync compose + .env + VPS scripts
+        env:
+          VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
+        run: |
+          ssh "$VPS_HOST" "mkdir -p $REMOTE_ROOT/deploy/vps/patches"
+          rsync -avz \
+            deploy/compose.prod.yml deploy/.env \
+            "$VPS_HOST:$REMOTE_ROOT/deploy/"
+          rsync -avz \
+            deploy/vps/ \
+            "$VPS_HOST:$REMOTE_ROOT/deploy/vps/"
+
+      - name: Deploy on VPS
+        env:
+          VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
+        run: ssh "$VPS_HOST" "cd $REMOTE_ROOT && bash deploy/vps/deploy.sh"
+
+      - name: Verify on VPS
+        env:
+          VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
+        run: ssh "$VPS_HOST" "cd $REMOTE_ROOT && bash deploy/vps/verify.sh"
+
+      - name: Fetch verify report
+        if: always()
+        env:
+          VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
+        run: |
+          mkdir -p reports
+          REPORT=$(ssh "$VPS_HOST" "ls -t $REMOTE_ROOT/deploy/reports/verify-*.md 2>/dev/null | head -1" || true)
+          if [ -n "$REPORT" ]; then
+            scp "$VPS_HOST:$REPORT" reports/
+          fi
+
+      - name: Upload verify report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-report
+          path: reports/
+          retention-days: 30
+          if-no-files-found: warn
