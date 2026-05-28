@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Bootstrap + smoke-test on throwaway branch"
-status: pending
+status: completed
 priority: P2
 effort: "30m"
 dependencies: [1, 2, 3]

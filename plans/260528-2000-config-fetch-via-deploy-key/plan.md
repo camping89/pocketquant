@@ -1,7 +1,7 @@
 ---
 title: "Centralize CI/CD config via pocketquant-config deploy-key fetch"
 description: "Move VPS host, SSH key, prod .env, Docker Hub creds, and Portainer access creds out of GH Actions secrets into pocketquant-config private repo. CI/CD fetches config at run time via one deploy key. Eve-platform pattern (approach A: re-fetch in each job)."
-status: pending
+status: completed
 priority: P2
 branch: "develop"
 tags: [cicd, secrets, infra]
@@ -9,6 +9,7 @@ blockedBy: []
 blocks: []
 supersedes: [260528-1700-cicd-deploy-into-github-actions]
 created: "2026-05-28T13:01:26.920Z"
+completed: "2026-05-28T16:18:48Z"
 createdBy: "ck:plan"
 source: skill
 ---
@@ -25,11 +26,11 @@ Source design: [brainstorm-config-fetch-via-deploy-key.md](./brainstorm-config-f
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Restructure pocketquant-config layout + bootstrap script](./phase-01-restructure-pocketquant-config-layout-bootstrap-script.md) | Pending |
-| 2 | [Add get-vps-config composite action](./phase-02-add-get-vps-config-composite-action.md) | Pending |
-| 3 | [Rewrite cicd.yml using composite action](./phase-03-rewrite-cicd-yml-using-composite-action.md) | Pending |
-| 4 | [Bootstrap + smoke-test on throwaway branch](./phase-04-bootstrap-smoke-test-on-throwaway-branch.md) | Pending |
-| 5 | [Cleanup old GH secrets + docs sweep](./phase-05-cleanup-old-gh-secrets-docs-sweep.md) | Pending |
+| 1 | [Restructure pocketquant-config layout + bootstrap script](./phase-01-restructure-pocketquant-config-layout-bootstrap-script.md) | Completed |
+| 2 | [Add get-vps-config composite action](./phase-02-add-get-vps-config-composite-action.md) | Completed |
+| 3 | [Rewrite cicd.yml using composite action](./phase-03-rewrite-cicd-yml-using-composite-action.md) | Completed |
+| 4 | [Bootstrap + smoke-test on throwaway branch](./phase-04-bootstrap-smoke-test-on-throwaway-branch.md) | Completed |
+| 5 | [Cleanup old GH secrets + docs sweep](./phase-05-cleanup-old-gh-secrets-docs-sweep.md) | Completed |
 
 ## Key decisions (locked by brainstorm)
 
