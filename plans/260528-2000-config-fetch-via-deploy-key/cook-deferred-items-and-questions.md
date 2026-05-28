@@ -44,10 +44,11 @@ Captured per user request: "log questions later, do not ask me to run".
 
 ## Tech debt to address in a future plan
 
-- **Node.js 20 deprecation warnings** on every CI run (docker/setup-buildx-action@v3, docker/login-action@v3, docker/metadata-action@v5, docker/build-push-action@v5, actions/checkout@v4). Will be forced to Node 24 by June 2, 2026. Bump to action versions that explicitly support Node 24.
-- **`packages/pocketquant-api/src/pocketquant/api/main_extensions.py` lacks a test** for the migration path that would have caught bug #1.
-- **`deploy/vps/deploy.sh` REQUIRED_VARS vs `vps/default/.env`** has no automated reconciliation. A schema check (or a `vps/default/.env.example` listing required keys) would prevent #2 + #5 recurring on the next VPS provision.
-- **Bug #1 (mongo migration AttributeError)** suggests `Database` wrapper is fighting consumers. Consider exposing the underlying `AsyncDatabase` as a property `database` (without name mangling) and dropping `get_database()` — or going the other way and removing `db.<anything>` accesses outside the wrapper.
+- ~~**Node.js 20 deprecation warnings**~~ — **CLOSED 2026-05-28.** Bumped actions/checkout v4→v5, docker/setup-buildx v3→v4, docker/login v3→v4, docker/metadata v5→v6, docker/build-push v5→v7, actions/upload-artifact v4→v7. Workflow runs with zero Node 20 warnings (verified gh run 26588574964).
+- ~~**`deploy/vps/deploy.sh` REQUIRED_VARS reconciliation**~~ — **CLOSED 2026-05-28.** Extracted to `deploy/vps/required-env-vars.txt` (single source of truth, tracked in repo). `deploy.sh` reads the file + lists ALL missing keys at once. New `Validate prod .env` step in cicd.yml fails the deploy job pre-rsync (~5 s) instead of mid-VPS-boot.
+- ~~**Minor log leak: VPS IP in `.env` comment header**~~ — **CLOSED 2026-05-28.** Stripped IP from `pocketquant-config/vps/default/.env` line 1. Comment now reads "# PocketQuant Production Configuration".
+- **`packages/pocketquant-api/src/pocketquant/api/main_extensions.py` lacks a test** for the migration path that would have caught the `db.database` AttributeError. STILL OPEN.
+- **`Database` wrapper API debate.** `db.database` AttributeError suggests `Database` is fighting consumers. Consider exposing the underlying `AsyncDatabase` as a public `database` property (without name mangling) and dropping `get_database()` — or removing `db.<anything>` accesses outside the wrapper. STILL OPEN.
 
 ## Deviations from plan
 
