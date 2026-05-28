@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [master, develop, feat/cicd-config-fetch-smoke]
+    branches: [master, develop]
   workflow_dispatch:
 
 concurrency:
