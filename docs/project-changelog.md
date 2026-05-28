@@ -2,6 +2,25 @@
 
 **Last Updated:** 2026-05-28 | **Format:** Semantic Versioning
 
+## [Unreleased] — 2026-05-28 — CI/CD: centralize config in pocketquant-config (REFACTOR)
+
+### Changed
+- GH Actions secrets reduced 5 → 1: only `POCKETQUANT_CONFIG_DEPLOY_KEY` needed.
+- All config (VPS host, SSH key, prod `.env`, Docker Hub creds, Portainer creds) now lives in `pocketquant-config/vps/default/`.
+- New composite action `.github/actions/get-vps-config/` clones `pocketquant-config` at run time via the deploy key and emits config as job-scoped outputs (mask-safe).
+- Each of 4 jobs (`build-api` / `build-web` / `cleanup-tags` / `deploy`) re-fetches independently → parallel, no cross-job leak.
+- `pocketquant-config` restructured: flat layout → `vps/<vps-name>/` (current single VPS named `default`). Multi-VPS-ready.
+- `pocketquant-config/scripts/bootstrap-gh.sh` — idempotent setup + rotation of the deploy key.
+
+### Removed
+- GH Actions secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `VPS_HOST`, `VPS_SSH_KEY`, `PROD_ENV`.
+- Portainer access credentials from `docs/deployment.md` (source-of-truth is now `pocketquant-config/vps/default/portainer.env`; container still deployed unchanged).
+
+### Operator action required
+- One-time: run `bash pocketquant-config/scripts/bootstrap-gh.sh` (creates deploy key + GH secret).
+- To rotate the deploy key: re-run the same script.
+- To change prod env: edit `pocketquant-config/vps/default/.env`, `git push`, then push a commit to pocketquant (or `gh workflow run cicd.yml`).
+
 ## [Unreleased] — 2026-05-28 — CI/CD: deploy moves into GitHub Actions (BREAKING for VPS deploys)
 
 ### Changed
