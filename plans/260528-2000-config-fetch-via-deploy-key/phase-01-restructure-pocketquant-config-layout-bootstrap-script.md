@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Restructure pocketquant-config layout + bootstrap script"
-status: pending
+status: completed
 priority: P2
 effort: "30m"
 dependencies: []

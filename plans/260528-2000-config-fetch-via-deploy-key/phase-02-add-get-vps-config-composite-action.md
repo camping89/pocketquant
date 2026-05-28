@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Add get-vps-config composite action"
-status: pending
+status: completed
 priority: P2
 effort: "1h"
 dependencies: [1]

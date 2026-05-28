@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Rewrite cicd.yml using composite action"
-status: pending
+status: completed
 priority: P2
 effort: "1h"
 dependencies: [1, 2]
