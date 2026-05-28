@@ -79,7 +79,7 @@ runs:
         done <<< "$ENV_CONTENT"
         {
           echo 'env_content<<DOTENV_EOF'
-          printf '%s' "$ENV_CONTENT"
+          printf '%s\n' "$ENV_CONTENT"
           echo 'DOTENV_EOF'
         } >> "$GITHUB_OUTPUT"
 
@@ -90,7 +90,7 @@ runs:
         done <<< "$SSH_KEY"
         {
           echo 'ssh_key<<SSHKEY_EOF'
-          printf '%s' "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY"
           echo 'SSHKEY_EOF'
         } >> "$GITHUB_OUTPUT"
 
