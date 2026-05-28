@@ -98,7 +98,7 @@ systemctl enable fail2ban
 systemctl restart fail2ban
 
 echo "=== Creating app directory ==="
-mkdir -p /opt/pocketquant/deploy/scripts-to-deploy/patches
+mkdir -p /opt/pocketquant/deploy/vps/patches
 chown -R deploy:deploy /opt/pocketquant
 
 echo -e "${GREEN}=== Setup Complete ===${NC}"

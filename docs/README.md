@@ -17,8 +17,8 @@ Start with the canonical set.
   Current package map, route groups, runtime flows, and testing assets.
 - [System Architecture](./system-architecture.md)
   Deeper backend/frontend architecture reference.
-- [Deployment Guide](./deployment-guide.md)
-  Production deployment notes.
+- [Deployment](./deployment.md)
+  Production deployment — single source of truth (skill-friendly summary + full operator runbook).
 
 ## Specialized Deep Dives
 
@@ -67,7 +67,7 @@ For implementation work:
 
 For deployment:
 
-1. [Deployment Guide](./deployment-guide.md)
+1. [Deployment](./deployment.md)
 
 ## Maintenance Note
 

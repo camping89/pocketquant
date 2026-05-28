@@ -39,7 +39,7 @@ web → api
 ## Backend Quick Start
 
 ```bash
-cp deploy/.env.example deploy/.env
+cp .env.example .env
 just install
 just up
 just be
@@ -156,7 +156,7 @@ Manual API testing:
 - [Docs Index](./docs/README.md)
 - [Codebase Summary](./docs/codebase-summary.md)
 - [System Architecture](./docs/system-architecture.md)
-- [Deployment Guide](./docs/deployment-guide.md)
+- [Deployment](./docs/deployment.md)
 
 ## License
 
