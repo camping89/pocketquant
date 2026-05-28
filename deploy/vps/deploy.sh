@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PocketQuant VPS Deploy Script
-# Handles first-time setup + subsequent deploys in one script.
+# PocketQuant VPS-side deploy script (runs ON the VPS).
+# Invoked over SSH by the CI/CD deploy job in .github/workflows/cicd.yml.
 #
-# First time:
-#   scp deploy/scripts-to-deploy/deploy.sh deploy/compose.prod.yml deploy/.env \
-#     to VPS:/opt/pocketquant/deploy/{scripts-to-deploy/,,}
-#   ssh vps "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
-#
-# Update:
-#   ssh vps "cd /opt/pocketquant && bash deploy/scripts-to-deploy/deploy.sh"
+# Manual invocation (debug / emergency rollback):
+#   ssh vps "cd /opt/pocketquant && bash deploy/vps/deploy.sh"
+#   ssh vps "cd /opt/pocketquant && IMAGE_TAG=sha-<short> bash deploy/vps/deploy.sh"
 
-# cd to deploy/ (one level up from scripts-to-deploy/) so .env + compose.prod.yml resolve relatively
+# cd to deploy/ (one level up from vps/) so .env + compose.prod.yml resolve relatively
 cd "$(dirname "$0")/.."
 
 # ─── Setup (runs only if needed) ──────────────────────────────

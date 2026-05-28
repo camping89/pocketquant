@@ -1,7 +1,7 @@
 # scripts/
 
 > **Scope:** Data-ops scripts (audit, backfill, resync). NOT deployment.
-> For deployment & VPS migration scripts, see `deploy/scripts/`.
+> For deployment, see `.github/workflows/cicd.yml` (CI/CD pipeline) + `deploy/vps/` (VPS-side scripts called by the pipeline).
 
 Operational scripts. Run from repository root.
 

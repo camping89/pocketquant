@@ -1,0 +1,122 @@
+name: 'Get VPS Config from pocketquant-config'
+description: 'Clone pocketquant-config (private), read VPS env+key+host+creds, mask + emit as outputs'
+
+inputs:
+  vps:
+    description: 'VPS folder name under vps/'
+    required: true
+    default: default
+  deploy-key:
+    description: 'SSH deploy key (read-only) for pocketquant-config'
+    required: true
+
+outputs:
+  vps_host:
+    description: 'user@ip (single line)'
+    value: ${{ steps.read.outputs.vps_host }}
+  env_content:
+    description: 'Prod .env content (multi-line)'
+    value: ${{ steps.read.outputs.env_content }}
+  ssh_key:
+    description: 'OpenSSH private key (multi-line)'
+    value: ${{ steps.read.outputs.ssh_key }}
+  dockerhub_username:
+    description: 'Docker Hub username'
+    value: ${{ steps.read.outputs.dockerhub_username }}
+  dockerhub_token:
+    description: 'Docker Hub access token'
+    value: ${{ steps.read.outputs.dockerhub_token }}
+  portainer_url:
+    description: 'Portainer base URL'
+    value: ${{ steps.read.outputs.portainer_url }}
+  portainer_password:
+    description: 'Portainer admin password'
+    value: ${{ steps.read.outputs.portainer_password }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout pocketquant-config (read-only)
+      uses: actions/checkout@v4
+      with:
+        repository: camping89/pocketquant-config
+        ref: master
+        ssh-key: ${{ inputs.deploy-key }}
+        path: .pq-config
+        persist-credentials: false
+
+    - name: Read + mask + emit outputs
+      id: read
+      shell: bash
+      env:
+        VPS_NAME: ${{ inputs.vps }}
+      run: |
+        set -euo pipefail
+        VPS_DIR=".pq-config/vps/$VPS_NAME"
+        if [[ ! -d "$VPS_DIR" ]]; then
+          echo "::error::VPS folder not found: $VPS_DIR"
+          exit 1
+        fi
+
+        # Normalize: strip CR, ensure trailing newline
+        normalize() { tr -d '\r' < "$1" | sed -e '$a\'; }
+
+        # 1) host (single line)
+        VPS_HOST=$(head -1 "$VPS_DIR/host" | tr -d '\r')
+        if [[ -z "$VPS_HOST" ]]; then
+          echo "::error::Empty host in $VPS_DIR/host"
+          exit 1
+        fi
+        echo "::add-mask::$VPS_HOST"
+        echo "vps_host=$VPS_HOST" >> "$GITHUB_OUTPUT"
+
+        # 2) .env (multi-line). Mask each non-empty value.
+        ENV_CONTENT=$(normalize "$VPS_DIR/.env")
+        while IFS='=' read -r k v; do
+          [[ -z "$k" || "$k" =~ ^[[:space:]]*# ]] && continue
+          v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+          [[ -n "$v" ]] && echo "::add-mask::$v"
+        done <<< "$ENV_CONTENT"
+        {
+          echo 'env_content<<DOTENV_EOF'
+          printf '%s\n' "$ENV_CONTENT"
+          echo 'DOTENV_EOF'
+        } >> "$GITHUB_OUTPUT"
+
+        # 3) ssh_key (multi-line PEM). Best-effort line-level mask.
+        SSH_KEY=$(normalize "$VPS_DIR/id_rsa")
+        while IFS= read -r line; do
+          [[ -n "$line" ]] && echo "::add-mask::$line"
+        done <<< "$SSH_KEY"
+        {
+          echo 'ssh_key<<SSHKEY_EOF'
+          printf '%s\n' "$SSH_KEY"
+          echo 'SSHKEY_EOF'
+        } >> "$GITHUB_OUTPUT"
+
+        # 4) docker-hub.env (KEY=val pairs). Source-eval after normalize.
+        DH_NORM=$(normalize "$VPS_DIR/docker-hub.env")
+        eval "$DH_NORM"
+        : "${DOCKERHUB_USERNAME:?missing DOCKERHUB_USERNAME in docker-hub.env}"
+        : "${DOCKERHUB_TOKEN:?missing DOCKERHUB_TOKEN in docker-hub.env}"
+        echo "::add-mask::$DOCKERHUB_USERNAME"
+        echo "::add-mask::$DOCKERHUB_TOKEN"
+        echo "dockerhub_username=$DOCKERHUB_USERNAME" >> "$GITHUB_OUTPUT"
+        echo "dockerhub_token=$DOCKERHUB_TOKEN" >> "$GITHUB_OUTPUT"
+
+        # 5) portainer.env (KEY=val pairs).
+        PT_NORM=$(normalize "$VPS_DIR/portainer.env")
+        eval "$PT_NORM"
+        : "${PORTAINER_URL:?missing PORTAINER_URL in portainer.env}"
+        : "${PORTAINER_PASSWORD:?missing PORTAINER_PASSWORD in portainer.env}"
+        echo "::add-mask::$PORTAINER_URL"
+        echo "::add-mask::$PORTAINER_PASSWORD"
+        echo "portainer_url=$PORTAINER_URL" >> "$GITHUB_OUTPUT"
+        echo "portainer_password=$PORTAINER_PASSWORD" >> "$GITHUB_OUTPUT"
+
+        echo "Loaded config for VPS '$VPS_NAME' from pocketquant-config (no values logged)"
+
+    - name: Cleanup pocketquant-config checkout
+      if: always()
+      shell: bash
+      run: rm -rf .pq-config
