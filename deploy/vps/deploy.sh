@@ -8,8 +8,10 @@ set -euo pipefail
 #   ssh vps "cd /opt/pocketquant && bash deploy/vps/deploy.sh"
 #   ssh vps "cd /opt/pocketquant && IMAGE_TAG=sha-<short> bash deploy/vps/deploy.sh"
 
+# Resolve script dir BEFORE cd (other helpers live alongside this script).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # cd to deploy/ (one level up from vps/) so .env + compose.prod.yml resolve relatively
-cd "$(dirname "$0")/.."
+cd "$SCRIPT_DIR/.."
 
 # ─── Setup (runs only if needed) ──────────────────────────────
 
@@ -30,7 +32,7 @@ fi
 
 set -a && source .env && set +a
 
-REQUIRED_VARS_FILE="$(dirname "$0")/required-env-vars.txt"
+REQUIRED_VARS_FILE="$SCRIPT_DIR/required-env-vars.txt"
 if [ ! -f "$REQUIRED_VARS_FILE" ]; then
   echo "ERROR: $REQUIRED_VARS_FILE not found"
   exit 1
