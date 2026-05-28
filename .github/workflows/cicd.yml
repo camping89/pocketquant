@@ -156,7 +156,7 @@ jobs:
           VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "$SSH_KEY" > ~/.ssh/id_rsa
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           VPS_IP="${VPS_HOST#*@}"
           ssh-keyscan -H "$VPS_IP" >> ~/.ssh/known_hosts 2>/dev/null
@@ -165,7 +165,7 @@ jobs:
         env:
           ENV_CONTENT: ${{ steps.cfg.outputs.env_content }}
         run: |
-          printf '%s' "$ENV_CONTENT" > deploy/.env
+          printf '%s\n' "$ENV_CONTENT" > deploy/.env
 
       - name: Sync compose + .env + VPS scripts
         env:
