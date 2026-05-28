@@ -1,6 +1,21 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-05-26 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-28 | **Format:** Semantic Versioning
+
+## [Unreleased] — 2026-05-28 — CI/CD: deploy moves into GitHub Actions (BREAKING for VPS deploys)
+
+### Changed
+- Workflow file renamed: `.github/workflows/ci.yml` → `cicd.yml`. Top-level `name: CI` → `name: CI/CD`. Adds `concurrency: deploy / cancel-in-progress: true`.
+- Push to `master` or `develop` now auto-deploys via a new `deploy` job (needs `build-api` + `build-web`). No more `bash deploy/deploy.sh` from laptop.
+- `deploy` job: setup SSH → write `deploy/.env` from `PROD_ENV` secret → rsync compose + .env + `deploy/vps/` to VPS → ssh `deploy.sh` → ssh `verify.sh` → upload `verify-report` artifact (30-day retention).
+
+### Removed
+- `deploy/deploy.sh` (operator wrapper)
+- `deploy/deploy.conf.example` (and operator-local `deploy/deploy.conf` via `.gitignore` cleanup)
+- `WAIT_FOR_CI` / `GITHUB_TOKEN` / `GITHUB_REPO` / `CI_BRANCH` / `CI_WORKFLOW` env handling — no longer needed.
+
+### Operator action required
+- Add 3 new GitHub Actions repo secrets: `VPS_HOST`, `VPS_SSH_KEY`, `PROD_ENV`. See `docs/deployment.md` → Prerequisites.
 
 ## [Unreleased] — 2026-05-26 — Strategy ID Disambiguation: `strategy_code` + `subscription_id` (REFACTOR)
 
