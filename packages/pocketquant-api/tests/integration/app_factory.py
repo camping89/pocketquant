@@ -24,10 +24,14 @@ from pocketquant.api.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
+    migrate_strategy_id_fields,
     recover_stale_backtests,
     register_health_checks,
     register_routes,
     start_background_jobs,
+)
+from pocketquant.api.market_data.app_services.sync_jobs import (
+    set_container as set_sync_container,
 )
 from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.common.mediator.mediator import Mediator
@@ -35,6 +39,9 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.redis import Cache
+from pocketquant.trading.jobs.backtest_jobs import (
+    set_container as set_backtest_container,
+)
 
 
 class TestCoreProvider(Provider):
@@ -80,9 +87,16 @@ def make_test_app(settings: Settings) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         c: AsyncContainer = app.state.dishka_container
+        # Mirror main.py: wire module-level container refs BEFORE any await so
+        # that persisted jobs which dispatch during early resolves can find them.
+        set_sync_container(c)
+        set_backtest_container(c)
         try:
             app.state.database = await c.get(Database)
             app.state.cache = await c.get(Cache)
+            # Mirror main.py: migration BEFORE handler registration so that
+            # PositionAppService.load_open_positions() reads post-migration shape.
+            await migrate_strategy_id_fields(c)
             await register_handlers(c)
             await ensure_all_indexes(c)
             await recover_stale_backtests(c)

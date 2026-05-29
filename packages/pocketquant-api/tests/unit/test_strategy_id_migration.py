@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import pytest
 import pytest_asyncio
 from dishka import Provider, Scope, make_async_container, provide
@@ -20,11 +22,23 @@ class _TestProvider(Provider):
         return self._settings
 
     @provide(scope=Scope.APP)
-    async def get_database(self, settings: Settings):
+    async def get_database(self, settings: Settings) -> AsyncIterator[Database]:
         db = Database()
         await db.connect(settings)
         yield db
         await db.disconnect()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_db(settings: Settings):
+    """Drop test DB before each test — session-scoped Mongo container persists state."""
+    db = Database()
+    await db.connect(settings)
+    try:
+        await db.database.client.drop_database(settings.mongodb_database)
+    finally:
+        await db.disconnect()
+    yield
 
 
 @pytest_asyncio.fixture
