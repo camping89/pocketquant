@@ -5,7 +5,7 @@ set -uo pipefail
 # Runs post-deploy checks and outputs a markdown report.
 #
 # Usage:
-#   ssh vps "cd /opt/pocketquant && bash deploy/vps/verify.sh"
+#   ssh vps "cd /opt/pocketquant && bash deploy/vps/11-verify.sh"
 #   # Report saved to deploy/reports/verify-<ISO-datetime>.md
 
 # cd to deploy/ (one level up from vps/) so .env, reports/ resolve relatively
@@ -127,7 +127,7 @@ fi
 
 # ─── 5. Redis direct check ─────────────────────────────────
 
-redis_ok=$(docker exec pocketquant-redis redis-cli PING 2>/dev/null || echo "")
+redis_ok=$(docker exec pocketquant-redis redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning PING 2>/dev/null || echo "")
 if [ "$redis_ok" = "PONG" ]; then
   check "Redis ping" "$PASS" "PONG"
 else
