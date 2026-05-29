@@ -13,18 +13,21 @@ logger = get_logger(__name__)
 class Database:
     """MongoDB connection manager. Instance-based, managed by DI container.
 
-    Architecture notes:
-    - __client: server-level connection (manages connection pool, auth, network).
-      Kept as private prop for disconnect() — without it we can't call .close()
-      and connections would leak. Although __database.client exists, accessing
-      parent from child is fragile and violates Law of Demeter.
-    - __database: reference to one specific database on the server.
-      Repositories receive this class and call get_collection() — they never
-      see the client, following Principle of Least Privilege.
+    Public surface (in order of preference for app code):
+    - get_collection(name) — preferred for repositories and CQRS handlers.
+    - database (property) — raw AsyncDatabase for migrations, admin ops,
+      and one-offs (rename_collection, list_collection_names, drop_index,
+      bulk aggregations). Avoid in app/repository code.
+    - get_database() — kept as alias of the `database` property for
+      backward compatibility with existing call sites.
 
-    Uses __ (name mangling) to enforce encapsulation — prevents external code
-    from accessing internals. Only public methods (get_database, get_collection)
-    should be used by consumers.
+    Architecture notes:
+    - __client: server-level connection (pool, auth, network). Kept private
+      for disconnect() — accessing it via __database.client violates Law of
+      Demeter.
+    - __database: reference to one specific database on the server.
+      Repositories receive this class and call get_collection() — they
+      should not reach for `database` (Principle of Least Privilege).
 
     Hierarchy: client (server) → database (one DB) → collection (one table)
     Only collections are used for CRUD; client/database handle lifecycle.
@@ -61,10 +64,17 @@ class Database:
             self.__database = None
             logger.info("mongodb.disconnected")
 
-    def get_database(self) -> AsyncDatabase:
+    @property
+    def database(self) -> AsyncDatabase:
+        """Raw AsyncDatabase. Use for migrations and admin ops; prefer
+        get_collection() in repository / CQRS-handler code."""
         if self.__database is None:
             raise RuntimeError("Database not connected. Call Database.connect() first.")
         return self.__database
 
+    def get_database(self) -> AsyncDatabase:
+        """Alias of `database` property. Retained for backward compatibility."""
+        return self.database
+
     def get_collection(self, name: str):
-        return self.get_database()[name]
+        return self.database[name]

@@ -212,6 +212,14 @@ class BarRepository(BaseRepository):
 - Domain entities handle serialization via `to_mongo()` / `from_mongo()`
 - No schemas/ directory (deleted 2026-03-15)
 
+**`Database` public surface (in order of preference for app code):**
+1. `get_collection(name)` — used by repositories / CQRS handlers (default).
+2. `database` property — raw `AsyncDatabase` for migrations and admin ops
+   (rename_collection, list_collection_names, drop_index, multi-collection
+   aggregations). Avoid in repository or handler code.
+3. `get_database()` — alias of `database` property, retained for backward
+   compatibility. New code should prefer `database`.
+
 **Benefits:** Instance-based design, easy to test, domain purity, single source of truth
 
 ### 5. Service Pattern (Business Logic)
