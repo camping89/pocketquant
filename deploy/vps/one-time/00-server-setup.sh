@@ -98,7 +98,7 @@ systemctl enable fail2ban
 systemctl restart fail2ban
 
 echo "=== Creating app directory ==="
-mkdir -p /opt/pocketquant/deploy/vps/patches
+mkdir -p /opt/pocketquant/deploy/vps/one-time
 chown -R deploy:deploy /opt/pocketquant
 
 echo -e "${GREEN}=== Setup Complete ===${NC}"
@@ -107,12 +107,9 @@ echo "Ports: SSH=${SSH_PORT}, HTTP=${HTTP_PORT}, HTTPS=${HTTPS_PORT}"
 echo ""
 echo "Next steps:"
 echo "1. Test SSH: ssh -p ${SSH_PORT} deploy@$(hostname -I | awk '{print $1}')"
-echo "2. Copy deploy/ folder to /opt/pocketquant/deploy/"
-echo "3. Create /opt/pocketquant/deploy/.env"
+echo "2. Update pocketquant-config/vps/default/host with: deploy@$(hostname -I | awk '{print $1}')"
+echo "3. git push from pocketquant-config, then push to pocketquant (or: gh workflow run cicd.yml)"
 echo ""
-echo "GitHub Secrets required:"
-echo "  DEPLOY_HOST=$(hostname -I | awk '{print $1}')"
-echo "  DEPLOY_SSH_PORT=${SSH_PORT}"
-echo "  DEPLOY_USER=deploy"
-echo "  DEPLOY_SSH_KEY=<your-private-key>"
-echo "  GHCR_TOKEN=<github-pat-with-packages-scope>"
+echo "CI/CD fetches host, SSH key, prod .env, Docker Hub + Portainer creds from"
+echo "pocketquant-config via the POCKETQUANT_CONFIG_DEPLOY_KEY secret. No per-host"
+echo "GitHub secrets/vars to set here — see docs/deployment.md → 'VPS Migration (new VPS)'."

@@ -2,9 +2,9 @@
 
 **Last Updated:** 2026-05-28 | **CI/CD:** GitHub Actions push → Docker Hub → SSH to VPS
 
-> **Deploy is now via GitHub Actions push.** The old `bash deploy/deploy.sh` operator wrapper was removed on 2026-05-28. Push to `master` or `develop` triggers the full build → deploy → verify pipeline.
+> **Deploy is via GitHub Actions push.** Push to `master` or `develop` triggers the full build → deploy → verify pipeline.
 
-> **Single source of truth.** Replaces the old `docs/deployment-guide.md`. Top section is the `/deploy` skill–compatible summary; the operator runbook follows below.
+> **Single source of truth.** Top section is the `/deploy` skill–compatible summary; the operator runbook follows below.
 
 ## Platform
 
@@ -41,7 +41,7 @@ gh workflow run cicd.yml --ref develop
 
 1. `build-api` + `build-web` (parallel, ~3-5 min) — build + push Docker images, tagged `:latest` and `:sha-<short>`.
 2. `cleanup-tags` — prune old Docker Hub SHA tags.
-3. `deploy` (needs both builds green): `get-vps-config` composite action fetches config from `pocketquant-config` → setup SSH → write `deploy/.env` → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/verify.sh` (19 checks) → upload verify report as artifact.
+3. `deploy` (needs both builds green): `get-vps-config` composite action fetches config from `pocketquant-config` → setup SSH → write `deploy/.env` → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/10-deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/11-verify.sh` (19 checks) → upload verify report as artifact.
 
 **Concurrency:** `concurrency: deploy / cancel-in-progress: true`. A new push cancels an in-flight deploy — newest wins.
 
@@ -54,6 +54,8 @@ Production config (host, SSH key, prod `.env`, Docker Hub creds, Portainer creds
 ### Production config source-of-truth
 
 `pocketquant-config/vps/default/.env` is the **single source of truth** for prod runtime env. The CI/CD `deploy` job materializes it as `deploy/.env` on the VPS each run via `rsync`. Any manual `.env` on the VPS is overwritten — edit the file in `pocketquant-config/`, `git push`, then push a commit to `pocketquant` (or `gh workflow run cicd.yml`).
+
+The `app` service consumes it directly via `env_file: .env` in `compose.prod.yml` — there is **no** hardcoded `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` in this file use the **internal docker-network service names** (`mongodb:27017`, `redis:6379`) because the file IS the app container's env; `MONGO_PORT`/`REDIS_PORT` are the host-published ports for external tools. Host-side scripts that need DB access run inside the container (`docker exec pocketquant-app …`), where those names resolve — see the resync/backup procedures below.
 
 ### `<repo>/.env` — app + Docker/compose vars (local dev only)
 
@@ -73,12 +75,11 @@ Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape
 | `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_PASSPHRASE` | No | Only for OKX live trading |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
 
-Required-key list is tracked at `deploy/vps/required-env-vars.txt` — the **single source of truth**. CI/CD's `Validate prod .env` step fails the deploy job before rsync if any key is missing; `deploy.sh` on the VPS re-validates as a belt-and-braces check. App reads these locally too — Pydantic uses `extra="ignore"`.
+The full key set lives in `pocketquant-config/vps/default/.env` (prod) and `pocketquant-config/local/.env` (local template). App reads them via Pydantic with `extra="ignore"`, so unused keys are harmless. There is no separate required-key gate — a genuinely missing prod value (e.g. `MONGO_PASSWORD`) surfaces as a container that fails to boot, caught by `11-verify.sh`.
 
-Adding a new required env var:
-1. Append the key to `deploy/vps/required-env-vars.txt` in `pocketquant`.
-2. Set its value in `pocketquant-config/vps/default/.env`, `git push` from `pocketquant-config`.
-3. Push any commit to `pocketquant` to redeploy.
+Adding a new env var:
+1. Set its value in `pocketquant-config/vps/default/.env`, `git push` from `pocketquant-config`.
+2. Push any commit to `pocketquant` to redeploy.
 
 **Where credentials live:** SSH key + prod `.env` + Docker Hub token + Portainer admin all live in the sibling `pocketquant-config/` directory — see [Credentials & Config Layout](#credentials--config-layout). CI/CD reads them at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY` secret (the only secret this repo needs).
 
@@ -106,8 +107,8 @@ CI/CD runs from the reverted HEAD. ~5-8 min from push to VPS healthy on old code
 
 ```bash
 ssh -i pocketquant-config/vps/default/id_rsa "$(cat pocketquant-config/vps/default/host)" "cd /opt/pocketquant && \
-  IMAGE_TAG=sha-<last-good-short> bash deploy/vps/deploy.sh && \
-  bash deploy/vps/verify.sh"
+  IMAGE_TAG=sha-<last-good-short> bash deploy/vps/10-deploy.sh && \
+  bash deploy/vps/11-verify.sh"
 ```
 
 CI tags every push as both `:latest` and `:sha-<commit>`. Pick the SHA of a known-good commit.
@@ -138,7 +139,7 @@ ssh <VPS> "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --en
 git commit --allow-empty -m "chore: redeploy" && git push origin develop
 ```
 
-The `verify.sh` **Boot integrity** check is a hard FAIL gate — it greps the last 200 log lines for fatal startup signatures (`CRITICAL`, `Startup Failed`, `Application startup failed`, `lifespan ... failed/error`, `RuntimeError ... lifespan`, `migration.failed`). Pattern is endpoint-agnostic so it keeps working as features change.
+The `11-verify.sh` **Boot integrity** check is a hard FAIL gate — it greps the last 200 log lines for fatal startup signatures (`CRITICAL`, `Startup Failed`, `Application startup failed`, `lifespan ... failed/error`, `RuntimeError ... lifespan`, `migration.failed`). Pattern is endpoint-agnostic so it keeps working as features change.
 
 ---
 
@@ -160,8 +161,8 @@ git push origin develop (or master)
               ├─ setup SSH (key from cfg.outputs.ssh_key)
               ├─ write deploy/.env from cfg.outputs.env_content
               ├─ rsync deploy/{compose.prod.yml,.env,vps/} → VPS:/opt/pocketquant/
-              ├─ ssh → bash deploy/vps/deploy.sh    (pull, up, ≤60s health gate, prune)
-              ├─ ssh → bash deploy/vps/verify.sh    (19 checks → report)
+              ├─ ssh → bash deploy/vps/10-deploy.sh    (pull, up, ≤60s health gate, prune)
+              ├─ ssh → bash deploy/vps/11-verify.sh    (19 checks → report)
               └─ upload verify-report artifact (30-day retention)
 
 VPS containers: app + web + mongodb + redis + portainer
@@ -177,7 +178,7 @@ Background sync jobs are scheduled via APScheduler with a **MongoDBJobStore** ba
 
 ```bash
 cd ../pocketquant-config
-bash scripts/bootstrap-gh.sh
+bash one-time/bootstrap-gh.sh
 ```
 
 The script generates an ed25519 deploy key, attaches it to `camping89/pocketquant-config` (read-only), and pushes the private half as `POCKETQUANT_CONFIG_DEPLOY_KEY` in `camping89/pocketquant`. Idempotent — re-run anytime to rotate.
@@ -186,7 +187,7 @@ Required GH Actions secrets in `camping89/pocketquant`:
 
 | Secret | Source |
 |---|---|
-| `POCKETQUANT_CONFIG_DEPLOY_KEY` | Set by `pocketquant-config/scripts/bootstrap-gh.sh` |
+| `POCKETQUANT_CONFIG_DEPLOY_KEY` | Set by `pocketquant-config/one-time/bootstrap-gh.sh` |
 
 That's it for the operator. No laptop-side setup is required for deploys.
 
@@ -207,7 +208,8 @@ All operator-side credentials live OUTSIDE this repo, in a sibling `pocketquant-
 | `vps/default/.env` | Prod `.env` — fetched as `cfg.outputs.env_content` |
 | `vps/default/docker-hub.env` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` |
 | `vps/default/portainer.env` | Portainer admin credentials |
-| `scripts/bootstrap-gh.sh` | Idempotent deploy-key setup + rotation |
+| `one-time/bootstrap-gh.sh` | Idempotent deploy-key setup + rotation |
+| `local/.env` | Ready-to-run app `.env` for local dev — `cp local/.env ../pocketquant/.env` |
 
 CI/CD reads all of the above at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY` GH secret + the `get-vps-config` composite action (`.github/actions/get-vps-config/`). Updates flow one-way: edit the file → `git push` from `pocketquant-config` → next CI/CD run picks it up.
 
@@ -227,7 +229,7 @@ No default values in `.env` — you MUST set them. **`WEB_PORT` is the public en
 
 ## First Deploy
 
-1. One-time: `bash pocketquant-config/scripts/bootstrap-gh.sh` (creates `POCKETQUANT_CONFIG_DEPLOY_KEY`).
+1. One-time: `bash pocketquant-config/one-time/bootstrap-gh.sh` (creates `POCKETQUANT_CONFIG_DEPLOY_KEY`).
 2. Push (or `gh workflow run cicd.yml --ref develop`).
 
 The `deploy` job will:
@@ -236,16 +238,16 @@ The `deploy` job will:
 - Setup SSH (write key + `ssh-keyscan` the VPS IP).
 - Write `deploy/.env` from `cfg.outputs.env_content`.
 - `rsync` `compose.prod.yml` + `.env` + `deploy/vps/` to `/opt/pocketquant/`.
-- ssh `bash deploy/vps/deploy.sh`:
+- ssh `bash deploy/vps/10-deploy.sh`:
   - Installs Docker if missing (then exits — re-run after logging back in).
   - Validates required env vars.
   - Pulls images from Docker Hub.
   - Starts all 5 services.
   - Waits up to 60s for `pocketquant-app` `/health` to return 200; fails with last 30 log lines + container status if not.
   - Prunes old images.
-- ssh `bash deploy/vps/verify.sh` — writes report to `deploy/reports/verify-<utc>.md` on the VPS, uploaded as `verify-report` artifact.
+- ssh `bash deploy/vps/11-verify.sh` — writes report to `deploy/reports/verify-<utc>.md` on the VPS, uploaded as `verify-report` artifact.
 
-If `verify.sh` reports FAIL on any check, jump to [Rollback](#rollback).
+If `11-verify.sh` reports FAIL on any check, jump to [Rollback](#rollback).
 
 ---
 
@@ -259,67 +261,6 @@ That's it. CI/CD is the only deploy path. Watch the run on the GitHub Actions ta
 
 ---
 
-## VPS Migration Runbook
-
-**Two prior migrations** to apply one-time on existing VPS installs before the first deploy of the new layout. Idempotent — safe to re-run. Run from your laptop:
-
-```bash
-# 2026-05-24: docker/ → deploy/   AND   2026-05-25: scripts-to-deploy/ split   AND   2026-05-27: scripts-to-deploy/ → vps/
-ssh <VPS> bash -s <<'REMOTE'
-set -euo pipefail
-cd /opt/pocketquant
-
-# Snapshot first (provider snapshot OR mongodump)
-docker exec pocketquant-mongodb mongodump --archive=/tmp/pre-layout-migrate.archive --gzip 2>/dev/null || true
-mkdir -p ./backups
-docker cp pocketquant-mongodb:/tmp/pre-layout-migrate.archive ./backups/ 2>/dev/null || true
-
-# 2026-05-24: docker/ → deploy/   (idempotent guards)
-mkdir -p deploy
-[ -f deploy.sh ] && mv deploy.sh deploy/deploy.sh
-[ -f verify.sh ] && mv verify.sh deploy/verify.sh
-if [ -d docker ]; then
-  mv docker/compose.prod.yml          deploy/compose.prod.yml          2>/dev/null || true
-  mv docker/compose.yml               deploy/compose.yml               2>/dev/null || true
-  mv docker/.env                      deploy/.env                      2>/dev/null || true
-  mv docker/scripts/cleanup.sh        deploy/cleanup.sh                2>/dev/null || true
-  mv docker/scripts/server-setup.sh   deploy/server-setup.sh           2>/dev/null || true
-  rmdir docker/scripts 2>/dev/null || true
-  rmdir docker         2>/dev/null || true
-fi
-
-# 2026-05-25: scripts-to-deploy/ split   (idempotent guards)
-mkdir -p deploy/scripts-to-deploy/patches
-[ -f deploy/deploy.sh ]              && mv deploy/deploy.sh         deploy/scripts-to-deploy/deploy.sh
-[ -f deploy/verify.sh ]              && mv deploy/verify.sh         deploy/scripts-to-deploy/verify.sh
-[ -f deploy/cleanup.sh ]             && mv deploy/cleanup.sh        deploy/scripts-to-deploy/cleanup.sh
-[ -f deploy/server-setup.sh ]        && mv deploy/server-setup.sh   deploy/scripts-to-deploy/server-setup.sh
-
-# 2026-05-27: scripts-to-deploy/ → vps/   (idempotent guards)
-mkdir -p deploy/vps/patches
-if [ -d deploy/scripts-to-deploy ]; then
-  for f in deploy/scripts-to-deploy/*.sh; do
-    [ -f "$f" ] && mv "$f" "deploy/vps/$(basename "$f")"
-  done
-  if [ -d deploy/scripts-to-deploy/patches ]; then
-    for f in deploy/scripts-to-deploy/patches/*; do
-      [ -e "$f" ] && mv "$f" "deploy/vps/patches/$(basename "$f")"
-    done
-    rmdir deploy/scripts-to-deploy/patches 2>/dev/null || true
-  fi
-  rmdir deploy/scripts-to-deploy 2>/dev/null || true
-fi
-rmdir deploy/scripts 2>/dev/null || true
-
-echo "Migration complete. Layout:"
-ls -la deploy/ deploy/vps/
-REMOTE
-```
-
-After this runs once, push to `develop` (or `master`) and CI/CD takes over.
-
----
-
 ## 2-Year Bar Re-Sync Procedure
 
 **Purpose:** Refresh historical market data after major data source changes (e.g., Binance migration, bug fixes).
@@ -328,27 +269,34 @@ After this runs once, push to `develop` (or `master`) and CI/CD takes over.
 
 ### Step 1: Backup Current Data
 ```bash
-ssh <VPS> "mongodump --uri='$MONGODB_URL' --archive=/opt/pocketquant/backup-$(date -u +%Y%m%d-%H%M%S).archive"
+# mongodump lives in the mongodb container; build the URI from that container's
+# own root creds (localhost inside it) — no host-side MONGODB_URL needed:
+ssh <VPS> "docker exec pocketquant-mongodb sh -c 'mongodump --uri=\"mongodb://\$MONGO_INITDB_ROOT_USERNAME:\$MONGO_INITDB_ROOT_PASSWORD@localhost:27017/pocketquant?authSource=admin\" --archive' > /opt/pocketquant/backup-$(date -u +%Y%m%d-%H%M%S).archive"
 ```
+
+> Scripts ship inside the app image (`/app/scripts`) and read `MONGODB_URL` from
+> the container env, whose internal hostname (`mongodb`) only resolves on the
+> docker network — so run them with `docker exec pocketquant-app`, not on the host.
 
 ### Step 2: Pre-Audit (Baseline Quality Check)
 ```bash
-ssh <VPS> "cd /opt/pocketquant && python scripts/audit_bar_quality.py --days 730 --output /opt/pocketquant/audit-pre.md"
+ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-pre.md"
+ssh <VPS> "docker cp pocketquant-app:/app/audit-pre.md /opt/pocketquant/audit-pre.md"
 # Inspect output — note flat_pct and zerovol_pct per interval
 ```
 
 ### Step 3: Plan Resync (Dry Run)
 ```bash
-ssh <VPS> "cd /opt/pocketquant && python scripts/resync_2y_from_binance.py --dry-run --days 730"
+ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --dry-run --days 730"
 ```
 
 ### Step 4: Execute Resync (Live)
 ```bash
 # All symbols (~2-3 hours):
-ssh <VPS> "cd /opt/pocketquant && python scripts/resync_2y_from_binance.py --days 730"
+ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730"
 
 # Specific symbols only (~30 min):
-ssh <VPS> "cd /opt/pocketquant && python scripts/resync_2y_from_binance.py --days 730 --symbols BTCUSDT,ETHUSDT"
+ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730 --symbols BTCUSDT,ETHUSDT"
 ```
 
 ### Step 5: Higher-Timeframe Direct Fetch
@@ -362,7 +310,8 @@ ssh <VPS> "curl -X POST http://localhost:\$APP_PORT/api/v1/market-data/sync \
 
 ### Step 6: Post-Audit (Verify Quality)
 ```bash
-ssh <VPS> "cd /opt/pocketquant && python scripts/audit_bar_quality.py --days 730 --output /opt/pocketquant/audit-post.md"
+ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-post.md"
+ssh <VPS> "docker cp pocketquant-app:/app/audit-post.md /opt/pocketquant/audit-post.md"
 # Compare to pre-audit: flat_pct and zerovol_pct should be ≤ 1% (or 0.0% if bug fixed)
 ```
 
@@ -394,11 +343,13 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 
 ### Setup
 
-1. Copy VPS connection settings from `pocketquant-config/vps/default/.env` (the production env source; local-only overrides live in `pocketquant-config/.env.local`) into your local `.env`. Override for local-friendly behaviour:
+1. Start from `pocketquant-config/local/.env`, then point its DB URLs at the VPS. The prod `vps/default/.env` URLs use **internal** docker hostnames (`mongodb`, `redis`) that only resolve on the VPS docker network — a laptop must use the VPS IP + published ports instead. The IP is the host part of `pocketquant-config/vps/default/host`; ports are `MONGO_PORT`/`REDIS_PORT`. Set in your local `.env` (creds match `vps/default/.env`):
 
    ```env
    ENVIRONMENT=development
    LOG_FORMAT=console
+   MONGODB_URL=mongodb://pocketquant:<MONGO_PASSWORD>@<vps-ip>:<MONGO_PORT>/pocketquant?authSource=admin
+   REDIS_URL=redis://<vps-ip>:<REDIS_PORT>/0
    ```
 
 2. Verify connectivity to `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>` (mongo shell, redis-cli, or your IDE).
@@ -436,7 +387,7 @@ sudo ufw enable
 
 VPS is disposable. To move to a new VPS:
 
-1. Provision the new VPS, run `deploy/vps/server-setup.sh` once (it bootstraps Docker, firewall, fail2ban, deploy user). Run manually over SSH from your laptop on first install.
+1. Provision the new VPS, run `deploy/vps/one-time/00-server-setup.sh` once (it bootstraps Docker, firewall, fail2ban, deploy user). Run manually over SSH from your laptop on first install.
 2. Update `pocketquant-config/vps/default/host` with the new `user@ip` (and `id_rsa` / `id_rsa.pub` if regenerated). `git push` from `pocketquant-config`.
 3. Push (or `gh workflow run cicd.yml`) — CI/CD performs the first deploy on the new VPS.
 
@@ -483,18 +434,6 @@ Re-run Step 1 — expect `missing_count == 0` and empty `gap_ranges`. Any residu
 ### Catch-up at boot (automatic)
 
 `start_background_jobs` runs `enqueue_missed_catchups` after cron registration. If the last successful `sync_backfill` / `sync_integrity` was >25h ago (or `sync_repair` >12.5h ago), a `<job_id>_catchup` one-off run is enqueued automatically. Manual audit is still recommended after any restart spanning a daily window, until 30 days of clean `job_history` confirm the catch-up is reliable.
-
----
-
-## Post-Migration Cleanup (GitHub)
-
-After migrating from the old GHCR-based setup, delete unused GitHub repo settings:
-
-**Delete secrets:** `DEPLOY_SSH_KEY`, `GHCR_TOKEN`, `MONGO_PASSWORD`, `MONGO_EXPRESS_PASSWORD`, `GRAFANA_PASSWORD`, `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_PASSPHRASE`.
-
-**Delete vars:** `DEPLOY_HOST`, `DEPLOY_SSH_PORT`, `DEPLOY_USER`.
-
-**Keep secrets:** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 
 ---
 

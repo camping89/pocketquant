@@ -7,7 +7,7 @@ This is the current local workflow for running PocketQuant, validating market-da
 Backend:
 
 ```bash
-cp .env.example .env
+cp ../pocketquant-config/local/.env .env
 just install
 ```
 
