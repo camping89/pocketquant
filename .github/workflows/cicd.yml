@@ -10,8 +10,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python + deps
+        run: uv sync --frozen
+
+      - name: Run pytest (pocketquant-api)
+        run: uv run pytest packages/pocketquant-api/tests/ -v
+
   build-api:
     runs-on: ubuntu-latest
+    needs: [tests]
     steps:
       - uses: actions/checkout@v5
 
@@ -56,6 +73,7 @@ jobs:
 
   build-web:
     runs-on: ubuntu-latest
+    needs: [tests]
     steps:
       - uses: actions/checkout@v5
 
