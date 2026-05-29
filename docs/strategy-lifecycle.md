@@ -25,10 +25,6 @@ That distinction drives everything below.
 
 ### 1. How a strategy is created
 
-Two creation paths exist:
-
-#### 1.1 Subscription-based (the FE path, recommended)
-
 `POST /api/v1/strategies/{strategy_code}/subscriptions` with body `{symbol, interval}`.
 
 - Route: `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py:22`
@@ -55,20 +51,6 @@ which posts via `useCreateSubscription` mutation
 — `packages/pocketquant-web/src/components/strategies/new-subscription-dialog.tsx`
 and `packages/pocketquant-web/src/hooks/use-strategy-mutations.ts:71`.
 
-#### 1.2 YAML load (legacy / scripted path)
-
-`POST /api/v1/strategies/load` with body `{path: "<path-to-yaml>"}`.
-
-- Route: `packages/pocketquant-trading/.../handlers/strategy/load/route.py:21`
-- Handler delegates to `StrategyAppService.load_strategy(config)` directly with
-  the YAML-parsed `StrategyConfig`. Reads the file via `StrategyLoader.load()`
-  — `packages/pocketquant-trading/.../app_services/yaml_strategy_loader.py:20`.
-- The README notes: `YAML strategy loading via POST /api/v1/strategies/load
-  is still supported, but no example files are shipped in strategies/examples/`
-  — `pocketquant/README.md:129`.
-- This path does NOT create a `Subscription` row in Mongo; the loaded
-  instance disappears on the next restart. Use only for ad-hoc loading.
-
 ### 2. How to update or change config
 
 There is **no edit endpoint**. To change a subscription's config:
@@ -85,7 +67,7 @@ To change strategy-level parameters (e.g. `entry_lookback_bars`):
   or come from `StrategyConfig.parameters` which is set to `{}` in
   `AddSymbolHandler` — handler builds `StrategyConfig(id, name, symbol, interval)`
   with no parameters override. The runtime parameters override path requires
-  editing code or using the YAML loader (§1.2) and is not exposed via API.
+  editing code and is not exposed via API.
 - FE shows config as **read-only**:
   `packages/pocketquant-web/src/components/strategies/strategy-config-card.tsx`
   exposes only Start / Stop / Delete — no edit form.
@@ -472,7 +454,6 @@ Backtest path is parallel and isolated:
 |---|---|---|---|
 | GET  | `/api/v1/strategies/` | List template IDs with metadata `{strategy_code, class_name, description}` | `pocketquant-backtest/.../handlers/router.py:10` |
 | GET  | `/api/v1/strategies/{strategy_code}` | Get template metadata | `strategy/get_one/route.py` |
-| POST | `/api/v1/strategies/load` | Load a `StrategyConfig` from a YAML file path | `strategy/load/route.py` |
 | POST | `/api/v1/strategies/{strategy_code}/subscriptions` | Create a subscription | `strategy/add_symbol/route.py` |
 | GET  | `/api/v1/subscriptions/?strategy_code=...` | List subscriptions with backtest status (optional filter; defaults to all) | `strategy/list_symbols/route.py` |
 | DELETE | `/api/v1/subscriptions/{sub_id}` | Remove a subscription (cascade) | `strategy/remove_symbol/route.py` |

@@ -140,10 +140,10 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Risk checks before order submission
 
 **API Endpoints:**
-- GET `/api/v1/strategies` - List available strategies
-- POST `/api/v1/strategies/load` - Load strategy by name
-- POST `/api/v1/strategies/start` - Start strategy execution
-- POST `/api/v1/strategies/stop` - Stop strategy
+- GET `/api/v1/strategies` - List registered strategy templates
+- POST `/api/v1/strategies/{strategy_code}/subscriptions` - Create a live subscription
+- POST `/api/v1/subscriptions/{sub_id}/start` - Start strategy execution
+- POST `/api/v1/subscriptions/{sub_id}/stop` - Stop strategy
 
 ### F8: Backtesting Engine
 
@@ -347,10 +347,9 @@ packages/pocketquant-trading/    (~3,452 LOC, 65 files)
 │   ├── OKXBroker + 7 WebSocket support files (auth, mappers, handlers)
 │   └── ~1,500+ LOC total broker integration
 ├── app_services/
-│   ├── StrategyAppService, OrderAppService, PositionAppService
-│   └── YamlStrategyLoader
+│   └── StrategyAppService, OrderAppService, PositionAppService
 ├── handlers/
-│   ├── Strategy ops (load/start/stop/get_one/get_all)
+│   ├── Strategy ops (add_symbol/start/stop/get_one/get_all/delete)
 │   └── Trading ops (list_orders/get_order/list_positions/get_position)
 └── persistence/
 

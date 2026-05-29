@@ -161,8 +161,7 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 
 ### Auto-load coupling
 
-- Pre-refactor: `LoadStrategyCommand` phải chạy trước `AddSymbolCommand` — coupling ngầm 2 bước.
-- Post-refactor (2026-05-26): `AddSymbolHandler` tự động `StrategyAppService.load_strategy(...)` nếu instance cho `sub_id` chưa tồn tại. User không cần load thủ công nữa.
+- `AddSymbolHandler` tự động `StrategyAppService.load_strategy(...)` nếu instance cho `sub_id` chưa tồn tại. User không cần load thủ công.
 
 ---
 

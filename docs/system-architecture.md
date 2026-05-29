@@ -285,8 +285,8 @@ operation_name/
 @handles(RunBacktestCommand)
 class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
     async def handle(self, cmd: RunBacktestCommand) -> BacktestResultDTO:
-        # 1. Fetch strategy config from infrastructure
-        strategy = await StrategyLoader.load_yaml(cmd.strategy_yaml)
+        # 1. Resolve strategy class from registry
+        strategy_class = STRATEGY_REGISTRY[cmd.strategy_code]
 
         # 2. Fetch historical bars from infrastructure
         bars = await BarRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
@@ -693,7 +693,7 @@ Key pipelines at high level:
 |----------|-------|----------|
 | Market data | 13 | SyncSymbolHandler, SyncBulkHandler, GetBarsHandler, StartQuoteFeedHandler, StopQuoteFeedHandler, SubscribeQuoteHandler, GetAllQuotesHandler, GetSyncStatusHandler, ListSymbolsHandler, CheckIntegrityHandler, RepairIntegrityHandler, GetSystemJobsHandler, *(1 more)* |
 | Backtesting | 5 | RunBacktestHandler, OptimizeHandler, GetResultHandler, GetOptimizationHandler, ListResultsHandler |
-| Strategy | 5 | LoadStrategyHandler, StartStrategyHandler, StopStrategyHandler, GetOneHandler, GetAllHandler |
+| Strategy | 4 | StartStrategyHandler, StopStrategyHandler, GetOneHandler, GetAllHandler |
 | Trading | 4 | ListOrdersHandler, GetOrderHandler, ListPositionsHandler, GetPositionHandler |
 
 **Handler Registration:** `register_handlers(container)` resolves all 27 handler types and registers with Mediator.
