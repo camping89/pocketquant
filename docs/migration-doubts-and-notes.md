@@ -1,6 +1,6 @@
 # Monorepo Migration — Notes
 
-**Date:** 2026-03-21 | **Last reviewed:** 2026-05-26 | **Status:** All migration items resolved; boot migration for strategy_id refactor shipped 2026-05-26; 2 deferred YAGNI notes remain
+**Date:** 2026-03-21 | **Last reviewed:** 2026-05-29 | **Status:** All migration items resolved; boot migration for strategy_id refactor shipped 2026-05-26; 1 deferred YAGNI note remains
 
 All 7 migration concerns resolved during cleanup. See git history for details.
 
@@ -8,9 +8,11 @@ All 7 migration concerns resolved during cleanup. See git history for details.
 
 **Strategy ID Refactor:** 7 commits (95c64f8..c68c02c) shipped. Mongo collection renamed `strategy_subscriptions` → `subscriptions`, fields `strategy_id` → `strategy_code` (subscriptions) and `strategy_id` → `subscription_id` (orders/positions). Boot migration `migrate_strategy_id_fields()` idempotent at startup (before `ensure_all_indexes`). Subscription hash deterministic IDs stable (no change). See `docs/code-standards.md` → "Strategy ID Disambiguation" and `docs/strategy-lifecycle.md` for field mapping tables.
 
-## Remaining Notes (Deferred — YAGNI)
+## Resolved (2026-05-29)
 
-- Strategy YAML path resolution uses CWD-relative — may need project-root resolution for Docker/production.
+- Strategy YAML path resolution — resolved by deleting unused YAML strategy loader + `POST /strategies/load` endpoint + `pyyaml` dep (plan: `260529-1700-delete-yaml-strategy-loader`). Strategy init now flows exclusively via `STRATEGY_REGISTRY` + subscription record.
+
+## Remaining Notes (Deferred — YAGNI)
 
 - **`Bar.tick_count` semantics inconsistent across data sources** (decided 2026-05-07: defer per YAGNI; still deferred as of 2026-05-25).
   Three shapes coexist in the `bars` collection:

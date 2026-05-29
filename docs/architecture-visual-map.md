@@ -166,7 +166,7 @@ graph TB
     Repos --> DB
 ```
 
-## 4. Request Flow — POST /strategies/load
+## 4. Request Flow — POST /strategies/{strategy_code}/subscriptions
 
 ```mermaid
 sequenceDiagram
@@ -174,24 +174,24 @@ sequenceDiagram
     participant Route as route.py
     participant Dishka as DishkaRoute
     participant Med as Mediator
-    participant Handler as LoadStrategyHandler
+    participant Handler as AddSymbolHandler
     participant Engine as StrategyAppService
     participant Broker as BrokerFactory
 
-    Client->>Route: POST /strategies/load {path: "ma.yaml"}
+    Client->>Route: POST /strategies/{code}/subscriptions {symbol, interval}
     Route->>Dishka: resolve FromDishka[Mediator]
     Dishka-->>Route: Mediator singleton
-    Route->>Route: StrategyLoader.load(path)
-    Route->>Med: send(LoadStrategyCommand)
+    Route->>Med: send(AddSymbolCommand)
     Med->>Med: lookup handler by type
     Med->>Handler: handle(command)
-    Handler->>Engine: load_strategy(config)
+    Handler->>Handler: STRATEGY_REGISTRY[strategy_code]
+    Handler->>Engine: load_strategy(StrategyConfig, strategy_class)
     Engine->>Broker: create_broker(config)
     Broker-->>Engine: PaperBroker instance
-    Engine-->>Handler: strategy_id
-    Handler-->>Med: strategy_id
-    Med-->>Route: strategy_id
-    Route-->>Client: {strategy_id, status: "loaded"}
+    Engine-->>Handler: subscription_id
+    Handler-->>Med: subscription_id
+    Med-->>Route: subscription_id
+    Route-->>Client: {subscription_id, status: "created"}
 ```
 
 ## 5. DI Resolution Graph

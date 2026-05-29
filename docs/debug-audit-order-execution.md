@@ -22,16 +22,15 @@
 
 ## Golden Path
 
-### Step 1 — Load Strategy
+### Step 1 — Create Subscription
 
-**API:** `POST /api/v1/strategies/load` `{"path": "strategies/your-strategy.yaml"}`
+**API:** `POST /api/v1/strategies/{strategy_code}/subscriptions` `{"symbol": "...", "interval": "..."}`
 
-- Route (`trading/handlers/strategy/load/route.py`) injects `Mediator` via `FromDishka`; sends `LoadStrategyCommand`.
-- Handler (`handlers/strategy/load/handler.py`) delegates to `StrategyAppService.load_strategy()`.
-- `yaml_strategy_loader.py` reads + validates YAML → `StrategyConfig` dataclass.
-- `StrategyAppService` (under asyncio lock) creates broker instance (`PaperBroker` or `OKXBroker`) + strategy object; stores both in in-memory dicts keyed by strategy ID.
+- Route (`trading/handlers/strategy/add_symbol/route.py`) injects `Mediator` via `FromDishka`; sends `AddSymbolCommand`.
+- Handler (`handlers/strategy/add_symbol/handler.py`) looks up the class in `STRATEGY_REGISTRY[strategy_code]` and delegates to `StrategyAppService.load_strategy(StrategyConfig(...), strategy_class=...)`.
+- `StrategyAppService` (under asyncio lock) creates broker instance (`PaperBroker` or `OKXBroker`) + strategy object; stores both in in-memory dicts keyed by `subscription_id`. Persists a `Subscription` row to Mongo.
 
-**Expected:** `200 OK`, log `strategy_loaded`. **Unexpected:** YAML parse error → fix config; missing fields → add required keys.
+**Expected:** `201 Created`, log `strategy_loaded`. **Unexpected:** unregistered `strategy_code` → 404; duplicate `(symbol, interval)` → 400.
 
 ---
 

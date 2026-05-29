@@ -26,11 +26,11 @@ Register a `(symbol, exchange, interval)` combo for a running strategy so the st
 
 | HTTP status | Displayed message | Cause |
 |---|---|---|
-| 404 | "Strategy not loaded. Load it first." | Strategy not yet loaded into memory via `LoadStrategyCommand` |
+| 404 | "Strategy not registered." | `strategy_code` not found in `STRATEGY_REGISTRY` |
 | 400 / 409 | "Subscription already exists for this symbol/exchange/interval." | Duplicate combo |
 | Other | `API {status}: {statusText}` | Generic fallback (route miss, network, server error) |
 
-> **Note:** `API 404: Not Found` also appears when `strategyId` is empty/null or the route isn't mounted — distinguish from the "strategy not loaded" 404 (which has a specific message body).
+> **Note:** `API 404: Not Found` also appears when `strategyId` is empty/null or the route isn't mounted — distinguish from the "strategy not registered" 404 (which has a specific message body).
 
 ---
 
@@ -155,11 +155,6 @@ A global handler maps `AppError` → JSON `{error: {code, message}}`.
 
 - Duplicate subscription returns 400 (DomainError) instead of 409 (Conflict) per REST convention. Should we align?
 - See journal: `strategy-subscriptions-cached-backtest-260505.md` § "Unresolved Questions"
-
-### UX coupling
-
-- `LoadStrategyCommand` must run before `AddSymbolCommand` — implicit two-step coupling.
-- **Suggested fix:** auto-trigger strategy load if not loaded; transparent to the user.
 
 ---
 

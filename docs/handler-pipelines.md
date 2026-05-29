@@ -352,11 +352,11 @@ Response: QuotesStatusResponse(is_running, subscription_count)
 
 **Pipeline:**
 ```
-RunBacktestCommand(strategy_name, symbol, start_date, end_date, params)
+RunBacktestCommand(strategy_id, symbol, start_date, end_date, params)
   ↓
 Handler.handle():
-  1. Fetch strategy: StrategyLoader.load_yaml(config_path)
-     └─ YAML → IStrategy instance
+  1. Resolve strategy class: STRATEGY_REGISTRY[strategy_code]
+     └─ Registry lookup → IStrategy class
   ↓
   2. Fetch bars: BarRepository.get_bars(symbol, start_date, end_date)
      └─ MongoDB bars collection (renamed from ohlcv), sorted ascending by timestamp
@@ -465,35 +465,9 @@ Response: List[BacktestResultDTO]
 
 ---
 
-## C. Strategy Handlers (5)
+## C. Strategy Handlers (4)
 
-### 19. LoadStrategyHandler (LoadStrategyCommand)
-
-**Request:** POST `/api/v1/strategies/load`
-
-**Pipeline:**
-```
-LoadStrategyCommand(name, config_path)
-  ↓
-Handler.handle():
-  1. Load YAML: StrategyLoader.load_yaml(config_path)
-     └─ Parse YAML → StrategyConfig dataclass
-  ↓
-  2. Instantiate: StrategyFactory.create(config.strategy_class, **config.params)
-     └─ Dynamic import + instantiate IStrategy subclass
-  ↓
-  3. Register handlers: EventRegistry.register_instance(strategy)
-     └─ Scan for @event_handler decorated methods
-     └─ Subscribe strategy.on_order_filled, etc. to EventBus
-  ↓
-  4. Store in StrategyAppService: StrategyAppService.load_strategy(strategy_id, strategy)
-  ↓
-Response: LoadStrategyResponse(strategy_id, name, status='loaded')
-```
-
----
-
-### 20. StartStrategyHandler (StartStrategyCommand)
+### 19. StartStrategyHandler (StartStrategyCommand)
 
 **Request:** POST `/api/v1/subscriptions/{sub_id}/start`
 
@@ -520,7 +494,7 @@ Response: StrategyStatusDTO(status='running')
 
 ---
 
-### 21. StopStrategyHandler (StopStrategyCommand)
+### 20. StopStrategyHandler (StopStrategyCommand)
 
 **Request:** POST `/api/v1/subscriptions/{sub_id}/stop`
 
@@ -543,7 +517,7 @@ Response: StrategyStatusDTO(status='stopped')
 
 ---
 
-### 22. GetStrategyHandler (GetStrategyQuery) — template metadata
+### 21. GetStrategyHandler (GetStrategyQuery) — template metadata
 
 **Request:** GET `/api/v1/strategies/{strategy_code}`
 
@@ -559,7 +533,7 @@ Response: {strategy_code, class_name, description} or 404
 
 ---
 
-### 23. GetStrategiesHandler (GetStrategiesQuery) — list templates
+### 22. GetStrategiesHandler (GetStrategiesQuery) — list templates
 
 **Request:** GET `/api/v1/strategies/`
 
@@ -574,7 +548,7 @@ Response: list[{strategy_code}]
 
 ---
 
-### 24. AddSymbolHandler (AddSymbolCommand) — create subscription
+### 23. AddSymbolHandler (AddSymbolCommand) — create subscription
 
 **Request:** POST `/api/v1/strategies/{strategy_code}/subscriptions`
 
@@ -605,7 +579,7 @@ Response: {id, strategy_code, symbol, interval, created_at}
 
 ---
 
-### 25. ListSymbolsHandler (ListSymbolsQuery) — list subscriptions
+### 24. ListSymbolsHandler (ListSymbolsQuery) — list subscriptions
 
 **Request:** GET `/api/v1/subscriptions/?strategy_code=...` (filter optional)
 
@@ -626,7 +600,7 @@ Response: list[{id, strategy_code, symbol, interval, created_at, is_running, bac
 
 ---
 
-### 26. RemoveSymbolHandler (RemoveSymbolCommand) — delete one subscription
+### 25. RemoveSymbolHandler (RemoveSymbolCommand) — delete one subscription
 
 **Request:** DELETE `/api/v1/subscriptions/{sub_id}`
 
@@ -654,7 +628,7 @@ Response: 204 No Content
 
 ---
 
-### 27. RunAllBacktestsHandler (RunAllBacktestsCommand) — fan-out backtests
+### 26. RunAllBacktestsHandler (RunAllBacktestsCommand) — fan-out backtests
 
 **Request:** POST `/api/v1/strategies/{strategy_code}/run-all-backtests`
 
@@ -691,7 +665,7 @@ Response: {job_ids: [...]} (HTTP 202)
 
 ---
 
-### 28. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery)
+### 27. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery)
 
 **Request:** GET `/api/v1/subscriptions/{sub_id}/backtest`
 
@@ -708,7 +682,7 @@ Response: raw doc | 404 NotFoundError ("trigger a run via run-all-backtests firs
 
 ---
 
-### 29. DeleteStrategyHandler (DeleteStrategyCommand) — cascade by template
+### 28. DeleteStrategyHandler (DeleteStrategyCommand) — cascade by template
 
 **Request:** DELETE `/api/v1/strategies/{strategy_code}`
 
