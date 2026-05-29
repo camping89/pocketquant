@@ -48,6 +48,9 @@ typeCheckingMode = "standard"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
+# importlib mode lets duplicate test-package names (e.g. tests/unit/) coexist
+# across all four packages without ModuleNotFoundError or ImportPathMismatchError.
+addopts = "--import-mode=importlib"
 testpaths = [
     "packages/pocketquant-core/tests",
     "packages/pocketquant-backtest/tests",
