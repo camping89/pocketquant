@@ -1,4 +1,4 @@
-"""CQRS handler providers — all 27 handlers as APP-scoped singletons.
+"""CQRS handler providers — all 37 handlers as APP-scoped singletons.
 
 Handlers are resolved by dishka via __init__ type hints and registered
 with Mediator in pocketquant.api.di.container:register_handlers().
@@ -54,7 +54,6 @@ from pocketquant.trading.handlers.strategy.get_trades.handler import (
 from pocketquant.trading.handlers.strategy.list_symbols.handler import (
     ListSymbolsHandler as ListStrategySymbolsHandler,
 )
-from pocketquant.trading.handlers.strategy.load.handler import LoadStrategyHandler
 from pocketquant.trading.handlers.strategy.remove_symbol.handler import RemoveSymbolHandler
 from pocketquant.trading.handlers.strategy.run_all_backtests.handler import RunAllBacktestsHandler
 from pocketquant.trading.handlers.strategy.start.handler import StartStrategyHandler
@@ -90,8 +89,7 @@ class HandlerProvider(Provider):
     list_positions_handler = provide(ListPositionsHandler, scope=Scope.APP)
     get_position_handler = provide(GetPositionHandler, scope=Scope.APP)
 
-    # Strategy (11)
-    load_strategy_handler = provide(LoadStrategyHandler, scope=Scope.APP)
+    # Strategy (12)
     start_strategy_handler = provide(StartStrategyHandler, scope=Scope.APP)
     stop_strategy_handler = provide(StopStrategyHandler, scope=Scope.APP)
     get_strategies_handler = provide(GetStrategiesHandler, scope=Scope.APP)
@@ -135,7 +133,6 @@ ALL_HANDLER_TYPES: list[type] = [
     GetOrderHandler,
     ListPositionsHandler,
     GetPositionHandler,
-    LoadStrategyHandler,
     StartStrategyHandler,
     StopStrategyHandler,
     GetStrategiesHandler,

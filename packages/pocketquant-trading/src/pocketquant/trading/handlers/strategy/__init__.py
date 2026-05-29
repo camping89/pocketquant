@@ -3,10 +3,8 @@
 from pocketquant.core.concepts.strategy.interfaces import IStrategy
 from pocketquant.core.concepts.strategy.value_objects import OrderConfig, StrategyConfig
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.app_services.yaml_strategy_loader import StrategyLoader
 from pocketquant.trading.handlers.strategy.get_all import GetStrategiesHandler, GetStrategiesQuery
 from pocketquant.trading.handlers.strategy.get_one import GetStrategyHandler, GetStrategyQuery
-from pocketquant.trading.handlers.strategy.load import LoadStrategyCommand, LoadStrategyHandler
 from pocketquant.trading.handlers.strategy.router import (
     router as strategy_router,
 )
@@ -23,15 +21,11 @@ __all__ = [
     "StrategyConfig",
     # Engine
     "StrategyAppService",
-    # Loader
-    "StrategyLoader",
     # Handlers
     "GetStrategiesHandler",
     "GetStrategiesQuery",
     "GetStrategyHandler",
     "GetStrategyQuery",
-    "LoadStrategyCommand",
-    "LoadStrategyHandler",
     "StartStrategyCommand",
     "StartStrategyHandler",
     "StopStrategyCommand",

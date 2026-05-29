@@ -6,8 +6,8 @@ as a text path so APScheduler can serialize them in MongoDBJobStore.
 
 NOTE: The strategy must already be loaded in StrategyAppService._configs before
 this job executes. If the app restarts and wipes in-memory state, the job fails
-with a clear 'strategy config not in memory' error. Call LoadStrategyCommand
-before adding symbols or triggering a backtest run.
+with a clear 'strategy config not in memory' error. Subscribe via
+POST /strategies/{strategy_code}/subscriptions before running backtest.
 """
 
 from __future__ import annotations
@@ -106,7 +106,8 @@ async def run_subscription_backtest(subscription_id: str) -> None:
         if base_config is None:
             raise ValueError(
                 f"Strategy config for '{strategy_code}' not in memory. "
-                "Load the strategy via LoadStrategyCommand before running backtest."
+                "Subscribe to the strategy via "
+                "POST /strategies/{strategy_code}/subscriptions before running backtest."
             )
 
         start_date, end_date = await resolve_date_range(bar_repo, symbol, interval)
