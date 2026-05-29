@@ -118,4 +118,4 @@ No empty subclasses. Use base classes directly:
 
 ## Known Issues
 
-See `docs/archive/migration-doubts-and-notes.md` for post-migration notes and unresolved questions.
+Post-migration notes and unresolved questions were retired from the docs tree; see git history (`git log -- docs/migration-doubts-and-notes.md`) if needed.
