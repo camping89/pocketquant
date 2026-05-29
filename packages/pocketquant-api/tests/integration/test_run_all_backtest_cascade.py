@@ -30,7 +30,7 @@ pytestmark = pytest.mark.integration
 
 _API = "/api/v1/strategies"
 _STRATEGY_ID = "hitnrun2"   # must be in STRATEGY_REGISTRY
-_SYMBOL = "BTC-USDT:BINANCE"
+_SYMBOL = "BTCUSDT:BINANCE"
 _INTERVAL = "1h"
 _N_BARS = 100
 _POLL_TIMEOUT_S = 30

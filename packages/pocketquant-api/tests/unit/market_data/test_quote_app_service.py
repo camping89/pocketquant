@@ -21,7 +21,7 @@ from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppS
 def _make_quote_data(volume: float | None, price: float = 50000.0) -> dict:
     """Build minimal quote_data dict as produced by the Binance WS mapper."""
     return {
-        "symbol_key": "BINANCE:BTCUSDT",
+        "symbol": "BTCUSDT:BINANCE",
         "last_price": price,
         "volume": volume,
         "timestamp": datetime(2026, 5, 8, 10, 0, 0, tzinfo=UTC),

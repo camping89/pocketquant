@@ -8,6 +8,8 @@ This test catches reintroduction of `IntervalTrigger` for any bar-aligned job.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pocketquant.api.market_data.app_services.sync_jobs import register_sync_jobs
@@ -28,7 +30,19 @@ BAR_ALIGNED_JOB_IDS: set[str] = {
 
 
 class _FakeContainer:
-    """Minimal stand-in for AsyncContainer — register_sync_jobs only stores the ref."""
+    """Minimal stand-in for AsyncContainer.
+
+    register_sync_jobs both stores the ref AND resolves JobHistoryRepository
+    for its catch-up sweep — give it a no-op `.get(...)` that returns an
+    AsyncMock whose own coroutine methods (e.g. find_last_success) return
+    None / empty so the catch-up logic short-circuits.
+    """
+
+    async def get(self, _type):
+        repo = AsyncMock()
+        # Catch-up sweep calls this; None means "no last success, skip catch-up".
+        repo.get_last_successful_started_at = AsyncMock(return_value=None)
+        return repo
 
 
 def _build_scheduler(settings: Settings) -> JobScheduler:
@@ -41,10 +55,10 @@ def _build_scheduler(settings: Settings) -> JobScheduler:
     return sched
 
 
-def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None:
+async def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None:
     """No bar-aligned job may use IntervalTrigger — must be CronTrigger only."""
     scheduler = _build_scheduler(settings)
-    register_sync_jobs(_FakeContainer(), scheduler)  # type: ignore[arg-type]
+    await register_sync_jobs(_FakeContainer(), scheduler)  # type: ignore[arg-type]
     jobs = scheduler._scheduler.get_jobs()  # pyright: ignore[reportPrivateUsage]
 
     registered_ids = {j.id for j in jobs}
