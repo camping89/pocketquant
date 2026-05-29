@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Deploy and verify"
-status: in-progress
+status: complete
 priority: P1
 effort: "30m"
 dependencies: [1]
@@ -83,12 +83,12 @@ push pocketquant         ──► CI ► ssh VPS ► 10-deploy.sh
 
 ## Success Criteria
 
-- [ ] Both repos pushed; CI/CD deploy green (or manual `10-deploy.sh` reports "App is healthy")
-- [ ] `11-verify.sh` verdict HEALTHY; Redis ping PASS; API /health PASS with redis latency
-- [ ] External `redis-cli ... ping` (no `-a`) returns NOAUTH error
-- [ ] External `redis-cli ... -a $PASS ping` returns PONG
-- [ ] `FLUSHALL` executed once under auth
-- [ ] App logs show no redis connection errors post-deploy
+- [x] Both repos pushed; CI/CD deploy green (or manual `10-deploy.sh` reports "App is healthy")
+- [x] `11-verify.sh` verdict HEALTHY; Redis ping PASS; API /health PASS with redis latency
+- [x] External `redis-cli ... ping` (no `-a`) returns NOAUTH error
+- [x] External `redis-cli ... -a $PASS ping` returns PONG
+- [x] `FLUSHALL` executed once under auth
+- [x] App logs show no redis connection errors post-deploy
 
 ## Risk Assessment
 
