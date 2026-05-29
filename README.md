@@ -154,7 +154,6 @@ Manual API testing:
 
 - [Run And Test Guide](./docs/run-and-test-guide.md)
 - [Docs Index](./docs/README.md)
-- [Codebase Summary](./docs/codebase-summary.md)
 - [System Architecture](./docs/system-architecture.md)
 - [Deployment](./docs/deployment.md)
 

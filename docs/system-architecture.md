@@ -186,11 +186,11 @@ class StrategyAppService:
         await self.event_bus.publish(SignalGeneratedEvent(...))
 ```
 
-### Layer 3: Features (CQRS Operation Routes) — packages/pocketquant-api/src/pocketquant/api/features/
+### Layer 3: Handlers (CQRS Operation Routes) — `trading/handlers/`, `backtest/handlers/`, `api/market_data/handlers/`
 
 **Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to handlers, return responses.
 
-**Pattern:** Operation-first vertical slices. Each operation is a self-contained use case (command/query + handler).
+**Pattern:** Operation-first vertical slices. Each operation is a self-contained use case (command/query + handler). The folder layout below illustrates the slice pattern; handlers physically live under each package's `handlers/` root (see "Where Does X Live?" above for exact paths).
 
 **Structure:**
 ```
@@ -494,6 +494,43 @@ src/
 
 **Deployment:** Vite `dist/` served as static assets behind FastAPI (no separate server).
 
+## Where Does X Live?
+
+| Topic | Location |
+|-------|----------|
+| Domain entities (Bar, Order, Position, Symbol) | `core/domain/{bar,order,position,symbol}/entities.py` |
+| Value objects (OHLCV, Signal, PnL, QuoteTick) | `core/domain/{bar,concepts}/value_objects.py` |
+| Domain events (11 events) | `core/domain/{bar,order,position,concepts}/events.py` |
+| Enums (OrderStatus, Interval, Direction, etc.) | `core/domain/{bar,order,position,shared}/enums.py` |
+| CQRS Mediator + Handler base | `core/common/mediator/` |
+| Event bus + @event_handler decorator | `core/common/messaging/` |
+| Middleware (correlation, rate limit, idempotency) | `core/common/middleware/` |
+| MongoDB connection | `core/persistence/mongodb.py` |
+| Redis connection | `core/persistence/redis.py` |
+| All 8 repositories | `core/persistence/repositories/` |
+| Binance REST + WS clients | `core/infrastructure/binance/` |
+| OKX broker + WS + reconnection | `core/infrastructure/brokers/okx/` |
+| PaperBroker (simulation) | `core/infrastructure/brokers/paper/` |
+| APScheduler wrapper | `core/infrastructure/scheduling/` + `core/common/jobs.py` |
+| Dishka DI container (6 providers) | `api/di/` |
+| FastAPI app + middleware wiring | `api/main.py`, `api/main_extensions.py` |
+| CQRS handlers (operations) | `trading/handlers/{strategy,trading,risk}/`, `backtest/handlers/`, `api/market_data/handlers/` |
+| Backtest execution engine | `backtest/app_services/backtest_app_service.py` |
+| Grid optimization engine | `backtest/app_services/grid_optimization_app_service.py` |
+| Strategy runtime dispatch | `trading/app_services/strategy_app_service.py` |
+| Order state machine | `trading/app_services/order_app_service.py` |
+| Position tracking + P&L | `trading/app_services/position_app_service.py` |
+| YAML strategy loader | `trading/app_services/strategy_loader.py` |
+| HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2.py` |
+| Background sync job registration | `api/main_extensions.py` → `register_sync_jobs()` |
+| Subscription backtest job worker | `trading/jobs/backtest_jobs.py` |
+| UUID7 generation | `core/common/uuid.py` |
+| Cache keys, TTLs, constants | `core/common/constants.py` |
+| Frontend API client layer | `web/src/api/` |
+| Frontend custom hooks | `web/src/hooks/` |
+| Chart + indicator components | `web/src/components/chart/` |
+| Domain purity test (AST check) | `core/tests/unit/domain/test_domain_purity.py` |
+
 ## Clean Architecture Request Flow
 
 ### Command Flow (State Mutation)
@@ -769,6 +806,51 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 **Characteristics:** Sync 1-5s per 5k bars | Quote <100ms | Bar aggregation <1ms/tick | Mediator <0.1ms | Quote throughput 1000+/sec
 
 **Security:** Credentials via env vars only | Rate limit 200 req/10s per IP | Idempotency cache 24h TTL | MongoDB/Redis auth via DSN
+
+## Configuration
+
+Environment variables (`.env`):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MONGODB_URL` | MongoDB DSN | — |
+| `REDIS_URL` | Redis DSN | — |
+| `LOG_FORMAT` | `json` (prod) or `console` (dev) | — |
+| `LOG_LEVEL` | `debug`, `info`, `warning`, `error` | — |
+| `ENVIRONMENT` | `development` or `production` | — |
+| `APP_PORT` | Host-mapped port (container always 41920) | `58921` |
+| `ENABLE_JOBS` | Enable background sync/integrity jobs | `false` |
+| `OKX_API_KEY` | OKX live trading credential (optional) | — |
+| `OKX_API_SECRET` | OKX live trading credential (optional) | — |
+| `OKX_PASSPHRASE` | OKX live trading credential (optional) | — |
+| `OKX_DEMO_MODE` | OKX sandbox mode | `true` |
+
+For deployment-specific env handling (docker-network service names, host-published ports), see [deployment.md](./deployment.md).
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `fastapi` | Web framework |
+| `pydantic` | Settings + command/query models; domain uses stdlib dataclasses |
+| `pymongo` | MongoDB driver — native async API (NOT Motor) |
+| `redis` | Async Redis client (redis-py) |
+| `structlog` | Structured logging |
+| `apscheduler` | Job scheduling |
+| `aiohttp` | Async HTTP + WebSocket (Binance REST/WS) |
+| `dishka` | Dependency injection |
+| `pytest` | Testing framework |
+| `ruff` | Linting and formatting |
+| `pyright` | Type checking |
+
+## Known Limitations
+
+- In-memory EventBus — events lost on crash; suitable for non-critical events only
+- In-memory APScheduler job store — jobs reschedule on startup; no persistent history beyond `job_history` MongoDB collection
+- No persistent outbox pattern — consider for mission-critical event delivery
+- Rate limiting state lost on Redis restart — acceptable for burst protection
+- Single-threaded strategy execution — one strategy per process
+- Domain purity enforced via AST check — I/O imports forbidden in `domain/`
 
 ## Recent Significant Changes
 

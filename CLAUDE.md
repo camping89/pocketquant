@@ -118,4 +118,4 @@ No empty subclasses. Use base classes directly:
 
 ## Known Issues
 
-See `docs/migration-doubts-and-notes.md` for post-migration notes and unresolved questions.
+See `docs/archive/migration-doubts-and-notes.md` for post-migration notes and unresolved questions.

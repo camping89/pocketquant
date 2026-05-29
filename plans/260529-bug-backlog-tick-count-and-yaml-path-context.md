@@ -9,7 +9,7 @@
 ## Bug A — `Bar.tick_count` semantic inconsistency across data sources
 
 ### Symptom + doc reference
-Documented in `docs/migration-doubts-and-notes.md` (deferred 2026-05-07, still open 2026-05-25).
+Documented in `docs/archive/migration-doubts-and-notes.md` (deferred 2026-05-07, still open 2026-05-25).
 
 `bars` collection contains 3 different `tick_count` shapes:
 
@@ -59,14 +59,14 @@ Data shifts semantic around 2026-04-30 — that's when source mix changed in the
 - `packages/pocketquant-api/src/pocketquant/api/market_data/handlers/ohlcv/stream_bars/route.py:32,52`
 - `packages/pocketquant-api/src/pocketquant/api/market_data/app_services/quote_dto.py:90`
 - `packages/pocketquant-core/src/pocketquant/core/persistence/repositories/bar_repository.py:18,137`
-- `docs/migration-doubts-and-notes.md` (entry: tick_count)
+- `docs/archive/migration-doubts-and-notes.md` (entry: tick_count)
 
 ---
 
 ## Bug B — Strategy YAML path resolution is CWD-relative
 
 ### Symptom + doc reference
-Documented in `docs/migration-doubts-and-notes.md`:
+Documented in `docs/archive/migration-doubts-and-notes.md`:
 > Strategy YAML path resolution uses CWD-relative — may need project-root resolution for Docker/production.
 
 ### Scout findings — what actually loads strategies today
@@ -109,7 +109,7 @@ Two layers:
 - `packages/pocketquant-trading/src/pocketquant/trading/handlers/strategy/load/route.py:21-30`
 - `packages/pocketquant-trading/src/pocketquant/trading/handlers/strategy/load/handler.py:21`
 - `packages/pocketquant-api/src/pocketquant/api/main_extensions.py` — `rehydrate_strategies_from_subscriptions` (line 267-312) for context on why lifespan no longer touches YAML
-- `docs/migration-doubts-and-notes.md` (entry: YAML path)
+- `docs/archive/migration-doubts-and-notes.md` (entry: YAML path)
 - `deploy/Dockerfile` (check WORKDIR + COPY of any strategies/ dir)
 
 ---

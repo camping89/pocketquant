@@ -1,9 +1,6 @@
 # PocketQuant Docs
 
-This directory mixes two kinds of documentation:
-
-- canonical docs for the current local workflow and code layout
-- deeper design notes that are still useful, but may contain older naming or historical detail
+This directory holds the canonical documentation for the current code layout and workflow. Historical snapshots live under [`archive/`](#archive-historical-may-be-outdated).
 
 Start with the canonical set.
 
@@ -13,27 +10,37 @@ Start with the canonical set.
   Current setup, backend/frontend startup, sync smoke test, and UI smoke test.
 - [Run And Test Guide](./run-and-test-guide.md)
   Step-by-step local workflow for running the API, syncing data, running the UI, and testing both.
-- [Codebase Summary](./codebase-summary.md)
-  Current package map, route groups, runtime flows, and testing assets.
 - [System Architecture](./system-architecture.md)
-  Deeper backend/frontend architecture reference.
+  Deeper backend/frontend architecture reference — layers, request flows, "Where Does X Live?", config, dependencies, limitations.
+- [Architecture Visual Map](./architecture-visual-map.md)
+  ASCII + Mermaid diagrams, bounded contexts, context map, ubiquitous language glossary.
+- [Handler Pipelines](./handler-pipelines.md)
+  Per-handler request/processing/side-effect detail for all CQRS handlers.
+- [Code Standards](./code-standards.md)
+  Naming, file-size rules, layer patterns, DDD aggregate-classification guide.
 - [Deployment](./deployment.md)
   Production deployment — single source of truth (skill-friendly summary + full operator runbook).
-
-## Specialized Deep Dives
-
 - [Project Overview / PDR](./project-overview-pdr.md)
-- [Handler Pipelines](./handler-pipelines.md)
-- [DDD Strategic Map](./ddd-strategic-map.md)
-- [Architecture Visual Map](./architecture-visual-map.md)
-- [Code Standards](./code-standards.md)
-- [Debug Audit: Order Execution](./debug-audit-order-execution.md)
-- [Migration Doubts And Notes](./migration-doubts-and-notes.md)
+  Product requirements, scope, roadmap.
 - [Project Changelog](./project-changelog.md)
+  Project history and version notes.
+- [Strategy Lifecycle](./strategy-lifecycle.md)
+  Strategy load → subscribe → backtest → start/stop lifecycle.
+- [WebSocket Architecture](./websocket-architecture.md)
+  Real-time quote/bar streaming design.
 
 ## Features
 
 - [Add Symbol (Strategy Subscription)](./feature-add-symbol.md)
+
+## Archive (historical, may be outdated)
+
+Point-in-time snapshots and journals. Kept for reference; not maintained against current code.
+
+- [Debug Audit: Order Execution](./archive/debug-audit-order-execution.md)
+- [Security: Redis Exposure](./archive/security-redis-exposure.md)
+- [Migration Doubts And Notes](./archive/migration-doubts-and-notes.md)
+- [Journals](./archive/journals/) — dated session/decision records.
 
 ## Current Repo Shape
 
@@ -61,8 +68,8 @@ For setup:
 
 For implementation work:
 
-1. [Codebase Summary](./codebase-summary.md)
-2. [System Architecture](./system-architecture.md)
+1. [System Architecture](./system-architecture.md)
+2. [Architecture Visual Map](./architecture-visual-map.md)
 3. [Code Standards](./code-standards.md)
 
 For deployment:
