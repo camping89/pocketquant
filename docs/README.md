@@ -1,6 +1,6 @@
 # PocketQuant Docs
 
-This directory holds the canonical documentation for the current code layout and workflow. Historical snapshots live under [`archive/`](#archive-historical-may-be-outdated).
+This directory holds the canonical documentation for the current code layout and workflow.
 
 Start with the canonical set.
 
@@ -32,15 +32,6 @@ Start with the canonical set.
 ## Features
 
 - [Add Symbol (Strategy Subscription)](./feature-add-symbol.md)
-
-## Archive (historical, may be outdated)
-
-Point-in-time snapshots and journals. Kept for reference; not maintained against current code.
-
-- [Debug Audit: Order Execution](./archive/debug-audit-order-execution.md)
-- [Security: Redis Exposure](./archive/security-redis-exposure.md)
-- [Migration Doubts And Notes](./archive/migration-doubts-and-notes.md)
-- [Journals](./archive/journals/) — dated session/decision records.
 
 ## Current Repo Shape
 
