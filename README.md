@@ -39,7 +39,7 @@ web → api
 ## Backend Quick Start
 
 ```bash
-cp ../pocketquant-config/local/.env .env
+cp ../pocketquant-config/local/all-local.env .env
 just install
 just up
 just be
