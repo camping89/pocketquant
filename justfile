@@ -13,16 +13,18 @@ install:
     uv sync
 
 # Start infrastructure (MongoDB + Redis)
+# --env-file .env: same single source the app reads, so container creds/ports
+# always match. Without it compose looks for deploy/.env (absent locally).
 up:
-    docker compose -f deploy/compose.yml up -d
+    docker compose -f deploy/compose.local.yml --env-file .env up -d
 
 # Stop infrastructure
 down:
-    docker compose -f deploy/compose.yml down
+    docker compose -f deploy/compose.local.yml --env-file .env down
 
 # Reset everything: stop containers and delete all data volumes
 reset:
-    docker compose -f deploy/compose.yml down -v
+    docker compose -f deploy/compose.local.yml --env-file .env down -v
 
 # Run all tests
 test:
@@ -49,7 +51,7 @@ qa: lint fmt types
 
 # Start Redis only (when using remote MongoDB)
 redis:
-    docker compose -f deploy/compose.yml up -d redis
+    docker compose -f deploy/compose.local.yml --env-file .env up -d redis
 
 # Start backend dev server with hot reload
 be:

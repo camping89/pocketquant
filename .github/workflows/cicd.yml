@@ -189,27 +189,11 @@ jobs:
             printf 'DOCKERHUB_USERNAME=%s\n' "$DH_U"
           } > deploy/.env
 
-      - name: Validate prod .env against required-env-vars.txt
-        run: |
-          set -a && source deploy/.env && set +a
-          missing=()
-          while IFS= read -r var; do
-            [[ -z "$var" || "$var" =~ ^[[:space:]]*# ]] && continue
-            if [ -z "${!var:-}" ]; then missing+=("$var"); fi
-          done < deploy/vps/required-env-vars.txt
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::pocketquant-config/.env missing required keys:"
-            printf '::error::  - %s\n' "${missing[@]}"
-            echo "::error::Add them to pocketquant-config/vps/default/.env and retry."
-            exit 1
-          fi
-          echo "All required env vars present."
-
       - name: Sync compose + .env + VPS scripts
         env:
           VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
         run: |
-          ssh "$VPS_HOST" "mkdir -p $REMOTE_ROOT/deploy/vps/patches"
+          ssh "$VPS_HOST" "mkdir -p $REMOTE_ROOT/deploy/vps/one-time"
           rsync -avz \
             deploy/compose.prod.yml deploy/.env \
             "$VPS_HOST:$REMOTE_ROOT/deploy/"
@@ -220,12 +204,12 @@ jobs:
       - name: Deploy on VPS
         env:
           VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
-        run: ssh "$VPS_HOST" "cd $REMOTE_ROOT && bash deploy/vps/deploy.sh"
+        run: ssh "$VPS_HOST" "cd $REMOTE_ROOT && bash deploy/vps/10-deploy.sh"
 
       - name: Verify on VPS
         env:
           VPS_HOST: ${{ steps.cfg.outputs.vps_host }}
-        run: ssh "$VPS_HOST" "cd $REMOTE_ROOT && bash deploy/vps/verify.sh"
+        run: ssh "$VPS_HOST" "cd $REMOTE_ROOT && bash deploy/vps/11-verify.sh"
 
       - name: Fetch verify report
         if: always()

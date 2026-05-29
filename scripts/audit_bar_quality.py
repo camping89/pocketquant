@@ -10,15 +10,18 @@ Usage:
 
 Exit codes: 0 = success, 1 = Mongo connection failure.
 
-MONGODB_URL must be set in environment (never passed as CLI flag).
+MONGODB_URL must be set in environment (never passed as CLI flag). In prod it
+holds the internal docker hostname (mongodb:27017), so run via the container:
+`docker exec pocketquant-app python scripts/audit_bar_quality.py ...`.
 
-Production run order:
-    1. mongodump --uri=$MONGODB_URL --db=pocketquant --collection=bars \\
-          --out=/backup/$(date +%Y%m%d)
-    2. python scripts/audit_bar_quality.py --days 730   # pre-resync baseline
-    3. python scripts/resync_2y_from_binance.py --days 730 --dry-run
-    4. python scripts/resync_2y_from_binance.py --days 730
-    5. python scripts/audit_bar_quality.py --days 730   # post-resync comparison
+Production run order (on the VPS):
+    1. docker exec pocketquant-mongodb sh -c 'mongodump \\
+          --uri="mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@localhost:27017/pocketquant?authSource=admin" \\
+          --db=pocketquant --collection=bars --archive' > /opt/pocketquant/bars-$(date +%Y%m%d).archive
+    2. docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730    # pre-resync baseline
+    3. docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730 --dry-run
+    4. docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730
+    5. docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730    # post-resync comparison
 """
 
 from __future__ import annotations

@@ -16,6 +16,26 @@ from testcontainers.redis import RedisContainer
 _PROD_HOST_FRAGMENT = "207.148.79.60"
 
 
+# Placeholder values for the bare ``Settings()`` path (e.g. the structlog
+# ``add_app_context`` processor calls ``get_settings()`` at log time). They keep
+# the suite hermetic: tests must run with no project ``.env`` present (CI) just
+# as well as with one (local/direnv). Fixtures that need real infra build their
+# own ``Settings`` against ephemeral containers and ignore these.
+_TEST_ENV_DEFAULTS = {
+    "APP_NAME": "pocketquant-test",
+    "APP_VERSION": "0.0.0",
+    "ENVIRONMENT": "development",
+    "MONGODB_URL": "mongodb://localhost:27017/pocketquant_test",
+    "MONGODB_DATABASE": "pocketquant_test",
+    "MONGODB_MIN_POOL_SIZE": "1",
+    "MONGODB_MAX_POOL_SIZE": "10",
+    "REDIS_URL": "redis://localhost:6379/1",
+    "REDIS_CACHE_TTL": "3600",
+    "LOG_LEVEL": "DEBUG",
+    "LOG_FORMAT": "console",
+}
+
+
 def pytest_configure(config: pytest.Config) -> None:
     import os
 
@@ -26,6 +46,11 @@ def pytest_configure(config: pytest.Config) -> None:
                 f"Refusing to run tests: {var} points at production "
                 f"({_PROD_HOST_FRAGMENT}). Unset the env var or use a local URL."
             )
+
+    # Seed required Settings fields only when absent, so a real dev environment
+    # (direnv/.env) keeps precedence and the prod-guard above still sees real URLs.
+    for key, val in _TEST_ENV_DEFAULTS.items():
+        os.environ.setdefault(key, val)
 
 
 @pytest.fixture(scope="session")

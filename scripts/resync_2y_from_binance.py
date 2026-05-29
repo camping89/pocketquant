@@ -14,7 +14,9 @@ Usage:
 
 Exit codes: 0 = success, 1 = Mongo connection failure or partial failure.
 
-MONGODB_URL must be set in environment (never passed as CLI flag).
+MONGODB_URL must be set in environment (never passed as CLI flag). On the VPS it
+holds an internal docker hostname, so prefix prod runs with
+`docker exec pocketquant-app` (see docs/deployment.md → 2-Year Bar Re-Sync).
 
 Production run order (multi-day option):
     Day 1: python scripts/resync_2y_from_binance.py --days 730 --symbols BTCUSDT,ETHUSDT,...
