@@ -75,7 +75,7 @@ Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape
 | `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_PASSPHRASE` | No | Only for OKX live trading |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
 
-The full key set lives in `pocketquant-config/vps/default/.env` (prod) and `pocketquant-config/local/.env` (local template). App reads them via Pydantic with `extra="ignore"`, so unused keys are harmless. There is no separate required-key gate — a genuinely missing prod value (e.g. `MONGO_PASSWORD`) surfaces as a container that fails to boot, caught by `11-verify.sh`.
+The full key set lives in `pocketquant-config/vps/default/.env` (prod) and `pocketquant-config/local/` (local templates: `all-local.env`, `remote-db.env`). App reads them via Pydantic with `extra="ignore"`, so unused keys are harmless. There is no separate required-key gate — a genuinely missing prod value (e.g. `MONGO_PASSWORD`) surfaces as a container that fails to boot, caught by `11-verify.sh`.
 
 Adding a new env var:
 1. Set its value in `pocketquant-config/vps/default/.env`, `git push` from `pocketquant-config`.
@@ -209,7 +209,8 @@ All operator-side credentials live OUTSIDE this repo, in a sibling `pocketquant-
 | `vps/default/docker-hub.env` | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` |
 | `vps/default/portainer.env` | Portainer admin credentials |
 | `one-time/bootstrap-gh.sh` | Idempotent deploy-key setup + rotation |
-| `local/.env` | Ready-to-run app `.env` for local dev — `cp local/.env ../pocketquant/.env` |
+| `local/all-local.env` | Ready-to-run local `.env` (code + Mongo + Redis all local) — `cp local/all-local.env ../pocketquant/.env` |
+| `local/remote-db.env` | Local code against VPS Mongo/Redis — `cp local/remote-db.env ../pocketquant/.env` |
 
 CI/CD reads all of the above at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY` GH secret + the `get-vps-config` composite action (`.github/actions/get-vps-config/`). Updates flow one-way: edit the file → `git push` from `pocketquant-config` → next CI/CD run picks it up.
 
@@ -343,14 +344,13 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 
 ### Setup
 
-1. Start from `pocketquant-config/local/.env`, then point its DB URLs at the VPS. The prod `vps/default/.env` URLs use **internal** docker hostnames (`mongodb`, `redis`) that only resolve on the VPS docker network — a laptop must use the VPS IP + published ports instead. The IP is the host part of `pocketquant-config/vps/default/host`; ports are `MONGO_PORT`/`REDIS_PORT`. Set in your local `.env` (creds match `vps/default/.env`):
+1. Copy the ready-made remote-DB config — its `MONGODB_URL`/`REDIS_URL` already point at the VPS IP + published ports with the correct creds (the prod `vps/default/.env` URLs use **internal** docker hostnames `mongodb`/`redis` that only resolve on the VPS network, so they can't be used from a laptop):
 
-   ```env
-   ENVIRONMENT=development
-   LOG_FORMAT=console
-   MONGODB_URL=mongodb://pocketquant:<MONGO_PASSWORD>@<vps-ip>:<MONGO_PORT>/pocketquant?authSource=admin
-   REDIS_URL=redis://<vps-ip>:<REDIS_PORT>/0
+   ```bash
+   cp ../pocketquant-config/local/remote-db.env .env
    ```
+
+   The Redis URL carries the `--requirepass` password — without it every Redis command is rejected (NOAUTH).
 
 2. Verify connectivity to `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>` (mongo shell, redis-cli, or your IDE).
 
@@ -366,7 +366,7 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 - Local writes go to the **production** database. Treat destructive scripts (drop, reset, bulk delete) with the same care as on the VPS.
 - Tests must NEVER touch prod. `packages/pocketquant-core/tests/conftest.py` raises if `MONGODB_URL` or `REDIS_URL` contains the prod IP, and uses ephemeral testcontainers for the `settings` fixture.
 - Before pointing at prod, back up local config: `cp .env .env.local-only.bak`. To revert: `cp .env.local-only.bak .env && just up`.
-- `ENABLE_JOBS=true` on local is safe — MongoDBJobStore coordinates with the VPS scheduler; the same job will not fire twice per tick.
+- Keep `ENABLE_JOBS=false` on local (the default in `remote-db.env`). The scheduler runs on PROD only; a local instance with jobs enabled would run them against the shared production state. Never set it to `true` locally.
 
 ---
 

@@ -47,7 +47,7 @@ Add `REDIS_PASSWORD` to the prod env source and update the URL:
 > Note the `:` before the password — Redis URLs use an empty username.
 >
 > **Prod-only by decision.** Local dev Redis (`compose.local.yml`,
-> `pocketquant-config/local/.env`, `pocketquant/.env`) stays no-auth on
+> `pocketquant-config/local/all-local.env`, `pocketquant/.env`) stays no-auth on
 > localhost — do NOT mirror `--requirepass` there.
 
 ### 2. Restrict network exposure (defense in depth)
@@ -84,7 +84,7 @@ redis-cli -h 207.148.79.60 -p 53679 -a "$REDIS_PASSWORD" ping
 - `deploy/vps/11-verify.sh` — Redis check passes `-a "$REDIS_PASSWORD"`.
 - `pocketquant-config/vps/default/.env` — `REDIS_PASSWORD`, `REDIS_URL`.
 
-Local dev (`compose.local.yml`, `pocketquant-config/local/.env`, `pocketquant/.env`)
+Local dev (`compose.local.yml`, `pocketquant-config/local/all-local.env`, `pocketquant/.env`)
 is intentionally left no-auth — not affected.
 
 ## Resolution (2026-05-29)
