@@ -228,5 +228,5 @@ jobs:
         with:
           name: verify-report
           path: reports/
-          retention-days: 30
+          retention-days: 3
           if-no-files-found: warn
