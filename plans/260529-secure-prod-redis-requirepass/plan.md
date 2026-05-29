@@ -1,7 +1,7 @@
 ---
 title: "Secure prod Redis with requirepass auth"
 description: "Add a password to the publicly-exposed production Redis (requirepass), update dependent healthcheck/verify/URL, deploy, and rotate."
-status: in-progress
+status: complete
 priority: P1
 branch: "develop"
 tags: [security, infra, redis, deployment]
@@ -39,7 +39,7 @@ rotates.
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Apply Redis auth](./phase-01-apply-redis-auth.md) | Complete |
-| 2 | [Deploy and verify](./phase-02-deploy-and-verify.md) | Pending |
+| 2 | [Deploy and verify](./phase-02-deploy-and-verify.md) | Complete |
 
 ## Key Files (two repos)
 
