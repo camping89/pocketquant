@@ -53,8 +53,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.database = await container.get(Database)
         app.state.cache = await container.get(Cache)
 
-        await register_handlers(container)
+        # Migration must precede register_handlers — handler resolution
+        # cascade-instantiates PositionAppService.start() which loads open
+        # positions with the post-migration field shape. If legacy docs are
+        # still on disk, the read would crash before migration could fix them.
         await migrate_strategy_id_fields(container)
+        await register_handlers(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)
