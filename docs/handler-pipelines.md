@@ -738,66 +738,9 @@ Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 
 ## Key Data Flows
 
-### Real-time Quote → Strategy Execution (Real-Time Wiring Status: In Progress)
+> End-to-end data flows (historical sync, real-time quotes, integrity, strategy execution, backtesting, optimization) are documented once in [system-architecture.md](./system-architecture.md#data-pipelines-overview). This file covers the per-handler detail above; the cross-handler pipelines are not duplicated here.
 
-```
-WebSocket aggTrade event from Binance @aggTrade
-  ↓
-BinanceWebSocketClient.parse_aggTrade_event()
-  ↓
-QuoteAppService._on_quote_update(quote)
-  ├─ Cache.set(f"quote:latest:{symbol}", quote, ttl=60)  # symbol is composite e.g. BTCUSDT:BINANCE
-  └─ BarAppService.process_tick(quote)
-      ├─ For each interval (1m, 5m, ..., 1M):
-      │   └─ Update BarBuilder[interval]
-      ├─ Detect bar boundary crossed
-      └─ BarAppService._save_completed_bar()
-         ├─ MongoDB insert_one(bar) to bars collection [COLLECTION RENAMED: ohlcv→bars]
-         ├─ Redis cache with build_bar_cache_key()
-         └─ Publish BarCompletedEvent [SOURCE: _save_completed_bar(), real-time emission status: PENDING]
-  ↓
-EventBus.publish(BarCompletedEvent) [Real-time wiring: TODO]
-  ↓
-StrategyAppService._on_bar(bar)
-  ├─ strategy.on_bar(bar) → Signal
-  ├─ RiskCheckHandler.check_signal(signal) → approved?
-  ├─ OrderAppService.submit_order(order, broker)
-  │   └─ OKXBroker.submit_order() or PaperBroker.submit_order()
-  └─ Publish OrderSubmittedEvent
-  ↓
-Broker processes order → fill/reject
-  ↓
-OrderFilledEvent published
-  ↓
-PositionAppService._on_order_filled()
-  ├─ Update position: entry/exit/quantity
-  ├─ Calculate P&L
-  ├─ Publish PositionOpenedEvent / PositionUpdatedEvent
-  └─ PositionRepository.save(position)
-```
-
-**Note:** Real-time BarCompletedEvent emission is wired in backtesting via HistoricalReplayAppService. Live event wiring for real-time strategies is scheduled for Phase 5 (real-time event wiring).
-
-### Backtesting: Historical Replay
-
-```
-BacktestAppService receives bars (sorted chronologically)
-  ↓
-For each bar:
-  1. Inject to StrategyAppService
-  2. strategy.on_bar(bar) → Signal
-  3. RiskCheckHandler validates
-  4. PaperBroker fills instantly (with slippage)
-  5. PositionAppService updates
-  6. Collect fill event
-  ↓
-After all bars:
-  PerformanceCalculator aggregates fills
-    ├─ Calculate Sharpe, Sortino, max drawdown
-    └─ Finalize P&L
-  ↓
-BacktestResult saved to MongoDB
-```
+**Real-time wiring status (unique to this surface):** Live `BarCompletedEvent` → strategy execution is wired today only in backtesting via `HistoricalReplayAppService`. Real-time emission from `BarAppService._save_completed_bar()` for live strategies is pending (Phase 5: real-time event wiring).
 
 ---
 

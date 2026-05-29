@@ -489,6 +489,26 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 - **Cache Keys:** Use `build_bar_cache_key()` (renamed from `build_ohlcv_cache_key()`)
 - **Collections:** Use `COLLECTION_BARS` (renamed from `COLLECTION_OHLCV`)
 
+### 12.5. DDD Classification Guide (When to Use an Aggregate)
+
+**When to use an Aggregate:**
+- Entity has **invariants** to protect (e.g. `OrderAggregate` state machine)
+- Entity has **lifecycle behavior** (e.g. `PositionAggregate` open → scale → close)
+- Entity **owns other entities** within a consistency boundary
+- Entity **emits domain events** from business operations
+
+**When NOT to use an Aggregate:**
+- Entity is a **data record** (e.g. `Bar` — just OHLCV data, serialization only)
+- Class is an **event factory** with no state (anti-pattern, deleted 2026-03-15)
+- Class is **never instantiated** in practice
+- Behavior is **CRUD-only** — use a plain entity or model
+
+**Project Rules:**
+1. Aggregates earn their complexity — no invariants, no aggregate.
+2. Events can be created directly where needed — no wrapper aggregate required.
+3. Value objects stay as frozen dataclasses — simple, immutable, no persistence.
+4. DTOs live in the application layer — they're infrastructure, not domain.
+
 ## Composite Symbol Format (2026-05-23)
 
 **Format:** `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`, `AAPL:NYSE`)
@@ -712,7 +732,7 @@ We use **Pyright** (via Pylance in VSCode), not mypy:
 
 ```bash
 pyright packages/                 # Type check entire packages
-pyright packages/pocketquant-api/src/pocketquant/api/features/backtesting/  # Check specific module
+pyright packages/pocketquant-backtest/src/pocketquant/backtest/handlers/  # Check specific module
 ```
 
 ## Performance Considerations

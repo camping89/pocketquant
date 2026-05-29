@@ -9,7 +9,7 @@ Dependent changes shipped together:
 - `deploy/vps/11-verify.sh`: redis check now uses `-a "${REDIS_PASSWORD:-}"` (default prevents `set -u` abort)
 - `deploy/vps/10-deploy.sh`: added fail-closed guard — refuse deploy if `REDIS_PASSWORD` empty (empty requirepass silently disables auth while healthcheck still PONGs, silently reopening the exposure)
 - `pocketquant-config/vps/default/.env`: added `REDIS_PASSWORD` + `REDIS_URL=redis://:<pw>@redis:6379/0`
-- `docs/security-redis-exposure.md`: status Resolved, residual-risk notes (online brute force, future auth-bypass CVE, password visible via docker inspect)
+- `docs/archive/security-redis-exposure.md`: status Resolved, residual-risk notes (online brute force, future auth-bypass CVE, password visible via docker inspect)
 
 Plan: `plans/260529-secure-prod-redis-requirepass/`.
 
@@ -39,7 +39,7 @@ Second push confirmed: external `ping` → `NOAUTH Authentication required`, aut
 
 2. **Env-dependent initialization is fragile.** Pydantic models, structlog processors, anything that reads environment at import-time needs a test-harness fallback. Using `os.environ.setdefault` in `pytest_configure` is the pattern: seed placeholders, let real env override, keep it hermetic.
 
-3. **Audit the handoff between security controls.** The requirepass + healthcheck + deploy guard are three separate points. If any breaks, the others still allow the container to reach "healthy" and the deploy to proceed. Documented the failure mode chain in `docs/security-redis-exposure.md`.
+3. **Audit the handoff between security controls.** The requirepass + healthcheck + deploy guard are three separate points. If any breaks, the others still allow the container to reach "healthy" and the deploy to proceed. Documented the failure mode chain in `docs/archive/security-redis-exposure.md`.
 
 ## Files of note
 
@@ -48,7 +48,7 @@ Second push confirmed: external `ping` → `NOAUTH Authentication required`, aut
 - `deploy/vps/11-verify.sh` — redis-cli check
 - `pocketquant-config/vps/default/.env` — REDIS_PASSWORD + REDIS_URL (separate repo)
 - `packages/pocketquant-api/tests/conftest.py` — pytest_configure with env seeding
-- `docs/security-redis-exposure.md` — residual risks & mitigation
+- `docs/archive/security-redis-exposure.md` — residual risks & mitigation
 
 ## Next steps
 

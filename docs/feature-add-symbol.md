@@ -1,6 +1,6 @@
 # Feature: Add Symbol (Strategy Subscription)
 
-**Last Updated:** 2026-05-26 | **Status:** Production | **Related:** `journals/strategy-subscriptions-cached-backtest-260505.md`
+**Last Updated:** 2026-05-26 | **Status:** Production | **Related:** `archive/journals/strategy-subscriptions-cached-backtest-260505.md`
 
 Tài liệu mô tả feature **Add Symbol** — modal cho phép user đăng ký một symbol (cặp giao dịch) vào một strategy template. Feature thuộc luồng **Strategy Subscription Management** với cardinality 1 strategy template : N subscriptions.
 
@@ -169,10 +169,10 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 
 - [Handler Pipelines](./handler-pipelines.md) — chi tiết CQRS pipeline pattern
 - [System Architecture](./system-architecture.md) — overview backend/frontend, subscription entity
-- [Debug Audit Order Execution](./debug-audit-order-execution.md) — live trading flow với subscription IDs
+- [Debug Audit Order Execution](./archive/debug-audit-order-execution.md) — live trading flow với subscription IDs
 - [Code Standards](./code-standards.md) — CQRS naming conventions + Strategy ID Disambiguation
 - [Strategy Lifecycle](./strategy-lifecycle.md) — bảng routes đầy đủ, mongo collection map
-- [Journal: Strategy Subscriptions Shipped](./journals/strategy-subscriptions-cached-backtest-260505.md) — implementation history & bug fixes
+- [Journal: Strategy Subscriptions Shipped](./archive/journals/strategy-subscriptions-cached-backtest-260505.md) — implementation history & bug fixes
 
 ---
 
