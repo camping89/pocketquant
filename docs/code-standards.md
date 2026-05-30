@@ -1,8 +1,8 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-05-30 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files
+Architecture: Clean Architecture + DDD + CQRS + Dishka. Type checker: Pyright.
 
-Current note: this document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md).
+This document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md).
 
 ## Clean Architecture Rules
 
@@ -210,7 +210,7 @@ class BarRepository(BaseRepository):
 - Database (PyMongo, NOT Motor) and Cache (Redis) managed by dishka
 - BaseRepository: `_collection()` helper, `Database` injected
 - Domain entities handle serialization via `to_mongo()` / `from_mongo()`
-- No schemas/ directory (deleted 2026-03-15)
+- No schemas/ directory
 
 **`Database` public surface (in order of preference for app code):**
 1. `get_collection(name)` — used by repositories / CQRS handlers (default).
@@ -423,8 +423,8 @@ Eliminate redundant empty Create subclasses. Use base classes directly for repos
 
 **Rule:** One schema definition per domain concept (OHLCV, Symbol, Order, etc.). No Create subclasses.
 
-**Applied Changes (2026-03-15):**
-- Schemas directory deleted — repositories use domain entities directly
+**Consolidation:**
+- No schemas directory — repositories use domain entities directly
 - All entities have `to_mongo()` / `from_mongo()` for MongoDB persistence
 - Factory methods: `Symbol.create()`, `OrderAggregate.create()`, `PositionAggregate.open()`
 
@@ -499,7 +499,7 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 
 **When NOT to use an Aggregate:**
 - Entity is a **data record** (e.g. `Bar` — just OHLCV data, serialization only)
-- Class is an **event factory** with no state (anti-pattern, deleted 2026-03-15)
+- Class is an **event factory** with no state (anti-pattern)
 - Class is **never instantiated** in practice
 - Behavior is **CRUD-only** — use a plain entity or model
 
@@ -509,7 +509,7 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 3. Value objects stay as frozen dataclasses — simple, immutable, no persistence.
 4. DTOs live in the application layer — they're infrastructure, not domain.
 
-## Composite Symbol Format (2026-05-23)
+## Composite Symbol Format
 
 **Format:** `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`, `AAPL:NYSE`)
 
@@ -523,14 +523,11 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 
 **Example Repository Usage:**
 ```python
-# Old (pre-2026-05-23): separate params
-await bar_repo.find(symbol="BTCUSDT", exchange="BINANCE", interval="1d")
-
-# New: composite symbol
+# composite symbol (single field, no separate exchange param)
 await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
 ```
 
-## Strategy ID Disambiguation (2026-05-26)
+## Strategy ID Disambiguation
 
 **CRITICAL DISTINCTION:** Three IDs must never be confused.
 
@@ -538,7 +535,7 @@ await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
 |---|---|---|---|---|---|
 | `strategy_code` | string | Template name registered in `STRATEGY_REGISTRY` | `"hitnrun2"` | Class name (immutable) | Identifies which strategy class to instantiate. Used to look up the class and load from persistent subscriptions. |
 | `subscription_id` | string (16-char hex) | Deterministic ID of one (strategy_code, symbol, interval) binding | `"a1b2c3d4e5f6g7h8"` | MongoDB `subscriptions._id` (immutable after creation) | Computed as `sha256(f"{strategy_code}\|{symbol}\|{interval}")[:16]`. Uniquely keys in-memory strategy instance, order, position, backtest result docs. |
-| `template_id` | **DEPRECATED** | Old name for path param that held strategy_code | was `"hitnrun2"` in URL | — | Removed 2026-05-26. Use `strategy_code` in new code. Legacy references in old docs should be treated as `strategy_code`. |
+| `template_id` | **DEPRECATED** | Old name for path param that held strategy_code | was `"hitnrun2"` in URL | — | Not used. Use `strategy_code`; treat any legacy `template_id` reference as `strategy_code`. |
 
 **Field Renames (Live Refactor):**
 - MongoDB `strategy_subscriptions` → `subscriptions` (collection name)

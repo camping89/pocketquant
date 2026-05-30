@@ -1,6 +1,5 @@
 # Strategy Lifecycle
 
-**Last Updated:** 2026-05-25 | **Status:** Reflects v1.0 production code
 **Scope:** End-to-end strategy lifecycle as implemented in `pocketquant-*` packages.
 **Source of truth:** code paths listed inline (no speculation).
 
@@ -13,7 +12,7 @@ The PocketQuant strategy model is **template-based**:
   `IStrategy` instance keyed by the subscription's deterministic ID
   — `packages/pocketquant-trading/.../trading/domain/subscription.py:24`
 
-**Key terminology (post 2026-05-26):**
+**Key terminology:**
 - `strategy_code`: the template name (e.g., `"hitnrun2"`), used to identify which strategy class to instantiate
 - `subscription_id`: the deterministic 16-char ID of a live subscription instance (e.g., `"a1b2c3d4e5f6g7h8"`)
 
@@ -279,7 +278,7 @@ serializers.
 
 | Collection | Owner repo | `_id` | Purpose | Indexes |
 |---|---|---|---|---|
-| `subscriptions` | `SubscriptionRepository` | `deterministic_id(strategy_code, symbol, interval)` | One row per subscription. Source of truth for what runs after restart (rehydration). Renamed from `strategy_subscriptions` (2026-05-26 boot migration). | `_id`, `strategy_code` (`ix_subscriptions_strategy_code`) |
+| `subscriptions` | `SubscriptionRepository` | `deterministic_id(strategy_code, symbol, interval)` | One row per subscription. Source of truth for what runs after restart (rehydration). | `_id`, `strategy_code` (`ix_subscriptions_strategy_code`) |
 | `backtest_runs` | `BacktestRepository` | `sub_id` (subscription-scoped) OR backtest `result.id` (ad-hoc) | One cached backtest result per subscription. Holds `metrics`, `equity_curve`, `open_positions`, `config_snapshot`, `status`, `last_run_at`, `error_msg`. Also holds non-subscription runs from `/backtest/run`. | `strategy_code`, `started_at`, `status`, `(strategy_code, started_at desc)`, `(strategy_code, metrics.sharpe_ratio desc)`, `(strategy_code, metrics.sortino_ratio desc)`, `(strategy_code, metrics.win_rate desc)`, `subscription_id unique sparse` |
 | `backtest_orders` | `BacktestOrderRepository` | order id | Per-run order fills array. Indexes: `(strategy_code, status)` |  |
 | `backtest_trades` | `BacktestTradeRepository` | trade id | Round-trip trade outcomes from backtests. Indexes: `(strategy_code, direction)` |  |
@@ -478,14 +477,11 @@ Backtest path is parallel and isolated:
    strategy class falls back to whatever defaults it hard-codes. Should
    parameters be (a) persisted on the subscription, (b) part of the template
    registration, or (c) sent in the `AddSymbol` body?
-3. **RESOLVED (2026-05-26):** URL parameter `sub_id` vs `strategy_id` — refactor
-   renamed routes to `/subscriptions/{sub_id}/start` and `/subscriptions/{sub_id}/stop`.
-   API surface now reflects the semantic: `subscription_id` is the 16-char deterministic ID.
-4. **Redis use for strategies is currently zero.** Worth caching the
+3. **Redis use for strategies is currently zero.** Worth caching the
    `subscriptions` rehydration list, recent signal counts, or
    per-subscription live PnL snapshots in Redis to avoid Mongo round-trips on
    every `/subscriptions/{sub_id}/positions` poll?
-5. **Backtest stale-recovery threshold = 10 min** vs **orphan job recovery =
+4. **Backtest stale-recovery threshold = 10 min** vs **orphan job recovery =
    600s**. Inconsistent; if a real backtest legitimately runs longer than 10
    min it gets force-failed. Should the threshold be derived from
    `BacktestConfig` or made configurable per template?

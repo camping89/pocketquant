@@ -1,8 +1,8 @@
 # System Architecture
 
-**Last Updated:** 2026-05-30 | **Version:** 4.2 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files | **Market Data:** Binance public REST/WS (@aggTrade), no auth required | **Streaming:** SSE + Redis-backed real-time
+Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 4 backend packages + 1 frontend package. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
-Current note: for local run/test steps and canonical route names, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document remains a deeper design reference.
+For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
 ## High-Level Architecture
 
@@ -64,7 +64,7 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 
 **Dependency Direction:** Features ← Application ← Domain, Infrastructure ← Domain (no reverse dependencies)
 
-**Real-Time Streaming (2026-05-30):** Frontend now receives live market data via Server-Sent Events (SSE) for bars and quotes, backed by Redis as the intermediary between inbound WebSocket sources (Binance, OKX) and outbound HTTP streams. See [WebSocket Architecture](./websocket-architecture.md) for detail on SSE endpoints (`/bars/stream/{symbol}`, `/quotes/stream/{symbol}`), polling intervals, and staleness detection.
+**Real-Time Streaming:** Frontend receives live market data via Server-Sent Events (SSE) for bars and quotes, backed by Redis as the intermediary between inbound WebSocket sources (Binance, OKX) and outbound HTTP streams. See [WebSocket Architecture](./websocket-architecture.md) for detail on SSE endpoints (`/bars/stream/{symbol}`, `/quotes/stream/{symbol}`), polling intervals, and staleness detection.
 
 ## Clean Architecture Layer Breakdown
 
@@ -132,7 +132,7 @@ All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mo
 **Example - Symbol Entity (Flattened from SymbolAggregate):**
 Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
 
-**Composite Symbol Format (2026-05-23):**
+**Composite Symbol Format:**
 Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
 
 **Example - Domain Service (Pure Logic):**
@@ -355,8 +355,7 @@ persistence/                           # Data access (MongoDB, Redis, repositori
     ├── symbol_repository.py    # Symbol metadata
     ├── subscription_repository.py  # Subscription ↔ Mongo (NEW)
     └── sync_status_repository.py   # Data sync status
-# NOTE: schemas/ directory deleted (2026-03-15)
-# Persistence logic consolidated into domain entities via to_mongo()/from_mongo()
+# NOTE: no schemas/ directory — persistence lives in domain entities via to_mongo()/from_mongo()
 ```
 
 **Key Services:**
@@ -853,50 +852,3 @@ For deployment-specific env handling (docker-network service names, host-publish
 - Rate limiting state lost on Redis restart — acceptable for burst protection
 - Single-threaded strategy execution — one strategy per process
 - Domain purity enforced via AST check — I/O imports forbidden in `domain/`
-
-## Recent Significant Changes
-
-### Scheduler Resilience (2026-05-24)
-- **Orphan job recovery:** `JobHistoryRepository.reconcile_orphan_running()` resets jobs stuck in `running` (e.g., crash mid-execution). Called at startup via `recover_orphan_jobs()`.
-- **Per-job misfire grace time:** `JobScheduler.add_cron_job()` accepts `misfire_grace_time` kwarg. Configured per job frequency (120s–3600s).
-- **Startup catch-up:** `register_sync_jobs()` immediately enqueues stale daily/12h jobs if last successful run > grace window.
-- **Structured error messages:** `JobScheduler._on_error()` now emits structured strings (was bare `""` for exceptions without text).
-- **New repo method:** `JobHistoryRepository.get_last_successful_started_at()` for catch-up logic.
-
-### Strategy Subscriptions (2026-05-23, renamed 2026-05-26)
-- `SubscriptionRepository` + `subscriptions` MongoDB collection (renamed at 2026-05-26 from `StrategySubscriptionRepository` / `strategy_subscriptions`).
-- Composite symbol format (`CODE:EXCHANGE`) replaces `(code, exchange)` pairs across all entities.
-- Routes split (2026-05-26): template-scoped under `/strategies/{strategy_code}`, instance-scoped under `/subscriptions/{sub_id}`.
-- `trading/jobs/backtest_jobs.py` — `run_subscription_backtest()` async job via APScheduler.
-- Frontend: `subscription-panel.tsx`, `strategy-api.ts`, `useSubscriptions.ts`.
-
-### Integrity Repair Verification (2026-04-13)
-- `SyncSymbolCommand.skip_filter: bool` — bypass `_filter_new_bars` for gap-fill repair.
-- `repair_integrity()` now re-checks post-resync, returns `still_missing` count + ranges.
-- `sync_repair` moved from daily cron → every 12h.
-- `JobHistoryRepository` (MongoDB-backed, 7-day TTL via index on `started_at`).
-- Monitor page: `data-health-table`, `data-health-row`, `health-banner`, `status-pill` components.
-
-### Bar Integrity System (2026-04-11)
-- `is_bar_aligned()` / `filter_aligned_bars()` in `bar_builder.py` — drop misaligned bars at ingestion.
-- `check_integrity()` / `repair_integrity()` in `integrity_jobs.py`.
-- `BarRepository.find_datetimes()` and `delete_many_by_ids()`.
-- `POST /api/v1/market-data/integrity/check` and `/repair` endpoints.
-
-### `sync_one` Handler Refactor (2026-05-05)
-- Handler folder split: `provider_fetch.py`, `bar_filters.py`, `bar_alignment.py`, `anomaly_log.py`, `responses.py`.
-- Handler.py reduced from 261 → 195 LOC.
-
-### 4-Package Monorepo (2026-03-21)
-- Reorganized: `packages/{core,backtest,trading,api}` using uv workspace.
-- Dependency graph enforced: `core ← {backtest, trading} ← api`.
-- Namespace packages (PEP 420): no `__init__.py` at `pocketquant/` level.
-
-### DDD + Persistence Cleanup (2026-03-15)
-- `persistence/schemas/` deleted; all MongoDB persistence moved into domain entities via `to_mongo()`/`from_mongo()`.
-- `OHLCVRepository` → `BarRepository`; `SymbolAggregate` → `Symbol`; `OHLCVAggregate` and `QuoteAggregate` deleted.
-- UUID7 time-ordered IDs throughout (B-tree friendly).
-
-### Dishka DI Migration (2026-03-13)
-- Replaced plain Python constructors + Services dataclass with dishka library.
-- 6 providers created; routes use `FromDishka[T]` injection; handler registration via `register_handlers(container)`.

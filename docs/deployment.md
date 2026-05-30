@@ -1,6 +1,6 @@
 # Deployment
 
-**Last Updated:** 2026-05-28 | **CI/CD:** GitHub Actions push → Docker Hub → SSH to VPS
+CI/CD: GitHub Actions push → Docker Hub → SSH to VPS.
 
 > **Deploy is via GitHub Actions push.** Push to `master` or `develop` triggers the full build → deploy → verify pipeline.
 
@@ -437,4 +437,4 @@ Re-run Step 1 — expect `missing_count == 0` and empty `gap_ranges`. Any residu
 
 ---
 
-For local development and UI testing, see [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document is production-only.
+For local development and UI testing, see [README](../README.md). This document is production-only.

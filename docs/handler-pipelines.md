@@ -1,8 +1,8 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-05-30 | **Total Handlers:** 37 registered CQRS handlers (16 market data + 4 trading + 12 strategy + 5 backtest) + ~45 HTTP endpoints (includes SSE + app-service-direct routes) | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files | **Data Provider:** Binance (IDataProvider impl, 1200 weight/min rate limit)
+37 registered CQRS handlers (16 market data + 4 trading + 12 strategy + 5 backtest) + ~45 HTTP endpoints (includes SSE + app-service-direct routes). Pattern: DDD + CQRS + Extract-Method. DI: Dishka. Data provider: Binance (IDataProvider impl, 1200 weight/min rate limit).
 
-**Updated (2026-05-30):** Handler count corrected: 37 registered CQRS handlers + ~8 additional SSE/integrity endpoints (not CQRS). Market data expanded with new SSE bars/quotes streams, integrity check/repair routes, and tracked-symbols CRUD. Handlers 4 and 5 marked STALE (start/stop feed endpoints removed — feed is auto-managed at lifespan). Naming: `strategy_id` (template code) vs `subscription_id` (per-subscription instance). Symbol is composite `CODE:EXCHANGE` (URL-encoded `%3A`). Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if path disagrees with live app.
+Naming: `strategy_id` (template code) vs `subscription_id` (per-subscription instance). Symbol is composite `CODE:EXCHANGE` (URL-encoded `%3A`). Verify against OpenAPI or [README](../README.md) if a path disagrees with the live app.
 
 This document details the complete pipeline for each CQRS handler, showing request flow, processing steps, and side effects.
 
