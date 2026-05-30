@@ -1,7 +1,5 @@
 # Feature: Add Symbol (Strategy Subscription)
 
-**Last Updated:** 2026-05-26 | **Status:** Production
-
 Tài liệu mô tả feature **Add Symbol** — modal cho phép user đăng ký một symbol (cặp giao dịch) vào một strategy template. Feature thuộc luồng **Strategy Subscription Management** với cardinality 1 strategy template : N subscriptions.
 
 ---
@@ -68,7 +66,7 @@ HTTP Route → Command → Handler → Domain → Repository → MongoDB
 | `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, build `AddSymbolCommand`, gửi qua Mediator |
 | `packages/pocketquant-trading/.../handlers/strategy/add_symbol/handler.py` | Auto-load strategy template nếu cần → tạo `Subscription` → persist |
 | `packages/pocketquant-trading/.../domain/subscription.py` | Aggregate `Subscription` với deterministic ID |
-| `packages/pocketquant-trading/.../persistence/subscription_repository.py` | Mongo persistence trên collection `subscriptions` (renamed từ `strategy_subscriptions` tại 2026-05-26 boot migration) |
+| `packages/pocketquant-trading/.../persistence/subscription_repository.py` | Mongo persistence trên collection `subscriptions` |
 
 ### Deterministic ID
 

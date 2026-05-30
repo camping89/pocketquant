@@ -1,6 +1,6 @@
 # CLAUDE.md — PocketQuant
 
-**Last Updated:** 2026-05-25 | **Status:** v2.0.1 production | **Architecture:** 5-package monorepo (4 Python uv workspace + 1 Node frontend)
+**Architecture:** 5-package monorepo (4 Python uv workspace + 1 Node frontend)
 
 ## Monorepo Structure
 
@@ -119,3 +119,22 @@ No empty subclasses. Use base classes directly:
 ## Known Issues
 
 Post-migration notes and unresolved questions were retired from the docs tree; see git history (`git log -- docs/migration-doubts-and-notes.md`) if needed.
+
+## Documentation Policy — AS-IS Only
+
+Docs describe the system **as it currently is**. They are NOT a historical record. Git is the history.
+
+**NEVER add to any doc (`docs/`, `README.md`, this file):**
+- Changelogs or version-history sections (no `project-changelog.md`, no `## Version History`, no `## Appendix: Notable Refactors`).
+- Doc banners / metadata lines: `**Last Updated:**`, `**Version:**`, `**Status:** ... as of <date>`, "Living document", etc.
+- Change narratives: "What changed", "Previously…", "Updated (date):", "Refreshed X", "now / no longer", before/after framing.
+- Dated migration entries describing a past one-time change (e.g. "Dishka DI Migration (2026-03-13)").
+
+**OK to keep / write:**
+- Current behavior, even if implemented by an idempotent boot migration that still runs at startup (describe what it does now, not when it was introduced — drop the date).
+- Current "Known Issues", "Limitations & Tech Debt", "Unresolved Questions" — these are present-state facts.
+- Stable external IDs (RFC, CVE, SQLSTATE) and in-code symbol names.
+
+**When editing:** if you change behavior, edit the doc to match the new behavior in place. Do not append a "changed" note. State the end state as if it were always true.
+
+**When asked "do we need this doc?":** if it duplicates another doc, fold the unique content into the canonical doc, delete the duplicate, and fix all inbound links. Prefer one source of truth over cross-referencing siblings.

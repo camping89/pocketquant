@@ -1,8 +1,6 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-05-30 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4 backend packages + 1 frontend package | **Handlers:** 37 CQRS handlers + 42 route modules + 2 SSE streams
-
-Current note: `pocketquant-web` is now part of the repo and sits alongside the backend package graph shown below.
+Visual reference for codebase navigation. DDD three-tier structure (top-level, concepts, shared); 4 backend packages + 1 frontend package; 37 CQRS handlers + 42 route modules + 2 SSE streams. `pocketquant-web` sits alongside the backend package graph shown below.
 
 ## 1. ASCII Layer Relation Map
 
@@ -420,7 +418,7 @@ flowchart LR
 | **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `pocketquant-core` (domain) + `pocketquant-trading` (orchestration) |
 | **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `pocketquant-core` (interfaces) + `pocketquant-trading` (registry, services) |
 | **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `pocketquant-core` (pure calculations) |
-| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity since 2026-03-15) | `pocketquant-core` |
+| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity) | `pocketquant-core` |
 | **Backtest** | Historical replay + performance analysis | `BacktestResult`, `TradeRecord`, `PerformanceCalculator` | `pocketquant-backtest` (engine, persistence) |
 
 > A 7th container — `pocketquant-web` (Node/Vite SPA) — is a **UI surface**, not a bounded context. It consumes the API HTTP boundary; no domain logic lives there.

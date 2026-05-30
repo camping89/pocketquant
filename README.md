@@ -85,7 +85,7 @@ Then start the API and open:
 
 - `http://localhost:41920/`
 
-FastAPI serves `packages/pocketquant-web/dist` when it exists.
+FastAPI serves `packages/pocketquant-web/dist` when it exists. Refreshing a client-side route should still return `index.html` (SPA fallback).
 
 ## Market Data
 
@@ -119,8 +119,16 @@ After syncing `BINANCE:BTCUSDT`:
 2. Confirm the chart loads candles instead of the error overlay
 3. Open the symbol picker and verify synced symbols are listed
 4. Verify interval buttons appear for synced intervals only
-5. Toggle indicators and confirm overlays redraw
-6. Pick a strategy and confirm a backtest request runs
+5. Switch intervals and confirm the chart reloads
+6. Toggle indicators and confirm overlays redraw
+7. Pick the `hitnrun2` strategy and confirm a backtest request runs
+8. Confirm backtest markers / position overlays appear on the chart
+
+If the UI is empty:
+
+- check browser devtools for failed `/api/*` calls
+- confirm the backend is still running
+- confirm sync status exists for the selected symbol and interval
 
 Current backtest strategy IDs exposed by the API:
 
@@ -150,9 +158,16 @@ Manual API testing:
 - Bruno collection: [`tests/http`](./tests/http)
 - Curl walkthrough: [`tests/manual/api-test.http`](./tests/manual/api-test.http)
 
+## Shutdown
+
+Stop the Vite and API servers with `Ctrl+C`, then stop local infrastructure:
+
+```bash
+just down
+```
+
 ## Docs
 
-- [Run And Test Guide](./docs/run-and-test-guide.md)
 - [Docs Index](./docs/README.md)
 - [System Architecture](./docs/system-architecture.md)
 - [Deployment](./docs/deployment.md)

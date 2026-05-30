@@ -1,8 +1,8 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-**Last Updated:** 2026-05-30 | **Status:** v1.0 Complete | **Architecture:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages in the `uv` workspace + `pocketquant-web` as a separate npm app | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files
+Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: 4 backend packages in the `uv` workspace + `pocketquant-web` as a separate npm app.
 
-Current note: use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md) for the current local workflow and verified endpoint names.
+Use [README](../README.md) for the current local workflow and verified endpoint names.
 
 ## Project Vision
 

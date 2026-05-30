@@ -1,6 +1,5 @@
 # WebSocket Architecture
 
-**Status:** Current as of 2026-05-30
 **Scope:** Real-time architecture: outbound WebSocket ingest (Binance quotes, OKX orders) + SSE server-to-client egress (bars, quotes).
 
 ---
@@ -53,7 +52,7 @@ Real-time architecture integrates **inbound WebSocket data sources** with **outb
                                                       (pocketquant-web)
 ```
 
-**What changed:** Previously, frontend used REST polling only. Now, SSE push for live bars (1s cadence) and quotes (500ms cadence) with staleness detection and automatic fallback to REST if SSE connection fails.
+Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) with staleness detection and automatic fallback to REST if the SSE connection fails.
 
 ---
 

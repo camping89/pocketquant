@@ -1,6 +1,6 @@
 # PocketQuant Docs
 
-This directory holds the canonical documentation for the current code layout and workflow.
+This directory holds the canonical documentation for the current code layout and workflow. Docs are **AS-IS only** — no changelogs, version banners, or change narratives (git is the history). See the Documentation Policy in the project `CLAUDE.md`.
 
 **New here?** Start with [Table of Contents](./table-of-contents.md) for a guided reading order.
 
@@ -9,9 +9,7 @@ Start with the canonical set.
 ## Canonical Docs
 
 - [Root README](../README.md)
-  Current setup, backend/frontend startup, sync smoke test, and UI smoke test.
-- [Run And Test Guide](./run-and-test-guide.md)
-  Step-by-step local workflow for running the API, syncing data, running the UI, and testing both.
+  Current setup, backend/frontend startup, sync smoke test, UI smoke test, and shutdown.
 - [System Architecture](./system-architecture.md)
   Deeper backend/frontend architecture reference — layers, request flows, "Where Does X Live?", config, dependencies, limitations.
 - [Architecture Visual Map](./architecture-visual-map.md)
@@ -24,8 +22,6 @@ Start with the canonical set.
   Production deployment — single source of truth (skill-friendly summary + full operator runbook).
 - [Project Overview / PDR](./project-overview-pdr.md)
   Product requirements, scope, roadmap.
-- [Project Changelog](./project-changelog.md)
-  Project history and version notes.
 - [Strategy Lifecycle](./strategy-lifecycle.md)
   Strategy load → subscribe → backtest → start/stop lifecycle.
 - [WebSocket Architecture](./websocket-architecture.md)
@@ -57,7 +53,6 @@ Notes:
 For setup:
 
 1. [Root README](../README.md)
-2. [Run And Test Guide](./run-and-test-guide.md)
 
 For implementation work:
 
@@ -74,5 +69,4 @@ For deployment:
 When documentation conflicts with the code:
 
 - trust `README.md`
-- trust `docs/run-and-test-guide.md`
 - verify routes against FastAPI OpenAPI at `http://localhost:41920/api/v1/docs`
