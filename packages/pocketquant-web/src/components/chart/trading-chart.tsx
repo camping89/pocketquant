@@ -72,7 +72,6 @@ export function TradingChart({
     if (chart && onChartReady) onChartReady(chart)
   }, [onChartReady])
 
-  // Main candlestick + volume series
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !data) return
@@ -169,7 +168,6 @@ export function TradingChart({
     setOhlcv((prev) => (prev ? { ...prev, t: text } : prev))
   }, [mode])
 
-  // Indicator series
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !indicatorData) return
@@ -246,7 +244,6 @@ export function TradingChart({
     }
   }, [markers])
 
-  // Position boxes — draws background, SL/TP lines with labels, entry line, and info text
   useEffect(() => {
     const candle = candleRef.current
     if (!candle) return

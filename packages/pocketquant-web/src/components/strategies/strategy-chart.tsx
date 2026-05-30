@@ -50,7 +50,6 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
   const entryLineRef = useRef<IPriceLine | null>(null)
   const liqLineRef = useRef<IPriceLine | null>(null)
 
-  // ── Candle + volume series ───────────────────────────────────────────────
   useEffect(() => {
     const chart = chartRef.current
     if (!chart || !data) return
@@ -95,7 +94,6 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
     }
 
     return () => {
-      // Cleanup on data/symbol change
       try {
         if (markersRef.current) { markersRef.current.detach(); markersRef.current = null }
         if (chart && candleRef.current) { chart.removeSeries(candleRef.current); candleRef.current = null }
@@ -104,7 +102,6 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
     }
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Trade markers ────────────────────────────────────────────────────────
   useEffect(() => {
     const candle = candleRef.current
     if (!candle) return
@@ -125,12 +122,10 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
     }
   }, [trades]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Open position price lines ────────────────────────────────────────────
   useEffect(() => {
     const candle = candleRef.current
     if (!candle) return
 
-    // Remove stale lines before re-drawing
     try {
       if (entryLineRef.current) { candle.removePriceLine(entryLineRef.current); entryLineRef.current = null }
       if (liqLineRef.current) { candle.removePriceLine(liqLineRef.current); liqLineRef.current = null }
@@ -177,13 +172,11 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
     }
   }, [openPosition]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {/* Chart canvas — useChart + ResizeObserver fills this container */}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Loading overlay */}
       {isLoading && (
         <div
           style={{
@@ -202,7 +195,6 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
         </div>
       )}
 
-      {/* Error state */}
       {error && !isLoading && (
         <div
           style={{

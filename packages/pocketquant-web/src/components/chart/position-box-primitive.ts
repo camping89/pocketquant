@@ -114,7 +114,6 @@ class BoxRenderer implements IPrimitivePaneRenderer {
         const yTP = pos.tp_price != null ? this.series.priceToCoordinate(pos.tp_price) : null
         const yEntry = this.series.priceToCoordinate(pos.entry_price)
 
-        // --- background box (sl → tp) ---
         if (ySL != null && yTP != null) {
           const boxTop = Math.min(ySL, yTP) * vR
           const boxH = Math.abs(ySL - yTP) * vR
@@ -141,7 +140,6 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           }
         }
 
-        // --- TP line + label ---
         if (pos.tp_price != null && yTP != null) {
           const y = yTP * vR
           dashedLine(ctx, lx, y, rx, '#26a69a', hR, vR)
@@ -154,7 +152,6 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           ctx.restore()
         }
 
-        // --- SL line + label ---
         if (pos.sl_price != null && ySL != null) {
           const y = ySL * vR
           dashedLine(ctx, lx, y, rx, '#ef5350', hR, vR)
@@ -167,7 +164,6 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           ctx.restore()
         }
 
-        // --- entry price line ---
         if (yEntry != null) {
           const y = yEntry * vR
           ctx.save()
@@ -181,7 +177,6 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           ctx.restore()
         }
 
-        // --- info text block (top-left of box) ---
         const boxTopY = ySL != null && yTP != null
           ? Math.min(ySL, yTP) * vR
           : (yEntry != null ? yEntry * vR : null)

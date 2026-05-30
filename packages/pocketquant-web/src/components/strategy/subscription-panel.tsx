@@ -116,7 +116,6 @@ export function SubscriptionPanel({ strategyId, selectedSubId, onSelectSub }: Su
 
   return (
     <div style={panelStyle}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>Symbols</span>
         <button className="btn-sm" onClick={() => setShowDialog(true)} style={{ padding: '2px 8px', fontSize: 11 }}>
@@ -141,7 +140,6 @@ export function SubscriptionPanel({ strategyId, selectedSubId, onSelectSub }: Su
         </button>
       </div>
 
-      {/* List */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {isLoading && (
           <div style={{ padding: '12px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>Loading…</div>

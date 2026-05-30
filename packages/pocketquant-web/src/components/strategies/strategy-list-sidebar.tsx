@@ -47,7 +47,6 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         overflow: 'hidden',
       }}
     >
-      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -70,7 +69,6 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         </button>
       </div>
 
-      {/* Filter input */}
       <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
         <input
           type="text"
@@ -89,7 +87,6 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         />
       </div>
 
-      {/* List */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {isLoading && (
           <div style={{ padding: '12px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -119,7 +116,6 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         ))}
       </div>
 
-      {/* Footer: subscription count */}
       {!isLoading && subs.length > 0 && (
         <div
           style={{

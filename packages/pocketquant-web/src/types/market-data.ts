@@ -1,7 +1,5 @@
 import type { UTCTimestamp } from 'lightweight-charts'
 
-// --- API response types ---
-
 export interface OHLCVBar {
   id: string
   datetime: string
@@ -58,8 +56,6 @@ export interface CurrentBarResponse {
   staleness_ms?: number | null
 }
 
-// --- Lightweight Charts data types ---
-
 export interface CandlestickData {
   time: UTCTimestamp
   open: number
@@ -91,8 +87,6 @@ export interface SyncStatus {
   consecutive_empty_fetches?: number
   is_stuck?: boolean
 }
-
-// --- Monitor types ---
 
 export interface IntegrityReport {
   symbol: string
@@ -129,8 +123,6 @@ export interface JobInfo {
   trigger: string
   last_run: JobLastRun | null
 }
-
-// --- UI types ---
 
 export type Interval = '1m' | '3m' | '5m' | '15m' | '30m' | '45m' | '1h' | '2h' | '3h' | '4h' | '1d' | '1w' | '1M'
 

@@ -28,7 +28,6 @@ export function IntervalSelector({ intervals, value, onChange }: IntervalSelecto
 
         if (!disabled) return btn
 
-        // Wrap disabled button in a tooltip span
         return (
           <span
             key={iv.value}

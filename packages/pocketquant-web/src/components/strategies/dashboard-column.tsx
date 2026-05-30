@@ -65,7 +65,6 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
         overflow: 'hidden',
       }}
     >
-      {/* Top summary strip */}
       <div
         style={{
           padding: '14px 16px 10px',
@@ -80,7 +79,6 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
         <EquitySparkline equityCurve={equityCurve} />
       </div>
 
-      {/* Tab bar */}
       <div
         style={{
           display: 'flex',
@@ -102,7 +100,6 @@ export function DashboardColumn({ sub }: DashboardColumnProps) {
         ))}
       </div>
 
-      {/* Tab content */}
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {btLoading && (
           <div style={{ padding: 16, color: 'var(--text-secondary)', fontSize: 12 }}>

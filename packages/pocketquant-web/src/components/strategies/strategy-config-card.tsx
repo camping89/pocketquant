@@ -63,7 +63,6 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
         gap: 0,
       }}
     >
-      {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           Subscription Config
@@ -92,7 +91,6 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
         </div>
       </div>
 
-      {/* Config rows */}
       <div style={rowStyle}>
         <span style={labelStyle}>Symbol</span>
         <span style={{ fontWeight: 600 }}>{code}</span>
@@ -145,7 +143,6 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
         </span>
       </div>
 
-      {/* Mutation error feedback */}
       {(startMut.isError || stopMut.isError || deleteMut.isError) && (
         <div
           style={{

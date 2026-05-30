@@ -50,7 +50,6 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
   // Derive effective symbol: user selection wins, otherwise first active.
   const symbol = symbolInput || activeSymbols[0]?.symbol || ''
 
-  // strategyId drives which subscription we create under
   const createSub = useCreateSubscription(strategyId || null)
 
   function handleSubmit(e: FormEvent) {
@@ -97,7 +96,6 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
         </h3>
 
         <form onSubmit={handleSubmit}>
-          {/* Strategy template picker */}
           <div style={{ marginBottom: 12 }}>
             <label style={labelStyle}>Strategy Template</label>
             <select
@@ -115,7 +113,6 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
             </select>
           </div>
 
-          {/* Symbol picker */}
           <div style={{ marginBottom: 12 }}>
             <label style={labelStyle}>Symbol</label>
             <select
@@ -143,7 +140,6 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
             </select>
           </div>
 
-          {/* Interval picker */}
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Interval</label>
             <div className="interval-group">
