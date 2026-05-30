@@ -68,19 +68,15 @@ SYNC_INTERVALS = [
 _MODULE = "pocketquant.api.market_data.app_services.sync_jobs"
 
 CATCHUP_TARGETS: list[tuple[str, str, int]] = [
-    ("sync_backfill",  f"{_MODULE}:sync_backfill",  86400 + 3600),   # 24h + 1h
+    ("sync_backfill", f"{_MODULE}:sync_backfill", 86400 + 3600),  # 24h + 1h
     ("sync_integrity", f"{_MODULE}:sync_integrity", 86400 + 3600),
-    ("sync_repair",    f"{_MODULE}:sync_repair",    43200 + 1800),   # 12h + 30min
+    ("sync_repair", f"{_MODULE}:sync_repair", 43200 + 1800),  # 12h + 30min
 ]
 
-# ---------------------------------------------------------------------------
 # Module-level container reference. Set once at startup by register_sync_jobs.
 # Job functions resolve their dependencies via this container at execution time.
-# ---------------------------------------------------------------------------
-
 _container: AsyncContainer | None = None
 
-# ---------------------------------------------------------------------------
 # Verify cascade thresholds (per-field).
 # Price relative threshold catches scale-aware drift across assets:
 #   BTC $80k → $8 trigger; ETH $3k → $0.30 trigger.
@@ -131,11 +127,6 @@ def compare_bar_fields(rest_bar, db_bar) -> dict[str, bool]:  # noqa: ANN001
     }
 
 
-# ---------------------------------------------------------------------------
-# Internal sync engine — shared by all interval-based jobs
-# ---------------------------------------------------------------------------
-
-
 async def _sync_by_intervals(
     intervals: list[Interval],
     n_bars: int,
@@ -159,7 +150,8 @@ async def _sync_by_intervals(
 
     if not symbols:
         logger.warning(
-            f"market_data.{job_name}.skipped", reason="no_tracked_symbols",
+            f"market_data.{job_name}.skipped",
+            reason="no_tracked_symbols",
         )
         return 0, 0
 
@@ -173,7 +165,9 @@ async def _sync_by_intervals(
         for interval in intervals:
             try:
                 command = SyncSymbolCommand(
-                    symbol=symbol, interval=interval, n_bars=n_bars,
+                    symbol=symbol,
+                    interval=interval,
+                    n_bars=n_bars,
                     source=source,
                 )
                 result = await mediator.send(command)
@@ -237,13 +231,11 @@ async def _sync_by_intervals(
     return total_inserted, total_fetched
 
 
-# ---------------------------------------------------------------------------
-# Job runners — wrap actual work with history recording.
-# ---------------------------------------------------------------------------
-
-
 async def _run_sync(
-    name: str, intervals: list[Interval], n_bars: int, source: str,
+    name: str,
+    intervals: list[Interval],
+    n_bars: int,
+    source: str,
 ) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
@@ -259,7 +251,13 @@ async def _run_sync(
 
     try:
         total_inserted, total_fetched = await _sync_by_intervals(
-            intervals, n_bars, name, mediator, tracked_symbol_repo, history_repo, doc_id,
+            intervals,
+            n_bars,
+            name,
+            mediator,
+            tracked_symbol_repo,
+            history_repo,
+            doc_id,
             source=source,
         )
         if doc_id:
@@ -280,9 +278,7 @@ async def _run_sync(
                     error=str(exc),
                 )
             except Exception:
-                logger.warning(
-                    "job_history.record_finish_failed", job_id=name, exc_info=True
-                )
+                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
         raise
 
 
@@ -307,7 +303,8 @@ async def _run_integrity(name: str) -> None:
                 if report["misaligned_count"] or report["missing_count"]:
                     logger.warning(
                         "integrity.issues_found",
-                        symbol=ts.symbol, interval=interval.value,
+                        symbol=ts.symbol,
+                        interval=interval.value,
                         misaligned=report["misaligned_count"],
                         missing=report["missing_count"],
                     )
@@ -325,9 +322,7 @@ async def _run_integrity(name: str) -> None:
                     error=str(exc),
                 )
             except Exception:
-                logger.warning(
-                    "job_history.record_finish_failed", job_id=name, exc_info=True
-                )
+                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
         raise
 
 
@@ -350,13 +345,17 @@ async def _run_repair(name: str) -> None:
         for ts in tracked:
             for interval in SYNC_INTERVALS:
                 result = await repair_integrity(
-                    ts.symbol, interval, bar_repo, mediator,
+                    ts.symbol,
+                    interval,
+                    bar_repo,
+                    mediator,
                     source=SOURCE_REST_REPAIR,
                 )
                 if result["deleted"] or result["gaps_resynced"]:
                     logger.info(
                         "integrity.repaired",
-                        symbol=ts.symbol, interval=interval.value,
+                        symbol=ts.symbol,
+                        interval=interval.value,
                         deleted=result["deleted"],
                         gaps_resynced=result["gaps_resynced"],
                     )
@@ -374,18 +373,12 @@ async def _run_repair(name: str) -> None:
                     error=str(exc),
                 )
             except Exception:
-                logger.warning(
-                    "job_history.record_finish_failed", job_id=name, exc_info=True
-                )
+                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
         raise
 
 
-# ---------------------------------------------------------------------------
-# Picklable job entrypoints — referenced by APScheduler as
+# APScheduler entrypoints — referenced by text as
 # "pocketquant.api.market_data.app_services.sync_jobs:<funcname>"
-# ---------------------------------------------------------------------------
-
-
 async def sync_1m() -> None:
     """Fetch last 100 1m bars per tracked symbol, upsert, then cascade to 5m–1d."""
     container = _get_container()
@@ -403,19 +396,25 @@ async def sync_1m() -> None:
         logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
     try:
-        # Step 1: REST-fetch 1m bars for all tracked symbols and upsert to Mongo.
         total_inserted, total_fetched = await _sync_by_intervals(
-            [Interval.MINUTE_1], 100, name, mediator, tracked_symbol_repo, history_repo, doc_id,
+            [Interval.MINUTE_1],
+            100,
+            name,
+            mediator,
+            tracked_symbol_repo,
+            history_repo,
+            doc_id,
             source=SOURCE_REST_SYNC_1M,
         )
 
-        # Step 2: Cascade 1m → 5m/15m/1h/4h/1d for each tracked symbol.
         tracked = await tracked_symbol_repo.list_all()
         cascade_total: dict[Interval, int] = {}
         for ts in tracked:
             try:
                 counts = await cascade_for_symbol(
-                    ts.symbol, lookback_minutes=100, bar_repo=bar_repo,
+                    ts.symbol,
+                    lookback_minutes=100,
+                    bar_repo=bar_repo,
                 )
                 for tf, count in counts.items():
                     cascade_total[tf] = cascade_total.get(tf, 0) + count
@@ -449,9 +448,7 @@ async def sync_1m() -> None:
                     error=str(exc),
                 )
             except Exception:
-                logger.warning(
-                    "job_history.record_finish_failed", job_id=name, exc_info=True
-                )
+                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
         raise
 
 
@@ -467,7 +464,9 @@ async def _verify_one_symbol(
     Raises on REST/DB failures so the caller can record per-symbol error state.
     """
     rest_bars = await provider.fetch_ohlcv(
-        symbol=symbol, interval=Interval.MINUTE_5, n_bars=12,
+        symbol=symbol,
+        interval=Interval.MINUTE_5,
+        n_bars=12,
     )
     if not rest_bars:
         return {"symbol": symbol, "compared": 0, "rest_empty": True}
@@ -475,8 +474,11 @@ async def _verify_one_symbol(
     oldest_rest = min(b.datetime for b in rest_bars if b.datetime)
     newest_rest = max(b.datetime for b in rest_bars if b.datetime)
     cascade_bars = await bar_repo.find(
-        symbol=symbol, interval=Interval.MINUTE_5,
-        start_date=oldest_rest, end_date=newest_rest + timedelta(minutes=5), limit=20,
+        symbol=symbol,
+        interval=Interval.MINUTE_5,
+        start_date=oldest_rest,
+        end_date=newest_rest + timedelta(minutes=5),
+        limit=20,
     )
     if not cascade_bars:
         return {"symbol": symbol, "compared": 0, "cascade_empty": True}
@@ -497,9 +499,7 @@ async def _verify_one_symbol(
         if any(fields_diff.values()):
             divergence_count += 1
             if len(samples) < 3:
-                samples.append(
-                    {"datetime": rest_bar.datetime.isoformat(), "fields": fields_diff}
-                )
+                samples.append({"datetime": rest_bar.datetime.isoformat(), "fields": fields_diff})
 
     return {
         "symbol": symbol,
@@ -546,12 +546,15 @@ async def sync_verify_cascade() -> None:
             symbol = ts.symbol.upper()
             try:
                 summary = await _verify_one_symbol(
-                    symbol, provider=provider, bar_repo=bar_repo,
+                    symbol,
+                    provider=provider,
+                    bar_repo=bar_repo,
                 )
             except Exception as exc:
                 logger.error(
                     "sync_verify_cascade.symbol_failed",
-                    symbol=symbol, error=str(exc),
+                    symbol=symbol,
+                    error=str(exc),
                 )
                 continue
 
@@ -572,7 +575,8 @@ async def sync_verify_cascade() -> None:
                 logger.warning(
                     "cascade.divergence_alert",
                     symbol=symbol,
-                    divergence_count=div, compared=compared,
+                    divergence_count=div,
+                    compared=compared,
                     price_threshold_pct=PRICE_THRESHOLD_PCT,
                     volume_threshold_pct=VOLUME_THRESHOLD_PCT,
                     sample_divergences=summary["samples"],
@@ -581,7 +585,8 @@ async def sync_verify_cascade() -> None:
                 logger.info(
                     "sync_verify_cascade.ok",
                     symbol=symbol,
-                    compared=compared, divergence_count=div,
+                    compared=compared,
+                    divergence_count=div,
                 )
 
         if doc_id:
@@ -592,12 +597,13 @@ async def sync_verify_cascade() -> None:
         if doc_id:
             try:
                 await history_repo.record_finish(
-                    doc_id, status="failed", duration_ms=_ms_since(started), error=str(exc),
+                    doc_id,
+                    status="failed",
+                    duration_ms=_ms_since(started),
+                    error=str(exc),
                 )
             except Exception:
-                logger.warning(
-                    "job_history.record_finish_failed", job_id=name, exc_info=True
-                )
+                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
         raise
 
 
@@ -614,11 +620,6 @@ async def sync_integrity() -> None:
 async def sync_repair() -> None:
     """Bi-daily gap repair across all tfs."""
     await _run_repair("sync_repair")
-
-
-# ---------------------------------------------------------------------------
-# Registration entrypoint
-# ---------------------------------------------------------------------------
 
 
 async def enqueue_missed_catchups(
@@ -690,25 +691,36 @@ async def register_sync_jobs(
     #   sync_integrity    3600s — same
     #   sync_repair       1800s — 30min slip on bi-daily 12h cron
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_1m", job_id="sync_1m",
-        cron_expression="*/1 * * * *", second=2,
+        f"{_MODULE}:sync_1m",
+        job_id="sync_1m",
+        cron_expression="*/1 * * * *",
+        second=2,
         misfire_grace_time=120,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_verify_cascade", job_id="sync_verify_cascade",
+        f"{_MODULE}:sync_verify_cascade",
+        job_id="sync_verify_cascade",
         cron_expression="0 * * * *",
         misfire_grace_time=600,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_backfill", job_id="sync_backfill", hour=3, minute=0,
+        f"{_MODULE}:sync_backfill",
+        job_id="sync_backfill",
+        hour=3,
+        minute=0,
         misfire_grace_time=3600,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_integrity", job_id="sync_integrity", hour=4, minute=0,
+        f"{_MODULE}:sync_integrity",
+        job_id="sync_integrity",
+        hour=4,
+        minute=0,
         misfire_grace_time=3600,
     )
     job_scheduler.add_cron_job(
-        f"{_MODULE}:sync_repair", job_id="sync_repair", cron_expression="0 */12 * * *",
+        f"{_MODULE}:sync_repair",
+        job_id="sync_repair",
+        cron_expression="0 */12 * * *",
         misfire_grace_time=1800,
     )
 

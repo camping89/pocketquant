@@ -55,9 +55,7 @@ async def test_catchup_enqueues_when_stale() -> None:
     assert scheduler.add_one_off_job.call_count == len(CATCHUP_TARGETS)
     # Verify suffixes — each catch-up uses `<job_id>_catchup` as job_id so
     # replace_existing=True merges duplicate multi-instance dispatches safely.
-    enqueued_ids = {
-        c.kwargs.get("job_id") for c in scheduler.add_one_off_job.call_args_list
-    }
+    enqueued_ids = {c.kwargs.get("job_id") for c in scheduler.add_one_off_job.call_args_list}
     assert enqueued_ids == {f"{job_id}_catchup" for job_id, _, _ in CATCHUP_TARGETS}
 
 

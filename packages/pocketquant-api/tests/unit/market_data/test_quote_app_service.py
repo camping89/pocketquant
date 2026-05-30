@@ -13,10 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 def _make_quote_data(volume: float | None, price: float = 50000.0) -> dict:
     """Build minimal quote_data dict as produced by the Binance WS mapper."""
@@ -53,11 +49,6 @@ def service(mock_bar_manager: AsyncMock, mock_cache: AsyncMock) -> QuoteAppServi
         bar_manager=mock_bar_manager,
         provider=provider,
     )
-
-
-# ---------------------------------------------------------------------------
-# Volume clamping contract
-# ---------------------------------------------------------------------------
 
 
 class TestOnQuoteUpdateVolumeClamping:

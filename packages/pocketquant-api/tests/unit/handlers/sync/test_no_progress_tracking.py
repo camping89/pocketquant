@@ -26,7 +26,11 @@ def _bar(ts: datetime) -> Bar:
         symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15,
         datetime=ts,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
         tick_count=1,
     )
 
@@ -89,9 +93,7 @@ def _build_handler(
 
     # Patch fetch_with_retry so we control records + attempts directly.
     fetch_mock = AsyncMock(return_value=(fetch_records, fetch_attempts))
-    patch_target = (
-        "pocketquant.api.market_data.handlers.sync.sync_one.handler.fetch_with_retry"
-    )
+    patch_target = "pocketquant.api.market_data.handlers.sync.sync_one.handler.fetch_with_retry"
     handler._fetch_patch = patch(patch_target, fetch_mock)  # type: ignore[attr-defined]
     handler._fetch_patch.start()  # type: ignore[attr-defined]
     return handler, mocks
@@ -104,7 +106,8 @@ def _stop(handler: SyncSymbolHandler) -> None:
 def _command() -> SyncSymbolCommand:
     return SyncSymbolCommand(
         symbol="BINANCE:BTCUSDT",
-        interval=Interval.MINUTE_15, n_bars=48,
+        interval=Interval.MINUTE_15,
+        n_bars=48,
         source="test",
     )
 
@@ -113,8 +116,10 @@ def _command() -> SyncSymbolCommand:
 async def test_empty_fetch_with_existing_data_bumps_streak() -> None:
     """Provider returned [] but DB has bars → bump only, no reset."""
     handler, mocks = _build_handler(
-        fetch_records=[], existing_count=10,
-        insert_count=0, bump_returns=1,
+        fetch_records=[],
+        existing_count=10,
+        insert_count=0,
+        bump_returns=1,
     )
     try:
         await handler.handle(_command())
@@ -129,8 +134,10 @@ async def test_empty_fetch_with_existing_data_bumps_streak() -> None:
 async def test_all_misaligned_bumps_streak() -> None:
     """Provider returned only misaligned bar → all dropped → bump only."""
     handler, mocks = _build_handler(
-        fetch_records=[_misaligned()], existing_count=10,
-        insert_count=0, bump_returns=1,
+        fetch_records=[_misaligned()],
+        existing_count=10,
+        insert_count=0,
+        bump_returns=1,
     )
     try:
         await handler.handle(_command())
@@ -145,8 +152,10 @@ async def test_all_misaligned_bumps_streak() -> None:
 async def test_all_existing_filtered_bumps_streak() -> None:
     """Aligned bars but all already exist → insert_count=0 → bump."""
     handler, mocks = _build_handler(
-        fetch_records=[_aligned()], existing_count=10,
-        insert_count=0, bump_returns=1,
+        fetch_records=[_aligned()],
+        existing_count=10,
+        insert_count=0,
+        bump_returns=1,
     )
     try:
         await handler.handle(_command())
@@ -161,8 +170,10 @@ async def test_all_existing_filtered_bumps_streak() -> None:
 async def test_successful_insert_resets_streak() -> None:
     """inserted_count > 0 → reset only, no bump."""
     handler, mocks = _build_handler(
-        fetch_records=[_aligned()], existing_count=10,
-        insert_count=2, bump_returns=0,
+        fetch_records=[_aligned()],
+        existing_count=10,
+        insert_count=2,
+        bump_returns=0,
     )
     try:
         await handler.handle(_command())
@@ -178,9 +189,11 @@ async def test_streak_three_with_stale_age_emits_error() -> None:
     """streak==3 AND age > 3× cadence → ERROR stuck_threshold_crossed."""
     cadence = 900  # 15m in seconds
     handler, mocks = _build_handler(
-        fetch_records=[], existing_count=10,
+        fetch_records=[],
+        existing_count=10,
         latest_age_seconds=cadence * 4,  # > 3× cadence
-        insert_count=0, bump_returns=3,
+        insert_count=0,
+        bump_returns=3,
     )
     try:
         with structlog.testing.capture_logs() as logs:
@@ -200,9 +213,11 @@ async def test_streak_four_only_warns_no_extra_error() -> None:
     """streak==4 (already past threshold) → WARN no_progress, no extra ERROR."""
     cadence = 900
     handler, mocks = _build_handler(
-        fetch_records=[], existing_count=10,
+        fetch_records=[],
+        existing_count=10,
         latest_age_seconds=cadence * 5,
-        insert_count=0, bump_returns=4,
+        insert_count=0,
+        bump_returns=4,
     )
     try:
         with structlog.testing.capture_logs() as logs:
@@ -210,12 +225,9 @@ async def test_streak_four_only_warns_no_extra_error() -> None:
     finally:
         _stop(handler)
 
-    has_error = any(
-        log.get("event") == "market_data.sync.stuck_threshold_crossed" for log in logs
-    )
+    has_error = any(log.get("event") == "market_data.sync.stuck_threshold_crossed" for log in logs)
     has_warn = any(
-        log.get("event") == "market_data.sync.no_progress"
-        and log.get("log_level") == "warning"
+        log.get("event") == "market_data.sync.no_progress" and log.get("log_level") == "warning"
         for log in logs
     )
     assert has_warn, "expected no_progress warning"
@@ -226,8 +238,10 @@ async def test_streak_four_only_warns_no_extra_error() -> None:
 async def test_first_sync_no_data_fails_no_bump_or_reset() -> None:
     """fetched=0 AND no existing bars → _fail; no bump, no reset."""
     handler, mocks = _build_handler(
-        fetch_records=[], existing_count=0,
-        insert_count=0, bump_returns=0,
+        fetch_records=[],
+        existing_count=0,
+        insert_count=0,
+        bump_returns=0,
     )
     try:
         result = await handler.handle(_command())

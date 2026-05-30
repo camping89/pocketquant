@@ -10,8 +10,6 @@ from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC
 
 @handles(BulkSyncCommand)
 class BulkSyncHandler(Handler[BulkSyncCommand, list[SyncResponse]]):  # type: ignore[type-arg]
-    """Handle syncing multiple composite symbols in sequence."""
-
     def __init__(self, sync_symbol_handler: SyncSymbolHandler):
         self._sync_symbol_handler = sync_symbol_handler
 

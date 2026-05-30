@@ -279,7 +279,6 @@ def mock_bar_repo():
             self.bars: list[Bar] = []
 
         async def upsert_bar(self, bar: Bar, *, source: str) -> None:  # noqa: ARG002
-
             # Remove existing bar with same key
             self.bars = [
                 b
@@ -300,23 +299,14 @@ def mock_bar_repo():
             end_date: datetime = None,
             limit: int = 5000,
         ) -> list[Bar]:
-            matching = [
-                b
-                for b in self.bars
-                if b.symbol == symbol
-                and b.interval == interval
-            ]
+            matching = [b for b in self.bars if b.symbol == symbol and b.interval == interval]
             if start_date and end_date:
                 matching = [b for b in matching if start_date <= b.datetime <= end_date]
             # Sort by datetime and return limited results
             return sorted(matching, key=lambda b: b.datetime, reverse=True)[:limit]
 
         async def get_latest(self, symbol: str, interval: Interval):
-            matching = [
-                b
-                for b in self.bars
-                if b.symbol == symbol and b.interval == interval
-            ]
+            matching = [b for b in self.bars if b.symbol == symbol and b.interval == interval]
             return max(matching, key=lambda b: b.datetime) if matching else None
 
     return MockBarRepository()

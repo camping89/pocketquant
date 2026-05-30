@@ -25,7 +25,11 @@ def _aligned_bar(ts: str = "2026-05-05T11:30:00+00:00") -> Bar:
         symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15,
         datetime=datetime.fromisoformat(ts),
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
         tick_count=1,
     )
 
@@ -35,7 +39,11 @@ def _misaligned_bar(ts: str = "2026-05-05T11:31:23+00:00") -> Bar:
         symbol="BINANCE:BTCUSDT",
         interval=Interval.MINUTE_15,
         datetime=datetime.fromisoformat(ts),
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
         tick_count=1,
     )
 
@@ -58,13 +66,17 @@ def fake_provider() -> AsyncMock:
 
 @pytest.mark.asyncio
 async def test_attempt_one_succeeds_no_sleep(
-    fast_sleep: AsyncMock, fake_provider: AsyncMock,
+    fast_sleep: AsyncMock,
+    fake_provider: AsyncMock,
 ) -> None:
     """Provider returns aligned bars on first try → attempts=1, no sleeps."""
     fake_provider.fetch_ohlcv.return_value = [_aligned_bar()]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
+        fake_provider,
+        "BINANCE:BTCUSDT",
+        Interval.MINUTE_15,
+        48,
     )
 
     assert attempts == 1
@@ -74,7 +86,8 @@ async def test_attempt_one_succeeds_no_sleep(
 
 @pytest.mark.asyncio
 async def test_empty_then_aligned_recovers(
-    fast_sleep: AsyncMock, fake_provider: AsyncMock,
+    fast_sleep: AsyncMock,
+    fake_provider: AsyncMock,
 ) -> None:
     """Provider returns [] then aligned → attempts=2, slept ~3s, fetch_recovered logged."""
     fake_provider.fetch_ohlcv.side_effect = [
@@ -84,7 +97,10 @@ async def test_empty_then_aligned_recovers(
 
     with structlog.testing.capture_logs() as logs:
         records, attempts = await fetch_with_retry(
-            fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
+            fake_provider,
+            "BINANCE:BTCUSDT",
+            Interval.MINUTE_15,
+            48,
         )
 
     assert attempts == 2
@@ -95,7 +111,8 @@ async def test_empty_then_aligned_recovers(
 
 @pytest.mark.asyncio
 async def test_all_misaligned_then_aligned(
-    fast_sleep: AsyncMock, fake_provider: AsyncMock,
+    fast_sleep: AsyncMock,
+    fake_provider: AsyncMock,
 ) -> None:
     """Provider returns all-misaligned then aligned → attempts=2, slept ~3s."""
     fake_provider.fetch_ohlcv.side_effect = [
@@ -104,7 +121,10 @@ async def test_all_misaligned_then_aligned(
     ]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
+        fake_provider,
+        "BINANCE:BTCUSDT",
+        Interval.MINUTE_15,
+        48,
     )
 
     assert attempts == 2
@@ -114,13 +134,17 @@ async def test_all_misaligned_then_aligned(
 
 @pytest.mark.asyncio
 async def test_three_empty_exhausts_retries(
-    fast_sleep: AsyncMock, fake_provider: AsyncMock,
+    fast_sleep: AsyncMock,
+    fake_provider: AsyncMock,
 ) -> None:
     """Provider returns [] × 3 → attempts=3, slept (3, 8), returns []."""
     fake_provider.fetch_ohlcv.side_effect = [[], [], []]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
+        fake_provider,
+        "BINANCE:BTCUSDT",
+        Interval.MINUTE_15,
+        48,
     )
 
     assert attempts == 3
@@ -131,14 +155,18 @@ async def test_three_empty_exhausts_retries(
 
 @pytest.mark.asyncio
 async def test_three_misaligned_exhausts_retries(
-    fast_sleep: AsyncMock, fake_provider: AsyncMock,
+    fast_sleep: AsyncMock,
+    fake_provider: AsyncMock,
 ) -> None:
     """Provider returns all-misaligned × 3 → attempts=3, returns last misaligned batch."""
     misaligned = [_misaligned_bar()]
     fake_provider.fetch_ohlcv.side_effect = [misaligned, misaligned, misaligned]
 
     records, attempts = await fetch_with_retry(
-        fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
+        fake_provider,
+        "BINANCE:BTCUSDT",
+        Interval.MINUTE_15,
+        48,
     )
 
     assert attempts == 3
@@ -155,14 +183,19 @@ async def test_time_budget_exhausted_breaks_early(
 
     # Budget is 15s; we simulate time advancing past it after the first fetch.
     # monotonic() called: deadline init, then 2 budget checks per retry iteration.
-    monotonic_values = iter([
-        0.0,    # deadline init: deadline = 15.0
-        14.0,   # budget check before sleep(3): 14 + 3 = 17 > 15 → break
-    ])
+    monotonic_values = iter(
+        [
+            0.0,  # deadline init: deadline = 15.0
+            14.0,  # budget check before sleep(3): 14 + 3 = 17 > 15 → break
+        ]
+    )
 
     with patch.object(provider_fetch.time, "monotonic", side_effect=lambda: next(monotonic_values)):
         records, attempts = await fetch_with_retry(
-            fake_provider, "BINANCE:BTCUSDT", Interval.MINUTE_15, 48,
+            fake_provider,
+            "BINANCE:BTCUSDT",
+            Interval.MINUTE_15,
+            48,
         )
 
     # First attempt fetched (no sleep, delay=0). Second attempt's sleep skipped

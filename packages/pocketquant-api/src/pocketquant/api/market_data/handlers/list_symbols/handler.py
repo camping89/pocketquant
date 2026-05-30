@@ -7,8 +7,6 @@ from pocketquant.core.persistence.repositories.symbol_repository import SymbolRe
 
 @handles(ListSymbolsQuery)
 class ListSymbolsHandler(Handler[ListSymbolsQuery, list[dict]]):
-    """Handle listing symbols from database."""
-
     def __init__(self, symbol_repository: SymbolRepository):
         self._symbol_repo = symbol_repository
 

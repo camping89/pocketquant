@@ -39,18 +39,12 @@ async def load_strategy(app_client):
         id=_STRATEGY_CODE,
         name="Test Strategy",
         symbol="BTC-USDT:BINANCE",
-
         interval="1h",
     )
     await svc.unload_strategy(_STRATEGY_CODE)
     await svc.load_strategy(config)
     yield
     await svc.unload_strategy(_STRATEGY_CODE)
-
-
-# ---------------------------------------------------------------------------
-# POST /strategies/{strategy_code}/subscriptions
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.skip(reason="Requires tracked_symbols seeding in test fixture (infrastructure setup)")
@@ -80,22 +74,13 @@ async def test_add_two_different_symbols_returns_201(app_client):
 @pytest.mark.asyncio
 async def test_add_duplicate_symbol_returns_400(app_client):
     payload = {"symbol": "BTC-USDT:BINANCE", "interval": "1h"}
-    r1 = await app_client.post(
-        f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions", json=payload
-    )
+    r1 = await app_client.post(f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions", json=payload)
     assert r1.status_code == 201, r1.text
 
-    r2 = await app_client.post(
-        f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions", json=payload
-    )
+    r2 = await app_client.post(f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions", json=payload)
     # DomainError.status_code = 400; error_code = SUBSCRIPTION_ALREADY_EXISTS
     assert r2.status_code == 400, r2.text
     assert r2.json()["error"]["code"] == "SUBSCRIPTION_ALREADY_EXISTS"
-
-
-# ---------------------------------------------------------------------------
-# GET /subscriptions/?strategy_code=
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.skip(reason="Requires tracked_symbols seeding in test fixture (infrastructure setup)")
@@ -118,11 +103,6 @@ async def test_list_subscriptions_returns_added_subs_with_null_backtest(app_clie
         assert item["backtest"] is None
 
 
-# ---------------------------------------------------------------------------
-# DELETE /subscriptions/{sub_id}
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.skip(reason="Requires tracked_symbols seeding in test fixture (infrastructure setup)")
 @pytest.mark.asyncio
 async def test_delete_subscription_removes_it_from_list(app_client):
@@ -143,11 +123,6 @@ async def test_delete_subscription_removes_it_from_list(app_client):
     items = list_r.json()
     assert len(items) == 1
     assert items[0]["id"] == r2.json()["id"]
-
-
-# ---------------------------------------------------------------------------
-# DELETE /strategies/{strategy_code}  (cascade)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -174,7 +149,6 @@ async def test_delete_strategy_clears_all_subscriptions(app_client):
         id=_STRATEGY_CODE,
         name="Test Strategy",
         symbol="BTC-USDT:BINANCE",
-
         interval="1h",
     )
     await svc.load_strategy(config)

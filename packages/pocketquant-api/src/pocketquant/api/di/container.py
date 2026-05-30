@@ -24,7 +24,6 @@ PROVIDERS = [
 
 
 def create_container() -> AsyncContainer:
-    """Create the dishka DI container with all providers."""
     return make_async_container(*PROVIDERS)
 
 

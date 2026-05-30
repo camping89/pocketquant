@@ -26,8 +26,6 @@ logger = get_logger(__name__)
 
 @handles(SyncSymbolCommand)
 class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
-    """Handle syncing a single symbol."""
-
     def __init__(
         self,
         provider: IDataProvider,
@@ -43,7 +41,6 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         self._sync_status_repo = sync_status_repository
 
     async def handle(self, request: SyncSymbolCommand) -> SyncResponse:
-        # ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``)
         symbol = request.symbol.upper()
         interval = request.interval
 
@@ -67,7 +64,10 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 if not request.skip_filter:
                     pre = len(records)
                     records = await filter_new_bars(
-                        records, symbol, interval, self._bar_repo,
+                        records,
+                        symbol,
+                        interval,
+                        self._bar_repo,
                     )
                     filtered_existing = pre - len(records)
                 pre_align = len(records)
@@ -75,14 +75,17 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 filtered_misaligned = pre_align - len(records)
 
             inserted_count = await self._persist_bars(
-                symbol, records, request.source,
+                symbol,
+                records,
+                request.source,
             )
             total_bars, latest_bar = await self._get_bar_stats(symbol, interval)
 
-            # Genuine first-sync failure: provider returned nothing AND no prior bars.
             if bars_fetched == 0 and total_bars == 0:
                 return await self._fail(
-                    symbol, interval, "No data returned from provider",
+                    symbol,
+                    interval,
+                    "No data returned from provider",
                 )
 
             await self._mark_completed(symbol, interval, total_bars, latest_bar)
@@ -100,7 +103,8 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             else:
                 streak = await self._sync_status_repo.bump_empty_fetch(symbol, interval)
                 emit_no_progress(
-                    symbol, interval,
+                    symbol,
+                    interval,
                     bars_fetched=bars_fetched,
                     filtered_misaligned=filtered_misaligned,
                     filtered_existing=filtered_existing,
@@ -110,11 +114,14 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
                 )
 
             return build_success(
-                symbol, interval,
-                bars_synced=inserted_count, bars_fetched=bars_fetched,
+                symbol,
+                interval,
+                bars_synced=inserted_count,
+                bars_fetched=bars_fetched,
                 filtered_existing=filtered_existing,
                 filtered_misaligned=filtered_misaligned,
-                total_bars=total_bars, latest_bar=latest_bar,
+                total_bars=total_bars,
+                latest_bar=latest_bar,
             )
 
         except Exception as e:
@@ -126,8 +133,6 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             )
             return await self._fail(symbol, interval, str(e))
 
-    # -- Private helpers (each does one thing) --
-
     async def _fetch_bars(
         self,
         symbol: str,
@@ -135,14 +140,20 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         n_bars: int,
     ) -> list[Bar]:
         records, attempts = await fetch_with_retry(
-            self.provider, symbol, interval, n_bars,
+            self.provider,
+            symbol,
+            interval,
+            n_bars,
         )
-        # Exposed to handle() / Phase 2 anomaly log via getattr fallback.
+        # Exposed for anomaly log via getattr fallback in handle().
         self._fetch_attempts = attempts
         return records
 
     async def _persist_bars(
-        self, symbol: str, records: list[Bar], source: str,
+        self,
+        symbol: str,
+        records: list[Bar],
+        source: str,
     ) -> int:
         if not records:
             return 0
@@ -150,9 +161,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         await self._symbol_repo.upsert(Symbol.create(symbol=symbol))
         return inserted_count
 
-    async def _get_bar_stats(
-        self, symbol: str, interval: DomainInterval
-    ) -> tuple[int, Bar | None]:
+    async def _get_bar_stats(self, symbol: str, interval: DomainInterval) -> tuple[int, Bar | None]:
         total_bars = await self._bar_repo.count(symbol, interval)
         latest_bar = await self._bar_repo.get_latest(symbol, interval)
         return total_bars, latest_bar
@@ -176,12 +185,8 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         cache_key = build_bar_cache_key(symbol, interval.value)
         await self._cache.delete_pattern(f"{cache_key}:*")
 
-    async def _fail(
-        self, symbol: str, interval: DomainInterval, message: str
-    ) -> SyncResponse:
-        await self._sync_status_repo.upsert(
-            symbol, interval, "error", error_message=message
-        )
+    async def _fail(self, symbol: str, interval: DomainInterval, message: str) -> SyncResponse:
+        await self._sync_status_repo.upsert(symbol, interval, "error", error_message=message)
         return SyncResponse(
             symbol=symbol,
             interval=interval.value,

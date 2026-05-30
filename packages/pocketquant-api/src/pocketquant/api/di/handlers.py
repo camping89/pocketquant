@@ -65,7 +65,6 @@ from pocketquant.trading.handlers.trading.list_positions.handler import ListPosi
 
 
 class HandlerProvider(Provider):
-    # Market data (16 — includes tracked_symbols CRUD; start_feed/stop_feed removed)
     list_tracked_symbols_handler = provide(ListTrackedSymbolsHandler, scope=Scope.APP)
     add_tracked_symbol_handler = provide(AddTrackedSymbolHandler, scope=Scope.APP)
     update_tracked_symbol_handler = provide(UpdateTrackedSymbolHandler, scope=Scope.APP)
@@ -83,13 +82,11 @@ class HandlerProvider(Provider):
     get_quote_service_status_handler = provide(GetQuoteServiceStatusHandler, scope=Scope.APP)
     list_symbols_handler = provide(ListSymbolsHandler, scope=Scope.APP)
 
-    # Trading (4)
     list_orders_handler = provide(ListOrdersHandler, scope=Scope.APP)
     get_order_handler = provide(GetOrderHandler, scope=Scope.APP)
     list_positions_handler = provide(ListPositionsHandler, scope=Scope.APP)
     get_position_handler = provide(GetPositionHandler, scope=Scope.APP)
 
-    # Strategy (12)
     start_strategy_handler = provide(StartStrategyHandler, scope=Scope.APP)
     stop_strategy_handler = provide(StopStrategyHandler, scope=Scope.APP)
     get_strategies_handler = provide(GetStrategiesHandler, scope=Scope.APP)
@@ -103,7 +100,6 @@ class HandlerProvider(Provider):
     get_strategy_trades_handler = provide(GetStrategyTradesHandler, scope=Scope.APP)
     delete_strategy_handler = provide(DeleteStrategyHandler, scope=Scope.APP)
 
-    # Backtesting (5)
     run_backtest_handler = provide(RunBacktestHandler, scope=Scope.APP)
     run_optimization_handler = provide(RunOptimizationHandler, scope=Scope.APP)
     get_backtest_handler = provide(GetBacktestHandler, scope=Scope.APP)

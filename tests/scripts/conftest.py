@@ -21,5 +21,9 @@ if str(_WORKSPACE_ROOT) not in sys.path:
 
 # If pytest already cached 'scripts' pointing to this test directory (tests/scripts/),
 # evict that stale entry so the real scripts/ package at workspace root takes over.
-if "scripts" in sys.modules and sys.modules["scripts"].__file__ and "tests" in sys.modules["scripts"].__file__:
+if (
+    "scripts" in sys.modules
+    and sys.modules["scripts"].__file__
+    and "tests" in sys.modules["scripts"].__file__
+):
     del sys.modules["scripts"]

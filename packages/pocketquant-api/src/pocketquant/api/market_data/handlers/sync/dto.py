@@ -19,4 +19,3 @@ class SyncResponse(BaseModel):
     total_bars: int | None = None
     last_bar_at: str | None = None
     message: str | None = None
-

@@ -66,11 +66,6 @@ _REPO_TYPES: list[type] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Lifespan helpers
-# ---------------------------------------------------------------------------
-
-
 async def ensure_all_indexes(container: AsyncContainer) -> None:
     """Ensure MongoDB indexes for all repository collections."""
     repos = [await container.get(rt) for rt in _REPO_TYPES]
@@ -78,10 +73,6 @@ async def ensure_all_indexes(container: AsyncContainer) -> None:
     logger.info("database_indexes_ensured")
 
 
-# ---------------------------------------------------------------------------
-# One-shot Mongo migration: strategy_id disambiguation
-# ---------------------------------------------------------------------------
-#
 # Reverse migration (for rollback):
 #     db.subscriptions.updateMany({}, {$rename: {strategy_code: "strategy_id"}})
 #     db.subscriptions.renameCollection("strategy_subscriptions")
@@ -398,11 +389,6 @@ def handle_startup_failure(error: Exception) -> None:
     raise error
 
 
-# ---------------------------------------------------------------------------
-# App factory helpers
-# ---------------------------------------------------------------------------
-
-
 def configure_middleware(app: FastAPI, settings) -> None:
     """Attach all middleware layers and global exception handlers."""
     register_exception_handlers(app)
@@ -450,8 +436,10 @@ def register_routes(app: FastAPI, settings) -> None:
 
     app.include_router(api)
 
-    # Serve frontend SPA from pocketquant-web dist/ (must be after API routes)
-    web_dist = Path(__file__).resolve().parent.parent.parent.parent.parent / "pocketquant-web" / "dist"
+    # After API routes — SPA fallback must not intercept /api/* paths
+    web_dist = (
+        Path(__file__).resolve().parent.parent.parent.parent.parent / "pocketquant-web" / "dist"
+    )
     if web_dist.is_dir():
         from fastapi.responses import FileResponse
 

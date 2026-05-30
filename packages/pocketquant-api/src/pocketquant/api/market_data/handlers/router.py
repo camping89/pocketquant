@@ -9,7 +9,6 @@ from pocketquant.api.market_data.handlers.sync.router import router as sync_rout
 
 router = APIRouter(prefix="/market-data", tags=["Market Data"])
 
-# Include sub-feature routers
 router.include_router(sync_router)
 router.include_router(integrity_router)
 router.include_router(ohlcv_router)

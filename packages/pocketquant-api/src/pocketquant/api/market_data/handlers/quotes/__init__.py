@@ -23,19 +23,15 @@ from pocketquant.api.market_data.handlers.quotes.unsubscribe import (
 )
 
 __all__ = [
-    # Status (observability)
     "GetQuotesStatusQuery",
     "GetQuotesStatusHandler",
-    # Subscription
     "SubscribeCommand",
     "UnsubscribeCommand",
     "SubscribeHandler",
     "UnsubscribeHandler",
-    # Query
     "GetLatestQuoteQuery",
     "GetAllQuotesQuery",
     "GetLatestQuoteHandler",
     "GetAllQuotesHandler",
-    # DTO
     "QuoteResult",
 ]

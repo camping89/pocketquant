@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 class Quote(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    # Composite symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``)
     symbol: str = Field(..., description="Composite symbol {code}:{exchange}")
     timestamp: dt = Field(default_factory=utc_now, description="Quote timestamp")
 
@@ -52,7 +51,6 @@ class Quote(BaseModel):
 
 
 class QuoteSubscription(BaseModel):
-    # Composite symbol ``{code}:{exchange}``
     symbol: str = Field(..., description="Composite symbol {code}:{exchange}")
 
     @property

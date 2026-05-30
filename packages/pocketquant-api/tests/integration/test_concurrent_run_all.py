@@ -37,11 +37,6 @@ _SYMBOL = "BTC-USDT:BINANCE"
 _INTERVAL = "1h"
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def _jobs_settings(settings: Settings) -> Settings:
     """Settings with enable_jobs=True so APScheduler initializes."""
@@ -131,18 +126,13 @@ async def setup(app_client):
     yield
 
     await svc.unload_strategy(_STRATEGY_ID)
-    await bar_repo._collection().delete_many(
-        {"symbol": _SYMBOL, "interval": _INTERVAL}
-    )
+    await bar_repo._collection().delete_many({"symbol": _SYMBOL, "interval": _INTERVAL})
     await sub_repo._collection().delete_many({"strategy_code": _STRATEGY_ID})
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(bool(os.getenv("SKIP_SLOW_TESTS")), reason="slow — set SKIP_SLOW_TESTS=1 to skip")
+@pytest.mark.skipif(
+    bool(os.getenv("SKIP_SLOW_TESTS")), reason="slow — set SKIP_SLOW_TESTS=1 to skip"
+)
 @pytest.mark.asyncio
 async def test_concurrent_run_all_no_duplicate_jobs(app_client):
     """Two simultaneous run-all calls produce at most N unique jobs per sub, not 2N."""

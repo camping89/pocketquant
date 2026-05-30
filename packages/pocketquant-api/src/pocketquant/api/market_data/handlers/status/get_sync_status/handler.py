@@ -44,7 +44,9 @@ def _iso_z(dt: datetime | None) -> str | None:
 
 
 async def _enrich_with_bars(
-    symbol: str, interval_value: str, bar_repo: BarRepository,
+    symbol: str,
+    interval_value: str,
+    bar_repo: BarRepository,
 ) -> tuple[int, datetime | None]:
     """Return (bar_count, latest_bar_dt) read directly from bars collection."""
     interval = Interval(interval_value)
@@ -71,10 +73,7 @@ class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
             return []
 
         enrichments = await asyncio.gather(
-            *(
-                _enrich_with_bars(s.symbol, s.interval, self._bar_repo)
-                for s in statuses
-            ),
+            *(_enrich_with_bars(s.symbol, s.interval, self._bar_repo) for s in statuses),
             return_exceptions=True,
         )
 
@@ -83,7 +82,8 @@ class GetSyncStatusHandler(Handler[GetSyncStatusQuery, list[SyncStatusResult]]):
             if isinstance(enrichment, BaseException):
                 logger.warning(
                     "sync_status.enrich_failed",
-                    symbol=s.symbol, interval=s.interval,
+                    symbol=s.symbol,
+                    interval=s.interval,
                     error=str(enrichment),
                 )
                 bar_count = s.bar_count

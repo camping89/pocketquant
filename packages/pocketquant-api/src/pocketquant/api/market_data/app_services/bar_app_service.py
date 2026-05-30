@@ -45,9 +45,9 @@ class BarAppService:
 
     In-memory state: _bars[symbol_key][interval] = BarBuilder (running OHLCV).
     symbol_key is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    Cron (P5 sync_1m + cascade) is the sole MongoDB writer — no upsert_bar here.
+    Cron sync_1m + cascade is the sole MongoDB writer — no upsert_bar here.
     On bar close: publish BarCompletedEvent (at-least-once) + force-flush Redis.
-    BarRepository kept for get_current_bar DB fallback (P4 SSE).
+    BarRepository kept for get_current_bar DB fallback (SSE endpoint).
     """
 
     def __init__(
@@ -58,14 +58,11 @@ class BarAppService:
         intervals: list[Interval] | None = None,
     ):
         self._cache = cache
-        self._bar_repo = bar_repository  # kept for get_current_bar fallback (P4 SSE)
+        self._bar_repo = bar_repository  # kept for get_current_bar DB fallback
         self._event_bus = event_bus
         self._intervals = intervals or _DEFAULT_INTERVALS
 
-        # Nested dict: symbol_key → interval → running BarBuilder
         self._bars: dict[str, dict[Interval, BarBuilder]] = defaultdict(dict)
-
-        # Throttle: track last Redis flush timestamp per (symbol_key, interval)
         self._last_flush_ts: dict[tuple[str, Interval], float] = {}
 
         self._lock = asyncio.Lock()
@@ -110,7 +107,6 @@ class BarAppService:
                 bar_start=bar_start,
             )
             self._bars[symbol_key][interval] = current_bar
-            # Force-flush new bar to Redis immediately on roll
             current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
             await self._cache_current_bar(symbol_key, interval, current_bar, force=True)
             return
@@ -121,7 +117,7 @@ class BarAppService:
     async def _save_completed_bar(self, bar: BarBuilder) -> None:
         """Emit BarCompletedEvent and clean up Redis for the closed bar.
 
-        NOTE: No MongoDB write here — cron sync_1m + cascade aggregator (P5)
+        NOTE: No MongoDB write here — cron sync_1m + cascade aggregator
         is the sole Mongo writer for `bars`. Removing upsert_bar is intentional.
         """
         if bar.is_empty():
@@ -169,9 +165,7 @@ class BarAppService:
         open. The Mongo source-of-truth is populated by the cascade aggregator.
         """
         try:
-            existing = await self._bar_repo.get_latest(
-                bar.symbol, bar.interval
-            )
+            existing = await self._bar_repo.get_latest(bar.symbol, bar.interval)
         except Exception as exc:
             logger.error("bar_app_service.seed_failed", error=str(exc))
             return
@@ -213,11 +207,9 @@ class BarAppService:
             if now - last < BAR_CURRENT_FLUSH_MIN_INTERVAL_S:
                 return
 
-        cache_key = CACHE_KEY_BAR_CURRENT.format(
-            symbol=symbol_key, interval=interval.value
-        )
+        cache_key = CACHE_KEY_BAR_CURRENT.format(symbol=symbol_key, interval=interval.value)
         ttl = _ttl_for_interval(interval)
-        # Inject wall-clock last_update (Unix seconds) for SSE staleness_ms calc (P4)
+        # Inject wall-clock last_update (Unix seconds) for SSE staleness_ms calculation
         bar_dict = bar.to_dict()
         bar_dict["last_update"] = time.time()
         await self._cache.set(cache_key, bar_dict, ttl=ttl)
@@ -229,9 +221,7 @@ class BarAppService:
         interval: Interval,
     ) -> dict[str, Any] | None:
         """``symbol`` is composite ``{code}:{exchange}``."""
-        cache_key = CACHE_KEY_BAR_CURRENT.format(
-            symbol=symbol.upper(), interval=interval.value
-        )
+        cache_key = CACHE_KEY_BAR_CURRENT.format(symbol=symbol.upper(), interval=interval.value)
         cached = await self._cache.get(cache_key)
         if cached is not None:
             return cached

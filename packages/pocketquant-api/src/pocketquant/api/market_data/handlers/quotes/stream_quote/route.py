@@ -19,7 +19,7 @@ from pocketquant.core.persistence.redis import Cache
 router = APIRouter(route_class=DishkaRoute)
 logger = get_logger(__name__)
 
-# Poll interval — 500ms aligned with P3 throttle (200ms) for < 700ms max lag
+# Poll interval — 500ms; combined with 200ms Redis write throttle keeps max lag < 700ms
 _POLL_INTERVAL = 0.5
 
 

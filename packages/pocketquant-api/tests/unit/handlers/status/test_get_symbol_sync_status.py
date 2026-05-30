@@ -34,9 +34,15 @@ def _status(interval: str, last_bar_age_seconds: int, bar_count: int = 1000) -> 
 
 def _bar(dt: datetime, interval: Interval) -> Bar:
     return Bar(
-        symbol=SYMBOL, interval=interval,
+        symbol=SYMBOL,
+        interval=interval,
         datetime=dt,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        tick_count=1,
     )
 
 
