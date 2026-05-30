@@ -17,27 +17,28 @@ Reading order for the PocketQuant docs. Top to bottom = onboarding path: orient 
 | 2 | [Project Overview / PDR](./project-overview-pdr.md) | Product vision, scope, functional requirements (F1…), roadmap. The "why" and "what". |
 | 3 | [System Architecture](./system-architecture.md) | Deep design reference: Clean Architecture + DDD + CQRS layers, request flows, "Where Does X Live?", config, limitations. |
 | 4 | [Architecture Visual Map](./architecture-visual-map.md) | ASCII + Mermaid diagrams, bounded contexts, context map, ubiquitous-language glossary. Visual companion to #3. |
+| 5 | [System Relationship Map](./system-relationship-map.md) | Whole-system forest view: two repos, CI/CD, Docker Hub, VPS containers, external services, clients — and how they connect. Zoomed-out companion to #3/#4. |
 
 ## 2. Conventions (before you write code)
 
 | # | Doc | Short Description |
 |---|-----|-------------------|
-| 5 | [Code Standards](./code-standards.md) | Naming, file-size rules, layer dependency direction, DDD aggregate-classification guide, Pyright conventions. |
+| 6 | [Code Standards](./code-standards.md) | Naming, file-size rules, layer dependency direction, DDD aggregate-classification guide, Pyright conventions. |
 
 ## 3. Domain Deep-Dives (how features actually work)
 
 | # | Doc | Short Description |
 |---|-----|-------------------|
-| 6 | [Strategy Lifecycle](./strategy-lifecycle.md) | Template-based strategy model: load → subscribe → backtest → start/stop. `strategy_code` vs `subscription_id`. |
-| 7 | [Handler Pipelines](./handler-pipelines.md) | Per-handler request/processing/side-effect detail for all 37 CQRS handlers. The API-level reference. |
-| 8 | [WebSocket Architecture](./websocket-architecture.md) | Outbound WS clients only: Binance `@aggTrade` market-data stream + OKX private order/position stream. No server-side WS. |
-| 9 | [Feature: Add Symbol](./feature-add-symbol.md) | Worked example of one feature end-to-end (strategy subscription modal). Template for understanding other slices. |
+| 7 | [Strategy Lifecycle](./strategy-lifecycle.md) | Template-based strategy model: load → subscribe → backtest → start/stop. `strategy_code` vs `subscription_id`. |
+| 8 | [Handler Pipelines](./handler-pipelines.md) | Per-handler request/processing/side-effect detail for all 37 CQRS handlers. The API-level reference. |
+| 9 | [WebSocket Architecture](./websocket-architecture.md) | Outbound WS clients only: Binance `@aggTrade` market-data stream + OKX private order/position stream. No server-side WS. |
+| 10 | [Feature: Add Symbol](./feature-add-symbol.md) | Worked example of one feature end-to-end (strategy subscription modal). Template for understanding other slices. |
 
 ## 4. Operations
 
 | # | Doc | Short Description |
 |---|-----|-------------------|
-| 10 | [Deployment](./deployment.md) | Production deploy via GitHub Actions → Docker Hub → SSH to Vultr VPS. Skill-friendly summary + operator runbook. |
+| 11 | [Deployment](./deployment.md) | Production deploy via GitHub Actions → Docker Hub → SSH to Vultr VPS. Skill-friendly summary + operator runbook. |
 
 ## Index
 

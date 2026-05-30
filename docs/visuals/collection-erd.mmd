@@ -1,0 +1,105 @@
+erDiagram
+    SYMBOLS ||..o{ BARS : "symbol (ref data)"
+    SYMBOLS ||..o{ SYNC_STATUS : "symbol"
+    SYMBOLS ||..o{ TRACKED_SYMBOLS : "symbol"
+    TRACKED_SYMBOLS ||..o{ BARS : "drives sync -> writes"
+    TRACKED_SYMBOLS ||..|| SYNC_STATUS : "sync progress per (symbol,interval)"
+
+    SUBSCRIPTIONS ||--o{ ORDERS : "subscription_id"
+    SUBSCRIPTIONS ||--o{ POSITIONS : "subscription_id"
+    SUBSCRIPTIONS ||..o| BACKTEST_RUNS : "subscription_id (cached result)"
+    SYMBOLS ||..o{ SUBSCRIPTIONS : "symbol"
+
+    BACKTEST_RUNS ||--o{ BACKTEST_ORDERS : "run_id"
+    BACKTEST_RUNS ||--o{ BACKTEST_TRADES : "run_id"
+
+    SYMBOLS {
+        uuid7 _id PK "stringified uuid7"
+        string symbol UK "BTCUSDT:BINANCE"
+        string name
+        string asset_type
+        bool is_active
+    }
+    BARS {
+        uuid7 _id PK "stringified uuid7"
+        string symbol FK "composite"
+        enum interval
+        datetime datetime "UK with symbol+interval"
+        float open_high_low_close
+        float volume
+        string source
+    }
+    SYNC_STATUS {
+        uuid7 _id PK "stringified uuid7"
+        string symbol "UK with interval"
+        string interval
+        string status
+        int bar_count
+        datetime last_bar_at
+    }
+    TRACKED_SYMBOLS {
+        string symbol PK "composite = natural _id"
+    }
+    SUBSCRIPTIONS {
+        string _id PK "deterministic hash(strategy_code|symbol|interval)"
+        string strategy_code "-> in-code STRATEGY_REGISTRY"
+        string symbol FK "composite"
+        enum interval
+        datetime created_at
+    }
+    ORDERS {
+        string _id PK "uuid7 string"
+        string subscription_id FK
+        string symbol FK
+        enum side
+        enum order_type
+        enum status
+        float quantity
+        float sl_price
+        float tp_price
+        string broker_order_id "-> OKX external"
+    }
+    POSITIONS {
+        string _id PK "uuid7 string"
+        string subscription_id FK
+        string symbol FK
+        enum side
+        float entry_price
+        float realized_pnl
+        bool is_closed
+    }
+    BACKTEST_RUNS {
+        string _id PK "run_id (uuid7 string)"
+        string strategy_code
+        string subscription_id "nullable, cache key"
+        string status
+        datetime started_at
+    }
+    BACKTEST_ORDERS {
+        string _id PK "order_id"
+        string run_id FK
+        string strategy_code
+        string symbol
+        string status
+    }
+    BACKTEST_TRADES {
+        string _id PK "trade_id"
+        string run_id FK
+        string strategy_code
+        datetime entry_time
+        float pnl
+    }
+    BACKTEST_OPTIMIZATION_RUNS {
+        string _id PK "uuid7 string"
+        string strategy_code
+        datetime created_at
+    }
+    JOB_HISTORY {
+        objectid _id PK
+        string job_id
+        string status
+    }
+    APSCHEDULER_JOBS {
+        string _id PK "job name"
+        datetime next_run_time "cross-process lock"
+    }
