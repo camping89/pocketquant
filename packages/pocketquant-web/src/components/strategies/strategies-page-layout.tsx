@@ -96,9 +96,7 @@ export function StrategiesPageLayout() {
 
   return (
     <>
-      {/* ── Desktop 3-pane layout ── */}
       <div className="strategies-layout">
-        {/* Sidebar */}
         <div className="strategies-sidebar">
           <StrategyListSidebar
             selectedSubId={selectedSub?.id ?? null}
@@ -106,7 +104,6 @@ export function StrategiesPageLayout() {
           />
         </div>
 
-        {/* Main center pane */}
         <main className="strategies-main">
           {selectedSub ? (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -119,7 +116,6 @@ export function StrategiesPageLayout() {
                   openPosition={openPos}
                 />
               </div>
-              {/* Config card below the chart */}
               <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
                 <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedSub(null)} />
               </div>
@@ -129,7 +125,6 @@ export function StrategiesPageLayout() {
           )}
         </main>
 
-        {/* Dashboard right pane */}
         <div className="strategies-dashboard">
           {selectedSub ? (
             <DashboardColumn sub={selectedSub} />
@@ -151,9 +146,7 @@ export function StrategiesPageLayout() {
         </div>
       </div>
 
-      {/* ── Mobile tab layout ── */}
       <div className="strategies-mobile">
-        {/* Tab bar */}
         <div className="strategies-mobile__tabs">
           {MOBILE_TABS.map(({ key, label }) => (
             <button
@@ -166,7 +159,6 @@ export function StrategiesPageLayout() {
           ))}
         </div>
 
-        {/* Active pane */}
         <div className="strategies-mobile__pane">
           {mobileTab === 'list' && (
             <StrategyListSidebar

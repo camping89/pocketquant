@@ -30,7 +30,6 @@ export function addIndicatorSeries(
 ): IndicatorSeriesRefs {
   const all: ISeriesApi<SeriesType>[] = []
 
-  // Overlay indicators on pane 0
   if (config.sma && data.sma20.length > 0) {
     const s = chart.addSeries(LineSeries, { color: COLORS.sma20, lineWidth: 1, priceScaleId: 'right' })
     s.setData(data.sma20)
@@ -64,7 +63,6 @@ export function addIndicatorSeries(
   // Track next available pane index for sub-chart indicators
   let nextPane = 1
 
-  // RSI in separate pane
   if (config.rsi && data.rsi14.length > 0) {
     const s = chart.addSeries(LineSeries, { color: COLORS.rsi, lineWidth: 1 }, nextPane)
     s.setData(data.rsi14)
@@ -72,7 +70,6 @@ export function addIndicatorSeries(
     nextPane++
   }
 
-  // MACD in next separate pane
   if (config.macd) {
     const pane = nextPane
     if (data.macdLine.length > 0) {

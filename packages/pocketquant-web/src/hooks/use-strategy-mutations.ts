@@ -9,9 +9,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { addSymbol, removeSubscription, deleteStrategy } from '../api/strategy-api'
 import { ApiError } from '../api/strategy-api'
 
-// ---------------------------------------------------------------------------
 // Backend error envelope: { error: { code: string, message: string } }
-// ---------------------------------------------------------------------------
 
 async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
   try {
@@ -48,10 +46,6 @@ async function stopSubscription(subId: string): Promise<void> {
     throw new ApiError(`Stop failed (${res.status}): ${detail}`, res.status)
   }
 }
-
-// ---------------------------------------------------------------------------
-// Exported hooks
-// ---------------------------------------------------------------------------
 
 export function useStartStrategy() {
   const qc = useQueryClient()
