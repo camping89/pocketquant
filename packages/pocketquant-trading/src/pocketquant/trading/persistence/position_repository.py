@@ -6,17 +6,13 @@ from pocketquant.core.persistence.base_repository import BaseRepository
 
 
 class PositionRepository(BaseRepository):
-    """MongoDB repository for position persistence."""
-
     _collection_name = COLLECTION_POSITIONS
 
     async def save(self, position: PositionAggregate) -> None:
-        """Save or update position."""
         collection = self._collection()
         await collection.replace_one({"_id": position.id}, position.to_mongo(), upsert=True)
 
     async def get(self, position_id: str) -> PositionAggregate | None:
-        """Get position by ID."""
         collection = self._collection()
         doc = await collection.find_one({"_id": position_id})
         if not doc:
@@ -24,7 +20,6 @@ class PositionRepository(BaseRepository):
         return PositionAggregate.from_mongo(doc)
 
     async def get_by_subscription(self, subscription_id: str) -> PositionAggregate | None:
-        """Get open position for a subscription."""
         collection = self._collection()
         doc = await collection.find_one({"subscription_id": subscription_id, "is_closed": False})
         if not doc:
@@ -32,7 +27,6 @@ class PositionRepository(BaseRepository):
         return PositionAggregate.from_mongo(doc)
 
     async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
-        """Get all open positions."""
         collection = self._collection()
         cursor = collection.find({"is_closed": False}).limit(limit)
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
@@ -42,9 +36,9 @@ class PositionRepository(BaseRepository):
     ) -> list[PositionAggregate]:
         """Return all open positions for a subscription (typically 0 or 1)."""
         collection = self._collection()
-        cursor = collection.find(
-            {"subscription_id": subscription_id, "is_closed": False}
-        ).limit(limit)
+        cursor = collection.find({"subscription_id": subscription_id, "is_closed": False}).limit(
+            limit
+        )
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
 
     async def find_closed_by_subscription(
@@ -60,7 +54,6 @@ class PositionRepository(BaseRepository):
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
 
     async def ensure_indexes(self) -> None:
-        """Create indexes for efficient queries."""
         collection = self._collection()
         await collection.create_index("subscription_id", name="ix_positions_subscription_id")
         await collection.create_index("is_closed", name="ix_positions_is_closed")

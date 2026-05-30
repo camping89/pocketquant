@@ -59,7 +59,6 @@ class WebhookDispatcher:
             raise errors[0]
 
     def _build_payload(self, event: DomainEvent) -> dict[str, Any]:
-        """Build webhook payload from domain event."""
         return {
             "event_type": type(event).__name__,
             "data": self._serialize_event(event),
@@ -68,14 +67,12 @@ class WebhookDispatcher:
         }
 
     def _serialize_event(self, event: DomainEvent) -> dict[str, Any]:
-        """Serialize event data, excluding base fields."""
         data = asdict(event)
         data.pop("event_id", None)
         data.pop("occurred_at", None)
         return data
 
     def _sign(self, payload: dict[str, Any], secret: str) -> str:
-        """Generate HMAC SHA256 signature for webhook payload."""
         body = json.dumps(payload, sort_keys=True)
         return hmac.new(
             secret.encode(),
@@ -84,5 +81,4 @@ class WebhookDispatcher:
         ).hexdigest()
 
     async def close(self) -> None:
-        """Close HTTP client."""
         await self.client.close()

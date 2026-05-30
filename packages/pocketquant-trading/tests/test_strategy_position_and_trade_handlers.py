@@ -93,9 +93,7 @@ async def test_trades_handler_maps_closed_positions_to_strategy_trade_shape() ->
     )
 
     handler = GetStrategyTradesHandler(position_repository=repo)
-    result = await handler.handle(
-        GetStrategyTradesQuery(subscription_id="strat-1", limit=50)
-    )
+    result = await handler.handle(GetStrategyTradesQuery(subscription_id="strat-1", limit=50))
 
     repo.find_closed_by_subscription.assert_awaited_once_with("strat-1", limit=50)
     assert len(result) == 2

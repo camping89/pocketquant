@@ -18,18 +18,14 @@ from pocketquant.trading.brokers.okx.websocket.okx_reconnection_handler import (
 from pocketquant.trading.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
 
 __all__ = [
-    # Client
     "OkxWebSocketClient",
-    # Auth
     "generate_ws_signature",
     "build_login_message",
     "get_private_ws_url",
-    # Parsers
     "OkxMessageParser",
     "OkxOrderMapper",
     "OkxPositionMapper",
     "PositionUpdate",
-    # Reconnection
     "OkxReconnectionHandler",
     "OkxStateReconciler",
 ]

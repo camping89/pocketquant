@@ -65,7 +65,6 @@ class OkxReconnectionHandler:
         logger.info("okx_reconnect_starting")
 
         while self._reconnecting:
-            # Circuit breaker check
             if self._consecutive_failures >= CIRCUIT_BREAKER_FAILURES:
                 logger.warning(
                     "okx_circuit_breaker_triggered",
@@ -80,13 +79,10 @@ class OkxReconnectionHandler:
             await asyncio.sleep(delay)
 
             try:
-                # Attempt to reconnect
                 await self._ws_client.connect()
 
-                # Sync state from REST API
                 await self._sync_state()
 
-                # Re-subscribe to channels
                 await self._ws_client.subscribe(
                     [
                         {"channel": "orders", "instType": "SWAP"},
@@ -94,7 +90,6 @@ class OkxReconnectionHandler:
                     ]
                 )
 
-                # Success - reset state
                 self._reconnecting = False
                 self._consecutive_failures = 0
 
@@ -109,7 +104,6 @@ class OkxReconnectionHandler:
                     failures=self._consecutive_failures,
                 )
 
-                # Exponential backoff
                 delay = min(delay * self._multiplier, self._max_delay)
 
     async def _sync_state(self) -> None:
@@ -156,7 +150,6 @@ class OkxReconnectionHandler:
                 )
                 return
 
-            # Add terminal orders to seen set
             terminal_count = 0
             for order in response.get("data", []):
                 state = order.get("state", "")
@@ -172,16 +165,12 @@ class OkxReconnectionHandler:
             logger.warning("okx_update_terminal_orders_error", error=str(e))
 
     def stop(self) -> None:
-        """Stop reconnection attempts."""
         self._reconnecting = False
         logger.info("okx_reconnect_stopped")
 
 
 class OkxStateReconciler:
-    """Reconciles local state with OKX REST API state.
-
-    Used after reconnection to detect any missed order fills.
-    """
+    """Reconciles local state with OKX REST after reconnect to detect missed fills."""
 
     def __init__(self, broker: OKXBroker) -> None:
         self._broker = broker
@@ -201,7 +190,6 @@ class OkxStateReconciler:
         }
 
     async def _fetch_open_orders(self) -> list[dict]:
-        """Fetch pending orders via REST API."""
         if not self._broker.trade_api:
             return []
 

@@ -10,5 +10,4 @@ router = APIRouter(route_class=DishkaRoute)
 
 @router.get("/positions")
 async def list_positions(mediator: FromDishka[Mediator]) -> list[dict]:
-    """Get all open positions."""
     return await mediator.send(ListPositionsQuery())

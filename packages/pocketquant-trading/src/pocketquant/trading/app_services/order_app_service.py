@@ -43,7 +43,6 @@ class OrderAppService:
         async with self._lock:
             self._pending[order.id] = order
 
-        # Persist initial order state
         await self._order_repo.save(order)
 
         try:
@@ -55,17 +54,13 @@ class OrderAppService:
                     order.broker_order_id = result.broker_order_id
 
                     if result.status == OrderStatus.FILLED:
-                        # Update order with fill info
                         order.fill(result.filled_quantity, result.filled_price or 0.0)
 
-                        # Move to completed orders
                         self._orders[order.id] = order
                         self._pending.pop(order.id, None)
 
-                        # Persist filled order
                         await self._order_repo.save(order)
 
-                        # Publish fill event
                         await self._event_bus.publish(
                             OrderFilledEvent(
                                 order_id=order.id,
@@ -84,7 +79,6 @@ class OrderAppService:
                             filled_price=result.filled_price,
                         )
                     else:
-                        # Update status and persist
                         order.submit(result.broker_order_id)
                         await self._order_repo.save(order)
 
@@ -95,7 +89,6 @@ class OrderAppService:
                             status=result.status.value,
                         )
                 else:
-                    # Mark as rejected and persist
                     order.reject(result.error_message or "Order rejected")
                     await self._order_repo.save(order)
 
@@ -159,19 +152,15 @@ class OrderAppService:
             return False
 
     def get_order(self, order_id: str) -> OrderAggregate | None:
-        """Get order by ID."""
         return self._orders.get(order_id) or self._pending.get(order_id)
 
     def get_pending_orders(self) -> list[OrderAggregate]:
-        """Get all pending orders."""
         return list(self._pending.values())
 
     def get_filled_orders(self) -> list[OrderAggregate]:
-        """Get all filled orders."""
         return list(self._orders.values())
 
     def get_orders_by_strategy(self, strategy_id: str) -> list[OrderAggregate]:
-        """Get all orders for a strategy."""
         all_orders = list(self._orders.values()) + list(self._pending.values())
         return [o for o in all_orders if o.subscription_id == strategy_id]
 
@@ -219,12 +208,10 @@ class OrderAppService:
         logger.info("loaded_pending_orders", count=len(pending))
 
     async def get_order_async(self, order_id: str) -> OrderAggregate | None:
-        """Get order by ID from memory or database."""
         order = self._orders.get(order_id) or self._pending.get(order_id)
         if order:
             return order
         return await self._order_repo.get(order_id)
 
     async def get_orders_by_strategy_async(self, strategy_id: str) -> list[OrderAggregate]:
-        """Get all orders for a subscription from database."""
         return await self._order_repo.find_by_subscription(strategy_id)

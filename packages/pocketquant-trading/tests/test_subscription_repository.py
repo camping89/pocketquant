@@ -18,9 +18,7 @@ from pocketquant.trading.persistence.subscription_repository import (
 pytestmark = pytest.mark.integration
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -34,9 +32,7 @@ async def repo(settings):
     await db.disconnect()
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _make_sub(strategy_code: str, symbol: str, interval: Interval) -> Subscription:
@@ -50,9 +46,7 @@ def _make_sub(strategy_code: str, symbol: str, interval: Interval) -> Subscripti
     )
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio

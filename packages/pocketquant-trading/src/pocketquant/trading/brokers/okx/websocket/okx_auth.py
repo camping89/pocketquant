@@ -27,7 +27,6 @@ def generate_ws_signature(api_secret: str, timestamp: str | None = None) -> tupl
     # Pre-hash string format per OKX docs
     pre_hash = timestamp + "GET" + "/users/self/verify"
 
-    # HMAC-SHA256 signature
     signature = base64.b64encode(
         hmac.new(
             api_secret.encode("utf-8"),

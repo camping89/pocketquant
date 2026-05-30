@@ -19,5 +19,4 @@ class WebhookConfig:
     endpoints: dict[str, list[WebhookEndpoint]] = field(default_factory=dict)
 
     def get_endpoints(self, event_type: str) -> list[WebhookEndpoint]:
-        """Get enabled endpoints for an event type."""
         return [e for e in self.endpoints.get(event_type, []) if e.enabled]

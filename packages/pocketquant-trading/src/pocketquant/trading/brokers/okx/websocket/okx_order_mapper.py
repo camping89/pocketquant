@@ -42,14 +42,12 @@ class OkxOrderMapper:
         state = data.get("state", "")
         status = OKX_STATE_MAP.get(state, OrderStatus.PENDING)
 
-        # Parse fill quantities
         acc_fill_sz = data.get("accFillSz", "0")
         avg_px = data.get("avgPx", "")
 
         filled_quantity = float(acc_fill_sz) if acc_fill_sz else 0.0
         filled_price = float(avg_px) if avg_px else None
 
-        # Get order IDs
         order_id = data.get("clOrdId", "")  # Our client order ID
         broker_order_id = data.get("ordId", "")  # OKX order ID
 
@@ -76,26 +74,22 @@ class OkxOrderMapper:
 
     @staticmethod
     def get_order_id(data: dict[str, Any]) -> str:
-        """Get OKX order ID from data."""
         return data.get("ordId", "")
 
     @staticmethod
     def get_client_order_id(data: dict[str, Any]) -> str:
-        """Get client order ID (our order.id) from data."""
         return data.get("clOrdId", "")
 
     @staticmethod
     def get_state(data: dict[str, Any]) -> str:
-        """Get order state from data."""
         return data.get("state", "")
 
     @staticmethod
     def get_symbol(data: dict[str, Any]) -> str:
-        """Get trading symbol from instId (remove -SWAP suffix)."""
+        """Get trading symbol from instId — strips -SWAP suffix and dashes."""
         inst_id = data.get("instId", "")
         return inst_id.replace("-SWAP", "").replace("-", "")
 
     @staticmethod
     def get_side(data: dict[str, Any]) -> str:
-        """Get order side (buy/sell)."""
         return data.get("side", "").upper()

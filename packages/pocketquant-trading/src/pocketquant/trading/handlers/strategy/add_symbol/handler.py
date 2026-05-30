@@ -45,20 +45,15 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
         symbol = request.symbol.upper()
         if not await self._tracked_repo.exists(symbol):
             raise NotFoundError(
-                f"Symbol '{symbol}' is not tracked. "
-                "Admin must add it to tracked_symbols first.",
+                f"Symbol '{symbol}' is not tracked. Admin must add it to tracked_symbols first.",
                 error_code="SYMBOL_NOT_TRACKED",
             )
 
         strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
         if strategy_class is None:
-            raise NotFoundError(
-                f"Strategy template '{request.strategy_id}' not found in registry."
-            )
+            raise NotFoundError(f"Strategy template '{request.strategy_id}' not found in registry.")
 
-        sub_id = Subscription.deterministic_id(
-            request.strategy_id, symbol, request.interval
-        )
+        sub_id = Subscription.deterministic_id(request.strategy_id, symbol, request.interval)
 
         if self._strategy_service.get_strategy(sub_id) is None:
             await self._strategy_service.load_strategy(
