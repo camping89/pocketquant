@@ -1,5 +1,3 @@
-"""API routes for running a backtest."""
-
 from datetime import datetime
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
@@ -71,29 +69,33 @@ async def run_backtest(
     if result.status == "completed":
         closed = await trade_repo.list_by_run(result.id)
         for t in closed:
-            positions.append({
-                "entry_price": t.entry_price,
-                "entry_time": t.entry_time,
-                "exit_price": t.exit_price,
-                "exit_time": t.exit_time,
-                "quantity": t.quantity,
-                "sl_price": t.sl_price,
-                "tp_price": t.tp_price,
-                "pnl": t.pnl,
-                "commission": t.commission,
-            })
+            positions.append(
+                {
+                    "entry_price": t.entry_price,
+                    "entry_time": t.entry_time,
+                    "exit_price": t.exit_price,
+                    "exit_time": t.exit_time,
+                    "quantity": t.quantity,
+                    "sl_price": t.sl_price,
+                    "tp_price": t.tp_price,
+                    "pnl": t.pnl,
+                    "commission": t.commission,
+                }
+            )
         for ol in result.open_positions:
-            positions.append({
-                "entry_price": ol.entry_price,
-                "entry_time": ol.entry_time,
-                "exit_price": None,
-                "exit_time": None,
-                "quantity": ol.quantity,
-                "sl_price": ol.sl_price,
-                "tp_price": ol.tp_price,
-                "pnl": 0.0,
-                "commission": ol.entry_commission_portion,
-            })
+            positions.append(
+                {
+                    "entry_price": ol.entry_price,
+                    "entry_time": ol.entry_time,
+                    "exit_price": None,
+                    "exit_time": None,
+                    "quantity": ol.quantity,
+                    "sl_price": ol.sl_price,
+                    "tp_price": ol.tp_price,
+                    "pnl": 0.0,
+                    "commission": ol.entry_commission_portion,
+                }
+            )
 
     return {
         "run_id": result.id,

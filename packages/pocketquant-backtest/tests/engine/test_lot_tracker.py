@@ -35,9 +35,6 @@ def _feed(
     )
 
 
-# --- Opening ----------------------------------------------------------------
-
-
 def test_open_single_long_lot(base_time: datetime) -> None:
     tracker = LotTracker()
     outcome = _feed(tracker, "LONG", 1.0, 100.0, base_time, commission=0.1)
@@ -68,15 +65,10 @@ def test_zero_qty_is_noop(base_time: datetime) -> None:
     assert tracker.lots == []
 
 
-# --- FIFO consume -----------------------------------------------------------
-
-
 def test_close_full_long_round_trip(base_time: datetime) -> None:
     tracker = LotTracker()
     _feed(tracker, "LONG", 1.0, 100.0, base_time, commission=0.1)
-    outcome = _feed(
-        tracker, "SHORT", 1.0, 110.0, base_time + timedelta(hours=1), commission=0.11
-    )
+    outcome = _feed(tracker, "SHORT", 1.0, 110.0, base_time + timedelta(hours=1), commission=0.11)
     assert outcome.opened is None
     assert len(outcome.consumed) == 1
     c = outcome.consumed[0]
@@ -129,16 +121,11 @@ def test_partial_close_keeps_remaining(base_time: datetime) -> None:
     assert remaining.entry_commission == pytest.approx(1.0)
 
 
-# --- Flip -------------------------------------------------------------------
-
-
 def test_flip_long_to_short(base_time: datetime) -> None:
     """LONG 10 → SELL 15 closes all LONG and opens SHORT 5."""
     tracker = LotTracker()
     _feed(tracker, "LONG", 10.0, 100.0, base_time, commission=1.0)
-    outcome = _feed(
-        tracker, "SHORT", 15.0, 90.0, base_time + timedelta(hours=1), commission=1.35
-    )
+    outcome = _feed(tracker, "SHORT", 15.0, 90.0, base_time + timedelta(hours=1), commission=1.35)
     assert len(outcome.consumed) == 1
     assert outcome.consumed[0].qty_closed == pytest.approx(10.0)
     # Exit commission proportional to closed portion of sell qty (10/15)
@@ -173,9 +160,6 @@ def test_flip_consumes_multiple_lots(base_time: datetime) -> None:
     assert outcome.opened is not None
     assert outcome.opened.direction == "SHORT"
     assert outcome.opened.qty_remaining == pytest.approx(3.0)
-
-
-# --- Scale in/out -----------------------------------------------------------
 
 
 def test_scale_out_two_partial_sells(base_time: datetime) -> None:

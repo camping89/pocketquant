@@ -14,8 +14,6 @@ logger = get_logger(__name__)
 
 
 class BacktestTradeRepository(BaseRepository):
-    """Repository for backtest round-trip trades."""
-
     _collection_name = COLLECTION_BACKTEST_TRADES
 
     async def save_many(self, trades: list[Trade]) -> None:

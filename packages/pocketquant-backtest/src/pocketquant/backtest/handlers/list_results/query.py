@@ -1,5 +1,3 @@
-"""CQRS query for listing backtests."""
-
 from pydantic import BaseModel
 
 

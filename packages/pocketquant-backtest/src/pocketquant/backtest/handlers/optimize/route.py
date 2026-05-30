@@ -1,5 +1,3 @@
-"""API routes for running optimization."""
-
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka

@@ -40,7 +40,9 @@ class _FakeBarRepo:
         self._bars = bars
 
     async def stream(
-        self, symbol: str, interval: Interval,
+        self,
+        symbol: str,
+        interval: Interval,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
     ) -> AsyncIterator[Bar]:
@@ -48,13 +50,18 @@ class _FakeBarRepo:
             yield b
 
 
-def _bar(idx: int, *, close: float, t0: datetime, low: float | None = None,
-         high: float | None = None) -> Bar:
+def _bar(
+    idx: int, *, close: float, t0: datetime, low: float | None = None, high: float | None = None
+) -> Bar:
     return Bar(
-        symbol=_SYM, interval=Interval.MINUTE_1,
+        symbol=_SYM,
+        interval=Interval.MINUTE_1,
         datetime=t0 + timedelta(minutes=idx),
-        open=close, high=high or close + 0.1, low=low or close - 0.1,
-        close=close, volume=1.0,
+        open=close,
+        high=high or close + 0.1,
+        low=low or close - 0.1,
+        close=close,
+        volume=1.0,
     )
 
 
@@ -62,8 +69,9 @@ def _bar(idx: int, *, close: float, t0: datetime, low: float | None = None,
 async def test_end_to_end_persists_three_collections(database: Database) -> None:
     """Round-trip: 1 entry + 1 exit → 1 trade, 2 orders, slim run in Mongo."""
     bus = EventBus()
-    broker = PaperBroker(initial_balance=100_000, slippage_percent=0,
-                         fill_delay_ms=0, event_bus=bus)
+    broker = PaperBroker(
+        initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
+    )
     await broker.connect()
     backtest_repo = BacktestRepository(database)
     order_repo = BacktestOrderRepository(database)
@@ -79,30 +87,46 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     async def scripted_strategy(event: BarCompletedEvent) -> None:
         nonlocal sent_open, sent_close
         if not sent_open:
-            o = OrderAggregate.create(subscription_id="scripted", symbol=_SYM,
-                                      side=OrderSide.BUY, order_type=OrderType.MARKET,
-                                      quantity=1.0)
+            o = OrderAggregate.create(
+                subscription_id="scripted",
+                symbol=_SYM,
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                quantity=1.0,
+            )
             await broker.submit_order(o)
             sent_open = True
         elif sent_open and not sent_close and event.bar_start >= t0 + timedelta(minutes=3):
-            o = OrderAggregate.create(subscription_id="scripted", symbol=_SYM,
-                                      side=OrderSide.SELL, order_type=OrderType.MARKET,
-                                      quantity=1.0)
+            o = OrderAggregate.create(
+                subscription_id="scripted",
+                symbol=_SYM,
+                side=OrderSide.SELL,
+                order_type=OrderType.MARKET,
+                quantity=1.0,
+            )
             await broker.submit_order(o)
             sent_close = True
 
     bus.subscribe(BarCompletedEvent, scripted_strategy)
 
     config = BacktestConfig(
-        strategy_code="scripted", symbol=_SYM, interval="1m",
-        start_date=date(2026, 1, 1), end_date=date(2026, 1, 31),
-        initial_capital=100_000.0, slippage_bps=0.0, commission_bps=10.0,
+        strategy_code="scripted",
+        symbol=_SYM,
+        interval="1m",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        initial_capital=100_000.0,
+        slippage_bps=0.0,
+        commission_bps=10.0,
     )
 
     runner = BacktestAppService(
-        event_bus=bus, broker=broker,
-        backtest_repository=backtest_repo, bar_repository=_FakeBarRepo(bars),
-        order_repository=order_repo, trade_repository=trade_repo,
+        event_bus=bus,
+        broker=broker,
+        backtest_repository=backtest_repo,
+        bar_repository=_FakeBarRepo(bars),
+        order_repository=order_repo,
+        trade_repository=trade_repo,
         persist_results=True,
     )
     result = await runner.run(config)
@@ -147,8 +171,9 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     and on_fill saw an existing entry and skipped the side backfill.
     """
     bus = EventBus()
-    broker = PaperBroker(initial_balance=100_000, slippage_percent=0,
-                         fill_delay_ms=0, event_bus=bus)
+    broker = PaperBroker(
+        initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
+    )
     await broker.connect()
     backtest_repo = BacktestRepository(database)
     order_repo = BacktestOrderRepository(database)
@@ -166,23 +191,36 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     async def scripted(event: BarCompletedEvent) -> None:
         nonlocal entered
         if not entered:
-            o = OrderAggregate.create(subscription_id="sl-test", symbol=_SYM,
-                                      side=OrderSide.BUY, order_type=OrderType.MARKET,
-                                      quantity=1.0, sl_price=95.0)
+            o = OrderAggregate.create(
+                subscription_id="sl-test",
+                symbol=_SYM,
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                quantity=1.0,
+                sl_price=95.0,
+            )
             await broker.submit_order(o)
             entered = True
 
     bus.subscribe(BarCompletedEvent, scripted)
 
     config = BacktestConfig(
-        strategy_code="sl-test", symbol=_SYM, interval="1m",
-        start_date=date(2026, 1, 1), end_date=date(2026, 1, 31),
-        initial_capital=100_000.0, slippage_bps=0.0, commission_bps=0.0,
+        strategy_code="sl-test",
+        symbol=_SYM,
+        interval="1m",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        initial_capital=100_000.0,
+        slippage_bps=0.0,
+        commission_bps=0.0,
     )
     runner = BacktestAppService(
-        event_bus=bus, broker=broker,
-        backtest_repository=backtest_repo, bar_repository=_FakeBarRepo(bars),
-        order_repository=order_repo, trade_repository=trade_repo,
+        event_bus=bus,
+        broker=broker,
+        backtest_repository=backtest_repo,
+        bar_repository=_FakeBarRepo(bars),
+        order_repository=order_repo,
+        trade_repository=trade_repo,
         persist_results=True,
     )
     result = await runner.run(config)

@@ -1,5 +1,3 @@
-"""CQRS query for getting optimization result."""
-
 from pydantic import BaseModel
 
 

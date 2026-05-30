@@ -1,5 +1,3 @@
-"""Performance calculator - computes trading metrics from equity curve and trades."""
-
 import numpy as np
 
 # Crypto markets trade 365 days
@@ -63,7 +61,6 @@ class PerformanceCalculator:
         if len(equity_curve) < 2:
             return 0.0
 
-        # Calculate daily returns
         returns = np.diff(equity_curve) / equity_curve[:-1]
 
         if len(returns) == 0:
@@ -75,7 +72,6 @@ class PerformanceCalculator:
         if std_return == 0 or np.isnan(std_return):
             return 0.0
 
-        # Annualize: multiply mean by days, std by sqrt(days)
         annual_return = mean_return * TRADING_DAYS_PER_YEAR
         annual_std = std_return * np.sqrt(TRADING_DAYS_PER_YEAR)
 
@@ -105,7 +101,6 @@ class PerformanceCalculator:
 
         mean_return = np.mean(returns)
 
-        # Downside returns only
         downside_returns = returns[returns < 0]
 
         if len(downside_returns) == 0:
@@ -117,7 +112,6 @@ class PerformanceCalculator:
         if downside_std == 0 or np.isnan(downside_std):
             return 0.0
 
-        # Annualize
         annual_return = mean_return * TRADING_DAYS_PER_YEAR
         annual_downside_std = downside_std * np.sqrt(TRADING_DAYS_PER_YEAR)
 
@@ -138,13 +132,8 @@ class PerformanceCalculator:
         if len(equity_curve) < 2:
             return 0.0
 
-        # Running maximum (peak)
         cummax = np.maximum.accumulate(equity_curve)
-
-        # Drawdown at each point
         drawdown = (equity_curve - cummax) / cummax
-
-        # Handle division by zero
         drawdown = np.nan_to_num(drawdown, nan=0.0)
 
         return float(np.min(drawdown))  # Most negative value

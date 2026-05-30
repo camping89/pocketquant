@@ -1,5 +1,3 @@
-"""OpenLot VO — snapshot of a still-open lot at end of backtest run."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

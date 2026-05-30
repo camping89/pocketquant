@@ -1,10 +1,7 @@
-"""Optimization configuration for grid search parameter sweeps."""
-
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-# Maximum combinations allowed (validated requirement: 1000)
 MAX_COMBINATIONS = 1000
 
 
@@ -41,7 +38,6 @@ class OptimizationConfig:
     max_workers: int = 4
 
     def get_total_combinations(self) -> int:
-        """Calculate total number of parameter combinations."""
         if not self.parameter_grid:
             return 0
 
@@ -51,7 +47,6 @@ class OptimizationConfig:
         return total
 
     def validate(self) -> None:
-        """Validate configuration, raise ValueError if invalid."""
         combinations = self.get_total_combinations()
 
         if combinations == 0:

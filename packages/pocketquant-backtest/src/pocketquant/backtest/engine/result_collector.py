@@ -77,8 +77,6 @@ class BacktestResultCollector:
         """Set the run_id after construction (caller convenience)."""
         self._run_id = run_id
 
-    # ---------------------------------------------------------------- callbacks
-
     async def on_fill(self, result: Any) -> None:
         """PaperBroker fill callback. Handles FILLED only; non-fills emit no Trade."""
         if result.filled_quantity is None or result.filled_quantity <= 0:
@@ -109,8 +107,9 @@ class BacktestResultCollector:
         order = self._upsert_order(result, fill_price, fill_qty, commission, timestamp)
         self._append_fill(order, result, fill_price, fill_qty, commission, timestamp)
 
-        self._emit_trades(outcome, exit_order_id=result.order_id, exit_price=fill_price,
-                          exit_time=timestamp)
+        self._emit_trades(
+            outcome, exit_order_id=result.order_id, exit_price=fill_price, exit_time=timestamp
+        )
         if not outcome.consumed:
             self._record_equity_point(timestamp)
 
@@ -124,8 +123,6 @@ class BacktestResultCollector:
         order.events.append(event)
         order.status = event.to_status
         order.last_updated_at = event.timestamp
-
-    # ---------------------------------------------------------------- internals
 
     def _resolve_side(self, result: Any) -> Direction:
         if result.side == OrderSide.BUY:
@@ -321,8 +318,6 @@ class BacktestResultCollector:
             )
         return out
 
-    # ---------------------------------------------------------------- finalize
-
     def finalize(
         self,
         run_id: str,
@@ -378,5 +373,6 @@ class BacktestResultCollector:
             error_message=error_message,
             parameters=self._config.parameters,
         )
-        return CollectedResults(run=run, orders=list(self._orders_by_id.values()),
-                                trades=list(self._trades))
+        return CollectedResults(
+            run=run, orders=list(self._orders_by_id.values()), trades=list(self._trades)
+        )

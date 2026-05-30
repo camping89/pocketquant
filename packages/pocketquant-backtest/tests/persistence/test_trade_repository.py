@@ -13,14 +13,31 @@ from pocketquant.core.persistence.mongodb import Database
 T0 = datetime(2026, 1, 5, 10, 0, 0)
 
 
-def _trade(*, trade_id: str, run_id: str, pnl: float = 10.0, direction: str = "LONG",
-           strategy_code: str = "s1") -> Trade:
+def _trade(
+    *,
+    trade_id: str,
+    run_id: str,
+    pnl: float = 10.0,
+    direction: str = "LONG",
+    strategy_code: str = "s1",
+) -> Trade:
     return Trade(
-        trade_id=trade_id, run_id=run_id, strategy_code=strategy_code, symbol="BTC:BIN",
-        direction=direction, entry_order_id="o-entry", entry_price=100.0,
-        entry_time=T0, quantity=1.0, exit_order_id="o-exit",
-        exit_price=100.0 + pnl, exit_time=T0 + timedelta(hours=1),
-        sl_price=None, tp_price=None, pnl=pnl, commission=0.21,
+        trade_id=trade_id,
+        run_id=run_id,
+        strategy_code=strategy_code,
+        symbol="BTC:BIN",
+        direction=direction,
+        entry_order_id="o-entry",
+        entry_price=100.0,
+        entry_time=T0,
+        quantity=1.0,
+        exit_order_id="o-exit",
+        exit_price=100.0 + pnl,
+        exit_time=T0 + timedelta(hours=1),
+        sl_price=None,
+        tp_price=None,
+        pnl=pnl,
+        commission=0.21,
         duration_seconds=3600.0,
     )
 
@@ -48,11 +65,13 @@ async def test_list_by_run_chronological(database: Database) -> None:
 @pytest.mark.asyncio
 async def test_list_top_pnl_desc_by_default(database: Database) -> None:
     repo = BacktestTradeRepository(database)
-    await repo.save_many([
-        _trade(trade_id="t1", run_id="r1", pnl=5.0),
-        _trade(trade_id="t2", run_id="r1", pnl=20.0),
-        _trade(trade_id="t3", run_id="r1", pnl=-10.0),
-    ])
+    await repo.save_many(
+        [
+            _trade(trade_id="t1", run_id="r1", pnl=5.0),
+            _trade(trade_id="t2", run_id="r1", pnl=20.0),
+            _trade(trade_id="t3", run_id="r1", pnl=-10.0),
+        ]
+    )
     top = await repo.list_top_pnl("s1", top=2)
     assert [t.trade_id for t in top] == ["t2", "t1"]
     bottom = await repo.list_top_pnl("s1", top=2, ascending=True)
@@ -62,10 +81,12 @@ async def test_list_top_pnl_desc_by_default(database: Database) -> None:
 @pytest.mark.asyncio
 async def test_delete_by_run_only_matches(database: Database) -> None:
     repo = BacktestTradeRepository(database)
-    await repo.save_many([
-        _trade(trade_id="t1", run_id="r1"),
-        _trade(trade_id="t2", run_id="r2"),
-    ])
+    await repo.save_many(
+        [
+            _trade(trade_id="t1", run_id="r1"),
+            _trade(trade_id="t2", run_id="r2"),
+        ]
+    )
     n = await repo.delete_by_run("r1")
     assert n == 1
     assert await repo.get("t1") is None
@@ -78,6 +99,11 @@ async def test_ensure_indexes_creates_all_five(database: Database) -> None:
     await repo.ensure_indexes()
     coll = database.get_collection("backtest_trades")
     indexes = await coll.index_information()
-    expected = {"ix_bttrades_run_id", "ix_bttrades_strategy_code_direction",
-                "ix_bttrades_entry_time", "ix_bttrades_pnl", "ix_bttrades_run_entry"}
+    expected = {
+        "ix_bttrades_run_id",
+        "ix_bttrades_strategy_code_direction",
+        "ix_bttrades_entry_time",
+        "ix_bttrades_pnl",
+        "ix_bttrades_run_entry",
+    }
     assert expected.issubset(set(indexes))
