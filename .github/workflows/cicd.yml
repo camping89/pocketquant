@@ -3,6 +3,8 @@ name: CI/CD
 on:
   push:
     branches: [master, develop]
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
