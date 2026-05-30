@@ -20,10 +20,7 @@ class GetAllQuotesHandler(Handler[GetAllQuotesQuery, list[QuoteResult]]):
     async def handle(self, request: GetAllQuotesQuery) -> list[QuoteResult]:
         # provider.subscriptions keys are composite symbols (e.g. BTCUSDT:BINANCE)
         symbol_keys = list(self._quote_app_service.provider.subscriptions.keys())
-        cache_keys = [
-            CACHE_KEY_QUOTE_LATEST.format(symbol=key)
-            for key in symbol_keys
-        ]
+        cache_keys = [CACHE_KEY_QUOTE_LATEST.format(symbol=key) for key in symbol_keys]
 
         cached_values = await self._cache.mget(cache_keys)
 

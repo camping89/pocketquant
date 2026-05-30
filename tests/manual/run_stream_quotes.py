@@ -21,7 +21,6 @@ from pocketquant.core.infrastructure.tradingview.tradingview_websocket_client im
 
 
 def on_quote(data: dict) -> None:
-    """Print quote data."""
     symbol = data.get("symbol_key", "?")
     price = data.get("last_price")
     change = data.get("change_percent")
@@ -41,7 +40,6 @@ def on_quote(data: dict) -> None:
 async def main(symbols: list[str], exchange: str, duration: int | None = None):
     provider = TradingViewWebSocketClient()
 
-    # Handle Ctrl+C
     stop_event = asyncio.Event()
 
     def signal_handler():
@@ -67,7 +65,6 @@ async def main(symbols: list[str], exchange: str, duration: int | None = None):
 
         print("\nStreaming quotes... (Ctrl+C to stop)\n")
 
-        # Run with optional duration
         async def run_stream():
             task = asyncio.create_task(provider.run_forever())
             try:
@@ -93,7 +90,6 @@ async def main(symbols: list[str], exchange: str, duration: int | None = None):
 
 
 if __name__ == "__main__":
-    # Parse args
     symbols = ["BTCUSD"]
     exchange = "CRYPTO"
 

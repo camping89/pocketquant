@@ -29,9 +29,6 @@ from scripts.resync_2y_from_binance import (
     run_resync,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _make_tracked_symbol(symbol: str = "BTCUSDT", exchange: str = "BINANCE") -> MagicMock:
     ts = MagicMock()
@@ -53,10 +50,6 @@ def _make_bar(
 
 _FROZEN_NOW = datetime(2026, 5, 8, 14, 30, 45, 123456, tzinfo=UTC)
 
-
-# ---------------------------------------------------------------------------
-# Window calculation
-# ---------------------------------------------------------------------------
 
 class TestComputeWindow:
     def test_end_dt_is_floored_minute_minus_1_second(self) -> None:
@@ -85,10 +78,6 @@ class TestComputeWindow:
 
         assert end_dt - start_dt == timedelta(days=30)
 
-
-# ---------------------------------------------------------------------------
-# Checkpoint helpers
-# ---------------------------------------------------------------------------
 
 class TestCheckpoint:
     def test_load_missing_checkpoint_returns_empty_dict(self, tmp_path: Path) -> None:
@@ -119,10 +108,6 @@ class TestCheckpoint:
         assert loaded == data
 
 
-# ---------------------------------------------------------------------------
-# Dry-run: no DB writes
-# ---------------------------------------------------------------------------
-
 class TestDryRun:
     @pytest.mark.asyncio
     async def test_dry_run_makes_no_db_calls(self, tmp_path: Path, capsys) -> None:
@@ -144,7 +129,10 @@ class TestDryRun:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
         ):
             result = await run_resync(args)
@@ -171,7 +159,10 @@ class TestDryRun:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
         ):
             await run_resync(args)
 
@@ -180,10 +171,6 @@ class TestDryRun:
         assert "BTCUSDT" in out
         assert "365" in out
 
-
-# ---------------------------------------------------------------------------
-# Checkpoint resume: done symbols skipped
-# ---------------------------------------------------------------------------
 
 class TestCheckpointResume:
     @pytest.mark.asyncio
@@ -218,11 +205,18 @@ class TestCheckpointResume:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
             patch("scripts.resync_2y_from_binance.BinanceClient", return_value=mock_binance),
             patch("scripts.resync_2y_from_binance.CHECKPOINT_PATH", ckpt_path),
-            patch("scripts.resync_2y_from_binance.cascade_for_symbol", new_callable=AsyncMock, return_value={}),
+            patch(
+                "scripts.resync_2y_from_binance.cascade_for_symbol",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             await run_resync(args)
 
@@ -231,10 +225,6 @@ class TestCheckpointResume:
         delete_call = mock_bar_repo.delete_many_by_range.call_args
         assert delete_call.args[0] == "ETHUSDT"
 
-
-# ---------------------------------------------------------------------------
-# Per-symbol orchestration: delete → fetch → insert → cascade
-# ---------------------------------------------------------------------------
 
 class TestSymbolOrchestration:
     @pytest.mark.asyncio
@@ -283,7 +273,10 @@ class TestSymbolOrchestration:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
             patch("scripts.resync_2y_from_binance.BinanceClient", return_value=mock_binance),
             patch("scripts.resync_2y_from_binance.CHECKPOINT_PATH", ckpt_path),
@@ -292,7 +285,9 @@ class TestSymbolOrchestration:
             result = await run_resync(args)
 
         assert result == 0
-        assert call_order == ["delete", "fetch", "insert", "cascade"], f"Unexpected order: {call_order}"
+        assert call_order == ["delete", "fetch", "insert", "cascade"], (
+            f"Unexpected order: {call_order}"
+        )
 
     @pytest.mark.asyncio
     async def test_no_cascade_skips_cascade_step(self, tmp_path: Path) -> None:
@@ -323,7 +318,10 @@ class TestSymbolOrchestration:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
             patch("scripts.resync_2y_from_binance.BinanceClient", return_value=mock_binance),
             patch("scripts.resync_2y_from_binance.CHECKPOINT_PATH", ckpt_path),
@@ -360,11 +358,18 @@ class TestSymbolOrchestration:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
             patch("scripts.resync_2y_from_binance.BinanceClient", return_value=mock_binance),
             patch("scripts.resync_2y_from_binance.CHECKPOINT_PATH", ckpt_path),
-            patch("scripts.resync_2y_from_binance.cascade_for_symbol", new_callable=AsyncMock, return_value={}),
+            patch(
+                "scripts.resync_2y_from_binance.cascade_for_symbol",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             await run_resync(args)
 
@@ -372,10 +377,6 @@ class TestSymbolOrchestration:
         intervals_passed = delete_call.args[2]
         assert set(intervals_passed) == set(CANONICAL_TFS)
 
-
-# ---------------------------------------------------------------------------
-# Non-Binance symbol filtering
-# ---------------------------------------------------------------------------
 
 class TestNonBinanceFiltering:
     @pytest.mark.asyncio
@@ -408,21 +409,24 @@ class TestNonBinanceFiltering:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
             patch("scripts.resync_2y_from_binance.BinanceClient", return_value=mock_binance),
             patch("scripts.resync_2y_from_binance.CHECKPOINT_PATH", ckpt_path),
-            patch("scripts.resync_2y_from_binance.cascade_for_symbol", new_callable=AsyncMock, return_value={}),
+            patch(
+                "scripts.resync_2y_from_binance.cascade_for_symbol",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             await run_resync(args)
 
         # Only one delete call (BTCUSDT/BINANCE); OKX skipped
         assert mock_bar_repo.delete_many_by_range.await_count == 1
 
-
-# ---------------------------------------------------------------------------
-# --symbols filter
-# ---------------------------------------------------------------------------
 
 class TestSymbolsFilter:
     @pytest.mark.asyncio
@@ -455,11 +459,18 @@ class TestSymbolsFilter:
             patch("scripts.resync_2y_from_binance.get_settings", return_value=MagicMock()),
             patch("scripts.resync_2y_from_binance.setup_logging"),
             patch("scripts.resync_2y_from_binance.Database", return_value=mock_db),
-            patch("scripts.resync_2y_from_binance.TrackedSymbolRepository", return_value=mock_tracked_repo),
+            patch(
+                "scripts.resync_2y_from_binance.TrackedSymbolRepository",
+                return_value=mock_tracked_repo,
+            ),
             patch("scripts.resync_2y_from_binance.BarRepository", return_value=mock_bar_repo),
             patch("scripts.resync_2y_from_binance.BinanceClient", return_value=mock_binance),
             patch("scripts.resync_2y_from_binance.CHECKPOINT_PATH", ckpt_path),
-            patch("scripts.resync_2y_from_binance.cascade_for_symbol", new_callable=AsyncMock, return_value={}),
+            patch(
+                "scripts.resync_2y_from_binance.cascade_for_symbol",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             await run_resync(args)
 
@@ -467,10 +478,6 @@ class TestSymbolsFilter:
         delete_call = mock_bar_repo.delete_many_by_range.call_args
         assert delete_call.args[0] == "BTCUSDT"
 
-
-# ---------------------------------------------------------------------------
-# parse_args defaults
-# ---------------------------------------------------------------------------
 
 class TestParseArgs:
     def test_default_days_is_730(self) -> None:
@@ -490,10 +497,6 @@ class TestParseArgs:
         assert args.symbols == "BTCUSDT,ETHUSDT"
 
 
-# ---------------------------------------------------------------------------
-# Estimate wall time helper
-# ---------------------------------------------------------------------------
-
 class TestEstimateWallTime:
     def test_returns_string_with_min(self) -> None:
         result = _estimate_wall_time(50, 730)
@@ -508,15 +511,9 @@ class TestEstimateWallTime:
         assert single_min < fifty_min
 
 
-# ---------------------------------------------------------------------------
-# C1: In-progress bar filter — bars at or after end_dt must be dropped
-# ---------------------------------------------------------------------------
-
 class TestInProgressBarFilter:
     @pytest.mark.asyncio
-    async def test_bars_at_or_after_end_dt_are_filtered_before_insert(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_bars_at_or_after_end_dt_are_filtered_before_insert(self, tmp_path: Path) -> None:
         """BinanceClient may return in-progress (partial) bar with datetime == end_dt
         or datetime > end_dt. These must be dropped before insert_many to prevent
         partial bar persisting permanently (unique index silently skips later full bar).
@@ -561,9 +558,7 @@ class TestInProgressBarFilter:
         mock_bar_repo.insert_many = _capture_insert
 
         mock_binance = MagicMock()
-        mock_binance.fetch_ohlcv = AsyncMock(
-            return_value=[bar_valid, bar_at_end, bar_past_end]
-        )
+        mock_binance.fetch_ohlcv = AsyncMock(return_value=[bar_valid, bar_at_end, bar_past_end])
         mock_binance.close = AsyncMock()
 
         with (
@@ -586,16 +581,10 @@ class TestInProgressBarFilter:
             await run_resync(args)
 
         # Only bar_valid should reach insert_many
-        assert inserted_bars == [bar_valid], (
-            f"Expected only bar_valid, got {inserted_bars}"
-        )
+        assert inserted_bars == [bar_valid], f"Expected only bar_valid, got {inserted_bars}"
         assert bar_at_end not in inserted_bars, "bar at end_dt must be filtered"
         assert bar_past_end not in inserted_bars, "bar past end_dt must be filtered"
 
-
-# ---------------------------------------------------------------------------
-# H2: Atomic checkpoint write
-# ---------------------------------------------------------------------------
 
 class TestAtomicCheckpoint:
     def test_checkpoint_written_atomically_no_tmp_remains(self, tmp_path: Path) -> None:

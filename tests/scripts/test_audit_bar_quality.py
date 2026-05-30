@@ -23,9 +23,6 @@ from scripts.audit_bar_quality import (
     run_audit,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _sample_agg_row(
     symbol: str = "BTCUSDT",
@@ -48,10 +45,6 @@ def _sample_agg_row(
 _NOW = datetime(2026, 5, 8, 12, 0, 0, tzinfo=UTC)
 _START = _NOW - timedelta(days=730)
 
-
-# ---------------------------------------------------------------------------
-# Pipeline construction
-# ---------------------------------------------------------------------------
 
 class TestBuildPipeline:
     def test_match_stage_includes_date_range(self) -> None:
@@ -119,10 +112,6 @@ class TestBuildPipeline:
         assert match["exchange"] == "BINANCE"
 
 
-# ---------------------------------------------------------------------------
-# Markdown rendering
-# ---------------------------------------------------------------------------
-
 class TestRenderMarkdown:
     def test_renders_header_and_table(self) -> None:
         rows = [_sample_agg_row()]
@@ -164,10 +153,6 @@ class TestRenderMarkdown:
         md = _render_markdown([], _START, _NOW, days=730)
         assert str(int(ABNORMAL_VOLUME_THRESHOLD)) in md
 
-
-# ---------------------------------------------------------------------------
-# run_audit: exit 1 on Mongo connection failure
-# ---------------------------------------------------------------------------
 
 class TestRunAuditErrorHandling:
     @pytest.mark.asyncio
@@ -277,10 +262,6 @@ class TestRunAuditErrorHandling:
         assert match_stage["symbol"] == "ETHUSDT"
         assert match_stage["exchange"] == "BINANCE"
 
-
-# ---------------------------------------------------------------------------
-# parse_args defaults
-# ---------------------------------------------------------------------------
 
 class TestParseArgs:
     def test_default_days_is_730(self) -> None:

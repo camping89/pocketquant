@@ -38,9 +38,15 @@ def _status(interval: str, last_bar_age_seconds: int, bar_count: int = 1000) -> 
 
 def _bar(dt: datetime, interval: Interval) -> Bar:
     return Bar(
-        symbol=SYMBOL, interval=interval,
+        symbol=SYMBOL,
+        interval=interval,
         datetime=dt,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        tick_count=1,
     )
 
 
@@ -117,7 +123,9 @@ async def test_count_overrides_status_count(handler, sync_status_repo, bar_repo)
 
 @pytest.mark.asyncio
 async def test_per_row_exception_isolated_with_fallback(
-    handler, sync_status_repo, bar_repo,
+    handler,
+    sync_status_repo,
+    bar_repo,
 ) -> None:
     """1 row's enrichment raises → that row falls back to sync_status fields; others succeed."""
     sync_status_repo.find_all.return_value = [

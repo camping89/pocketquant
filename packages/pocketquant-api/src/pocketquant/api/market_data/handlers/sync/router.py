@@ -6,6 +6,5 @@ from pocketquant.api.market_data.handlers.sync.sync_one.route import router as s
 
 router = APIRouter()
 
-# Include operation routers
 router.include_router(sync_one_router)
 router.include_router(sync_bulk_router)

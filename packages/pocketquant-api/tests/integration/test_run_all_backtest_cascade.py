@@ -29,17 +29,12 @@ from .app_factory import make_test_app
 pytestmark = pytest.mark.integration
 
 _API = "/api/v1/strategies"
-_STRATEGY_ID = "hitnrun2"   # must be in STRATEGY_REGISTRY
+_STRATEGY_ID = "hitnrun2"  # must be in STRATEGY_REGISTRY
 _SYMBOL = "BTCUSDT:BINANCE"
 _INTERVAL = "1h"
 _N_BARS = 100
 _POLL_TIMEOUT_S = 30
 _POLL_INTERVAL_S = 1.0
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -143,18 +138,13 @@ async def setup_strategy_and_bars(app_client):
     yield
 
     await svc.unload_strategy(_STRATEGY_ID)
-    await bar_repo._collection().delete_many(
-        {"symbol": _SYMBOL, "interval": _INTERVAL}
-    )
+    await bar_repo._collection().delete_many({"symbol": _SYMBOL, "interval": _INTERVAL})
     await bt_repo.delete_by_strategy_code(_STRATEGY_ID)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(bool(os.getenv("SKIP_SLOW_TESTS")), reason="slow — set SKIP_SLOW_TESTS=1 to skip")
+@pytest.mark.skipif(
+    bool(os.getenv("SKIP_SLOW_TESTS")), reason="slow — set SKIP_SLOW_TESTS=1 to skip"
+)
 @pytest.mark.asyncio
 async def test_run_all_backtest_cascade_delete(app_client):
     """Full flow: add sub → run-all → poll until done → delete strategy → DB clean."""

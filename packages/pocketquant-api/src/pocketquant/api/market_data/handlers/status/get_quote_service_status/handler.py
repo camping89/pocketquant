@@ -10,8 +10,6 @@ from pocketquant.core.common.mediator import Handler, handles
 
 @handles(GetQuoteServiceStatusQuery)
 class GetQuoteServiceStatusHandler(Handler[GetQuoteServiceStatusQuery, StatusResult]):
-    """Handle getting quote service status."""
-
     def __init__(self, quote_app_service: QuoteAppService):
         self._quote_app_service = quote_app_service
 

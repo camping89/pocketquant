@@ -27,8 +27,6 @@ def build_success(
         filtered_misaligned=filtered_misaligned,
         total_bars=total_bars,
         last_bar_at=(
-            latest_bar.datetime.isoformat()
-            if latest_bar and latest_bar.datetime
-            else None
+            latest_bar.datetime.isoformat() if latest_bar and latest_bar.datetime else None
         ),
     )

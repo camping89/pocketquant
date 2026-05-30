@@ -32,13 +32,12 @@ def _bar(
     """Lightweight Bar stub — verify code only reads fields, not Bar identity."""
     return SimpleNamespace(
         datetime=dt or datetime(2026, 5, 8, 10, 0, tzinfo=UTC),
-        open=open_, high=high, low=low, close=close, volume=volume,
+        open=open_,
+        high=high,
+        low=low,
+        close=close,
+        volume=volume,
     )
-
-
-# ---------------------------------------------------------------------------
-# compare_bar_fields — pure function
-# ---------------------------------------------------------------------------
 
 
 class TestCompareBarFields:
@@ -47,7 +46,11 @@ class TestCompareBarFields:
         b = _bar()
         result = compare_bar_fields(a, b)
         assert result == {
-            "open": False, "high": False, "low": False, "close": False, "volume": False,
+            "open": False,
+            "high": False,
+            "low": False,
+            "close": False,
+            "volume": False,
         }
 
     def test_open_divergent_above_threshold(self) -> None:
@@ -77,15 +80,11 @@ class TestCompareBarFields:
         result = compare_bar_fields(a, b)
         assert result["volume"] is False
 
-    def test_thresholds_are_what_plan_locked_in(self) -> None:
-        # Guard against accidental loosening — plan decision: 0.01% / 5%.
+    def test_thresholds_are_calibrated(self) -> None:
+        # Guard against accidental loosening: price 0.01% catches BTC $8 drift;
+        # volume 5% allows exchange rounding noise.
         assert PRICE_THRESHOLD_PCT == 0.0001
         assert VOLUME_THRESHOLD_PCT == 0.05
-
-
-# ---------------------------------------------------------------------------
-# _verify_one_symbol — orchestration around fetch + repo
-# ---------------------------------------------------------------------------
 
 
 def _ts(minute: int) -> datetime:
@@ -99,7 +98,9 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock())
 
         out = await _verify_one_symbol(
-            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT",
+            provider=provider,
+            bar_repo=bar_repo,
         )
         assert out["rest_empty"] is True
         assert out["compared"] == 0
@@ -112,7 +113,9 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=[]))
 
         out = await _verify_one_symbol(
-            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT",
+            provider=provider,
+            bar_repo=bar_repo,
         )
         assert out["cascade_empty"] is True
         assert out["compared"] == 0
@@ -125,7 +128,9 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
 
         out = await _verify_one_symbol(
-            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT",
+            provider=provider,
+            bar_repo=bar_repo,
         )
         assert out["compared"] == 3
         assert out["divergence_count"] == 0
@@ -140,7 +145,9 @@ class TestVerifyOneSymbol:
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
 
         out = await _verify_one_symbol(
-            "BINANCE:BTCUSDT", provider=provider, bar_repo=bar_repo,
+            "BINANCE:BTCUSDT",
+            provider=provider,
+            bar_repo=bar_repo,
         )
         assert out["compared"] == 5
         assert out["divergence_count"] == 5

@@ -80,7 +80,8 @@ async def test_sync_1m_dispatches_with_rest_sync_1m_source(
 
     # Stub cascade_for_symbol to avoid touching bar repo.
     monkeypatch.setattr(
-        sync_jobs, "cascade_for_symbol",
+        sync_jobs,
+        "cascade_for_symbol",
         AsyncMock(return_value={}),
     )
 

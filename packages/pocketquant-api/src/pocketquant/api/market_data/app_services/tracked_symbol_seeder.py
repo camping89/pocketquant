@@ -54,14 +54,12 @@ async def seed_tracked_symbols(container: AsyncContainer) -> None:
 
     symbols: set[str] = set()
 
-    # Collect from strategies (all statuses)
     strat_collection = database.get_collection("strategies")
     async for doc in strat_collection.find({}, {"symbol": 1, "exchange": 1}):
         composite = _to_composite(doc)
         if composite:
             symbols.add(composite)
 
-    # Collect from orders (open statuses only)
     orders_collection = database.get_collection("orders")
     async for doc in orders_collection.find(
         {"status": {"$in": _OPEN_ORDER_STATUSES}},
@@ -71,7 +69,6 @@ async def seed_tracked_symbols(container: AsyncContainer) -> None:
         if composite:
             symbols.add(composite)
 
-    # Upsert all discovered composite symbols
     now = utc_now()
     for composite in symbols:
         ts = TrackedSymbol(

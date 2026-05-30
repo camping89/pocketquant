@@ -55,12 +55,8 @@ async def _seed_legacy_state(settings: Settings) -> None:
                 "interval": "1m",
             }
         )
-        await raw["orders"].insert_one(
-            {"_id": "ord1", "strategy_id": "sub1", "status": "filled"}
-        )
-        await raw["positions"].insert_one(
-            {"_id": "pos1", "strategy_id": "sub1", "is_closed": True}
-        )
+        await raw["orders"].insert_one({"_id": "ord1", "strategy_id": "sub1", "status": "filled"})
+        await raw["positions"].insert_one({"_id": "pos1", "strategy_id": "sub1", "is_closed": True})
     finally:
         await db.disconnect()
 

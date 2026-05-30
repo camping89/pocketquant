@@ -29,7 +29,11 @@ def _bar(ts: datetime) -> Bar:
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
         datetime=ts,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
         tick_count=1,
     )
 
@@ -51,11 +55,6 @@ def bar_repo() -> AsyncMock:
     repo = AsyncMock()
     repo.find_datetimes = AsyncMock(return_value=[])
     return repo
-
-
-# ---------------------------------------------------------------------------
-# Core scenarios
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -107,7 +106,7 @@ async def test_middle_hole_keeps_hole_bars(bar_repo: AsyncMock) -> None:
     base = datetime(2026, 5, 7, 2, 0, tzinfo=UTC)
     records = _series(base, 100)  # 02:00..03:39
 
-    span_a = [base + timedelta(minutes=i) for i in range(31)]   # 02:00..02:30
+    span_a = [base + timedelta(minutes=i) for i in range(31)]  # 02:00..02:30
     span_b = [base + timedelta(minutes=60 + i) for i in range(39)]  # 03:00..03:38
     bar_repo.find_datetimes.return_value = _existing_docs(span_a + span_b)
 
@@ -134,11 +133,6 @@ async def test_empty_db_keeps_all(bar_repo: AsyncMock) -> None:
     assert len(result) == 100
 
 
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_empty_records_returns_empty(bar_repo: AsyncMock) -> None:
     result = await filter_new_bars([], SYMBOL, Interval.MINUTE_1, bar_repo)
@@ -155,7 +149,12 @@ async def test_records_with_none_datetime_passthrough(bar_repo: AsyncMock) -> No
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
         datetime=None,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        tick_count=1,
     )
     records = [valid, invalid]
     bar_repo.find_datetimes.return_value = _existing_docs([base])  # valid IS existing
@@ -173,7 +172,12 @@ async def test_all_none_datetimes_skip_query(bar_repo: AsyncMock) -> None:
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
         datetime=None,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0, tick_count=1,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
+        tick_count=1,
     )
     records = [invalid, invalid]
 
@@ -212,10 +216,7 @@ async def test_logs_filtered_existing_when_skipped(bar_repo: AsyncMock) -> None:
         result = await filter_new_bars(records, SYMBOL, Interval.MINUTE_1, bar_repo)
 
     assert len(result) == 3
-    matching = [
-        e for e in logs
-        if e.get("event") == "market_data.sync.filtered_existing"
-    ]
+    matching = [e for e in logs if e.get("event") == "market_data.sync.filtered_existing"]
     assert len(matching) == 1
     entry = matching[0]
     assert entry["kept"] == 3

@@ -78,7 +78,6 @@ def aggregate_ohlcv(bars: list[Bar]) -> dict | None:
     if not bars:
         return None
 
-    # Sort by datetime ascending to ensure first/last ordering is correct.
     sorted_bars = sorted(bars, key=lambda b: b.datetime or datetime.min)
 
     open_ = sorted_bars[0].open
@@ -125,8 +124,6 @@ def compute_boundaries(
     """
     secs = tf_seconds(tf)
 
-    # Align range_start DOWN to its enclosing bucket boundary so the bucket that
-    # *contains* range_start (and therefore overlaps it) is included.
     epoch = range_start.timestamp()
     first_boundary_epoch = math.floor(epoch / secs) * secs
     first_boundary = datetime.fromtimestamp(first_boundary_epoch, tz=UTC)
@@ -174,7 +171,6 @@ async def cascade_for_symbol(
         for boundary in boundaries:
             bucket_end = boundary + timedelta(seconds=tf_secs)
 
-            # Query 1m source bars for this bucket window (inclusive start, exclusive end).
             source_bars = await bar_repo.find(
                 symbol=sym,
                 interval=Interval.MINUTE_1,

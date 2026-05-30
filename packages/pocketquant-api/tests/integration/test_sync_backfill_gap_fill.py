@@ -31,7 +31,11 @@ def _bar(ts: datetime) -> Bar:
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
         datetime=ts,
-        open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=1.0,
+        volume=1.0,
         tick_count=1,
     )
 
@@ -67,7 +71,7 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
     base = datetime(2026, 5, 7, 2, 0, tzinfo=UTC)
 
     # Seed two non-contiguous spans.
-    span_a = _series(base, 31)                          # 02:00..02:30
+    span_a = _series(base, 31)  # 02:00..02:30
     span_b = _series(base + timedelta(minutes=60), 39)  # 03:00..03:38
     seeded = span_a + span_b
     await bar_repo.insert_many(seeded, source="test")
@@ -80,7 +84,10 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
 
     # Run the filter under test against real Mongo.
     filtered = await filter_new_bars(
-        fetched, SYMBOL, Interval.MINUTE_1, bar_repo,
+        fetched,
+        SYMBOL,
+        Interval.MINUTE_1,
+        bar_repo,
     )
 
     assert len(filtered) == 30, "Should keep 29 hole bars + 1 new tail bar"
@@ -101,14 +108,19 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
     # Spot check a hole datetime is queryable.
     hole_dt = base + timedelta(minutes=45)  # 02:45
     hole_bars = await bar_repo.find(
-        symbol=SYMBOL, interval=Interval.MINUTE_1,
-        start_date=hole_dt, end_date=hole_dt, limit=1,
+        symbol=SYMBOL,
+        interval=Interval.MINUTE_1,
+        start_date=hole_dt,
+        end_date=hole_dt,
+        limit=1,
     )
     assert len(hole_bars) == 1
     assert hole_bars[0].datetime == hole_dt
 
 
-@pytest.mark.skip(reason="filter_new_bars not filtering existing bars — find_datetimes query not returning seeded docs")
+@pytest.mark.skip(
+    reason="filter_new_bars not filtering existing bars — find_datetimes query not returning seeded docs"
+)
 @pytest.mark.asyncio
 async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) -> None:
     """Real-Mongo: 3 tail bars exist; backfill 1000 → 997 new persisted.
@@ -127,7 +139,10 @@ async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) ->
     fetched = _series(fetch_start, 1000)  # ends at 03:37
 
     filtered = await filter_new_bars(
-        fetched, SYMBOL, Interval.MINUTE_1, bar_repo,
+        fetched,
+        SYMBOL,
+        Interval.MINUTE_1,
+        bar_repo,
     )
 
     # 997 should be new (everything except the 3 already-existing tail bars).
@@ -151,7 +166,10 @@ async def test_continuous_db_filter_drops_overlap(bar_repo: BarRepository) -> No
     fetched = _series(base, 100)  # 00:00..01:39 (+1 new tail)
 
     filtered = await filter_new_bars(
-        fetched, SYMBOL, Interval.MINUTE_1, bar_repo,
+        fetched,
+        SYMBOL,
+        Interval.MINUTE_1,
+        bar_repo,
     )
 
     assert len(filtered) == 1

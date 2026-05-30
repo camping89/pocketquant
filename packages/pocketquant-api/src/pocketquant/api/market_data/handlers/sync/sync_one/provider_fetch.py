@@ -53,17 +53,21 @@ async def fetch_with_retry(
             await asyncio.sleep(delay)
 
         records = await provider.fetch_ohlcv(
-            symbol=symbol, interval=interval, n_bars=n_bars,
+            symbol=symbol,
+            interval=interval,
+            n_bars=n_bars,
         )
 
         if records and has_aligned_bar(records, interval):
             if attempt > 1:
                 logger.info(
                     "market_data.sync.fetch_recovered",
-                    symbol=symbol, interval=interval.value,
-                    attempt=attempt, fetched=len(records),
+                    symbol=symbol,
+                    interval=interval.value,
+                    attempt=attempt,
+                    fetched=len(records),
                 )
             return records, attempt
 
-    # All attempts exhausted: return last response, caller logs anomaly via Phase 2.
+    # All attempts exhausted — caller (anomaly_log.emit_no_progress) handles the streak.
     return records, attempt

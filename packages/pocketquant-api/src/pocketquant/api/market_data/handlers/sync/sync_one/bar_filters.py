@@ -46,7 +46,8 @@ async def filter_new_bars(
         return records
 
     existing_docs = await bar_repo.find_datetimes(
-        symbol, interval,
+        symbol,
+        interval,
         start_date=min(times),
         end_date=max(times),
     )
@@ -55,8 +56,7 @@ async def filter_new_bars(
     existing_set = {coerce_utc(d["datetime"]) for d in existing_docs}
 
     filtered = [
-        r for r in records
-        if r.datetime is None or coerce_utc(r.datetime) not in existing_set
+        r for r in records if r.datetime is None or coerce_utc(r.datetime) not in existing_set
     ]
     skipped = len(records) - len(filtered)
     if skipped > 0:

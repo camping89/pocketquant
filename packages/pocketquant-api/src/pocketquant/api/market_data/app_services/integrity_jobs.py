@@ -16,9 +16,7 @@ from pocketquant.core.persistence.repositories.bar_repository import BarReposito
 logger = get_logger(__name__)
 
 
-def _group_gaps(
-    missing: list[datetime], step: timedelta
-) -> list[tuple[datetime, datetime]]:
+def _group_gaps(missing: list[datetime], step: timedelta) -> list[tuple[datetime, datetime]]:
     """Group consecutive missing timestamps into (start, end) ranges."""
     if not missing:
         return []
@@ -100,15 +98,20 @@ async def repair_integrity(
     if report["gap_ranges"]:
         try:
             command = SyncSymbolCommand(
-                symbol=symbol, interval=interval,
-                n_bars=5000, skip_filter=True, source=source,
+                symbol=symbol,
+                interval=interval,
+                n_bars=5000,
+                skip_filter=True,
+                source=source,
             )
             await mediator.send(command)
             resynced = len(report["gap_ranges"])
         except Exception as e:
             logger.error(
                 "integrity.resync_failed",
-                symbol=symbol, interval=interval.value, error=str(e),
+                symbol=symbol,
+                interval=interval.value,
+                error=str(e),
             )
 
     # Verify: re-check integrity after repair
@@ -119,8 +122,10 @@ async def repair_integrity(
     if still_missing > 0:
         logger.warning(
             "integrity.repair.still_missing",
-            symbol=symbol, interval=interval.value,
-            still_missing=still_missing, ranges=still_missing_ranges,
+            symbol=symbol,
+            interval=interval.value,
+            still_missing=still_missing,
+            ranges=still_missing_ranges,
         )
 
     return {

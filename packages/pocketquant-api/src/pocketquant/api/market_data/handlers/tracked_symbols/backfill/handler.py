@@ -66,14 +66,12 @@ class BackfillTrackedSymbolHandler:
         )
         return {"persisted_count": persisted, "mode_used": mode}
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
     async def _direct(self, symbol: str, interval: Interval, n: int) -> int:
         """REST-fetch the requested tf directly and upsert."""
         bars = await self._provider.fetch_ohlcv(
-            symbol=symbol, interval=interval, n_bars=n,
+            symbol=symbol,
+            interval=interval,
+            n_bars=n,
         )
         if not bars:
             logger.warning(
@@ -99,12 +97,10 @@ class BackfillTrackedSymbolHandler:
 
     async def _cascade(self, symbol: str, interval: Interval, n: int) -> int:
         """REST-fetch 1m source bars, upsert, then cascade to the requested tf."""
-        # How many 1m bars do we need to cover n bars of the target tf?
         tf_secs = tf_seconds(interval)
         tf_minutes = tf_secs // 60
         lookback_minutes = n * tf_minutes
 
-        # Fetch and upsert 1m bars (the source-of-truth).
         bars_1m = await self._provider.fetch_ohlcv(
             symbol=symbol,
             interval=Interval.MINUTE_1,
@@ -128,12 +124,10 @@ class BackfillTrackedSymbolHandler:
                     exc_info=True,
                 )
 
-        # Cascade from 1m → all higher tfs within the lookback window.
         counts = await cascade_for_symbol(
             symbol=symbol,
             lookback_minutes=lookback_minutes,
             bar_repo=self._bar_repo,
         )
 
-        # Return the count for the specifically requested tf (or total if 1m).
         return counts.get(interval, 0)

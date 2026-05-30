@@ -143,9 +143,7 @@ class TestThrottle:
         builder.add_tick(100.0, 1.0, datetime(2026, 5, 6, 10, 0, 1, tzinfo=UTC))
 
         # Even if throttle would normally block, force=True writes
-        await bar_service._cache_current_bar(
-            "BINANCE:BTC", Interval.MINUTE_1, builder, force=True
-        )
+        await bar_service._cache_current_bar("BINANCE:BTC", Interval.MINUTE_1, builder, force=True)
 
         assert mock_cache.set.called
 
@@ -174,9 +172,7 @@ class TestNoMongoWrite:
         mock_bar_repo.upsert_bar.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_event_bus_publishes_on_bar_completion(
-        self, bar_service, mock_event_bus
-    ):
+    async def test_event_bus_publishes_on_bar_completion(self, bar_service, mock_event_bus):
         """BarCompletedEvent IS published on bar completion."""
         from datetime import UTC, datetime
 
@@ -295,9 +291,7 @@ class TestCacheKeyInjection:
         builder.add_tick(100.0, 1.0, datetime(2026, 5, 6, 10, 0, 1, tzinfo=UTC))
 
         before = time.time()
-        await bar_service._cache_current_bar(
-            "BINANCE:BTC", Interval.MINUTE_1, builder, force=True
-        )
+        await bar_service._cache_current_bar("BINANCE:BTC", Interval.MINUTE_1, builder, force=True)
         after = time.time()
 
         # Verify cache.set was called with last_update in the dict

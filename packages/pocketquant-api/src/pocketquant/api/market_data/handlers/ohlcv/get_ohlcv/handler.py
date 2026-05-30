@@ -49,9 +49,7 @@ class GetOHLCVHandler(Handler[GetOHLCVQuery, list[dict]]):
 
     @staticmethod
     def _build_cache_key(symbol: str, interval: Interval, request: GetOHLCVQuery) -> str:
-        key = CACHE_KEY_OHLCV.format(
-            symbol=symbol, interval=interval.value, limit=request.limit
-        )
+        key = CACHE_KEY_OHLCV.format(symbol=symbol, interval=interval.value, limit=request.limit)
         if request.start_date:
             key += f":from:{request.start_date.isoformat()}"
         if request.end_date:

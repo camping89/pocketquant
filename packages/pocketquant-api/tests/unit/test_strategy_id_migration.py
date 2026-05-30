@@ -57,12 +57,8 @@ async def test_renames_collection_and_fields(container, settings: Settings) -> N
     await raw["strategy_subscriptions"].insert_one(
         {"_id": "sub1", "strategy_id": "hitnrun2", "symbol": "BTCUSDT:BINANCE", "interval": "1m"}
     )
-    await raw["orders"].insert_one(
-        {"_id": "ord1", "strategy_id": "sub1", "status": "filled"}
-    )
-    await raw["positions"].insert_one(
-        {"_id": "pos1", "strategy_id": "sub1", "is_closed": False}
-    )
+    await raw["orders"].insert_one({"_id": "ord1", "strategy_id": "sub1", "status": "filled"})
+    await raw["positions"].insert_one({"_id": "pos1", "strategy_id": "sub1", "is_closed": False})
     await raw["backtest_runs"].insert_one(
         {"_id": "bt1", "strategy_id": "hitnrun2", "status": "completed"}
     )
@@ -98,7 +94,13 @@ async def test_renames_collection_and_fields(container, settings: Settings) -> N
         assert bt.get("strategy_code") == "hitnrun2"
         assert "strategy_id" not in bt
     finally:
-        for coll in ("subscriptions", "strategy_subscriptions", "orders", "positions", "backtest_runs"):
+        for coll in (
+            "subscriptions",
+            "strategy_subscriptions",
+            "orders",
+            "positions",
+            "backtest_runs",
+        ):
             await raw[coll].drop()
 
 
@@ -135,9 +137,7 @@ async def test_aborts_when_both_collections_exist(container, settings: Settings)
     db = await container.get(Database)
     raw = db.database
 
-    await raw["strategy_subscriptions"].insert_one(
-        {"_id": "subA", "strategy_id": "hitnrun2"}
-    )
+    await raw["strategy_subscriptions"].insert_one({"_id": "subA", "strategy_id": "hitnrun2"})
     await raw["subscriptions"].insert_one({"_id": "subB", "strategy_code": "hitnrun2"})
 
     try:

@@ -31,6 +31,5 @@ async def verify_admin_token(x_admin_token: str | None = Header(default=None)) -
 
     expected = expected_secret.get_secret_value()
 
-    # Reject missing token or perform timing-safe comparison
     if not x_admin_token or not hmac.compare_digest(x_admin_token, expected):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Admin-Token")
