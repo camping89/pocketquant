@@ -509,6 +509,36 @@ Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in Mongo
 3. Value objects stay as frozen dataclasses — simple, immutable, no persistence.
 4. DTOs live in the application layer — they're infrastructure, not domain.
 
+### 12.6. Primary Key Rule — UUIDv7 Only (MANDATORY)
+
+**Every persisted document we control MUST use a UUIDv7 `_id`.** No hash keys, no natural keys, no Mongo ObjectId, no composite-string keys.
+
+**Rules:**
+1. Generate every id via `generate_id()` (returns `UUID`) from `core/common/uuid.py`. Domain entities declare `id: UUID`; serialize with `"_id": str(self.id)` in `to_mongo()`. Never declare `id: str` for a persisted entity.
+2. **Never** derive `_id` from business data (no `sha256(...)`, no composite-symbol-as-id, no slug).
+3. **Never** rely on Mongo's default ObjectId — always set `_id` explicitly to a uuid7.
+4. **Uniqueness and idempotency belong on secondary unique indexes, never on `_id`.** If a `(strategy_code, symbol, interval)` triple must be unique, enforce it with a unique compound index — not by making it the primary key.
+
+**The one allowed exception — third-party library-owned collections.** Collections whose `_id` is written by an external library (e.g. APScheduler's MongoDBJobStore → `apscheduler_jobs`) are exempt. We do **not** patch or fork the library to force uuid7. This exception applies ONLY to collections we did not author; every collection our own code writes follows the rule with no exception.
+
+**Rationale:** one id type across all code we own. Predictable, time-ordered, no special cases to remember, no representation drift — without coupling to third-party storage internals.
+
+**Anti-patterns (all forbidden):**
+```python
+# ❌ hash / natural / objectid as primary key
+_id = hashlib.sha256(f"{a}|{b}|{c}".encode()).hexdigest()[:16]
+_id = symbol                       # composite string as id
+id: str                            # persisted entity declaring str id
+# (and: letting Mongo assign a default ObjectId)
+
+# ✅ correct — every persisted entity
+from pocketquant.core.common.uuid import UUID, generate_id
+id: UUID = Field(default_factory=generate_id)
+def to_mongo(self) -> dict: return {"_id": str(self.id), ...}
+# uniqueness/idempotency → separate unique index, e.g.
+await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval", 1)], unique=True)
+```
+
 ## Composite Symbol Format
 
 **Format:** `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`, `AAPL:NYSE`)

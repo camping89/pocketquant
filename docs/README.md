@@ -14,6 +14,8 @@ Start with the canonical set.
   Deeper backend/frontend architecture reference — layers, request flows, "Where Does X Live?", config, dependencies, limitations.
 - [Architecture Visual Map](./architecture-visual-map.md)
   ASCII + Mermaid diagrams, bounded contexts, context map, ubiquitous language glossary.
+- [System Relationship Map](./system-relationship-map.md)
+  Whole-system view: two repos, CI/CD, Docker Hub, VPS runtime, external services, clients — how they relate.
 - [Handler Pipelines](./handler-pipelines.md)
   Per-handler request/processing/side-effect detail for all CQRS handlers.
 - [Code Standards](./code-standards.md)
