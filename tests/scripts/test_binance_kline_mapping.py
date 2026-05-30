@@ -36,8 +36,7 @@ SAMPLE_KLINE_1M = [
 def test_kline_to_bar_basic() -> None:
     bar = kline_to_bar(SAMPLE_KLINE_1M, "btcusdt", "binance", Interval.MINUTE_1)
 
-    assert bar.symbol == "BTCUSDT"
-    assert bar.exchange == "BINANCE"
+    assert bar.symbol == "BTCUSDT:BINANCE"
     assert bar.interval == Interval.MINUTE_1
     assert bar.datetime == datetime(2024, 4, 30, 8, 20, 0, tzinfo=UTC)
     assert bar.open == pytest.approx(60000.10)

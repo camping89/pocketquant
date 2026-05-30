@@ -551,7 +551,7 @@ class TestInProgressBarFilter:
         mock_bar_repo.ensure_indexes = AsyncMock()
         mock_bar_repo.delete_many_by_range = AsyncMock(return_value=0)
 
-        async def _capture_insert(bars):
+        async def _capture_insert(bars, *, source):
             inserted_bars.extend(bars)
             return len(bars)
 
