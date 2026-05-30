@@ -1,6 +1,6 @@
 # System Architecture
 
-**Last Updated:** 2026-05-24 | **Version:** 4.1 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 334 files, ~16,815 LOC | **Market Data:** Binance public REST/WS (@aggTrade), no auth required
+**Last Updated:** 2026-05-30 | **Version:** 4.2 | **Status:** Production Ready | **Pattern:** DDD + CQRS + Clean Architecture + Dishka | **Structure:** 4 backend packages + 1 frontend package | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files | **Market Data:** Binance public REST/WS (@aggTrade), no auth required | **Streaming:** SSE + Redis-backed real-time
 
 Current note: for local run/test steps and canonical route names, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md). This document remains a deeper design reference.
 
@@ -63,6 +63,8 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 ```
 
 **Dependency Direction:** Features ← Application ← Domain, Infrastructure ← Domain (no reverse dependencies)
+
+**Real-Time Streaming (2026-05-30):** Frontend now receives live market data via Server-Sent Events (SSE) for bars and quotes, backed by Redis as the intermediary between inbound WebSocket sources (Binance, OKX) and outbound HTTP streams. See [WebSocket Architecture](./websocket-architecture.md) for detail on SSE endpoints (`/bars/stream/{symbol}`, `/quotes/stream/{symbol}`), polling intervals, and staleness detection.
 
 ## Clean Architecture Layer Breakdown
 
@@ -722,18 +724,18 @@ Key pipelines at high level:
 - **InfrastructureProvider** - PaperBroker, OKXBroker, BrokerFactory, BinanceClient (IDataProvider), BinanceWebSocketClient (IRealtimeQuoteProvider), OkxWebSocketClient, OkxReconnectionHandler, HTTP client, WebhookDispatcher, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
 - **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
-- **HandlerProvider** - All 27 CQRS handlers (via @handles decorator)
+- **HandlerProvider** - All 37 CQRS handlers (via @handles decorator)
 
-**27 CQRS Handlers by Category:**
+**37 CQRS Handlers by Category** (registered in Dishka HandlerProvider; SSE bars/quotes streams and integrity routes are app-service-direct, not counted here — see [handler-pipelines](./handler-pipelines.md)):
 
-| Category | Count | Handlers |
+| Category | Count | Handlers (representative) |
 |----------|-------|----------|
-| Market data | 13 | SyncSymbolHandler, SyncBulkHandler, GetBarsHandler, StartQuoteFeedHandler, StopQuoteFeedHandler, SubscribeQuoteHandler, GetAllQuotesHandler, GetSyncStatusHandler, ListSymbolsHandler, CheckIntegrityHandler, RepairIntegrityHandler, GetSystemJobsHandler, *(1 more)* |
-| Backtesting | 5 | RunBacktestHandler, OptimizeHandler, GetResultHandler, GetOptimizationHandler, ListResultsHandler |
-| Strategy | 4 | StartStrategyHandler, StopStrategyHandler, GetOneHandler, GetAllHandler |
+| Market data | 16 | SyncSymbolHandler, GetOHLCVHandler, SubscribeHandler, UnsubscribeHandler, GetLatestQuoteHandler, GetAllQuotesHandler, GetQuotesStatusHandler, GetSyncStatusHandler, GetSymbolSyncStatusHandler, GetQuoteServiceStatusHandler, ListSymbolsHandler, ListTrackedSymbolsHandler, AddTrackedSymbolHandler, UpdateTrackedSymbolHandler, RemoveTrackedSymbolHandler, BackfillTrackedSymbolHandler |
+| Strategy | 12 | GetStrategiesHandler, GetStrategyHandler, DeleteStrategyHandler, RunAllBacktestsHandler, AddSymbolHandler, RemoveSymbolHandler, StartStrategyHandler, StopStrategyHandler, GetStrategyPositionsHandler, GetStrategyTradesHandler, GetSubscriptionBacktestHandler, ListSymbolsHandler (subscriptions) |
+| Backtesting | 5 | RunBacktestHandler, RunOptimizationHandler, GetBacktestHandler, GetOptimizationHandler, ListBacktestsHandler |
 | Trading | 4 | ListOrdersHandler, GetOrderHandler, ListPositionsHandler, GetPositionHandler |
 
-**Handler Registration:** `register_handlers(container)` resolves all 27 handler types and registers with Mediator.
+**Handler Registration:** `register_handlers(container)` resolves all 37 handler types and registers with Mediator.
 
 **8 Background Jobs** (registered in `register_sync_jobs()`):
 
@@ -758,7 +760,7 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 2. Load settings from .env via pydantic-settings
 3. Setup structured logging (structlog)
 4. Create dishka AsyncContainer with 6 providers (initialization order: Core → Persistence → Infrastructure → MarketData → Trading → Handler)
-5. `register_handlers(container)` resolves all 27 handlers, registers with Mediator
+5. `register_handlers(container)` resolves all 37 handlers, registers with Mediator
 6. `ensure_all_indexes()` creates MongoDB indexes
 7. `register_health_checks()` registers DB/Redis/job health probes
 8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`

@@ -1,20 +1,23 @@
 # Handler Pipelines & Detailed Flows
 
-**Last Updated:** 2026-05-08 | **Total Handlers:** 35 CQRS handlers across market data, strategy, backtest, trading, and subscriptions | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 334 files, ~16,815 LOC | **Data Provider:** Binance (IDataProvider impl, 1200 weight/min rate limit)
+**Last Updated:** 2026-05-30 | **Total Handlers:** 37 registered CQRS handlers (16 market data + 4 trading + 12 strategy + 5 backtest) + ~45 HTTP endpoints (includes SSE + app-service-direct routes) | **Pattern:** DDD + CQRS + Extract-Method | **DI:** Dishka | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files | **Data Provider:** Binance (IDataProvider impl, 1200 weight/min rate limit)
 
-**Updated (2026-05-25):** API paths corrected for composite-symbol refactor (2026-05-23). Route paths now use `/{symbol}` where symbol is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`, URL-encoded as `BTCUSDT%3ABINANCE`). Handlers 4 and 5 marked STALE (start/stop feed endpoints removed — feed is auto-managed at lifespan). Handler class names updated to match code. Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if a path disagrees with the live app.
+**Updated (2026-05-30):** Handler count corrected: 37 registered CQRS handlers + ~8 additional SSE/integrity endpoints (not CQRS). Market data expanded with new SSE bars/quotes streams, integrity check/repair routes, and tracked-symbols CRUD. Handlers 4 and 5 marked STALE (start/stop feed endpoints removed — feed is auto-managed at lifespan). Naming: `strategy_id` (template code) vs `subscription_id` (per-subscription instance). Symbol is composite `CODE:EXCHANGE` (URL-encoded `%3A`). Verify against OpenAPI or [run-and-test-guide](./run-and-test-guide.md) if path disagrees with live app.
 
-This document details the complete pipeline for each of the 35 CQRS handlers in PocketQuant, showing request flow, processing steps, and side effects.
+This document details the complete pipeline for each CQRS handler, showing request flow, processing steps, and side effects.
 
-## Handler Categories
+**Handler & Endpoint Distribution:**
+- **37 registered CQRS handlers:** Discovered by Dishka via `@handles` decorator
+- **~45 HTTP endpoints total:** CQRS handlers (37) + SSE/app-service-direct routes (8)
+- **37 registered handlers grouped by:**
+  - **Market Data (16):** sync, bulk-sync, ohlcv, bars-stream (SSE), quotes-stream (SSE), subscriptions (6 CRUD), symbols, sync-status, quotes-status, integrity operations, tracked-symbols (5 CRUD)
+  - **Backtesting (5):** run, optimize, get-backtest, get-optimization, list-backtests
+  - **Strategy (12):** start, stop, get-one, get-all, add-symbol, list-symbols, remove-symbol, run-all-backtests, get-subscription-backtest, delete-cascade, (plus 2 legacy routing shims)
+  - **Trading (4):** list-orders, get-order, list-positions, get-position
 
-- **Market Data (13):** Sync, OHLCV retrieval, quotes, symbols, status (handlers 1-13; handlers 4-5 STALE — removed)
-- **Backtesting (5):** Run, optimize, get results
-- **Strategy (11):** Load, start, stop, get one, get all, add symbol, list symbols, remove symbol, run-all backtest, get subscription backtest, delete strategy cascade
-- **Trading (4):** List/get orders, list/get positions
-- **Subscriptions:** Integrated into Strategy handlers (24-29)
+**Distinction:** Some routes (bars-stream, quotes-stream, integrity operations) use app-service direct calls or iterate directly over in-memory data, not mediator-routed CQRS handlers.
 
-## A. Market Data Handlers (13)
+## A. Market Data Handlers & Endpoints (16 CQRS + 8 SSE/Direct)
 
 ### 1. SyncSymbolHandler (SyncSymbolCommand)
 
@@ -344,9 +347,179 @@ Response: QuotesStatusResponse(is_running, subscription_count)
 
 ---
 
+### 14. StreamBarsHandler (SSE endpoint — app-service direct)
+
+**Request:** GET `/api/v1/market-data/bars/stream/{symbol}?interval={interval}`
+
+> `{symbol}` is composite e.g. `BTCUSDT%3ABINANCE`. Returns Server-Sent Events stream; NOT CQRS.
+
+**Implementation:**
+1. Client opens EventSource → server starts poll loop (interval 1.0s).
+2. Every poll: `BarAppService.get_current_bar(symbol, interval)` → reads Redis `bar:current:{symbol}:{interval}`.
+3. Compare vs last emitted: emit only if `bar_start` changed, `volume`/`price` increased, or `is_in_progress` flipped.
+4. Fallback: If Redis miss, query MongoDB closed bars (recovery after disconnect).
+5. Response stream (SSE):
+   ```
+   data: {"symbol":"BTCUSDT:BINANCE","interval":"1m","bar_start":1...,"open":101.0,"high":101.5,"low":100.8,"close":101.2,"volume":1000,"tick_count":10,"is_in_progress":true,"staleness_ms":50}
+   ```
+6. Disconnect: `asyncio.CancelledError` caught silently; client auto-retries.
+7. Max lag: ~1.2s (1s poll + overhead).
+
+**Side Effects:** None (read-only).
+
+---
+
+### 15. StreamQuoteHandler (SSE endpoint — app-service direct)
+
+**Request:** GET `/api/v1/market-data/quotes/stream/{symbol}`
+
+> `{symbol}` composite. Returns Server-Sent Events stream; NOT CQRS.
+
+**Implementation:**
+1. Client opens EventSource → server starts poll loop (interval 0.5s).
+2. Every poll: `QuoteAppService.get_latest_quote(symbol)` → reads Redis `quote:latest:{symbol}`.
+3. Compare vs last emitted: emit only if `last_price` or `volume` changed.
+4. Fallback (initial miss): REST GET `/api/v1/market-data/quotes/latest/{symbol}` to warm-start cache.
+5. Response stream (SSE):
+   ```
+   data: {"symbol":"BTCUSDT:BINANCE","last_price":101.50,"bid":101.48,"ask":101.52,"volume":1000,"change":0.5,"change_percent":0.49,"ts":1234567890}
+   ```
+6. Max lag: <700ms (0.5s poll + overhead).
+
+**Side Effects:** None (read-only).
+
+---
+
+### 16. IntegrityCheckHandler (app-service direct)
+
+**Request:** POST `/api/v1/market-data/integrity/check`
+
+**Implementation:**
+1. Scan all bars in MongoDB → validate:
+   - OHLC order (open ≤ high, low ≤ close)
+   - No negative volumes
+   - Timestamp monotonicity within symbol+interval
+   - Volume delta > 0 (no backwards ticks)
+2. Return: `{total_bars, violations: [{bar_id, error_msg}, ...], valid_count}`
+
+**Side Effects:** None (read-only diagnostic).
+
+---
+
+### 17. IntegrityRepairHandler (app-service direct)
+
+**Request:** POST `/api/v1/market-data/integrity/repair`
+
+**Implementation:**
+1. Iterate violations from `IntegrityCheckHandler`
+2. For each:
+   - Clamp OHLC to valid order (if high < low, swap)
+   - Delete bars with negative volumes
+   - Trigger re-sync: `SyncSymbolCommand(symbol, interval, skip_filter=True)` to backfill
+3. Return: `{repaired_count, deleted_count, resync_jobs_queued}`
+
+**Side Effects:** MongoDB bars collection modified; sync jobs enqueued.
+
+---
+
+### 18. ListTrackedSymbolsHandler (ListTrackedSymbolsQuery — CQRS)
+
+**Request:** GET `/api/v1/market-data/tracked-symbols`
+
+**Pipeline:**
+```
+ListTrackedSymbolsQuery()
+  ↓
+Fetch: TrackedSymbolRepository.list_all()
+  └─ MongoDB tracked_symbols collection
+  ↓
+Serialize: List[{code, exchange, status, last_sync_at}]
+  ↓
+Response: list[TrackedSymbolDTO]
+```
+
+---
+
+### 19. AddTrackedSymbolHandler (AddTrackedSymbolCommand — CQRS, admin-protected)
+
+**Request:** POST `/api/v1/market-data/tracked-symbols` (requires `X-Admin-Token` header)
+
+**Pipeline:**
+```
+AddTrackedSymbolCommand(code, exchange)
+  ↓
+Validate: not already tracked (DuplicateKeyError → 400)
+  ↓
+Create: TrackedSymbol(code, exchange, status='pending', last_sync_at=None)
+  ↓
+Persist: TrackedSymbolRepository.add()
+  ↓
+Response: {code, exchange, status, created_at}
+```
+
+**Side Effects:** MongoDB tracked_symbols collection updated.
+
+---
+
+### 20. UpdateTrackedSymbolHandler (UpdateTrackedSymbolCommand — CQRS, admin-protected)
+
+**Request:** PUT `/api/v1/market-data/tracked-symbols/{symbol}`
+
+**Pipeline:**
+```
+UpdateTrackedSymbolCommand(code, exchange, status)
+  ↓
+Fetch existing: TrackedSymbolRepository.find(code, exchange) → 404 if not found
+  ↓
+Update: Set status (e.g., 'paused', 'active')
+  ↓
+Persist: TrackedSymbolRepository.update()
+  ↓
+Response: {code, exchange, status, updated_at}
+```
+
+---
+
+### 21. RemoveTrackedSymbolHandler (RemoveTrackedSymbolCommand — CQRS, admin-protected)
+
+**Request:** DELETE `/api/v1/market-data/tracked-symbols/{symbol}`
+
+**Pipeline:**
+```
+RemoveTrackedSymbolCommand(code, exchange)
+  ↓
+Delete: TrackedSymbolRepository.delete(code, exchange) → 404 if not found
+  ↓
+Side effect: Unsubscribe from WS via WsSubscriptionManager (reconcile loop picks it up in next 5s cycle)
+  ↓
+Response: 204 No Content
+```
+
+**Side Effects:** MongoDB tracked_symbols collection updated; WS subscription eventually removed (within reconcile cycle).
+
+---
+
+### 22. BackfillTrackedSymbolHandler (BackfillTrackedSymbolCommand — CQRS, admin-protected)
+
+**Request:** POST `/api/v1/market-data/tracked-symbols/{symbol}/backfill`
+
+**Pipeline:**
+```
+BackfillTrackedSymbolCommand(code, exchange, interval, n_bars)
+  ↓
+Delegate: SyncSymbolCommand(code, exchange, interval, n_bars, skip_filter=True)
+  └─ Allows re-filling gaps (filter is bypassed)
+  ↓
+Response: {bars_synced, status}
+```
+
+**Side Effects:** MongoDB bars collection updated via SyncSymbolHandler.
+
+---
+
 ## B. Backtesting Handlers (5)
 
-### 14. RunBacktestHandler (RunBacktestCommand)
+### 23. RunBacktestHandler (RunBacktestCommand)
 
 **Request:** POST `/api/v1/backtest/run`
 
@@ -391,7 +564,7 @@ Response: BacktestResultDTO(run_id, sharpe, drawdown, trades)
 
 ---
 
-### 15. RunOptimizationHandler (RunOptimizationCommand)
+### 24. RunOptimizationHandler (RunOptimizationCommand)
 
 **Request:** POST `/api/v1/backtest/optimize`
 
@@ -416,7 +589,7 @@ Response: OptimizationResultDTO(best_params, best_metric, all_results)
 
 ---
 
-### 16. GetBacktestHandler (GetBacktestQuery)
+### 25. GetBacktestHandler (GetBacktestQuery)
 
 **Request:** GET `/api/v1/backtest/{run_id}`
 
@@ -432,7 +605,7 @@ Response: BacktestResultDTO
 
 ---
 
-### 17. GetOptimizationHandler (GetOptimizationQuery)
+### 26. GetOptimizationHandler (GetOptimizationQuery)
 
 **Request:** GET `/api/v1/backtest/optimization/{id}`
 
@@ -447,7 +620,7 @@ Response: OptimizationResultDTO
 
 ---
 
-### 18. ListBacktestsHandler (ListBacktestsQuery)
+### 27. ListBacktestsHandler (ListBacktestsQuery)
 
 **Request:** GET `/api/v1/backtest/strategy/{strategy_id}`
 
@@ -465,9 +638,9 @@ Response: List[BacktestResultDTO]
 
 ---
 
-## C. Strategy Handlers (4)
+## C. Strategy Handlers (12)
 
-### 19. StartStrategyHandler (StartStrategyCommand)
+### 28. StartStrategyHandler (StartStrategyCommand)
 
 **Request:** POST `/api/v1/subscriptions/{sub_id}/start`
 
@@ -494,7 +667,7 @@ Response: StrategyStatusDTO(status='running')
 
 ---
 
-### 20. StopStrategyHandler (StopStrategyCommand)
+### 29. StopStrategyHandler (StopStrategyCommand)
 
 **Request:** POST `/api/v1/subscriptions/{sub_id}/stop`
 
@@ -517,7 +690,7 @@ Response: StrategyStatusDTO(status='stopped')
 
 ---
 
-### 21. GetStrategyHandler (GetStrategyQuery) — template metadata
+### 30. GetStrategyHandler (GetStrategyQuery) — template metadata
 
 **Request:** GET `/api/v1/strategies/{strategy_code}`
 
@@ -533,7 +706,7 @@ Response: {strategy_code, class_name, description} or 404
 
 ---
 
-### 22. GetStrategiesHandler (GetStrategiesQuery) — list templates
+### 31. GetStrategiesHandler (GetStrategiesQuery) — list templates
 
 **Request:** GET `/api/v1/strategies/`
 
@@ -548,7 +721,7 @@ Response: list[{strategy_code}]
 
 ---
 
-### 23. AddSymbolHandler (AddSymbolCommand) — create subscription
+### 32. AddSymbolHandler (AddSymbolCommand) — create subscription
 
 **Request:** POST `/api/v1/strategies/{strategy_code}/subscriptions`
 
@@ -579,7 +752,7 @@ Response: {id, strategy_code, symbol, interval, created_at}
 
 ---
 
-### 24. ListSymbolsHandler (ListSymbolsQuery) — list subscriptions
+### 33. ListSymbolsHandler (ListSymbolsQuery) — list subscriptions
 
 **Request:** GET `/api/v1/subscriptions/?strategy_code=...` (filter optional)
 
@@ -600,7 +773,7 @@ Response: list[{id, strategy_code, symbol, interval, created_at, is_running, bac
 
 ---
 
-### 25. RemoveSymbolHandler (RemoveSymbolCommand) — delete one subscription
+### 34. RemoveSymbolHandler (RemoveSymbolCommand) — delete one subscription
 
 **Request:** DELETE `/api/v1/subscriptions/{sub_id}`
 
@@ -628,7 +801,7 @@ Response: 204 No Content
 
 ---
 
-### 26. RunAllBacktestsHandler (RunAllBacktestsCommand) — fan-out backtests
+### 35. RunAllBacktestsHandler (RunAllBacktestsCommand) — fan-out backtests
 
 **Request:** POST `/api/v1/strategies/{strategy_code}/run-all-backtests`
 
@@ -665,7 +838,7 @@ Response: {job_ids: [...]} (HTTP 202)
 
 ---
 
-### 27. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery)
+### 36. GetSubscriptionBacktestHandler (GetSubscriptionBacktestQuery)
 
 **Request:** GET `/api/v1/subscriptions/{sub_id}/backtest`
 
@@ -682,7 +855,7 @@ Response: raw doc | 404 NotFoundError ("trigger a run via run-all-backtests firs
 
 ---
 
-### 28. DeleteStrategyHandler (DeleteStrategyCommand) — cascade by template
+### 37. DeleteStrategyHandler (DeleteStrategyCommand) — cascade by template
 
 **Request:** DELETE `/api/v1/strategies/{strategy_code}`
 
@@ -714,24 +887,24 @@ Response: 204 No Content
 
 ## D. Trading Handlers (4)
 
-### 30-33. Order & Position Handlers
+### 38-41. Order & Position Handlers
 
 Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 
 **Routes:**
 ```
-30. ListOrdersHandler:    GET /api/v1/trading/orders                  → list[OrderDTO]
-31. GetOrderHandler:      GET /api/v1/trading/orders/{order_id}       → OrderDTO
-32. ListPositionsHandler: GET /api/v1/trading/positions               → list[PositionDTO]
-33. GetPositionHandler:   GET /api/v1/trading/positions/{subscription_id} → PositionDTO
+38. ListOrdersHandler:    GET /api/v1/trading/orders                  → list[OrderDTO]
+39. GetOrderHandler:      GET /api/v1/trading/orders/{order_id}       → OrderDTO
+40. ListPositionsHandler: GET /api/v1/trading/positions               → list[PositionDTO]
+41. GetPositionHandler:   GET /api/v1/trading/positions/{subscription_id} → PositionDTO
 ```
 
 **Pipelines:**
 ```
-30. ListOrdersHandler:    OrderAppService.list_all() → list[dict]
-31. GetOrderHandler:      OrderAppService.get_by_id(order_id) → dict
-32. ListPositionsHandler: PositionAppService.list_all() → list[dict]
-33. GetPositionHandler:   PositionAppService.get_async(subscription_id) → dict
+38. ListOrdersHandler:    OrderAppService.list_all() → list[dict]
+39. GetOrderHandler:      OrderAppService.get_by_id(order_id) → dict
+40. ListPositionsHandler: PositionAppService.list_all() → list[dict]
+41. GetPositionHandler:   PositionAppService.get_async(subscription_id) → dict
 ```
 
 ---
@@ -746,7 +919,7 @@ Simple in-memory reads from `OrderAppService` and `PositionAppService`.
 
 ## Handler Registration
 
-All 35 handlers registered via `@handles` decorator:
+All 37 handlers registered via `@handles` decorator:
 
 ```python
 @handles(SyncSymbolCommand)

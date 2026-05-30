@@ -2,6 +2,8 @@
 
 This directory holds the canonical documentation for the current code layout and workflow.
 
+**New here?** Start with [Table of Contents](./table-of-contents.md) for a guided reading order.
+
 Start with the canonical set.
 
 ## Canonical Docs

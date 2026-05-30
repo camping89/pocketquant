@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-**Last Updated:** 2026-05-24 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Codebase:** 334 files, ~16,815 LOC
+**Last Updated:** 2026-05-30 | **Architecture:** Clean Architecture + DDD + CQRS + Dishka | **Type Checker:** Pyright | **Codebase:** 363 Python files (~18,973 LOC, excl. tests) + 100 web TS/TSX files
 
 Current note: this document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md) and [run-and-test-guide](./run-and-test-guide.md).
 
@@ -182,7 +182,7 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 3. **InfrastructureProvider** - Brokers, TradingView, Scheduler
 4. **MarketDataProvider** - BarAppService, QuoteAppService
 5. **TradingProvider** - OrderAppService, PositionAppService
-6. **HandlerProvider** - All 27 CQRS handlers
+6. **HandlerProvider** - All 37 CQRS handlers
 
 **Benefits:**
 - Auto-resolution by type hint (no manual wiring)
