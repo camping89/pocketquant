@@ -9,8 +9,6 @@ from typing import Any
 
 @dataclass
 class BacktestMetrics:
-    """Performance metrics calculated from backtest results."""
-
     total_return: float  # (final - initial) / initial
     cagr: float  # Compound Annual Growth Rate
     sharpe_ratio: float  # Risk-adjusted return

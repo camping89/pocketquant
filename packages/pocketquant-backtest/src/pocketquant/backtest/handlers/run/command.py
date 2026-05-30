@@ -1,5 +1,3 @@
-"""CQRS command for running a backtest."""
-
 from datetime import date
 from typing import Any
 

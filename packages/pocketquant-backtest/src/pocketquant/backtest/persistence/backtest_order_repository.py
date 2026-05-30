@@ -70,7 +70,5 @@ class BacktestOrderRepository(BaseRepository):
             [("strategy_code", 1), ("status", 1)], name="ix_btorders_strategy_code_status"
         )
         await collection.create_index("submitted_at", name="ix_btorders_submitted_at")
-        await collection.create_index(
-            [("run_id", 1), ("status", 1)], name="ix_btorders_run_status"
-        )
+        await collection.create_index([("run_id", 1), ("status", 1)], name="ix_btorders_run_status")
         logger.info("backtest_orders_indexes_created")

@@ -1,5 +1,3 @@
-"""Backtest configuration dataclass for defining backtest parameters."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -57,5 +55,4 @@ class BacktestConfig:
 
     @property
     def commission_percent(self) -> float:
-        """Convert commission BPS to decimal percent."""
         return self.commission_bps / 10_000

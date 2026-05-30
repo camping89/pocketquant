@@ -1,5 +1,3 @@
-"""EquityPoint VO — single point on the equity curve."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

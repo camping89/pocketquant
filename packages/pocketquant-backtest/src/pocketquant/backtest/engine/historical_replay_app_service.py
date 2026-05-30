@@ -1,5 +1,3 @@
-"""Historical replay engine for backtesting - emits BarCompletedEvent from OHLCV data."""
-
 import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -18,8 +16,6 @@ logger = get_logger(__name__)
 
 @dataclass
 class ReplayStats:
-    """Statistics from a replay run."""
-
     bars_processed: int
     duration_seconds: float
     bars_per_second: float
@@ -64,7 +60,6 @@ class HistoricalReplayAppService:
         prev_bar_time: datetime | None = None
 
         async for bar in bars:
-            # Track timing
             bar_time = bar.datetime
             if bar_time is None:
                 continue
@@ -75,7 +70,6 @@ class HistoricalReplayAppService:
             # Set simulation time BEFORE emitting event
             set_simulation_time(bar_time)
 
-            # Create and emit BarCompletedEvent
             event = BarCompletedEvent(
                 symbol=bar.symbol,
                 interval=config.interval,
@@ -90,7 +84,6 @@ class HistoricalReplayAppService:
 
             bars_processed += 1
 
-            # Handle replay speed delay
             if config.replay_speed > 0 and prev_bar_time is not None:
                 real_interval = (bar_time - prev_bar_time).total_seconds()
                 delay = real_interval / config.replay_speed

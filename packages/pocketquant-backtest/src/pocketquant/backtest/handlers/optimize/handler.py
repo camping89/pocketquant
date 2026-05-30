@@ -1,5 +1,3 @@
-"""Handler for running optimization."""
-
 from pocketquant.backtest.domain import OptimizationResult
 from pocketquant.backtest.handlers.optimize.command import RunOptimizationCommand
 from pocketquant.backtest.optimization.grid_optimization_app_service import (
@@ -15,8 +13,6 @@ from pocketquant.core.persistence.repositories.bar_repository import BarReposito
 
 @handles(RunOptimizationCommand)
 class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]):
-    """Handle RunOptimizationCommand - execute grid optimization."""
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -30,7 +26,6 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
         self._optimization_repo = optimization_repository
 
     async def handle(self, request: RunOptimizationCommand) -> OptimizationResult:
-        """Execute optimization and return result."""
         config = OptimizationConfig(
             strategy_code=request.strategy_id,
             symbol=request.symbol,
@@ -53,7 +48,6 @@ class RunOptimizationHandler(Handler[RunOptimizationCommand, OptimizationResult]
 
         result = await optimizer.optimize(config)
 
-        # Persist optimization result
         await self._optimization_repo.save(result)
 
         return result

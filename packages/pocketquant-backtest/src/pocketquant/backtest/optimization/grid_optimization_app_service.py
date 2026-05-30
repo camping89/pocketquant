@@ -1,5 +1,3 @@
-"""Grid optimizer - parallel parameter sweep for strategy optimization."""
-
 import asyncio
 import itertools
 from datetime import UTC, datetime
@@ -63,13 +61,11 @@ class GridOptimizationAppService:
         Raises:
             ValueError: If config validation fails.
         """
-        # Validate before starting
         config.validate()
 
         optimization_id = generate_id_str()
         started_at = datetime.now(UTC)
 
-        # Generate all parameter combinations
         combinations = self._generate_combinations(config.parameter_grid)
         total_combinations = len(combinations)
 
@@ -81,7 +77,6 @@ class GridOptimizationAppService:
             max_workers=config.max_workers,
         )
 
-        # Run backtests in parallel with semaphore
         semaphore = asyncio.Semaphore(config.max_workers)
         tasks = [
             self._run_with_semaphore(semaphore, config, params, optimization_id)
@@ -90,7 +85,6 @@ class GridOptimizationAppService:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Process results
         completed_results: list[tuple[dict[str, Any], BacktestResult]] = []
         failed_count = 0
 
@@ -133,10 +127,7 @@ class GridOptimizationAppService:
                 error_message="All backtests failed",
             )
 
-        # Rank by target metric
         ranked = self._rank_results(completed_results, config.target_metric)
-
-        # Build result entries
         result_entries = [
             OptimizationResultEntry(
                 parameters=params,
@@ -180,9 +171,7 @@ class GridOptimizationAppService:
         params: dict[str, Any],
         optimization_id: str,
     ) -> BacktestResult:
-        """Run a single backtest with semaphore concurrency control."""
         async with semaphore:
-            # Create backtest config with these parameters
             backtest_config = BacktestConfig(
                 strategy_code=config.strategy_code,
                 symbol=config.symbol,
@@ -215,7 +204,6 @@ class GridOptimizationAppService:
             return await runner.run(backtest_config)
 
     def _generate_combinations(self, parameter_grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
-        """Generate all parameter combinations from grid."""
         if not parameter_grid:
             return [{}]
 
@@ -241,7 +229,6 @@ class GridOptimizationAppService:
         )
 
     def _serialize_config(self, config: OptimizationConfig) -> dict[str, Any]:
-        """Serialize optimization config for storage."""
         return {
             "strategy_code": config.strategy_code,
             "symbol": config.symbol,

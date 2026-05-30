@@ -1,5 +1,3 @@
-"""API routes for getting optimization results."""
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pocketquant.backtest.handlers.get_optimization.query import GetOptimizationQuery

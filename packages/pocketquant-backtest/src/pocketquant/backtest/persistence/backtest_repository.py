@@ -1,5 +1,3 @@
-"""Backtest repository - MongoDB persistence for backtest runs and results."""
-
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,8 +10,6 @@ logger = get_logger(__name__)
 
 
 class BacktestRepository(BaseRepository):
-    """MongoDB repository for backtest run persistence."""
-
     _collection_name = COLLECTION_BACKTEST_RUNS
 
     async def save(self, result: BacktestResult) -> str:
@@ -25,7 +21,6 @@ class BacktestRepository(BaseRepository):
         return result.id
 
     async def get(self, run_id: str) -> BacktestResult | None:
-        """Get a backtest result by ID."""
         collection = self._collection()
         doc = await collection.find_one({"_id": run_id})
         if not doc:
@@ -35,7 +30,6 @@ class BacktestRepository(BaseRepository):
     async def list_by_strategy_code(
         self, strategy_code: str, limit: int = 20, include_failed: bool = False
     ) -> list[BacktestResult]:
-        """List recent backtest runs for a strategy template."""
         collection = self._collection()
 
         query: dict[str, Any] = {"strategy_code": strategy_code}
@@ -52,7 +46,6 @@ class BacktestRepository(BaseRepository):
     async def get_best_by_metric(
         self, strategy_code: str, metric: str = "sharpe_ratio", limit: int = 10
     ) -> list[BacktestResult]:
-        """Get top backtest results ranked by a specific metric."""
         collection = self._collection()
 
         cursor = (
@@ -194,7 +187,13 @@ class BacktestRepository(BaseRepository):
         collection = self._collection()
         cursor = collection.find(
             {"_id": {"$in": sub_ids}, "subscription_id": {"$exists": True}},
-            projection={"subscription_id": 1, "status": 1, "last_run_at": 1, "error_msg": 1, "_id": 1},
+            projection={
+                "subscription_id": 1,
+                "status": 1,
+                "last_run_at": 1,
+                "error_msg": 1,
+                "_id": 1,
+            },
         )
         out: dict[str, dict] = {}
         async for doc in cursor:

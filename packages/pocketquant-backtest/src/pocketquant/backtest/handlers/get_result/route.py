@@ -1,5 +1,3 @@
-"""API routes for getting backtest results."""
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pocketquant.backtest.handlers.get_result.query import GetBacktestQuery

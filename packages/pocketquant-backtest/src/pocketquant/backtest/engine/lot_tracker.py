@@ -138,7 +138,6 @@ class LotTracker:
                 except ValueError:
                     pass
 
-        # Any leftover qty opens a new lot in the requested direction
         if remaining > 0:
             # Commission attributable to the new-lot portion of the fill
             new_lot_commission = commission * (remaining / qty)

@@ -1,5 +1,3 @@
-"""Backtest entities — persisted results with MongoDB persistence."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -76,8 +74,6 @@ class BacktestResult:
 
 @dataclass
 class OptimizationResult:
-    """Complete result of a grid optimization run."""
-
     id: str
     strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized OptimizationConfig
@@ -98,7 +94,6 @@ class OptimizationResult:
         return self.to_mongo()
 
     def to_mongo(self) -> dict[str, Any]:
-        """Convert to dictionary for MongoDB storage."""
         return {
             "_id": self.id,
             "strategy_code": self.strategy_code,
@@ -118,7 +113,6 @@ class OptimizationResult:
 
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> OptimizationResult:
-        """Create from MongoDB document."""
         return cls(
             id=data["_id"],
             strategy_code=data["strategy_code"],

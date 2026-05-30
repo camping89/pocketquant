@@ -1,5 +1,3 @@
-"""Handler for running a backtest."""
-
 from pocketquant.backtest.domain import BacktestResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
@@ -18,8 +16,6 @@ from pocketquant.trading.app_services.strategy_app_service import StrategyAppSer
 
 @handles(RunBacktestCommand)
 class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
-    """Handle RunBacktestCommand - execute a single backtest."""
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -37,7 +33,6 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         self._strategy_app_service = strategy_app_service
 
     async def handle(self, request: RunBacktestCommand) -> BacktestResult:
-        """Execute backtest and return result."""
         config = BacktestConfig(
             strategy_code=request.strategy_id,
             symbol=request.symbol,
@@ -50,7 +45,6 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
             parameters=request.parameters or {},
         )
 
-        # Resolve strategy class from registry
         strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
         if strategy_class is None:
             raise ValueError(
@@ -58,7 +52,6 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
                 f"Available: {list(STRATEGY_REGISTRY.keys())}"
             )
 
-        # Build StrategyConfig for this backtest run (parameters may be overridden)
         strategy_cfg = StrategyConfig(
             id=request.strategy_id,
             name=request.strategy_id,

@@ -50,7 +50,9 @@ class _InMemoryOrderRepo:
     async def get(self, order_id: str) -> OrderAggregate | None:
         return self._items.get(order_id)
 
-    async def find_by_subscription(self, subscription_id: str, limit: int = 1000) -> list[OrderAggregate]:
+    async def find_by_subscription(
+        self, subscription_id: str, limit: int = 1000
+    ) -> list[OrderAggregate]:
         return [o for o in self._items.values() if o.subscription_id == subscription_id][:limit]
 
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
@@ -114,9 +116,7 @@ class _StubBrokerFactory:
         return self._broker
 
 
-def _ohlcv_bar(
-    idx: int, *, o: float, h: float, lo: float, c: float, t0: datetime
-) -> Bar:
+def _ohlcv_bar(idx: int, *, o: float, h: float, lo: float, c: float, t0: datetime) -> Bar:
     return Bar(
         symbol=_SYM,
         interval=Interval.MINUTE_1,
@@ -129,9 +129,7 @@ def _ohlcv_bar(
     )
 
 
-def _downtrend_bars(
-    n_warm: int = 30, n_trend: int = 20, start_price: float = 100.0
-) -> list[Bar]:
+def _downtrend_bars(n_warm: int = 30, n_trend: int = 20, start_price: float = 100.0) -> list[Bar]:
     """Flat warm-up at start_price, then steady step-down that breaks below window low."""
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     bars: list[Bar] = []
@@ -150,16 +148,12 @@ def _downtrend_bars(
     for j in range(n_trend):
         price -= 0.5
         bars.append(
-            _ohlcv_bar(
-                n_warm + j, o=price + 0.5, h=price + 0.5, lo=price - 0.5, c=price, t0=t0
-            )
+            _ohlcv_bar(n_warm + j, o=price + 0.5, h=price + 0.5, lo=price - 0.5, c=price, t0=t0)
         )
     return bars
 
 
-def _uptrend_bars(
-    n_warm: int = 30, n_trend: int = 20, start_price: float = 100.0
-) -> list[Bar]:
+def _uptrend_bars(n_warm: int = 30, n_trend: int = 20, start_price: float = 100.0) -> list[Bar]:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     bars: list[Bar] = []
     for i in range(n_warm):
@@ -177,19 +171,14 @@ def _uptrend_bars(
     for j in range(n_trend):
         price += 0.5
         bars.append(
-            _ohlcv_bar(
-                n_warm + j, o=price - 0.5, h=price + 0.5, lo=price - 0.5, c=price, t0=t0
-            )
+            _ohlcv_bar(n_warm + j, o=price - 0.5, h=price + 0.5, lo=price - 0.5, c=price, t0=t0)
         )
     return bars
 
 
 def _choppy_bars(n: int = 60, base: float = 100.0) -> list[Bar]:
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
-    return [
-        _ohlcv_bar(i, o=base, h=base + 0.2, lo=base - 0.2, c=base, t0=t0)
-        for i in range(n)
-    ]
+    return [_ohlcv_bar(i, o=base, h=base + 0.2, lo=base - 0.2, c=base, t0=t0) for i in range(n)]
 
 
 async def _run_backtest(

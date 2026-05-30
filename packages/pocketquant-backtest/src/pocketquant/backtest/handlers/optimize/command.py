@@ -1,5 +1,3 @@
-"""CQRS command for running optimization."""
-
 from datetime import date
 from typing import Any
 

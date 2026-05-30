@@ -1,5 +1,3 @@
-"""Backtest runner — orchestrates single backtest execution with broker and strategy."""
-
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 

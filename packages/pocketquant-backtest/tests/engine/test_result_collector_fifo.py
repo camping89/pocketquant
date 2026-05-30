@@ -69,9 +69,6 @@ async def _feed(collector: BacktestResultCollector, fill: OrderResult, at: datet
     await collector.on_fill(fill)
 
 
-# --- Scenarios --------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_long_round_trip(collector: BacktestResultCollector) -> None:
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)

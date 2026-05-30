@@ -78,7 +78,6 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
     try:
         yield db
     finally:
-        # Drop collections used by Phase 3+ repos.
         for coll in (
             "backtest_runs",
             "backtest_orders",
