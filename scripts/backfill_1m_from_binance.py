@@ -25,8 +25,12 @@ from datetime import UTC, datetime
 import httpx
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import Settings, get_settings
-from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL, Bar
+from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infrastructure.binance.binance_mappers import (
+    INTERVAL_TO_BINANCE,
+    kline_to_bar,
+)
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
@@ -36,19 +40,6 @@ BINANCE_API_BASE = "https://api.binance.com"
 KLINES_ENDPOINT = "/api/v3/klines"
 MAX_LIMIT_PER_CALL = 1000
 INTER_CALL_SLEEP_SEC = 0.1
-
-# Domain Interval -> Binance literal interval string + bar duration in ms
-INTERVAL_TO_BINANCE: dict[Interval, tuple[str, int]] = {
-    Interval.MINUTE_1: ("1m", 60_000),
-    Interval.MINUTE_3: ("3m", 3 * 60_000),
-    Interval.MINUTE_5: ("5m", 5 * 60_000),
-    Interval.MINUTE_15: ("15m", 15 * 60_000),
-    Interval.MINUTE_30: ("30m", 30 * 60_000),
-    Interval.HOUR_1: ("1h", 60 * 60_000),
-    Interval.HOUR_2: ("2h", 2 * 60 * 60_000),
-    Interval.HOUR_4: ("4h", 4 * 60 * 60_000),
-    Interval.DAY_1: ("1d", 24 * 60 * 60_000),
-}
 
 
 @dataclass(frozen=True)
@@ -113,32 +104,6 @@ def parse_args(argv: list[str] | None = None) -> BackfillConfig:
     )
 
 
-def kline_to_bar(kline: list, symbol: str, exchange: str, interval: Interval) -> Bar:
-    """Map a Binance kline row to a Bar entity.
-
-    Binance kline schema (positional):
-      0: open time (ms)        4: close
-      1: open                  5: volume (base asset)
-      2: high                  6: close time (ms)
-      ...                      8: number of trades
-    """
-    open_time_ms = int(kline[0])
-    bar_dt = datetime.fromtimestamp(open_time_ms / 1000, tz=UTC)
-    return Bar(
-        # Composite {code}:{exchange} — the key every producer and BarRepository
-        # uses; a bare code would write bars the rest of the system can't query.
-        symbol=f"{symbol.upper()}:{exchange.upper()}",
-        interval=interval,
-        datetime=bar_dt,
-        open=float(kline[1]),
-        high=float(kline[2]),
-        low=float(kline[3]),
-        close=float(kline[4]),
-        volume=float(kline[5]),
-        tick_count=int(kline[8]),
-    )
-
-
 async def fetch_klines(
     client: httpx.AsyncClient,
     symbol: str,
@@ -174,6 +139,9 @@ async def run_backfill(cfg: BackfillConfig) -> int:
     setup_logging(settings)
 
     mongo_host = str(settings.mongodb_url).split("@")[-1].split("/")[0]
+    # Composite {code}:{exchange} — the system-wide bar key; a bare code would
+    # write bars the rest of the system can't query.
+    composite_symbol = f"{cfg.symbol}:{cfg.exchange}"
     binance_interval, bar_duration_ms = INTERVAL_TO_BINANCE[cfg.interval]
     start_ms = int(cfg.start.timestamp() * 1000)
     end_ms = int(cfg.end.timestamp() * 1000)
@@ -219,7 +187,7 @@ async def run_backfill(cfg: BackfillConfig) -> int:
                     logger.info("backfill.chunk_empty", chunk=chunk_idx, cursor_ms=cursor_ms)
                     break
 
-                bars = [kline_to_bar(k, cfg.symbol, cfg.exchange, cfg.interval) for k in klines]
+                bars = [kline_to_bar(k, composite_symbol, cfg.interval) for k in klines]
                 # Sanity assertion: open_time aligned to bar boundary
                 for k in klines:
                     if int(k[0]) % bar_duration_ms != 0:

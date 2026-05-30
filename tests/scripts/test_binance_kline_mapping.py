@@ -1,4 +1,8 @@
-"""Unit tests for Binance kline -> Bar mapping (offline, no API calls)."""
+"""Unit tests for the backfill CLI arg parsing (offline, no API calls).
+
+Kline→Bar mapping itself is exercised by the canonical mapper tests in
+pocketquant-core (test_binance_client.py); this script imports that mapper.
+"""
 
 from __future__ import annotations
 
@@ -10,61 +14,8 @@ from pocketquant.core.domain.shared.enums import Interval
 from scripts.backfill_1m_from_binance import (
     INTERVAL_TO_BINANCE,
     BackfillConfig,
-    kline_to_bar,
     parse_args,
 )
-
-# Sample kline from Binance docs (positional schema):
-#   [open_time_ms, open, high, low, close, volume, close_time_ms,
-#    quote_volume, trades, taker_buy_base, taker_buy_quote, ignore]
-SAMPLE_KLINE_1M = [
-    1714465200000,  # 2024-04-30T08:20:00Z (minute aligned)
-    "60000.10",
-    "60100.55",
-    "59950.00",
-    "60050.25",
-    "12.34567890",
-    1714465259999,
-    "740123.45",
-    87,
-    "5.12000000",
-    "300000.00",
-    "0",
-]
-
-
-def test_kline_to_bar_basic() -> None:
-    bar = kline_to_bar(SAMPLE_KLINE_1M, "btcusdt", "binance", Interval.MINUTE_1)
-
-    assert bar.symbol == "BTCUSDT:BINANCE"
-    assert bar.interval == Interval.MINUTE_1
-    assert bar.datetime == datetime(2024, 4, 30, 8, 20, 0, tzinfo=UTC)
-    assert bar.open == pytest.approx(60000.10)
-    assert bar.high == pytest.approx(60100.55)
-    assert bar.low == pytest.approx(59950.00)
-    assert bar.close == pytest.approx(60050.25)
-    assert bar.volume == pytest.approx(12.34567890)
-    assert bar.tick_count == 87
-
-
-def test_open_time_minute_aligned() -> None:
-    bar = kline_to_bar(SAMPLE_KLINE_1M, "BTCUSDT", "BINANCE", Interval.MINUTE_1)
-    assert bar.datetime is not None
-    assert bar.datetime.second == 0
-    assert bar.datetime.microsecond == 0
-    # ms epoch must be exactly minute-aligned
-    assert int(bar.datetime.timestamp() * 1000) % 60_000 == 0
-
-
-def test_volume_and_trades_parsed_as_numbers() -> None:
-    """Strings from Binance must coerce to float (volume) and int (trades)."""
-    bar = kline_to_bar(SAMPLE_KLINE_1M, "BTCUSDT", "BINANCE", Interval.MINUTE_1)
-    assert isinstance(bar.volume, float)
-    assert isinstance(bar.tick_count, int)
-    assert isinstance(bar.open, float)
-    assert isinstance(bar.high, float)
-    assert isinstance(bar.low, float)
-    assert isinstance(bar.close, float)
 
 
 def test_unknown_interval_rejected_by_cli() -> None:
@@ -122,7 +73,7 @@ def test_parse_args_rejects_inverted_range() -> None:
 
 
 def test_interval_map_covers_target_intervals() -> None:
-    """The intervals listed in plan F2 must all map to a Binance literal."""
+    """Every interval the backfill CLI accepts must map to a Binance literal."""
     required = {
         Interval.MINUTE_1,
         Interval.MINUTE_5,
