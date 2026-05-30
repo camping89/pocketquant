@@ -1,6 +1,18 @@
 # PocketQuant: Project Changelog
 
-**Last Updated:** 2026-05-28 | **Format:** Semantic Versioning
+**Last Updated:** 2026-05-30 | **Format:** Semantic Versioning
+
+## [Unreleased] — 2026-05-30 — Docs Refresh: WebSocket & Handler Inventory (DOCS)
+
+### Changed
+- **websocket-architecture.md:** Corrected documentation to reflect actual SSE server→client streaming surfaces (GET `/market-data/bars/stream/{symbol}` and `/market-data/quotes/stream/{symbol}` with `text/event-stream`, Redis-backed). Previously doc incorrectly claimed "REST only, no server stream".
+- **Handler inventory audit:** Refreshed registry from "35 handlers" to 42 route modules / ~45 HTTP endpoints / 37 registered CQRS handlers. Documented previously-undocumented surfaces: `tracked_symbols` admin CRUD (+backfill), market-data integrity check/repair, `system_jobs` observability (jobs/runs/stats), and SSE stream endpoints.
+- **Codebase stats:** Updated across docs from "334 files / ~16,815 LOC" to "363 Python files (~18,973 LOC excl tests) + 100 web TS/TSX files".
+
+### Added
+- **docs/table-of-contents.md:** New reading-order index (13 docs) organized by onboarding tier: Start Here → Big Picture → Conventions → Domain Deep-Dives → Operations. Guides users from setup through implementation to production operations.
+
+---
 
 ## [Unreleased] — 2026-05-28 — CI/CD: centralize config in pocketquant-config (REFACTOR)
 
@@ -69,11 +81,11 @@
 - **Repurposed:** `deploy/scripts/` is now reserved for LOCAL operator-side helpers (see `deploy/scripts/README.md`). Empty by default.
 - **Updated:** `deploy.sh` + `verify.sh` `cd "$(dirname "$0")/.."` so `.env` and `compose.prod.yml` still resolve relatively after the move.
 - **Updated:** `server-setup.sh` line 101 stale path `deploy/scripts/patches` → `deploy/scripts-to-deploy/patches`.
-- **Docs:** `docs/deployment-guide.md` — `.env` example now `WEB_PORT=80` (matches prod). Port Map note clarifies: `WEB_PORT` is public; obscure-port rule applies only to `APP_PORT`/`MONGO_PORT`/`REDIS_PORT`/`PORTAINER_PORT`.
+- **Docs:** `docs/deployment.md` — `.env` example now `WEB_PORT=80` (matches prod). Port Map note clarifies: `WEB_PORT` is public; obscure-port rule applies only to `APP_PORT`/`MONGO_PORT`/`REDIS_PORT`/`PORTAINER_PORT`.
 - **Docs:** "Updating" section adds explicit re-scp step for `scripts-to-deploy/*.sh` (closes a silent-failure mode where CI doesn't push shell scripts).
 
 ### Migration Required
-- **VPS (BREAKING):** see [`docs/deployment-guide.md` → "VPS Migration Runbook"](./deployment-guide.md#vps-migration-runbook) — Step 2 idempotent `mv` block covers both 2026-05-24 and 2026-05-25 migrations in one pass.
+- **VPS (BREAKING):** see [`docs/deployment.md` → "VPS Migration Runbook"](./deployment.md#vps-migration-runbook) — Step 2 idempotent `mv` block covers both 2026-05-24 and 2026-05-25 migrations in one pass.
 
 ---
 
@@ -92,7 +104,7 @@
 ### Migration Required
 
 - **Local dev:** Pull this change, then verify `deploy/.env` exists (file was moved from repo root). If your local copy lost it, `cp deploy/.env.example deploy/.env` and re-fill secrets.
-- **VPS (BREAKING):** see [`docs/deployment-guide.md` → "VPS Migration Runbook"](./deployment-guide.md#vps-migration-runbook) — requires one-time `mv` on `/opt/pocketquant`. Rollback runbook published.
+- **VPS (BREAKING):** see [`docs/deployment.md` → "VPS Migration Runbook"](./deployment.md#vps-migration-runbook) — requires one-time `mv` on `/opt/pocketquant`. Rollback runbook published.
 
 ---
 

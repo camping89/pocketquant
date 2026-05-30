@@ -1,6 +1,6 @@
 # Architecture Visual Map
 
-**Last Updated:** 2026-05-05 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4 backend packages + 1 frontend package
+**Last Updated:** 2026-05-30 | **Purpose:** Living visual reference for codebase navigation | **DDD Structure:** Three-tier (top-level, concepts, shared) | **Structure:** 4 backend packages + 1 frontend package | **Handlers:** 37 CQRS handlers + 42 route modules + 2 SSE streams
 
 Current note: `pocketquant-web` is now part of the repo and sits alongside the backend package graph shown below.
 
@@ -18,10 +18,10 @@ Current note: `pocketquant-web` is now part of the repo and sits alongside the b
   └────────────┬─────────────────────────────────┘
                │
   ╔════════════╧═════════════════════════════════════════════╗
-  ║  FEATURES  (src/features/)  35 CQRS Handlers            ║
-  ║  market_data(13) backtesting(5) strategy(11) trading(4) ║
-  ║  risk(1) + subscriptions(2)                             ║
+  ║  FEATURES  (src/features/)  37 CQRS Handlers            ║
+  ║  market_data(16) backtesting(5) strategy(12) trading(4) ║
   ║  Route → Command/Query → Mediator.send() → Handler      ║
+  ║  + 2 SSE streams: /bars/stream/{symbol}, /quotes/stream ║
   ╚════════════╤═════════════════════════════════════════════╝
                │
   ┌────────────┴────────────┐
@@ -118,7 +118,7 @@ graph TB
     subgraph CQRS["CQRS Layer"]
         Commands["Commands/Queries<br/><code>src/features/*/command.py|query.py</code>"]
         Med["Mediator<br/><code>src/common/mediator/</code>"]
-        Handlers["35 Handlers<br/><code>src/features/*/handler.py</code>"]
+        Handlers["37 Handlers<br/><code>src/features/*/handler.py</code>"]
     end
 
     subgraph APP["Application Layer — Orchestrators"]
@@ -328,7 +328,7 @@ flowchart LR
 │  ┌─────────┐      ┌──────────┐      ┌────────────────┐    │
 │  │  CQRS   │      │ Domain   │      │ Background     │    │
 │  │ Handlers│─────>│ Engine   │      │ Jobs           │    │
-│  │ (27)    │      │ (Pure)   │      │ (APScheduler)  │    │
+│  │ (37)    │      │ (Pure)   │      │ (APScheduler)  │    │
 │  └─────────┘      └──────────┘      └────────────────┘    │
 │       │                                     │              │
 │       v                                     v              │
@@ -357,7 +357,7 @@ flowchart LR
        v                                         v
   MarketDataProvider ──> TradingProvider ──> HandlerProvider
 
-  Container creates all 27 handlers + registers with Mediator
+  Container creates all 37 handlers + registers with Mediator
 ```
 
 ## 10. Event Flow
@@ -380,8 +380,8 @@ flowchart LR
 |--------|-------|---------|-------|
 | `AppService` | Application | Stateful orchestrator | 8 |
 | `Client` | Infrastructure | External service caller | 2 |
-| `Handler` | Features | CQRS command/query handler | 27 |
-| `Repository` | Persistence | Data access | 7 |
+| `Handler` | Features | CQRS command/query handler | 37 |
+| `Repository` | Persistence | Data access | 8 |
 | `Factory` | Infrastructure | Object creation | 1 |
 | `Provider` | DI | Dishka dependency provider | 6 |
 
