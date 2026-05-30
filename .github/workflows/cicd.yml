@@ -5,6 +5,9 @@ on:
     branches: [master, develop]
     paths-ignore:
       - 'docs/**'
+      - 'plans/**'
+      - '**/*.md'
+      - 'LICENSE'
   workflow_dispatch:
 
 concurrency:
