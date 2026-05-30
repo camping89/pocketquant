@@ -115,9 +115,7 @@ class BarBuilder:
         }
 
     @classmethod
-    def create_for_tick(
-        cls, symbol: str, interval: Interval, timestamp: datetime
-    ) -> BarBuilder:
+    def create_for_tick(cls, symbol: str, interval: Interval, timestamp: datetime) -> BarBuilder:
         """Factory to create a bar builder aligned to the tick timestamp.
 
         ``symbol`` is composite ``{code}:{exchange}``.

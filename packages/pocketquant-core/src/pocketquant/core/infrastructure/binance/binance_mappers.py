@@ -12,10 +12,7 @@ from typing import Any
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 
-# ---------------------------------------------------------------------------
-# Interval map: Domain Interval → (Binance literal, bar duration ms)
-# ---------------------------------------------------------------------------
-
+# Domain Interval → (Binance literal, bar duration ms)
 INTERVAL_TO_BINANCE: dict[Interval, tuple[str, int]] = {
     Interval.MINUTE_1: ("1m", 60_000),
     Interval.MINUTE_3: ("3m", 3 * 60_000),
@@ -28,13 +25,8 @@ INTERVAL_TO_BINANCE: dict[Interval, tuple[str, int]] = {
     Interval.DAY_1: ("1d", 24 * 60 * 60_000),
     Interval.WEEK_1: ("1w", 7 * 24 * 60 * 60_000),
     Interval.MONTH_1: ("1M", 30 * 24 * 60 * 60_000),  # approximate; Binance defines calendar month
-    # NOTE: HOUR_6, HOUR_8, HOUR_12, DAY_3 omitted — not in current Interval enum.
-    # Add when enum is extended (Phase 02 or later).
+    # HOUR_6, HOUR_8, HOUR_12, DAY_3 omitted — not in current Interval enum.
 }
-
-# ---------------------------------------------------------------------------
-# Symbol validation
-# ---------------------------------------------------------------------------
 
 _SYMBOL_RE = re.compile(r"^[A-Z0-9]{6,12}$")
 
@@ -50,11 +42,6 @@ def validate_symbol(symbol: str) -> str:
             f"Invalid Binance symbol '{symbol}': must be 6-12 uppercase alphanumeric chars"
         )
     return upper
-
-
-# ---------------------------------------------------------------------------
-# Kline → Bar
-# ---------------------------------------------------------------------------
 
 
 def kline_to_bar(kline: list[Any], symbol: str, interval: Interval) -> Bar:
@@ -89,11 +76,6 @@ def kline_to_bar(kline: list[Any], symbol: str, interval: Interval) -> Bar:
         volume=float(kline[5]),
         tick_count=int(kline[8]),
     )
-
-
-# ---------------------------------------------------------------------------
-# aggTrade frame → quote callback dict
-# ---------------------------------------------------------------------------
 
 
 def aggtrade_to_quote_dict(event: dict[str, Any], symbol: str) -> dict[str, Any]:

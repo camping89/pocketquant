@@ -14,9 +14,6 @@ import pytest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _make_kline(
     open_time_ms: int = 1_700_000_000_000,
@@ -66,10 +63,6 @@ def _mock_http_response(json_body: list, status_code: int = 200) -> AsyncMock:
     get_mock = AsyncMock(return_value=mock_resp)
     return get_mock
 
-
-# ---------------------------------------------------------------------------
-# kline → Bar mapping per interval
-# ---------------------------------------------------------------------------
 
 class TestKlineToBarMapping:
     """Parametrized mapping tests covering multiple intervals."""
@@ -146,10 +139,6 @@ class TestKlineToBarMapping:
         assert all(b.volume > 0 for b in bars)
 
 
-# ---------------------------------------------------------------------------
-# Pagination
-# ---------------------------------------------------------------------------
-
 class TestPagination:
     """Tests for single-call and multi-chunk paginated fetches."""
 
@@ -225,10 +214,6 @@ class TestPagination:
         assert start_times[1] < start_times[0], "Window must slide back in time"
 
 
-# ---------------------------------------------------------------------------
-# Error handling
-# ---------------------------------------------------------------------------
-
 class TestErrorHandling:
     """Tests for HTTP error and input validation scenarios."""
 
@@ -265,10 +250,6 @@ class TestErrorHandling:
 
         assert bars == []
 
-
-# ---------------------------------------------------------------------------
-# close()
-# ---------------------------------------------------------------------------
 
 class TestClose:
     """Tests for httpx client resource cleanup."""

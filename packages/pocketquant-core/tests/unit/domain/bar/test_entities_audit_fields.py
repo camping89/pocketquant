@@ -27,9 +27,16 @@ from pocketquant.core.domain.shared.enums import Interval
 
 def _build_bar(**overrides):
     base = dict(
-        symbol="BTCUSDT", exchange="BINANCE", interval=Interval.MINUTE_1,
+        symbol="BTCUSDT",
+        exchange="BINANCE",
+        interval=Interval.MINUTE_1,
         datetime=datetime(2026, 1, 1, tzinfo=UTC),
-        open=1.0, high=2.0, low=0.5, close=1.5, volume=100.0, tick_count=1,
+        open=1.0,
+        high=2.0,
+        low=0.5,
+        close=1.5,
+        volume=100.0,
+        tick_count=1,
     )
     base.update(overrides)
     return Bar(**base)
@@ -56,10 +63,16 @@ class TestFromMongoAuditFields:
     def test_parses_updated_at_when_present(self) -> None:
         doc = {
             "_id": "11111111-1111-1111-1111-111111111111",
-            "symbol": "BTCUSDT", "exchange": "BINANCE", "interval": "1m",
+            "symbol": "BTCUSDT",
+            "exchange": "BINANCE",
+            "interval": "1m",
             "datetime": datetime(2026, 1, 1, tzinfo=UTC),
-            "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5,
-            "volume": 100.0, "tick_count": 1,
+            "open": 1.0,
+            "high": 2.0,
+            "low": 0.5,
+            "close": 1.5,
+            "volume": 100.0,
+            "tick_count": 1,
             "created_at": datetime(2026, 1, 1, tzinfo=UTC),
             "updated_at": datetime(2026, 2, 1, tzinfo=UTC),
             "source": "rest_sync_1m",
@@ -71,10 +84,16 @@ class TestFromMongoAuditFields:
     def test_handles_legacy_doc_missing_audit_fields(self) -> None:
         doc = {
             "_id": "22222222-2222-2222-2222-222222222222",
-            "symbol": "BTCUSDT", "exchange": "BINANCE", "interval": "1m",
+            "symbol": "BTCUSDT",
+            "exchange": "BINANCE",
+            "interval": "1m",
             "datetime": datetime(2026, 1, 1, tzinfo=UTC),
-            "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5,
-            "volume": 100.0, "tick_count": 1,
+            "open": 1.0,
+            "high": 2.0,
+            "low": 0.5,
+            "close": 1.5,
+            "volume": 100.0,
+            "tick_count": 1,
             "created_at": datetime(2026, 1, 1, tzinfo=UTC),
         }
         bar = Bar.from_mongo(doc)

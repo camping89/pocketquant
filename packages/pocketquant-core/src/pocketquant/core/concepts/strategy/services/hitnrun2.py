@@ -76,12 +76,12 @@ class HitNRun2Strategy(IStrategy):
         close = float(bar["close"])
 
         # Snapshot windows BEFORE appending current bar so the current bar is excluded.
-        prev_lows_entry = list(self._lows)[-self.entry_lookback_bars:]
-        prev_highs_entry = list(self._highs)[-self.entry_lookback_bars:]
-        prev_lows_sl = list(self._lows)[-self.sl_lookback_bars:]
-        prev_highs_sl = list(self._highs)[-self.sl_lookback_bars:]
-        prev_lows_tp = list(self._lows)[-self.tp_lookback_bars:]
-        prev_highs_tp = list(self._highs)[-self.tp_lookback_bars:]
+        prev_lows_entry = list(self._lows)[-self.entry_lookback_bars :]
+        prev_highs_entry = list(self._highs)[-self.entry_lookback_bars :]
+        prev_lows_sl = list(self._lows)[-self.sl_lookback_bars :]
+        prev_highs_sl = list(self._highs)[-self.sl_lookback_bars :]
+        prev_lows_tp = list(self._lows)[-self.tp_lookback_bars :]
+        prev_highs_tp = list(self._highs)[-self.tp_lookback_bars :]
 
         self._highs.append(high)
         self._lows.append(low)

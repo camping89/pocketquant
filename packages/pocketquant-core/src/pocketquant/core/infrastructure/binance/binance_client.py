@@ -46,10 +46,6 @@ class BinanceClient(IDataProvider):
         self._base_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(base_url=self._base_url, timeout=30.0)
 
-    # ------------------------------------------------------------------
-    # IDataProvider
-    # ------------------------------------------------------------------
-
     async def fetch_ohlcv(
         self,
         symbol: str,
@@ -103,9 +99,7 @@ class BinanceClient(IDataProvider):
             if not klines:
                 break
 
-            chunk_bars = [
-                kline_to_bar(k, symbol.upper(), interval) for k in klines
-            ]
+            chunk_bars = [kline_to_bar(k, symbol.upper(), interval) for k in klines]
             # Defense-in-depth: drop any bar whose openTime >= cutoff in case Binance
             # returns one despite endTime cap (clock skew / server-side off-by-one).
             filtered = [b for b in chunk_bars if b.datetime is not None and b.datetime < cutoff_dt]
@@ -119,10 +113,9 @@ class BinanceClient(IDataProvider):
                 )
             all_bars = filtered + all_bars  # prepend so result stays ascending
             remaining -= len(klines)
-            end_time_ms = start_time_ms  # slide window back
+            end_time_ms = start_time_ms
 
             if len(klines) < chunk_limit:
-                # No more historical data available
                 break
 
             if remaining > 0:
@@ -145,10 +138,6 @@ class BinanceClient(IDataProvider):
     async def close(self) -> None:
         """Close the underlying httpx async client."""
         await self._http.aclose()
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     async def _fetch_klines(self, params: dict[str, Any]) -> list[list[Any]]:
         """Execute one GET /api/v3/klines call.

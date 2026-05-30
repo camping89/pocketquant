@@ -19,9 +19,6 @@ from pocketquant.core.infrastructure.binance.binance_websocket_client import (
 
 _WS_MODULE = "pocketquant.core.infrastructure.binance.binance_websocket_client"
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _aggtrade_frame(
     symbol: str = "BTCUSDT",
@@ -31,29 +28,27 @@ def _aggtrade_frame(
     agg_id: int = 1,
 ) -> str:
     """Build a canned @aggTrade JSON frame (single-stream format)."""
-    return json.dumps({
-        "e": "aggTrade",
-        "E": trade_time_ms + 1,
-        "s": symbol,
-        "a": agg_id,
-        "p": price,
-        "q": qty,
-        "f": agg_id,
-        "l": agg_id,
-        "T": trade_time_ms,
-        "m": True,
-        "M": True,
-    })
+    return json.dumps(
+        {
+            "e": "aggTrade",
+            "E": trade_time_ms + 1,
+            "s": symbol,
+            "a": agg_id,
+            "p": price,
+            "q": qty,
+            "f": agg_id,
+            "l": agg_id,
+            "T": trade_time_ms,
+            "m": True,
+            "M": True,
+        }
+    )
 
 
 def _combined_frame(inner: dict) -> str:
     """Wrap an aggTrade event in combined-stream envelope."""
     return json.dumps({"stream": f"{inner['s'].lower()}@aggTrade", "data": inner})
 
-
-# ---------------------------------------------------------------------------
-# aggTrade frame parsing + callback dispatch
-# ---------------------------------------------------------------------------
 
 class TestAggTradeFrameParsing:
     """Tests for _handle_frame parsing and callback invocation."""
@@ -160,10 +155,6 @@ class TestAggTradeFrameParsing:
         assert isinstance(client.last_tick_at, datetime)
 
 
-# ---------------------------------------------------------------------------
-# Subscribe / Unsubscribe
-# ---------------------------------------------------------------------------
-
 class TestSubscriptionManagement:
     """Tests for subscription count tracking."""
 
@@ -201,10 +192,6 @@ class TestSubscriptionManagement:
         key = await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
         assert key == "BTCUSDT:BINANCE"
 
-
-# ---------------------------------------------------------------------------
-# Reconnect backoff
-# ---------------------------------------------------------------------------
 
 class TestReconnectBackoff:
     """Tests for exponential backoff behaviour in run_forever."""
@@ -289,6 +276,7 @@ class TestReconnectBackoff:
                 return mock_ws
             # Second connect: stop the loop so test doesn't hang
             client._running = False
+
             # Return a mock WS that terminates immediately
             async def _empty_iter():
                 return
@@ -314,11 +302,7 @@ class TestReconnectBackoff:
         assert len(backoff_delays) == 1
 
 
-# ---------------------------------------------------------------------------
-# Silent exit + watchdog (regression: websockets 16.0 + Python 3.14)
-# ---------------------------------------------------------------------------
-
-
+# regression: websockets 16.0 + Python 3.14 — async for neither yields nor raises on dead socket
 class TestSilentExitAndWatchdog:
     """Tests for silent-exit handling and stale-socket watchdog."""
 

@@ -19,11 +19,8 @@ from pocketquant.core.config import Settings
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
-# ---------------------------------------------------------------------------
 # Safety guard: block tests against any non-localhost / non-testcontainer DB.
 # Even if a stray test reads from os.environ, it must not point at the prod IP.
-# ---------------------------------------------------------------------------
-
 _PROD_HOST_FRAGMENT = "207.148.79.60"
 
 
@@ -37,11 +34,7 @@ def pytest_configure(config: pytest.Config) -> None:
             )
 
 
-# ---------------------------------------------------------------------------
 # Session-scoped containers — started once per pytest run
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="session")
 def mongo_container() -> Iterator[MongoDbContainer]:
     with MongoDbContainer("mongo:7.0") as mongo:
@@ -54,12 +47,8 @@ def redis_container() -> Iterator[RedisContainer]:
         yield redis
 
 
-# ---------------------------------------------------------------------------
 # Per-test settings — fresh DB names so tests don't bleed state.
 # Container reuse keeps startup cost paid once.
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def settings(
     mongo_container: MongoDbContainer,

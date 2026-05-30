@@ -19,7 +19,9 @@ class OrderResult:
     submitted_at: datetime | None = None
     sl_price: float | None = None
     tp_price: float | None = None
-    side: OrderSide | None = None  # BUY/SELL — used by FIFO lot tracker; optional for backward compat
+    side: OrderSide | None = (
+        None  # BUY/SELL — used by FIFO lot tracker; optional for backward compat
+    )
 
     @property
     def is_success(self) -> bool:

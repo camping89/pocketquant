@@ -10,10 +10,6 @@ import pytest
 from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 from pocketquant.core.domain.shared.enums import Interval
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 BAR_START = datetime(2026, 5, 8, 10, 0, 0, tzinfo=UTC)
 BAR_END = BAR_START + timedelta(seconds=60)  # 1m bar
 
@@ -31,11 +27,6 @@ def builder() -> BarBuilder:
 def _tick_ts(offset_s: int = 1) -> datetime:
     """Return a timestamp inside the bar window."""
     return BAR_START + timedelta(seconds=offset_s)
-
-
-# ---------------------------------------------------------------------------
-# Delta semantics
-# ---------------------------------------------------------------------------
 
 
 class TestDeltaSemantics:

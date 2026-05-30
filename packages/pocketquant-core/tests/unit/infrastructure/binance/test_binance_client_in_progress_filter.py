@@ -19,10 +19,6 @@ import pytest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _make_kline(open_time_ms: int, *, close: float = 50_000.0) -> list:
     return [
@@ -72,11 +68,6 @@ def _patch_now(now_ms: int):
     )
 
 
-# ---------------------------------------------------------------------------
-# 1) endTime cap: closed-bar boundary
-# ---------------------------------------------------------------------------
-
-
 class TestEndTimeCap:
     """fetch_ohlcv must cap endTime so the in-progress bar is never requested."""
 
@@ -123,11 +114,6 @@ class TestEndTimeCap:
         assert bars[0].datetime == datetime.fromtimestamp(prev_open / 1000, tz=UTC)
 
 
-# ---------------------------------------------------------------------------
-# 2) Defense-in-depth filter: drop in-progress bar even if returned
-# ---------------------------------------------------------------------------
-
-
 class TestDefenseInDepthFilter:
     """If Binance returns the in-progress bar anyway, fetch_ohlcv must drop it."""
 
@@ -151,11 +137,6 @@ class TestDefenseInDepthFilter:
 
         assert len(bars) == 1
         assert bars[0].datetime == datetime.fromtimestamp(prev_open / 1000, tz=UTC)
-
-
-# ---------------------------------------------------------------------------
-# 3) Pagination consistency: cap computed once, no duplicates / gaps
-# ---------------------------------------------------------------------------
 
 
 class TestPaginationConsistency:
@@ -196,9 +177,7 @@ class TestPaginationConsistency:
 
         cutoff_dt = datetime.fromtimestamp(bar_open / 1000, tz=UTC)
         with _patch_now(now_ms), patch("asyncio.sleep"):
-            bars = await client.fetch_ohlcv(
-                "BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1500
-            )
+            bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1500)
 
         assert call_count == 2
         assert len(bars) == 1500

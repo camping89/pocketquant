@@ -58,9 +58,7 @@ async def test_idempotency_index_tolerates_legacy_null_rows(repo):
     await repo.record_skip(job_id="sync_5m", scheduled_run_time=sched, status="missed")
     await repo.record_skip(job_id="sync_5m", scheduled_run_time=sched, status="missed")
     coll = repo._collection()
-    rows = await coll.count_documents(
-        {"job_id": "sync_5m", "scheduled_run_time": sched}
-    )
+    rows = await coll.count_documents({"job_id": "sync_5m", "scheduled_run_time": sched})
     assert rows == 1, "record_skip must be idempotent on (job_id, scheduled_run_time)"
 
 
@@ -96,9 +94,12 @@ async def test_record_detail_appends_to_run(repo):
     doc_id = await repo.record_start("sync_5m")
     await repo.record_detail(
         doc_id,
-        symbol="BINANCE:BTCUSDT", interval="5m",
-        bars_fetched=60, bars_inserted=3,
-        filtered_existing=54, filtered_misaligned=0,
+        symbol="BINANCE:BTCUSDT",
+        interval="5m",
+        bars_fetched=60,
+        bars_inserted=3,
+        filtered_existing=54,
+        filtered_misaligned=0,
         status="completed",
     )
     runs = await repo.find_runs("sync_5m", limit=10)
@@ -171,16 +172,32 @@ async def test_get_last_successful_started_at_returns_latest_completed(repo):
     coll = repo._collection()
     await coll.insert_many(
         [
-            {"_id": "a", "job_id": "sync_backfill", "status": "completed",
-             "started_at": older_success},
-            {"_id": "b", "job_id": "sync_backfill", "status": "completed",
-             "started_at": recent_success},
+            {
+                "_id": "a",
+                "job_id": "sync_backfill",
+                "status": "completed",
+                "started_at": older_success,
+            },
+            {
+                "_id": "b",
+                "job_id": "sync_backfill",
+                "status": "completed",
+                "started_at": recent_success,
+            },
             # 'failed' rows must be ignored even when newer than any success.
-            {"_id": "c", "job_id": "sync_backfill", "status": "failed",
-             "started_at": now - timedelta(minutes=5)},
+            {
+                "_id": "c",
+                "job_id": "sync_backfill",
+                "status": "failed",
+                "started_at": now - timedelta(minutes=5),
+            },
             # 'running' rows must also be ignored.
-            {"_id": "d", "job_id": "sync_backfill", "status": "running",
-             "started_at": now - timedelta(minutes=1)},
+            {
+                "_id": "d",
+                "job_id": "sync_backfill",
+                "status": "running",
+                "started_at": now - timedelta(minutes=1),
+            },
         ]
     )
 

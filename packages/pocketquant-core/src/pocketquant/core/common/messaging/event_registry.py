@@ -77,7 +77,6 @@ class EventRegistry:
         self._registered.clear()
 
 
-# Singleton registry
 _registry = EventRegistry()
 
 

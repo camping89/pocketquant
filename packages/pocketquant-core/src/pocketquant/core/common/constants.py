@@ -9,9 +9,7 @@ def build_bar_cache_key(symbol: str, interval: str) -> str:
     return f"ohlcv:{symbol.upper()}:{interval}"
 
 
-# ============================================================
-# COLLECTIONS - MongoDB collection names
-# ============================================================
+# MongoDB collection names
 COLLECTION_BARS = "bars"
 COLLECTION_SYNC_STATUS = "sync_status"
 COLLECTION_SYMBOLS = "symbols"
@@ -24,38 +22,28 @@ COLLECTION_BACKTEST_OPTIMIZATION_RUNS = "backtest_optimization_runs"
 COLLECTION_JOB_HISTORY = "job_history"
 COLLECTION_TRACKED_SYMBOLS = "tracked_symbols"
 
-# ============================================================
-# CACHE_KEYS - Redis key patterns (use .format() for interpolation)
+# Redis key patterns (use .format() for interpolation)
 # Symbol values are composite "{code}:{exchange}" - templates kept generic.
-# ============================================================
 CACHE_KEY_QUOTE_LATEST = "quote:latest:{symbol}"
 CACHE_KEY_BAR_CURRENT = "bar:current:{symbol}:{interval}"
 CACHE_KEY_OHLCV = "ohlcv:{symbol}:{interval}:{limit}"
 
-# ============================================================
-# TTL - Cache time-to-live (seconds)
-# ============================================================
+# Cache time-to-live (seconds)
 TTL_QUOTE_LATEST = 60
 TTL_BAR_CURRENT = 300
 TTL_OHLCV_QUERY = 300
 TTL_DEFAULT = 3600
 
-# ============================================================
-# LIMITS - System constraints
-# ============================================================
+# System constraints
 LIMIT_TVDATAFEED_MAX_BARS = 5000
 LIMIT_BULK_SYNC_MAX = 50
 LIMIT_OHLCV_QUERY_MAX = 5000
 
-# ============================================================
-# HEADERS - HTTP header names
-# ============================================================
+# HTTP header names
 HEADER_CORRELATION_ID = "X-Correlation-ID"
 HEADER_IDEMPOTENCY_KEY = "Idempotency-Key"
 
-# ============================================================
-# INTERVALS - Time intervals in seconds (for bar aggregation)
-# ============================================================
+# Time intervals in seconds (for bar aggregation)
 INTERVAL_SECONDS = {
     "1m": 60,
     "5m": 300,
