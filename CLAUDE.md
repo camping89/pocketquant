@@ -120,6 +120,27 @@ No empty subclasses. Use base classes directly:
 
 Post-migration notes and unresolved questions were retired from the docs tree; see git history (`git log -- docs/migration-doubts-and-notes.md`) if needed.
 
+## [IMPORTANT] Comment Policy — Explain WHY, Not WHAT
+
+Comments cost LOC and rot. Default: no comment. Add one only when code can't speak for itself.
+
+REMOVE / never write:
+- Comments restating the line (`# increment counter`, `# validate creds` over obvious validation)
+- Banner / divider / count labels (`# Trading (4)`, `# ---- setup ----`)
+- Docstrings echoing the symbol name (`"""Get bar."""` on `get_bar`)
+- Filler Arrange/Act/Assert markers that add nothing
+
+KEEP / write only for:
+- WHY: races, ordering/suspension constraints, invariants, trade-offs, await-preemption notes
+- Hacks / workarounds + external-system quirks (OKX, Mongo, Redis, asyncio, APScheduler)
+- `# type: ignore[...]` / `// @ts-expect-error` / `// eslint-disable` — always with its reason
+- Warnings about non-obvious failure modes
+- Docstrings documenting params / contracts / edge cases (not name restatement)
+- Test comments explaining scenario intent or non-obvious setup
+
+No plan/phase/finding refs in comments — explain the invariant, not the origin.
+Applies to Python (`#`, `"""`) and TS/JS (`//`, `/** */`) alike. Full policy + examples: `docs/code-standards.md` → "Comment Policy".
+
 ## Documentation Policy — AS-IS Only
 
 Docs describe the system **as it currently is**. They are NOT a historical record. Git is the history.

@@ -656,11 +656,42 @@ from pocketquant.core.common.uuid import generate_id
 # NOTE: No pydantic, pymongo, redis, aiohttp imports in domain/
 ```
 
-## Commenting & Documentation
+## Comment Policy — Explain WHY, Not WHAT
 
-**Comments:** Write for WHY (non-obvious logic, workarounds, API quirks). Skip WHAT (obvious code is self-documenting).
+Comments cost LOC and rot out of sync with code. Default: no comment. Add one only when the code cannot speak for itself. Applies to Python (`#`, `"""`) and TS/JS (`//`, `/** */`) alike.
 
-**Docstrings:** Minimal. Use type hints to carry heavy lifting. Module-level: brief purpose statement.
+### REMOVE / never write
+
+- Comments restating the line (`# increment counter`, `# validate creds` over obvious validation)
+- Banner / divider / count labels (`# Trading (4)`, `# ---- setup ----`, `# Market data (16)`)
+- Docstrings echoing the symbol name (`"""Get bar."""` on `get_bar`)
+- Filler Arrange/Act/Assert markers that add nothing
+- Plan/phase/finding refs — explain the invariant, not the origin
+
+### KEEP / write only for
+
+- **WHY:** races, ordering/suspension constraints, publish-before-subscribe, await-preemption notes, invariants, trade-offs
+- **Hacks / workarounds** + external-system quirks (OKX, Mongo, Redis, asyncio, APScheduler)
+- `# type: ignore[...]` / `// @ts-expect-error` / `// eslint-disable` — always with their reason
+- Warnings about non-obvious failure modes (`# benign — already dropped`)
+- Docstrings documenting params / contracts / edge cases / non-obvious return semantics
+- Test comments explaining scenario intent or non-obvious setup
+
+### Examples
+
+```python
+# KEEP — load-bearing ordering note (see "Await Is Preemption")
+# Wire the event bus before any handler can publish: container.get() awaits,
+# so a subscriber resolved first would miss publish-before-subscribe events.
+
+# REMOVE — restates the call
+# Get the bar from the repository
+bar = await repo.get(bar_id)
+```
+
+**Route docstrings:** name-echo docstrings on FastAPI routes are removed even though OpenAPI summaries may blank — only docstrings carrying param/contract/edge-case content survive.
+
+**Docstrings:** Minimal. Let type hints carry the heavy lifting. Module-level: brief purpose statement only when non-obvious.
 
 ## Type Hints
 
