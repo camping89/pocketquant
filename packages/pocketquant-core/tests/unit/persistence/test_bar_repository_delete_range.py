@@ -18,10 +18,6 @@ import pytest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 _START = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 _END = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 
@@ -49,10 +45,6 @@ def _make_repo(deleted_count: int = 42) -> tuple[BarRepository, MagicMock]:
     repo = BarRepository(mock_db)
     return repo, mock_collection
 
-
-# ---------------------------------------------------------------------------
-# Happy path: correct filter construction
-# ---------------------------------------------------------------------------
 
 class TestDeleteManyByRangeFilter:
     @pytest.mark.asyncio
@@ -104,10 +96,6 @@ class TestDeleteManyByRangeFilter:
         assert result == 0
 
 
-# ---------------------------------------------------------------------------
-# Edge case: empty interval list
-# ---------------------------------------------------------------------------
-
 class TestDeleteManyByRangeEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_intervals_returns_zero_without_db_call(self) -> None:
@@ -130,7 +118,9 @@ class TestDeleteManyByRangeEdgeCases:
     async def test_interval_values_are_strings_not_enum_objects(self) -> None:
         """$in list must contain string values (e.g. '1m'), not Interval enum objects."""
         repo, mock_col = _make_repo()
-        await repo.delete_many_by_range("BTCUSDT:BINANCE", [Interval.MINUTE_1, Interval.DAY_1], _START, _END)
+        await repo.delete_many_by_range(
+            "BTCUSDT:BINANCE", [Interval.MINUTE_1, Interval.DAY_1], _START, _END
+        )
 
         call_filter = mock_col.delete_many.call_args.args[0]
         for val in call_filter["interval"]["$in"]:

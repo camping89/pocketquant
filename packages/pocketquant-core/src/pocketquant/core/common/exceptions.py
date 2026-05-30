@@ -12,11 +12,6 @@ from pocketquant.core.common.logging import get_logger
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Domain exception classes
-# ---------------------------------------------------------------------------
-
-
 class AppError(Exception):
     """Base application error with HTTP status code."""
 
@@ -41,21 +36,11 @@ class DomainError(AppError):
         super().__init__(message, status_code=400, error_code=error_code)
 
 
-# ---------------------------------------------------------------------------
-# Error response builder
-# ---------------------------------------------------------------------------
-
-
 def _error_response(status_code: int, error_code: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
         content={"error": {"code": error_code, "message": message}},
     )
-
-
-# ---------------------------------------------------------------------------
-# Handler registration
-# ---------------------------------------------------------------------------
 
 
 def register_exception_handlers(app: FastAPI) -> None:

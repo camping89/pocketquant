@@ -31,10 +31,16 @@ def _reset_cache():
 def _bars(n: int) -> list[Bar]:
     return [
         Bar(
-            symbol="BTCUSDT", exchange="BINANCE", interval=Interval.MINUTE_1,
+            symbol="BTCUSDT",
+            exchange="BINANCE",
+            interval=Interval.MINUTE_1,
             datetime=datetime(2026, 1, 1, 0, i, tzinfo=UTC),
-            open=1.0 + i, high=2.0 + i, low=0.5 + i, close=1.5 + i,
-            volume=100.0, tick_count=1,
+            open=1.0 + i,
+            high=2.0 + i,
+            low=0.5 + i,
+            close=1.5 + i,
+            volume=100.0,
+            tick_count=1,
         )
         for i in range(n)
     ]

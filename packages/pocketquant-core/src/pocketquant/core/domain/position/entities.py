@@ -96,7 +96,6 @@ class PositionAggregate(BaseModel):
         if price <= 0:
             raise ValueError("Price must be positive")
 
-        # Calculate weighted average entry price
         total_cost = self.entry_price * self.quantity + price * quantity
         self.quantity += quantity
         self.entry_price = total_cost / self.quantity
@@ -122,7 +121,6 @@ class PositionAggregate(BaseModel):
         if quantity > self.quantity:
             raise ValueError(f"Cannot reduce by {quantity}, only {self.quantity} held")
 
-        # Calculate realized P&L for this reduction
         pnl_per_unit = self._calculate_pnl_per_unit(price)
         realized = pnl_per_unit * quantity
         self.realized_pnl += realized

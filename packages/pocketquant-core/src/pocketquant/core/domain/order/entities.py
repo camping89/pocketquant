@@ -115,7 +115,6 @@ class OrderAggregate(BaseModel):
         if self.filled_quantity + quantity > self.quantity:
             raise ValueError("Fill quantity exceeds order quantity")
 
-        # Calculate weighted average fill price
         total_filled = self.filled_quantity + quantity
         if self.filled_price is not None:
             self.filled_price = (
@@ -127,7 +126,6 @@ class OrderAggregate(BaseModel):
         self.filled_quantity = total_filled
         self.status = OrderStatus.PARTIALLY_FILLED
         self.updated_at = utc_now()
-
         self._events.append(
             OrderPartiallyFilledEvent(
                 order_id=self.id,
@@ -142,7 +140,6 @@ class OrderAggregate(BaseModel):
     def fill(self, quantity: float, price: float) -> OrderAggregate:
         """Fully fill the order."""
         if self.status == OrderStatus.PARTIALLY_FILLED:
-            # Complete a partial fill
             remaining = self.quantity - self.filled_quantity
             if quantity != remaining:
                 raise ValueError(f"Fill quantity {quantity} != remaining {remaining}")
@@ -151,7 +148,6 @@ class OrderAggregate(BaseModel):
             if quantity != self.quantity:
                 raise ValueError("Full fill quantity must match order quantity")
 
-        # Calculate weighted average fill price
         if self.filled_price is not None and self.filled_quantity > 0:
             self.filled_price = (
                 self.filled_price * self.filled_quantity + price * quantity

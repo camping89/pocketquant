@@ -91,20 +91,14 @@ class JobScheduler:
             self._loop = None
 
         if self._history_repo is not None:
-            self._scheduler.add_listener(
-                self._on_skip, EVENT_JOB_MISSED | EVENT_JOB_MAX_INSTANCES
-            )
+            self._scheduler.add_listener(self._on_skip, EVENT_JOB_MISSED | EVENT_JOB_MAX_INSTANCES)
             self._scheduler.add_listener(self._on_error, EVENT_JOB_ERROR)
         logger.info("scheduler.started")
 
     def _on_skip(self, event: Any) -> None:
         """APScheduler EVENT_JOB_MISSED / EVENT_JOB_MAX_INSTANCES handler.
         Persists a record so silent skips become visible in /runs."""
-        status = (
-            "skipped_max_instances"
-            if event.code == EVENT_JOB_MAX_INSTANCES
-            else "missed"
-        )
+        status = "skipped_max_instances" if event.code == EVENT_JOB_MAX_INSTANCES else "missed"
         self._dispatch_skip(event.job_id, event.scheduled_run_time, status, None)
 
     def _on_error(self, event: Any) -> None:
@@ -120,11 +114,7 @@ class JobScheduler:
             err = "unknown_error_no_exception"
         else:
             msg = str(exc)
-            err = (
-                f"{type(exc).__name__}: {msg}"
-                if msg
-                else f"{type(exc).__name__}(no message)"
-            )
+            err = f"{type(exc).__name__}: {msg}" if msg else f"{type(exc).__name__}(no message)"
         self._dispatch_skip(event.job_id, event.scheduled_run_time, "failed", err)
 
     def _dispatch_skip(

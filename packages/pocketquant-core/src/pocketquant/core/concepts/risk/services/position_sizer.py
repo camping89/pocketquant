@@ -66,7 +66,6 @@ class PositionSizer:
         risk_amount = account_balance * risk_config.risk_per_trade
         size = risk_amount / price_risk
 
-        # Apply max exposure limit
         max_size = (account_balance * risk_config.max_exposure_percent) / entry_price
         return min(size, max_size)
 
@@ -85,7 +84,6 @@ class PositionSizer:
         kelly_fraction = risk_config.risk_per_trade * 0.5
         size = (account_balance * kelly_fraction) / entry_price
 
-        # Apply max exposure limit
         max_size = (account_balance * risk_config.max_exposure_percent) / entry_price
         return min(size, max_size)
 

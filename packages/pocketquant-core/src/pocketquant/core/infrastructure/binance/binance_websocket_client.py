@@ -53,10 +53,6 @@ class BinanceWebSocketClient:
         self._reconnect_delay = _RECONNECT_DELAY_INITIAL
         self.last_tick_at: datetime | None = None
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     async def connect(self) -> None:
         """Open WebSocket to Binance stream URL based on current subscriptions."""
         url = self._build_url()
@@ -169,10 +165,6 @@ class BinanceWebSocketClient:
     def subscriptions(self) -> dict[str, tuple[str, Callable[[dict[str, Any]], Any]]]:
         """Return subscriptions dict: composite_symbol -> (code, callback)."""
         return self._subscriptions
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _build_url(self) -> str:
         """Build stream URL: single or combined depending on subscription count."""

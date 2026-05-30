@@ -19,8 +19,7 @@ class HealthCoordinator:
     async def check_all(self) -> dict[str, Any]:
         """Run all health checks in parallel and aggregate results."""
         checks = [
-            self._run_check(name, check_function)
-            for name, check_function in self._checks.items()
+            self._run_check(name, check_function) for name, check_function in self._checks.items()
         ]
         results = await asyncio.gather(*checks, return_exceptions=False)
 

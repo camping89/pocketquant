@@ -170,9 +170,7 @@ class JobHistoryRepository(BaseRepository):
         )
         return result.modified_count
 
-    async def get_last_successful_started_at(
-        self, job_id: str
-    ) -> datetime | None:
+    async def get_last_successful_started_at(self, job_id: str) -> datetime | None:
         """Return ``started_at`` of the most recent ``completed`` run for ``job_id``.
 
         Used by startup catch-up logic to decide whether the gap since the last
@@ -237,21 +235,13 @@ class JobHistoryRepository(BaseRepository):
         if status:
             q["status"] = status
 
-        cursor = (
-            self._collection()
-            .find(q)
-            .sort("started_at", -1)
-            .skip(offset)
-            .limit(limit)
-        )
+        cursor = self._collection().find(q).sort("started_at", -1).skip(offset).limit(limit)
         rows: list[dict[str, Any]] = []
         async for d in cursor:
             rows.append(_serialize(d))
         return rows
 
-    async def aggregate_stats(
-        self, job_id: str, since: datetime
-    ) -> dict[str, Any]:
+    async def aggregate_stats(self, job_id: str, since: datetime) -> dict[str, Any]:
         """Counts by status + p50/p95 duration over [since, now].
 
         Uses Mongo 7+ `$median` / `$percentile`. Falls back gracefully if the
@@ -373,7 +363,5 @@ def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
         "error": doc.get("error"),
         "total_inserted": doc.get("total_inserted"),
         "total_fetched": doc.get("total_fetched"),
-        "details": [
-            {**d, "ts": to_utc_iso(d.get("ts"))} for d in doc.get("details", []) or []
-        ],
+        "details": [{**d, "ts": to_utc_iso(d.get("ts"))} for d in doc.get("details", []) or []],
     }

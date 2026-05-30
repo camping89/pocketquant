@@ -34,9 +34,16 @@ def _reset_cache():
 
 def _make_bar(close: float = 1.5) -> Bar:
     return Bar(
-        symbol="BTCUSDT", exchange="BINANCE", interval=Interval.MINUTE_1,
+        symbol="BTCUSDT",
+        exchange="BINANCE",
+        interval=Interval.MINUTE_1,
         datetime=datetime(2026, 1, 1, tzinfo=UTC),
-        open=1.0, high=2.0, low=0.5, close=close, volume=100.0, tick_count=1,
+        open=1.0,
+        high=2.0,
+        low=0.5,
+        close=close,
+        volume=100.0,
+        tick_count=1,
     )
 
 
@@ -93,8 +100,11 @@ class TestCacheMissExistingSameValue:
     async def test_no_write_when_db_already_has_same_value(self) -> None:
         bar = _make_bar()
         existing = {
-            "open": bar.open, "high": bar.high, "low": bar.low,
-            "close": bar.close, "volume": bar.volume,
+            "open": bar.open,
+            "high": bar.high,
+            "low": bar.low,
+            "close": bar.close,
+            "volume": bar.volume,
         }
         repo, collection = _make_repo(existing_doc=existing)
 
@@ -111,7 +121,11 @@ class TestCacheMissExistingDiffValue:
         new_bar = _make_bar(close=1.7)
         # Existing has a different close — diff-aware update should fire.
         existing = {
-            "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 100.0,
+            "open": 1.0,
+            "high": 2.0,
+            "low": 0.5,
+            "close": 1.5,
+            "volume": 100.0,
         }
         repo, collection = _make_repo(existing_doc=existing)
 

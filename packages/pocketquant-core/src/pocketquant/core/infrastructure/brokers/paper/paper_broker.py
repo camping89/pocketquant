@@ -145,8 +145,6 @@ class PaperBroker(IBroker):
             self._event_bus.unsubscribe(BarCompletedEvent, self._on_bar_completed)
             self._bar_subscribed = False
 
-    # ----- Order submission ------------------------------------------------
-
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
         """Route order to MARKET fill, immediate LIMIT, or pending LIMIT queue.
 
@@ -314,8 +312,6 @@ class PaperBroker(IBroker):
                 [],
             )
 
-    # ----- Cancel / expire -------------------------------------------------
-
     async def cancel_order(self, broker_order_id: str) -> bool:
         """Cancel a pending LIMIT. Idempotent for already-filled orders."""
         async with self._lock:
@@ -377,8 +373,6 @@ class PaperBroker(IBroker):
             await self._notify_callbacks(result)
         return len(pendings)
 
-    # ----- Queries ---------------------------------------------------------
-
     async def get_positions(self) -> list[PositionAggregate]:
         async with self._lock:
             return [p for p in self._positions.values() if not p.is_closed]
@@ -401,8 +395,6 @@ class PaperBroker(IBroker):
         """
         return list(self._order_events.get(order_id, []))
 
-    # ----- Subscription API -----------------------------------------------
-
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         """Add order *fill / status-result* callback."""
         self._order_callbacks.append(callback)
@@ -419,12 +411,8 @@ class PaperBroker(IBroker):
         """Clear all order event callbacks."""
         self._event_callbacks.clear()
 
-    # ----- Price tracking --------------------------------------------------
-
     def set_current_price(self, symbol: str, price: float) -> None:
         self._current_prices[symbol.upper()] = price
-
-    # ----- Internals -------------------------------------------------------
 
     def _get_market_price(self, order: OrderAggregate) -> float:
         if order.price:
@@ -551,8 +539,6 @@ class PaperBroker(IBroker):
                 errors.append(e)
         if errors:
             raise errors[0]
-
-    # ----- Bar-driven flows -----------------------------------------------
 
     @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
