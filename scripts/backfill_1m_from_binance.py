@@ -85,9 +85,7 @@ def parse_args(argv: list[str] | None = None) -> BackfillConfig:
     )
     parser.add_argument("--start", required=True, help="ISO 8601 UTC, e.g. 2026-04-30T08:54:00Z")
     parser.add_argument("--end", required=True, help="ISO 8601 UTC, e.g. 2026-05-03T21:34:00Z")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Fetch + map + log, no DB writes"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Fetch + map + log, no DB writes")
     parser.add_argument(
         "--mongodb-url",
         default=None,
@@ -127,8 +125,9 @@ def kline_to_bar(kline: list, symbol: str, exchange: str, interval: Interval) ->
     open_time_ms = int(kline[0])
     bar_dt = datetime.fromtimestamp(open_time_ms / 1000, tz=UTC)
     return Bar(
-        symbol=symbol.upper(),
-        exchange=exchange.upper(),
+        # Composite {code}:{exchange} — the key every producer and BarRepository
+        # uses; a bare code would write bars the rest of the system can't query.
+        symbol=f"{symbol.upper()}:{exchange.upper()}",
         interval=interval,
         datetime=bar_dt,
         open=float(kline[1]),
@@ -220,9 +219,7 @@ async def run_backfill(cfg: BackfillConfig) -> int:
                     logger.info("backfill.chunk_empty", chunk=chunk_idx, cursor_ms=cursor_ms)
                     break
 
-                bars = [
-                    kline_to_bar(k, cfg.symbol, cfg.exchange, cfg.interval) for k in klines
-                ]
+                bars = [kline_to_bar(k, cfg.symbol, cfg.exchange, cfg.interval) for k in klines]
                 # Sanity assertion: open_time aligned to bar boundary
                 for k in klines:
                     if int(k[0]) % bar_duration_ms != 0:

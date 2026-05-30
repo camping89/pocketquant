@@ -52,12 +52,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--days", type=int, default=730, help="Lookback window in days (default 730)"
     )
-    parser.add_argument(
-        "--symbol", default=None, help="Filter to single symbol, e.g. BTCUSDT"
-    )
-    parser.add_argument(
-        "--exchange", default=None, help="Filter to single exchange, e.g. BINANCE"
-    )
+    parser.add_argument("--symbol", default=None, help="Filter to single symbol, e.g. BTCUSDT")
+    parser.add_argument("--exchange", default=None, help="Filter to single exchange, e.g. BINANCE")
     parser.add_argument(
         "--output",
         default=None,
@@ -104,13 +100,9 @@ def _build_pipeline(
                         ]
                     }
                 },
-                "zero_volume": {
-                    "$sum": {"$cond": [{"$eq": ["$volume", 0]}, 1, 0]}
-                },
+                "zero_volume": {"$sum": {"$cond": [{"$eq": ["$volume", 0]}, 1, 0]}},
                 "abnormal_volume": {
-                    "$sum": {
-                        "$cond": [{"$gt": ["$volume", ABNORMAL_VOLUME_THRESHOLD]}, 1, 0]
-                    }
+                    "$sum": {"$cond": [{"$gt": ["$volume", ABNORMAL_VOLUME_THRESHOLD]}, 1, 0]}
                 },
             }
         },
@@ -118,9 +110,7 @@ def _build_pipeline(
     ]
 
 
-def _render_markdown(
-    rows: list[dict], start_dt: datetime, end_dt: datetime, days: int
-) -> str:
+def _render_markdown(rows: list[dict], start_dt: datetime, end_dt: datetime, days: int) -> str:
     """Render aggregation results as Markdown table."""
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
@@ -200,7 +190,8 @@ async def run_audit(args: argparse.Namespace) -> int:
         else _REPO_ROOT / "plans" / "reports" / f"audit-{date_str}-bar-quality.md"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(md_content)
+    # encoding pinned: report contains non-ASCII (→) that crashes on Windows cp1252 default
+    output_path.write_text(md_content, encoding="utf-8")
     logger.info("audit.report_saved", path=str(output_path))
 
     return 0
