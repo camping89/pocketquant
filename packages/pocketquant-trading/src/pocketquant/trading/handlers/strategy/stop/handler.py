@@ -7,12 +7,9 @@ from pocketquant.trading.handlers.strategy.stop.command import StopStrategyComma
 
 @handles(StopStrategyCommand)
 class StopStrategyHandler(Handler[StopStrategyCommand, bool]):
-    """Handle StopStrategyCommand."""
-
     def __init__(self, strategy_app_service: StrategyAppService) -> None:
         self._strategy_app_service = strategy_app_service
 
     async def handle(self, request: StopStrategyCommand) -> bool:
-        """Stop a running strategy."""
         await self._strategy_app_service.stop_strategy(request.subscription_id)
         return True

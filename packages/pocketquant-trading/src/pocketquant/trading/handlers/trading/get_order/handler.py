@@ -8,13 +8,10 @@ from pocketquant.trading.handlers.trading.get_order.query import GetOrderQuery
 
 @handles(GetOrderQuery)
 class GetOrderHandler(Handler[GetOrderQuery, dict]):
-    """Handler to get a specific order."""
-
     def __init__(self, order_app_service: OrderAppService):
         self._order_app_service = order_app_service
 
     async def handle(self, request: GetOrderQuery) -> dict:
-        """Get order by ID."""
         order = self._order_app_service.get_order(request.order_id)
 
         if not order:

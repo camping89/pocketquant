@@ -36,10 +36,6 @@ class Subscription:
     interval: Interval
     created_at: datetime
 
-    # ------------------------------------------------------------------
-    # Factory helpers
-    # ------------------------------------------------------------------
-
     @staticmethod
     def deterministic_id(
         strategy_code: str,
@@ -60,12 +56,7 @@ class Subscription:
         raw = f"{strategy_code}|{symbol.upper()}|{interval_val}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
-    # ------------------------------------------------------------------
-    # MongoDB serialisation
-    # ------------------------------------------------------------------
-
     def to_mongo(self) -> dict:
-        """Serialise to a MongoDB document. Uses _id = id for dedup by PK."""
         return {
             "_id": self.id,
             "strategy_code": self.strategy_code,
@@ -76,7 +67,6 @@ class Subscription:
 
     @classmethod
     def from_mongo(cls, doc: dict) -> Subscription:
-        """Deserialise from a MongoDB document."""
         return cls(
             id=doc["_id"],
             strategy_code=doc["strategy_code"],

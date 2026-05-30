@@ -34,7 +34,6 @@ class DeleteStrategyHandler(Handler[DeleteStrategyCommand, None]):
         self._strategy_service = strategy_app_service
 
     async def handle(self, request: DeleteStrategyCommand) -> None:
-        """Execute cascade delete for the strategy and all associated data."""
         subs = await self._sub_repo.list_by_strategy_code(request.strategy_id)
 
         # 1. Cancel scheduled jobs and unload per-subscription strategy instances

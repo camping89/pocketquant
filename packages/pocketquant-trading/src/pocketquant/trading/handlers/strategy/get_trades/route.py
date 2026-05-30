@@ -17,6 +17,4 @@ async def get_subscription_trades(
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
     """Return recent completed trades for the subscription's strategy instance."""
-    return await mediator.send(
-        GetStrategyTradesQuery(subscription_id=sub_id, limit=limit)
-    )
+    return await mediator.send(GetStrategyTradesQuery(subscription_id=sub_id, limit=limit))

@@ -10,12 +10,13 @@ class GetStrategyHandler(Handler[GetStrategyQuery, dict | None]):
     """Handle GetStrategyQuery — return template metadata for a strategy code."""
 
     async def handle(self, request: GetStrategyQuery) -> dict | None:
-        """Return template metadata or None if the code is unknown."""
         strategy_class = STRATEGY_REGISTRY.get(request.strategy_code)
         if strategy_class is None:
             return None
         return {
             "strategy_code": request.strategy_code,
             "class_name": strategy_class.__name__,
-            "description": (strategy_class.__doc__ or "").strip().split("\n")[0] if strategy_class.__doc__ else "",
+            "description": (strategy_class.__doc__ or "").strip().split("\n")[0]
+            if strategy_class.__doc__
+            else "",
         }

@@ -21,10 +21,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
 # Module-level container reference — set once at startup via set_container().
 # Job functions resolve their dependencies via this reference at execution time.
-# ---------------------------------------------------------------------------
 
 _container: AsyncContainer | None = None
 
@@ -43,10 +41,8 @@ def _get_container() -> AsyncContainer:
     return _container
 
 
-# ---------------------------------------------------------------------------
 # Job entrypoint — top-level coroutine referenced by APScheduler as text path:
 #   "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest"
-# ---------------------------------------------------------------------------
 
 
 async def run_subscription_backtest(subscription_id: str) -> None:

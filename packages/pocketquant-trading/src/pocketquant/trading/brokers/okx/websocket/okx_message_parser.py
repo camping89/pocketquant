@@ -11,22 +11,18 @@ class OkxMessageParser:
 
     @staticmethod
     def is_event(message: dict) -> bool:
-        """Check if message is an event (login, subscribe, error)."""
         return "event" in message
 
     @staticmethod
     def is_data(message: dict) -> bool:
-        """Check if message contains channel data."""
         return "arg" in message and "data" in message
 
     @staticmethod
     def get_channel(message: dict) -> str:
-        """Extract channel name from data message."""
         return message.get("arg", {}).get("channel", "")
 
     @staticmethod
     def get_data(message: dict) -> list[dict]:
-        """Extract data array from message."""
         return message.get("data", [])
 
     @staticmethod
@@ -53,15 +49,12 @@ class OkxMessageParser:
 
     @staticmethod
     def get_event_type(message: dict) -> str:
-        """Get event type from event message."""
         return message.get("event", "")
 
     @staticmethod
     def get_event_code(message: dict) -> str:
-        """Get event code (for login/error responses)."""
         return message.get("code", "")
 
     @staticmethod
     def get_event_message(message: dict) -> str:
-        """Get event message/error description."""
         return message.get("msg", "")

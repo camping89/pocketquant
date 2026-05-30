@@ -11,9 +11,7 @@ from pocketquant.core.persistence.mongodb import Database
 pytestmark = pytest.mark.integration
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -27,9 +25,7 @@ async def repo(settings):
     await db.disconnect()
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 async def _insert_running(repo: BacktestRepository, sub_id: str, age_minutes: float) -> None:
@@ -47,9 +43,7 @@ async def _insert_running(repo: BacktestRepository, sub_id: str, age_minutes: fl
     )
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio

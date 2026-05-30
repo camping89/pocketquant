@@ -66,12 +66,10 @@ class OkxWebSocketClient:
 
     @property
     def ws_url(self) -> str:
-        """Get WebSocket URL based on demo mode."""
         return get_private_ws_url(self._demo)
 
     @property
     def is_connected(self) -> bool:
-        """Check if WebSocket is connected and authenticated."""
         return self._connected and self._authenticated
 
     async def connect(self) -> None:
@@ -83,17 +81,14 @@ class OkxWebSocketClient:
         try:
             logger.info("okx_ws_connecting", url=self.ws_url, demo=self._demo)
 
-            # Connect with timeout
             self._ws = await asyncio.wait_for(
                 websockets.connect(self.ws_url, ping_interval=None),
                 timeout=CONNECT_TIMEOUT,
             )
             self._connected = True
 
-            # Authenticate
             await self._authenticate()
 
-            # Start heartbeat
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
             logger.info("okx_ws_connected", authenticated=self._authenticated)
@@ -106,7 +101,6 @@ class OkxWebSocketClient:
             raise ConnectionError(f"WebSocket connection failed: {e}") from e
 
     async def _authenticate(self) -> None:
-        """Send login message and wait for confirmation."""
         if not self._ws:
             raise ConnectionError("WebSocket not connected")
 
@@ -114,7 +108,6 @@ class OkxWebSocketClient:
 
         await self._ws.send(json.dumps(login_msg))
 
-        # Wait for login response
         try:
             response = await asyncio.wait_for(self._ws.recv(), timeout=LOGIN_TIMEOUT)
             data = json.loads(response)
@@ -154,7 +147,6 @@ class OkxWebSocketClient:
 
         await self._ws.send(json.dumps(subscribe_msg))
 
-        # Wait for subscribe confirmation
         try:
             response = await asyncio.wait_for(self._ws.recv(), timeout=SUBSCRIBE_TIMEOUT)
             data = json.loads(response)
@@ -172,7 +164,6 @@ class OkxWebSocketClient:
             raise ConnectionError("Subscribe timeout") from e
 
     async def disconnect(self) -> None:
-        """Close WebSocket connection gracefully."""
         self._connected = False
         self._authenticated = False
 
@@ -192,7 +183,6 @@ class OkxWebSocketClient:
         logger.info("okx_ws_disconnected")
 
     async def _heartbeat_loop(self) -> None:
-        """Send periodic pings to keep connection alive."""
         while self._connected and self._ws:
             try:
                 await asyncio.sleep(PING_INTERVAL)
@@ -200,10 +190,8 @@ class OkxWebSocketClient:
                 if not self._connected or not self._ws:
                     break
 
-                # Send ping (OKX expects "ping" text)
                 await self._ws.send("ping")
 
-                # Wait for pong with timeout
                 try:
                     response = await asyncio.wait_for(self._ws.recv(), timeout=PONG_TIMEOUT)
                     if response != "pong":
@@ -226,7 +214,6 @@ class OkxWebSocketClient:
                 logger.error("okx_ws_heartbeat_error", error=str(e))
 
     async def _handle_disconnect(self) -> None:
-        """Handle disconnection - notify callback."""
         self._connected = False
         self._authenticated = False
 
@@ -252,20 +239,17 @@ class OkxWebSocketClient:
 
         try:
             async for message in self._ws:
-                # Handle pong
                 if message == "pong":
                     continue
 
                 try:
                     data = json.loads(message)
 
-                    # Skip event messages (login, subscribe, error)
                     if "event" in data:
                         if data.get("event") == "error":
                             logger.warning("okx_ws_error_event", data=data)
                         continue
 
-                    # Yield data messages
                     if "data" in data:
                         yield data
 

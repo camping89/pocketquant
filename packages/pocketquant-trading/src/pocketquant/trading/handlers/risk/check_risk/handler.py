@@ -36,35 +36,25 @@ class RiskCheckHandler:
         Returns:
             Tuple of (is_valid, rejection_reason)
         """
-        # Check if we have enough balance
         if account.available_balance <= 0:
             return False, "Insufficient balance"
 
-        # Check exit signals - always allowed
         if signal.direction == Direction.EXIT:
             if position is None or position.is_closed:
                 return False, "No position to exit"
             return True, ""
 
-        # Check FLAT signals - nothing to do
         if signal.direction == Direction.FLAT:
             return False, "Flat signal, no action"
 
-        # Check max positions for new entries
         if position is None or position.is_closed:
-            # This is a new position
-            # Note: In a multi-strategy setup, we'd check total positions
             pass
         else:
-            # Already have a position
             if position.side.value == signal.direction.value:
-                # Adding to position - check if allowed
                 pass
             else:
-                # Reversing position - this is an exit + new entry
                 pass
 
-        # Check exposure limits
         exposure_check = self._check_exposure(account, position, config)
         if not exposure_check[0]:
             return exposure_check
@@ -77,7 +67,6 @@ class RiskCheckHandler:
         position: PositionAggregate | None,
         config: RiskConfig,
     ) -> tuple[bool, str]:
-        """Check if current exposure is within limits."""
         if position is None or position.is_closed:
             return True, ""
 

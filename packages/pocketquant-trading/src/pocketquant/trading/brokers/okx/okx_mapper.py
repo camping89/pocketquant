@@ -5,7 +5,6 @@ from pocketquant.core.domain.position import PositionAggregate, PositionSide
 
 
 def map_okx_order_state(state: str) -> OrderStatus:
-    """Map OKX order state to domain OrderStatus."""
     mapping = {
         "live": OrderStatus.SUBMITTED,
         "partially_filled": OrderStatus.PARTIALLY_FILLED,
@@ -17,12 +16,10 @@ def map_okx_order_state(state: str) -> OrderStatus:
 
 
 def map_order_side_to_okx(side: OrderSide) -> str:
-    """Map domain OrderSide to OKX side string."""
     return "buy" if side == OrderSide.BUY else "sell"
 
 
 def map_order_type_to_okx(order_type: OrderType) -> str:
-    """Map domain OrderType to OKX ordType string."""
     mapping = {
         OrderType.MARKET: "market",
         OrderType.LIMIT: "limit",
@@ -51,11 +48,9 @@ def map_order_to_okx_params(order: OrderAggregate, inst_suffix: str = "USDT") ->
         "clOrdId": order.id,  # Client order ID for tracking
     }
 
-    # Add price for limit orders
     if order.order_type == OrderType.LIMIT and order.price:
         params["px"] = str(order.price)
 
-    # Add trigger price for stop orders
     if order.order_type in (OrderType.STOP_LIMIT, OrderType.STOP_MARKET):
         if order.stop_price:
             params["triggerPx"] = str(order.stop_price)
@@ -75,7 +70,6 @@ def map_okx_position_to_domain(pos_data: dict, subscription_id: str) -> Position
     Returns:
         PositionAggregate or None if no position
     """
-    # Extract position details
     pos_amt = float(pos_data.get("pos", "0"))
     if pos_amt == 0:
         return None
@@ -90,7 +84,6 @@ def map_okx_position_to_domain(pos_data: dict, subscription_id: str) -> Position
     quote = parts[1] if len(parts) > 1 else "USDT"
     composite_symbol = f"{code}{quote}:OKX"
 
-    # Determine side from position amount
     side = PositionSide.LONG if pos_amt > 0 else PositionSide.SHORT
     quantity = abs(pos_amt)
 
@@ -123,7 +116,6 @@ def map_okx_balance_to_domain(balance_data: dict) -> dict:
     """
     details = balance_data.get("details", [])
 
-    # Find USDT balance
     usdt_balance = next(
         (d for d in details if d.get("ccy") == "USDT"),
         {},

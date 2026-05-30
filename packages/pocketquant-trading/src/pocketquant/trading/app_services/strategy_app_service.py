@@ -52,15 +52,12 @@ class StrategyAppService:
 
     @property
     def is_running(self) -> bool:
-        """Check if engine is running."""
         return self._running
 
     async def start(self) -> None:
-        """Start the strategy engine and subscribe to events."""
         if self._running:
             return
 
-        # Auto-register decorated event handlers
         registry = get_event_registry()
         registry.register_instance(self, self._event_bus)
         self._running = True
@@ -68,15 +65,12 @@ class StrategyAppService:
         logger.info("strategy_engine_started")
 
     async def stop(self) -> None:
-        """Stop the strategy engine and all strategies."""
         if not self._running:
             return
 
-        # Stop all strategies
         for strategy_id in list(self._strategies.keys()):
             await self.stop_strategy(strategy_id)
 
-        # Disconnect all brokers
         for broker in self._brokers.values():
             await broker.disconnect()
 
@@ -101,14 +95,11 @@ class StrategyAppService:
             if config.id in self._strategies:
                 raise ValueError(f"Strategy already loaded: {config.id}")
 
-            # Create or get broker for this strategy
             broker = await self._get_or_create_broker(config.broker)
 
-            # Create strategy instance (use base class if none provided)
             if strategy_class:
                 strategy = strategy_class(config)
             else:
-                # Use a simple pass-through strategy for now
                 strategy = _DefaultStrategy(config)
 
             self._strategies[config.id] = strategy
@@ -125,7 +116,6 @@ class StrategyAppService:
             return config.id
 
     async def start_strategy(self, strategy_id: str) -> None:
-        """Start a loaded strategy."""
         async with self._lock:
             if strategy_id not in self._strategies:
                 raise ValueError(f"Strategy not found: {strategy_id}")
@@ -134,7 +124,6 @@ class StrategyAppService:
             if strategy.is_running:
                 return
 
-            # Connect broker if needed
             broker = self._brokers[strategy_id]
             if not broker.is_connected:
                 await broker.connect()
@@ -144,7 +133,6 @@ class StrategyAppService:
             logger.info("strategy_started", strategy_id=strategy_id)
 
     async def stop_strategy(self, strategy_id: str) -> None:
-        """Stop a running strategy."""
         async with self._lock:
             if strategy_id not in self._strategies:
                 return
@@ -156,7 +144,6 @@ class StrategyAppService:
             logger.info("strategy_stopped", strategy_id=strategy_id)
 
     async def unload_strategy(self, strategy_id: str) -> None:
-        """Unload a strategy completely."""
         await self.stop_strategy(strategy_id)
 
         async with self._lock:
@@ -167,7 +154,6 @@ class StrategyAppService:
             logger.info("strategy_unloaded", strategy_id=strategy_id)
 
     def get_strategies(self) -> list[dict]:
-        """Get list of loaded strategies with status."""
         return [
             {
                 "id": s.id,
@@ -181,15 +167,11 @@ class StrategyAppService:
         ]
 
     def get_strategy(self, strategy_id: str) -> IStrategy | None:
-        """Get strategy by ID."""
         return self._strategies.get(strategy_id)
 
     @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        """Handle bar completed event."""
-        strategies = self._find_strategies(
-            event.symbol, event.interval, trigger="bar"
-        )
+        strategies = self._find_strategies(event.symbol, event.interval, trigger="bar")
 
         for strategy in strategies:
             try:
@@ -218,7 +200,6 @@ class StrategyAppService:
 
     @event_handler(QuoteReceivedEvent)
     async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
-        """Handle quote received event."""
         strategies = self._find_strategies(event.symbol, trigger="tick")
 
         for strategy in strategies:
@@ -267,19 +248,15 @@ class StrategyAppService:
     async def _process_signal(
         self, strategy: IStrategy, signal: Signal, current_price: float
     ) -> None:
-        """Process a trading signal through risk and order pipeline."""
         broker = self._brokers.get(strategy.id)
         if not broker:
             logger.warning("no_broker_for_strategy", strategy_id=strategy.id)
             return
 
-        # Get account balance
         balance = await broker.get_balance()
 
-        # Get current position
         position = self._position_app_service.get(strategy.id)
 
-        # Risk check
         valid, reason = self._risk_check_handler.validate(
             signal,
             balance,
@@ -294,7 +271,6 @@ class StrategyAppService:
             )
             return
 
-        # Calculate position size
         stop_loss = signal.stop_loss_price or (
             current_price * (1 - strategy.config.orders.stop_loss.distance_percent)
             if signal.direction == Direction.LONG
@@ -312,10 +288,8 @@ class StrategyAppService:
             logger.info("zero_position_size", strategy_id=strategy.id)
             return
 
-        # Create order
         order = self._create_order(strategy, signal, size, current_price)
 
-        # Submit order
         result = await self._order_app_service.submit(order, broker)
 
         logger.info(
@@ -333,7 +307,6 @@ class StrategyAppService:
         size: float,
         current_price: float,
     ) -> OrderAggregate:
-        """Create order from signal."""
         side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
 
         order_type = (
@@ -354,13 +327,10 @@ class StrategyAppService:
         )
 
     async def _get_or_create_broker(self, broker_type: str) -> IBroker:
-        """Get existing broker or create new one."""
-        # Check if we already have this broker type
         for broker in self._brokers.values():
             if broker.name == broker_type or broker.name == f"{broker_type}-demo":
                 return broker
 
-        # Create new broker
         config = self._default_broker_config.copy()
         broker = self._broker_factory.create(broker_type, config)
         return broker
@@ -370,5 +340,4 @@ class _DefaultStrategy(IStrategy):
     """Default pass-through strategy that never generates signals."""
 
     async def on_bar(self, bar: dict) -> Signal | None:
-        """Default implementation returns no signal."""
         return None

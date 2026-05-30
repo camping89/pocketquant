@@ -10,5 +10,4 @@ class GetStrategiesHandler(Handler[GetStrategiesQuery, list]):
     """Handle GetStrategiesQuery — list registered strategy templates."""
 
     async def handle(self, request: GetStrategiesQuery) -> list:
-        """Return one entry per registered template in STRATEGY_REGISTRY."""
         return [{"strategy_code": code} for code in STRATEGY_REGISTRY.keys()]

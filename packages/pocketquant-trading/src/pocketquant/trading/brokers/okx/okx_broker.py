@@ -46,7 +46,6 @@ class OKXBroker(IBroker):
         self._demo = demo
         self._inst_suffix = inst_suffix
 
-        # SDK instances (lazy initialized)
         self._trade_api: Any = None
         self._account_api: Any = None
         self._ws_client: OkxWebSocketClient | None = None
@@ -71,18 +70,14 @@ class OKXBroker(IBroker):
 
     @property
     def trade_api(self) -> Any:
-        """Get OKX Trade API instance."""
         return self._trade_api
 
     @property
     def seen_terminal_orders(self) -> set[str]:
-        """Get set of terminal order IDs for deduplication."""
         return self._seen_terminal_orders
 
     async def connect(self) -> None:
-        """Initialize OKX API clients."""
         try:
-            # Import OKX SDK
             from okx import Account, Trade
 
             # Flag: "1" for demo, "0" for live
@@ -115,7 +110,6 @@ class OKXBroker(IBroker):
             raise
 
     async def disconnect(self) -> None:
-        """Close OKX connections."""
         if self._ws_task:
             self._ws_task.cancel()
             try:
@@ -127,7 +121,6 @@ class OKXBroker(IBroker):
         logger.info("okx_broker_disconnected")
 
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
-        """Submit order to OKX via REST API."""
         if not self._connected or not self._trade_api:
             return OrderResult(
                 order_id=order.id,
@@ -145,7 +138,6 @@ class OKXBroker(IBroker):
                 None, lambda: self._trade_api.place_order(**params)
             )
 
-            # Parse response
             if response.get("code") != "0":
                 error_msg = response.get("msg", "Unknown error")
                 logger.warning(
@@ -160,7 +152,6 @@ class OKXBroker(IBroker):
                     error_message=error_msg,
                 )
 
-            # Extract order data
             data = response.get("data", [{}])[0]
             broker_order_id = data.get("ordId", "")
             state = data.get("sCode", "0")
@@ -183,7 +174,6 @@ class OKXBroker(IBroker):
                 side=order.side,
             )
 
-            # Notify callbacks
             await self._notify_callbacks(result)
 
             return result
@@ -198,7 +188,6 @@ class OKXBroker(IBroker):
             )
 
     async def cancel_order(self, broker_order_id: str) -> bool:
-        """Cancel order on OKX."""
         if not self._connected or not self._trade_api:
             return False
 
@@ -229,7 +218,6 @@ class OKXBroker(IBroker):
             return False
 
     async def get_positions(self) -> list[PositionAggregate]:
-        """Get open positions from OKX."""
         if not self._connected or not self._account_api:
             return []
 
@@ -254,7 +242,6 @@ class OKXBroker(IBroker):
             return []
 
     async def get_balance(self) -> AccountBalance:
-        """Get account balance from OKX."""
         if not self._connected or not self._account_api:
             return AccountBalance(total_equity=0, available_balance=0, currency="USDT")
 
@@ -278,15 +265,12 @@ class OKXBroker(IBroker):
             return AccountBalance(total_equity=0, available_balance=0, currency="USDT")
 
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
-        """Subscribe to order updates via WebSocket."""
         self._order_callbacks.append(callback)
 
-        # Start WebSocket listener if not running
         if not self._ws_task:
             self._ws_task = asyncio.create_task(self._ws_listener())
 
     async def unsubscribe_order_updates(self) -> None:
-        """Unsubscribe from order updates."""
         self._order_callbacks.clear()
 
         if self._ws_task:
@@ -303,7 +287,6 @@ class OKXBroker(IBroker):
         logger.info("okx_ws_listener_starting")
 
         try:
-            # Create WebSocket client
             self._ws_client = OkxWebSocketClient(
                 api_key=self._api_key,
                 api_secret=self._api_secret,
@@ -312,16 +295,13 @@ class OKXBroker(IBroker):
                 on_disconnect=self._on_ws_disconnect,
             )
 
-            # Create reconnection handler
             self._reconnection_handler = OkxReconnectionHandler(
                 ws_client=self._ws_client,
                 broker=self,
             )
 
-            # Connect and authenticate
             await self._ws_client.connect()
 
-            # Subscribe to private channels
             await self._ws_client.subscribe(
                 [
                     {"channel": "orders", "instType": "SWAP"},
@@ -331,7 +311,6 @@ class OKXBroker(IBroker):
 
             logger.info("okx_ws_listener_started")
 
-            # Process messages
             async for message in self._ws_client:
                 await self._handle_ws_message(message)
 
@@ -381,7 +360,6 @@ class OKXBroker(IBroker):
                 return
             self._seen_terminal_orders.add(ord_id)
 
-        # Map to OrderResult and notify callbacks
         result = OkxOrderMapper.to_order_result(data)
 
         logger.info(
@@ -412,14 +390,9 @@ class OKXBroker(IBroker):
         )
 
     def _on_ws_disconnect(self) -> None:
-        """Handle WebSocket disconnect event.
-
-        Triggers reconnection handler with exponential backoff.
-        """
         logger.warning("okx_ws_disconnected_callback")
 
         if self._reconnection_handler and self._connected:
-            # Start reconnection in background task
             asyncio.create_task(self._reconnection_handler.handle_disconnect())
 
     async def _notify_callbacks(self, result: OrderResult) -> None:

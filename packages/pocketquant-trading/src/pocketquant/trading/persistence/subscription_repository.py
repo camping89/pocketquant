@@ -69,7 +69,6 @@ class SubscriptionRepository(BaseRepository):
         return result.deleted_count
 
     async def ensure_indexes(self) -> None:
-        """Create indexes for efficient by-strategy-code queries."""
         collection = self._collection()
         await collection.create_index(
             "strategy_code",

@@ -53,9 +53,7 @@ async def test_autoload_uses_sub_id_as_instance_key() -> None:
         )
     )
 
-    expected_sub_id = Subscription.deterministic_id(
-        "hitnrun2", "BTCUSDT:BINANCE", "1h"
-    )
+    expected_sub_id = Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", "1h")
 
     svc.load_strategy.assert_awaited_once()
     cfg = svc.load_strategy.await_args.args[0]

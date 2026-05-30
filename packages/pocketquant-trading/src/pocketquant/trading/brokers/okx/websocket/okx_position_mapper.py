@@ -23,7 +23,6 @@ class PositionUpdate:
 
     @property
     def is_open(self) -> bool:
-        """Check if position is open (has quantity)."""
         return self.quantity > 0
 
 
@@ -51,7 +50,6 @@ class OkxPositionMapper:
         - lever: Leverage
         - mgnMode: Margin mode (cross/isolated)
         """
-        # Parse position size - can be signed
         pos_str = data.get("pos", "0")
         pos_float = float(pos_str) if pos_str else 0.0
 
@@ -64,13 +62,11 @@ class OkxPositionMapper:
 
         quantity = abs(pos_float)
 
-        # Parse other fields
         avg_px = data.get("avgPx", "0")
         upl = data.get("upl", "0")
         mark_px = data.get("markPx", "0")
         lever = data.get("lever", "1")
 
-        # Extract symbol from instId
         inst_id = data.get("instId", "")
         symbol = inst_id.replace("-SWAP", "").replace("-", "")
 
@@ -88,16 +84,13 @@ class OkxPositionMapper:
 
     @staticmethod
     def get_position_id(data: dict[str, Any]) -> str:
-        """Get position ID from data."""
         return data.get("posId", "")
 
     @staticmethod
     def get_inst_id(data: dict[str, Any]) -> str:
-        """Get instrument ID from data."""
         return data.get("instId", "")
 
     @staticmethod
     def is_position_closed(data: dict[str, Any]) -> bool:
-        """Check if position is closed (quantity is zero)."""
         pos = data.get("pos", "0")
         return float(pos) == 0.0 if pos else True

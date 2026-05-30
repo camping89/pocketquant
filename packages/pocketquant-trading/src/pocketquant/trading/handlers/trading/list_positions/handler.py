@@ -7,11 +7,8 @@ from pocketquant.trading.handlers.trading.list_positions.query import ListPositi
 
 @handles(ListPositionsQuery)
 class ListPositionsHandler(Handler[ListPositionsQuery, list[dict]]):
-    """Handler to list all positions."""
-
     def __init__(self, position_app_service: PositionAppService):
         self._position_app_service = position_app_service
 
     async def handle(self, request: ListPositionsQuery) -> list[dict]:
-        """Get all open positions."""
         return self._position_app_service.get_all_summaries()

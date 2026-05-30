@@ -8,13 +8,10 @@ from pocketquant.trading.handlers.trading.get_position.query import GetPositionQ
 
 @handles(GetPositionQuery)
 class GetPositionHandler(Handler[GetPositionQuery, dict]):
-    """Handler to get a specific position."""
-
     def __init__(self, position_app_service: PositionAppService):
         self._position_app_service = position_app_service
 
     async def handle(self, request: GetPositionQuery) -> dict:
-        """Get position for a specific strategy."""
         summary = self._position_app_service.get_position_summary(request.strategy_id)
 
         if not summary:

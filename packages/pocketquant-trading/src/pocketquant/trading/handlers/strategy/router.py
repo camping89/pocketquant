@@ -50,7 +50,6 @@ from pocketquant.trading.handlers.strategy.run_all_backtests.route import (
 from pocketquant.trading.handlers.strategy.start.route import router as start_subscription_router
 from pocketquant.trading.handlers.strategy.stop.route import router as stop_subscription_router
 
-# ---------- /strategies (template-scoped) ----------
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 router.include_router(list_templates_router)
 router.include_router(get_template_router)
@@ -58,7 +57,6 @@ router.include_router(create_subscription_router)
 router.include_router(run_all_backtests_router)
 router.include_router(delete_strategy_router)
 
-# ---------- /subscriptions (instance-scoped) ----------
 subscription_router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 subscription_router.include_router(list_subscriptions_router)
 subscription_router.include_router(start_subscription_router)

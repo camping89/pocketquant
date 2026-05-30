@@ -8,9 +8,7 @@ IDs in production depend on the exact hash recipe.
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.trading.domain.subscription import Subscription
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 _HEX_CHARS = frozenset("0123456789abcdef")
 
@@ -30,9 +28,7 @@ def test_back_compat_known_id_hitnrun2_btc_1m():
     assert Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", "1m") == expected
 
 
-# ---------------------------------------------------------------------------
 # Stability: same input → same id
-# ---------------------------------------------------------------------------
 
 
 def test_same_input_returns_same_id_case_1():
@@ -65,9 +61,7 @@ def test_same_input_returns_same_id_case_5():
     assert a == b
 
 
-# ---------------------------------------------------------------------------
 # Uniqueness: different field values → different ids
-# ---------------------------------------------------------------------------
 
 
 def test_different_strategy_id_produces_different_id():
@@ -94,9 +88,7 @@ def test_different_interval_produces_different_id():
     assert a != b
 
 
-# ---------------------------------------------------------------------------
 # Format: exactly 16 lowercase hex chars
-# ---------------------------------------------------------------------------
 
 
 def test_id_is_16_chars():
@@ -109,9 +101,7 @@ def test_id_is_all_lowercase_hex():
     assert all(c in _HEX_CHARS for c in result), f"Non-hex chars in: {result}"
 
 
-# ---------------------------------------------------------------------------
 # Normalisation: symbol case-insensitive
-# ---------------------------------------------------------------------------
 
 
 def test_symbol_uppercase_normalised():
