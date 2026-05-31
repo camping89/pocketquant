@@ -4,10 +4,10 @@
     "packages/pocketquant-backtest/src",
     "packages/pocketquant-trading/src",
     "packages/pocketquant-api/src",
-    "packages/pocketquant-core/tests",
-    "packages/pocketquant-backtest/tests",
-    "packages/pocketquant-trading/tests",
-    "packages/pocketquant-api/tests"
+    "tests/core_test",
+    "tests/backtest_test",
+    "tests/trading_test",
+    "tests/api_test"
   ],
   "venvPath": ".",
   "venv": ".venv",
@@ -21,19 +21,19 @@
   "reportPrivateUsage": "error",
   "executionEnvironments": [
     {
-      "root": "packages/pocketquant-core/tests",
+      "root": "tests/core_test",
       "reportPrivateUsage": "none"
     },
     {
-      "root": "packages/pocketquant-backtest/tests",
+      "root": "tests/backtest_test",
       "reportPrivateUsage": "none"
     },
     {
-      "root": "packages/pocketquant-trading/tests",
+      "root": "tests/trading_test",
       "reportPrivateUsage": "none"
     },
     {
-      "root": "packages/pocketquant-api/tests",
+      "root": "tests/api_test",
       "reportPrivateUsage": "none"
     }
   ]
