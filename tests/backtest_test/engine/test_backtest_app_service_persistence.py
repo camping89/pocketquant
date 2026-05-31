@@ -21,7 +21,7 @@ from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.infrastructure.persistence.mongodb import Database
 

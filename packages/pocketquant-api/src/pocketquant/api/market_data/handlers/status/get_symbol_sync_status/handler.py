@@ -15,7 +15,7 @@ from pocketquant.api.market_data.handlers.status.get_symbol_sync_status.query im
 from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.infrastructure.persistence.repositories.sync_status_repository import SyncStatusRepository
 

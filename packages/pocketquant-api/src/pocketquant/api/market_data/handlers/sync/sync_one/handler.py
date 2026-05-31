@@ -14,7 +14,7 @@ from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
+from pocketquant.core.domain.shared.enums import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.sync_status.services import (
     SyncProgressDecision,

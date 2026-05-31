@@ -236,13 +236,7 @@ async def _run_backtest(
     )
     strategy = strategy_cls(strategy_cfg)
 
-    # Direct inject — mirror RunBacktestHandler._load_strategy_for_backtest.
-    async with strategy_svc._lock:  # pyright: ignore[reportPrivateUsage]
-        strategy_svc._strategies[strategy.id] = strategy  # pyright: ignore[reportPrivateUsage]
-        strategy_svc._brokers[strategy.id] = broker  # pyright: ignore[reportPrivateUsage]
-        strategy_svc._configs[strategy.id] = strategy_cfg  # pyright: ignore[reportPrivateUsage]
-        await broker.connect()
-        await strategy.on_start()
+    await strategy_svc.inject_prepared_strategy(strategy.id, strategy, broker, strategy_cfg)
 
     bar_repo = _FakeBarRepo(bars)
     runner = BacktestAppService(

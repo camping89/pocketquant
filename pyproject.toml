@@ -61,19 +61,57 @@ root_packages = ["pocketquant"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Core has zero sibling dependencies"
-type = "forbidden"
-source_modules = ["pocketquant.core"]
-forbidden_modules = ["pocketquant.backtest", "pocketquant.trading", "pocketquant.api"]
+name = "Six-package layered architecture"
+type = "layers"
+layers = [
+    "pocketquant.api",
+    "pocketquant.backtest | pocketquant.trading",
+    "pocketquant.execution",
+    "pocketquant.infrastructure",
+    "pocketquant.core",
+]
 
 [[tool.importlinter.contracts]]
-name = "Backtest depends only on Core"
+name = "Core imports no inner package"
+type = "forbidden"
+source_modules = ["pocketquant.core"]
+forbidden_modules = [
+    "pocketquant.infrastructure",
+    "pocketquant.execution",
+    "pocketquant.backtest",
+    "pocketquant.trading",
+    "pocketquant.api",
+]
+
+[[tool.importlinter.contracts]]
+name = "Infrastructure imports only core"
+type = "forbidden"
+source_modules = ["pocketquant.infrastructure"]
+forbidden_modules = [
+    "pocketquant.execution",
+    "pocketquant.backtest",
+    "pocketquant.trading",
+    "pocketquant.api",
+]
+
+[[tool.importlinter.contracts]]
+name = "Execution imports no sibling/upper package"
+type = "forbidden"
+source_modules = ["pocketquant.execution"]
+forbidden_modules = [
+    "pocketquant.backtest",
+    "pocketquant.trading",
+    "pocketquant.api",
+]
+
+[[tool.importlinter.contracts]]
+name = "Backtest and Trading are independent siblings"
 type = "forbidden"
 source_modules = ["pocketquant.backtest"]
 forbidden_modules = ["pocketquant.trading", "pocketquant.api"]
 
 [[tool.importlinter.contracts]]
-name = "Trading depends only on Core"
+name = "Trading does not import Backtest"
 type = "forbidden"
 source_modules = ["pocketquant.trading"]
 forbidden_modules = ["pocketquant.backtest", "pocketquant.api"]

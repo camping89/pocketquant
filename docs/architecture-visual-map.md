@@ -226,7 +226,7 @@ graph LR
         QuoteAppService
     end
 
-    subgraph TradingProvider
+    subgraph ExecutionProvider
         OrderAppService
         PositionAppService
         StrategyAppService
@@ -353,7 +353,7 @@ flowchart LR
   CoreProvider ──> PersistenceProvider ──> InfrastructureProvider
        │                                         │
        v                                         v
-  MarketDataProvider ──> TradingProvider ──> HandlerProvider
+  MarketDataProvider ──> ExecutionProvider ──> HandlerProvider
 
   Container creates all 37 handlers + registers with Mediator
 ```

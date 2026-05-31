@@ -19,7 +19,7 @@ from pocketquant.api.market_data.handlers.status.get_sync_status.query import Ge
 from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.infrastructure.persistence.repositories.sync_status_repository import SyncStatusRepository
 

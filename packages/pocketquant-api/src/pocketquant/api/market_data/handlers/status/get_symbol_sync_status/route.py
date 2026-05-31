@@ -11,7 +11,7 @@ from pocketquant.api.market_data.handlers.status.get_symbol_sync_status.query im
     GetSymbolSyncStatusQuery,
 )
 from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 
 router = APIRouter(route_class=DishkaRoute)
 

@@ -85,7 +85,7 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
 - Handler: `.../run_all_backtests/handler.py:26`
 - Behavior: fans out one `JobScheduler.add_one_off_job(...)` per subscription of
   the strategy, with `job_id = f"bt:{sub.id}"` and module reference
-  `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest`. Returns
+  `pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest`. Returns
   `{job_ids: [...]}`. `replace_existing=True` so repeat calls cancel the
   previous tick safely.
 - The job persists to `apscheduler_jobs` MongoDB collection (so it survives
@@ -229,7 +229,7 @@ when triggered by bar) AND `config.trigger == "bar" | "tick"`
 When `POST .../run-all-backtests` fires:
 
 1. `RunAllBacktestsHandler` calls `JobScheduler.add_one_off_job("pocketquant
-   .trading.jobs.backtest_jobs:run_subscription_backtest", job_id="bt:{sub.id}",
+   .backtest.jobs.subscription_backtest_jobs:run_subscription_backtest", job_id="bt:{sub.id}",
    subscription_id=sub.id)`. APScheduler serializes this as a `DateTrigger`
    row in `apscheduler_jobs` Mongo collection.
 2. The AsyncIOExecutor picks it up; `run_subscription_backtest(subscription_id)`
@@ -334,7 +334,7 @@ Live order and position docs (collections `orders` and `positions`) now use
 ### 7. Redis cache contents
 
 `Cache` wraps `redis.asyncio.Redis` and is DI-scoped APP. See
-`packages/pocketquant-core/src/pocketquant/core/persistence/redis.py` and
+`packages/pocketquant-infrastructure/src/pocketquant/infrastructure/persistence/redis.py` and
 the constants at
 `packages/pocketquant-core/src/pocketquant/core/common/constants.py:27-41`.
 

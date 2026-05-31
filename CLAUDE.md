@@ -1,42 +1,57 @@
 # CLAUDE.md — PocketQuant
 
-**Architecture:** 5-package monorepo (4 Python uv workspace + 1 Node frontend)
+**Architecture:** 6-package monorepo (5 Python uv workspace + 1 Node frontend)
 
 ## Monorepo Structure
 
-5 packages under `packages/`. The 4 Python packages share the `pocketquant.*` namespace and form the uv workspace. `pocketquant-web` is a separate Node/Vite SPA, **excluded from the uv workspace** (see `pyproject.toml` → `[tool.uv.workspace] exclude`).
+6 packages under `packages/`. The 5 Python packages share the `pocketquant.*` namespace and form the uv workspace. `pocketquant-web` is a separate Node/Vite SPA, **excluded from the uv workspace** (see `pyproject.toml` → `[tool.uv.workspace] exclude`).
 
 ```
 packages/
-├── pocketquant-core/       # 0 deps — domain, common, persistence, infra ports
-├── pocketquant-backtest/   # → core — backtest engine, optimization, PaperBroker
-├── pocketquant-trading/    # → core — live trading, OKX broker, strategy orchestration
-├── pocketquant-api/        # → core + backtest + trading — FastAPI, DI, composition root
-└── pocketquant-web/        # Node/Vite SPA — TanStack Router, lightweight-charts; consumes pocketquant-api HTTP
+├── pocketquant-core/           # 0 deps — pure domain, concepts, common, config, ports + DTOs, all persisted entities
+├── pocketquant-infrastructure/ # → core — Database, Cache, all repositories, PaperBroker, binance, scheduler, http client
+├── pocketquant-execution/      # → core + infrastructure — shared strategy/order/position/risk app-services
+├── pocketquant-backtest/       # → core + infra + execution — backtest engine, optimization, backtest-run orchestration
+├── pocketquant-trading/        # → core + infra + execution — live trading, OKX broker, strategy/subscription handlers
+├── pocketquant-api/            # → all of the above — FastAPI, DI, composition root
+└── pocketquant-web/            # Node/Vite SPA — TanStack Router, lightweight-charts; consumes pocketquant-api HTTP
 ```
 
-**Dependency graph:** core ← {backtest, trading} ← api ← web (HTTP only)
+**Dependency graph:** core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api ← web (HTTP only). `backtest` and `trading` are independent siblings — neither imports the other.
 
 ## Package Imports
 
 ```python
-# Core domain
+# Core domain + ports/DTOs (no concrete adapters, no repos)
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
+from pocketquant.core.domain.backtest import BacktestResult, OptimizationResult
+from pocketquant.core.domain.subscription.entities import Subscription
+from pocketquant.core.domain.brokers.interfaces import IBroker, IBrokerFactory
+from pocketquant.core.domain.brokers.value_objects import OrderResult, AccountBalance
+from pocketquant.core.domain.market_data.interfaces import IDataProvider, IRealtimeQuoteProvider
 from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.persistence.repositories import BarRepository
-from pocketquant.core.infrastructure.brokers import IBroker, PaperBroker, IBrokerFactory
 from pocketquant.core.config import Settings
 
+# Infrastructure — persistence + concrete adapters
+from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.redis import Cache
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
+
+# Execution — shared strategy engine (used by both backtest + trading)
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.order_app_service import OrderAppService
+from pocketquant.execution.app_services.position_app_service import PositionAppService
+
 # Backtest
-from pocketquant.backtest.domain.entities import BacktestResult, OptimizationResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 
 # Trading
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.app_services.order_app_service import OrderAppService
 from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
 
 # API (composition root)
@@ -47,12 +62,13 @@ from pocketquant.api.market_data.app_services.bar_app_service import BarAppServi
 
 ## Domain Structure (Three-Tier DDD)
 
-Domain entities live in `pocketquant-core`:
-- **Top-level** (collection-backed): `domain/{bar,order,position,symbol,sync_status}/`
+All persisted domain entities live in `pocketquant-core`:
+- **Top-level** (collection-backed): `domain/{bar,order,position,symbol,sync_status,backtest,subscription}/`
+- **Ports + DTOs**: `domain/brokers/` (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent), `domain/market_data/` (IDataProvider, IRealtimeQuoteProvider)
 - **Concepts** (non-persisted logic): `concepts/{quote,risk,strategy}/`
-- **Shared** (cross-cutting): `domain/shared/{enums,events,value_objects}.py`
+- **Shared** (cross-cutting): `domain/shared/{enums,events,value_objects}.py` — `Interval` is the single enum in `enums.py`; `value_objects.py` holds only `INTERVAL_SECONDS`.
 
-Backtest domain lives in `pocketquant-backtest/domain/`.
+Backtest non-persisted services (e.g. `performance_calculator.py`) stay in `pocketquant-backtest/domain/services/`.
 
 Standard file names per folder: `entities.py`, `events.py`, `value_objects.py`, `enums.py`, `interfaces.py`, `services/`
 
@@ -61,18 +77,22 @@ Standard file names per folder: `entities.py`, `events.py`, `value_objects.py`, 
 6 providers in `pocketquant.api.di/`:
 - CoreProvider: Settings, EventBus, Mediator
 - PersistenceProvider: Database, Cache, repositories
-- InfrastructureProvider: BrokerFactory, TradingView, JobScheduler
+- InfrastructureProvider: BrokerFactory, JobScheduler, IDataProvider, HealthCoordinator
+- ExecutionProvider: OrderAppService, PositionAppService, StrategyAppService, RiskCheckHandler
 - MarketDataProvider: BarAppService, QuoteAppService, sync jobs
-- TradingProvider: OrderAppService, PositionAppService, StrategyAppService
 - HandlerProvider: All CQRS handlers
 
 Routes use `FromDishka[Mediator]` + `DishkaRoute` (NOT `Depends()`)
 
 ## Key Architecture Decisions
 
-- **IBrokerFactory protocol** in core — StrategyAppService depends on protocol, BrokerFactory (api) implements it
-- **PaperBroker in core** — shared by backtest engine and paper trading mode
-- **Backtest repos in backtest package** — `backtest_repository.py`, `optimization_repository.py` live in backtest, not core (avoid circular deps)
+- **IBrokerFactory protocol** in core — StrategyAppService depends on the protocol; BrokerFactory (api) implements it
+- **Ports + DTOs in core** — IBroker/IBrokerFactory/IDataProvider/IRealtimeQuoteProvider + OrderResult/AccountBalance/OrderEvent live in `core.domain.{brokers,market_data}`; concrete adapters live in infrastructure (DIP)
+- **PaperBroker in infrastructure** — `infrastructure.brokers.paper.paper_broker`; shared by backtest engine and paper trading mode
+- **All repositories in infrastructure** — every repo (core entities + backtest + trading + job_history) lives in `infrastructure.persistence.repositories`; zero repos in backtest/trading
+- **Shared engine in execution** — StrategyAppService/OrderAppService/PositionAppService/RiskCheckHandler in `pocketquant-execution`; both backtest and trading consume it, breaking the old backtest↔trading cycle
+- **Strategy injection** — backtest paths inject prepared strategies via the public `StrategyAppService.inject_prepared_strategy()` (connects broker + calls `on_start()` inside the lock); no private-member access
+- **Backtest-run orchestration in backtest** — `backtest.jobs.subscription_backtest_jobs` + `backtest.handlers.run_all_backtests` run backtests; trading reads backtest *results* via the infra repo only
 - **Namespace packages** — no `__init__.py` at `pocketquant/` level (PEP 420)
 - **Async suspension points** — every `await` is a preemption point (also `yield` in async generators, hidden awaits in `container.get()`, `async for` / `async with` / `gather`). Wire deps before consumers (publish-before-subscribe), finish setup before `yield` in `AsyncIterator` factories, no `await` inside atomic blocks, cleanup in `try/finally`. See `docs/code-standards.md` → "Async Suspension Points — Await Is Preemption" for the 6 sub-patterns.
 
@@ -112,7 +132,7 @@ No empty subclasses. Use base classes directly:
 | Routes | (functions) | — | `async def sync_symbol(...)` |
 | Middleware | `{Name}Middleware` | `Middleware` | `RateLimitMiddleware`, `IdempotencyMiddleware` |
 | Errors | `{Name}Error` | `Error` | `AppError`, `NotFoundError`, `DomainError` |
-| DI Providers | `{Domain}Provider` | `Provider` | `CoreProvider`, `TradingProvider` |
+| DI Providers | `{Domain}Provider` | `Provider` | `CoreProvider`, `ExecutionProvider` |
 | Configs | `{Name}Config` | `Config` | `BacktestConfig`, `WebhookConfig` |
 | Background Jobs | (functions) | — | `sync_5m()`, `sync_integrity()` |
 

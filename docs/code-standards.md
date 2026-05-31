@@ -178,11 +178,11 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 
 **6 Providers (initialization order):**
 1. **CoreProvider** - Settings, EventBus (max_history=50), Mediator
-2. **PersistenceProvider** - Database, Cache, 7 repositories
-3. **InfrastructureProvider** - Brokers, TradingView, Scheduler
-4. **MarketDataProvider** - BarAppService, QuoteAppService
-5. **TradingProvider** - OrderAppService, PositionAppService
-6. **HandlerProvider** - All 37 CQRS handlers
+2. **PersistenceProvider** - Database, Cache, repositories
+3. **InfrastructureProvider** - BrokerFactory, JobScheduler, IDataProvider, HealthCoordinator
+4. **ExecutionProvider** - OrderAppService, PositionAppService, StrategyAppService, RiskCheckHandler
+5. **MarketDataProvider** - BarAppService, QuoteAppService
+6. **HandlerProvider** - All CQRS handlers
 
 **Benefits:**
 - Auto-resolution by type hint (no manual wiring)
@@ -192,9 +192,9 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through instance methods in `packages/pocketquant-core/src/pocketquant/core/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
+All data access through instance methods in `packages/pocketquant-infrastructure/src/pocketquant/infrastructure/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
 
-**7 Repositories:** BarRepository (renamed from OHLCVRepository), OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository
+**12 Repositories:** BarRepository, OrderRepository, PositionRepository, SubscriptionRepository, BacktestRepository, BacktestOrderRepository, BacktestTradeRepository, OptimizationRepository, SymbolRepository, TrackedSymbolRepository, SyncStatusRepository, JobHistoryRepository
 
 **Key Pattern:**
 ```python

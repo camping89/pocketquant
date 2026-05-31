@@ -62,8 +62,8 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 
 | Path | Role |
 |---|---|
-| `packages/pocketquant-core/src/pocketquant/core/infrastructure/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
-| `packages/pocketquant-core/src/pocketquant/core/infrastructure/realtime_quote_provider.py:16` | `IRealtimeQuoteProvider` Protocol (`@runtime_checkable`, 9 members) |
+| `packages/pocketquant-infrastructure/src/pocketquant/infrastructure/market_data/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
+| `packages/pocketquant-core/src/pocketquant/core/domain/market_data/interfaces.py:16` | `IRealtimeQuoteProvider` Protocol (`@runtime_checkable`, 9 members) |
 | `packages/pocketquant-api/src/pocketquant/api/market_data/app_services/quote_app_service.py:18` | `QuoteAppService` — consumes ticks, writes to Redis + bar builder |
 | `packages/pocketquant-api/src/pocketquant/api/market_data/app_services/ws_subscription_manager.py:22` | `WsSubscriptionManager` — 5s reconcile loop vs `tracked_symbols` |
 | `packages/pocketquant-api/src/pocketquant/api/di/market_data.py:26` | DI wiring (scope=APP singleton) |
