@@ -4,11 +4,11 @@ from pocketquant.backtest.optimization.grid_optimization_app_service import (
     GridOptimizationAppService,
 )
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
-from pocketquant.backtest.persistence.optimization_repository import OptimizationRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.optimization_repository import OptimizationRepository
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 
 @handles(RunOptimizationCommand)

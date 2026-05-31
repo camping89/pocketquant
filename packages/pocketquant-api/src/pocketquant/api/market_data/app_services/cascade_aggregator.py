@@ -24,7 +24,7 @@ from pocketquant.core.domain.bar.entities import SOURCE_CASCADE, Bar
 from pocketquant.core.domain.shared.enums import Interval
 
 if TYPE_CHECKING:
-    from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+    from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
 

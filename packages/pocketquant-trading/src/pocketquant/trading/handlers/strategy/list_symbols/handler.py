@@ -1,10 +1,10 @@
 """ListSubscriptionsHandler — return subscriptions enriched with backtest status + is_running."""
 
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.strategy.list_symbols.query import ListSymbolsQuery
-from pocketquant.trading.persistence.subscription_repository import (
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 

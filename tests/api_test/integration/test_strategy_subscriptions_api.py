@@ -20,9 +20,9 @@ _STRATEGY_CODE = "test-sub-strat"
 @pytest.fixture(autouse=True)
 async def load_strategy(app_client):
     """Load test strategy + clean MongoDB subscription/backtest collections per test."""
-    from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+    from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
     from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-    from pocketquant.trading.persistence.subscription_repository import (
+    from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
         SubscriptionRepository,
     )
 

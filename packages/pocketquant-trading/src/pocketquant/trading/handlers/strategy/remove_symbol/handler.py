@@ -1,11 +1,11 @@
 """RemoveSymbolHandler — cancel job, delete backtest cache, delete subscription."""
 
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.strategy.remove_symbol.command import RemoveSymbolCommand
-from pocketquant.trading.persistence.subscription_repository import (
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 

@@ -12,12 +12,12 @@ from pocketquant.core.domain.backtest import (
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
 

@@ -16,12 +16,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 
 from .app_factory import make_test_app
@@ -95,7 +95,7 @@ def _synthetic_bars(n: int) -> list[Bar]:
 async def setup_strategy_and_bars(app_client):
     """Seed bars + load strategy; cleanup after."""
     from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-    from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )
 
@@ -126,7 +126,7 @@ async def setup_strategy_and_bars(app_client):
     await svc.unload_strategy(_STRATEGY_ID)
     await svc.load_strategy(config)
 
-    from pocketquant.trading.persistence.subscription_repository import (
+    from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
         SubscriptionRepository,
     )
 
@@ -148,7 +148,7 @@ async def setup_strategy_and_bars(app_client):
 @pytest.mark.asyncio
 async def test_run_all_backtest_cascade_delete(app_client):
     """Full flow: add sub → run-all → poll until done → delete strategy → DB clean."""
-    from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+    from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 
     container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     bt_repo: BacktestRepository = await container.get(BacktestRepository)

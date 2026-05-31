@@ -23,7 +23,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_TRACKED_SYMBOL_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
 

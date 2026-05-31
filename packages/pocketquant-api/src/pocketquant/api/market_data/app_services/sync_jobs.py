@@ -35,12 +35,12 @@ from pocketquant.core.domain.bar.entities import (
 )
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.infrastructure.scheduling.job_history_repository import (
+from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 

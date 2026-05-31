@@ -33,7 +33,7 @@ from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.config import Settings
 
 if TYPE_CHECKING:
-    from pocketquant.core.infrastructure.scheduling.job_history_repository import (
+    from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
         JobHistoryRepository,
     )
 

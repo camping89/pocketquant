@@ -15,8 +15,8 @@ from typing import Any, Literal
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
-from pocketquant.core.common.cache import Cache
-from pocketquant.core.infrastructure.scheduling.job_history_repository import (
+from pocketquant.infrastructure.persistence import Cache
+from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
 

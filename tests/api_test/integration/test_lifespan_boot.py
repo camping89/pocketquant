@@ -21,7 +21,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.mongodb import Database
 
 from .app_factory import make_test_app
 

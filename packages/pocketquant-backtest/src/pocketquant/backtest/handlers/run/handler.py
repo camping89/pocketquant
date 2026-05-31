@@ -2,15 +2,15 @@ from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
-from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 
 

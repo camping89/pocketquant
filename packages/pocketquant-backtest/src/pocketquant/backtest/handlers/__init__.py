@@ -27,7 +27,7 @@ from pocketquant.backtest.optimization.grid_optimization_app_service import (
 )
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 
 __all__ = [
     "backtest_router",

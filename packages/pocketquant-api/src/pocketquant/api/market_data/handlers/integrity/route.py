@@ -9,7 +9,7 @@ from pocketquant.api.market_data.app_services.integrity_jobs import (
 )
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pydantic import BaseModel, Field
 
 

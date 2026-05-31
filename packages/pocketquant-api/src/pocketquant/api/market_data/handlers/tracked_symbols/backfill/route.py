@@ -24,7 +24,7 @@ from pocketquant.api.market_data.handlers.tracked_symbols.backfill.handler impor
 from pocketquant.api.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 router = APIRouter(route_class=DishkaRoute)
 

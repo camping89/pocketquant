@@ -1,6 +1,6 @@
 """GetSubscriptionBacktestHandler — return raw cached backtest doc or 404."""
 
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.trading.handlers.strategy.get_subscription_backtest.query import (

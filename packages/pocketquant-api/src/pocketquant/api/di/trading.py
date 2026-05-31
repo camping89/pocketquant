@@ -14,8 +14,8 @@ from pocketquant.trading.app_services.order_app_service import OrderAppService
 from pocketquant.trading.app_services.position_app_service import PositionAppService
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
-from pocketquant.trading.persistence.order_repository import OrderRepository
-from pocketquant.trading.persistence.position_repository import PositionRepository
+from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
+from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
 
 
 class TradingProvider(Provider):

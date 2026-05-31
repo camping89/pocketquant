@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
-from pocketquant.core.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.mongodb import Database
 
 pytestmark = pytest.mark.integration
 

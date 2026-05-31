@@ -9,7 +9,7 @@ from pocketquant.api.market_data.handlers.sync.sync_one.bar_filters import (
 from pocketquant.api.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pocketquant.api.market_data.handlers.sync.sync_one.provider_fetch import fetch_with_retry
 from pocketquant.api.market_data.handlers.sync.sync_one.responses import build_success
-from pocketquant.core.common.cache import Cache
+from pocketquant.infrastructure.persistence import Cache
 from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
@@ -17,9 +17,9 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
-from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.infrastructure.persistence.repositories.sync_status_repository import SyncStatusRepository
 
 logger = get_logger(__name__)
 
