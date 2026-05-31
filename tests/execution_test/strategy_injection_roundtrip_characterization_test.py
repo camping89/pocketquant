@@ -1,23 +1,18 @@
-"""Characterization test pinning the strategy-injection round-trip contract.
+"""Contract test for the public strategy-injection API on the execution engine.
 
-This is the regression net for the Phase-7 extraction that replaces the three
-private-member injection hacks (``run/handler.py``,
-``backtest_strategy_loader.py``) with a public ``inject_prepared_strategy``
-method on the execution engine.
-
-The load-bearing behavior the public method MUST reproduce, verified here
-against the CURRENT injection block:
+``inject_prepared_strategy`` replaces the three former private-member injection
+hacks. The load-bearing behavior it MUST reproduce, pinned here:
 
   1. Round-trip: after injection, ``get_strategy(sid)`` returns the instance and
      ``unload_strategy(sid)`` clears it.
-  2. The broker is **connected** after injection (the hack calls
-     ``broker.connect()`` inside the lock when not already connected).
-  3. ``strategy.on_start()`` fired exactly once (the hack awaits it inside the
-     same critical section).
+  2. The broker is **connected** after injection (connect() runs inside the lock
+     when not already connected).
+  3. ``strategy.on_start()`` fired exactly once (awaited inside the same critical
+     section).
+  4. ``get_config(sid)`` returns the registered config; unknown sid → None.
 
-If the Phase-7 public method drops connect/on_start (a dict-only assignment),
-assertions (2) and (3) fail here — that is the regression this test exists to
-catch.
+A dict-only assignment that drops connect/on_start fails (2) and (3) — the
+regression this test guards.
 """
 
 from __future__ import annotations
@@ -28,7 +23,7 @@ import pytest
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.interfaces import IStrategy
 from pocketquant.core.concepts.strategy.value_objects import Signal, StrategyConfig
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 
 
 class _FakeBroker:
@@ -91,29 +86,6 @@ def _service() -> StrategyAppService:
     )
 
 
-async def _inject_current_way(
-    svc: StrategyAppService,
-    sid: str,
-    strategy: IStrategy,
-    broker: _FakeBroker,
-    config: StrategyConfig,
-) -> None:
-    """Replicate the CURRENT private-member injection critical section verbatim.
-
-    Mirrors ``RunBacktestHandler._load_strategy_for_backtest`` and
-    ``load_strategy_for_backtest`` — connect + on_start happen inside the lock.
-    Phase 7 replaces this block with ``svc.inject_prepared_strategy(...)``; this
-    test pins what that method must do.
-    """
-    async with svc._lock:  # pyright: ignore[reportPrivateUsage]
-        svc._strategies[sid] = strategy  # pyright: ignore[reportPrivateUsage]
-        svc._brokers[sid] = broker  # type: ignore[assignment]  # pyright: ignore[reportPrivateUsage]
-        svc._configs[sid] = config  # pyright: ignore[reportPrivateUsage]
-        if not broker.is_connected:
-            await broker.connect()
-        await strategy.on_start()
-
-
 @pytest.mark.asyncio
 async def test_injection_roundtrip_get_then_unload() -> None:
     svc = _service()
@@ -121,7 +93,7 @@ async def test_injection_roundtrip_get_then_unload() -> None:
     strat = _CountingStrategy(cfg)
     broker = _FakeBroker()
 
-    await _inject_current_way(svc, cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
 
     assert svc.get_strategy(cfg.id) is strat
     await svc.unload_strategy(cfg.id)
@@ -136,7 +108,7 @@ async def test_injection_connects_broker() -> None:
     broker = _FakeBroker()
     assert broker.is_connected is False
 
-    await _inject_current_way(svc, cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
 
     assert broker.is_connected is True
     assert broker.connect_calls == 1
@@ -149,7 +121,7 @@ async def test_injection_invokes_on_start_once() -> None:
     strat = _CountingStrategy(cfg)
     broker = _FakeBroker()
 
-    await _inject_current_way(svc, cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
 
     assert strat.on_start_calls == 1
     assert strat.is_running is True
@@ -164,7 +136,20 @@ async def test_injection_does_not_reconnect_already_connected_broker() -> None:
     await broker.connect()
     assert broker.connect_calls == 1
 
-    await _inject_current_way(svc, cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
 
     # Guard already-connected: connect() not called a second time.
     assert broker.connect_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_config_returns_registered_then_none_for_unknown() -> None:
+    svc = _service()
+    cfg = _config()
+    strat = _CountingStrategy(cfg)
+    broker = _FakeBroker()
+
+    assert svc.get_config(cfg.id) is None
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
+    assert svc.get_config(cfg.id) is cfg
+    assert svc.get_config("does-not-exist") is None

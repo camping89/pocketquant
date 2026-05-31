@@ -10,7 +10,7 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (

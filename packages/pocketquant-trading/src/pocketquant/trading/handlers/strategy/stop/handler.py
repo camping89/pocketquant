@@ -1,7 +1,7 @@
 """Stop strategy command handler."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.strategy.stop.command import StopStrategyCommand
 
 

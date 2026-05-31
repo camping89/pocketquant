@@ -2,7 +2,7 @@
 
 from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.strategy.list_symbols.query import ListSymbolsQuery
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,

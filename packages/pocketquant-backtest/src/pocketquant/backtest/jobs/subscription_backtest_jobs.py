@@ -42,7 +42,7 @@ def _get_container() -> AsyncContainer:
 
 
 # Job entrypoint — top-level coroutine referenced by APScheduler as text path:
-#   "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest"
+#   "pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest"
 
 
 async def run_subscription_backtest(subscription_id: str) -> None:
@@ -64,8 +64,8 @@ async def run_subscription_backtest(subscription_id: str) -> None:
     from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
     from pocketquant.core.common.messaging import EventBus
     from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-    from pocketquant.trading.jobs.backtest_strategy_loader import (
+    from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
+    from pocketquant.backtest.jobs.backtest_strategy_loader import (
         build_backtest_config,
         load_strategy_for_backtest,
         resolve_date_range,
@@ -97,8 +97,9 @@ async def run_subscription_backtest(subscription_id: str) -> None:
     synthetic_id: str | None = None
 
     try:
-        # 2. Validate strategy config is in memory
-        base_config = strategy_app_service._configs.get(strategy_code)  # pyright: ignore[reportPrivateUsage]
+        # 2. Validate strategy config is in memory. Keyed by the live strategy_code
+        # (pre-loaded via load_strategy), NOT a synthetic per-job id.
+        base_config = strategy_app_service.get_config(strategy_code)
         if base_config is None:
             raise ValueError(
                 f"Strategy config for '{strategy_code}' not in memory. "

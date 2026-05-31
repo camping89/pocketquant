@@ -3,12 +3,12 @@
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.trading.handlers.strategy.run_all_backtests.command import RunAllBacktestsCommand
+from pocketquant.backtest.handlers.run_all_backtests.command import RunAllBacktestsCommand
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 
-_JOB_MODULE = "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest"
+_JOB_MODULE = "pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest"
 
 
 @handles(RunAllBacktestsCommand)

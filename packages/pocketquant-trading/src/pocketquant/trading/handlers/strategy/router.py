@@ -9,7 +9,6 @@ Template-scoped:
     GET    /                                  list registered templates
     GET    /{strategy_code}                   template metadata
     POST   /{strategy_code}/subscriptions     create a subscription
-    POST   /{strategy_code}/run-all-backtests fan-out backtest for all subs of template
     DELETE /{strategy_code}                   cascade delete template + all subs
 
 Subscription-scoped:
@@ -44,9 +43,6 @@ from pocketquant.trading.handlers.strategy.list_symbols.route import (
 from pocketquant.trading.handlers.strategy.remove_symbol.route import (
     router as remove_subscription_router,
 )
-from pocketquant.trading.handlers.strategy.run_all_backtests.route import (
-    router as run_all_backtests_router,
-)
 from pocketquant.trading.handlers.strategy.start.route import router as start_subscription_router
 from pocketquant.trading.handlers.strategy.stop.route import router as stop_subscription_router
 
@@ -54,7 +50,6 @@ router = APIRouter(prefix="/strategies", tags=["strategies"])
 router.include_router(list_templates_router)
 router.include_router(get_template_router)
 router.include_router(create_subscription_router)
-router.include_router(run_all_backtests_router)
 router.include_router(delete_strategy_router)
 
 subscription_router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])

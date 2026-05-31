@@ -13,7 +13,6 @@ from pocketquant.infrastructure.market_data.binance.binance_client import Binanc
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.infrastructure.persistence.repositories.job_history_repository import JobHistoryRepository
 from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
 
 
 class InfrastructureProvider(Provider):
@@ -35,7 +34,6 @@ class InfrastructureProvider(Provider):
         return BinanceClient(settings=settings)
 
     broker_factory = provide(BrokerFactory, scope=Scope.APP)
-    risk_handler = provide(RiskCheckHandler, scope=Scope.APP)
 
     @provide(scope=Scope.APP)
     def get_health_coordinator(self) -> HealthCoordinator:

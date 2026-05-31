@@ -762,6 +762,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pocketquant-core" },
+    { name = "pocketquant-execution" },
     { name = "pocketquant-infrastructure" },
 ]
 
@@ -770,6 +771,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pandas", specifier = ">=2.1.0" },
     { name = "pocketquant-core", editable = "packages/pocketquant-core" },
+    { name = "pocketquant-execution", editable = "packages/pocketquant-execution" },
     { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
 ]
 
@@ -844,6 +846,7 @@ version = "2.0.0"
 source = { editable = "packages/pocketquant-trading" }
 dependencies = [
     { name = "pocketquant-core" },
+    { name = "pocketquant-execution" },
     { name = "pocketquant-infrastructure" },
     { name = "python-okx" },
     { name = "websockets" },
@@ -852,6 +855,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "pocketquant-core", editable = "packages/pocketquant-core" },
+    { name = "pocketquant-execution", editable = "packages/pocketquant-execution" },
     { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
     { name = "python-okx", specifier = ">=0.4.1" },
     { name = "websockets", specifier = ">=12.0" },

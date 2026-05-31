@@ -25,10 +25,10 @@ from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.brokers.interfaces import IBroker
 from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.trading.app_services.order_app_service import OrderAppService
-from pocketquant.trading.app_services.position_app_service import PositionAppService
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
+from pocketquant.execution.app_services.order_app_service import OrderAppService
+from pocketquant.execution.app_services.position_app_service import PositionAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
 
 _SYM = "BTCUSDT:BINANCE"
 

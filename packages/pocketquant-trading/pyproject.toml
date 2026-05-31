@@ -7,6 +7,7 @@ license = { text = "MIT" }
 dependencies = [
     "pocketquant-core",
     "pocketquant-infrastructure",
+    "pocketquant-execution",
     "python-okx>=0.4.1",
     "websockets>=12.0",
 ]
@@ -14,6 +15,7 @@ dependencies = [
 [tool.uv.sources]
 pocketquant-core = { workspace = true }
 pocketquant-infrastructure = { workspace = true }
+pocketquant-execution = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

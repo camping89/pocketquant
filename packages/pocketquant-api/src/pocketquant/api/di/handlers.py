@@ -54,8 +54,8 @@ from pocketquant.trading.handlers.strategy.get_trades.handler import (
 from pocketquant.trading.handlers.strategy.list_symbols.handler import (
     ListSymbolsHandler as ListStrategySymbolsHandler,
 )
+from pocketquant.backtest.handlers.run_all_backtests.handler import RunAllBacktestsHandler
 from pocketquant.trading.handlers.strategy.remove_symbol.handler import RemoveSymbolHandler
-from pocketquant.trading.handlers.strategy.run_all_backtests.handler import RunAllBacktestsHandler
 from pocketquant.trading.handlers.strategy.start.handler import StartStrategyHandler
 from pocketquant.trading.handlers.strategy.stop.handler import StopStrategyHandler
 from pocketquant.trading.handlers.trading.get_order.handler import GetOrderHandler

@@ -1,7 +1,7 @@
 """Trading feature - order and position management."""
 
-from pocketquant.trading.app_services.order_app_service import OrderAppService
-from pocketquant.trading.app_services.position_app_service import PositionAppService
+from pocketquant.execution.app_services.order_app_service import OrderAppService
+from pocketquant.execution.app_services.position_app_service import PositionAppService
 from pocketquant.trading.handlers.trading.get_order import GetOrderHandler, GetOrderQuery
 from pocketquant.trading.handlers.trading.get_position import GetPositionHandler, GetPositionQuery
 from pocketquant.trading.handlers.trading.list_orders import ListOrdersHandler, ListOrdersQuery

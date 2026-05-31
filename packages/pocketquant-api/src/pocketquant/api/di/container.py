@@ -3,11 +3,11 @@
 from dishka import AsyncContainer, make_async_container
 from pocketquant.api.di import (
     CoreProvider,
+    ExecutionProvider,
     HandlerProvider,
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
-    TradingProvider,
 )
 from pocketquant.api.di.handlers import ALL_HANDLER_TYPES
 from pocketquant.core.common.mediator.handler_registry import HandlerRegistry
@@ -17,8 +17,8 @@ PROVIDERS = [
     CoreProvider(),
     PersistenceProvider(),
     InfrastructureProvider(),
+    ExecutionProvider(),
     MarketDataProvider(),
-    TradingProvider(),
     HandlerProvider(),
 ]
 
