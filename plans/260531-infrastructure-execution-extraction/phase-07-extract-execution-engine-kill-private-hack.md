@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Extract execution engine + kill private hack"
-status: pending
+status: done
 priority: P1
 effort: "1.5d"
 dependencies: [6]

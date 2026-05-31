@@ -16,6 +16,10 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
+from pocketquant.core.domain.sync_status.services import (
+    SyncProgressDecision,
+    SyncProgressTracker,
+)
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
@@ -91,9 +95,8 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
             await self._mark_completed(symbol, interval, total_bars, latest_bar)
             await self._invalidate_cache(symbol, interval)
 
-            # Single bump/reset decision: covers empty-fetch, all-misaligned,
-            # and all-already-existing cases uniformly.
-            if inserted_count > 0:
+            decision = SyncProgressTracker.decide(inserted_count)
+            if decision is SyncProgressDecision.RESET:
                 await self._sync_status_repo.reset_empty_fetch(symbol, interval)
                 logger.info(
                     "market_data.sync.completed",
