@@ -3,7 +3,7 @@
 from typing import Any
 
 from pocketquant.core.domain.order import OrderStatus
-from pocketquant.core.infrastructure.brokers.models import OrderResult
+from pocketquant.core.domain.brokers.value_objects import OrderResult
 
 # OKX order state to domain OrderStatus mapping
 OKX_STATE_MAP: dict[str, OrderStatus] = {

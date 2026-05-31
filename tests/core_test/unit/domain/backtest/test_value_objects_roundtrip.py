@@ -14,7 +14,7 @@ from pocketquant.core.domain.backtest import (
     Order,
     Trade,
 )
-from pocketquant.core.infrastructure.brokers.events import OrderEvent
+from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)

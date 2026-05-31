@@ -17,7 +17,7 @@ from pocketquant.backtest.engine.result_collector import BacktestResultCollector
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.domain.order import OrderSide, OrderStatus
-from pocketquant.core.infrastructure.brokers.models import OrderResult
+from pocketquant.core.domain.brokers.value_objects import OrderResult
 
 
 @pytest.fixture

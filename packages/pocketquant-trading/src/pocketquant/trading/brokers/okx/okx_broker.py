@@ -7,8 +7,8 @@ from typing import Any
 import structlog
 from pocketquant.core.domain.order import OrderAggregate, OrderStatus
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.core.infrastructure.brokers.interface import IBroker, OrderCallback
-from pocketquant.core.infrastructure.brokers.models import AccountBalance, OrderResult
+from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
+from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.trading.brokers.okx.okx_mapper import (
     map_okx_balance_to_domain,
     map_okx_position_to_domain,

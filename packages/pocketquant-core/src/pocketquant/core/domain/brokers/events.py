@@ -4,8 +4,7 @@
 delivered alongside ``OrderResult`` via a dedicated callback channel.
 
 Lives in core so both ``PaperBroker`` (emitter) and the backtest result
-collector (consumer) can import it without crossing the core → backtest
-dependency boundary.
+collector (consumer) can import it without crossing a dependency boundary.
 """
 
 from __future__ import annotations

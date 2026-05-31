@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import Protocol
 
+from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.core.infrastructure.brokers.models import AccountBalance, OrderResult
 
 # Callback can be sync or async
 OrderCallback = Callable[[OrderResult], None | Awaitable[None]]

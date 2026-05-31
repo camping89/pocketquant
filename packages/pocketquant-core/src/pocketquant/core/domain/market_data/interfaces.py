@@ -1,20 +1,54 @@
-"""IRealtimeQuoteProvider — structural Protocol for realtime WebSocket quote providers.
+"""Market-data provider ports — REST/historical (IDataProvider) and realtime (IRealtimeQuoteProvider).
 
-Using Protocol (not ABC) so future providers (OKX, Kraken, etc.) can satisfy the
-interface via structural subtyping without inheritance. @runtime_checkable enables
-isinstance() checks in DI tests and guard assertions.
+Neutral domain location so no concrete provider implementation (Binance, OKX,
+TradingView, etc.) is implied by the module path.
 """
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
+
+from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.shared.value_objects import Interval
+
+
+class IDataProvider(ABC):
+    """Abstract base class for data providers."""
+
+    @abstractmethod
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        interval: Interval,
+        n_bars: int = 1000,
+    ) -> list[Bar]:
+        """Fetch OHLCV bars from data provider. ``symbol`` is composite ``{code}:{exchange}``."""
+        ...
+
+    @abstractmethod
+    async def search_symbols(
+        self,
+        query: str,
+    ) -> list[dict]:
+        """Search available symbols."""
+        ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Clean up resources."""
+        ...
 
 
 @runtime_checkable
 class IRealtimeQuoteProvider(Protocol):
     """Protocol for realtime WebSocket-based quote providers.
+
+    Using Protocol (not ABC) so future providers (OKX, Kraken, etc.) satisfy the
+    interface via structural subtyping without inheritance. @runtime_checkable
+    enables isinstance() checks in DI tests and guard assertions.
 
     9 required members — all concrete providers must expose these to satisfy DI
     type resolution and runtime isinstance() checks.
