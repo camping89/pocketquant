@@ -24,7 +24,7 @@ from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.brokers.interfaces import IBroker
-from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.trading.app_services.order_app_service import OrderAppService
 from pocketquant.trading.app_services.position_app_service import PositionAppService
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService

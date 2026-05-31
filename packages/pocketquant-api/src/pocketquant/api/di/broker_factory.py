@@ -2,7 +2,7 @@
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.interfaces import IBroker
-from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
 
 

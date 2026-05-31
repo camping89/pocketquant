@@ -9,10 +9,10 @@ from dishka import Provider, Scope, provide
 from pocketquant.api.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
-from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
+from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.infrastructure.persistence.repositories.job_history_repository import JobHistoryRepository
-from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
 
 

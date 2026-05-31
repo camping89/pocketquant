@@ -15,7 +15,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infrastructure.binance.binance_mappers import (
+from pocketquant.infrastructure.market_data.binance.binance_mappers import (
     INTERVAL_TO_BINANCE,
     kline_to_bar,
     validate_symbol,

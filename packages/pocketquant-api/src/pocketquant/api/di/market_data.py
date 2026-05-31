@@ -6,7 +6,7 @@ from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppS
 from pocketquant.api.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.infrastructure.binance.binance_websocket_client import BinanceWebSocketClient
+from pocketquant.infrastructure.market_data.binance.binance_websocket_client import BinanceWebSocketClient
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 from pocketquant.infrastructure.persistence.redis import Cache
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository

@@ -8,7 +8,7 @@ import pytest
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
-from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _SYM = "BTCUSDT:BINANCE"

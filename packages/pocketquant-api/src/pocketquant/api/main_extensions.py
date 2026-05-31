@@ -32,7 +32,7 @@ from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLogg
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 from pocketquant.infrastructure.persistence.repositories.job_history_repository import JobHistoryRepository
-from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.infrastructure.persistence.repositories.sync_status_repository import SyncStatusRepository

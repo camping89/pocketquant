@@ -38,7 +38,7 @@ from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
-from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
