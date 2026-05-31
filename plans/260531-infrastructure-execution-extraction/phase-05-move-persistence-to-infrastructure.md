@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Move persistence to infrastructure"
-status: pending
+status: done
 priority: P1
 effort: "1d"
 dependencies: [4]

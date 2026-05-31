@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Move adapters to infrastructure"
-status: pending
+status: done
 priority: P1
 effort: "1d"
 dependencies: [5]

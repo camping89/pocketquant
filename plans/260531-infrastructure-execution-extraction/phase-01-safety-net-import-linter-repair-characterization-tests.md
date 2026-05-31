@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Safety net: import-linter repair + characterization tests"
-status: pending
+status: done
 priority: P1
 effort: "0.5d"
 dependencies: []

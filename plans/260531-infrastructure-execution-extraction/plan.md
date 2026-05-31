@@ -1,7 +1,7 @@
 ---
 title: "Extract infrastructure + execution packages (6-package layering)"
 description: "Split persistence + adapters out of core into pocketquant-infrastructure; extract shared strategy engine into pocketquant-execution; break the backtest↔trading cycle; promote all persisted entities to core. TDD: characterization tests + import-linter gate each move."
-status: pending
+status: done
 priority: P1
 branch: "develop"
 tags: [refactor, monorepo, architecture, tdd, hexagonal]
@@ -41,13 +41,13 @@ New public methods (execution-service injection API, sync-status domain service)
 |-------|------|--------|
 | 1 | [Safety net: import-linter repair + characterization tests](./phase-01-safety-net-import-linter-repair-characterization-tests.md) | Done |
 | 2 | [Scaffold infrastructure + execution packages](./phase-02-scaffold-infrastructure-execution-packages.md) | Done |
-| 3 | [Promote persisted entities to core](./phase-03-promote-persisted-entities-to-core.md) | Pending |
-| 4 | [Move ports + DTOs to core](./phase-04-move-ports-dtos-to-core.md) | Pending |
-| 5 | [Move persistence to infrastructure](./phase-05-move-persistence-to-infrastructure.md) | Pending |
-| 6 | [Move adapters to infrastructure](./phase-06-move-adapters-to-infrastructure.md) | Pending |
-| 7 | [Extract execution engine + kill private hack](./phase-07-extract-execution-engine-kill-private-hack.md) | Pending |
-| 8 | [Extract sync-status counter to domain service](./phase-08-extract-sync-status-counter-to-domain-service.md) | Pending |
-| 9 | [Finalize layered contracts + docs + full sweep](./phase-09-finalize-layered-contracts-docs-full-sweep.md) | Pending |
+| 3 | [Promote persisted entities to core](./phase-03-promote-persisted-entities-to-core.md) | Done |
+| 4 | [Move ports + DTOs to core](./phase-04-move-ports-dtos-to-core.md) | Done |
+| 5 | [Move persistence to infrastructure](./phase-05-move-persistence-to-infrastructure.md) | Done |
+| 6 | [Move adapters to infrastructure](./phase-06-move-adapters-to-infrastructure.md) | Done |
+| 7 | [Extract execution engine + kill private hack](./phase-07-extract-execution-engine-kill-private-hack.md) | Done |
+| 8 | [Extract sync-status counter to domain service](./phase-08-extract-sync-status-counter-to-domain-service.md) | Done |
+| 9 | [Finalize layered contracts + docs + full sweep](./phase-09-finalize-layered-contracts-docs-full-sweep.md) | Done |
 
 ## Phase Dependency Chain
 
