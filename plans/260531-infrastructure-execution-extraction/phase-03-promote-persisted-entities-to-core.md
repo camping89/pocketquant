@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Promote persisted entities to core"
-status: pending
+status: done
 priority: P1
 effort: "1d"
 dependencies: [2]

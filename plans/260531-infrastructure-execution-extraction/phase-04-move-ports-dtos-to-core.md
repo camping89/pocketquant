@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Move ports + DTOs to core"
-status: pending
+status: done
 priority: P1
 effort: "0.5d"
 dependencies: [3]

@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Finalize layered contracts + docs + full sweep"
-status: pending
+status: done
 priority: P1
 effort: "0.5d"
 dependencies: [8]
