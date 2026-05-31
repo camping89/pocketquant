@@ -31,8 +31,8 @@ from pocketquant.core.infrastructure.binance.binance_mappers import (
     INTERVAL_TO_BINANCE,
     kline_to_bar,
 )
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger("scripts.backfill_1m_from_binance")
 

@@ -61,16 +61,16 @@ async def run_subscription_backtest(subscription_id: str) -> None:
      10. Finally: unload synthetic_id only — user's live strategy is untouched.
     """
     from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-    from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
+    from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
     from pocketquant.core.common.messaging import EventBus
-    from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+    from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
     from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
     from pocketquant.trading.jobs.backtest_strategy_loader import (
         build_backtest_config,
         load_strategy_for_backtest,
         resolve_date_range,
     )
-    from pocketquant.trading.persistence.subscription_repository import (
+    from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
         SubscriptionRepository,
     )
 

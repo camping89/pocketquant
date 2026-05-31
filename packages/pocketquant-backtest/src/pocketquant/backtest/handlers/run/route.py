@@ -3,7 +3,7 @@ from datetime import datetime
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
-from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.common.mediator import Mediator
 from pydantic import BaseModel
 

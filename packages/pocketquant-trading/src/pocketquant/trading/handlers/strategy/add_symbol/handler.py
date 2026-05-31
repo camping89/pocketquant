@@ -7,13 +7,13 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
-from pocketquant.trading.persistence.subscription_repository import (
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 

@@ -6,12 +6,12 @@ from datetime import UTC, datetime
 
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.core.domain.subscription import (
     Subscription,
     SubscriptionAlreadyExistsError,
 )
-from pocketquant.trading.persistence.subscription_repository import (
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 

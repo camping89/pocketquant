@@ -4,7 +4,7 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.trading.handlers.strategy.run_all_backtests.command import RunAllBacktestsCommand
-from pocketquant.trading.persistence.subscription_repository import (
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 

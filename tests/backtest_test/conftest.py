@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.mongodb import Database
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 

@@ -4,7 +4,7 @@ from pocketquant.api.market_data.handlers.tracked_symbols.list_all.query import 
     ListTrackedSymbolsQuery,
 )
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 

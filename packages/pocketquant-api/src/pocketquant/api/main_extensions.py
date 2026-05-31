@@ -16,34 +16,34 @@ from pocketquant.api.market_data.handlers.router import router as market_data_ro
 from pocketquant.api.market_data.handlers.tracked_symbols import router as tracked_symbols_router
 from pocketquant.api.system_jobs.route import router as system_jobs_router
 from pocketquant.backtest.handlers import backtest_router
-from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
-from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
-from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
-from pocketquant.backtest.persistence.optimization_repository import (
+from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
+from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
     OptimizationRepository,
 )
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
-from pocketquant.core.common.health.checks import check_database, check_redis
+from pocketquant.infrastructure.persistence.health_checks import check_database, check_redis
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
-from pocketquant.core.infrastructure.scheduling.job_history_repository import JobHistoryRepository
+from pocketquant.infrastructure.persistence.repositories.job_history_repository import JobHistoryRepository
 from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
-from pocketquant.core.persistence.repositories.sync_status_repository import SyncStatusRepository
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.infrastructure.persistence.repositories.sync_status_repository import SyncStatusRepository
+from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 from pocketquant.trading.handlers.strategy import strategy_router, subscription_router
 from pocketquant.trading.handlers.trading import trading_router
-from pocketquant.trading.persistence.order_repository import OrderRepository
-from pocketquant.trading.persistence.position_repository import PositionRepository
-from pocketquant.trading.persistence.subscription_repository import (
+from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
+from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 
@@ -204,7 +204,7 @@ async def migrate_strategy_id_fields(container: AsyncContainer) -> None:
       2. Per-collection ``$rename`` of the legacy ``strategy_id`` field.
       3. Drop legacy named indexes. ``ensure_all_indexes`` re-creates the new ones.
     """
-    from pocketquant.core.persistence.mongodb import Database
+    from pocketquant.infrastructure.persistence.mongodb import Database
 
     database = await container.get(Database)
 
@@ -385,7 +385,7 @@ def handle_startup_failure(error: Exception) -> None:
     )
     console.print("\n[dim]Your code:[/]")
     console.print("  -> [cyan]pocketquant.api.main[/] in lifespan")
-    console.print("  -> [cyan]pocketquant.core.persistence.mongodb[/] in connect")
+    console.print("  -> [cyan]pocketquant.infrastructure.persistence.mongodb[/] in connect")
     raise error
 
 

@@ -4,7 +4,7 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.trading.handlers.strategy.get_positions.query import (
     GetStrategyPositionsQuery,
 )
-from pocketquant.trading.persistence.position_repository import PositionRepository
+from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
 
 
 @handles(GetStrategyPositionsQuery)

@@ -25,8 +25,8 @@ from pocketquant.api.market_data.app_services.sync_jobs import set_container as 
 from pocketquant.api.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.redis import Cache
 from pocketquant.trading.jobs.backtest_jobs import set_container as set_backtest_container
 
 logger = get_logger(__name__)

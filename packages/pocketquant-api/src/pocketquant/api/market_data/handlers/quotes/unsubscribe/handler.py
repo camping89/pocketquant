@@ -5,7 +5,7 @@ from pocketquant.api.market_data.handlers.quotes.unsubscribe.command import Unsu
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.infrastructure.persistence.redis import Cache
 
 logger = get_logger(__name__)
 

@@ -6,7 +6,7 @@ from pocketquant.api.market_data.handlers.quotes.dto import QuoteResult
 from pocketquant.api.market_data.handlers.quotes.get_all.query import GetAllQuotesQuery
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.infrastructure.persistence.redis import Cache
 
 
 @handles(GetAllQuotesQuery)

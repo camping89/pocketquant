@@ -14,7 +14,7 @@ from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)

@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.infrastructure.persistence.redis import Cache
 
 router = APIRouter(route_class=DishkaRoute)
 logger = get_logger(__name__)
