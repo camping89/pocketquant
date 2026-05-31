@@ -12,7 +12,7 @@ from pocketquant.core.common.time.simulation import (
 )
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
-from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 
 
 @pytest.fixture(autouse=True)

@@ -5,6 +5,6 @@ live in ``pocketquant.core.domain.brokers``. This package holds only the
 concrete PaperBroker adapter.
 """
 
-from pocketquant.core.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 
 __all__ = ["PaperBroker"]

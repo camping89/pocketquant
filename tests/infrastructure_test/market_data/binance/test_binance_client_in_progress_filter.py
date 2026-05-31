@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
+from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
 
 
 def _make_kline(open_time_ms: int, *, close: float = 50_000.0) -> list:
@@ -63,7 +63,7 @@ def _patch_now(now_ms: int):
     fake_dt.now = MagicMock(return_value=fake_now)
     fake_dt.fromtimestamp = datetime.fromtimestamp
     return patch(
-        "pocketquant.core.infrastructure.binance.binance_client.datetime",
+        "pocketquant.infrastructure.market_data.binance.binance_client.datetime",
         fake_dt,
     )
 

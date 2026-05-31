@@ -43,7 +43,7 @@ from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
+from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
 from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (

@@ -778,8 +778,6 @@ name = "pocketquant-core"
 version = "2.0.0"
 source = { editable = "packages/pocketquant-core" }
 dependencies = [
-    { name = "apscheduler" },
-    { name = "httpx" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pydantic" },
@@ -787,13 +785,10 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
     { name = "structlog" },
-    { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "apscheduler", specifier = ">=3.10.0" },
-    { name = "httpx", specifier = ">=0.26.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pandas", specifier = ">=2.1.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
@@ -801,7 +796,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "structlog", specifier = ">=24.1.0" },
-    { name = "websockets", specifier = ">=12.0" },
 ]
 
 [[package]]

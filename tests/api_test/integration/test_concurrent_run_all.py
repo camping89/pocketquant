@@ -20,7 +20,7 @@ from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
