@@ -12,6 +12,8 @@ members = [
     "pocketquant-api",
     "pocketquant-backtest",
     "pocketquant-core",
+    "pocketquant-execution",
+    "pocketquant-infrastructure",
     "pocketquant-trading",
     "pocketquant-workspace",
 ]
@@ -799,6 +801,46 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "structlog", specifier = ">=24.1.0" },
+    { name = "websockets", specifier = ">=12.0" },
+]
+
+[[package]]
+name = "pocketquant-execution"
+version = "2.0.0"
+source = { editable = "packages/pocketquant-execution" }
+dependencies = [
+    { name = "pocketquant-core" },
+    { name = "pocketquant-infrastructure" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pocketquant-core", editable = "packages/pocketquant-core" },
+    { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
+]
+
+[[package]]
+name = "pocketquant-infrastructure"
+version = "2.0.0"
+source = { editable = "packages/pocketquant-infrastructure" }
+dependencies = [
+    { name = "apscheduler" },
+    { name = "cachetools" },
+    { name = "httpx" },
+    { name = "pocketquant-core" },
+    { name = "pymongo" },
+    { name = "redis" },
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "apscheduler", specifier = ">=3.10.0" },
+    { name = "cachetools", specifier = ">=5.0.0" },
+    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "pocketquant-core", editable = "packages/pocketquant-core" },
+    { name = "pymongo", specifier = ">=4.16.0" },
+    { name = "redis", specifier = ">=5.0.0" },
     { name = "websockets", specifier = ">=12.0" },
 ]
 
