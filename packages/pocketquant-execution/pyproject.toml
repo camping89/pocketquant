@@ -1,0 +1,21 @@
+[project]
+name = "pocketquant-execution"
+version = "2.0.0"
+description = "PocketQuant shared strategy/order/position/risk execution engine"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+dependencies = [
+    "pocketquant-core",
+    "pocketquant-infrastructure",
+]
+
+[tool.uv.sources]
+pocketquant-core = { workspace = true }
+pocketquant-infrastructure = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pocketquant"]
