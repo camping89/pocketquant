@@ -34,7 +34,7 @@ from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_SYNC_1M,
 )
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infrastructure.data_provider import IDataProvider
+from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.core.infrastructure.scheduling.job_history_repository import (
     JobHistoryRepository,
 )

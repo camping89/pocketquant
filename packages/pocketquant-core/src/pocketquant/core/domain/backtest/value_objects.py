@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
-from pocketquant.core.infrastructure.brokers.events import OrderEvent
+from pocketquant.core.domain.brokers.events import OrderEvent
 
 
 @dataclass

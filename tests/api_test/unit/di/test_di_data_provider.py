@@ -15,8 +15,8 @@ from pocketquant.api.di.market_data import MarketDataProvider
 from pocketquant.core.config import Settings
 from pocketquant.core.infrastructure.binance.binance_client import BinanceClient
 from pocketquant.core.infrastructure.binance.binance_websocket_client import BinanceWebSocketClient
-from pocketquant.core.infrastructure.data_provider import IDataProvider
-from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 
 
 @pytest.fixture

@@ -20,7 +20,7 @@ from pocketquant.core.infrastructure.binance.binance_mappers import (
     kline_to_bar,
     validate_symbol,
 )
-from pocketquant.core.infrastructure.data_provider import IDataProvider
+from pocketquant.core.domain.market_data.interfaces import IDataProvider
 
 logger = get_logger(__name__)
 

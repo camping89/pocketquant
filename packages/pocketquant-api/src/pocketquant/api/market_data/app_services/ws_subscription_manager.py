@@ -9,7 +9,7 @@ Cancel-safe: CancelledError propagates cleanly so lifespan teardown works.
 import asyncio
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )

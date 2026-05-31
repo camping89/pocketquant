@@ -11,7 +11,7 @@ from pocketquant.core.concepts.strategy.interfaces import IStrategy
 from pocketquant.core.concepts.strategy.value_objects import Direction, Signal, StrategyConfig
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
-from pocketquant.core.infrastructure.brokers.interface import IBroker, IBrokerFactory
+from pocketquant.core.domain.brokers.interfaces import IBroker, IBrokerFactory
 
 if TYPE_CHECKING:
     from pocketquant.trading.app_services.order_app_service import OrderAppService

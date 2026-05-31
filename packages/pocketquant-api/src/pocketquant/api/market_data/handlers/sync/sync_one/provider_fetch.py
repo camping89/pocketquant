@@ -14,7 +14,7 @@ from pocketquant.api.market_data.handlers.sync.sync_one.bar_alignment import has
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.value_objects import Interval
-from pocketquant.core.infrastructure.data_provider import IDataProvider
+from pocketquant.core.domain.market_data.interfaces import IDataProvider
 
 logger = get_logger(__name__)
 

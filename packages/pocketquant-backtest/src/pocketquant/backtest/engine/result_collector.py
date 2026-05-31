@@ -26,7 +26,7 @@ from pocketquant.core.domain.backtest import (
     Order,
     Trade,
 )
-from pocketquant.core.infrastructure.brokers.events import OrderEvent
+from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.backtest.engine.collected_results import CollectedResults
 from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
 from pocketquant.backtest.engine.metrics_builder import build_metrics

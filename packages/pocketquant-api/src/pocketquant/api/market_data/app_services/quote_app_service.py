@@ -9,7 +9,7 @@ from pocketquant.api.market_data.app_services.quote_dto import Quote, QuoteTick
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
-from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 from pocketquant.core.persistence.redis import Cache
 
 logger = get_logger(__name__)

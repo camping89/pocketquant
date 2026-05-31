@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pocketquant.api.market_data.handlers.quotes.get_status.query import GetQuotesStatusQuery
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.infrastructure.realtime_quote_provider import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 
 
 @dataclass
