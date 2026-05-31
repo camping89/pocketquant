@@ -58,6 +58,7 @@ markers = [
 
 [tool.importlinter]
 root_packages = ["pocketquant"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Core has zero sibling dependencies"
