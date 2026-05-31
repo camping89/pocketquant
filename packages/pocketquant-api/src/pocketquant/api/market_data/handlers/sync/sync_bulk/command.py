@@ -1,7 +1,7 @@
 """Bulk sync command for market data operations."""
 
 from pocketquant.core.common.constants import LIMIT_TVDATAFEED_MAX_BARS
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pydantic import BaseModel, Field
 
 

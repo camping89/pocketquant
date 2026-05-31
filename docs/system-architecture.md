@@ -307,55 +307,47 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         )
 ```
 
-### Layer 4: Infrastructure (External I/O) — packages/pocketquant-core/src/pocketquant/core/infrastructure/ + persistence/
+### Layer 4: Infrastructure (External I/O) — packages/pocketquant-infrastructure/
 
-**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP.
+**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters only — the abstractions (ports/DTOs) live in `pocketquant-core` (`core.domain.brokers`, `core.domain.market_data`) so execution/backtest/trading depend on contracts, not adapters (DIP).
 
 **Structure:**
 ```
-infrastructure/                        # External I/O (brokers, providers, scheduling, webhooks)
-├── brokers/                  # Order execution abstraction
-│   ├── interface.py         # IBroker interface (submit, cancel, get positions)
-│   ├── factory.py           # BrokerFactory (create paper or okx)
-│   ├── models.py            # Execution models (ExecutionResult, etc.)
-│   ├── paper/               # PaperBroker (in-memory simulation)
-│   │   └── paper_broker.py
-│   └── okx/                 # OKXBroker (live trading)
-│       ├── okx_broker.py    # REST + WebSocket integration
-│       ├── okx_mapper.py    # Domain ↔ OKX model mapping
-│       └── websocket/       # OKX WebSocket protocol
-│           ├── okx_websocket_client.py   # Low-level WebSocket
-│           ├── okx_auth.py               # HMAC-SHA256 auth
-│           ├── okx_message_parser.py     # JSON message parsing
-│           ├── okx_order_mapper.py       # Order state mapping
-│           ├── okx_position_mapper.py    # Position state mapping
-│           └── okx_reconnection_handler.py  # Resilient connection
-├── binance/                  # Binance REST + WS integration
-│   ├── binance_client.py    # BinanceClient (implements IDataProvider)
-│   ├── binance_websocket.py # BinanceWebSocketClient (@aggTrade stream)
-│   └── models.py            # Binance-specific DTOs
-├── http_client/              # Generic HTTP utilities
-│   └── client.py            # Async HTTP client (aiohttp wrapper)
-├── scheduling/               # Job scheduling (APScheduler)
-├── webhooks/                 # Webhook delivery
-│   └── dispatcher.py        # WebhookDispatcher (HMAC signing, retry)
-├── data_provider.py         # IDataProvider protocol (abstraction for historical bars)
-└── realtime_quote_provider.py # IRealtimeQuoteProvider protocol (abstraction for real-time quotes)
-
-persistence/                           # Data access (MongoDB, Redis, repositories)
-├── mongodb.py               # MongoDB async singleton (PyMongo)
-├── redis.py                 # Redis async singleton (redis-py)
-├── base_repository.py       # BaseRepository mixin (_collection() helper)
-└── repositories/            # Data access layers (instance methods via DI)
-    ├── bar_repository.py       # Bar persistence (renamed from ohlcv_repository.py)
-    ├── order_repository.py     # Order persistence
-    ├── position_repository.py  # Position tracking
-    ├── backtest_repository.py  # Backtest results + subscription-scoped upsert
-    ├── optimization_repository.py  # Parameter optimization
-    ├── symbol_repository.py    # Symbol metadata
-    ├── subscription_repository.py  # Subscription ↔ Mongo (NEW)
-    └── sync_status_repository.py   # Data sync status
+infrastructure/                        # External I/O — concrete adapters
+├── brokers/
+│   └── paper/               # PaperBroker (in-memory simulation)
+│       └── paper_broker.py
+├── market_data/
+│   └── binance/             # Binance REST + WS integration
+│       ├── binance_client.py            # BinanceClient (implements core IDataProvider)
+│       ├── binance_websocket_client.py  # BinanceWebSocketClient (@aggTrade stream)
+│       └── binance_mappers.py           # Binance-specific mapping
+├── http_client/
+│   └── client.py            # ResilientHttpClient (retry/backoff)
+├── scheduling/
+│   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
+└── persistence/                       # Data access (MongoDB, Redis, repositories)
+    ├── mongodb.py           # Database async singleton (PyMongo)
+    ├── redis.py             # Cache async singleton (redis-py)
+    ├── base_repository.py   # BaseRepository mixin (_collection() helper)
+    ├── health_checks.py     # check_database / check_redis
+    └── repositories/        # All 12 repos (instance methods via DI)
+        ├── bar_repository.py
+        ├── order_repository.py
+        ├── position_repository.py
+        ├── subscription_repository.py
+        ├── backtest_repository.py
+        ├── backtest_order_repository.py
+        ├── backtest_trade_repository.py
+        ├── optimization_repository.py
+        ├── symbol_repository.py
+        ├── tracked_symbol_repository.py
+        ├── sync_status_repository.py
+        └── job_history_repository.py
 # NOTE: no schemas/ directory — persistence lives in domain entities via to_mongo()/from_mongo()
+# OKX live broker (OKXBroker + websocket) lives in pocketquant-trading (trading/brokers/okx/).
+# Ports + DTOs (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent,
+# IDataProvider, IRealtimeQuoteProvider) live in pocketquant-core (core.domain.{brokers,market_data}).
 ```
 
 **Key Services:**
@@ -506,25 +498,24 @@ src/
 | CQRS Mediator + Handler base | `core/common/mediator/` |
 | Event bus + @event_handler decorator | `core/common/messaging/` |
 | Middleware (correlation, rate limit, idempotency) | `core/common/middleware/` |
-| MongoDB connection | `core/persistence/mongodb.py` |
-| Redis connection | `core/persistence/redis.py` |
-| All 8 repositories | `core/persistence/repositories/` |
-| Binance REST + WS clients | `core/infrastructure/binance/` |
-| OKX broker + WS + reconnection | `core/infrastructure/brokers/okx/` |
-| PaperBroker (simulation) | `core/infrastructure/brokers/paper/` |
-| APScheduler wrapper | `core/infrastructure/scheduling/` + `core/common/jobs.py` |
+| MongoDB connection | `infrastructure/persistence/mongodb.py` |
+| Redis connection | `infrastructure/persistence/redis.py` |
+| All repositories | `infrastructure/persistence/repositories/` |
+| Binance REST + WS clients | `infrastructure/market_data/binance/` |
+| OKX broker + WS + reconnection | `trading/brokers/okx/` |
+| PaperBroker (simulation) | `infrastructure/brokers/paper/` |
+| APScheduler wrapper | `infrastructure/scheduling/scheduler.py` |
 | Dishka DI container (6 providers) | `api/di/` |
 | FastAPI app + middleware wiring | `api/main.py`, `api/main_extensions.py` |
-| CQRS handlers (operations) | `trading/handlers/{strategy,trading,risk}/`, `backtest/handlers/`, `api/market_data/handlers/` |
-| Backtest execution engine | `backtest/app_services/backtest_app_service.py` |
-| Grid optimization engine | `backtest/app_services/grid_optimization_app_service.py` |
-| Strategy runtime dispatch | `trading/app_services/strategy_app_service.py` |
-| Order state machine | `trading/app_services/order_app_service.py` |
-| Position tracking + P&L | `trading/app_services/position_app_service.py` |
-| YAML strategy loader | `trading/app_services/strategy_loader.py` |
-| HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2.py` |
+| CQRS handlers (operations) | `trading/handlers/{strategy,trading}/`, `execution/handlers/risk/`, `backtest/handlers/`, `api/market_data/handlers/` |
+| Backtest execution engine | `backtest/engine/backtest_app_service.py` |
+| Grid optimization engine | `backtest/optimization/grid_optimization_app_service.py` |
+| Strategy runtime dispatch | `execution/app_services/strategy_app_service.py` |
+| Order state machine | `execution/app_services/order_app_service.py` |
+| Position tracking + P&L | `execution/app_services/position_app_service.py` |
+| HitNRun2 strategy (hitnrun2) | `core/concepts/strategy/services/hitnrun2.py` |
 | Background sync job registration | `api/main_extensions.py` → `register_sync_jobs()` |
-| Subscription backtest job worker | `trading/jobs/backtest_jobs.py` |
+| Subscription backtest job worker | `backtest/jobs/subscription_backtest_jobs.py` |
 | UUID7 generation | `core/common/uuid.py` |
 | Cache keys, TTLs, constants | `core/common/constants.py` |
 | Frontend API client layer | `web/src/api/` |
@@ -722,7 +713,7 @@ Key pipelines at high level:
 - **PersistenceProvider** - Database (PyMongo), Cache (Redis), 8 repositories (BarRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository, JobHistoryRepository)
 - **InfrastructureProvider** - PaperBroker, OKXBroker, BrokerFactory, BinanceClient (IDataProvider), BinanceWebSocketClient (IRealtimeQuoteProvider), OkxWebSocketClient, OkxReconnectionHandler, HTTP client, WebhookDispatcher, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
-- **TradingProvider** - OrderAppService, PositionAppService, StrategyAppService
+- **ExecutionProvider** - OrderAppService, PositionAppService, StrategyAppService, RiskCheckHandler
 - **HandlerProvider** - All 37 CQRS handlers (via @handles decorator)
 
 **37 CQRS Handlers by Category** (registered in Dishka HandlerProvider; SSE bars/quotes streams and integrity routes are app-service-direct, not counted here — see [handler-pipelines](./handler-pipelines.md)):

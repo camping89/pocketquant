@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Extract sync-status counter to domain service"
-status: pending
+status: done
 priority: P2
 effort: "0.5d"
 dependencies: [7]

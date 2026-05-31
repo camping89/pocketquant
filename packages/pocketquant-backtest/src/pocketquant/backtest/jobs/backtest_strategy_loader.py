@@ -12,7 +12,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService

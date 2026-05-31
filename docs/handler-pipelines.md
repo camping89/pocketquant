@@ -815,7 +815,7 @@ Handler.handle():
   ↓
   2. For each subscription:
      └─ JobScheduler.add_one_off_job(
-          "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest",
+          "pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest",
           job_id=f"bt:{sub.id}",
           subscription_id=sub.id,
         )
@@ -823,7 +823,7 @@ Handler.handle():
 Response: {job_ids: [...]} (HTTP 202)
 ```
 
-**Job Worker:** `pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest(subscription_id)`
+**Job Worker:** `pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest(subscription_id)`
 - Resolve subscription → `sub.strategy_code`, `sub.symbol`, `sub.interval`
 - `BacktestRepository.upsert_status(sub_id, strategy_code=..., status='running')`
 - Load synthetic instance under `f"{strategy_code}::bt::{sub_id}"` (concurrency-safe)

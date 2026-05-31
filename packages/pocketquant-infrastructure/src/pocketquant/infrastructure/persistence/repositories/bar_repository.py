@@ -7,7 +7,7 @@ from cachetools import TTLCache
 from pocketquant.core.common.constants import COLLECTION_BARS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)

@@ -2,7 +2,7 @@
 
 from pocketquant.api.market_data.handlers.sync.dto import SyncResponse
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 
 
 def build_success(

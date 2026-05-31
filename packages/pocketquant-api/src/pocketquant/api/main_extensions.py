@@ -25,6 +25,7 @@ from pocketquant.infrastructure.persistence.repositories.optimization_repository
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.infrastructure.persistence.health_checks import check_database, check_redis
+from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware

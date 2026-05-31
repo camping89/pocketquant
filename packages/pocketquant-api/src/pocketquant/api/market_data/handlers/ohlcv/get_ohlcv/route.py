@@ -14,7 +14,7 @@ from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.api.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
 from pocketquant.core.common.constants import LIMIT_OHLCV_QUERY_MAX
 from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pydantic import BaseModel
 
 

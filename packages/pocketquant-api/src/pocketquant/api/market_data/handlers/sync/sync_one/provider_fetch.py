@@ -13,7 +13,7 @@ import time
 from pocketquant.api.market_data.handlers.sync.sync_one.bar_alignment import has_aligned_bar
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 
 logger = get_logger(__name__)

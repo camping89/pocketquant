@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query
 from pocketquant.api.common.symbol_validation import validate_composite_symbol
 from pocketquant.api.market_data.app_services.quote_app_service import QuoteAppService
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 
 router = APIRouter(route_class=DishkaRoute)
 

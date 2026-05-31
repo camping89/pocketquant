@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_SYNC_STATUS
 from pocketquant.core.common.uuid import generate_id_str
-from pocketquant.core.domain.shared.value_objects import Interval
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status import SyncStatus
 from pocketquant.infrastructure.persistence.base_repository import BaseRepository
 from pymongo import ReturnDocument

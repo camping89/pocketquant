@@ -14,17 +14,19 @@ Backend packages are managed with a `uv` workspace. The frontend is a separate n
 
 ```text
 packages/
-├── pocketquant-core/       # Domain, common utilities, persistence, providers
-├── pocketquant-backtest/   # Backtest handlers and persistence
-├── pocketquant-trading/    # Strategy, order, position, broker workflows
-├── pocketquant-api/        # FastAPI app, DI container, route composition
-└── pocketquant-web/        # React 19 + Vite chart UI
+├── pocketquant-core/           # Domain, concepts, common utilities, config, ports + DTOs, persisted entities
+├── pocketquant-infrastructure/ # Database, Cache, repositories, PaperBroker, binance, scheduler, http client
+├── pocketquant-execution/      # Shared strategy/order/position/risk engine
+├── pocketquant-backtest/       # Backtest engine, optimization, backtest-run orchestration
+├── pocketquant-trading/        # Strategy, order, position, OKX broker workflows
+├── pocketquant-api/            # FastAPI app, DI container, route composition
+└── pocketquant-web/            # React 19 + Vite chart UI
 ```
 
 Dependency direction:
 
 ```text
-core ← {backtest, trading} ← api
+core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api
 web → api
 ```
 
