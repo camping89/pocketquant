@@ -6,7 +6,7 @@ IDs in production depend on the exact hash recipe.
 """
 
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.trading.domain.subscription import Subscription
+from pocketquant.core.domain.subscription import Subscription
 
 # Helpers
 

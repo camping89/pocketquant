@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from pocketquant.backtest.domain.value_objects import (
+from pocketquant.core.domain.backtest.value_objects import (
     BacktestMetrics,
     EquityPoint,
     OpenLot,
@@ -16,10 +16,11 @@ from pocketquant.backtest.domain.value_objects import (
 class BacktestResult:
     """Slim backtest run record — metrics + equity curve + open-lot snapshots.
 
-    After Phase 4 of the storage refactor, fills go to ``backtest_orders.fills[]``
-    and round-trip outcomes go to ``backtest_trades``. ``open_positions`` carries
-    the still-open lots at run-end so the run doc remains self-contained for
-    quick UI snapshots without a cross-collection join.
+    Storage layout: per-order audit (fills + lifecycle events) lives in
+    ``backtest_orders.fills[]`` and round-trip outcomes in ``backtest_trades``.
+    ``open_positions`` carries the still-open lots at run-end so the run doc
+    remains self-contained for quick UI snapshots without a cross-collection
+    join.
     """
 
     id: str

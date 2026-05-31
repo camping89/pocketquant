@@ -1,4 +1,4 @@
-from pocketquant.backtest.domain import OptimizationResult
+from pocketquant.core.domain.backtest import OptimizationResult
 from pocketquant.backtest.handlers.optimize.command import RunOptimizationCommand
 from pocketquant.backtest.optimization.grid_optimization_app_service import (
     GridOptimizationAppService,

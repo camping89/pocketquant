@@ -2,7 +2,7 @@
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.persistence.base_repository import BaseRepository
-from pocketquant.trading.domain.subscription import (
+from pocketquant.core.domain.subscription import (
     Subscription,
     SubscriptionAlreadyExistsError,
 )

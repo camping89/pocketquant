@@ -5,16 +5,16 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pocketquant.backtest.domain import (
+from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     EquityPoint,
     Fill,
     OpenLot,
     OptimizationResultEntry,
     Order,
-    OrderEvent,
     Trade,
 )
+from pocketquant.core.infrastructure.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)

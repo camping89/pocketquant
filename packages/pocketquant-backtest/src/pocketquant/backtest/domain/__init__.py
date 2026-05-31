@@ -1,26 +1,6 @@
-"""Backtest domain — backtesting results and metrics."""
+"""Backtest domain — non-persisted calculation services.
 
-from pocketquant.backtest.domain.entities import BacktestResult, OptimizationResult
-from pocketquant.backtest.domain.value_objects import (
-    BacktestMetrics,
-    EquityPoint,
-    Fill,
-    OpenLot,
-    OptimizationResultEntry,
-    Order,
-    OrderEvent,
-    Trade,
-)
-
-__all__ = [
-    "BacktestMetrics",
-    "BacktestResult",
-    "EquityPoint",
-    "Fill",
-    "OpenLot",
-    "OptimizationResult",
-    "OptimizationResultEntry",
-    "Order",
-    "OrderEvent",
-    "Trade",
-]
+Persisted entities/value objects (BacktestResult, Order, Trade, …) now live in
+``pocketquant.core.domain.backtest``. This package retains only stateless
+domain services (e.g. PerformanceCalculator).
+"""

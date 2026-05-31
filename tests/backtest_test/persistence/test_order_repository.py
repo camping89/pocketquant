@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from pocketquant.backtest.domain import Fill, Order, OrderEvent
+from pocketquant.core.domain.backtest import Fill, Order
+from pocketquant.core.infrastructure.brokers.events import OrderEvent
 from pocketquant.backtest.persistence.backtest_order_repository import BacktestOrderRepository
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
 from pocketquant.core.persistence.mongodb import Database

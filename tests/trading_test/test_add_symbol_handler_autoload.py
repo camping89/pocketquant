@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
-from pocketquant.trading.domain.subscription import Subscription
+from pocketquant.core.domain.subscription import Subscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 

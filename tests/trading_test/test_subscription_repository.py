@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.mongodb import Database
-from pocketquant.trading.domain.subscription import (
+from pocketquant.core.domain.subscription import (
     Subscription,
     SubscriptionAlreadyExistsError,
 )

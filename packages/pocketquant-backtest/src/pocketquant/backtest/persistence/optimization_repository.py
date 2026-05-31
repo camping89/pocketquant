@@ -1,6 +1,6 @@
 """Optimization repository for MongoDB persistence."""
 
-from pocketquant.backtest.domain import OptimizationResult
+from pocketquant.core.domain.backtest import OptimizationResult
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_OPTIMIZATION_RUNS
 from pocketquant.core.persistence.base_repository import BaseRepository
 

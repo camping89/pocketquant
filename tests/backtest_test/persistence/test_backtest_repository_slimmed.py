@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from pocketquant.backtest.domain import BacktestMetrics, BacktestResult, EquityPoint, OpenLot
+from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, EquityPoint, OpenLot
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.core.persistence.mongodb import Database
 

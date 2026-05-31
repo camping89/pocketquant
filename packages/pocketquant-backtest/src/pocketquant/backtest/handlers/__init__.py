@@ -1,4 +1,4 @@
-from pocketquant.backtest.domain import BacktestMetrics, BacktestResult, OptimizationResult
+from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, OptimizationResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.engine.historical_replay_app_service import HistoricalReplayAppService
 from pocketquant.backtest.handlers.get_optimization import (

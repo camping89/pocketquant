@@ -1,4 +1,4 @@
-from pocketquant.backtest.domain import BacktestResult
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig

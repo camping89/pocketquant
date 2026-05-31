@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from pocketquant.backtest.domain import BacktestResult
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.backtest.engine.historical_replay_app_service import (
     HistoricalReplayAppService,
 )

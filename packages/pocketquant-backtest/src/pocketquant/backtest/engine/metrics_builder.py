@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import numpy as np
-from pocketquant.backtest.domain import BacktestMetrics, EquityPoint, Trade
+from pocketquant.core.domain.backtest import BacktestMetrics, EquityPoint, Trade
 from pocketquant.backtest.domain.services.performance_calculator import PerformanceCalculator
 
 
