@@ -7,7 +7,7 @@ which targets the live ``orders`` collection.
 
 from __future__ import annotations
 
-from pocketquant.backtest.domain.value_objects.order import Order
+from pocketquant.core.domain.backtest.value_objects import Order
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_ORDERS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.persistence.base_repository import BaseRepository

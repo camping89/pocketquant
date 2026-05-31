@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-from pocketquant.backtest.domain import Trade
+from pocketquant.core.domain.backtest import Trade
 from pocketquant.backtest.persistence.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.persistence.mongodb import Database
 

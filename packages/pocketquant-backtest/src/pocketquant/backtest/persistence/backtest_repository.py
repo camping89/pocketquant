@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pocketquant.backtest.domain import BacktestResult
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_RUNS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.persistence.base_repository import BaseRepository

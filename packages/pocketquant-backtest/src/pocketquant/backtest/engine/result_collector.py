@@ -17,16 +17,16 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from pocketquant.backtest.domain import (
+from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
     EquityPoint,
     Fill,
     OpenLot,
     Order,
-    OrderEvent,
     Trade,
 )
+from pocketquant.core.infrastructure.brokers.events import OrderEvent
 from pocketquant.backtest.engine.collected_results import CollectedResults
 from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
 from pocketquant.backtest.engine.metrics_builder import build_metrics

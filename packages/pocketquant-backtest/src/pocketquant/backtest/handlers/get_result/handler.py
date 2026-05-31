@@ -1,4 +1,4 @@
-from pocketquant.backtest.domain import BacktestResult
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.backtest.handlers.get_result.query import GetBacktestQuery
 from pocketquant.backtest.persistence.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles

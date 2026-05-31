@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pocketquant.backtest.domain import BacktestResult, Order, Trade
+from pocketquant.core.domain.backtest import BacktestResult, Order, Trade
 
 
 @dataclass

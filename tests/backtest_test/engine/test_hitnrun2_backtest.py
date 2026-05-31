@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
-from pocketquant.backtest.domain import BacktestResult
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.messaging import EventBus

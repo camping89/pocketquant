@@ -11,7 +11,7 @@ from pocketquant.core.persistence.repositories.tracked_symbol_repository import 
     TrackedSymbolRepository,
 )
 from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.domain.subscription import Subscription
+from pocketquant.core.domain.subscription import Subscription
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
 from pocketquant.trading.persistence.subscription_repository import (
     SubscriptionRepository,

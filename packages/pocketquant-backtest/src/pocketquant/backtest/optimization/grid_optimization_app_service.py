@@ -3,7 +3,7 @@ import itertools
 from datetime import UTC, datetime
 from typing import Any
 
-from pocketquant.backtest.domain import (
+from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
     OptimizationResult,
