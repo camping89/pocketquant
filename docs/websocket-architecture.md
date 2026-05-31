@@ -269,8 +269,8 @@ SSE polling adds ~0.5–1.2s latency (poll cycle overhead) compared to WebSocket
 
 ## Tests
 
-- `packages/pocketquant-core/tests/unit/infrastructure/binance/test_binance_websocket_client.py` — Binance WS unit tests (~15 cases).
-- `packages/pocketquant-api/tests/unit/di/test_di_data_provider.py` — DI resolution and `IRealtimeQuoteProvider` Protocol conformance.
+- `tests/core_test/unit/infrastructure/binance/test_binance_websocket_client.py` — Binance WS unit tests (~15 cases).
+- `tests/api_test/unit/di/test_di_data_provider.py` — DI resolution and `IRealtimeQuoteProvider` Protocol conformance.
 
 ---
 

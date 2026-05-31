@@ -592,7 +592,7 @@ subscription_id = sha256(f"{strategy_code}|{symbol.upper()}|{interval_val}")[:16
 ```
 Renaming `strategy_id` → `strategy_code` does NOT change existing subscription IDs.
 Existing subscriptions with hash `a1b2c3...` continue to use that hash even after migration.
-Backward-compatibility test: `packages/pocketquant-trading/tests/test_subscription_deterministic_id.py:test_back_compat_known_id_hitnrun2_btc_1m`
+Backward-compatibility test: `tests/trading_test/test_subscription_deterministic_id.py:test_back_compat_known_id_hitnrun2_btc_1m`
 
 ## Code Organization Guidelines
 

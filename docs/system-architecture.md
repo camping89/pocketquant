@@ -530,7 +530,7 @@ src/
 | Frontend API client layer | `web/src/api/` |
 | Frontend custom hooks | `web/src/hooks/` |
 | Chart + indicator components | `web/src/components/chart/` |
-| Domain purity test (AST check) | `core/tests/unit/domain/test_domain_purity.py` |
+| Domain purity test (AST check) | `tests/core_test/unit/domain/test_domain_purity.py` |
 
 ## Clean Architecture Request Flow
 

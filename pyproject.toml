@@ -51,13 +51,7 @@ pythonpath = ["."]
 # importlib mode lets duplicate test-package names (e.g. tests/unit/) coexist
 # across all four packages without ModuleNotFoundError or ImportPathMismatchError.
 addopts = "--import-mode=importlib"
-testpaths = [
-    "packages/pocketquant-core/tests",
-    "packages/pocketquant-backtest/tests",
-    "packages/pocketquant-trading/tests",
-    "packages/pocketquant-api/tests",
-    "tests",
-]
+testpaths = ["tests"]
 markers = [
     "integration: marks tests as integration tests (require network)",
 ]

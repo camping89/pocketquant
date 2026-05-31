@@ -32,7 +32,7 @@ test:
 
 # Run tests for a specific package (core, backtest, trading, api)
 test-pkg pkg:
-    {{python}} -m pytest packages/pocketquant-{{pkg}}/tests/
+    {{python}} -m pytest tests/{{pkg}}_test/
 
 # Lint check
 lint:

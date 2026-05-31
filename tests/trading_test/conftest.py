@@ -2,7 +2,7 @@
 
 Provides the same session-scoped testcontainer fixtures as pocketquant-core's
 conftest so integration tests in this package work both when run in isolation
-(uv run pytest packages/pocketquant-trading/tests/) and as part of the full
+(uv run pytest tests/trading_test/) and as part of the full
 workspace suite (uv run pytest).
 
 When pytest collects the full testpaths suite it discovers both conftests; the

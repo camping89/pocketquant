@@ -364,7 +364,7 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 ### Safety notes
 
 - Local writes go to the **production** database. Treat destructive scripts (drop, reset, bulk delete) with the same care as on the VPS.
-- Tests must NEVER touch prod. `packages/pocketquant-core/tests/conftest.py` raises if `MONGODB_URL` or `REDIS_URL` contains the prod IP, and uses ephemeral testcontainers for the `settings` fixture.
+- Tests must NEVER touch prod. `tests/core_test/conftest.py` raises if `MONGODB_URL` or `REDIS_URL` contains the prod IP, and uses ephemeral testcontainers for the `settings` fixture.
 - Before pointing at prod, back up local config: `cp .env .env.local-only.bak`. To revert: `cp .env.local-only.bak .env && just up`.
 - Keep `ENABLE_JOBS=false` on local (the default in `remote-db.env`). The scheduler runs on PROD only; a local instance with jobs enabled would run them against the shared production state. Never set it to `true` locally.
 
