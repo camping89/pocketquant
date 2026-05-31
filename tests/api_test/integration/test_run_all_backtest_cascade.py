@@ -22,7 +22,7 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 
 from .app_factory import make_test_app
 

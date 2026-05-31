@@ -14,9 +14,9 @@ from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.brokers.interfaces import IBroker, IBrokerFactory
 
 if TYPE_CHECKING:
-    from pocketquant.trading.app_services.order_app_service import OrderAppService
-    from pocketquant.trading.app_services.position_app_service import PositionAppService
-    from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
+    from pocketquant.execution.app_services.order_app_service import OrderAppService
+    from pocketquant.execution.app_services.position_app_service import PositionAppService
+    from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
 
 logger = structlog.get_logger(__name__)
 
@@ -152,6 +152,39 @@ class StrategyAppService:
             self._configs.pop(strategy_id, None)
 
             logger.info("strategy_unloaded", strategy_id=strategy_id)
+
+    async def inject_prepared_strategy(
+        self,
+        sid: str,
+        strategy: IStrategy,
+        broker: IBroker,
+        config: StrategyConfig,
+    ) -> None:
+        """Register an externally-prepared strategy+broker pair under ``sid``.
+
+        Backtest callers build their own PaperBroker and strategy instance (to
+        bypass the broker-factory lookup) and inject them directly. Registration,
+        broker connection, and ``on_start()`` MUST all happen inside the same
+        critical section: ``start_strategy`` also takes ``_lock``, so a lock-split
+        would race ``unload_strategy`` and could leave a strategy registered but
+        never started, or a broker never connected (silent zero-trade backtests).
+        """
+        async with self._lock:
+            self._strategies[sid] = strategy
+            self._brokers[sid] = broker
+            self._configs[sid] = config
+            if not broker.is_connected:
+                await broker.connect()
+            await strategy.on_start()
+
+    def get_config(self, sid: str) -> StrategyConfig | None:
+        """Return the in-memory StrategyConfig registered under ``sid`` (or None).
+
+        ``sid`` is the registration key — a live ``strategy_code`` for the
+        subscription-backtest read path, or a synthetic per-job id for injected
+        backtests. Caller picks the keyspace.
+        """
+        return self._configs.get(sid)
 
     def get_strategies(self) -> list[dict]:
         return [

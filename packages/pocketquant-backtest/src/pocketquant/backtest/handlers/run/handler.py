@@ -11,7 +11,7 @@ from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 
 
 @handles(RunBacktestCommand)
@@ -73,7 +73,13 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         # Register strategy instance on the shared StrategyAppService so it
         # receives BarCompletedEvent during replay
         strategy_instance = strategy_class(strategy_cfg)
-        await self._load_strategy_for_backtest(strategy_instance, broker)
+        sid = strategy_instance.id
+        # Unload any stale previous run with the same id
+        if self._strategy_app_service.get_strategy(sid) is not None:
+            await self._strategy_app_service.unload_strategy(sid)
+        await self._strategy_app_service.inject_prepared_strategy(
+            sid, strategy_instance, broker, strategy_instance.config
+        )
 
         try:
             runner = BacktestAppService(
@@ -88,22 +94,3 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
         finally:
             # Clean up: unload backtest strategy so it doesn't linger
             await self._strategy_app_service.unload_strategy(request.strategy_id)
-
-    async def _load_strategy_for_backtest(self, strategy, broker) -> None:
-        """Inject strategy + broker directly into StrategyAppService internals."""
-        sid = strategy.id
-        # Unload any stale previous run with the same ID
-        if self._strategy_app_service.get_strategy(sid) is not None:
-            await self._strategy_app_service.unload_strategy(sid)
-
-        # Inject directly — bypass load_strategy() to avoid broker-factory lookup.
-        # start_strategy() also acquires _lock; do both in one critical section.
-        async with self._strategy_app_service._lock:  # pyright: ignore[reportPrivateUsage]
-            self._strategy_app_service._strategies[sid] = strategy  # pyright: ignore[reportPrivateUsage]
-            self._strategy_app_service._brokers[sid] = broker  # pyright: ignore[reportPrivateUsage]
-            self._strategy_app_service._configs[sid] = strategy.config  # pyright: ignore[reportPrivateUsage]
-            # Connect broker and start strategy inside the lock (broker is PaperBroker,
-            # connect() is a no-op, so this is safe)
-            if not broker.is_connected:
-                await broker.connect()
-            await strategy.on_start()

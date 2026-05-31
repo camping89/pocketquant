@@ -1,4 +1,4 @@
-"""Trading service providers with async lifecycle.
+"""Execution engine providers — shared strategy/order/position/risk app-services.
 
 OrderAppService and PositionAppService need async post-init (load state from DB).
 StrategyAppService uses a generator factory for start/stop lifecycle.
@@ -10,15 +10,17 @@ from dishka import Provider, Scope, provide
 from pocketquant.api.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.trading.app_services.order_app_service import OrderAppService
-from pocketquant.trading.app_services.position_app_service import PositionAppService
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.handlers.risk.check_risk.handler import RiskCheckHandler
+from pocketquant.execution.app_services.order_app_service import OrderAppService
+from pocketquant.execution.app_services.position_app_service import PositionAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
 from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
 from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
 
 
-class TradingProvider(Provider):
+class ExecutionProvider(Provider):
+    risk_handler = provide(RiskCheckHandler, scope=Scope.APP)
+
     @provide(scope=Scope.APP)
     async def get_order_manager(
         self, event_bus: EventBus, order_repository: OrderRepository

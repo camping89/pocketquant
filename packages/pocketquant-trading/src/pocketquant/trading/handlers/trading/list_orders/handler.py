@@ -1,7 +1,7 @@
 """List orders handler."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.trading.app_services.order_app_service import OrderAppService
+from pocketquant.execution.app_services.order_app_service import OrderAppService
 from pocketquant.trading.handlers.trading.list_orders.query import ListOrdersQuery
 
 

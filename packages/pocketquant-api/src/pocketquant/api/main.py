@@ -14,6 +14,7 @@ from pocketquant.api.main_extensions import (
     migrate_strategy_id_fields,
     recover_orphan_jobs,
     recover_stale_backtests,
+    rekey_backtest_job_refs,
     register_health_checks,
     register_routes,
     rehydrate_strategies_from_subscriptions,
@@ -27,7 +28,9 @@ from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.redis import Cache
-from pocketquant.trading.jobs.backtest_jobs import set_container as set_backtest_container
+from pocketquant.backtest.jobs.subscription_backtest_jobs import (
+    set_container as set_backtest_container,
+)
 
 logger = get_logger(__name__)
 
@@ -58,6 +61,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # positions with the post-migration field shape. If legacy docs are
         # still on disk, the read would crash before migration could fix them.
         await migrate_strategy_id_fields(container)
+        # Re-key moved bt:* job refs BEFORE register_handlers — that cascade can
+        # start JobScheduler, which would resolve+drop a stale (old-ref) job.
+        await rekey_backtest_job_refs(container)
         await register_handlers(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)

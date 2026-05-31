@@ -15,7 +15,7 @@ from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.value_objects import Interval
 from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 
@@ -115,13 +115,8 @@ async def load_strategy_for_backtest(
     if strategy_app_service.get_strategy(synthetic_id) is not None:
         await strategy_app_service.unload_strategy(synthetic_id)
 
-    # Inject directly — same pattern as RunBacktestHandler._load_strategy_for_backtest
-    async with strategy_app_service._lock:  # pyright: ignore[reportPrivateUsage]
-        strategy_app_service._strategies[synthetic_id] = strategy_instance  # pyright: ignore[reportPrivateUsage]
-        strategy_app_service._brokers[synthetic_id] = broker  # pyright: ignore[reportPrivateUsage]
-        strategy_app_service._configs[synthetic_id] = bt_strategy_cfg  # pyright: ignore[reportPrivateUsage]
-        if not broker.is_connected:
-            await broker.connect()
-        await strategy_instance.on_start()
+    await strategy_app_service.inject_prepared_strategy(
+        synthetic_id, strategy_instance, broker, bt_strategy_cfg
+    )
 
     return broker, synthetic_id

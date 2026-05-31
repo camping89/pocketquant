@@ -11,17 +11,17 @@ Adding a new CQRS handler:
 """
 
 from pocketquant.api.di.core import CoreProvider
+from pocketquant.api.di.execution import ExecutionProvider
 from pocketquant.api.di.handlers import HandlerProvider
 from pocketquant.api.di.infrastructure import InfrastructureProvider
 from pocketquant.api.di.market_data import MarketDataProvider
 from pocketquant.api.di.persistence import PersistenceProvider
-from pocketquant.api.di.trading import TradingProvider
 
 __all__ = [
     "CoreProvider",
+    "ExecutionProvider",
     "HandlerProvider",
     "InfrastructureProvider",
     "MarketDataProvider",
     "PersistenceProvider",
-    "TradingProvider",
 ]

@@ -21,7 +21,7 @@ _STRATEGY_CODE = "test-sub-strat"
 async def load_strategy(app_client):
     """Load test strategy + clean MongoDB subscription/backtest collections per test."""
     from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
-    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+    from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
     from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
         SubscriptionRepository,
     )
@@ -141,7 +141,7 @@ async def test_delete_strategy_clears_all_subscriptions(app_client):
 
     # After cascade delete the strategy is unloaded; re-load to query subscriptions
     from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
-    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+    from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 
     container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     svc: StrategyAppService = await container.get(StrategyAppService)

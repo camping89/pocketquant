@@ -15,7 +15,7 @@ from pocketquant.api.market_data.handlers.quotes.router import router as quote_r
 from pocketquant.api.market_data.handlers.router import router as market_data_router
 from pocketquant.api.market_data.handlers.tracked_symbols import router as tracked_symbols_router
 from pocketquant.api.system_jobs.route import router as system_jobs_router
-from pocketquant.backtest.handlers import backtest_router
+from pocketquant.backtest.handlers import backtest_router, run_all_backtests_router
 from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
 from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
@@ -238,6 +238,52 @@ async def recover_stale_backtests(container: AsyncContainer) -> None:
         logger.info("stale_backtest_recovery", marked_failed=n)
 
 
+_BT_JOB_FUNC_OLD = "pocketquant.trading.jobs.backtest_jobs:run_subscription_backtest"
+_BT_JOB_FUNC_NEW = "pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest"
+
+
+async def rekey_backtest_job_refs(container: AsyncContainer) -> None:
+    """Re-point persisted ``bt:*`` jobs from the old func ref to the new one.
+
+    The subscription-backtest job module moved packages, so its APScheduler text
+    ref changed. A job enqueued before deploy still carries the OLD ref pickled in
+    the ``apscheduler_jobs`` store; on load APScheduler would resolve it, fail, and
+    silently drop the job — the requested backtest never runs. This rewrites the
+    pickled ``func`` in place so the in-flight fan-out executes post-deploy.
+
+    Must run BEFORE the scheduler loads jobs (i.e. before register_handlers
+    cascades JobScheduler.start). Idempotent: already-migrated jobs are skipped.
+    """
+    import pickle
+
+    db = await container.get(Database)
+    collection = db.get_collection("apscheduler_jobs")
+
+    rekeyed = 0
+    async for doc in collection.find({"_id": {"$regex": "^bt:"}}):
+        raw = doc.get("job_state")
+        if raw is None:
+            continue
+        try:
+            state = pickle.loads(raw)
+        except Exception:
+            logger.warning("bt_job_rekey.unpickle_failed", job_id=doc.get("_id"))
+            continue
+
+        if state.get("func") != _BT_JOB_FUNC_OLD:
+            continue
+
+        state["func"] = _BT_JOB_FUNC_NEW
+        new_raw = pickle.dumps(state, pickle.HIGHEST_PROTOCOL)
+        await collection.update_one(
+            {"_id": doc["_id"]}, {"$set": {"job_state": new_raw}}
+        )
+        rekeyed += 1
+
+    if rekeyed:
+        logger.info("bt_job_rekey.completed", rekeyed=rekeyed)
+
+
 async def recover_orphan_jobs(container: AsyncContainer) -> None:
     """Mark any job_history docs stuck at status='running' as 'failed' on startup.
 
@@ -267,7 +313,7 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
     """
     from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
     from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
-    from pocketquant.trading.app_services.strategy_app_service import StrategyAppService
+    from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 
     sub_repo = await container.get(SubscriptionRepository)
     strategy_service = await container.get(StrategyAppService)
@@ -430,6 +476,7 @@ def register_routes(app: FastAPI, settings) -> None:
     api.include_router(quote_router)
     api.include_router(system_jobs_router)
     api.include_router(strategy_router)
+    api.include_router(run_all_backtests_router)
     api.include_router(subscription_router)
     api.include_router(trading_router)
     api.include_router(backtest_router)

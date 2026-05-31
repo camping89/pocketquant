@@ -22,6 +22,11 @@ from pocketquant.backtest.handlers.run import (
     RunBacktestCommand,
     RunBacktestHandler,
 )
+from pocketquant.backtest.handlers.run_all_backtests import (
+    RunAllBacktestsCommand,
+    RunAllBacktestsHandler,
+    run_all_backtests_router,
+)
 from pocketquant.backtest.optimization.grid_optimization_app_service import (
     GridOptimizationAppService,
 )
@@ -31,6 +36,9 @@ from pocketquant.infrastructure.persistence.repositories.backtest_repository imp
 
 __all__ = [
     "backtest_router",
+    "run_all_backtests_router",
+    "RunAllBacktestsCommand",
+    "RunAllBacktestsHandler",
     "BacktestAppService",
     "HistoricalReplayAppService",
     "GridOptimizationAppService",

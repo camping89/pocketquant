@@ -13,11 +13,11 @@ from dishka import AsyncContainer, Provider, Scope, make_async_container, provid
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 from pocketquant.api.di import (
+    ExecutionProvider,
     HandlerProvider,
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
-    TradingProvider,
 )
 from pocketquant.api.di.container import register_handlers
 from pocketquant.api.main_extensions import (
@@ -39,7 +39,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.redis import Cache
-from pocketquant.trading.jobs.backtest_jobs import (
+from pocketquant.backtest.jobs.subscription_backtest_jobs import (
     set_container as set_backtest_container,
 )
 
@@ -78,8 +78,8 @@ def make_test_app(settings: Settings) -> FastAPI:
         TestCoreProvider(settings),
         PersistenceProvider(),
         InfrastructureProvider(),
+        ExecutionProvider(),
         MarketDataProvider(),
-        TradingProvider(),
         HandlerProvider(),
     ]
     container = make_async_container(*providers)
