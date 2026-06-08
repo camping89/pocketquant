@@ -14,7 +14,7 @@ Real-time architecture integrates **inbound WebSocket data sources** with **outb
 
 **Outbound (SSE):**
 - **Bars stream** — GET `/api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Polls Redis for current bar, emits on change.
-- **Quotes stream** — GET `/api/v1/market-data/quotes/stream/{symbol}`. Polls Redis for latest quote, emits on change.
+- **Quotes stream** — GET `/api/v1/quotes/stream/{symbol}`. Polls Redis for latest quote, emits on change.
 
 **Data Bridge:** Redis acts as intermediary — inbound WS writes, SSE polls and emits to frontend.
 
@@ -199,7 +199,7 @@ async def start_quote_feed(container, app):
 
 ### Quotes SSE
 
-**Route:** GET `/api/v1/market-data/quotes/stream/{symbol}`
+**Route:** GET `/api/v1/quotes/stream/{symbol}`
 
 **Files:**
 - `packages/pocketquant-api/src/pocketquant/api/market_data/handlers/quotes/stream_quote/route.py` — handler + SSE endpoint
@@ -236,7 +236,7 @@ async def start_quote_feed(container, app):
 
 2. **`use-realtime-quote.ts`** — Binds to quotes SSE
    - File: `packages/pocketquant-web/src/hooks/use-realtime-quote.ts`
-   - Opens EventSource to `/api/v1/market-data/quotes/stream/{symbol}`
+   - Opens EventSource to `/api/v1/quotes/stream/{symbol}`
    - 10s stale threshold: falls back to REST polling if SSE inactive
    - Fallback: GET `/api/v1/market-data/quotes/latest/{symbol}` before SSE connects (warm start)
 
@@ -278,4 +278,3 @@ SSE polling adds ~0.5–1.2s latency (poll cycle overhead) compared to WebSocket
 
 - Is a frontend live-tick stream a near-term requirement, or is REST polling acceptable?
 - Are the OKX heartbeat race / dropped events a tolerated edge case, or has it caused production incidents?
-- `tests/manual/run_stream_quotes.py:18` still imports `tradingview_websocket_client` which appears removed — stale manual script or in-progress migration?

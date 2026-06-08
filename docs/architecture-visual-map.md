@@ -1,6 +1,6 @@
 # Architecture Visual Map
 
-Visual reference for codebase navigation. DDD three-tier structure (top-level, concepts, shared); 4 backend packages + 1 frontend package; 37 CQRS handlers + 42 route modules + 2 SSE streams. `pocketquant-web` sits alongside the backend package graph shown below.
+Visual reference for codebase navigation. DDD three-tier structure (top-level, concepts, shared); 6-package layered monorepo (5 Python + `pocketquant-web`); 37 CQRS handlers + route modules + 2 SSE streams.
 
 ## 1. ASCII Layer Relation Map
 
@@ -16,8 +16,8 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   └────────────┬─────────────────────────────────┘
                │
   ╔════════════╧═════════════════════════════════════════════╗
-  ║  FEATURES  (src/features/)  37 CQRS Handlers            ║
-  ║  market_data(16) backtesting(5) strategy(12) trading(4) ║
+  ║  HANDLERS  (api + trading packages)  37 CQRS Handlers   ║
+  ║  market_data(17) strategy/trading(14) backtest(6)       ║
   ║  Route → Command/Query → Mediator.send() → Handler      ║
   ║  + 2 SSE streams: /bars/stream/{symbol}, /quotes/stream ║
   ╚════════════╤═════════════════════════════════════════════╝
@@ -38,15 +38,15 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   ║ GridOptimize  ║  ║  Bar  Symbol  ║  ║  PaperBroker      ║
   ║ HistReplay    ║  ║  OrderAgg     ║  ║  OKXBroker        ║
   ║ BarApp        ║  ║  PositionAgg  ║  ║ Data Providers    ║
-  ║ QuoteApp      ║  ║  SyncStatus   ║  ║  TVClient(REST)   ║
-  ║ StrategyApp   ║  ║  BacktestRes  ║  ║  TVWebSocket      ║
+  ║ QuoteApp      ║  ║  SyncStatus   ║  ║ BinanceClient(REST)║
+  ║ StrategyApp   ║  ║  BacktestRes  ║  ║ BinanceWebSocket  ║
   ║ OrderApp      ║  ║               ║  ║ Scheduling        ║
   ║ PositionApp   ║  ║ CONCEPTS:     ║  ║  APScheduler      ║
   ║ YamlLoader    ║  ║  Quote (VO)   ║  ║ Webhooks          ║
   ╚═══════╤═══════╝  ║  Risk (Sizer) ║  ║  Dispatcher       ║
           │          ║  Strategy     ║  ╚═════════╤═════════╝
           │          ║   IStrategy   ║            │
-          │          ║   MACrossover ║            │
+          │          ║   HitNRun2    ║            │
           │          ║               ║            │
           │          ║ SHARED:       ║            │
           │          ║  DomainEvent  ║            │
@@ -57,17 +57,17 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
           └──────────────────┼────────────────────┘
                              │
   ╔══════════════════════════╧════════════════════════════╗
-  ║  PERSISTENCE  (src/persistence/)                      ║
-  ║  Database(MongoDB)  Cache(Redis)  8 Repositories     ║
-  ║  Bar · Order · Position · Backtest · Optimization    ║
-  ║  Symbol · SyncStatus · Subscription                   ║
+  ║  PERSISTENCE  (infrastructure/persistence/)           ║
+  ║  Database(MongoDB)  Cache(Redis)  9 Repositories     ║
+  ║  Bar · Order · Position · Optimization · Symbol      ║
+  ║  SyncStatus · Subscription · TrackedSymbol · JobHist ║
   ╚══════════╤══════════════════╤═════════════════════════╝
              │                  │
              ▼                  ▼
        MongoDB:$MONGO_PORT   Redis:$REDIS_PORT
 
   ╔══════════════════════════════════════════════════════╗
-  ║  COMMON  (src/common/)  Cross-Cutting, ALL layers   ║
+  ║  COMMON  (core/common/)  Cross-Cutting, ALL layers  ║
   ║  Mediator · EventBus · Middleware(3) · Health(3)    ║
   ║  Logging(structlog) · UUID7 · Constants · Tracing   ║
   ╚══════════════════════════════════════════════════════╝
@@ -97,7 +97,7 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   │   ├── quote/          QuoteTick VO, QuoteReceivedEvent✅
   │   ├── risk/           RiskConfig VO, RiskModel enum, PositionSizer service
   │   └── strategy/       IStrategy interface, Signal VO, Direction enum
-  │                        MACrossover impl, SignalGeneratedEvent
+  │                        HitNRun2 impl, SignalGeneratedEvent
   │
   └── shared/ (cross-cutting, used by all domain folders)
       ├── events.py       DomainEvent base class
@@ -110,13 +110,13 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
 ```mermaid
 graph TB
     subgraph HTTP["HTTP Layer"]
-        Routes["FastAPI Routes<br/><code>src/features/*/route.py</code>"]
+        Routes["FastAPI Routes<br/><code>*/handlers/*/route.py</code>"]
     end
 
     subgraph CQRS["CQRS Layer"]
-        Commands["Commands/Queries<br/><code>src/features/*/command.py|query.py</code>"]
-        Med["Mediator<br/><code>src/common/mediator/</code>"]
-        Handlers["37 Handlers<br/><code>src/features/*/handler.py</code>"]
+        Commands["Commands/Queries<br/><code>*/handlers/*/command.py|query.py</code>"]
+        Med["Mediator<br/><code>core/common/mediator/</code>"]
+        Handlers["37 Handlers<br/><code>*/handlers/*/handler.py</code>"]
     end
 
     subgraph APP["Application Layer — Orchestrators"]
@@ -136,7 +136,7 @@ graph TB
         subgraph CONCEPTS["Concepts (non-persisted)"]
             QuoteVO["Quote (VO)"]
             RiskSvc["Risk (Sizer)"]
-            StrategySvc["Strategy (IStrategy, MACrossover)"]
+            StrategySvc["Strategy (IStrategy, HitNRun2)"]
         end
         subgraph SHARED["Shared"]
             SharedBase["DomainEvent · Interval · ValueObjects"]
@@ -145,15 +145,15 @@ graph TB
 
     subgraph INFRA["Infrastructure Layer — External I/O"]
         Brokers["Brokers (Paper, OKX)"]
-        TVClient["TradingViewClient"]
-        TVWebSocket["TradingViewWebSocket"]
+        BinanceClient["BinanceClient (REST)"]
+        BinanceWS["BinanceWebSocketClient (@aggTrade)"]
         Scheduler["JobScheduler (APScheduler)"]
     end
 
     subgraph PERSIST["Persistence Layer"]
         DB["Database (MongoDB)"]
         Cache["Cache (Redis)"]
-        Repos["8 Repositories"]
+        Repos["9 Repositories"]
     end
 
     Routes --> Commands --> Med --> Handlers
@@ -208,7 +208,7 @@ graph LR
         BarRepo["BarRepository"]
         OrderRepo["OrderRepository"]
         PositionRepo["PositionRepository"]
-        BacktestRepo["BacktestRepository"]
+        SubRepo["SubscriptionRepository"]
         SymbolRepo["SymbolRepository"]
         SyncRepo["SyncStatusRepository"]
         OptRepo["OptimizationRepository"]
@@ -216,7 +216,7 @@ graph LR
 
     subgraph InfrastructureProvider
         JobScheduler
-        TVProvider["TradingViewClient"]
+        DataProvider["BinanceClient (IDataProvider)"]
         BrokerFactory
         HealthCoord["HealthCoordinator"]
     end
@@ -235,14 +235,14 @@ graph LR
     Settings --> Database
     Settings --> Cache
     Settings --> JobScheduler
-    Settings --> TVProvider
+    Settings --> DataProvider
     Settings --> QuoteAppService
     Settings --> StrategyAppService
 
     Database --> BarRepo
     Database --> OrderRepo
     Database --> PositionRepo
-    Database --> BacktestRepo
+    Database --> SubRepo
     Database --> SymbolRepo
     Database --> SyncRepo
     Database --> OptRepo
@@ -269,8 +269,8 @@ graph LR
 
 ```mermaid
 flowchart LR
-    TV["TradingView<br/>WebSocket"] -->|binary frames| TVWS["TVWebSocketClient<br/>(parse)"]
-    TVWS -->|QuoteTick| QS["QuoteAppService"]
+    BN["Binance<br/>@aggTrade WS"] -->|JSON frames| BWS["BinanceWebSocketClient<br/>(parse)"]
+    BWS -->|QuoteTick| QS["QuoteAppService"]
     QS -->|tick| Redis["Redis<br/>(latest quote, 60s TTL)"]
     QS -->|tick| BM["BarAppService"]
     BM -->|build bar| BM
@@ -299,7 +299,7 @@ flowchart LR
                     ┌────────────┘       │       └────────────┐
                     v                    v                    v
            ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-           │ TradingView  │    │     OKX      │    │  Webhook     │
+           │   Binance    │    │     OKX      │    │  Webhook     │
            │ Data Provider│    │   Exchange   │    │  Consumers   │
            │ REST + WS    │    │  REST + WS   │    │  HTTP POST   │
            └──────────────┘    └──────────────┘    └──────────────┘
@@ -372,58 +372,12 @@ flowchart LR
   .on_bar()         .process_tick()   ._on_fill()
 ```
 
-## 11. Naming Glossary
+> **Naming glossary, file-navigation ("I need to…"), bounded-context table, ubiquitous-language** moved to text homes:
+> - Class-naming by layer → [code-standards.md](./code-standards.md) → "Class Naming by Layer"
+> - File navigation ("where does X live") → [system-architecture.md](./system-architecture.md) → "Where Does X Live?"
+> - Bounded contexts + ubiquitous language → [system-architecture.md](./system-architecture.md)
 
-| Suffix | Layer | Purpose | Count |
-|--------|-------|---------|-------|
-| `AppService` | Application | Stateful orchestrator | 8 |
-| `Client` | Infrastructure | External service caller | 2 |
-| `Handler` | Features | CQRS command/query handler | 37 |
-| `Repository` | Persistence | Data access | 8 |
-| `Factory` | Infrastructure | Object creation | 1 |
-| `Provider` | DI | Dishka dependency provider | 6 |
-
-## 12. File Navigation Cheat Sheet
-
-**Standard DDD File Names (per folder):**
-- `entities.py` — Pydantic BaseModel with to_mongo/from_mongo
-- `events.py` — Frozen dataclass domain events
-- `value_objects.py` — Frozen dataclass immutable values
-- `enums.py` — String enums
-- `interfaces.py` — ABC base classes
-- `services/` — Pure domain services
-
-**"I need to..."**
-
-| Task | Go to |
-|------|-------|
-| Add API endpoint | `src/features/{domain}/{operation}/route.py` |
-| Implement business logic | `src/features/{domain}/{operation}/handler.py` |
-| Define request/response | `src/features/{domain}/{operation}/command.py\|query.py` |
-| Add application service | `src/application/{domain}/` |
-| Add domain entity (persisted) | `src/domain/{name}/entities.py` |
-| Add domain concept (non-persisted) | `src/domain/concepts/{name}/` |
-| Add domain event | `src/domain/{name}/events.py` |
-| Add shared enum/VO | `src/domain/shared/enums.py\|value_objects.py` |
-| Add repository | `src/persistence/repositories/` |
-| Change startup | `src/main.py` (lifespan function) |
-| Configure DI | `src/container.py` + `src/di/` (6 provider files) |
-| Add middleware | `src/common/middleware/` + `src/main_extensions.py` |
-
-## 13. Bounded Contexts (Strategic Map)
-
-| Context | Responsibility | Owns | Package |
-|---|---|---|---|
-| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `pocketquant-core` (domain) + `pocketquant-api` (sync jobs) |
-| **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `pocketquant-core` (domain) + `pocketquant-trading` (orchestration) |
-| **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `pocketquant-core` (interfaces) + `pocketquant-trading` (registry, services) |
-| **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `pocketquant-core` (pure calculations) |
-| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity) | `pocketquant-core` |
-| **Backtest** | Historical replay + performance analysis | `BacktestResult`, `TradeRecord`, `PerformanceCalculator` | `pocketquant-backtest` (engine, persistence) |
-
-> A 7th container — `pocketquant-web` (Node/Vite SPA) — is a **UI surface**, not a bounded context. It consumes the API HTTP boundary; no domain logic lives there.
-
-### Context Map (Relationships)
+## 11. Context Map (Bounded-Context Relationships)
 
 ```
                                     ┌──────────────┐
@@ -449,24 +403,4 @@ flowchart LR
    (no upstream)
 ```
 
-**Relationship types:**
-- **Market Data → Strategy** — *Customer/Supplier* via published events (`BarCompletedEvent`, `QuoteReceivedEvent`)
-- **Strategy → Trading** — *Customer/Supplier* via `SignalGeneratedEvent`
-- **Trading → Position lifecycle** — internal aggregate-to-aggregate event chain (`OrderFilledEvent` → `PositionAggregate`)
-- **Risk → Trading** — *Shared Kernel* (risk calculations consumed pre-trade)
-- **Symbol → all** — *Conformist* (everyone reads `Symbol`; no one mutates without ownership)
-- **Backtest → Market Data** — *Customer* (replays historical Bars)
-
-## 14. Ubiquitous Language
-
-| Term | Meaning in this codebase | Common false synonyms to avoid |
-|---|---|---|
-| **Symbol** | Composite identifier `BTCUSDT:BINANCE` — code + exchange in one string | "Ticker", "pair", "instrument" |
-| **Bar** | Time-bucketed OHLCV record. **Not** "candle", "kline", "ohlcv-row" | "Candle" (UI term only); use "Bar" in domain code |
-| **Quote** | Latest tick (price + size + timestamp), cached in Redis. Not persisted long-term | "Tick" (used only inside `BarBuilder` aggregation) |
-| **Subscription** | Strategy's registration for `(symbol, exchange, interval)` → drives feed routing | "Watch", "follow" |
-| **Sync** | Bringing local Bar storage up-to-date from an external source (TradingView, Binance) | "Backfill" (specific to one-off historical loads), "refresh" |
-| **Strategy** | A pluggable trading-logic class implementing `IStrategy`. Loaded by id, not file path | "Algorithm" (too broad), "bot" (UI term) |
-| **Aggregate** | DDD construct: entity with invariants + lifecycle + event emission. Earn this name. | Don't apply to data records (e.g. Bar isn't an aggregate) |
-| **Composite symbol** | The `CODE:EXCHANGE` format. Replaced earlier `(exchange, code)` 2-tuple API | "Exchange-prefixed symbol" |
-| **In-progress bar** | Bar currently being built from live ticks; `is_complete=False` | "Open bar", "partial bar" |
+Relationship types (Customer/Supplier, Shared Kernel, Conformist) and the ubiquitous-language glossary live in [system-architecture.md](./system-architecture.md) → "Bounded Contexts" + "Ubiquitous Language".

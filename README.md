@@ -102,9 +102,9 @@ curl -X POST http://localhost:41920/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSDT","exchange":"BINANCE","interval":"1d","n_bars":200}'
 
-curl "http://localhost:41920/api/v1/market-data/sync-status/BINANCE/BTCUSDT?interval=1d"
+curl "http://localhost:41920/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE?interval=1d"
 
-curl "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSDT?interval=1d&limit=20"
+curl "http://localhost:41920/api/v1/market-data/ohlcv/BTCUSDT%3ABINANCE/1d?limit=20"
 ```
 
 What to expect:

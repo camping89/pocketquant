@@ -258,18 +258,14 @@ await order_manager.load_pending_orders()  # async init
 Encapsulate external API calls with clean interface:
 
 ```python
-# TradingViewClient
-class TradingViewClient:
-    def __init__(self, username: Optional[str], password: Optional[str]):
-        self.executor = ThreadPoolExecutor(max_workers=4)
-
-    async def get_bars(self, symbol: str, exchange: str, interval: str, n_bars: int):
-        # Run blocking tvdatafeed in thread pool
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, self._fetch_bars, ...)
+# BinanceClient implements the IDataProvider port
+class BinanceClient(IDataProvider):
+    async def fetch_ohlcv(self, symbol: str, interval: Interval, n_bars: int = 1000) -> list[Bar]:
+        # symbol is composite {code}:{exchange}; auto-paginates when n_bars > 1000
+        ...
 ```
 
-**Rationale:** Isolates blocking I/O from async event loop, clean error handling, easy to mock for testing.
+**Rationale:** Concrete adapter behind a core `IDataProvider` port (DIP) — isolates external I/O, clean error handling, easy to mock for testing.
 
 ### 7. Event Handler Auto-Discovery Pattern
 
@@ -322,9 +318,9 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
         self.bar_repo = bar_repo
 
     async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
-        # 1. Fetch from infrastructure
+        # 1. Fetch from infrastructure (symbol is composite {code}:{exchange})
         bars = await self.provider.fetch_ohlcv(
-            cmd.symbol, cmd.exchange, cmd.interval, cmd.n_bars
+            cmd.symbol, cmd.interval, cmd.n_bars
         )
 
         # 2. Validate via domain (Bar.from_mongo)
@@ -601,12 +597,12 @@ Backward-compatibility test: `tests/trading_test/test_subscription_deterministic
 Use kebab-case with descriptive names that indicate purpose:
 
 ```
-quote_routes.py           # FastAPI routes for quotes
-quote_app_service.py      # QuoteAppService business logic
-bar_builder.py            # BarBuilder domain service
-bar_repository.py         # BarRepository data access
-tradingview.py            # TradingViewClient for REST API
-tradingview_ws.py         # TradingViewWebSocketClient for WebSocket
+quote_routes.py                # FastAPI routes for quotes
+quote_app_service.py           # QuoteAppService business logic
+bar_builder.py                 # BarBuilder domain service
+bar_repository.py              # BarRepository data access
+binance_client.py              # BinanceClient (IDataProvider) for REST API
+binance_websocket_client.py    # BinanceWebSocketClient for @aggTrade WebSocket
 ```
 
 ### Module Size
@@ -800,12 +796,13 @@ pyright packages/pocketquant-backtest/src/pocketquant/backtest/handlers/  # Chec
 Run blocking operations in thread pool to avoid blocking event loop:
 
 ```python
-# Good: Thread pool isolation
-loop = asyncio.get_event_loop()
-bars = await loop.run_in_executor(self.executor, self._fetch_bars, symbol)
+# Good: native async I/O (Binance via aiohttp)
+bars = await self.provider.fetch_ohlcv(symbol, interval, n_bars)
 
-# Bad: Blocking event loop
-bars = tvdatafeed_client.get_bars(symbol)  # Blocks!
+# Bad: blocking call on the event loop
+bars = some_sync_client.get_bars(symbol)  # Blocks!
+# If a sync lib is unavoidable, isolate it:
+#   await loop.run_in_executor(self.executor, sync_fn, symbol)
 ```
 
 ### Bulk Operations
@@ -1010,8 +1007,9 @@ class Settings(BaseSettings):
     mongodb_url: MongoDsn
     redis_url: RedisDsn
     log_format: str = "json"  # or "console"
-    tradingview_username: Optional[str] = None
-    tradingview_password: Optional[str] = None
+    okx_api_key: Optional[str] = None       # live trading only (Binance market data needs no auth)
+    okx_secret_key: Optional[str] = None
+    okx_passphrase: Optional[str] = None
 
     class Config:
         env_file = ".env"
@@ -1026,7 +1024,7 @@ class Settings(BaseSettings):
 ```bash
 # .env.example (dummy values)
 MONGODB_URL=mongodb://localhost:52017
-TRADINGVIEW_USERNAME=username_placeholder
+OKX_API_KEY=api_key_placeholder
 ```
 
 ## File Size Targets
