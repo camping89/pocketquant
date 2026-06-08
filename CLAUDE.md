@@ -161,11 +161,21 @@ KEEP / write only for:
 No plan/phase/finding refs in comments — explain the invariant, not the origin.
 Applies to Python (`#`, `"""`) and TS/JS (`//`, `/** */`) alike. Full policy + examples: `docs/code-standards.md` → "Comment Policy".
 
-## Documentation Policy — AS-IS Only
+## Documentation Policy
+
+Applies to every `.md` file under `docs/`, `README.md`, and this file.
+
+### Format & language
+- All docs are Markdown (`.md`). Use bullet lists and tables over paragraphs. Add a Mermaid v11 or ASCII diagram when a concept has 2+ interacting parts (see monorepo tree + dependency graph above).
+- Prose tiếng Việt. Giữ nguyên tiếng Anh, không dịch: tên trong code (`StrategyAppService`, `bar_repository.py`), thuật ngữ kỹ thuật (`dependency injection`, `CQRS handler`, `uv workspace`), định danh ngoài (`PEP 420`, `OKX`, `MongoDB`).
+- Không tạo cụm nửa Việt nửa Anh ("cái handler", "service xử lý") — là thuật ngữ thì để nguyên cả cụm tiếng Anh. Từ có bản dịch tiếng Việt rõ nghĩa, không nhầm thì dịch (`database` → "cơ sở dữ liệu"); dịch ra mà phải chú thích tiếng Anh mới hiểu thì giữ tiếng Anh.
+- Mỗi câu nói một ý: chủ ngữ → động từ → đối tượng → lý do. Không dùng lượng từ mơ hồ (`some`, `vài`, `thường`) — ghi con số/tập chính xác. Không dùng đại từ mơ hồ (`it`, `nó`, `cái này`) — gọi thẳng tên.
+
+### AS-IS only — describe the current system, not its history
 
 Docs describe the system **as it currently is**. They are NOT a historical record. Git is the history.
 
-**NEVER add to any doc (`docs/`, `README.md`, this file):**
+**NEVER add to any doc:**
 - Changelogs or version-history sections (no `project-changelog.md`, no `## Version History`, no `## Appendix: Notable Refactors`).
 - Doc banners / metadata lines: `**Last Updated:**`, `**Version:**`, `**Status:** ... as of <date>`, "Living document", etc.
 - Change narratives: "What changed", "Previously…", "Updated (date):", "Refreshed X", "now / no longer", before/after framing.
