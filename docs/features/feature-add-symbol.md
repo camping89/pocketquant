@@ -165,10 +165,10 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 
 ## 5. Related Docs
 
-- [Handler Pipelines](./handler-pipelines.md) — chi tiết CQRS pipeline pattern
-- [System Architecture](./system-architecture.md) — overview backend/frontend, subscription entity
-- [Code Standards](./code-standards.md) — CQRS naming conventions + Strategy ID Disambiguation
-- [Strategy Lifecycle](./strategy-lifecycle.md) — bảng routes đầy đủ, mongo collection map
+- [Handler Pipelines](../handler-pipelines.md) — chi tiết CQRS pipeline pattern
+- [System Architecture](../system-architecture.md) — overview backend/frontend, subscription entity
+- [Code Standards](../code-standards.md) — CQRS naming conventions + Strategy ID Disambiguation
+- [Strategy Lifecycle](../strategy-lifecycle.md) — bảng routes đầy đủ, mongo collection map
 
 ---
 

@@ -37,15 +37,16 @@ gh workflow run cicd.yml --ref develop
 # or: GitHub repo → Actions → CI/CD → Run workflow
 ```
 
-**What runs:** 4 jobs in `.github/workflows/cicd.yml`
+**What runs:** 5 jobs in `.github/workflows/cicd.yml`
 
-1. `build-api` + `build-web` (parallel, ~3-5 min) — build + push Docker images, tagged `:latest` and `:sha-<short>`.
-2. `cleanup-tags` — prune old Docker Hub SHA tags.
-3. `deploy` (needs both builds green): `get-vps-config` composite action fetches config from `pocketquant-config` → setup SSH → write `deploy/.env` → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/10-deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/11-verify.sh` (19 checks) → upload verify report as artifact.
+1. `tests` — pre-build gate: `uv sync --frozen` → `pytest tests/api_test/`. `build-api` + `build-web` both `needs: [tests]`, nên build chỉ chạy khi tests xanh.
+2. `build-api` + `build-web` (parallel, ~3-5 min) — build + push Docker images, tagged `:latest` và `:sha-<short>`.
+3. `cleanup-tags` — prune old Docker Hub SHA tags.
+4. `deploy` (needs both builds green): `get-vps-config` composite action fetches config from `pocketquant-config` → setup SSH → write `deploy/.env` → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/10-deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/11-verify.sh` (19 checks) → upload verify report as artifact.
 
 **Concurrency:** `concurrency: deploy / cancel-in-progress: true`. A new push cancels an in-flight deploy — newest wins.
 
-**Verify report:** download from the run's `verify-report` artifact (retained 30 days).
+**Verify report:** download from the run's `verify-report` artifact (retained 3 days).
 
 ## Environment Variables
 

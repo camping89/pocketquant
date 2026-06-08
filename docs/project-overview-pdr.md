@@ -1,16 +1,16 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: 4 backend packages in the `uv` workspace + `pocketquant-web` as a separate npm app.
+Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: 5 Python packages in the `uv` workspace + `pocketquant-web` as a separate npm app.
 
 Use [README](../README.md) for the current local workflow and verified endpoint names.
 
 ## Project Vision
 
-PocketQuant is an algorithmic trading platform providing real-time market data synchronization, automated bar aggregation, and structured data storage for backtesting and forward testing workflows. The platform bridges TradingView data with MongoDB persistence, enabling traders and quants to build strategies on reliable, comprehensive market data.
+PocketQuant is an algorithmic trading platform providing real-time market data synchronization, automated bar aggregation, and structured data storage for backtesting and forward testing workflows. The platform bridges Binance public market data with MongoDB persistence, enabling traders and quants to build strategies on reliable, comprehensive market data.
 
 ## Product Goals
 
-1. **Data Reliability:** Efficient historical bar sync from TradingView with MongoDB persistence
+1. **Data Reliability:** Efficient historical bar sync from Binance with MongoDB persistence
 2. **Real-time Processing:** Live quote streaming with automatic aggregation into multiple timeframe bars
 3. **Developer Experience:** Clean REST API with OpenAPI documentation, minimal setup friction
 4. **Production Ready:** Structured logging, error handling, graceful degradation
@@ -20,7 +20,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F1: Historical Data Synchronization
 
-**Requirement:** Fetch bar data from TradingView and persist to MongoDB.
+**Requirement:** Fetch bar data from Binance public REST and persist to MongoDB.
 
 **Sub-requirements:**
 - Sync single symbol with configurable interval and bar count
@@ -29,13 +29,14 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Track sync progress and status
 - Prevent duplicate data via upsert operations
 - Support 13 standard intervals (1m to 1M)
-- Enforce 5000 bar maximum per fetch (TradingView limit)
+- Auto-paginate when `n_bars > 1000` (Binance returns max 1000 bars/call, 1200 weight/min budget)
 
 **API Endpoints:**
-- POST `/api/v1/market-data/sync` - Single symbol (blocking)
-- POST `/api/v1/market-data/sync/background` - Async sync
+- POST `/api/v1/market-data/sync` - Single symbol
+- POST `/api/v1/market-data/sync/background` - Async single symbol
 - POST `/api/v1/market-data/sync/bulk` - Multiple symbols
-- GET `/api/v1/market-data/sync-status` - Sync progress
+- GET `/api/v1/market-data/sync-status` - All sync progress
+- GET `/api/v1/market-data/sync-status/{symbol}` - Per-symbol (composite, e.g. `BTCUSDT:BINANCE`)
 
 **Status Tracking:**
 - Pending (request received, awaiting processing)
@@ -45,25 +46,22 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F2: Real-time Quote Streaming
 
-**Requirement:** Consume live price updates from TradingView WebSocket and distribute to subscribers.
+**Requirement:** Consume live price updates from Binance `@aggTrade` WebSocket and distribute to subscribers.
 
 **Sub-requirements:**
-- Maintain persistent WebSocket connection
+- Maintain persistent WebSocket connection (singleton, app-wide), auto-started by the FastAPI lifespan
 - Auto-reconnect with exponential backoff (1s to 60s)
-- Subscribe/unsubscribe to specific symbols
-- Cache latest quotes in Redis (60s TTL)
-- Log all quote events for audit trail
-- Handle binary protocol (TradingView custom format)
+- Subscribe/unsubscribe to specific symbols; `WsSubscriptionManager` reconciles vs `tracked_symbols` every 5s
+- Cache latest quotes in Redis (~60s TTL)
 - Re-subscribe after reconnection
 
 **API Endpoints:**
-- POST `/api/v1/quotes/start` - Start WebSocket
-- POST `/api/v1/quotes/stop` - Stop WebSocket
 - POST `/api/v1/quotes/subscribe` - Register symbol
 - POST `/api/v1/quotes/unsubscribe` - Deregister symbol
-- GET `/api/v1/market-data/status` - Connection status
 - GET `/api/v1/quotes/latest/{symbol}` - Latest quote (composite symbol: `BTCUSDT:BINANCE`, URL-encoded `%3A`)
 - GET `/api/v1/quotes/all` - All cached quotes
+- GET `/api/v1/quotes/status` - Quote service status
+- GET `/api/v1/quotes/stream/{symbol}` - SSE live quote stream
 
 ### F3: Multi-interval Bar Aggregation
 
@@ -79,7 +77,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Concurrent tick processing with lock protection
 
 **Data Flow:**
-- TradingView tick → QuoteAppService → QuoteAggregator → MongoDB + Redis
+- Binance `@aggTrade` tick → QuoteAppService → BarAppService (bar aggregation) → MongoDB + Redis
 
 ### F4: Data Retrieval
 
@@ -94,7 +92,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Support flexible time ranges
 
 **API Endpoints:**
-- GET `/api/v1/market-data/bar/{symbol}` - Bars with query params (composite symbol: `BTCUSDT:BINANCE`, URL-encoded `%3A`)
+- GET `/api/v1/market-data/ohlcv/{symbol}/{interval}` - Bars with query params (composite symbol: `BTCUSDT:BINANCE`, URL-encoded `%3A`)
 
 ### F5: Symbol Registry
 
@@ -132,8 +130,8 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 **Requirement:** Load and execute trading strategies with flexible broker abstraction.
 
 **Sub-requirements:**
-- Load strategies from YAML configuration files
-- Support multiple strategy implementations (MA crossover, etc.)
+- Load strategy templates from the in-code `STRATEGY_REGISTRY` (e.g. `hitnrun2`)
+- Support multiple strategy implementations via the `IStrategy` interface
 - Route market data events to strategy handlers (on_bar, on_tick, on_fill)
 - Broker abstraction: paper trading + live trading support
 - Position/order tracking from execution fills
@@ -173,9 +171,10 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - MongoDB persistence for historical records
 
 **API Endpoints:**
-- GET `/api/v1/orders` - List all orders
-- GET `/api/v1/positions` - List open positions
-- POST `/api/v1/orders/{order_id}/cancel` - Cancel order
+- GET `/api/v1/trading/orders` - List all orders
+- GET `/api/v1/trading/orders/{order_id}` - Get one order
+- GET `/api/v1/trading/positions` - List positions
+- GET `/api/v1/trading/positions/{strategy_id}` - Positions by strategy
 
 ### F10: Live Trading (OKX)
 
@@ -250,7 +249,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - No credentials in code or logs
 
 **Data Protection:**
-- Optional TradingView authentication
+- Binance public market data needs no auth; OKX live trading uses API key/secret/passphrase (optional)
 - MongoDB/Redis authentication via DSN
 - CORS configuration available
 
@@ -303,90 +302,63 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 | Structured Logging | ✅ Complete | N/A | N/A | 100% |
 | Docker Setup | ✅ Complete | N/A | N/A | N/A |
 
-### Module Breakdown (Clean Architecture + DDD + CQRS)
+### Module Breakdown (6-package layered monorepo)
+
+Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api`, `web → api` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
 
 ```
-packages/pocketquant-core/       (~4,966 LOC)
-├── domain/             (~355 LOC + concepts ~545 LOC)
-│   ├── Entities (6): Bar, Symbol, Order, Position, Backtest, SyncStatus
-│   ├── Aggregates (2): OrderAggregate, PositionAggregate
-│   ├── Value Objects, Events, Services (pure logic, zero I/O)
-│   ├── Concepts: Quote (70 LOC), Risk (167 LOC), Strategy (383 LOC)
-│   └── MongoDB Persistence: `to_mongo()`/`from_mongo()` methods
-├── common/             (~1,146 LOC, 32 files)
-│   ├── Mediator & EventBus, CQRS/Event handler auto-discovery
-│   ├── UUID Utilities (UUID7), DI Container Integration
-│   ├── Middleware (correlation, logging, idempotency, rate limiting)
-│   └── Health checks, logging (structlog)
-├── infrastructure/     (~550 LOC, 28 files)
-│   ├── Brokers (IBroker, PaperBroker 264 LOC, OKXBroker)
-│   ├── Data Providers (TradingView 295 LOC WebSocket, 168 LOC client)
-│   ├── OKX WebSocket with HMAC-SHA256 auth
-│   ├── Job Scheduling (APScheduler 182 LOC)
-│   └── HTTP Client & Webhooks
-└── persistence/        (~394 LOC, 18 files)
-    ├── Database (MongoDB, PyMongo async)
-    ├── Cache (Redis async)
-    └── Repositories (7): Bar, Order, Position, Backtest, Optimization, Symbol, SyncStatus
+packages/pocketquant-core/           # 0 deps — pure domain
+├── domain/        TOP-LEVEL entities (bar, order, position, symbol, sync_status,
+│                  backtest, subscription) + ports/DTOs (brokers, market_data)
+├── concepts/      non-persisted logic (quote, risk, strategy: IStrategy + hitnrun2)
+├── common/        Mediator, EventBus, middleware, UUID7, health, structlog
+├── config/        Settings
+└── persistence/   abstract base classes only (concrete impls live in infrastructure)
 
-packages/pocketquant-backtest/   (~2,429 LOC, 33 files)
-├── domain/
-│   ├── BacktestResult, OptimizationResult entities
-│   └── PerformanceCalculator (215 LOC)
-├── engine/
-│   ├── BacktestAppService (168 LOC)
-│   ├── GridOptimizationAppService (258 LOC)
-│   ├── HistoricalReplayAppService (121 LOC)
-│   └── ResultCollector (310 LOC)
-├── optimization/
-│   └── GridOptimizationService, config models
-└── handlers/ + persistence/
+packages/pocketquant-infrastructure/ # → core
+├── persistence/   Database (MongoDB), Cache (Redis), 9 repositories
+│                  (bar, order, position, backtest, optimization, symbol,
+│                   sync_status, subscription, tracked_symbol, job_history)
+├── brokers/paper/ PaperBroker (shared by backtest + paper trading)
+├── market_data/binance/  BinanceClient (REST) + BinanceWebSocketClient (@aggTrade)
+├── scheduling/    JobScheduler (APScheduler)
+└── http/          HTTP client
 
-packages/pocketquant-trading/    (~3,452 LOC, 65 files)
-├── brokers/okx/
-│   ├── OKXBroker + 7 WebSocket support files (auth, mappers, handlers)
-│   └── ~1,500+ LOC total broker integration
-├── app_services/
-│   └── StrategyAppService, OrderAppService, PositionAppService
-├── handlers/
-│   ├── Strategy ops (add_symbol/start/stop/get_one/get_all/delete)
-│   └── Trading ops (list_orders/get_order/list_positions/get_position)
-└── persistence/
+packages/pocketquant-execution/      # → core + infra — shared strategy engine
+└── app_services/  StrategyAppService, OrderAppService, PositionAppService
+                   + RiskCheckHandler (consumed by both backtest and trading)
 
-packages/pocketquant-api/        (~2,853 LOC, 87 files)
-├── features/           - Operation-First Vertical Slices
-│   ├── backtesting/    - Run, optimize, retrieve backtests
-│   ├── market_data/    - Sync, bar queries, quotes, symbols
-│   ├── strategy/       - Load, start, stop strategies
-│   ├── trading/        - Orders, positions
-│   └── risk/           - Risk checks
-├── di/                 - Dishka dependency injection
-│   ├── container.py    - Factory + handler registration
-│   └── 6 Provider classes
-└── main.py            - FastAPI app + lifespan setup
+packages/pocketquant-backtest/       # → core + infra + execution
+├── engine/        BacktestAppService, ResultCollector
+├── optimization/  GridOptimizationAppService, config models
+├── jobs/ + handlers/  backtest-run orchestration (run_all_backtests)
+└── domain/services/   PerformanceCalculator (NumPy metrics)
 
-pocketquant-web (React SPA)      (~1,414 LOC, 25 TypeScript files)
+packages/pocketquant-trading/        # → core + infra + execution
+├── brokers/okx/   OKXBroker + WebSocket support (auth, mappers, reconnection)
+├── domain/        Subscription aggregate (deterministic ID)
+└── handlers/      strategy ops (add_symbol/start/stop/delete/list/get) +
+                   trading ops (list_orders/get_order/list_positions/get_position)
+
+packages/pocketquant-api/            # → all above — composition root
+├── market_data/   sync/quotes/ohlcv/tracked_symbols/status handlers + app-services
+├── di/            Dishka container + 6 Provider classes + register_handlers()
+└── main.py        FastAPI app + lifespan (WS feed start/stop, boot migrations)
+
+packages/pocketquant-web/            # React 19 + Vite SPA (separate npm app)
 ├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector
-├── Hooks: useOHLCV, useBacktest, useSymbols, useIndicators, useRealTimeBar
-├── API: backtestApi, marketDataApi, apiFetch utilities
-└── Tech: React 19, Vite 8, TypeScript 5.9, Lightweight Charts 5.1
-
-**Total: 14,751 LOC Python (295 files) + 1,414 LOC TypeScript (25 files)**
-- pocketquant-core: ~4,966 LOC
-- pocketquant-backtest: ~2,429 LOC
-- pocketquant-trading: ~3,452 LOC
-- pocketquant-api: ~2,853 LOC
-- pocketquant-web: ~1,414 LOC TypeScript
+├── Hooks: useOHLCV, useBacktest, useSymbols, use-realtime-bar, use-realtime-quote
+└── Tech: React 19, Vite, TypeScript, TanStack Router/Query, Lightweight Charts
 ```
 
-**Operation-First Pattern:** Each feature contains self-contained operations (folders). Each operation is a complete use case: command/query definition, handler logic, optional route. Shared infrastructure within a feature is in base/.
+**Operation-First Pattern:** Each feature is a self-contained operation folder — command/query definition + handler logic + optional route. 37 CQRS handlers total, registered with the Mediator via `ALL_HANDLER_TYPES` in `api/di/handlers.py`.
 
 ## Success Criteria
 
 ### Version 1.0 (Complete)
 
 **Core Features (F1-F6):**
-- [x] Historical OHLCV sync from TradingView
+- [x] Historical OHLCV sync from Binance
 - [x] Real-time quote streaming via WebSocket
 - [x] Multi-interval bar aggregation (1m to 1M)
 - [x] MongoDB persistence with proper schema
@@ -421,7 +393,6 @@ pocketquant-web (React SPA)      (~1,414 LOC, 25 TypeScript files)
 
 - [ ] Bulk sync parallelization (currently sequential per symbol)
 - [ ] Symbol search/filtering implementation
-- [ ] Rate limiting on TradingView requests
 - [ ] Configurable aggregator intervals post-initialization
 - [ ] Persistent job storage (currently in-memory only)
 - [ ] Automatic MongoDB/Redis reconnection
@@ -440,36 +411,6 @@ pocketquant-web (React SPA)      (~1,414 LOC, 25 TypeScript files)
 - [ ] Troubleshooting guide
 - [ ] Performance tuning guide
 - [ ] Example strategy using the API
-
-## Roadmap (Future Phases)
-
-### Phase 2: Extended Data Sources
-
-- Alternative data providers (Binance, Kraken, IEX)
-- Fundamental data (earnings, dividends, splits)
-- Sentiment data integration
-- News feed integration
-
-### Phase 3: Backtesting Engine
-
-- Strategy runner with historical replay
-- Performance metrics (Sharpe, max drawdown, etc.)
-- Parameter optimization
-- Risk analysis tools
-
-### Phase 4: Live Trading
-
-- Paper trading simulator
-- Broker integrations (Alpaca, Interactive Brokers)
-- Order management
-- Portfolio tracking
-
-### Phase 5: Analytics & Visualization
-
-- Web dashboard
-- Chart rendering
-- Performance analytics
-- Risk dashboards
 
 ## Development Practices
 

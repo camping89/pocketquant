@@ -1,6 +1,6 @@
 # System Architecture
 
-Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 4 backend packages + 1 frontend package. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
+Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 6-package layered monorepo (5 Python `uv` workspace + `pocketquant-web`): `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api`, `web → api`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
 For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
@@ -138,29 +138,27 @@ Exchange encapsulation replaces standalone `exchange` field across domain entiti
 **Example - Domain Service (Pure Logic):**
 BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
 
-### Layer 2: Application (Orchestrators) — packages/{backtest, trading}/src/pocketquant/
+### Layer 2: Application (Orchestrators) — `execution`, `backtest`, `trading`, `api` packages
 
-**Purpose:** Orchestrate domain logic + infrastructure I/O to fulfill business use cases. Stateful services and engines that coordinate between layers.
+**Purpose:** Orchestrate domain logic + infrastructure I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `pocketquant-execution` and is consumed by both `backtest` and `trading` (breaks the old backtest↔trading cycle).
 
 **Structure:**
 ```
-application/
-├── backtesting/              # Backtest orchestration
-│   ├── backtest_app_service.py       # BacktestAppService (execute backtest)
-│   ├── grid_optimization_app_service.py  # GridOptimizationAppService (parameter search)
-│   ├── historical_replay_app_service.py  # HistoricalReplayAppService (inject bars)
-│   ├── result_collector.py           # ResultCollector (collect fills, metrics)
-│   └── models/                       # DTOs, performance calculator
-├── market_data/              # Data sync orchestration
-│   ├── bar_app_service.py          # BarAppService (multi-interval aggregation)
-│   ├── quote_app_service.py        # QuoteAppService (WebSocket lifecycle)
-│   └── models/                     # DTOs for market data
-├── strategy/                 # Strategy orchestration
-│   └── strategy_app_service.py     # StrategyAppService (dispatch, signal handling)
-├── trading/                  # Trading orchestration
-│   ├── order_app_service.py        # OrderAppService (order state, recovery)
-│   └── position_app_service.py     # PositionAppService (position tracking, P&L)
-└── __init__.py
+pocketquant-execution/.../execution/app_services/   # SHARED engine (used by backtest + trading)
+├── strategy_app_service.py     # StrategyAppService (dispatch, signal handling, broker wiring)
+├── order_app_service.py        # OrderAppService (order state, recovery)
+└── position_app_service.py     # PositionAppService (position tracking, P&L)
+
+pocketquant-backtest/.../backtest/   # Backtest orchestration
+├── engine/backtest_app_service.py    # BacktestAppService (execute backtest)
+├── engine/result_collector.py        # ResultCollector (collect fills, metrics)
+├── optimization/                     # GridOptimizationAppService (parameter search)
+├── jobs/ + handlers/                 # backtest-run orchestration (run_all_backtests)
+└── domain/services/                  # PerformanceCalculator (NumPy metrics)
+
+pocketquant-api/.../api/market_data/app_services/   # Market-data orchestration
+├── bar_app_service.py          # BarAppService (multi-interval aggregation)
+└── quote_app_service.py        # QuoteAppService (WebSocket lifecycle)
 ```
 
 **Example - Application Service:**
@@ -228,10 +226,9 @@ features/
 │   │   ├── check/          # Operation: Check bar alignment + gaps
 │   │   ├── repair/         # Operation: Delete misaligned, resync gaps
 │   │   └── route.py
-│   ├── quotes/              # Nested group
-│   │   ├── start_feed/     # Operation: Start WebSocket
-│   │   ├── stop_feed/      # Operation: Stop WebSocket
+│   ├── quotes/              # Nested group (WS feed auto-started by lifespan)
 │   │   ├── subscribe/      # Operation: Subscribe
+│   │   ├── unsubscribe/    # Operation: Unsubscribe
 │   │   ├── get_all/        # Operation: Get all quotes
 │   │   └── router.py
 │   ├── status/              # Nested group
@@ -240,9 +237,8 @@ features/
 │   ├── list_symbols/        # Operation: List symbols
 │   └── router.py
 ├── strategy/                 # Strategy feature (10 operations)
-│   ├── get_all/            # Operation: List strategies
+│   ├── get_all/            # Operation: List strategy templates (STRATEGY_REGISTRY)
 │   ├── get_one/            # Operation: Get strategy
-│   ├── load/               # Operation: Load strategy YAML
 │   ├── start/              # Operation: Start strategy
 │   ├── stop/               # Operation: Stop strategy
 │   ├── subscriptions/       # NEW: Nested group for strategy subscriptions
@@ -535,19 +531,19 @@ Middleware Stack
   ├─ RateLimitMiddleware → check token bucket (200 req/10s)
   └─ IdempotencyMiddleware → return cached response if duplicate
   ↓
-Route (features/market_data/sync/sync_one/route.py)
+Route (api/market_data/handlers/sync/sync_one/route.py)
   ├─ Parse request body
   ├─ Build SyncSymbolCommand
   └─ Call Mediator.send(command)
   ↓
-Mediator (common/mediator/mediator.py)
+Mediator (core/common/mediator/mediator.py)
   ├─ Lookup handler via @handles(SyncSymbolCommand)
   └─ Call handler.handle(command)
   ↓
-Handler (features/market_data/sync/sync_one/handler.py)
+Handler (api/market_data/handlers/sync/sync_one/handler.py)
   ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [infrastructure]
   │       └─ Excludes the in-progress bar: endTime caps at floor(now/duration)*duration - 1
-  │          (single-point fix for v2.0.1; in-progress quote remains in Redis via WS @aggTrade)
+  │          (in-progress quote remains in Redis via WS @aggTrade)
   ├─ [2] Validate: Bar.from_mongo()                               [domain]
   ├─ [3] Persist: BarRepository.upsert_many()                     [infrastructure]
   ├─ [4] Invalidate: Cache.delete_pattern()                       [infrastructure]
@@ -567,27 +563,27 @@ Route Response
 ### Query Flow (Read-Only)
 
 ```
-HTTP Request (GET /market-data/bar/{symbol}?interval=1d&limit=100)
+HTTP Request (GET /market-data/ohlcv/{symbol}/{interval}?limit=100)
   ↓
 Middleware Stack
   ├─ CorrelationIdMiddleware → inject correlation_id
   ├─ RateLimitMiddleware → check token bucket
   └─ (No idempotency for GET)
   ↓
-Route (features/market_data/bar/get_bars/route.py)
-  ├─ Parse query params (symbol as composite: BTCUSDT:BINANCE or URL-encoded %3A)
-  ├─ Build GetBarsQuery
+Route (api/market_data/handlers/ohlcv/get_ohlcv/route.py)
+  ├─ Parse params (symbol as composite: BTCUSDT:BINANCE or URL-encoded %3A)
+  ├─ Build GetOHLCVQuery
   └─ Call Mediator.send(query)
   ↓
-Mediator (common/mediator/mediator.py)
-  ├─ Lookup handler via @handles(GetBarsQuery)
+Mediator (core/common/mediator/mediator.py)
+  ├─ Lookup handler via @handles(GetOHLCVQuery)
   └─ Call handler.handle(query)
   ↓
-Handler (features/market_data/bar/get_bars/handler.py)
+Handler (api/market_data/handlers/ohlcv/get_ohlcv/handler.py)
   ├─ [1] Fetch: Cache.get(key) or BarRepository.get_bars()
   ├─ [2] Validate: Bar value objects
   ├─ [3] Cache: Cache.set(key, result, ttl=300)
-  └─ [4] Return: BarsDTO (never return entities)
+  └─ [4] Return: OHLCVResponse (never return entities)
   ↓
 Route Response
   └─ Return BarsDTO as JSON 200
@@ -597,25 +593,29 @@ Route Response
 
 ### MongoDB Collections & Repository Access
 
-**Collections (MongoDB, accessed via Repositories):**
+13 collections. `_id` is a UUIDv7 except three deliberate natural/domain keys (`subscriptions` = deterministic `hash(strategy_code|symbol|interval)` for idempotent re-subscribe; `tracked_symbols` = the composite `symbol` string; `apscheduler_jobs` = the job name, APScheduler-managed). `job_history._id` is a Mongo ObjectId (insert default). Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
 
-| Collection | Repository | Purpose |
-|-----------|-----------|---------|
-| `bars` | BarRepository | Market OHLCV bars (composite symbol identifier) |
-| `orders` | OrderRepository | Order lifecycle (composite symbol identifier) |
-| `positions` | PositionRepository | Position tracking (composite symbol identifier) |
-| `backtests` | BacktestRepository | Backtest results + subscription cache (dual-purpose via `subscription_id` field) |
-| `optimizations` | OptimizationRepository | Parameter optimization |
-| `symbols` | SymbolRepository | Symbol metadata |
-| `sync_status` | SyncStatusRepository | Data sync progress (composite symbol identifier) |
-| `subscriptions` | SubscriptionRepository | Subscription ↔ (symbol/interval) storage (composite symbol identifier) |
-| `job_history` | JobHistoryRepository | Background job execution history |
+| Collection | `_id` strategy | Repository | Logical FK → | Context |
+|---|---|---|---|---|
+| `symbols` | uuid7 | SymbolRepository | — (reference data) | Symbol |
+| `bars` | uuid7 | BarRepository | `symbol` → symbols | Market Data |
+| `sync_status` | uuid7 | SyncStatusRepository | `(symbol,interval)` ↔ bars | Market Data |
+| `tracked_symbols` | natural: `symbol` | TrackedSymbolRepository | drives bars + sync_status | Market Data |
+| `subscriptions` | deterministic hash | SubscriptionRepository | `symbol` → symbols; `strategy_code` → in-code registry | Strategy |
+| `orders` | uuid7 | OrderRepository | `subscription_id`; `broker_order_id` → OKX | Trading |
+| `positions` | uuid7 | PositionRepository | `subscription_id` → subscriptions | Trading |
+| `backtest_runs` | uuid7 (`run_id`) | BacktestRepository | `subscription_id` → subscriptions (cache) | Backtest |
+| `backtest_orders` | uuid7 | BacktestOrderRepository | `run_id` → backtest_runs | Backtest |
+| `backtest_trades` | uuid7 | BacktestTradeRepository | `run_id` → backtest_runs | Backtest |
+| `backtest_optimization_runs` | uuid7 | OptimizationRepository | — | Backtest |
+| `job_history` | ObjectId | JobHistoryRepository | — | Scheduling |
+| `apscheduler_jobs` | natural: job name | (APScheduler-managed) | — | Scheduling |
 
 **All repositories:**
 - Inherit from `BaseRepository` (provides `_collection()` helper)
 - Instance-based with `Database` injected via constructor
 - Zero direct `Database.get_collection()` calls outside persistence layer
-- Enforce schema validation via MongoDB document schemas
+- No physical joins — orphans possible; cleanup is explicit in repo methods (e.g. `delete_by_strategy_code`)
 
 ### Recovery on Startup
 
@@ -688,7 +688,7 @@ Key pipelines at high level:
 2. **Real-time Quotes:** Binance @aggTrade WebSocket → QuoteAppService → BarAppService (13 intervals) → MongoDB + EventBus
 3. **Data Integrity:** Check alignment + gaps → Delete misaligned → Resync gaps (skip_filter=True) → Verify — Cron jobs @ 04:00 UTC (check) & every 12h (repair)
 4. **Strategy Execution:** Market event → Strategy.on_bar() → Risk check → Broker.submit_order() → Position tracking
-5. **Backtesting:** YAML config → Historical bars → PaperBroker.simulate_fills() → PerformanceCalculator → MongoDB
+5. **Backtesting:** BacktestConfig → Historical bars → PaperBroker.simulate_fills() → PerformanceCalculator → MongoDB
 6. **Parameter Optimization:** GridOptimizationAppService → Parallel backtests → Best params → MongoDB
 
 ## Concurrency Model
@@ -710,7 +710,7 @@ Key pipelines at high level:
 
 **6 Providers:**
 - **CoreProvider** - Settings, EventBus (max_history=**50**), Mediator
-- **PersistenceProvider** - Database (PyMongo), Cache (Redis), 8 repositories (BarRepository, OrderRepository, PositionRepository, BacktestRepository, OptimizationRepository, SymbolRepository, SyncStatusRepository, JobHistoryRepository)
+- **PersistenceProvider** - Database (PyMongo), Cache (Redis), repositories (Bar, Order, Position, Subscription, Symbol, SyncStatus, TrackedSymbol, Optimization, Backtest{Run,Order,Trade}, JobHistory)
 - **InfrastructureProvider** - PaperBroker, OKXBroker, BrokerFactory, BinanceClient (IDataProvider), BinanceWebSocketClient (IRealtimeQuoteProvider), OkxWebSocketClient, OkxReconnectionHandler, HTTP client, WebhookDispatcher, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
 - **ExecutionProvider** - OrderAppService, PositionAppService, StrategyAppService, RiskCheckHandler
@@ -777,7 +777,7 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 |--------|------|---------|
 | **Binance** | HTTP + WS | Public REST (no auth), rate limit 1200 weight/min. @aggTrade WebSocket for real-time quotes. Bars must include per-tick delta volume. |
 | **OKX** | WS + Auth | HMAC-SHA256, 1s-30s backoff, 10-fail circuit breaker |
-| **MongoDB** | Async | PyMongo, pool 5-50 connections, 8 collections |
+| **MongoDB** | Async | PyMongo, pool 5-50 connections, 13 collections |
 | **Redis** | Async | redis-py, TTL: 60s quotes, 300s bars, 86400s idempotency |
 
 ## Error Handling
@@ -843,3 +843,82 @@ For deployment-specific env handling (docker-network service names, host-publish
 - Rate limiting state lost on Redis restart — acceptable for burst protection
 - Single-threaded strategy execution — one strategy per process
 - Domain purity enforced via AST check — I/O imports forbidden in `domain/`
+
+## Whole-System View (repos, services, runtime)
+
+Zoomed-out companion to the layer breakdown above. Diagrams (end-to-end build→ship→run, config-flow, collection ERD) live in [system-relationship-map](./system-relationship-map.md); the deploy runbook is [deployment.md](./deployment.md).
+
+### Two Repositories (split by secret boundary)
+
+| Repo | Holds | Secrets? | Read by |
+|---|---|---|---|
+| `pocketquant` | All app code (6 packages), Dockerfiles, compose, CI/CD workflow, deploy scripts, docs | No | Developers, GitHub Actions |
+| `pocketquant-config` | Prod `.env`, SSH deploy key, Docker Hub + Portainer creds, local env templates | **Yes — the repo IS the secret store** | GitHub Actions (read-only deploy key), operators |
+
+The only secret inside `pocketquant` is the `POCKETQUANT_CONFIG_DEPLOY_KEY` GitHub Actions secret — the read-only key CI/CD uses to clone `pocketquant-config` at deploy time.
+
+### External Service Relationships
+
+| External | Direction | Protocol | Purpose | Auth |
+|---|---|---|---|---|
+| Binance | app → Binance | REST + WS `@aggTrade` | Historical bar sync + live quote ingestion | None (public) |
+| OKX | app ↔ OKX | REST + WS | Live order/position execution (live trading mode) | API key/secret/passphrase (optional) |
+| Docker Hub | CI push / VPS pull | HTTPS | Image registry | Docker Hub creds (from config repo) |
+| GitHub Actions | push-triggered | — | Build + deploy orchestration | — |
+
+App is **outbound-only** to exchanges — no server-side WebSocket; clients get real-time data via SSE backed by Redis. See [WebSocket Architecture](./websocket-architecture.md).
+
+### Local-Dev Modes vs Prod
+
+| Mode | Code | Mongo + Redis | Env template | Jobs |
+|---|---|---|---|---|
+| Local sandbox | laptop | local Docker (`just up`) | `local/all-local.env` | safe to enable |
+| Remote-DB | laptop | **prod VPS** (published ports) | `local/remote-db.env` | `ENABLE_JOBS=false` (scheduler runs on prod only) |
+| Production | VPS container | VPS containers (internal names) | `vps/default/.env` | enabled |
+
+APScheduler coordinates across processes via the shared `apscheduler_jobs` collection — first to claim `next_run_time` wins. A remote-DB laptop must keep `ENABLE_JOBS=false`, else it double-schedules against live prod.
+
+### Where Each Concern Lives
+
+| Concern | Location |
+|---|---|
+| App layers (DDD/CQRS/DI internals) | this doc + [architecture-visual-map](./architecture-visual-map.md) |
+| CI/CD pipeline + ops procedures | [deployment.md](./deployment.md) |
+| Secret/config storage | `pocketquant-config/` (own README) |
+| Container definitions | `deploy/compose.prod.yml`, `deploy/Dockerfile` |
+| CI workflow | `.github/workflows/cicd.yml` |
+
+## Bounded Contexts (Strategic Map)
+
+| Context | Responsibility | Owns | Package |
+|---|---|---|---|
+| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `pocketquant-core` (domain) + `pocketquant-api` (sync jobs) |
+| **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `pocketquant-core` (domain) + `pocketquant-trading` (orchestration) |
+| **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `pocketquant-core` (interfaces) + `pocketquant-trading` (registry, services) |
+| **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `pocketquant-core` (pure calculations) |
+| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity) | `pocketquant-core` |
+| **Backtest** | Historical replay + performance analysis | `BacktestResult`, `TradeRecord`, `PerformanceCalculator` | `pocketquant-backtest` (engine, persistence) |
+
+> A 7th container — `pocketquant-web` (Node/Vite SPA) — is a **UI surface**, not a bounded context. It consumes the API HTTP boundary; no domain logic lives there.
+
+**Relationship types** (context-map diagram in [architecture-visual-map](./architecture-visual-map.md) §11):
+- **Market Data → Strategy** — *Customer/Supplier* via published events (`BarCompletedEvent`, `QuoteReceivedEvent`)
+- **Strategy → Trading** — *Customer/Supplier* via `SignalGeneratedEvent`
+- **Trading → Position lifecycle** — internal aggregate-to-aggregate event chain (`OrderFilledEvent` → `PositionAggregate`)
+- **Risk → Trading** — *Shared Kernel* (risk calculations consumed pre-trade)
+- **Symbol → all** — *Conformist* (everyone reads `Symbol`; no one mutates without ownership)
+- **Backtest → Market Data** — *Customer* (replays historical Bars)
+
+## Ubiquitous Language
+
+| Term | Meaning in this codebase | Common false synonyms to avoid |
+|---|---|---|
+| **Symbol** | Composite identifier `BTCUSDT:BINANCE` — code + exchange in one string | "Ticker", "pair", "instrument" |
+| **Bar** | Time-bucketed OHLCV record. **Not** "candle", "kline", "ohlcv-row" | "Candle" (UI term only); use "Bar" in domain code |
+| **Quote** | Latest tick (price + size + timestamp), cached in Redis. Not persisted long-term | "Tick" (used only inside `BarBuilder` aggregation) |
+| **Subscription** | Strategy's registration for `(symbol, interval)` → drives feed routing | "Watch", "follow" |
+| **Sync** | Bringing local Bar storage up-to-date from Binance | "Backfill" (specific to one-off historical loads), "refresh" |
+| **Strategy** | A pluggable trading-logic class implementing `IStrategy`. Loaded by id, not file path | "Algorithm" (too broad), "bot" (UI term) |
+| **Aggregate** | DDD construct: entity with invariants + lifecycle + event emission. Earn this name. | Don't apply to data records (e.g. Bar isn't an aggregate) |
+| **Composite symbol** | The `CODE:EXCHANGE` format. Replaced earlier `(exchange, code)` 2-tuple API | "Exchange-prefixed symbol" |
+| **In-progress bar** | Bar currently being built from live ticks; `is_complete=False` | "Open bar", "partial bar" |
