@@ -202,6 +202,15 @@ class StrategyAppService:
     def get_strategy(self, strategy_id: str) -> IStrategy | None:
         return self._strategies.get(strategy_id)
 
+    def loaded_strategy_ids(self) -> list[str]:
+        """Return all currently-loaded instance keys (snapshot, lock-free read).
+
+        Keys are either subscription ids (``deterministic_id`` shape) or synthetic
+        backtest ids (``{code}::bt::{sub_id}``). The reconcile orphan-unload pass
+        filters on shape so it never touches synthetic backtest instances.
+        """
+        return list(self._strategies.keys())
+
     @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         strategies = self._find_strategies(event.symbol, event.interval, trigger="bar")

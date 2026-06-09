@@ -13,11 +13,11 @@ packages/
 ├── pocketquant-execution/      # → core + infrastructure — shared strategy/order/position/risk app-services
 ├── pocketquant-backtest/       # → core + infra + execution — backtest engine, optimization, backtest-run orchestration
 ├── pocketquant-trading/        # → core + infra + execution — live trading, OKX broker, strategy/subscription handlers
-├── pocketquant-api/            # → all of the above — FastAPI, DI, composition root
-└── pocketquant-web/            # Node/Vite SPA — TanStack Router, lightweight-charts; consumes pocketquant-api HTTP
+├── pocketquant-app/            # → all of the above — FastAPI, DI, composition root
+└── pocketquant-web/            # Node/Vite SPA — TanStack Router, lightweight-charts; consumes pocketquant-app HTTP
 ```
 
-**Dependency graph:** core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api ← web (HTTP only). `backtest` and `trading` are independent siblings — neither imports the other.
+**Dependency graph:** core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app ← web (HTTP only). `backtest` and `trading` are independent siblings — neither imports the other.
 
 ## Package Imports
 
@@ -55,9 +55,9 @@ from pocketquant.backtest.optimization.models.backtest_config import BacktestCon
 from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
 
 # API (composition root)
-from pocketquant.api.di.container import create_container
-from pocketquant.api.di.broker_factory import BrokerFactory
-from pocketquant.api.market_data.app_services.bar_app_service import BarAppService
+from pocketquant.app.di.container import create_container
+from pocketquant.app.di.broker_factory import BrokerFactory
+from pocketquant.app.market_data.app_services.bar_app_service import BarAppService
 ```
 
 ## Domain Structure (Three-Tier DDD)
@@ -74,7 +74,7 @@ Standard file names per folder: `entities.py`, `events.py`, `value_objects.py`, 
 
 ## DI Container (Dishka)
 
-6 providers in `pocketquant.api.di/`:
+6 providers in `pocketquant.app.di/`:
 - CoreProvider: Settings, EventBus, Mediator
 - PersistenceProvider: Database, Cache, repositories
 - InfrastructureProvider: BrokerFactory, JobScheduler, IDataProvider, HealthCoordinator

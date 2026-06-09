@@ -1,0 +1,1 @@
+"""Add tracked symbol route."""

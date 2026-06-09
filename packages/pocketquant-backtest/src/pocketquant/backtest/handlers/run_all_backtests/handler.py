@@ -1,30 +1,37 @@
-"""RunAllBacktestsHandler — enqueue one-off backtest job per subscription."""
+"""RunAllBacktestsHandler — enqueue one backtest request per subscription."""
 
+from datetime import UTC, datetime
+
+from pocketquant.backtest.handlers.run_all_backtests.command import RunAllBacktestsCommand
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.backtest.handlers.run_all_backtests.command import RunAllBacktestsCommand
+from pocketquant.core.domain.backtest.request import BacktestRequest
+from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
+    BacktestRequestRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 
-_JOB_MODULE = "pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest"
-
 
 @handles(RunAllBacktestsCommand)
 class RunAllBacktestsHandler(Handler[RunAllBacktestsCommand, dict]):
-    """Handle RunAllBacktestsCommand — fan-out immediate one-off jobs via scheduler."""
+    """Enqueue a backtest request for every subscription of a strategy template.
+
+    Pure DB write — no scheduler. The headless app's BacktestRequestWorker
+    claims and runs each request. bff can therefore call this without owning a
+    JobScheduler.
+    """
 
     def __init__(
         self,
         subscription_repository: SubscriptionRepository,
-        job_scheduler: JobScheduler,
+        backtest_request_repository: BacktestRequestRepository,
     ) -> None:
         self._sub_repo = subscription_repository
-        self._scheduler = job_scheduler
+        self._request_repo = backtest_request_repository
 
     async def handle(self, request: RunAllBacktestsCommand) -> dict:
-        """Enqueue a date-triggered (immediate) backtest job for each subscription."""
         subs = await self._sub_repo.list_by_strategy_code(request.strategy_id)
         if not subs:
             raise NotFoundError(
@@ -32,14 +39,23 @@ class RunAllBacktestsHandler(Handler[RunAllBacktestsCommand, dict]):
                 "Add symbols via POST /{strategy_id}/symbols first."
             )
 
+        # FE (strategy-api.ts runAllBacktests) reads `job_ids`; keep the key name
+        # so the run-all path needs zero FE change — it now carries request ids.
+        #
+        # Deterministic id per subscription + upsert enqueue makes two concurrent
+        # run-all fan-outs collapse to one pending request per sub (preserving the
+        # old APScheduler replace_existing dedup), instead of duplicating compute.
         job_ids = []
         for sub in subs:
-            job_id = f"bt:{sub.id}"
-            self._scheduler.add_one_off_job(
-                _JOB_MODULE,
-                job_id=job_id,
-                subscription_id=sub.id,
+            bt_request = BacktestRequest(
+                id=f"bt:{sub.id}",
+                kind="subscription",
+                status="pending",
+                requested_at=datetime.now(UTC),
+                sub_id=sub.id,
+                strategy_code=sub.strategy_code,
             )
-            job_ids.append(job_id)
+            await self._request_repo.enqueue(bt_request)
+            job_ids.append(bt_request.id)
 
         return {"job_ids": job_ids}

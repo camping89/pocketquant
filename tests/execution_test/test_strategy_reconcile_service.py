@@ -1,11 +1,14 @@
 """Unit tests for StrategyReconcileService — pure fakes, no DB/containers.
 
-The reconcile loop diffs desired_state (Mongo) vs actual run-state (RAM) and
-converges by calling start/stop, then mirrors observed actual back to Mongo on
-drift. Tests pin: the four-combo decision table, idempotency (no churn writes),
-missing-instance warn path, per-sub error isolation, cancel-safety, and the
-load-bearing invariant that injected backtest strategies (no sub row) are
-untouched.
+The reconcile loop owns instance lifecycle (load missing, unload orphan) AND
+converges run-state: it diffs desired_state (Mongo) vs actual run-state (RAM),
+calls start/stop, then mirrors observed actual back on drift. Tests pin: the
+four-combo decision table, idempotency (no churn writes), per-sub error
+isolation, cancel-safety, and the load-bearing invariant that injected backtest
+strategies (synthetic id, no sub row) are never unloaded.
+
+Instance-lifecycle specifics (load missing / unload orphan / anti-clobber) are
+covered in test_reconcile_instance_lifecycle.py.
 """
 
 from __future__ import annotations
@@ -46,12 +49,14 @@ class _FakeStrategy:
 
 
 class _FakeStrategyService:
-    """Records start/stop calls; mutates fake instances so reconcile is idempotent."""
+    """Records start/stop/load/unload; mutates fake instances for idempotency."""
 
     def __init__(self) -> None:
         self._instances: dict[str, _FakeStrategy] = {}
         self.start_calls: list[str] = []
         self.stop_calls: list[str] = []
+        self.load_calls: list[str] = []
+        self.unload_calls: list[str] = []
         self.start_raises_for: set[str] = set()
 
     def load(self, sub_id: str, running: bool) -> None:
@@ -59,6 +64,18 @@ class _FakeStrategyService:
 
     def get_strategy(self, sub_id: str):
         return self._instances.get(sub_id)
+
+    def loaded_strategy_ids(self) -> list[str]:
+        return list(self._instances.keys())
+
+    async def load_strategy(self, config, strategy_class=None) -> str:
+        self.load_calls.append(config.id)
+        self._instances[config.id] = _FakeStrategy(running=False)
+        return config.id
+
+    async def unload_strategy(self, sub_id: str) -> None:
+        self.unload_calls.append(sub_id)
+        self._instances.pop(sub_id, None)
 
     async def start_strategy(self, sub_id: str) -> None:
         self.start_calls.append(sub_id)
@@ -150,29 +167,41 @@ async def test_stable_stopped_is_idempotent_no_calls_no_writes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_instance_desired_running_warns_no_start_persists_stopped() -> None:
-    svc = _FakeStrategyService()  # no instance loaded for s1
-    sub = _sub("s1", desired="running", actual="running")  # DB stale → must drift to stopped
-    recon = _service([sub], svc)
-
-    await recon._reconcile()
-
-    assert svc.start_calls == []
-    assert recon._sub_repo.actual_writes == [("s1", "stopped")]
-
-
-@pytest.mark.asyncio
-async def test_missing_instance_legacy_stopped_actual_no_write_no_churn() -> None:
-    """Legacy sub desired=running, actual already stopped, no RAM instance:
-    no drift → no per-tick write (and the warn would not fire every tick)."""
+async def test_missing_instance_desired_running_loads_then_starts() -> None:
+    """Sub with valid template but no RAM instance: ensure-instance loads it,
+    then converge starts it — the control-plane now owns lifecycle."""
     svc = _FakeStrategyService()  # no instance loaded for s1
     sub = _sub("s1", desired="running", actual="stopped")
     recon = _service([sub], svc)
 
     await recon._reconcile()
 
+    assert svc.load_calls == ["s1"]
+    assert svc.start_calls == ["s1"]
+    assert recon._sub_repo.actual_writes == [("s1", "running")]
+
+
+@pytest.mark.asyncio
+async def test_unknown_template_skips_load_no_start() -> None:
+    """Sub whose template is not in the registry is skipped (warn), not loaded,
+    so it never starts and drifts to stopped."""
+    svc = _FakeStrategyService()
+    sub = Subscription(
+        id="s1",
+        strategy_code="does-not-exist",
+        symbol="BTCUSDT:BINANCE",
+        interval=Interval.MINUTE_5,
+        created_at=NOW,
+        desired_state="running",
+        actual_state="running",  # DB stale → must drift to stopped
+    )
+    recon = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.load_calls == []
     assert svc.start_calls == []
-    assert recon._sub_repo.actual_writes == []  # idempotent: nothing to write
+    assert recon._sub_repo.actual_writes == [("s1", "stopped")]  # idempotent: nothing to write
 
 
 @pytest.mark.asyncio

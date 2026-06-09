@@ -30,7 +30,7 @@ reset:
 test:
     {{python}} -m pytest
 
-# Run tests for a specific package (core, backtest, trading, api)
+# Run tests for a specific package (core, backtest, trading, app)
 test-pkg pkg:
     {{python}} -m pytest tests/{{pkg}}_test/
 
@@ -55,7 +55,7 @@ redis:
 
 # Start backend dev server with hot reload
 be:
-    {{python}} -m uvicorn pocketquant.api.main:app --reload --host 0.0.0.0 --port 41920
+    {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41920
 
 # Start frontend dev server
 [working-directory: 'packages/pocketquant-web']

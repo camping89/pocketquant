@@ -52,7 +52,7 @@ Operation-First Structure:
 │   └── __init__.py
 ├── router.py                   # Feature router (aggregates all operations)
 └── __init__.py
-# Note: Handler registration in pocketquant/api/di/container.py via register_handlers(container)
+# Note: Handler registration in pocketquant/app/di/container.py via register_handlers(container)
 
 IMPORTANT: No business logic in features/. All logic in:
 - Application layer (orchestrators, state machines)
@@ -78,7 +78,7 @@ features/backtesting/
 │   ├── query.py
 │   └── handler.py
 └── router.py                   # Aggregate all operation routes
-# Handler registration in pocketquant/api/di/ (no separate register.py file)
+# Handler registration in pocketquant/app/di/ (no separate register.py file)
 ```
 
 **Application Layer (Orchestrators):**
@@ -172,9 +172,9 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 ```
 
 **Key Files:**
-- `packages/pocketquant-api/src/pocketquant/api/di/container.py` — `create_container()`, handler registration
-- `packages/pocketquant-api/src/pocketquant/api/di/providers/` — 6 Provider classes
-- `packages/pocketquant-api/src/pocketquant/api/main.py` — Lifespan: create container, `setup_dishka()`
+- `packages/pocketquant-app/src/pocketquant/app/di/container.py` — `create_container()`, handler registration
+- `packages/pocketquant-app/src/pocketquant/app/di/providers/` — 6 Provider classes
+- `packages/pocketquant-app/src/pocketquant/app/main.py` — Lifespan: create container, `setup_dishka()`
 
 **6 Providers (initialization order):**
 1. **CoreProvider** - Settings, EventBus (max_history=50), Mediator
@@ -382,7 +382,7 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 **Registration Pattern:**
 Handlers auto-discovered at container build time:
 1. Implement handler with `@handles(RequestType)` decorator
-2. Add to HandlerProvider in `packages/pocketquant-api/src/pocketquant/api/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
+2. Add to HandlerProvider in `packages/pocketquant-app/src/pocketquant/app/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
 3. `register_handlers(container)` in container.py resolves all handlers and registers with Mediator at startup
 4. Dependencies resolved by dishka via __init__ type hints (no manual injection)
 
@@ -635,7 +635,7 @@ import structlog
 # 3. Local
 from pocketquant.core.common.database import Database
 from pocketquant.core.common.logging import get_logger
-from pocketquant.api.features.market_data.base.models import OHLCV
+from pocketquant.app.features.market_data.base.models import OHLCV
 ```
 
 **Example (Domain layer - Stdlib dataclasses only):**

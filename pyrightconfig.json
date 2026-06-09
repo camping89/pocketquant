@@ -3,11 +3,11 @@
     "packages/pocketquant-core/src",
     "packages/pocketquant-backtest/src",
     "packages/pocketquant-trading/src",
-    "packages/pocketquant-api/src",
+    "packages/pocketquant-app/src",
     "tests/core_test",
     "tests/backtest_test",
     "tests/trading_test",
-    "tests/api_test"
+    "tests/app_test"
   ],
   "venvPath": ".",
   "venv": ".venv",
@@ -33,7 +33,7 @@
       "reportPrivateUsage": "none"
     },
     {
-      "root": "tests/api_test",
+      "root": "tests/app_test",
       "reportPrivateUsage": "none"
     }
   ]

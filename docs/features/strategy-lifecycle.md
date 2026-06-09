@@ -132,7 +132,7 @@ Endpoints feeding the UI:
 - `GET /api/v1/subscriptions/{sub_id}/trades` — closed positions as trades
   (`.../get_trades/handler.py:17`)
 - `GET /api/v1/system/jobs` — APScheduler job listing for ops visibility
-  (`packages/pocketquant-api/.../main_extensions.py:280`)
+  (`packages/pocketquant-app/.../main_extensions.py:280`)
 
 ---
 
@@ -142,7 +142,7 @@ Endpoints feeding the UI:
 
 #### 5.1 Composition root + DI lifecycle
 
-`packages/pocketquant-api/src/pocketquant/api/main.py:34` defines the FastAPI
+`packages/pocketquant-app/src/pocketquant/app/main.py:34` defines the FastAPI
 `lifespan` context manager. At startup, in order:
 
 1. `set_sync_container(container)` and `set_backtest_container(container)`
@@ -379,9 +379,9 @@ upstream of strategies by market-data and middleware layers:
 
 | Key pattern | Set by | Read by | TTL |
 |---|---|---|---|
-| `quote:latest:{symbol}` | `QuoteAppService` on `QuoteReceivedEvent` (`packages/pocketquant-api/.../quote_app_service.py:65`) | `GetLatestQuoteHandler`, `GetAllQuotesHandler`, `/quotes/stream` SSE route | 60s (`TTL_QUOTE_LATEST`) |
-| `bar:current:{symbol}:{interval}` | `BarAppService` (`packages/pocketquant-api/.../bar_app_service.py:216`) | `BarAppService.get_current_bar` | 300s (`TTL_BAR_CURRENT`) |
-| `ohlcv:{symbol}:{interval}:{limit}[:from:...][:to:...]` | `GetOHLCVHandler` (`packages/pocketquant-api/.../ohlcv/get_ohlcv/handler.py:46`) | same handler — query-result cache | 300s (`TTL_OHLCV_QUERY`) |
+| `quote:latest:{symbol}` | `QuoteAppService` on `QuoteReceivedEvent` (`packages/pocketquant-app/.../quote_app_service.py:65`) | `GetLatestQuoteHandler`, `GetAllQuotesHandler`, `/quotes/stream` SSE route | 60s (`TTL_QUOTE_LATEST`) |
+| `bar:current:{symbol}:{interval}` | `BarAppService` (`packages/pocketquant-app/.../bar_app_service.py:216`) | `BarAppService.get_current_bar` | 300s (`TTL_BAR_CURRENT`) |
+| `ohlcv:{symbol}:{interval}:{limit}[:from:...][:to:...]` | `GetOHLCVHandler` (`packages/pocketquant-app/.../ohlcv/get_ohlcv/handler.py:46`) | same handler — query-result cache | 300s (`TTL_OHLCV_QUERY`) |
 | `ohlcv:{SYMBOL}:{interval}:*` (delete-pattern) | `SyncOneHandler` after sync completion (`.../sync/sync_one/handler.py:176`) | Cache invalidation — drops every limit variant for that symbol/interval. | n/a (delete) |
 | Idempotency keys | `IdempotencyMiddleware` (`packages/pocketquant-core/.../middleware.py`) | same | request-scoped |
 | Rate-limit tokens | `RateLimitMiddleware` | same | window-scoped |

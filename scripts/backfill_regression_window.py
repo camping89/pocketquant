@@ -28,9 +28,9 @@ import asyncio
 import sys
 from datetime import UTC, datetime
 
-from pocketquant.api.di.container import create_container, register_handlers
-from pocketquant.api.market_data.app_services.cascade_aggregator import cascade_for_symbol
-from pocketquant.api.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.app.di.container import create_container, register_handlers
+from pocketquant.app.market_data.app_services.cascade_aggregator import cascade_for_symbol
+from pocketquant.app.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL

@@ -1,6 +1,6 @@
 # System Architecture
 
-Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 6-package layered monorepo (5 Python `uv` workspace + `pocketquant-web`): `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api`, `web → api`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
+Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 6-package layered monorepo (5 Python `uv` workspace + `pocketquant-web`): `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app`, `web → app`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
 For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
@@ -191,7 +191,7 @@ pocketquant-backtest/.../backtest/   # Backtest orchestration
 ├── jobs/ + handlers/                 # backtest-run orchestration (run_all_backtests)
 └── domain/services/                  # PerformanceCalculator (NumPy metrics)
 
-pocketquant-api/.../api/market_data/app_services/   # Market-data orchestration
+pocketquant-app/.../api/market_data/app_services/   # Market-data orchestration
 ├── bar_app_service.py          # BarAppService (multi-interval aggregation)
 └── quote_app_service.py        # QuoteAppService (WebSocket lifecycle)
 ```
@@ -739,9 +739,9 @@ Key pipelines at high level:
 **Key files:**
 | File | Purpose |
 |------|---------|
-| `packages/pocketquant-api/src/pocketquant/api/di/container.py` | Factory: `create_container()`, handler registration |
-| `packages/pocketquant-api/src/pocketquant/api/di/` | 6 Provider classes |
-| `packages/pocketquant-api/src/pocketquant/api/main.py` | Lifespan: create container, setup_dishka |
+| `packages/pocketquant-app/src/pocketquant/app/di/container.py` | Factory: `create_container()`, handler registration |
+| `packages/pocketquant-app/src/pocketquant/app/di/` | 6 Provider classes |
+| `packages/pocketquant-app/src/pocketquant/app/main.py` | Lifespan: create container, setup_dishka |
 
 **6 Providers:**
 - **CoreProvider** - Settings, EventBus (max_history=**50**), Mediator
@@ -927,7 +927,7 @@ APScheduler coordinates across processes via the shared `apscheduler_jobs` colle
 
 | Context | Responsibility | Owns | Package |
 |---|---|---|---|
-| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `pocketquant-core` (domain) + `pocketquant-api` (sync jobs) |
+| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `pocketquant-core` (domain) + `pocketquant-app` (sync jobs) |
 | **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `pocketquant-core` (domain) + `pocketquant-trading` (orchestration) |
 | **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `pocketquant-core` (interfaces) + `pocketquant-trading` (registry, services) |
 | **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `pocketquant-core` (pure calculations) |

@@ -19,15 +19,15 @@ packages/
 ├── pocketquant-execution/      # Shared strategy/order/position/risk engine
 ├── pocketquant-backtest/       # Backtest engine, optimization, backtest-run orchestration
 ├── pocketquant-trading/        # Strategy, order, position, OKX broker workflows
-├── pocketquant-api/            # FastAPI app, DI container, route composition
+├── pocketquant-app/            # FastAPI app, DI container, route composition
 └── pocketquant-web/            # React 19 + Vite chart UI
 ```
 
 Dependency direction:
 
 ```text
-core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api
-web → api
+core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app
+web → app
 ```
 
 ## Prerequisites

@@ -96,17 +96,13 @@ async def test_stop_handler_missing_sub_raises_not_found(repo):
 
 
 @pytest.mark.asyncio
-async def test_add_symbol_persists_stopped_and_loads_without_starting(repo):
-    strategy_service = MagicMock()
-    strategy_service.get_strategy = MagicMock(return_value=None)
-    strategy_service.load_strategy = AsyncMock(return_value="loaded")
-    strategy_service.start_strategy = AsyncMock()
-
+async def test_add_symbol_persists_stopped_pure_db_write(repo):
+    """add_symbol is a pure Mongo write — no engine, no RAM load. The app
+    control-plane materializes the instance later; the handler only persists."""
     tracked_repo = MagicMock()
     tracked_repo.exists = AsyncMock(return_value=True)
 
     handler = AddSymbolHandler(
-        strategy_app_service=strategy_service,
         subscription_repository=repo,
         tracked_symbol_repository=tracked_repo,
     )
@@ -118,8 +114,6 @@ async def test_add_symbol_persists_stopped_and_loads_without_starting(repo):
     fetched = await repo.get(result["id"])
     assert fetched.desired_state == "stopped"
     assert fetched.actual_state == "stopped"
-    strategy_service.load_strategy.assert_awaited_once()
-    strategy_service.start_strategy.assert_not_called()
 
 
 @pytest.mark.asyncio

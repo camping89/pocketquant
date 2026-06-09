@@ -2,8 +2,8 @@
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.backtest.handlers.run_all_backtests.command import RunAllBacktestsCommand
+from pocketquant.core.common.mediator import Mediator
 
 router = APIRouter(prefix="/strategies", tags=["strategies"], route_class=DishkaRoute)
 
