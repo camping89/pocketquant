@@ -1,33 +1,34 @@
-"""ListSubscriptionsHandler — return subscriptions enriched with backtest status + is_running."""
+"""ListSubscriptionsHandler — subscriptions enriched with backtest status + run-state."""
 
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.handlers.strategy.list_symbols.query import ListSymbolsQuery
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.trading.handlers.strategy.list_symbols.query import ListSymbolsQuery
 
 
 @handles(ListSymbolsQuery)
 class ListSymbolsHandler(Handler[ListSymbolsQuery, list]):
-    """Handle ListSymbolsQuery — join subscriptions with backtest status + live is_running."""
+    """Handle ListSymbolsQuery — join subscriptions with backtest status + run-state."""
 
     def __init__(
         self,
         subscription_repository: SubscriptionRepository,
         backtest_repository: BacktestRepository,
-        strategy_app_service: StrategyAppService,
     ) -> None:
         self._sub_repo = subscription_repository
         self._bt_repo = backtest_repository
-        self._strategy_service = strategy_app_service
 
     async def handle(self, request: ListSymbolsQuery) -> list:
         """List subscriptions filtered by strategy_code (or all if None).
 
-        Computes ``is_running`` from the live StrategyAppService instance keyed
-        by ``sub.id``. Uses a single batched DB call for backtest statuses.
+        Run-state is sourced from the DB: ``actual_state`` is the reconcile loop's
+        mirror of live engine state, so no RAM read is needed. ``is_running`` is
+        derived (``actual_state == "running"``) for FE back-compat; ``desired_state``
+        is exposed so the FE can render the transitional (converging) state.
         """
         if request.strategy_code is None:
             subs = await self._sub_repo.list_all()
@@ -47,12 +48,10 @@ class ListSymbolsHandler(Handler[ListSymbolsQuery, list]):
                 "symbol": sub.symbol,
                 "interval": sub.interval.value,
                 "created_at": sub.created_at.isoformat(),
-                "is_running": self._is_running(sub.id),
+                "desired_state": sub.desired_state,
+                "actual_state": sub.actual_state,
+                "is_running": sub.actual_state == "running",
                 "backtest": bt_statuses.get(sub.id),
             }
             for sub in subs
         ]
-
-    def _is_running(self, sub_id: str) -> bool:
-        strategy = self._strategy_service.get_strategy(sub_id)
-        return bool(strategy and strategy.is_running)

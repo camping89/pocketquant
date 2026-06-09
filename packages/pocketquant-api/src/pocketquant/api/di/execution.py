@@ -13,9 +13,17 @@ from pocketquant.core.config import Settings
 from pocketquant.execution.app_services.order_app_service import OrderAppService
 from pocketquant.execution.app_services.position_app_service import PositionAppService
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
+from pocketquant.execution.app_services.strategy_reconcile_service import (
+    StrategyReconcileService,
+)
 from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
 from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
+from pocketquant.infrastructure.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 
 
 class ExecutionProvider(Provider):
@@ -66,3 +74,16 @@ class ExecutionProvider(Provider):
         await engine.start()
         yield engine
         await engine.stop()
+
+    @provide(scope=Scope.APP)
+    def get_reconcile_service(
+        self,
+        subscription_repository: SubscriptionRepository,
+        strategy_app_service: StrategyAppService,
+        settings: Settings,
+    ) -> StrategyReconcileService:
+        return StrategyReconcileService(
+            subscription_repository,
+            strategy_app_service,
+            interval_s=settings.reconcile_interval_seconds,
+        )

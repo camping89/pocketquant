@@ -1,23 +1,23 @@
 # Handler Pipelines & Detailed Flows
 
-37 registered CQRS handlers (17 market data + 4 trading + 11 strategy + 5 backtest) + ~45 HTTP endpoints (includes SSE + app-service-direct routes). Pattern: DDD + CQRS + Extract-Method. DI: Dishka. Data provider: Binance (`BinanceClient` implements `IDataProvider`, 1200 weight/min rate limit, max 1000 bars/call).
+37 registered CQRS handlers (16 market data + 4 trading + 12 strategy + 5 backtest) + ~45 HTTP endpoints (includes SSE + app-service-direct routes). Pattern: DDD + CQRS + Extract-Method. DI: Dishka. Data provider: Binance (`BinanceClient` implements `IDataProvider`, 1200 weight/min rate limit, max 1000 bars/call).
 
 Naming: `strategy_id` (template code) vs `subscription_id` (per-subscription instance). Symbol is composite `CODE:EXCHANGE` (URL-encoded `%3A`). Verify against OpenAPI or [README](../README.md) if a path disagrees with the live app.
 
 This document details the complete pipeline for each CQRS handler, showing request flow, processing steps, and side effects.
 
 **Handler & Endpoint Distribution:**
-- **37 registered CQRS handlers:** Discovered by Dishka via `@handles` decorator
+- **37 registered CQRS handlers:** Discovered by Dishka via `@handles` decorator (count verified by `@handles` decorator usages across packages)
 - **~45 HTTP endpoints total:** CQRS handlers (37) + SSE/app-service-direct routes (8)
 - **37 registered handlers grouped by:**
-  - **Market Data (17):** sync, bulk-sync, ohlcv, subscribe, unsubscribe, get-latest-quote, get-all-quotes, list-symbols, sync-status, symbol-sync-status, quotes-status, quote-service-status, tracked-symbols (4 CRUD)
+  - **Market Data (16):** sync, bulk-sync, ohlcv, subscribe, unsubscribe, get-latest-quote, get-all-quotes, list-symbols, sync-status, symbol-sync-status, quotes-status, quote-service-status, tracked-symbols (list, add, update, remove)
   - **Backtesting (5):** run, optimize, get-backtest, get-optimization, list-backtests
-  - **Strategy (11):** start, stop, get-one, get-all, add-symbol, list-symbols, remove-symbol, run-all-backtests, get-subscription-backtest, get-positions, get-trades, delete-cascade
+  - **Strategy (12):** start, stop, get-one, get-all, add-symbol, list-symbols, remove-symbol, run-all-backtests, get-subscription-backtest, get-positions, get-trades, delete-cascade
   - **Trading (4):** list-orders, get-order, list-positions, get-position
 
-**Distinction:** SSE streams (bars-stream, quotes-stream) and integrity operations use app-service-direct calls or iterate directly over in-memory data — they are NOT mediator-routed CQRS handlers and are not counted in the 37.
+**Distinction (NOT counted in the 37):** SSE streams (bars-stream, quotes-stream), integrity check/repair, and the tracked-symbol backfill route use app-service-direct calls or iterate over in-memory data — they are NOT mediator-routed CQRS handlers. `BackfillTrackedSymbolHandler` has no `@handles` decorator; its route calls it directly via DI.
 
-## A. Market Data Handlers & Endpoints (17 CQRS + SSE/Direct)
+## A. Market Data Handlers & Endpoints (16 CQRS + SSE/Direct)
 
 ### 1. SyncSymbolHandler (SyncSymbolCommand)
 
@@ -30,7 +30,7 @@ This document details the complete pipeline for each CQRS handler, showing reque
 - `n_bars: int` - Number of bars to fetch (default: 1000; auto-paginates above)
 - `skip_filter: bool` - Bypass `_filter_new_bars` — used by repair to fill gaps (default: False)
 
-**Implementation (Extract-Method Pattern, 8 Private Helpers):**
+**Implementation (Extract-Method Pattern — illustrative):** The real handler in `handlers/sync/sync_one/` keeps `handle()` as a readable checklist and pushes detail into private helpers plus sibling modules (`bar_filters.filter_new_bars`/`drop_misaligned_bars`, `provider_fetch.fetch_with_retry`, `responses.build_success`, `anomaly_log.emit_no_progress`). The snippet below shows the shape, not the exact line-by-line code.
 
 ```python
 @handles(SyncSymbolCommand)
@@ -59,12 +59,6 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         return await self.provider.fetch_ohlcv(
             cmd.symbol, cmd.interval, cmd.n_bars
         )
-
-    def _validate_bars(self, bars: List[Bar]) -> None:
-        """Validate bar structure."""
-        if not bars:
-            raise ValueError("Empty bars")
-        # ... validation logic
 
     async def _persist_bars(self, bars: List[Bar], symbol: str) -> int:
         """Bulk insert/update to MongoDB."""
@@ -286,19 +280,30 @@ Response: SyncStatusDTO
 
 ---
 
-### 11. GetQuotesStatusHandler (GetQuotesStatusQuery)
+### 11. Quote-status handlers — GetQuotesStatusHandler + GetQuoteServiceStatusHandler
 
-**Request:** GET `/api/v1/quotes/status`
+Two distinct CQRS handlers, two routes, both simple status reads:
 
-**Pipeline:**
+**11a. GetQuotesStatusHandler (GetQuotesStatusQuery)** — GET `/api/v1/quotes/status`
 ```
 GetQuotesStatusQuery()
   ↓
-Check QuoteAppService.is_running
-  ↓
-Count subscriptions: len(QuoteAppService._subscriptions)
+Check QuoteAppService.is_running + count subscriptions
   ↓
 Response: QuotesStatusResponse(is_running, subscription_count)
+```
+
+**11b. GetQuoteServiceStatusHandler (GetQuoteServiceStatusQuery)** — GET `/api/v1/market-data/status`
+```
+GetQuoteServiceStatusQuery()
+  ↓
+svc = QuoteAppService
+  ↓
+Response: QuoteServiceStatus(
+    running=svc.running and svc.provider.is_connected(),
+    subscription_count=svc.provider.subscription_count,
+    active_symbols=svc.bar_manager.active_symbols,
+)
 ```
 
 ---
@@ -346,35 +351,41 @@ Response: QuotesStatusResponse(is_running, subscription_count)
 
 ---
 
-### 14. IntegrityCheckHandler (app-service direct)
+### 14. check_integrity (app-service direct — `integrity_jobs.py`)
 
 **Request:** POST `/api/v1/market-data/integrity/check`
 
+**Request body:** `{symbol (composite), interval, days_back (1–90, default 7)}`
+
 **Implementation:**
-1. Scan all bars in MongoDB → validate:
-   - OHLC order (open ≤ high, low ≤ close)
-   - No negative volumes
-   - Timestamp monotonicity within symbol+interval
-   - Volume delta > 0 (no backwards ticks)
-2. Return: `{total_bars, violations: [{bar_id, error_msg}, ...], valid_count}`
+1. Build the alignment grid for the window: `end = get_bar_start(now, interval)` (last CLOSED bar), `start = end - days_back`.
+2. Fetch stored datetimes: `bar_repo.find_datetimes(symbol, interval, start, end)`.
+3. Partition: bars where `is_bar_aligned()` false → `misaligned`; aligned datetimes → set.
+4. Compute `missing = expected_grid - aligned_times`; group consecutive misses into `gap_ranges`.
+5. Return: `{symbol, interval, total, misaligned_count, misaligned_ids, missing_count, gap_ranges}`.
+
+> Checks **alignment + gaps only** — NOT OHLC ordering or negative volumes. Reliable only for 24/7 markets (crypto); equity symbols produce false-positive gaps on weekends/holidays.
 
 **Side Effects:** None (read-only diagnostic).
 
 ---
 
-### 15. IntegrityRepairHandler (app-service direct)
+### 15. repair_integrity (app-service direct — `integrity_jobs.py`)
 
 **Request:** POST `/api/v1/market-data/integrity/repair`
 
-**Implementation:**
-1. Iterate violations from `IntegrityCheckHandler`
-2. For each:
-   - Clamp OHLC to valid order (if high < low, swap)
-   - Delete bars with negative volumes
-   - Trigger re-sync: `SyncSymbolCommand(symbol, interval, skip_filter=True)` to backfill
-3. Return: `{repaired_count, deleted_count, resync_jobs_queued}`
+**Request body:** `{symbol (composite), interval, days_back (1–90, default 7)}`
 
-**Side Effects:** MongoDB bars collection modified; sync jobs enqueued.
+**Implementation:**
+1. Run `check_integrity()` to get the report.
+2. Delete misaligned: `bar_repo.delete_many_by_ids(report["misaligned_ids"])`.
+3. If `gap_ranges` non-empty: send one `SyncSymbolCommand(symbol, interval, n_bars=5000, skip_filter=True, source=...)` via mediator to backfill; on exception, log `integrity.resync_failed` and continue.
+4. Re-check (`check_integrity()` again) to capture `still_missing` + `still_missing_ranges`; warn `integrity.repair.still_missing` if gaps remain.
+5. Return: `{symbol, interval, deleted, gaps_resynced, missing_before, still_missing, still_missing_ranges}`.
+
+**Side Effects:** MongoDB bars collection modified (misaligned deleted, gaps re-upserted via sync pipeline).
+
+> Also runs unattended: background job `sync_repair` (~every 12h) iterates tracked symbols × intervals calling `repair_integrity`. See `code-standards.md` §9.5 for the canonical 5-step description.
 
 ---
 
@@ -600,25 +611,25 @@ Response: List[BacktestResultDTO]
 
 **Request:** POST `/api/v1/subscriptions/{sub_id}/start`
 
+**Declarative design:** Writes `desired_state=running` to Mongo; returns immediately before engine starts. The reconcile loop converges within ≤1 poll interval (default 5s).
+
 **Pipeline:**
 ```
 StartStrategyCommand(subscription_id)
   ↓
 Handler.handle():
-  1. Fetch: StrategyAppService.get_strategy(subscription_id)
-     └─ Per-subscription strategy instance
+  1. Update Mongo: SubscriptionRepository.update_desired_state(sub_id, "running")
+     └─ Control-plane write only; no engine call
   ↓
-  2. Connect broker: IBroker.connect()
-     └─ OKXBroker or PaperBroker
+  2. Validate: modified_count > 0 → subscription exists; else raise NotFoundError (404)
   ↓
-  3. Initialize: await strategy.on_start()
-     └─ Strategy can subscribe to quotes, set initial state
-  ↓
-  4. Set running: StrategyAppService.set_running(subscription_id, True)
-  ↓
-  5. Start listening: Subscribe to BarCompletedEvent, QuoteReceivedEvent
-  ↓
-Response: StrategyStatusDTO(status='running')
+Response: HTTP 200 (success) or 404 (not found)
+
+[Meanwhile, background reconcile loop will:
+  - Read subscription.desired_state="running" (within 5s)
+  - Compare to live StrategyAppService instance
+  - If drift: call start_strategy(sub_id) to converge
+  - Write actual_state="running" back to Mongo]
 ```
 
 ---
@@ -627,22 +638,28 @@ Response: StrategyStatusDTO(status='running')
 
 **Request:** POST `/api/v1/subscriptions/{sub_id}/stop`
 
+**Declarative design:** Writes `desired_state=stopped` to Mongo; returns immediately. Reconcile loop converges within ≤1 interval.
+
 **Pipeline:**
 ```
 StopStrategyCommand(subscription_id)
   ↓
 Handler.handle():
-  1. Call: await strategy.on_stop()
-     └─ Strategy cleanup
+  1. Update Mongo: SubscriptionRepository.update_desired_state(sub_id, "stopped")
+     └─ Control-plane write only; no engine call
   ↓
-  2. Disconnect broker: IBroker.disconnect()
+  2. Validate: modified_count > 0 → subscription exists; else raise NotFoundError (404)
   ↓
-  3. Unsubscribe: Remove BarCompletedEvent subscriber
-  ↓
-  4. Set running: StrategyAppService.set_running(subscription_id, False)
-  ↓
-Response: StrategyStatusDTO(status='stopped')
+Response: HTTP 200 (success) or 404 (not found)
+
+[Meanwhile, background reconcile loop will:
+  - Read subscription.desired_state="stopped" (within 5s)
+  - Compare to live StrategyAppService instance
+  - If drift: call stop_strategy(sub_id) to converge
+  - Write actual_state="stopped" back to Mongo]
 ```
+
+**Async-eventual semantics:** The API returns success before the engine actually stops. Clients poll `GET /subscriptions/{sub_id}` to observe `actual_state` transition.
 
 ---
 
@@ -693,18 +710,29 @@ Handler.handle():
   3. Compute sub_id: Subscription.deterministic_id(strategy_code, symbol, interval)
      └─ sha256(f"{strategy_code}|{symbol.upper()}|{interval_val}")[:16]
   ↓
-  4. Auto-load instance: if StrategyAppService.get_strategy(sub_id) is None
+  4. Auto-load instance (stopped): if StrategyAppService.get_strategy(sub_id) is None
      └─ StrategyAppService.load_strategy(StrategyConfig(id=sub_id, name=strategy_code, ...))
+        Load strategy instance but do NOT start it (desired_state=stopped)
   ↓
-  5. Persist: SubscriptionRepository.add(Subscription(id=sub_id, strategy_code, symbol, interval))
+  5. Persist: SubscriptionRepository.add(
+       Subscription(
+         id=sub_id, 
+         strategy_code, 
+         symbol, 
+         interval,
+         desired_state="stopped",    # opt-in: user must POST /start
+         actual_state="stopped"
+       )
+     )
      └─ DuplicateKeyError → SubscriptionAlreadyExistsError (400 DomainError)
   ↓
-Response: {id, strategy_code, symbol, interval, created_at}
+Response: {id, strategy_code, symbol, interval, created_at, desired_state, actual_state}
 ```
 
 **Side Effects:**
-- MongoDB: document inserted into `subscriptions` collection
-- In-process: new IStrategy instance loaded into `StrategyAppService._strategies[sub_id]`
+- MongoDB: document inserted into `subscriptions` collection with `desired_state="stopped"`
+- In-process: new IStrategy instance loaded (pre-loaded but not running) into `StrategyAppService._strategies[sub_id]`
+- FE must POST `/start` explicitly for live trading; no auto-start on add
 
 ---
 
@@ -722,10 +750,23 @@ Fetch: SubscriptionRepository.list_all() if filter None
   ↓
 Enrich (single batched call): BacktestRepository.get_subscription_statuses([sub_ids])
   ↓
-Compute is_running per sub: StrategyAppService.get_strategy(sub.id).is_running
+Compute is_running per sub: Sub.actual_state == "running" (from Mongo, NOT RAM)
+  └─ Sources control-plane truth (actual_state written by reconcile loop)
   ↓
-Response: list[{id, strategy_code, symbol, interval, created_at, is_running, backtest}]
+Response: list[{
+  id, 
+  strategy_code, 
+  symbol, 
+  interval, 
+  created_at,
+  desired_state,       # what user/API wants
+  actual_state,        # what reconcile loop observed on last tick
+  is_running,          # derived: actual_state == "running"
+  backtest             # cached backtest result (if exists)
+}]
 ```
+
+**No RAM read:** The handler reads subscriptions from Mongo; `is_running` is computed from `actual_state` (written by reconcile loop), not from live RAM. This decouples the API from the in-memory engine state.
 
 ---
 
@@ -841,6 +882,46 @@ Response: 204 No Content
 
 ---
 
+### 36. GetStrategyPositionsHandler (GetStrategyPositionsQuery)
+
+**Request:** GET `/api/v1/subscriptions/{sub_id}/positions`
+
+**Pipeline:**
+```
+GetStrategyPositionsQuery(subscription_id)
+  ↓
+Fetch: PositionRepository.find_open_by_subscription(sub_id)
+  ↓
+Map each open position → FE dict (symbol, direction, entry_price, quantity,
+  unrealized_pnl, entry_time, sl_price, tp_price)
+  ↓
+Response: list[dict] (0 or more)
+```
+
+**Side Effects:** None (read-only).
+
+---
+
+### 37. GetStrategyTradesHandler (GetStrategyTradesQuery)
+
+**Request:** GET `/api/v1/subscriptions/{sub_id}/trades?limit=100` (limit 1–500)
+
+**Pipeline:**
+```
+GetStrategyTradesQuery(subscription_id, limit)
+  ↓
+Fetch: PositionRepository.find_closed_by_subscription(sub_id, limit)
+  ↓
+Map each closed position → StrategyTrade dict (id, direction, entry_price,
+  exit_price=current_price, entry_time, exit_time, pnl=realized_pnl, quantity)
+  ↓
+Response: list[dict]
+```
+
+**Side Effects:** None (read-only).
+
+---
+
 ## D. Trading Handlers (4)
 
 ### 38-41. Order & Position Handlers
@@ -884,9 +965,9 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         ...
 ```
 
-Registry auto-discovered in `src/container.py`:
+Registry auto-discovered at container build time in `packages/pocketquant-api/src/pocketquant/api/di/container.py`:
 ```python
-register_all_handlers(container)  # Wires all @handles decorators to Mediator
+await register_handlers(container)  # Resolves all @handles classes and wires them to the Mediator
 ```
 
 ---
@@ -896,7 +977,7 @@ register_all_handlers(container)  # Wires all @handles decorators to Mediator
 | Handler | Latency | Notes |
 |---------|---------|-------|
 | **SyncSymbolHandler** | 1-5s | ThreadPoolExecutor (4 workers) for blocking I/O |
-| **GetBarsHandler** | <5ms | Redis cache hit, <100ms miss |
+| **GetOHLCVHandler** | <5ms | Redis cache hit, <100ms miss |
 | **GetLatestQuoteHandler** | <5ms | Redis in-memory |
 | **RunBacktestHandler** | 10s-2min | Depends on bar count, strategy complexity |
 | **StrategyAppService.on_bar()** | <1ms | In-memory strategy execution |

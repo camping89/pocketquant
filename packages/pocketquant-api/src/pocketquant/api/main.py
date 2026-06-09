@@ -12,25 +12,28 @@ from pocketquant.api.main_extensions import (
     ensure_all_indexes,
     handle_startup_failure,
     migrate_strategy_id_fields,
+    migrate_subscription_desired_state,
     recover_orphan_jobs,
     recover_stale_backtests,
-    rekey_backtest_job_refs,
     register_health_checks,
     register_routes,
     rehydrate_strategies_from_subscriptions,
+    rekey_backtest_job_refs,
     start_background_jobs,
     start_quote_feed,
+    start_reconcile_loop,
     stop_quote_feed,
+    stop_reconcile_loop,
 )
 from pocketquant.api.market_data.app_services.sync_jobs import set_container as set_sync_container
 from pocketquant.api.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
+from pocketquant.backtest.jobs.subscription_backtest_jobs import (
+    set_container as set_backtest_container,
+)
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.redis import Cache
-from pocketquant.backtest.jobs.subscription_backtest_jobs import (
-    set_container as set_backtest_container,
-)
 
 logger = get_logger(__name__)
 
@@ -61,6 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # positions with the post-migration field shape. If legacy docs are
         # still on disk, the read would crash before migration could fix them.
         await migrate_strategy_id_fields(container)
+        # Backfill desired_state/actual_state right after the field rename — both
+        # are subscriptions-collection migrations; rename first, then state backfill,
+        # so rehydrate/reconcile read the final field shape.
+        await migrate_subscription_desired_state(container)
         # Re-key moved bt:* job refs BEFORE register_handlers — that cascade can
         # start JobScheduler, which would resolve+drop a stale (old-ref) job.
         await rekey_backtest_job_refs(container)
@@ -73,6 +80,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await register_health_checks(container, app)
         await start_background_jobs(container)
         await start_quote_feed(container, app)
+        # Start LAST — instances are rehydrated, so the first tick has no spurious
+        # missing_instance warnings.
+        await start_reconcile_loop(container, app)
 
         logger.info("application_started")
         yield
@@ -80,6 +90,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception as e:
         handle_startup_failure(e)
     finally:
+        # Stop reconcile FIRST — before quote feed and container.close() (which
+        # stops StrategyAppService) — so it never issues start/stop on a stopping engine.
+        await stop_reconcile_loop(container, app)
         await stop_quote_feed(container, app)
         # container.close() runs generator cleanup in reverse order:
         # StrategyAppService.stop → JobScheduler.shutdown → Cache/Database.disconnect

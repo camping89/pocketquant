@@ -1,13 +1,15 @@
 """DeleteStrategyHandler — cascade cancel jobs, delete backtests, subs, unload strategy."""
 
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.handlers.strategy.delete.command import DeleteStrategyCommand
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.trading.handlers.strategy.delete.command import DeleteStrategyCommand
 
 
 @handles(DeleteStrategyCommand)

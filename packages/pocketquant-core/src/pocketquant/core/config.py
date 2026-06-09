@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     default_broker: Literal["paper", "okx"] = "paper"
     paper_initial_balance: float = 100_000.0
     paper_slippage_percent: float = 0.001
+    reconcile_interval_seconds: float = 5.0
 
 
 @lru_cache

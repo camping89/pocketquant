@@ -1,10 +1,12 @@
 """GetStrategyPositionsHandler — list open positions for a strategy instance."""
 
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.infrastructure.persistence.repositories.position_repository import (
+    PositionRepository,
+)
 from pocketquant.trading.handlers.strategy.get_positions.query import (
     GetStrategyPositionsQuery,
 )
-from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
 
 
 @handles(GetStrategyPositionsQuery)

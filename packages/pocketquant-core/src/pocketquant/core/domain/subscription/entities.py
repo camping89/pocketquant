@@ -5,9 +5,14 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from pocketquant.core.common.exceptions import DomainError
 from pocketquant.core.domain.shared.enums import Interval
+
+# Control-plane run-state: desired = what a human/handler wants, actual = the
+# reconcile loop's mirror of RAM truth. Two values only (YAGNI); widen later.
+RunState = Literal["running", "stopped"]
 
 
 class SubscriptionAlreadyExistsError(DomainError):
@@ -35,6 +40,8 @@ class Subscription:
     symbol: str
     interval: Interval
     created_at: datetime
+    desired_state: RunState = "stopped"
+    actual_state: RunState = "stopped"
 
     @staticmethod
     def deterministic_id(
@@ -63,14 +70,20 @@ class Subscription:
             "symbol": self.symbol,
             "interval": self.interval.value,
             "created_at": self.created_at,
+            "desired_state": self.desired_state,
+            "actual_state": self.actual_state,
         }
 
     @classmethod
     def from_mongo(cls, doc: dict) -> Subscription:
+        # .get default tolerates legacy docs written before the state fields
+        # existed (read may happen before the boot migration backfills them).
         return cls(
             id=doc["_id"],
             strategy_code=doc["strategy_code"],
             symbol=doc["symbol"],
             interval=Interval(doc["interval"]),
             created_at=doc["created_at"],
+            desired_state=doc.get("desired_state", "stopped"),
+            actual_state=doc.get("actual_state", "stopped"),
         )

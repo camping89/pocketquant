@@ -155,28 +155,60 @@ Endpoints feeding the UI:
    renames collection `strategy_subscriptions` → `subscriptions`,
    renames legacy fields `strategy_id` → `strategy_code` and `strategy_id` → `subscription_id`
    per the field semantics table below, drops legacy indexes. Aborts if both
-   old and new collections coexist. Code: `main_extensions.py` (lifespan sequence).
-5. `ensure_all_indexes(container)` — creates all Mongo indexes (including new
+   old and new collections coexist.
+5. `migrate_subscription_desired_state(container)` — idempotent migration:
+   backfills `desired_state` and `actual_state` on legacy docs lacking them.
+   Sets `desired_state="running"` (auto-resume) and `actual_state="stopped"` on
+   docs without `desired_state`. Runs after field-rename migration so it sees
+   the final shape. Enables the control plane.
+6. `ensure_all_indexes(container)` — creates all Mongo indexes (including new
    `ix_subscriptions_strategy_code`, `ix_orders_subscription_id`, `ix_positions_subscription_id`, etc.).
-6. `recover_stale_backtests(container)` — marks any doc stuck in
-   `status=running` older than 10 min as `failed`
-   (`BacktestRepository.mark_stale_running_as_failed`).
-7. `recover_orphan_jobs(container)` — same idea for `job_history`.
-8. `seed_tracked_symbols(container)`.
-9. `rehydrate_strategies_from_subscriptions(container)` — replays §1.1 step 4
+7. `recover_stale_backtests(container)` — marks any doc stuck in
+   `status=running` older than 10 min as `failed`.
+8. `recover_orphan_jobs(container)` — same idea for `job_history`.
+9. `seed_tracked_symbols(container)`.
+10. `rehydrate_strategies_from_subscriptions(container)` — replays §1.1 step 4
    for every persisted `Subscription`: loads one `IStrategy` instance
    per subscription, keyed by `sub.id`. Subscriptions whose strategy_code is no
-   longer in `STRATEGY_REGISTRY` are skipped with a warning. Code:
-   `main_extensions.py:109`.
-10. `start_background_jobs(container)` — starts `JobScheduler.start()` and
+   longer in `STRATEGY_REGISTRY` are skipped with a warning. Instances are
+   loaded stopped (no engine start here).
+11. `start_background_jobs(container)` — starts `JobScheduler.start()` and
     registers the cron sync jobs.
-11. `start_quote_feed(container, app)` — boots WebSocket aggregator.
+12. `start_quote_feed(container, app)` — boots WebSocket aggregator.
+13. `start_reconcile_loop(container, app)` — starts the background reconciliation
+    service LAST (after rehydrate, so instances exist). Runs as an `asyncio.Task`
+    and reconciles every 5s. First tick converges all subscriptions to their
+    `desired_state` stored in Mongo (from step 5 migration).
 
 On shutdown, `container.close()` runs `AsyncIterator` factories' cleanup in
 reverse order: StrategyAppService.stop → JobScheduler.shutdown →
 Cache/Database.disconnect (`main.py:73-74`).
 
-#### 5.2 In-memory state held by `StrategyAppService`
+#### 5.2 Reconciliation loop — declaring intent
+
+`StrategyReconcileService` — `packages/pocketquant-execution/.../app_services/strategy_reconcile_service.py`
+
+Runs as a background `asyncio.Task` started at boot step 13 (after rehydrate).
+Polls every `Settings.reconcile_interval_seconds` (default 5.0s):
+
+1. Fetch all subscriptions: `SubscriptionRepository.list_all()` (from Mongo).
+2. For each subscription:
+   - Fetch live instance from RAM: `StrategyAppService.get_strategy(sub.id)`.
+   - Compare `sub.desired_state` (Mongo) vs live `instance.is_running` (RAM).
+   - If mismatch:
+     - Call `start_strategy(sub.id)` or `stop_strategy(sub.id)` to converge.
+     - Mirror observed outcome back to Mongo: `update_actual_state(sub.id, observed)`.
+3. Log convergence summary: `{started: N, stopped: M}`.
+
+**Idempotent:** `start_strategy` and `stop_strategy` are guarded by locks and early-return if already in the desired state. No per-tick write churn — actual_state updated only on drift.
+
+**Per-subscription error isolation:** A single failing subscription does not crash the loop; the loop logs and continues to the next tick.
+
+**Missing instance handling:** If a subscription has `desired_state="running"` but no RAM instance, the loop records `actual_state="stopped"` and warns once. The subscription is visible to the FE with drift (`desired=running, actual=stopped`).
+
+**Backtest strategies invisible:** Synthetic strategies injected for backtests (via `load_strategy_for_backtest`) have ids not in the subscriptions table; the loop ignores them.
+
+#### 5.3 In-memory state held by `StrategyAppService`
 
 `packages/pocketquant-trading/.../app_services/strategy_app_service.py:24`.
 
@@ -199,7 +231,7 @@ Key invariants:
   `_on_bar_completed` to `BarCompletedEvent` and `_on_quote_received` to
   `QuoteReceivedEvent`.
 
-#### 5.3 Event-driven signal flow
+#### 5.4 Event-driven signal flow
 
 ```
 @BarCompletedEvent ──┐
@@ -224,7 +256,7 @@ Strategies are only triggered if `is_running=True` AND
 when triggered by bar) AND `config.trigger == "bar" | "tick"`
 — `_find_strategies` at line 247.
 
-#### 5.4 Backtest job execution
+#### 5.5 Backtest job execution
 
 When `POST .../run-all-backtests` fires:
 
@@ -258,7 +290,7 @@ When `POST .../run-all-backtests` fires:
 Failures: writes `status='failed', error_msg=str(exc)[:500]` and re-raises so
 the scheduler's `EVENT_JOB_ERROR` listener also records to `job_history`.
 
-#### 5.5 Risk + sizing pipeline
+#### 5.6 Risk + sizing pipeline
 
 `_process_signal` calls `RiskCheckHandler.validate(signal, balance, position,
 risk_config)`. If it returns `(False, reason)`, the signal is logged as rejected
@@ -271,6 +303,8 @@ mapping (`LONG → BUY`, `SHORT → SELL`), `order_type` from
 ---
 
 ### 6. MongoDB collections (the durable state)
+
+Control-plane truth lives in the `subscriptions` collection (§2).
 
 Sources: `packages/pocketquant-core/src/pocketquant/core/common/constants.py`
 (collection names) and each repository's `_collection_name` plus `to_mongo()`
@@ -296,11 +330,13 @@ Document shape for the most relevant collection (`subscriptions`):
 
 ```jsonc
 {
-  "_id":           "<16-hex deterministic id>",
-  "strategy_code": "hitnrun2",        // template name in STRATEGY_REGISTRY
-  "symbol":        "BTCUSDT:BINANCE", // composite "{code}:{exchange}"
-  "interval":      "1h",
-  "created_at":    ISODate("...")
+  "_id":            "<16-hex deterministic id>",
+  "strategy_code":  "hitnrun2",        // template name in STRATEGY_REGISTRY
+  "symbol":         "BTCUSDT:BINANCE", // composite "{code}:{exchange}"
+  "interval":       "1h",
+  "created_at":     ISODate("..."),
+  "desired_state":  "running" | "stopped",  // control plane: what user/API intends
+  "actual_state":   "running" | "stopped"   // data plane: what reconcile loop observed
 }
 ```
 
@@ -365,8 +401,11 @@ Implications for strategies:
 
 ### 8. How storage and operation tie together
 
-The lifecycle is best read as: **subscription is the source of truth →
-everything else is derived**.
+The lifecycle is best read as: **subscription is the source of truth (control plane) →
+reconcile loop converges engine state (data plane) → everything else is derived**.
+
+Control-plane truth: `subscriptions` collection holds `desired_state` and `actual_state`.
+Data-plane truth: `StrategyAppService` instances' `is_running` flag, converged by reconcile loop every 5s.
 
 ```
                        ┌─────────────────────────────────────────────────┐
@@ -438,7 +477,8 @@ Backtest path is parallel and isolated:
 | State | Persisted? | Recovered on restart |
 |---|---|---|
 | Subscription template + (symbol, interval) | Yes (`subscriptions` collection) | Re-loaded via `rehydrate_strategies_from_subscriptions` |
-| Running/stopped flag for live trading | No (in-memory `strategy.is_running`) | Resets to stopped — must POST `/start` again |
+| Running/stopped intent | Yes (`subscriptions.desired_state`) | `desired_state` restored from Mongo; reconcile loop converges to it within 1 tick |
+| Running/stopped observation | Yes (`subscriptions.actual_state`) | `actual_state` restored from Mongo; reflects last observed engine state before shutdown. Reconcile loop immediately re-observes on next tick. |
 | Cached backtest result | Yes (`backtest_runs`) | Available immediately after rehydration |
 | In-flight backtest in `running` state | Yes (status row) | `recover_stale_backtests` flips `running` older than 10 min to `failed` |
 | Scheduled jobs (cron/interval/one-off) | Yes (`apscheduler_jobs`) | Picked up automatically; missed ticks within `misfire_grace_time=300s` still fire |

@@ -7,15 +7,15 @@ from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
-    TrackedSymbolRepository,
-)
-from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
+from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
+from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
 
 
 @handles(AddSymbolCommand)
@@ -66,12 +66,17 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
                 strategy_class=strategy_class,
             )
 
+        # Add = subscribe only (desired_state="stopped"). The user starts it
+        # explicitly via the start endpoint, which flips desired_state to running
+        # and lets reconcile converge — no surprise auto-trading on add.
         sub = Subscription(
             id=sub_id,
             strategy_code=request.strategy_id,
             symbol=symbol,
             interval=Interval(request.interval),
             created_at=datetime.now(UTC),
+            desired_state="stopped",
+            actual_state="stopped",
         )
         await self._sub_repo.add(sub)
         return {

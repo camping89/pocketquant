@@ -1,18 +1,20 @@
 """RemoveSymbolHandler — cancel job, delete backtest cache, delete subscription."""
 
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
-from pocketquant.trading.handlers.strategy.remove_symbol.command import RemoveSymbolCommand
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.trading.handlers.strategy.remove_symbol.command import RemoveSymbolCommand
 
 
 @handles(RemoveSymbolCommand)
 class RemoveSymbolHandler(Handler[RemoveSymbolCommand, None]):
-    """Handle RemoveSymbolCommand — unload instance + cancel job + delete subscription + backtest."""
+    """Handle RemoveSymbolCommand — unload instance, cancel job, delete sub + backtest."""
 
     def __init__(
         self,

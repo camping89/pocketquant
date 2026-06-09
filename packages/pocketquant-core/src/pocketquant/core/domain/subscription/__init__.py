@@ -1,8 +1,9 @@
 """Subscription domain — strategy-to-symbol runtime mapping."""
 
 from pocketquant.core.domain.subscription.entities import (
+    RunState,
     Subscription,
     SubscriptionAlreadyExistsError,
 )
 
-__all__ = ["Subscription", "SubscriptionAlreadyExistsError"]
+__all__ = ["RunState", "Subscription", "SubscriptionAlreadyExistsError"]
