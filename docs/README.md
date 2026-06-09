@@ -51,11 +51,11 @@ packages/
 ├── pocketquant-execution/      # → core + infra — shared strategy/order/position/risk engine
 ├── pocketquant-backtest/       # → core + infra + execution — backtest engine, optimization, run orchestration
 ├── pocketquant-trading/        # → core + infra + execution — live trading, OKX broker, strategy/subscription
-├── pocketquant-api/            # → all above — FastAPI, DI container, route composition
+├── pocketquant-app/            # → all above — FastAPI, DI container, route composition
 └── pocketquant-web/            # React 19 + Vite SPA (separate npm app, excluded from uv workspace)
 ```
 
-Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api`, `web → api` (HTTP only). `backtest` and `trading` are independent siblings.
+Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app`, `web → app` (HTTP only). `backtest` and `trading` are independent siblings.
 
 Notes:
 

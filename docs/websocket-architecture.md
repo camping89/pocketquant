@@ -64,10 +64,10 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 |---|---|
 | `packages/pocketquant-infrastructure/src/pocketquant/infrastructure/market_data/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
 | `packages/pocketquant-core/src/pocketquant/core/domain/market_data/interfaces.py:16` | `IRealtimeQuoteProvider` Protocol (`@runtime_checkable`, 9 members) |
-| `packages/pocketquant-api/src/pocketquant/api/market_data/app_services/quote_app_service.py:18` | `QuoteAppService` — consumes ticks, writes to Redis + bar builder |
-| `packages/pocketquant-api/src/pocketquant/api/market_data/app_services/ws_subscription_manager.py:22` | `WsSubscriptionManager` — 5s reconcile loop vs `tracked_symbols` |
-| `packages/pocketquant-api/src/pocketquant/api/di/market_data.py:26` | DI wiring (scope=APP singleton) |
-| `packages/pocketquant-api/src/pocketquant/api/main_extensions.py:110` | `start_quote_feed` lifespan hook |
+| `packages/pocketquant-app/src/pocketquant/app/market_data/app_services/quote_app_service.py:18` | `QuoteAppService` — consumes ticks, writes to Redis + bar builder |
+| `packages/pocketquant-app/src/pocketquant/app/market_data/app_services/ws_subscription_manager.py:22` | `WsSubscriptionManager` — 5s reconcile loop vs `tracked_symbols` |
+| `packages/pocketquant-app/src/pocketquant/app/di/market_data.py:26` | DI wiring (scope=APP singleton) |
+| `packages/pocketquant-app/src/pocketquant/app/main_extensions.py:110` | `start_quote_feed` lifespan hook |
 
 ### URLs
 
@@ -139,21 +139,21 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 ## DI Wiring
 
 ```python
-# packages/pocketquant-api/src/pocketquant/api/di/market_data.py
+# packages/pocketquant-app/src/pocketquant/app/di/market_data.py
 @provide(scope=Scope.APP)
 def get_realtime_quote_provider(self) -> IRealtimeQuoteProvider:
     """Singleton WS client shared by QuoteAppService, WsSubscriptionManager."""
     return BinanceWebSocketClient()
 ```
 
-OKX WS client is **not** in the DI container — it's created lazily inside `OKXBroker._ws_listener` when `subscribe_order_updates` is first called. `OKXBroker` itself comes from `BrokerFactory` (`packages/pocketquant-api/src/pocketquant/api/di/broker_factory.py`).
+OKX WS client is **not** in the DI container — it's created lazily inside `OKXBroker._ws_listener` when `subscribe_order_updates` is first called. `OKXBroker` itself comes from `BrokerFactory` (`packages/pocketquant-app/src/pocketquant/app/di/broker_factory.py`).
 
 ---
 
 ## Lifespan / Startup
 
 ```python
-# packages/pocketquant-api/src/pocketquant/api/main_extensions.py:110
+# packages/pocketquant-app/src/pocketquant/app/main_extensions.py:110
 async def start_quote_feed(container, app):
     quote_svc = await container.get(QuoteAppService)
     sub_mgr = await container.get(WsSubscriptionManager)
@@ -173,7 +173,7 @@ async def start_quote_feed(container, app):
 **Route:** GET `/api/v1/market-data/bars/stream/{symbol}?interval={interval}`
 
 **Files:**
-- `packages/pocketquant-api/src/pocketquant/api/market_data/handlers/ohlcv/stream_bars/route.py` — handler + SSE endpoint
+- `packages/pocketquant-app/src/pocketquant/app/market_data/handlers/ohlcv/stream_bars/route.py` — handler + SSE endpoint
 
 **Flow:**
 1. Client opens EventSource connection → server enters poll loop.
@@ -202,7 +202,7 @@ async def start_quote_feed(container, app):
 **Route:** GET `/api/v1/quotes/stream/{symbol}`
 
 **Files:**
-- `packages/pocketquant-api/src/pocketquant/api/market_data/handlers/quotes/stream_quote/route.py` — handler + SSE endpoint
+- `packages/pocketquant-app/src/pocketquant/app/market_data/handlers/quotes/stream_quote/route.py` — handler + SSE endpoint
 
 **Flow:**
 1. Client opens EventSource connection → server enters poll loop.

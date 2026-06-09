@@ -20,7 +20,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY packages/pocketquant-core/pyproject.toml packages/pocketquant-core/
 COPY packages/pocketquant-backtest/pyproject.toml packages/pocketquant-backtest/
 COPY packages/pocketquant-trading/pyproject.toml packages/pocketquant-trading/
-COPY packages/pocketquant-api/pyproject.toml packages/pocketquant-api/
+COPY packages/pocketquant-app/pyproject.toml packages/pocketquant-app/
 
 # Copy all package source code
 COPY packages/ packages/
@@ -61,4 +61,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 41920
 
-CMD ["uvicorn", "pocketquant.api.main:app", "--host", "0.0.0.0", "--port", "41920"]
+CMD ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41920"]

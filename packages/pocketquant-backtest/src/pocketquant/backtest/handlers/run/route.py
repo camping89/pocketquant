@@ -1,105 +1,61 @@
-from datetime import datetime
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
+from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Mediator
+from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
+    BacktestRequestRepository,
+)
 from pydantic import BaseModel
 
 router = APIRouter(route_class=DishkaRoute)
 
 
-class BacktestMetricsResponse(BaseModel):
-    """Backtest performance metrics."""
+class EnqueueBacktestResponse(BaseModel):
+    """Response after enqueuing a single backtest — FE polls for the result."""
 
-    total_return: float
-    cagr: float
-    sharpe_ratio: float
-    sortino_ratio: float
-    max_drawdown: float
-    win_rate: float
-    profit_factor: float
-    total_trades: int
-    winning_trades: int
-    losing_trades: int
-    total_commission: float
+    request_id: str
 
 
-class PositionResponse(BaseModel):
-    """Paired entry+exit position from backtest (closed) or open lot snapshot."""
+class BacktestRequestStatusResponse(BaseModel):
+    """Poll response for a single backtest request.
 
-    entry_price: float
-    entry_time: datetime
-    exit_price: float | None = None
-    exit_time: datetime | None = None
-    quantity: float
-    sl_price: float | None = None
-    tp_price: float | None = None
-    pnl: float
-    commission: float
+    ``result`` carries the assembled FE payload (run_id/status/metrics/positions)
+    once ``status == 'done'``; it is None while pending/running and on failure.
+    """
 
-
-class RunBacktestResponse(BaseModel):
-    """Response after submitting backtest."""
-
-    run_id: str
+    request_id: str
     status: str
-    metrics: BacktestMetricsResponse | None = None
-    positions: list[PositionResponse] = []
+    result: dict | None = None
+    error: str | None = None
 
 
-@router.post("/run", response_model=RunBacktestResponse)
+@router.post("/run", response_model=EnqueueBacktestResponse, status_code=202)
 async def run_backtest(
     cmd: RunBacktestCommand,
     mediator: FromDishka[Mediator],
-    trade_repo: FromDishka[BacktestTradeRepository],
 ) -> dict:
-    """Execute a single backtest run.
+    """Enqueue a single backtest run. Returns a request id for polling.
 
-    Returns metrics + a unified positions list combining closed round-trip
-    Trades (from ``backtest_trades``) and still-open lots (from the run doc's
-    ``open_positions``). The unified shape preserves backward compatibility for
-    existing FE consumers; the downstream backtest-analysis-panel plan will
-    rewire to consume the new collections directly.
+    Execution is async: the headless app's worker runs the engine and embeds the
+    result in the request doc. Poll ``GET /backtest/requests/{request_id}``.
     """
-    result = await mediator.send(cmd)
+    return await mediator.send(cmd)
 
-    positions: list[dict] = []
-    if result.status == "completed":
-        closed = await trade_repo.list_by_run(result.id)
-        for t in closed:
-            positions.append(
-                {
-                    "entry_price": t.entry_price,
-                    "entry_time": t.entry_time,
-                    "exit_price": t.exit_price,
-                    "exit_time": t.exit_time,
-                    "quantity": t.quantity,
-                    "sl_price": t.sl_price,
-                    "tp_price": t.tp_price,
-                    "pnl": t.pnl,
-                    "commission": t.commission,
-                }
-            )
-        for ol in result.open_positions:
-            positions.append(
-                {
-                    "entry_price": ol.entry_price,
-                    "entry_time": ol.entry_time,
-                    "exit_price": None,
-                    "exit_time": None,
-                    "quantity": ol.quantity,
-                    "sl_price": ol.sl_price,
-                    "tp_price": ol.tp_price,
-                    "pnl": 0.0,
-                    "commission": ol.entry_commission_portion,
-                }
-            )
+
+@router.get("/requests/{request_id}", response_model=BacktestRequestStatusResponse)
+async def get_backtest_request(
+    request_id: str,
+    request_repo: FromDishka[BacktestRequestRepository],
+) -> dict:
+    """Poll a single backtest request's status + embedded result."""
+    bt_request = await request_repo.get(request_id)
+    if bt_request is None:
+        raise NotFoundError(f"Backtest request not found: {request_id}")
 
     return {
-        "run_id": result.id,
-        "status": result.status,
-        "metrics": result.metrics.to_dict() if result.status == "completed" else None,
-        "positions": positions,
+        "request_id": bt_request.id,
+        "status": bt_request.status,
+        "result": bt_request.result,
+        "error": bt_request.error,
     }

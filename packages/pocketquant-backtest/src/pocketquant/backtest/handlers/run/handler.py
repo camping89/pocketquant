@@ -1,96 +1,46 @@
-from pocketquant.core.domain.backtest import BacktestResult
-from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
+"""RunBacktestHandler — enqueue a single ad-hoc backtest request.
+
+Pure DB write: persist a ``single`` BacktestRequest and return its id. The
+headless app's BacktestRequestWorker claims it, runs the engine via the shared
+dispatch, and embeds the FE response in the request doc. FE polls
+``GET /backtest/requests/{id}`` for the result.
+"""
+
+from datetime import UTC, datetime
+
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
-from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
-from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
+from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.domain.backtest.request import BacktestRequest
+from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
+    BacktestRequestRepository,
+)
 
 
 @handles(RunBacktestCommand)
-class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResult]):
-    def __init__(
-        self,
-        event_bus: EventBus,
-        backtest_repository: BacktestRepository,
-        backtest_order_repository: BacktestOrderRepository,
-        backtest_trade_repository: BacktestTradeRepository,
-        bar_repository: BarRepository,
-        strategy_app_service: StrategyAppService,
-    ) -> None:
-        self._event_bus = event_bus
-        self._backtest_repo = backtest_repository
-        self._order_repo = backtest_order_repository
-        self._trade_repo = backtest_trade_repository
-        self._bar_repo = bar_repository
-        self._strategy_app_service = strategy_app_service
+class RunBacktestHandler(Handler[RunBacktestCommand, dict]):
+    def __init__(self, backtest_request_repository: BacktestRequestRepository) -> None:
+        self._request_repo = backtest_request_repository
 
-    async def handle(self, request: RunBacktestCommand) -> BacktestResult:
-        config = BacktestConfig(
+    async def handle(self, request: RunBacktestCommand) -> dict:
+        config = {
+            "strategy_code": request.strategy_id,
+            "symbol": request.symbol,
+            "interval": request.interval,
+            "start_date": request.start_date.isoformat(),
+            "end_date": request.end_date.isoformat(),
+            "initial_capital": request.initial_capital,
+            "slippage_bps": request.slippage_bps,
+            "commission_bps": request.commission_bps,
+            "parameters": request.parameters or {},
+        }
+        bt_request = BacktestRequest(
+            id=generate_id_str(),
+            kind="single",
+            status="pending",
+            requested_at=datetime.now(UTC),
             strategy_code=request.strategy_id,
-            symbol=request.symbol,
-            interval=request.interval,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            initial_capital=request.initial_capital,
-            slippage_bps=request.slippage_bps,
-            commission_bps=request.commission_bps,
-            parameters=request.parameters or {},
+            config=config,
         )
-
-        strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
-        if strategy_class is None:
-            raise ValueError(
-                f"Unknown strategy: '{request.strategy_id}'. "
-                f"Available: {list(STRATEGY_REGISTRY.keys())}"
-            )
-
-        strategy_cfg = StrategyConfig(
-            id=request.strategy_id,
-            name=request.strategy_id,
-            symbol=request.symbol,
-            interval=request.interval,
-            trigger="bar",
-            broker="paper",
-            parameters={**config.parameters},
-        )
-
-        # Create fresh broker for this backtest. event_bus enables SL/TP auto-fill
-        # on BarCompletedEvent — required for strategies that set sl_price/tp_price.
-        broker = PaperBroker(
-            initial_balance=request.initial_capital,
-            slippage_percent=config.slippage_percent,
-            event_bus=self._event_bus,
-        )
-
-        # Register strategy instance on the shared StrategyAppService so it
-        # receives BarCompletedEvent during replay
-        strategy_instance = strategy_class(strategy_cfg)
-        sid = strategy_instance.id
-        # Unload any stale previous run with the same id
-        if self._strategy_app_service.get_strategy(sid) is not None:
-            await self._strategy_app_service.unload_strategy(sid)
-        await self._strategy_app_service.inject_prepared_strategy(
-            sid, strategy_instance, broker, strategy_instance.config
-        )
-
-        try:
-            runner = BacktestAppService(
-                event_bus=self._event_bus,
-                broker=broker,
-                backtest_repository=self._backtest_repo,
-                bar_repository=self._bar_repo,
-                order_repository=self._order_repo,
-                trade_repository=self._trade_repo,
-            )
-            return await runner.run(config)
-        finally:
-            # Clean up: unload backtest strategy so it doesn't linger
-            await self._strategy_app_service.unload_strategy(request.strategy_id)
+        await self._request_repo.enqueue(bt_request)
+        return {"request_id": bt_request.id}

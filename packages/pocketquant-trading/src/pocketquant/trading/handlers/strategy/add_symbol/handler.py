@@ -1,14 +1,12 @@
-"""AddSymbolHandler — persist a new Subscription for a loaded strategy template."""
+"""AddSymbolHandler — persist a new Subscription (pure Mongo write)."""
 
 from datetime import UTC, datetime
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
-from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -20,28 +18,26 @@ from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCo
 
 @handles(AddSymbolCommand)
 class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
-    """Handle AddSymbolCommand — auto-load template if needed, then persist subscription."""
+    """Persist a subscription — no RAM instance load.
+
+    Pure Mongo write so the stateless bff can serve this without owning the
+    engine. The app control-plane (reconcile loop) materializes the runtime
+    instance within ≤1 tick. The tracked-symbol + registry checks stay: they
+    fail fast (404) for the user instead of persisting a junk subscription that
+    reconcile would only later reject.
+
+    ``request.symbol`` must be composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
+    """
 
     def __init__(
         self,
-        strategy_app_service: StrategyAppService,
         subscription_repository: SubscriptionRepository,
         tracked_symbol_repository: TrackedSymbolRepository,
     ) -> None:
-        self._strategy_service = strategy_app_service
         self._sub_repo = subscription_repository
         self._tracked_repo = tracked_symbol_repository
 
     async def handle(self, request: AddSymbolCommand) -> dict:
-        """Persist subscription and load a dedicated strategy instance.
-
-        Each subscription owns its own ``IStrategy`` instance keyed by ``sub.id``
-        so that subscribing the same template to multiple (symbol, interval)
-        pairs results in independent runtime instances. ``request.strategy_id``
-        is the template code (matched against ``STRATEGY_REGISTRY``).
-
-        ``request.symbol`` must be composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-        """
         symbol = request.symbol.upper()
         if not await self._tracked_repo.exists(symbol):
             raise NotFoundError(
@@ -49,22 +45,10 @@ class AddSymbolHandler(Handler[AddSymbolCommand, dict]):
                 error_code="SYMBOL_NOT_TRACKED",
             )
 
-        strategy_class = STRATEGY_REGISTRY.get(request.strategy_id)
-        if strategy_class is None:
+        if request.strategy_id not in STRATEGY_REGISTRY:
             raise NotFoundError(f"Strategy template '{request.strategy_id}' not found in registry.")
 
         sub_id = Subscription.deterministic_id(request.strategy_id, symbol, request.interval)
-
-        if self._strategy_service.get_strategy(sub_id) is None:
-            await self._strategy_service.load_strategy(
-                StrategyConfig(
-                    id=sub_id,
-                    name=request.strategy_id,
-                    symbol=symbol,
-                    interval=request.interval,
-                ),
-                strategy_class=strategy_class,
-            )
 
         # Add = subscribe only (desired_state="stopped"). The user starts it
         # explicitly via the start endpoint, which flips desired_state to running

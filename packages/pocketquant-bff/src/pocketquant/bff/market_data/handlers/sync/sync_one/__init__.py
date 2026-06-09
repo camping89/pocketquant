@@ -1,0 +1,1 @@
+"""Sync single symbol route."""

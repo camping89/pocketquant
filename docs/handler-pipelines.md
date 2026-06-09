@@ -965,7 +965,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResponse]):
         ...
 ```
 
-Registry auto-discovered at container build time in `packages/pocketquant-api/src/pocketquant/api/di/container.py`:
+Registry auto-discovered at container build time in `packages/pocketquant-app/src/pocketquant/app/di/container.py`:
 ```python
 await register_handlers(container)  # Resolves all @handles classes and wires them to the Mediator
 ```

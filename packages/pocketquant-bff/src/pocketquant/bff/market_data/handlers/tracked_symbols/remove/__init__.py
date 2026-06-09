@@ -1,0 +1,1 @@
+"""Remove tracked symbol route."""

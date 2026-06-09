@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from pocketquant.api.di.broker_factory import BrokerFactory
+from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig

@@ -1,0 +1,19 @@
+"""DTOs for status operations."""
+
+from dataclasses import dataclass
+
+
+@dataclass
+class SyncStatusResult:
+    """Result of a sync status query. ``symbol`` is composite ``{code}:{exchange}``."""
+
+    symbol: str
+    interval: str
+    status: str
+    bar_count: int | None = None
+    last_sync_at: str | None = None
+    last_bar_at: str | None = None
+    error_message: str | None = None
+    # Diagnostics for UI: counter + derived stuck flag.
+    consecutive_empty_fetches: int = 0
+    is_stuck: bool = False

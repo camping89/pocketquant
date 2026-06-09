@@ -13,7 +13,7 @@ FORBIDDEN_IMPORTS = [
     "pocketquant.execution",
     "pocketquant.trading",
     "pocketquant.backtest",
-    "pocketquant.api",
+    "pocketquant.app",
 ]
 
 

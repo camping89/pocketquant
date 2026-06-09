@@ -304,7 +304,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### Module Breakdown (6-package layered monorepo)
 
-Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ api`, `web → api` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
+Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app`, `web → app` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
 
 ```
 packages/pocketquant-core/           # 0 deps — pure domain
@@ -340,7 +340,7 @@ packages/pocketquant-trading/        # → core + infra + execution
 └── handlers/      strategy ops (add_symbol/start/stop/delete/list/get) +
                    trading ops (list_orders/get_order/list_positions/get_position)
 
-packages/pocketquant-api/            # → all above — composition root
+packages/pocketquant-app/            # → all above — composition root
 ├── market_data/   sync/quotes/ohlcv/tracked_symbols/status handlers + app-services
 ├── di/            Dishka container + 6 Provider classes + register_handlers()
 └── main.py        FastAPI app + lifespan (WS feed start/stop, boot migrations)
@@ -449,14 +449,14 @@ uv sync
 docker compose -f deploy/compose.local.yml up -d
 
 # 3. Run app (F5 in VS Code for debugging, or terminal)
-uvicorn pocketquant.api.main:app --reload --port 41920
+uvicorn pocketquant.app.main:app --reload --port 41920
 ```
 
 **Production:**
 ```bash
 docker compose -f deploy/compose.prod.yml --env-file deploy/.env up -d
 uv sync
-uvicorn pocketquant.api.main:app --host 0.0.0.0 --port 41920 --workers 4
+uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41920 --workers 4
 ```
 
 ## Contact & Support
