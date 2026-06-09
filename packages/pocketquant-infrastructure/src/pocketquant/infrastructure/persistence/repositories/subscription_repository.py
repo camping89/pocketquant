@@ -1,11 +1,12 @@
 """SubscriptionRepository — MongoDB persistence for strategy subscriptions."""
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.infrastructure.persistence.base_repository import BaseRepository
 from pocketquant.core.domain.subscription import (
+    RunState,
     Subscription,
     SubscriptionAlreadyExistsError,
 )
+from pocketquant.infrastructure.persistence.base_repository import BaseRepository
 from pymongo.errors import DuplicateKeyError
 
 logger = get_logger(__name__)
@@ -49,6 +50,24 @@ class SubscriptionRepository(BaseRepository):
         collection = self._collection()
         cursor = collection.find({})
         return [Subscription.from_mongo(doc) async for doc in cursor]
+
+    async def update_desired_state(self, sub_id: str, state: RunState) -> int:
+        """Set the control-plane desired_state. Returns modified_count (0 if no such sub)."""
+        collection = self._collection()
+        result = await collection.update_one(
+            {"_id": sub_id}, {"$set": {"desired_state": state}}
+        )
+        logger.debug("subscription_desired_state_updated", sub_id=sub_id, state=state)
+        return result.modified_count
+
+    async def update_actual_state(self, sub_id: str, state: RunState) -> int:
+        """Mirror observed RAM run-state into actual_state. Returns modified_count."""
+        collection = self._collection()
+        result = await collection.update_one(
+            {"_id": sub_id}, {"$set": {"actual_state": state}}
+        )
+        logger.debug("subscription_actual_state_updated", sub_id=sub_id, state=state)
+        return result.modified_count
 
     async def delete(self, sub_id: str) -> int:
         """Delete a subscription by ID. Returns deleted_count (0 or 1)."""

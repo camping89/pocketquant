@@ -66,6 +66,41 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 
 **Real-Time Streaming:** Frontend receives live market data via Server-Sent Events (SSE) for bars and quotes, backed by Redis as the intermediary between inbound WebSocket sources (Binance, OKX) and outbound HTTP streams. See [WebSocket Architecture](./websocket-architecture.md) for detail on SSE endpoints (`/bars/stream/{symbol}`, `/quotes/stream/{symbol}`), polling intervals, and staleness detection.
 
+## Strategy Declarative Control Plane (SP1)
+
+**Architecture:** Kubernetes-style control-plane/data-plane split.
+
+```
+Control plane (desired state)           Data plane (live engine)
+ Mongo: subscription.desired_state       RAM: StrategyAppService instances
+      ▲                 │                    ▲           │
+ API  │                 │ read desired       │ start/stop
+      │                 ▼                    │           ▼
+ [handlers]  ┌──────────────────┐           │    [market events]
+             │  reconcile loop  │───────────┴────────────
+             │  5s poll         │ write actual_state → Mongo
+             └──────────────────┘
+```
+
+**Control-plane sources of truth:** `Subscription` entity persists two state fields:
+- `desired_state: "running" | "stopped"` — what a handler (or human) intends → written by HTTP start/stop handlers
+- `actual_state: "running" | "stopped"` — live engine's observed state → written by reconcile loop when it detects drift
+
+**Handlers are declarative:** `StartStrategyCommand` and `StopStrategyCommand` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
+
+**Reconcile loop:** `StrategyReconcileService` (in `pocketquant-execution`) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
+1. Iterates `sub_repo.list_all()` (reads from Mongo)
+2. For each subscription, compares `desired_state` to live `StrategyAppService` instance's run-state
+3. Calls `start_strategy()` or `stop_strategy()` to converge
+4. Mirrors observed `actual_state` back to Mongo only on drift (idempotent, no per-tick churn)
+5. Subscription-driven: never enumerates RAM, so injected backtest strategies (synthetic ids) are invisible
+
+**Add new subscription:** `AddSymbolHandler` persists with `desired_state="stopped"` (opt-in to trading; no auto-start on add) and pre-loads the instance without starting it.
+
+**List subscriptions:** `ListSymbolsHandler` sources run-state from Mongo: returns `desired_state`, `actual_state`, and computed `is_running` (derived as `actual_state == "running"`). No RAM read.
+
+**Boot migration:** Idempotent `migrate_subscription_desired_state` backfills legacy docs lacking `desired_state` → `desired_state="running"` (auto-resume), `actual_state="stopped"`. Only docs without `desired_state` are touched; a human's later stop is never re-flipped on redeploy. Runs after rehydrate, before reconcile starts, so first tick auto-resumes all legacy subs within one poll interval.
+
 ## Clean Architecture Layer Breakdown
 
 ### Layer 1: Domain (Pure Business Logic) — packages/pocketquant-core/src/pocketquant/core/domain/

@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.core.domain.subscription import (
     Subscription,
     SubscriptionAlreadyExistsError,
 )
+from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -96,6 +96,39 @@ async def test_list_by_strategy_code_filters_correctly(repo):
 
     # Non-existent strategy returns empty list
     assert await repo.list_by_strategy_code("strat-c") == []
+
+
+@pytest.mark.asyncio
+async def test_update_desired_state_persists_and_leaves_actual(repo):
+    sub = _make_sub("strat-desired", "BTC-USDT:BINANCE", Interval.HOUR_1)
+    await repo.add(sub)
+
+    modified = await repo.update_desired_state(sub.id, "running")
+    assert modified == 1
+
+    fetched = await repo.get(sub.id)
+    assert fetched is not None
+    assert fetched.desired_state == "running"
+    assert fetched.actual_state == "stopped"  # untouched
+
+
+@pytest.mark.asyncio
+async def test_update_actual_state_persists(repo):
+    sub = _make_sub("strat-actual", "ETH-USDT:BINANCE", Interval.HOUR_1)
+    await repo.add(sub)
+
+    modified = await repo.update_actual_state(sub.id, "running")
+    assert modified == 1
+
+    fetched = await repo.get(sub.id)
+    assert fetched is not None
+    assert fetched.actual_state == "running"
+    assert fetched.desired_state == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_update_desired_state_missing_sub_returns_zero(repo):
+    assert await repo.update_desired_state("does-not-exist", "running") == 0
 
 
 @pytest.mark.asyncio

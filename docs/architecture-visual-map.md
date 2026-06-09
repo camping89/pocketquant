@@ -79,7 +79,38 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   Domain has ZERO I/O imports (enforced by AST test)
 ```
 
-## 2. Domain Three-Tier Structure
+## 2. Strategy Control Plane / Data Plane (Kubernetes-style)
+
+Declarative control via Mongo; reconcile loop converges engine state.
+
+```
+Control plane (intent)              Data plane (live engine)
+ Mongo: subscription                 RAM: StrategyAppService
+  ├─ desired_state: running            ├─ _strategies[sub_id] with is_running
+  └─ actual_state: stopped      ◀─────  ├─ _brokers[sub_id]
+                                        └─ _configs[sub_id]
+         ▲
+         │ handlers write
+         │ desired_state
+      [API]
+      /start
+      /stop
+      /add (desired=stopped)
+
+[reconcile loop every 5s]
+  ├─ read desired_state from Mongo
+  ├─ compare vs live is_running (RAM)
+  ├─ call start_strategy() / stop_strategy() if drift
+  └─ write actual_state back to Mongo (only on change)
+```
+
+**Key insight:** Handlers are async-eventual (return before engine changes); reconcile loop
+provides convergence guarantee. FE polls `actual_state` to observe catch-up. Clean separation
+of control (Mongo) from data (RAM).
+
+---
+
+## 3. Domain Three-Tier Structure
 
 ```
   packages/pocketquant-core/src/pocketquant/core/domain/
@@ -105,7 +136,7 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
       └── value_objects.py  Shared VOs (Price, Signal, etc)
 ```
 
-## 3. Layer Map (Mermaid)
+## 4. Layer Map (Mermaid)
 
 ```mermaid
 graph TB
@@ -164,7 +195,7 @@ graph TB
     Repos --> DB
 ```
 
-## 4. Request Flow — POST /strategies/{strategy_code}/subscriptions
+## 5. Request Flow — POST /strategies/{strategy_code}/subscriptions
 
 ```mermaid
 sequenceDiagram
@@ -192,7 +223,7 @@ sequenceDiagram
     Route-->>Client: {subscription_id, status: "created"}
 ```
 
-## 5. DI Resolution Graph
+## 6. DI Resolution Graph
 
 ```mermaid
 graph LR
@@ -265,7 +296,7 @@ graph LR
     PositionAppService --> StrategyAppService
 ```
 
-## 6. Real-Time Data Flow — WebSocket to Strategy
+## 7. Real-Time Data Flow — WebSocket to Strategy
 
 ```mermaid
 flowchart LR
@@ -287,7 +318,7 @@ flowchart LR
     PT -->|save| Mongo
 ```
 
-## 7. C4 System Context (Level 1)
+## 8. C4 System Context (Level 1)
 
 ```
     ┌──────────┐          ┌──────────────────────────────┐
@@ -305,7 +336,7 @@ flowchart LR
            └──────────────┘    └──────────────┘    └──────────────┘
 ```
 
-## 8. C4 Container (Level 2)
+## 9. C4 Container (Level 2)
 
 ```
     ┌──────────┐
@@ -347,7 +378,7 @@ flowchart LR
     └──────────────┘       └──────────────┘
 ```
 
-## 9. DI Container Wiring Order
+## 10. DI Container Wiring Order
 
 ```
   CoreProvider ──> PersistenceProvider ──> InfrastructureProvider
@@ -358,7 +389,7 @@ flowchart LR
   Container creates all 37 handlers + registers with Mediator
 ```
 
-## 10. Event Flow
+## 11. Event Flow
 
 ```
   Handler ──publish──> EventBus ──notify──> Subscribers
@@ -377,7 +408,7 @@ flowchart LR
 > - File navigation ("where does X live") → [system-architecture.md](./system-architecture.md) → "Where Does X Live?"
 > - Bounded contexts + ubiquitous language → [system-architecture.md](./system-architecture.md)
 
-## 11. Context Map (Bounded-Context Relationships)
+## 12. Context Map (Bounded-Context Relationships)
 
 ```
                                     ┌──────────────┐

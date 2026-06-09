@@ -16,37 +16,52 @@ from pocketquant.api.market_data.handlers.router import router as market_data_ro
 from pocketquant.api.market_data.handlers.tracked_symbols import router as tracked_symbols_router
 from pocketquant.api.system_jobs.route import router as system_jobs_router
 from pocketquant.backtest.handlers import backtest_router, run_all_backtests_router
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
-from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
-    OptimizationRepository,
-)
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
-from pocketquant.infrastructure.persistence.health_checks import check_database, check_redis
-from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
-from pocketquant.infrastructure.persistence.repositories.job_history_repository import JobHistoryRepository
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
-from pocketquant.infrastructure.persistence.repositories.sync_status_repository import SyncStatusRepository
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
-    TrackedSymbolRepository,
+from pocketquant.execution.app_services.strategy_reconcile_service import (
+    StrategyReconcileService,
 )
-from pocketquant.trading.handlers.strategy import strategy_router, subscription_router
-from pocketquant.trading.handlers.trading import trading_router
+from pocketquant.infrastructure.persistence.health_checks import check_database, check_redis
+from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
+from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
+    JobHistoryRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
+    OptimizationRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import PositionRepository
+from pocketquant.infrastructure.persistence.repositories.position_repository import (
+    PositionRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.infrastructure.persistence.repositories.sync_status_repository import (
+    SyncStatusRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
+from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.trading.handlers.strategy import strategy_router, subscription_router
+from pocketquant.trading.handlers.trading import trading_router
 
 logger = get_logger(__name__)
 
@@ -228,6 +243,38 @@ async def migrate_strategy_id_fields(container: AsyncContainer) -> None:
     logger.info("mongo_migration.completed", total_renamed=total_renamed)
 
 
+async def migrate_subscription_desired_state(container: AsyncContainer) -> None:
+    """Backfill control-plane state on pre-existing subscription docs. Idempotent.
+
+    Old subscriptions lost their RAM run-state on restart; the declarative model
+    treats ``desired_state="running"`` as auto-resume, so legacy docs are set to
+    ``running`` (reconcile starts them) with ``actual_state="stopped"`` so the
+    transition is observable in logs/FE. Only docs LACKING ``desired_state`` are
+    touched — a human's later ``stop`` is never re-flipped on redeploy.
+
+    Runs AFTER ``migrate_strategy_id_fields`` (field rename must precede) and
+    BEFORE ``rehydrate_strategies_from_subscriptions`` so rehydrate/reconcile read
+    the final field shape.
+
+    Mass-start note: this flips EVERY legacy sub to running on first deploy. Pre-
+    deploy, count the affected docs on a DB copy:
+        db.subscriptions.countDocuments({desired_state: {$exists: false}})
+    Rollback (stop everything):
+        db.subscriptions.updateMany({}, {$set: {desired_state: "stopped"}})
+    """
+    database = await container.get(Database)
+    coll = database.database["subscriptions"]
+    result = await coll.update_many(
+        {"desired_state": {"$exists": False}},
+        {"$set": {"desired_state": "running", "actual_state": "stopped"}},
+    )
+    if result.modified_count:
+        logger.info(
+            "subscription_state_migration.completed",
+            modified_count=result.modified_count,
+        )
+
+
 async def recover_stale_backtests(container: AsyncContainer) -> None:
     """Mark any backtest docs stuck in 'running' as 'failed' on startup.
 
@@ -402,6 +449,37 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     provider = await container.get(IRealtimeQuoteProvider)
     await provider.disconnect()
     logger.info("quote_feed.stopped")
+
+
+async def start_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
+    """Start the declarative control-plane reconcile loop as a background task.
+
+    Gated on ``enable_jobs`` — same flag as background jobs, so the test/CLI
+    profile (``enable_jobs=False``) never spins a live loop. Must start AFTER
+    ``rehydrate_strategies_from_subscriptions`` so instances exist; otherwise the
+    first tick logs N missing_instance warnings before catching up next tick.
+    """
+    settings = await container.get(Settings)
+    if not settings.enable_jobs:
+        logger.info("reconcile_loop_disabled")
+        return
+
+    svc = await container.get(StrategyReconcileService)
+    app.state.reconcile_task = asyncio.create_task(svc.run())
+    logger.info("reconcile_loop.started")
+
+
+async def stop_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
+    """Cancel the reconcile task. Must run BEFORE quote-feed stop + container.close
+    so reconcile never issues start/stop against an engine that is shutting down."""
+    task: asyncio.Task | None = getattr(app.state, "reconcile_task", None)
+    if task and not task.done():
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
+        except (TimeoutError, asyncio.CancelledError):
+            pass
+    logger.info("reconcile_loop.stopped")
 
 
 async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
