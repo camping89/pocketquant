@@ -104,8 +104,8 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
 
 ### 4. How to see it on the UI
 
-Open the chart UI (`http://localhost:5173` in dev, `http://localhost:41920/`
-when the FastAPI serves the built bundle). The strategies dashboard is a
+Open the chart UI (`http://localhost:5173` in dev, `http://localhost/`
+when the nginx serves the built bundle via bff). The strategies dashboard is a
 **3-pane layout**
 — `packages/pocketquant-web/src/components/strategies/strategies-page-layout.tsx`:
 

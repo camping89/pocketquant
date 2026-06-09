@@ -605,6 +605,32 @@ binance_client.py              # BinanceClient (IDataProvider) for REST API
 binance_websocket_client.py    # BinanceWebSocketClient for @aggTrade WebSocket
 ```
 
+### Class Naming by Layer
+
+Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domain services) get NO suffix — they ARE the domain language. CQRS handlers live in `{feature}/{operation}/` with `command.py`|`query.py` + `handler.py` + `route.py` + `__init__.py`.
+
+| Layer | Pattern | Suffix | Examples |
+|-------|---------|--------|----------|
+| Entities | `{Name}` or `{Name}Aggregate` | None / `Aggregate` (complex only) | `Bar`, `Symbol`, `OrderAggregate` |
+| Events | `{Entity}{PastTense}Event` | `Event` | `OrderFilledEvent`, `BarCompletedEvent` |
+| Enums | `{Concept}` | None | `Interval`, `OrderType`, `OrderSide` |
+| Value Objects | `{Concept}` | None | `PnL`, `OHLCV`, `BarRange` |
+| Domain Services | `{DescriptiveName}` | None | `BarBuilder`, `PerformanceCalculator` |
+| Repositories | `{Entity}Repository` | `Repository` | `BarRepository`, `OrderRepository` |
+| Infra Interfaces | `I{Concept}` | `I` prefix | `IBroker`, `IDataProvider`, `IBrokerFactory` |
+| Infra Impls | `{Source}{Type}` | None (source-prefixed) | `OkxBroker`, `TradingViewClient`, `PaperBroker` |
+| App Services | `{Entity}AppService` | `AppService` | `BarAppService`, `StrategyAppService` |
+| CQRS Queries | `{Get\|List}{Entity}Query` | `Query` | `GetOHLCVQuery`, `ListOrdersQuery` |
+| CQRS Commands | `{Action}{Entity}Command` | `Command` | `SyncSymbolCommand`, `StartStrategyCommand` |
+| CQRS Handlers | `{MatchingRequest}Handler` | `Handler` | `SyncSymbolHandler`, `ListOrdersHandler` |
+| DTOs | `{Name}Response` | `Response` | `SyncResponse`, `QuoteResponse` |
+| Routes | (functions) | — | `async def sync_symbol(...)` |
+| Middleware | `{Name}Middleware` | `Middleware` | `RateLimitMiddleware`, `IdempotencyMiddleware` |
+| Errors | `{Name}Error` | `Error` | `AppError`, `NotFoundError`, `DomainError` |
+| DI Providers | `{Domain}Provider` | `Provider` | `CoreProvider`, `ExecutionProvider` |
+| Configs | `{Name}Config` | `Config` | `BacktestConfig`, `WebhookConfig` |
+| Background Jobs | (functions) | — | `sync_5m()`, `sync_integrity()` |
+
 ### Module Size
 
 Keep individual files under 200 LOC for optimal context management:

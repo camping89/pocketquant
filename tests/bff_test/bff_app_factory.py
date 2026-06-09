@@ -1,8 +1,8 @@
-"""Shared test bff factory for pocketquant-bff integration tests.
+"""Test factory for the pocketquant-bff FastAPI app.
 
-Mirrors app_factory.py but uses bff DI providers so feature routes (strategies,
-subscriptions, trading, backtest) are registered. Used for route-hitting tests
-that previously ran against app but now belong to bff.
+Builds the bff app from its real DI providers wired to testcontainer Settings,
+bypassing the module-level ``app = create_app()`` in bff/main.py. Stateless: no
+scheduler, no engine — only DB/Cache + the bff handler subset.
 """
 
 from __future__ import annotations
@@ -33,8 +33,8 @@ from pocketquant.infrastructure.persistence.redis import Cache
 class TestBffCoreProvider(Provider):
     """Injects a pre-built Settings instance into the bff DI graph for tests.
 
-    Defined at module level (not inside a function) so dishka's get_type_hints()
-    can resolve forward references correctly on Python 3.14+.
+    Module-level (not a closure) so dishka's get_type_hints() resolves forward
+    references on Python 3.14+.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -55,18 +55,13 @@ class TestBffCoreProvider(Provider):
 
 
 def make_bff_test_app(settings: Settings) -> FastAPI:
-    """Build a fully-wired bff FastAPI test app using testcontainer settings.
-
-    Registers all feature routes (strategies, subscriptions, backtest, trading,
-    market-data). No scheduler, no WS feed — bff is stateless.
-    """
-    providers = [
+    """Build a fully-wired bff FastAPI test app using testcontainer settings."""
+    container = make_async_container(
         TestBffCoreProvider(settings),
         BffPersistenceProvider(),
         BffMarketDataProvider(),
         BffHandlerProvider(),
-    ]
-    container = make_async_container(*providers)
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:

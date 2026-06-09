@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 
 import pytest
+from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.execution.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     aggregate_ohlcv,
@@ -10,8 +12,6 @@ from pocketquant.execution.market_data.app_services.cascade_aggregator import (
     compute_boundaries,
     tf_seconds,
 )
-from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.enums import Interval
 
 
 class TestTfSeconds:

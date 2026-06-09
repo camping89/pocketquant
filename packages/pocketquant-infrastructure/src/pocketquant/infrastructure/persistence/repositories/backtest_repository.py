@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_RUNS
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.infrastructure.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)

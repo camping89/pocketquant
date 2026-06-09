@@ -14,13 +14,13 @@ import httpx
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.market_data.binance.binance_mappers import (
     INTERVAL_TO_BINANCE,
     kline_to_bar,
     validate_symbol,
 )
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
 
 logger = get_logger(__name__)
 
@@ -57,7 +57,7 @@ class BinanceClient(IDataProvider):
         ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         Paginates automatically when n_bars > 1000 (Binance limit per call).
         """
-        # Extract the code part from composite symbol for Binance API calls (BINANCE-specific boundary)
+        # Extract bare code from composite symbol for Binance API (BINANCE-specific boundary)
         code = symbol.split(":")[0] if ":" in symbol else symbol
         validated_symbol = validate_symbol(code)
         binance_interval, bar_duration_ms = INTERVAL_TO_BINANCE[interval]

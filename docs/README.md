@@ -51,22 +51,23 @@ packages/
 ├── pocketquant-execution/      # → core + infra — shared strategy/order/position/risk engine
 ├── pocketquant-backtest/       # → core + infra + execution — backtest engine, optimization, run orchestration
 ├── pocketquant-trading/        # → core + infra + execution — live trading, OKX broker, strategy/subscription
-├── pocketquant-app/            # → all above — FastAPI, DI container, route composition
+├── pocketquant-app/            # → all above — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
+├── pocketquant-bff/            # → core, infra, backtest, trading — stateless gateway: read/write routes, backtest enqueue
 └── pocketquant-web/            # React 19 + Vite SPA (separate npm app, excluded from uv workspace)
 ```
 
-Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app`, `web → app` (HTTP only). `backtest` and `trading` are independent siblings.
+Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings.
 
 Notes:
 
-- The 5 Python packages share the `pocketquant.*` namespace and form the `uv` workspace.
+- The 6 Python packages share the `pocketquant.*` namespace and form the `uv` workspace.
 - `pocketquant-web` is a separate npm/Vite app, **excluded** from the uv workspace.
-- The built web app is served by FastAPI when `packages/pocketquant-web/dist` exists.
+- Two processes run from one image (1-image-2-CMD): app (headless, port 41920 internal, `/health` only) and bff (stateless gateway, port 41921 internal, serves all `/api/*` routes).
 
 ## Maintenance Note
 
 When documentation conflicts with the code:
 
 - trust `README.md`
-- verify routes against FastAPI OpenAPI at `http://localhost:41920/api/v1/docs`
+- verify routes against FastAPI OpenAPI at `http://localhost:41921/api/v1/docs` (bff, not app)
 - fold duplicate content into the canonical doc, delete the duplicate, fix inbound links

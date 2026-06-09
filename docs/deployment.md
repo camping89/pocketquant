@@ -8,7 +8,7 @@ CI/CD: GitHub Actions push → Docker Hub → SSH to VPS.
 
 ## Platform
 
-**Vultr VPS** (Ubuntu) with self-managed Docker Compose stack. 5 containers: app (FastAPI), web (SPA + reverse proxy), MongoDB, Redis, Portainer. Images built by GitHub Actions, pushed to Docker Hub, pulled on the VPS.
+**Vultr VPS** (Ubuntu) with self-managed Docker Compose stack. 6 containers: app (headless runtime), bff (API gateway), web (SPA + reverse proxy), MongoDB, Redis, Portainer. Images built by GitHub Actions, pushed to Docker Hub, pulled on the VPS.
 
 Dashboards:
 - Portainer: `http://<vps-ip>:$PORTAINER_PORT`
@@ -16,9 +16,10 @@ Dashboards:
 
 ## Production URL
 
-`http://<vps-ip>:$WEB_PORT/` — public SPA entry point. The web container reverse-proxies `/api/*` to the app container on `$APP_PORT`. Set `$WEB_PORT=443` if terminating TLS directly.
+`http://<vps-ip>:$WEB_PORT/` — public SPA entry point. The web container (nginx) reverse-proxies `/api/*` to the bff container (stateless gateway, internal :41921). Set `$WEB_PORT=443` if terminating TLS directly.
 
-API: `http://<vps-ip>:$APP_PORT/api/v1/docs` (Swagger).
+API: `http://<vps-ip>:$WEB_PORT/api/v1/docs` (Swagger, via web → bff).
+App health: container-internal only — `docker exec pocketquant-app curl http://localhost:41920/health`.
 
 ## Deploy Command
 
@@ -56,7 +57,7 @@ Production config (host, SSH key, prod `.env`, Docker Hub creds, Portainer creds
 
 `pocketquant-config/vps/default/.env` is the **single source of truth** for prod runtime env. The CI/CD `deploy` job materializes it as `deploy/.env` on the VPS each run via `rsync`. Any manual `.env` on the VPS is overwritten — edit the file in `pocketquant-config/`, `git push`, then push a commit to `pocketquant` (or `gh workflow run cicd.yml`).
 
-The `app` service consumes it directly via `env_file: .env` in `compose.prod.yml` — there is **no** hardcoded `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` in this file use the **internal docker-network service names** (`mongodb:27017`, `redis:6379`) because the file IS the app container's env; `MONGO_PORT`/`REDIS_PORT` are the host-published ports for external tools. Host-side scripts that need DB access run inside the container (`docker exec pocketquant-app …`), where those names resolve — see the resync/backup procedures below.
+Both `app` and `bff` services consume it directly via `env_file: .env` in `compose.prod.yml` — there is **no** hardcoded `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` in this file use the **internal docker-network service names** (`mongodb:27017`, `redis:6379`) because the file IS the container env; `MONGO_PORT`/`REDIS_PORT` are the host-published ports for external tools. Host-side scripts that need DB access run inside the container (`docker exec pocketquant-app …`), where those names resolve — see the resync/backup procedures below.
 
 ### `<repo>/.env` — app + Docker/compose vars (local dev only)
 
@@ -68,11 +69,11 @@ Pydantic Settings reads it for `just be` / `just fe`. On the VPS, the same shape
 | `IMAGE_TAG` | No | Image tag to pull; defaults to `latest` |
 | `MONGO_USER` | Yes | Mongo root user |
 | `MONGO_PASSWORD` | Yes | Strong random Mongo password |
-| `APP_PORT` | Yes | API container port (use obscure value, not 80/443) |
 | `WEB_PORT` | Yes | Public SPA entry (default `80`, use `443` for TLS) |
 | `MONGO_PORT` | Yes | Mongo external port (obscure value) |
 | `REDIS_PORT` | Yes | Redis external port (obscure value) |
 | `PORTAINER_PORT` | Yes | Portainer UI port (obscure value) |
+| `REDIS_PASSWORD` | Yes | Redis auth password |
 | `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_PASSPHRASE` | No | Only for OKX live trading |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
 
@@ -129,8 +130,11 @@ ssh <VPS> "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant
 # App logs
 ssh <VPS> "docker logs pocketquant-app --tail 50"
 
-# Health
-ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41920/health"
+# Health (bff)
+ssh <VPS> "docker exec pocketquant-bff curl -s http://localhost:41921/health"
+
+# Restart bff only (safe)
+ssh <VPS> "docker restart pocketquant-bff"
 
 # Restart everything (no rebuild)
 ssh <VPS> "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env restart"
@@ -147,6 +151,31 @@ The `11-verify.sh` **Boot integrity** check is a hard FAIL gate — it greps the
 # Operator Runbook
 
 Everything above this line is what the `/deploy` skill (and a busy operator) needs. Everything below is the deep runbook: first-deploy, migrations, gap repair, local-dev-pointing-at-prod, etc.
+
+## Services & Health
+
+**app** (headless runtime, internal :41920):
+```bash
+ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41920/health"
+ssh <VPS> "docker logs pocketquant-app --tail 50"
+```
+
+**bff** (API gateway, internal :41921):
+```bash
+ssh <VPS> "docker exec pocketquant-bff curl -s http://localhost:41921/health"
+ssh <VPS> "docker logs pocketquant-bff --tail 50"
+```
+
+**web** (nginx, public port):
+```bash
+ssh <VPS> "docker exec pocketquant-web curl -s http://localhost:80"
+ssh <VPS> "docker logs pocketquant-web --tail 50"
+```
+
+**Restart strategies:**
+- **Restart just bff** (safe, FE continues): `ssh <VPS> "docker restart pocketquant-bff"` — no effect on live trading
+- **Restart just app** (risky during live trading): stops scheduler + strategy + WS feed; existing orders/positions unaffected in MongoDB
+- **Restart both** (hard reset): use `docker compose restart pocketquant-app pocketquant-bff`
 
 ## Architecture
 
@@ -355,11 +384,12 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 
 2. Verify connectivity to `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>` (mongo shell, redis-cli, or your IDE).
 
-3. Start servers (two terminals):
+3. Start servers (three terminals):
 
    ```bash
-   just be      # FastAPI on :41920
-   just fe      # Vite dev server on :5173 (proxies /api -> :41920)
+   just be      # app (headless runtime) on :41920
+   just bff     # bff (API gateway) on :41921
+   just fe      # Vite dev server on :5173 (proxies /api -> :41921)
    ```
 
 ### Safety notes

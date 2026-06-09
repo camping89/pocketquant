@@ -18,9 +18,12 @@ COPY pyproject.toml uv.lock README.md ./
 
 # Copy all package pyproject.toml files (needed for dependency resolution)
 COPY packages/pocketquant-core/pyproject.toml packages/pocketquant-core/
+COPY packages/pocketquant-infrastructure/pyproject.toml packages/pocketquant-infrastructure/
+COPY packages/pocketquant-execution/pyproject.toml packages/pocketquant-execution/
 COPY packages/pocketquant-backtest/pyproject.toml packages/pocketquant-backtest/
 COPY packages/pocketquant-trading/pyproject.toml packages/pocketquant-trading/
 COPY packages/pocketquant-app/pyproject.toml packages/pocketquant-app/
+COPY packages/pocketquant-bff/pyproject.toml packages/pocketquant-bff/
 
 # Copy all package source code
 COPY packages/ packages/

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from pocketquant.execution.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.execution.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
 from pydantic import ValidationError
 
 

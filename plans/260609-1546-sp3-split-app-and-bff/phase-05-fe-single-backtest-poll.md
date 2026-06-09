@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "FE single-backtest poll"
-status: pending
+status: completed
 priority: P2
 effort: "4h"
 dependencies: [2]
@@ -10,6 +10,10 @@ dependencies: [2]
 # Phase 5: FE single-backtest poll
 
 ## Overview
+
+> **Reality khác plan (verified 2026-06-09):** backend single-backtest đã async-enqueue từ Phase 2 (`run/handler.py` enqueue, `run/route.py` POST→202 `{request_id}` + GET `/backtest/requests/{id}` poll, bff đã register `backtest_router`). FE phần single-backtest (`runBacktest`/`useBacktest`/`BacktestResponse` + `StrategySelector`) là **dead code — 0 consumer**; UI backtest thực tế là subscription-based (`backtest-panel` + `useSubscriptions` refetchInterval + `useSubscriptionBacktest`) **đã poll sẵn**. Quyết định user: **xóa dead code + fix proxy**, không build single-backtest UI (YAGNI/KISS/DRY).
+>
+> **Đã làm:** xóa `runBacktest`+`BacktestResponse` (`backtest-api.ts`), xóa `use-backtest.ts` (`useBacktest`+`useStrategies` trùng `useStrategiesList`), xóa `strategy-selector.tsx` (unmounted). Giữ `fetchStrategies` + các type live (`BacktestPosition/Metrics/EquityPoint/Status/SubscriptionBacktest`). Fix `vite.config.ts` proxy `41920`→`41921` (bff). `-89` LOC. Lint 0 error, build xanh.
 
 Single backtest (`POST /api/v1/backtest/run`) đổi từ synchronous (FE await `BacktestResult`) sang async qua queue (Phase 2): enqueue → trả `{request_id}` → FE poll tới khi `done` → render chart. Đồng nhất với run_all đã poll. Cũng đổi FE proxy target sang bff (nếu cần local; prod đã qua bff service).
 

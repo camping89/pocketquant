@@ -49,20 +49,30 @@ docker pull "${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}"
 echo "=== Starting services ==="
 docker compose -f compose.prod.yml --env-file .env up -d --remove-orphans
 
-echo "=== Waiting for app health (timeout 60s) ==="
-deadline=$(( $(date +%s) + 60 ))
-until docker exec pocketquant-app curl -fsS --max-time 2 http://localhost:41920/health >/dev/null 2>&1; do
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    echo "ERROR: app did not become healthy within 60s"
-    echo "--- last 30 log lines ---"
-    docker logs pocketquant-app --tail 30 2>&1 || true
-    echo "--- container status ---"
-    docker ps --format "table {{.Names}}\t{{.Status}}" | grep pocketquant || true
-    exit 1
-  fi
-  sleep 2
-done
-echo "App is healthy."
+# Wait for both processes. app (headless runtime) migrates the schema in its
+# lifespan before becoming healthy; bff depends_on app healthy, so it only
+# starts accepting traffic after migration. Probe both — a healthy app with a
+# dead bff means the FE has no API upstream.
+wait_health() {
+  local container="$1" port="$2" timeout="$3"
+  echo "=== Waiting for $container health (timeout ${timeout}s) ==="
+  local deadline=$(( $(date +%s) + timeout ))
+  until docker exec "$container" curl -fsS --max-time 2 "http://localhost:${port}/health" >/dev/null 2>&1; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      echo "ERROR: $container did not become healthy within ${timeout}s"
+      echo "--- last 30 log lines ---"
+      docker logs "$container" --tail 30 2>&1 || true
+      echo "--- container status ---"
+      docker ps --format "table {{.Names}}\t{{.Status}}" | grep pocketquant || true
+      exit 1
+    fi
+    sleep 2
+  done
+  echo "$container is healthy."
+}
+
+wait_health pocketquant-app 41920 60
+wait_health pocketquant-bff 41921 30
 
 echo "=== Cleaning old images ==="
 docker image prune -f

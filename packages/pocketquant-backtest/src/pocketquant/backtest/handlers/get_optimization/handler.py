@@ -1,7 +1,9 @@
-from pocketquant.core.domain.backtest import OptimizationResult
 from pocketquant.backtest.handlers.get_optimization.query import GetOptimizationQuery
-from pocketquant.infrastructure.persistence.repositories.optimization_repository import OptimizationRepository
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.domain.backtest import OptimizationResult
+from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
+    OptimizationRepository,
+)
 
 
 @handles(GetOptimizationQuery)

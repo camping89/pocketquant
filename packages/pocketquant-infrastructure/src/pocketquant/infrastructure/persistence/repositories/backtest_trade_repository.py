@@ -5,9 +5,9 @@ Stores round-trip ``Trade`` documents (entry + exit linked by order IDs).
 
 from __future__ import annotations
 
-from pocketquant.core.domain.backtest.value_objects import Trade
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_TRADES
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.domain.backtest.value_objects import Trade
 from pocketquant.infrastructure.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)

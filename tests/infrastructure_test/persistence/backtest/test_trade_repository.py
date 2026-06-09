@@ -6,8 +6,10 @@ from datetime import datetime, timedelta
 
 import pytest
 from pocketquant.core.domain.backtest import Trade
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
 
 # Mongo strips tz info on roundtrip — naive datetime keeps equality clean.
 T0 = datetime(2026, 1, 5, 10, 0, 0)

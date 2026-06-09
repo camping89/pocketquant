@@ -78,7 +78,7 @@ class BinanceWebSocketClient:
         symbol: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Register a symbol subscription. ``symbol`` is composite ``{code}:{exchange}``. Returns key."""
+        """Register a subscription. ``symbol`` composite ``{code}:{exchange}``. Returns key."""
         # Extract bare code for Binance API stream name (BINANCE-specific boundary)
         code = symbol.split(":")[0] if ":" in symbol else symbol
         validated = validate_symbol(code)

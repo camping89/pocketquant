@@ -57,34 +57,6 @@ export interface SubscriptionBacktest {
   parameters?: Record<string, unknown>
 }
 
-export interface BacktestResponse {
-  run_id: string
-  status: string
-  metrics: BacktestMetrics | null
-  positions: BacktestPosition[]
-}
-
 export async function fetchStrategies(): Promise<string[]> {
   return apiFetch<string[]>('/api/v1/backtest/strategies')
-}
-
-export async function runBacktest(params: {
-  strategy_id: string
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
-  symbol: string
-  interval: string
-  start_date: string
-  end_date: string
-  initial_capital?: number
-}): Promise<BacktestResponse> {
-  const res = await fetch('/api/v1/backtest/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      initial_capital: 10_000,
-      ...params,
-    }),
-  })
-  if (!res.ok) throw new Error(`Backtest failed: ${res.status}`)
-  return res.json()
 }

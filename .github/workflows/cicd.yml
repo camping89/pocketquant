@@ -28,8 +28,11 @@ jobs:
       - name: Install Python + deps
         run: uv sync --frozen
 
-      - name: Run pytest (pocketquant-app)
-        run: uv run pytest tests/app_test/ -v
+      - name: Check import contracts (app/bff isolation)
+        run: uv run lint-imports
+
+      - name: Run pytest (full suite — app + bff + runtime split)
+        run: uv run pytest tests/ -q
 
   build-app:
     runs-on: ubuntu-latest

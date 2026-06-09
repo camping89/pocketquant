@@ -7,9 +7,11 @@ from datetime import datetime
 import pytest
 from pocketquant.core.domain.backtest import Fill, Order
 from pocketquant.core.domain.brokers.events import OrderEvent
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
 from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
 
 # Mongo strips tz info on roundtrip (naive UTC) — use naive to keep equality clean.
 NOW = datetime(2026, 1, 5, 10, 0, 0)

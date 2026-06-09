@@ -1,7 +1,7 @@
 ---
 title: "SP3 — Split app (headless runtime) + bff (FE gateway)"
 description: "Tách runtime trading (scheduler/WS/strategy/reconcile) ra khỏi tầng HTTP serve-FE. 2 package: pocketquant-app headless + pocketquant-bff stateless gateway. Mục tiêu: crash/restart bff không gián đoạn live trading."
-status: pending
+status: completed
 priority: P2
 branch: "develop"
 tags: [split, bff, isolation, control-plane, sp3]
@@ -84,9 +84,9 @@ Brainstorm report claim "sau SP1, ranh giới = 100% Mongo, command channel bi�
 | 2 | [Backtest request queue](./phase-02-backtest-request-queue.md) | Completed |
 | 3 | [Control-plane instance lifecycle](./phase-03-control-plane-instance-lifecycle.md) | Completed |
 | 4 | [DI split and two entrypoints](./phase-04-di-split-and-two-entrypoints.md) | Completed |
-| 5 | [FE single-backtest poll](./phase-05-fe-single-backtest-poll.md) | Pending |
-| 6 | [Deploy CI import-linter](./phase-06-deploy-ci-import-linter.md) | Pending |
-| 7 | [Verify isolation](./phase-07-verify-isolation.md) | Pending |
+| 5 | [FE single-backtest poll](./phase-05-fe-single-backtest-poll.md) | Completed |
+| 6 | [Deploy CI import-linter](./phase-06-deploy-ci-import-linter.md) | Completed |
+| 7 | [Verify isolation](./phase-07-verify-isolation.md) | Completed |
 
 ## Key dependencies (phase ordering)
 

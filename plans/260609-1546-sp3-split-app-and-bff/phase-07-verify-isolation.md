@@ -1,11 +1,20 @@
 ---
 phase: 7
 title: "Verify isolation"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 dependencies: [4, 5, 6]
 ---
+
+> **Đã làm (2026-06-09):**
+> - **app standalone test** (`tests/app_test/integration/test_app_standalone_runtime.py`): app container resolve full runtime (JobScheduler/StrategyAppService/StrategyReconcileService/BacktestRequestWorker); reconcile tick converge desired=running→actual=running; worker drain queue — KHÔNG bff. 3 test.
+> - **bff stateless test** (`tests/bff_test/` mới: conftest + bff_app_factory + integration/test_bff_stateless_serve.py): bff container raise `NoFactoryError` cho 4 runtime type (parametrized); POST start ghi `desired_state` only (actual giữ stopped, bff không reconcile); GET serve seeded read. 6 test.
+> - **Full suite**: 470 passed, 12 skipped, 0 failed (≥ baseline 444). pyright 0 error + ruff clean trên file mới (98 ruff error còn lại = pre-existing trong package committed, KHÔNG thuộc SP3).
+> - **lint-imports**: 9 contract kept, 0 broken.
+> - **Docs sweep** (qua docs-manager): README, docs/README, system-architecture (thêm section App/BFF + Mermaid), system-relationship-map, deployment, features/strategy-lifecycle, CLAUDE.md layout+graph. 0 stale `:41920` proxy ref / "FastAPI serves dist" còn lại.
+> - **code-reviewer**: DONE, no blocking, no regression. 7 focus item PASS. Report: `plans/reports/code-reviewer-260609-2136-sp3-phases-5-7-review-report.md`.
+> - **Manual crash-isolation smoke**: PENDING — cần live docker stack (kill bff → app tick tiếp), env-dependent đúng như plan risk. Integration test phủ logic standalone. Chạy 1 lần ở deploy kế tiếp. Ghi verify report `plans/reports/`.
 
 # Phase 7: Verify isolation
 

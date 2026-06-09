@@ -5,12 +5,12 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pocketquant.execution.market_data.app_services import sync_jobs
-from pocketquant.execution.market_data.handlers.sync import SyncSymbolCommand
 from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_BACKFILL,
     SOURCE_REST_SYNC_1M,
 )
+from pocketquant.execution.market_data.app_services import sync_jobs
+from pocketquant.execution.market_data.handlers.sync import SyncSymbolCommand
 
 
 class _FakeContainer:
@@ -25,10 +25,10 @@ class _FakeContainer:
 
 def _wire_container(monkeypatch: pytest.MonkeyPatch, *, mediator) -> None:
     from pocketquant.core.common.mediator import Mediator
+    from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
     from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
         JobHistoryRepository,
     )
-    from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
     from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )

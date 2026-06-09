@@ -33,13 +33,13 @@ from pocketquant.app.main_extensions import (
     start_backtest_worker,
     stop_backtest_worker,
 )
-from pocketquant.execution.market_data.app_services.sync_jobs import (
-    set_container as set_sync_container,
-)
 from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
+from pocketquant.execution.market_data.app_services.sync_jobs import (
+    set_container as set_sync_container,
+)
 from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.redis import Cache
 

@@ -1,22 +1,28 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.backtest.engine.historical_replay_app_service import (
     HistoricalReplayAppService,
 )
 from pocketquant.backtest.engine.result_collector import BacktestResultCollector
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import BacktestOrderRepository
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import BacktestTradeRepository
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
+from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)

@@ -229,7 +229,7 @@ class TestCheckpointResume:
 class TestSymbolOrchestration:
     @pytest.mark.asyncio
     async def test_call_order_delete_fetch_insert_cascade(self, tmp_path: Path) -> None:
-        """Verify per-symbol call order: delete_many_by_range → fetch_ohlcv → insert_many → cascade."""
+        """Per-symbol call order: delete_many_by_range → fetch_ohlcv → insert_many → cascade."""
         args = parse_args(["--days", "730"])
         ckpt_path = tmp_path / "ckpt.json"
 

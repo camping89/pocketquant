@@ -45,13 +45,22 @@ Whole-system **diagrams**: how the two repos, CI/CD, image registry, VPS runtime
                                                    5 containers on one bridge net
                                                                ▼
                           ┌──────────┬──────────┬──────────┬──────────┬───────────┐
-                          │   web    │   app    │ mongodb  │  redis   │ portainer │
-                          │  :80 →   │ :41920   │ :27017   │  :6379   │  :9000    │
-                          │  /api/*  │ FastAPI  │  bars,   │ quote,   │  docker   │
-                          │  proxy → │ (uvicorn)│ orders,  │ bar,     │  admin UI │
-                          │   app    │          │ positions│ idempot, │           │
-                          └────┬─────┘          │ ...      │ rate     │           │
-                               │                └──────────┴──────────┴───────────┘
+                          │   web    │   bff    │ mongodb  │  redis   │ portainer │
+                          │  :80     │ :41921   │ :27017   │  :6379   │  :9000    │
+                          │  nginx   │ FastAPI  │  bars,   │ quote,   │  docker   │
+                          │  /api/*→ │ gateway  │ orders,  │ bar,     │  admin UI │
+                          │  bff:41  │ (uvicorn)│ positions│ idempot, │           │
+                          │    921   │          │ ...      │ rate     │           │
+                          └────┬─────┴──┬───────┘          │ ...      │           │
+                               │        │ depends_on       └──────────┴───────────┘
+                               │        │ service_healthy
+                               │        ▼
+                               │    ┌─────────────┐
+                               │    │ app :41920  │  headless runtime
+                               │    │   (uvicorn) │  scheduler, WS feed
+                               └───▶│             │  strategy lifecycle
+                                    │ /health only│
+                                    └─────────────┘
                                │ public entry (WEB_PORT)
                                ▼
                           ┌──────────┐
