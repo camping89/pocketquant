@@ -3,8 +3,8 @@
 import structlog
 from pocketquant.core.concepts.risk import RiskConfig
 from pocketquant.core.concepts.strategy import Direction, Signal
-from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.brokers.value_objects import AccountBalance
+from pocketquant.core.domain.position import PositionAggregate
 
 logger = structlog.get_logger(__name__)
 

@@ -16,10 +16,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
-from pocketquant.infrastructure.persistence.mongodb import Database
 
 pytestmark = pytest.mark.integration
 

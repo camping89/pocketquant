@@ -27,8 +27,6 @@ from pocketquant.core.common.messaging import EventBus, event_handler
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.bar.events import BarCompletedEvent
-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
-from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.domain.brokers.events import (
     REASON_AUTO_SL,
     REASON_AUTO_TP,
@@ -46,6 +44,8 @@ from pocketquant.core.domain.brokers.events import (
 )
 from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
+from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.position import PositionAggregate, PositionSide
 
 # STOP_LIMIT / STOP_MARKET share the LIMIT pending path until real STOP
 # semantics (price-rises-through trigger) are implemented.

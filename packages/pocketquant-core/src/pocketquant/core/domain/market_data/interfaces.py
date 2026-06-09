@@ -1,4 +1,4 @@
-"""Market-data provider ports — REST/historical (IDataProvider) and realtime (IRealtimeQuoteProvider).
+"""Market-data provider ports — REST/historical + realtime quote interfaces.
 
 Neutral domain location so no concrete provider implementation (Binance, OKX,
 TradingView, etc.) is implied by the module path.
@@ -69,7 +69,7 @@ class IRealtimeQuoteProvider(Protocol):
         symbol: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Register a symbol subscription. ``symbol`` is composite ``{code}:{exchange}``. Returns key."""
+        """Register a subscription. ``symbol`` composite ``{code}:{exchange}``. Returns key."""
         ...
 
     async def unsubscribe(self, symbol: str) -> None:

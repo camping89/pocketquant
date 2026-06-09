@@ -17,6 +17,12 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from pocketquant.backtest.engine.collected_results import CollectedResults
+from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
+from pocketquant.backtest.engine.metrics_builder import build_metrics
+from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.core.common.time.simulation import get_current_time
+from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
@@ -27,12 +33,6 @@ from pocketquant.core.domain.backtest import (
     Trade,
 )
 from pocketquant.core.domain.brokers.events import OrderEvent
-from pocketquant.backtest.engine.collected_results import CollectedResults
-from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
-from pocketquant.backtest.engine.metrics_builder import build_metrics
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.core.common.time.simulation import get_current_time
-from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,8 @@ class BacktestResultCollector:
             strategy_code=self._config.strategy_code,
             symbol=self._config.symbol,
             side=side,
-            order_type=OrderType.MARKET,  # MARKET assumption; LIMIT path also fills as MARKET-on-cross
+            # MARKET assumption; LIMIT path also fills as MARKET-on-cross
+            order_type=OrderType.MARKET,
             quantity=fill_qty,
             price=None,
             sl_price=result.sl_price,

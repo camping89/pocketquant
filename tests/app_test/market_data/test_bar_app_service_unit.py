@@ -4,13 +4,13 @@ import time
 from unittest.mock import AsyncMock
 
 import pytest
+from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.execution.market_data.app_services.bar_app_service import (
     BarAppService,
 )
 from pocketquant.execution.market_data.app_services.quote_dto import QuoteTick
-from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.bar.events import BarCompletedEvent
-from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.infrastructure.persistence.redis import Cache
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
@@ -296,7 +296,6 @@ class TestCacheKeyInjection:
 
         # Verify cache.set was called with last_update in the dict
         assert mock_cache.set.called
-        call_kwargs = mock_cache.set.call_args[1]
         bar_dict = mock_cache.set.call_args[0][1]
         assert "last_update" in bar_dict
         assert before <= bar_dict["last_update"] <= after

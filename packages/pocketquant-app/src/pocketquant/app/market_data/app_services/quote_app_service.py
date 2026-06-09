@@ -4,12 +4,12 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from pocketquant.execution.market_data.app_services.bar_app_service import BarAppService
-from pocketquant.execution.market_data.app_services.quote_dto import Quote, QuoteTick
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
+from pocketquant.execution.market_data.app_services.bar_app_service import BarAppService
+from pocketquant.execution.market_data.app_services.quote_dto import Quote, QuoteTick
 from pocketquant.infrastructure.persistence.redis import Cache
 
 logger = get_logger(__name__)

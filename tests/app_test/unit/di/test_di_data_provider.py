@@ -13,10 +13,11 @@ import pytest
 from pocketquant.app.di.infrastructure import InfrastructureProvider
 from pocketquant.app.di.market_data import MarketDataProvider
 from pocketquant.core.config import Settings
+from pocketquant.core.domain.market_data.interfaces import IDataProvider, IRealtimeQuoteProvider
 from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
-from pocketquant.infrastructure.market_data.binance.binance_websocket_client import BinanceWebSocketClient
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
+from pocketquant.infrastructure.market_data.binance.binance_websocket_client import (
+    BinanceWebSocketClient,
+)
 
 
 @pytest.fixture

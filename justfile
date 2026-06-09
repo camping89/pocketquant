@@ -53,11 +53,19 @@ qa: lint fmt types
 redis:
     docker compose -f deploy/compose.local.yml --env-file .env up -d redis
 
-# Start backend dev server with hot reload
+# Start headless runtime: scheduler, WS feed, strategies, reconcile, backtest worker (port 41920, /health only)
 be:
     {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41920
 
-# Start frontend dev server
+# Start FE gateway: stateless API serving pocketquant-web + DB read/write (port 41921)
+bff:
+    BFF_PORT=41921 {{python}} -m uvicorn pocketquant.bff.main:app --reload --host 0.0.0.0 --port 41921
+
+# Start frontend dev server (vite proxies /api → bff on 41921)
 [working-directory: 'packages/pocketquant-web']
 fe:
     npm run dev
+
+# Check import-linter contracts (9 layered/forbidden contracts incl. bff isolation)
+lint-imports:
+    uv run lint-imports

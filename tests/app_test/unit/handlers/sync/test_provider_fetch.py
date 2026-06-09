@@ -12,12 +12,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import structlog
+from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.execution.market_data.handlers.sync.sync_one import provider_fetch
 from pocketquant.execution.market_data.handlers.sync.sync_one.provider_fetch import (
     fetch_with_retry,
 )
-from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.enums import Interval
 
 
 def _aligned_bar(ts: str = "2026-05-05T11:30:00+00:00") -> Bar:

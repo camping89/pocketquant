@@ -2,7 +2,7 @@
 
 Covers:
 - Cache hit (same OHLCV) → zero DB calls.
-- Cache miss + new doc (find_one returns None) → $setOnInsert created_at, $set OHLCV+updated_at+source.
+- Cache miss + new doc (find_one None) → $setOnInsert created_at, $set OHLCV+updated_at+source.
 - Cache miss + existing doc with same OHLCV → no write, cache warmed.
 - Cache miss + existing doc with different OHLCV → $set OHLCV+updated_at+source, no $setOnInsert.
 - upsert_bar without source kwarg raises TypeError.
@@ -72,7 +72,7 @@ class TestCacheHit:
 
 class TestCacheMissNewDoc:
     @pytest.mark.asyncio
-    async def test_uses_setOnInsert_created_at_and_set_audit_fields(self) -> None:
+    async def test_uses_set_on_insert_created_at_and_set_audit_fields(self) -> None:
         bar = _make_bar()
         repo, collection = _make_repo(existing_doc=None)
 
@@ -117,7 +117,7 @@ class TestCacheMissExistingSameValue:
 
 class TestCacheMissExistingDiffValue:
     @pytest.mark.asyncio
-    async def test_writes_only_set_no_setOnInsert(self) -> None:
+    async def test_writes_only_set_no_set_on_insert(self) -> None:
         new_bar = _make_bar(close=1.7)
         # Existing has a different close — diff-aware update should fire.
         existing = {

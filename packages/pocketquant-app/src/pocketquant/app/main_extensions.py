@@ -209,7 +209,7 @@ async def _drop_legacy_indexes(db, collection: str, index_names: list[str]) -> N
 
 
 async def migrate_strategy_id_fields(container: AsyncContainer) -> None:
-    """Idempotent boot-time migration: rename ``strategy_id`` → ``strategy_code`` / ``subscription_id``.
+    """Idempotent boot migration: rename ``strategy_id`` → ``strategy_code`` / ``subscription_id``.
 
     Runs BEFORE ``rehydrate_strategies_from_subscriptions`` so the rehydrate
     reads the new field name. Safe to call repeatedly — each step checks

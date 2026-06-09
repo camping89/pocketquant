@@ -1,4 +1,3 @@
-from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, OptimizationResult
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.engine.historical_replay_app_service import HistoricalReplayAppService
 from pocketquant.backtest.handlers.get_optimization import (
@@ -32,7 +31,10 @@ from pocketquant.backtest.optimization.grid_optimization_app_service import (
 )
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
+from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, OptimizationResult
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
 
 __all__ = [
     "backtest_router",

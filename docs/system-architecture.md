@@ -14,19 +14,26 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
 │  pocketquant-web: React 19 + Vite + Lightweight Charts         │
 │  Candlestick chart, 5 indicators, symbol/interval selectors     │
 └──────────────────────┬──────────────────────────────────────────┘
-                       │ HTTP/REST (proxy to :41920)
+                       │ HTTP/REST (proxy to :41921 bff)
                        ▼
+          ┌─────────────────────────┐
+          │   pocketquant-bff       │  Stateless gateway
+          │  :41921 (internal)      │  Read/write API routes
+          └──────┬────────┬─────────┘
+                 │        │ depends_on health
+                 │        ▼
+          ┌──────────────────────────────────────────────┐
+          │  pocketquant-app (headless runtime)          │
+          │  :41920 (internal, /health only)             │
+          │  Scheduler, WS feed, strategy lifecycle,     │
+          │  reconcile loop, backtest worker             │
+          └──────┬───────────────────────────────────────┘
+                 │
+                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         External Services                        │
-│   Binance (REST + WS @aggTrade)  │  OKX (REST + WS)  │  Scheduler│
-└───────────┬─────────────────────────┬───────────────────────────┘
-            │                         │
-            ▼                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Features Layer (CQRS Operation Routers)             │
-│  Commands/Queries → Handlers → Domain + Infrastructure          │
-│  backtesting/ | market_data/ | strategy/ | trading/ | risk/     │
-└────────────────────────┬────────────────────────────────────────┘
+│   External Services & Infrastructure                             │
+│  Binance REST+WS | OKX REST+WS | MongoDB | Redis | APScheduler │
+└─────────────────────────────────────────────────────────────────┘
                          │
             ┌────────────┴────────────┐
             │                         │
@@ -458,7 +465,7 @@ common/
 ```
 src/
 ├── api/                  # REST client layer
-│   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41920)
+│   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41921 bff)
 │   └── market-data-api.ts  # Market data queries
 ├── components/
 │   ├── chart/           # Charting components
@@ -497,7 +504,7 @@ src/
 - **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2)
 - **Symbol/Interval Selectors:** Switch data without page reload
 - **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
-- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41920`
+- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41921` (bff)
 
 **Custom Hooks:**
 
@@ -793,7 +800,7 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 10. `seed_tracked_symbols()` ensures at least one symbol in registry
 11. `start_background_jobs()` registers APScheduler sync jobs (with per-job `misfire_grace_time` tuning)
 12. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-13. Server ready on port 41920 (internal; host port via `APP_PORT` env var)
+13. Server ready: app on port 41920 (internal, `/health` only) + bff on port 41921 (internal, serves `/api/*`)
 
 > ⚠ **Adding new persistent jobs or async workers?** See `code-standards.md` → "Async Suspension Points — Await Is Preemption" before wiring. The rule: wire every dependency (globals, container handles, registrations) BEFORE the call that starts the worker. APScheduler replays `next_run_time` on startup; first tick fires within `misfire_grace_time` seconds of `start()`. Per-job grace time configured in `register_sync_jobs()`; adjust based on job criticality.
 
@@ -805,6 +812,66 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
    - JobScheduler.shutdown(wait=True) — stop background jobs
    - Cache.disconnect() — close Redis
    - Database.disconnect() — close MongoDB
+
+## SP3: App/BFF Two-Process Architecture
+
+**Goal:** Isolate live-trading runtime (app) from stateless API gateway (bff) to enable safe FE restarts and independent scaling.
+
+**One image, two commands:**
+
+```mermaid
+graph LR
+    web["pocketquant-web<br/>(nginx)<br/>:80"]
+    bff["pocketquant-bff<br/>(gateway)<br/>:41921"]
+    app["pocketquant-app<br/>(headless runtime)<br/>:41920"]
+    mongo["MongoDB<br/>:27017"]
+    redis["Redis<br/>:6379"]
+    
+    web -->|/api/*| bff
+    bff -->|read/write state| mongo
+    bff -->|cache| redis
+    app -->|scheduler/strategy| mongo
+    app -->|quotes/reconcile| redis
+    bff -.->|depends_on<br/>service_healthy| app
+    
+    style app fill:#fdd
+    style bff fill:#dfd
+    style web fill:#ddf
+```
+
+**app (Headless Runtime):**
+- Container-internal port 41920, `/health` endpoint only (no `/api/*` routes)
+- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest-request worker
+- Lifespan runs migrations + `ensure_indexes()` before yielding (schema ready before bff accepts traffic)
+- Crash/restart here is isolated — live trading stops but FE is unaffected (bff ≠ app)
+- Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41920`
+
+**bff (Stateless Gateway):**
+- Container-internal port 41921, serves all `/api/v1/*` routes (read operations, desired-state writes, backtest enqueue)
+- NO scheduler, NO WS, NO engine in RAM — restart is cheap
+- Depends on app service healthy before accepting traffic
+- Routes delegate to DI-injected handlers; DI has no access to scheduler/strategy types (raises `NoFactoryError` if attempted)
+- Coordinate with app only via MongoDB (subscriptions, orders, positions, backtest runs) + Redis (quotes, bars, rate-limit state)
+- Command: `uvicorn pocketquant.bff.main:app --host 0.0.0.0 --port 41921`
+
+**Dependency Graph (top tier only):**
+
+```
+core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}
+       └─ app has NO imports of bff
+       └─ bff has NO imports of app
+       └─ both import core + infra + execution + backtest + trading (verified by import-linter contract: bff↛app, app↛bff)
+```
+
+**Local Dev Ports:**
+- app: `http://localhost:41920/health` (liveness only)
+- bff: `http://localhost:41921/api/v1/docs` (Swagger)
+- Vite proxy: `/api/*` → `http://localhost:41921` (bff)
+
+**Container Network (compose.prod.yml):**
+- web + app + bff + mongo + redis + portainer on same bridge network (`pocketquant-prod`)
+- No published ports for app or bff — nginx in web container reverse-proxies `/api/*` to bff service name (`http://bff:41921`)
+- External clients reach web on `WEB_PORT` (default :80); nginx routes `/api/*` internally to bff on :41921
 
 ## Integration Points
 

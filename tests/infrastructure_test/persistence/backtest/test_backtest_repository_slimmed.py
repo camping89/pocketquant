@@ -6,8 +6,10 @@ from datetime import datetime
 
 import pytest
 from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, EquityPoint, OpenLot
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import BacktestRepository
 from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
 
 # Mongo strips tz info on roundtrip — naive datetime keeps equality clean.
 NOW = datetime(2026, 1, 5, 10, 0, 0)

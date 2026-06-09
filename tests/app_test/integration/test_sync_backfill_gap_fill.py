@@ -14,12 +14,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from pocketquant.execution.market_data.handlers.sync.sync_one.bar_filters import (
-    filter_new_bars,
-)
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.execution.market_data.handlers.sync.sync_one.bar_filters import (
+    filter_new_bars,
+)
 from pocketquant.infrastructure.persistence.mongodb import Database
 from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
@@ -119,7 +119,7 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
 
 
 @pytest.mark.skip(
-    reason="filter_new_bars not filtering existing bars — find_datetimes query not returning seeded docs"
+    reason="filter_new_bars not filtering existing bars — find_datetimes not returning seeded docs"
 )
 @pytest.mark.asyncio
 async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) -> None:

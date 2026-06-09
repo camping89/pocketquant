@@ -19,16 +19,19 @@ packages/
 ├── pocketquant-execution/      # Shared strategy/order/position/risk engine
 ├── pocketquant-backtest/       # Backtest engine, optimization, backtest-run orchestration
 ├── pocketquant-trading/        # Strategy, order, position, OKX broker workflows
-├── pocketquant-app/            # FastAPI app, DI container, route composition
+├── pocketquant-app/            # FastAPI headless runtime, scheduler, WS feed, strategy lifecycle, reconcile loop
+├── pocketquant-bff/            # FastAPI stateless gateway for read/write/backtest API routes
 └── pocketquant-web/            # React 19 + Vite chart UI
 ```
 
 Dependency direction:
 
 ```text
-core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app
-web → app
+core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}
+web → bff (HTTP only)
 ```
+
+Note: `app` (headless runtime) and `bff` (stateless gateway) are separate processes from the same image, each in their own container. `bff` has no imports of `app`; they coordinate only via shared MongoDB + Redis.
 
 ## Prerequisites
 
@@ -44,14 +47,16 @@ web → app
 cp ../pocketquant-config/local/all-local.env .env
 just install
 just up
-just be
+just be      # app (headless runtime) on :41920
+just bff     # bff (API gateway) on :41921
 ```
 
 Backend URLs:
 
-- API docs: `http://localhost:41920/api/v1/docs`
-- OpenAPI JSON: `http://localhost:41920/api/v1/openapi.json`
-- Health check: `http://localhost:41920/health`
+- API docs: `http://localhost:41921/api/v1/docs`
+- OpenAPI JSON: `http://localhost:41921/api/v1/openapi.json`
+- Health check (app): `http://localhost:41920/health` (container-internal only)
+- Health check (bff): `http://localhost:41921/health`
 
 If services fail to start, verify that `.env` is internally consistent:
 
@@ -72,22 +77,26 @@ Frontend URL:
 
 - Vite dev UI: `http://localhost:5173` by default
 
-Vite proxies `/api/*` to `http://localhost:41920`, so the browser app talks to the local FastAPI server automatically. If port `5173` is already in use, Vite will choose the next free port.
+Vite proxies `/api/*` to `http://localhost:41921` (bff), so the browser app talks to the API gateway automatically. If port `5173` is already in use, Vite will choose the next free port.
 
-## Serve The Built UI Through FastAPI
+## Serve The Built UI Through Docker
 
-Build the frontend once:
+Build the frontend:
 
 ```bash
 cd packages/pocketquant-web
 npm run build
 ```
 
-Then start the API and open:
+Run the full Docker stack:
 
-- `http://localhost:41920/`
+```bash
+just up  # starts pocketquant-web (nginx on :80) + bff (:41921) + app (:41920) + mongo + redis
+```
 
-FastAPI serves `packages/pocketquant-web/dist` when it exists. Refreshing a client-side route should still return `index.html` (SPA fallback).
+Open: `http://localhost/`
+
+The web container's nginx serves `packages/pocketquant-web/dist` and proxies `/api/*` to bff. Refreshing a client-side route returns `index.html` (SPA fallback).
 
 ## Market Data
 
@@ -98,13 +107,13 @@ FastAPI serves `packages/pocketquant-web/dist` when it exists. Refreshing a clie
 The UI only becomes useful after at least one symbol/interval has been synced.
 
 ```bash
-curl -X POST http://localhost:41920/api/v1/market-data/sync \
+curl -X POST http://localhost:41921/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSDT","exchange":"BINANCE","interval":"1d","n_bars":200}'
 
-curl "http://localhost:41920/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE?interval=1d"
+curl "http://localhost:41921/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE?interval=1d"
 
-curl "http://localhost:41920/api/v1/market-data/ohlcv/BTCUSDT%3ABINANCE/1d?limit=20"
+curl "http://localhost:41921/api/v1/market-data/ohlcv/BTCUSDT%3ABINANCE/1d?limit=20"
 ```
 
 What to expect:

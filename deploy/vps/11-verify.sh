@@ -63,7 +63,7 @@ EOF
 
 # ─── 1. Container running checks ───────────────────────────
 
-CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-portainer"
+CONTAINERS="pocketquant-app pocketquant-bff pocketquant-mongodb pocketquant-redis pocketquant-portainer"
 for c in $CONTAINERS; do
   running=$(container_running "$c")
   if [ "$running" = "true" ]; then
@@ -75,7 +75,7 @@ done
 
 # ─── 2. Docker health status ───────────────────────────────
 
-HEALTH_CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis"
+HEALTH_CONTAINERS="pocketquant-app pocketquant-bff pocketquant-mongodb pocketquant-redis"
 for c in $HEALTH_CONTAINERS; do
   health=$(container_health "$c")
   if [ "$health" = "healthy" ]; then
@@ -87,20 +87,34 @@ for c in $HEALTH_CONTAINERS; do
   fi
 done
 
-# ─── 3. App HTTP healthcheck ───────────────────────────────
+# ─── 3. App HTTP healthcheck (headless liveness, container-internal) ───────
 
-health_response=$(docker exec pocketquant-app curl -sf http://localhost:41920/health 2>/dev/null || echo "")
-if [ -n "$health_response" ]; then
-  app_status=$(echo "$health_response" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+app_health=$(docker exec pocketquant-app curl -sf http://localhost:41920/health 2>/dev/null || echo "")
+if [ -n "$app_health" ]; then
+  app_status=$(echo "$app_health" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
   if [ "$app_status" = "healthy" ]; then
-    db_latency=$(echo "$health_response" | grep -o '"database":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
-    redis_latency=$(echo "$health_response" | grep -o '"redis":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
-    check "API /health" "$PASS" "db=${db_latency:-?}ms redis=${redis_latency:-?}ms"
+    check "App /health" "$PASS" "headless runtime healthy"
   else
-    check "API /health" "$FAIL" "status=$app_status"
+    check "App /health" "$FAIL" "status=$app_status"
   fi
 else
-  check "API /health" "$FAIL" "no response from app"
+  check "App /health" "$FAIL" "no response from app"
+fi
+
+# ─── 3a. bff HTTP healthcheck (FE gateway, db+redis readiness) ─────────────
+
+bff_health=$(docker exec pocketquant-bff curl -sf http://localhost:41921/health 2>/dev/null || echo "")
+if [ -n "$bff_health" ]; then
+  bff_status=$(echo "$bff_health" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+  if [ "$bff_status" = "healthy" ]; then
+    db_latency=$(echo "$bff_health" | grep -o '"database":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
+    redis_latency=$(echo "$bff_health" | grep -o '"redis":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
+    check "BFF /health" "$PASS" "db=${db_latency:-?}ms redis=${redis_latency:-?}ms"
+  else
+    check "BFF /health" "$FAIL" "status=$bff_status"
+  fi
+else
+  check "BFF /health" "$FAIL" "no response from bff"
 fi
 
 # ─── 3b. Web container: SPA routes ─────────────────────────
@@ -159,14 +173,16 @@ else
 fi
 
 # ─── 8. Port listening ─────────────────────────────────────
+# app + bff are container-internal (no host-published port after the SP3 split);
+# the only public listener is web (nginx). Verify that.
 
 if command -v ss &>/dev/null; then
   source .env 2>/dev/null || true
-  app_port="${APP_PORT:-41920}"
-  if ss -tlnp | grep -q ":${app_port} "; then
-    check "Port $app_port" "$PASS" "listening"
+  web_port="${WEB_PORT:-80}"
+  if ss -tlnp | grep -q ":${web_port} "; then
+    check "Port $web_port" "$PASS" "listening"
   else
-    check "Port $app_port" "$FAIL" "not listening"
+    check "Port $web_port" "$FAIL" "not listening"
   fi
 else
   check "Port check" "$WARN" "ss not available"

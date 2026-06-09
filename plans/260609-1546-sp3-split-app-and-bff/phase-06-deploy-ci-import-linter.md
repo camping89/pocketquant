@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Deploy CI import-linter"
-status: pending
+status: completed
 priority: P1
 effort: "6h"
 dependencies: [4]
@@ -10,6 +10,18 @@ dependencies: [4]
 # Phase 6: Deploy CI import-linter
 
 ## Overview
+
+> **Đã làm (2026-06-09):**
+> - **import-linter**: layers contract đổi top tier `pocketquant.app | pocketquant.bff`; thêm `pocketquant.bff` vào forbidden của core/infra/execution/backtest/trading; 2 forbidden one-directional `bff↛app` + `app↛bff`. `lint-imports` **9 contract kept, 0 broken** (`pyproject.toml`).
+> - **1 image 2 CMD** (D-Recommended): `deploy/Dockerfile` thêm copy infra/execution/bff pyproject vào cache layer; wheel chứa cả 2 module. Verified: build OK, `pocketquant.app.main:app` + `pocketquant.bff.main:app` cùng construct FastAPI trong 1 image.
+> - **compose.prod.yml**: `app` headless (bỏ `ports` public, internal-only, `command:` app.main), `bff` mới (internal `41921`, `command:` bff.main, `depends_on: app service_healthy`), `web` nginx `depends_on bff`. compose `config` VALID.
+> - **nginx.conf**: `/api/` proxy `app:41920` → `bff:41921` (app headless không có `/api`).
+> - **deploy/vps/10-deploy.sh**: `wait_health` helper, probe cả app(60s)+bff(30s).
+> - **deploy/vps/11-verify.sh**: thêm `pocketquant-bff` vào container/health list, tách App/BFF `/health` exec check, port-listening check `APP_PORT`→`WEB_PORT` (app/bff internal-only).
+> - **cicd.yml**: thêm `lint-imports` step + đổi test `tests/app_test/` → full `tests/` suite.
+> - **justfile**: thêm recipe `bff` (41921) + `lint-imports`; cập nhật comment `be` (headless).
+>
+> **Khác plan (verify):** app + bff đều **internal-only** (web nginx reach `bff:41921` qua docker network) ⇒ **KHÔNG cần `APP_PORT`/`BFF_PORT` env mới**, `pocketquant-config` (repo riêng) **không phải sửa**. Đơn giản hơn risk plan dự kiến. Web nginx GIỮ làm public entrypoint (serve static + proxy /api→bff); bff StaticFiles mount no-op trong prod (image không có web dist) — chấp nhận, YAGNI.
 
 Đóng gói + chạy 2 process: import-linter contract cho `pocketquant.bff` (top layer độc lập), 2 Docker image (hoặc 1 image 2 CMD), compose 2 service, CI build cả 2, deploy script. App không expose port public; bff expose. Cập nhật `pocketquant-config` nếu cần env/port mới.
 
