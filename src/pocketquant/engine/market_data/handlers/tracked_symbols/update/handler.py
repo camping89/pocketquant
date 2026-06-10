@@ -3,7 +3,7 @@
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 from pocketquant.engine.market_data.handlers.tracked_symbols.update.command import (

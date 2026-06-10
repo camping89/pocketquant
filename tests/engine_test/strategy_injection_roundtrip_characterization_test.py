@@ -22,8 +22,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.concepts.strategy.interfaces import IStrategy
-from pocketquant.core.concepts.strategy.value_objects import Signal, StrategyConfig
+from pocketquant.core.domain.strategy.interfaces import IStrategy
+from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 
 

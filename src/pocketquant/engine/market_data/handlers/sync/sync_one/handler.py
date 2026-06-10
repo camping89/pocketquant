@@ -11,10 +11,10 @@ from pocketquant.core.domain.sync_status.services import (
     SyncProgressDecision,
     SyncProgressTracker,
 )
-from pocketquant.core.persistence import Cache
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
-from pocketquant.core.persistence.repositories.sync_status_repository import (
+from pocketquant.core.infra.persistence import Cache
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.core.infra.persistence.repositories.sync_status_repository import (
     SyncStatusRepository,
 )
 from pocketquant.engine.market_data.handlers.sync.dto import SyncResponse

@@ -10,7 +10,7 @@ import asyncio
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 

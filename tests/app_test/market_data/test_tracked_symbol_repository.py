@@ -1,8 +1,9 @@
 """Unit tests for TrackedSymbolRepository — persistence layer."""
 
 import pytest
+
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 
@@ -84,7 +85,7 @@ class TestTrackedSymbolRepository:
 @pytest.fixture
 async def repo(settings) -> TrackedSymbolRepository:
     """TrackedSymbolRepository connected to test MongoDB."""
-    from pocketquant.core.persistence.mongodb import Database
+    from pocketquant.core.infra.persistence.mongodb import Database
 
     db = Database()
     await db.connect(settings)

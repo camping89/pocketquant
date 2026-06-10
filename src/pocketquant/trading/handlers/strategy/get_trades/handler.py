@@ -1,7 +1,7 @@
 """GetStrategyTradesHandler — list closed positions mapped to StrategyTrade shape."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.position_repository import (
+from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
 from pocketquant.trading.handlers.strategy.get_trades.query import (

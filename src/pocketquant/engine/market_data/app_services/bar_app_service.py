@@ -12,8 +12,8 @@ from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.services.bar_builder import BarBuilder, get_bar_start
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
-from pocketquant.core.persistence.redis import Cache
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.redis import Cache
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.quote_dto import QuoteTick
 
 logger = get_logger(__name__)

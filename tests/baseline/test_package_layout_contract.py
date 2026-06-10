@@ -30,9 +30,7 @@ def test_all_subpackages_importable_from_single_src_tree() -> None:
         assert spec is not None, f"pocketquant.{sub} not importable"
         # Regular packages expose origin (__init__.py); namespace packages (PEP 420)
         # expose only submodule_search_locations.
-        locations = (
-            [spec.origin] if spec.origin else list(spec.submodule_search_locations or [])
-        )
+        locations = [spec.origin] if spec.origin else list(spec.submodule_search_locations or [])
         assert locations and all(str(src_root) in loc for loc in locations), (
             f"pocketquant.{sub} resolves to {locations}, expected under {src_root}"
         )
@@ -54,8 +52,6 @@ def test_no_python_packages_dir_remnants() -> None:
     if not packages_dir.exists():
         return
     leftovers = [
-        d.name
-        for d in packages_dir.iterdir()
-        if d.is_dir() and d.name != "pocketquant-web"
+        d.name for d in packages_dir.iterdir() if d.is_dir() and d.name != "pocketquant-web"
     ]
     assert leftovers == [], f"Python packages must be merged into src/: {leftovers}"

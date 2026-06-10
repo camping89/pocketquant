@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from dishka import Provider, Scope, make_async_container, provide
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+
 from pocketquant.bff.di.container import register_bff_handlers
 from pocketquant.bff.di.handlers import BffHandlerProvider
 from pocketquant.bff.di.market_data import BffMarketDataProvider
@@ -26,8 +27,8 @@ from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.redis import Cache
 
 
 class TestBffCoreProvider(Provider):

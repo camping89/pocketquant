@@ -19,9 +19,9 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.redis import Cache
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.redis import Cache
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     cascade_for_symbol,

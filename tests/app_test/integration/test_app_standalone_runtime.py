@@ -32,14 +32,14 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.core.scheduling.scheduler import JobScheduler
+from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
@@ -109,8 +109,8 @@ async def test_app_reconcile_runs_desired_running_without_bff(
     engine = await app_container.get(StrategyAppService)
     await engine.start()
     # Boot rehydrate: one stopped instance per subscription (mirrors lifespan).
-    from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
-    from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
+    from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+    from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 
     await engine.load_strategy(
         StrategyConfig(

@@ -20,16 +20,16 @@ import pytest
 
 from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
-from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.order_repository import OrderRepository
-from pocketquant.core.persistence.repositories.position_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.engine.app_services.order_app_service import OrderAppService

@@ -1,7 +1,7 @@
 """List strategy templates from STRATEGY_REGISTRY."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.trading.handlers.strategy.get_all.query import GetStrategiesQuery
 
 

@@ -26,11 +26,11 @@ class _FakeContainer:
 
 def _wire_container(monkeypatch: pytest.MonkeyPatch, *, mediator) -> None:
     from pocketquant.core.common.mediator import Mediator
-    from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-    from pocketquant.core.persistence.repositories.job_history_repository import (
+    from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+    from pocketquant.core.infra.persistence.repositories.job_history_repository import (
         JobHistoryRepository,
     )
-    from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )
 

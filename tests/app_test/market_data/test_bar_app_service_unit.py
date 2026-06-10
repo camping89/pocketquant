@@ -8,8 +8,8 @@ import pytest
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.redis import Cache
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.redis import Cache
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.bar_app_service import (
     BarAppService,
 )

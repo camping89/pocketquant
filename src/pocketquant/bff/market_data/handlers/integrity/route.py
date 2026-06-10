@@ -8,7 +8,7 @@ from pocketquant.bff.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
@@ -45,6 +45,10 @@ async def integrity_repair(
     # source is keyword-only; days_back must be passed by name too (it follows the
     # `*` marker). Repaired bars are tagged with the REST-repair provenance.
     return await repair_integrity(
-        symbol, body.interval, bar_repo, mediator,
-        source=SOURCE_REST_REPAIR, days_back=body.days_back,
+        symbol,
+        body.interval,
+        bar_repo,
+        mediator,
+        source=SOURCE_REST_REPAIR,
+        days_back=body.days_back,
     )

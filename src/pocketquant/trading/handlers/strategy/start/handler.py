@@ -2,7 +2,7 @@
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.trading.handlers.strategy.start.command import StartStrategyCommand
@@ -22,9 +22,7 @@ class StartStrategyHandler(Handler[StartStrategyCommand, bool]):
         self._sub_repo = subscription_repository
 
     async def handle(self, request: StartStrategyCommand) -> bool:
-        modified = await self._sub_repo.update_desired_state(
-            request.subscription_id, "running"
-        )
+        modified = await self._sub_repo.update_desired_state(request.subscription_id, "running")
         if modified == 0:
             raise NotFoundError(f"Subscription '{request.subscription_id}' not found.")
         return True

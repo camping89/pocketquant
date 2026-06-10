@@ -11,17 +11,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+
 from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.backtest_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.trading.handlers.strategy.delete.command import DeleteStrategyCommand

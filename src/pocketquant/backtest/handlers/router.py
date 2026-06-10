@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from pocketquant.backtest.handlers import get_optimization, get_result, list_results, optimize, run
-from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 

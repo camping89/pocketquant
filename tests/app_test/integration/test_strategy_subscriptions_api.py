@@ -23,10 +23,10 @@ async def load_strategy(bff_client):
     bff is stateless — no in-RAM StrategyAppService. The DELETE + cascade
     handlers are pure Mongo, so only DB isolation is needed here.
     """
-    from pocketquant.core.persistence.repositories.backtest_repository import (
+    from pocketquant.core.infra.persistence.repositories.backtest_repository import (
         BacktestRepository,
     )
-    from pocketquant.core.persistence.repositories.subscription_repository import (
+    from pocketquant.core.infra.persistence.repositories.subscription_repository import (
         SubscriptionRepository,
     )
 

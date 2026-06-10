@@ -23,16 +23,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
+
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import Settings, get_settings
 from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.market_data.binance.binance_mappers import (
+from pocketquant.core.infra.binance.binance_mappers import (
     INTERVAL_TO_BINANCE,
     kline_to_bar,
 )
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger("scripts.backfill_1m_from_binance")
 

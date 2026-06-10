@@ -12,7 +12,7 @@ from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.mongodb import Database
 
 
 @pytest.fixture(scope="session")

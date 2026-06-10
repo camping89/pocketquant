@@ -1,7 +1,7 @@
 """Handler for listing all tracked symbols."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 from pocketquant.engine.market_data.handlers.tracked_symbols.list_all.query import (

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from pocketquant.backtest.handlers.run.command import RunBacktestCommand
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
 

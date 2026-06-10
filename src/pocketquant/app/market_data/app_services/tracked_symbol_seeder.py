@@ -13,8 +13,8 @@ from dishka import AsyncContainer
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 

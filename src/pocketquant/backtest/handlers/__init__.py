@@ -32,7 +32,7 @@ from pocketquant.backtest.optimization.grid_optimization_app_service import (
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
 from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, OptimizationResult
-from pocketquant.core.persistence.repositories.backtest_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
 
