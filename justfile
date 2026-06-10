@@ -30,6 +30,10 @@ reset:
 test:
     {{python}} -m pytest
 
+# Regenerate baseline regression snapshots (OpenAPI, route inventory, mediator registry)
+baseline:
+    BASELINE_UPDATE=1 {{python}} -m pytest tests/baseline/ -q
+
 # Run tests for a specific package (core, backtest, trading, app)
 test-pkg pkg:
     {{python}} -m pytest tests/{{pkg}}_test/
