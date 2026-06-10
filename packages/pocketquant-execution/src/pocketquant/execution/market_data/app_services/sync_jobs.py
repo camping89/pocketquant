@@ -29,20 +29,20 @@ from pocketquant.core.domain.bar.entities import (
 )
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.job_history_repository import (
+    JobHistoryRepository,
+)
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
+from pocketquant.core.scheduling.scheduler import JobScheduler
 from pocketquant.execution.market_data.app_services.cascade_aggregator import cascade_for_symbol
 from pocketquant.execution.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
 )
 from pocketquant.execution.market_data.handlers.sync import SyncSymbolCommand
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
-    JobHistoryRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
-    TrackedSymbolRepository,
-)
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 
 if TYPE_CHECKING:
     from dishka import AsyncContainer

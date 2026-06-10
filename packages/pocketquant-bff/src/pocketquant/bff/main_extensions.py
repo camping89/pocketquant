@@ -15,9 +15,9 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
-from pocketquant.infrastructure.persistence.health_checks import check_database, check_redis
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
+from pocketquant.core.persistence.health_checks import check_database, check_redis
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
 

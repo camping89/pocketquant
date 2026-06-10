@@ -6,7 +6,7 @@ import structlog
 from pocketquant.core.common.messaging import EventBus, event_handler, get_event_registry
 from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
 from pocketquant.core.domain.position import PositionAggregate, PositionOpenedEvent, PositionSide
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
+from pocketquant.core.persistence.repositories.position_repository import (
     PositionRepository,
 )
 

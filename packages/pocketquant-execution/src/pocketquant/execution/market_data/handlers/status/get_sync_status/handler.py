@@ -18,13 +18,13 @@ from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.sync_status_repository import (
+    SyncStatusRepository,
+)
 from pocketquant.execution.market_data.handlers.status.dto import SyncStatusResult
 from pocketquant.execution.market_data.handlers.status.get_sync_status.query import (
     GetSyncStatusQuery,
-)
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.sync_status_repository import (
-    SyncStatusRepository,
 )
 
 logger = get_logger(__name__)

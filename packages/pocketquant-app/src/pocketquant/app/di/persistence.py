@@ -9,39 +9,39 @@ from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 from pocketquant.core.config import Settings
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.redis import Cache
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+from pocketquant.core.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
+from pocketquant.core.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
+from pocketquant.core.persistence.repositories.optimization_repository import (
     OptimizationRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.position_repository import (
     PositionRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
+from pocketquant.core.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
-from pocketquant.infrastructure.persistence.repositories.sync_status_repository import (
+from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.core.persistence.repositories.sync_status_repository import (
     SyncStatusRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 

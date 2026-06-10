@@ -1,9 +1,11 @@
 {
   "include": [
     "packages/pocketquant-core/src",
+    "packages/pocketquant-execution/src",
     "packages/pocketquant-backtest/src",
     "packages/pocketquant-trading/src",
     "packages/pocketquant-app/src",
+    "packages/pocketquant-bff/src",
     "tests/core_test",
     "tests/backtest_test",
     "tests/trading_test",

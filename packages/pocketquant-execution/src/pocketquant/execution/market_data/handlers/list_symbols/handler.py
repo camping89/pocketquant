@@ -1,8 +1,8 @@
 """Handler for list symbols query."""
 
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
 from pocketquant.execution.market_data.handlers.list_symbols.query import ListSymbolsQuery
-from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
 
 
 @handles(ListSymbolsQuery)

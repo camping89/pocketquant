@@ -46,21 +46,20 @@ Canonical documentation for the current code layout and workflow. Docs are **AS-
 
 ```text
 packages/
-├── pocketquant-core/           # 0 deps — domain, concepts, common, config, ports + DTOs, persisted entities
-├── pocketquant-infrastructure/ # → core — Database, Cache, repositories, PaperBroker, binance, scheduler, http
-├── pocketquant-execution/      # → core + infra — shared strategy/order/position/risk engine
-├── pocketquant-backtest/       # → core + infra + execution — backtest engine, optimization, run orchestration
-├── pocketquant-trading/        # → core + infra + execution — live trading, OKX broker, strategy/subscription
-├── pocketquant-app/            # → all above — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
-├── pocketquant-bff/            # → core, infra, backtest, trading — stateless gateway: read/write routes, backtest enqueue
+├── pocketquant-core/           # 0 deps — domain, concepts, common, config, ports/DTOs, adapters, persisted entities
+├── pocketquant-execution/      # → core — shared strategy/order/position/risk engine
+├── pocketquant-backtest/       # → core + execution — backtest engine, optimization, run orchestration
+├── pocketquant-trading/        # → core + execution — live trading, OKX broker, strategy/subscription
+├── pocketquant-app/            # → core, execution, backtest, trading — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
+├── pocketquant-bff/            # → core, execution, backtest, trading — stateless gateway: read/write routes, backtest enqueue
 └── pocketquant-web/            # React 19 + Vite SPA (separate npm app, excluded from uv workspace)
 ```
 
-Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings.
+Dependency direction: `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings.
 
 Notes:
 
-- The 6 Python packages share the `pocketquant.*` namespace and form the `uv` workspace.
+- The 5 Python packages share the `pocketquant.*` namespace and form the `uv` workspace.
 - `pocketquant-web` is a separate npm/Vite app, **excluded** from the uv workspace.
 - Two processes run from one image (1-image-2-CMD): app (headless, port 41920 internal, `/health` only) and bff (stateless gateway, port 41921 internal, serves all `/api/*` routes).
 

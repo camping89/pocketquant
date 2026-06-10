@@ -39,15 +39,15 @@ from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.market_data.binance.binance_client import BinanceClient
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
 from pocketquant.execution.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     cascade_for_symbol,
-)
-from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
-    TrackedSymbolRepository,
 )
 
 logger = get_logger("scripts.resync_2y_from_binance")

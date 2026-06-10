@@ -2,7 +2,7 @@
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
+from pocketquant.core.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.trading.handlers.strategy.start.command import StartStrategyCommand

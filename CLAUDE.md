@@ -1,28 +1,27 @@
 # CLAUDE.md — PocketQuant
 
-6-package monorepo: 5 Python (`uv` workspace, `pocketquant.*` namespace) + 1 Node SPA (`pocketquant-web`, excluded from the workspace). Pattern: DDD + CQRS + Clean Architecture + Dishka DI.
+5-package monorepo: 4 Python (`uv` workspace, `pocketquant.*` namespace) + 1 Node SPA (`pocketquant-web`, excluded from the workspace). Pattern: DDD + CQRS + Clean Architecture + Dishka DI.
 
 ## Layout
 
 ```
 packages/
-├── pocketquant-core/            # 0 deps — domain, concepts, config, ports + DTOs, all persisted entities
-├── pocketquant-infrastructure/  # → core — Database, Cache, all repositories, PaperBroker, binance, scheduler
-├── pocketquant-execution/       # → core, infra — shared strategy/order/position/risk engine
-├── pocketquant-backtest/        # → core, infra, execution — backtest engine, optimization
-├── pocketquant-trading/         # → core, infra, execution — live trading, OKX broker, handlers
+├── pocketquant-core/            # 0 internal deps — domain, concepts, config, ports + DTOs, all persisted entities, AND concrete adapters: Database, Cache, all repositories, PaperBroker, binance, scheduler, HTTP client
+├── pocketquant-execution/       # → core — shared strategy/order/position/risk engine
+├── pocketquant-backtest/        # → core, execution — backtest engine, optimization
+├── pocketquant-trading/         # → core, execution — live trading, OKX broker, handlers
 ├── pocketquant-app/             # → all — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile loop, backtest worker
-├── pocketquant-bff/             # → core, infra, backtest, trading — stateless gateway: read/write API routes, backtest enqueue
+├── pocketquant-bff/             # → core, backtest, trading — stateless gateway: read/write API routes, backtest enqueue
 └── pocketquant-web/             # Node/Vite SPA — consumes bff over HTTP
 ```
 
-Dependency graph: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. `app` and `bff` are independent siblings with no cross-imports (verified by import-linter). `backtest` and `trading` are independent siblings — neither imports the other.
+Dependency graph: `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. `app` and `bff` are independent siblings with no cross-imports (verified by import-linter). `backtest` and `trading` are independent siblings — neither imports the other.
 
 ## Rules that change decisions
 
-- **Ports + DTOs live in core**, concrete adapters in infrastructure (DIP). `IBroker`/`IBrokerFactory`/`IDataProvider`/`IRealtimeQuoteProvider` + `OrderResult`/`AccountBalance`/`OrderEvent` → `core.domain.{brokers,market_data}`.
-- **All repositories in infrastructure** — zero repos in backtest/trading.
-- **PaperBroker in infrastructure** (`infrastructure.brokers.paper`) — shared by backtest + paper trading.
+- **Ports + DTOs and concrete adapters both live in core.** Ports `IBroker`/`IBrokerFactory`/`IDataProvider`/`IRealtimeQuoteProvider` + DTOs `OrderResult`/`AccountBalance`/`OrderEvent` → `core.domain.{brokers,market_data}`; concrete adapters → `core.{persistence,brokers,market_data,scheduling,http_client}`. Domain (`core.domain`) stays I/O-free (enforced by `test_domain_purity`).
+- **All repositories in core** (`core.persistence.repositories`) — zero repos in backtest/trading.
+- **PaperBroker in core** (`core.brokers.paper`) — shared by backtest + paper trading.
 - **Shared engine in execution** — `StrategyAppService`/`OrderAppService`/`PositionAppService`/`RiskCheckHandler`; both backtest and trading consume it (breaks the old backtest↔trading cycle).
 - **Strategy injection** via the public `StrategyAppService.inject_prepared_strategy()` — never touch private members.
 - **Namespace packages (PEP 420)** — no `__init__.py` at the `pocketquant/` namespace level.

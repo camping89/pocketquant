@@ -10,10 +10,10 @@ from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.market_data.binance.binance_client import BinanceClient
+from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.execution.market_data.app_services.bar_app_service import BarAppService
-from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
-from pocketquant.infrastructure.persistence.redis import Cache
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 
 class BffMarketDataProvider(Provider):

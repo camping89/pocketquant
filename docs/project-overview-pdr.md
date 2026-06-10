@@ -304,46 +304,49 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### Module Breakdown (6-package layered monorepo)
 
-Dependency direction: `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app`, `web → app` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
+Dependency direction: `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
 
 ```
-packages/pocketquant-core/           # 0 deps — pure domain
+packages/pocketquant-core/           # 0 deps — domain + adapters
 ├── domain/        TOP-LEVEL entities (bar, order, position, symbol, sync_status,
 │                  backtest, subscription) + ports/DTOs (brokers, market_data)
 ├── concepts/      non-persisted logic (quote, risk, strategy: IStrategy + hitnrun2)
 ├── common/        Mediator, EventBus, middleware, UUID7, health, structlog
 ├── config/        Settings
-└── persistence/   abstract base classes only (concrete impls live in infrastructure)
-
-packages/pocketquant-infrastructure/ # → core
-├── persistence/   Database (MongoDB), Cache (Redis), 9 repositories
-│                  (bar, order, position, backtest, optimization, symbol,
-│                   sync_status, subscription, tracked_symbol, job_history)
+├── persistence/   Database (MongoDB), Cache (Redis), all 12 repositories
+│                  (bar, order, position, backtest, backtest_order, backtest_trade,
+│                   optimization, symbol, sync_status, subscription, tracked_symbol,
+│                   job_history)
 ├── brokers/paper/ PaperBroker (shared by backtest + paper trading)
 ├── market_data/binance/  BinanceClient (REST) + BinanceWebSocketClient (@aggTrade)
 ├── scheduling/    JobScheduler (APScheduler)
-└── http/          HTTP client
+└── http_client/   ResilientHttpClient (retry/backoff)
 
-packages/pocketquant-execution/      # → core + infra — shared strategy engine
+packages/pocketquant-execution/      # → core — shared strategy engine
 └── app_services/  StrategyAppService, OrderAppService, PositionAppService
                    + RiskCheckHandler (consumed by both backtest and trading)
 
-packages/pocketquant-backtest/       # → core + infra + execution
+packages/pocketquant-backtest/       # → core + execution
 ├── engine/        BacktestAppService, ResultCollector
 ├── optimization/  GridOptimizationAppService, config models
 ├── jobs/ + handlers/  backtest-run orchestration (run_all_backtests)
 └── domain/services/   PerformanceCalculator (NumPy metrics)
 
-packages/pocketquant-trading/        # → core + infra + execution
+packages/pocketquant-trading/        # → core + execution
 ├── brokers/okx/   OKXBroker + WebSocket support (auth, mappers, reconnection)
 ├── domain/        Subscription aggregate (deterministic ID)
 └── handlers/      strategy ops (add_symbol/start/stop/delete/list/get) +
                    trading ops (list_orders/get_order/list_positions/get_position)
 
-packages/pocketquant-app/            # → all above — composition root
+packages/pocketquant-app/            # → core, execution, backtest, trading — headless runtime
 ├── market_data/   sync/quotes/ohlcv/tracked_symbols/status handlers + app-services
 ├── di/            Dishka container + 6 Provider classes + register_handlers()
 └── main.py        FastAPI app + lifespan (WS feed start/stop, boot migrations)
+
+packages/pocketquant-bff/            # → core, execution, backtest, trading — stateless gateway
+├── api/v1/       Read-only query routes + write routes (delegation only)
+├── di/            Dishka container (same 6 Providers as app)
+└── main.py        FastAPI gateway app
 
 packages/pocketquant-web/            # React 19 + Vite SPA (separate npm app)
 ├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector

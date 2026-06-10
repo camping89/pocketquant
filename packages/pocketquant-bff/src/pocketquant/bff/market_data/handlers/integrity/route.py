@@ -6,11 +6,11 @@ from pocketquant.bff.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.execution.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
 )
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 from pydantic import BaseModel, Field
 
 

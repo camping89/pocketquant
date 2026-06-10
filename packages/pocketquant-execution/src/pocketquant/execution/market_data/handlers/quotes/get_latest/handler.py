@@ -2,10 +2,10 @@
 
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.mediator import Handler, handles
+from pocketquant.core.persistence import Cache
 from pocketquant.execution.market_data.app_services.quote_dto import Quote
 from pocketquant.execution.market_data.handlers.quotes.dto import QuoteResult
 from pocketquant.execution.market_data.handlers.quotes.get_latest.query import GetLatestQuoteQuery
-from pocketquant.infrastructure.persistence import Cache
 
 
 @handles(GetLatestQuoteQuery)

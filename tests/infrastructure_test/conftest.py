@@ -12,8 +12,8 @@ from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from pocketquant.core.config import Settings
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.redis import Cache
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.redis import Cache
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 

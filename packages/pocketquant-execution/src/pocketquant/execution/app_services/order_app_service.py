@@ -7,7 +7,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.interfaces import IBroker
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderFilledEvent, OrderStatus
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
 
 logger = structlog.get_logger(__name__)
 

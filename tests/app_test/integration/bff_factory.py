@@ -26,8 +26,8 @@ from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.redis import Cache
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.redis import Cache
 
 
 class TestBffCoreProvider(Provider):

@@ -13,10 +13,10 @@ Features (routes, commands, queries, handlers)
 Application (orchestrators: StrategyAppService, BacktestAppService, etc.)
   ↓ imports
 Domain (aggregates, value objects, events)
-  ↑ imports ← Infrastructure (brokers, providers, persistence)
+  ↑ imports ← Adapters (brokers, providers, persistence in core.*)
 
 CRITICAL: No reverse dependencies.
-- Domain NEVER imports from Application, Features, or Infrastructure
+- Domain NEVER imports from Application, Features, or Adapters
 - Enforced via test_domain_purity.py (AST check)
 ```
 
@@ -25,9 +25,9 @@ CRITICAL: No reverse dependencies.
 | Layer | Responsibility | I/O |
 |-------|---|---|
 | **Domain** | Business rules, validation, events | NONE (zero I/O) |
-| **Application** | Orchestrators, state machines, coordination | Calls infrastructure |
+| **Application** | Orchestrators, state machines, coordination | Calls adapters |
 | **Features** | HTTP routes, request parsing, response formatting | Calls application handlers |
-| **Infrastructure** | DB, brokers, providers, scheduling, HTTP | All external I/O |
+| **Adapters** | DB, brokers, providers, scheduling, HTTP | All external I/O |
 | **Common** | Mediator, EventBus, middleware, utilities | Cross-cutting concerns |
 
 ## Architecture Patterns
@@ -103,11 +103,11 @@ domain/backtest/
 **Key Rules:**
 1. Each operation is a folder (command/query.py + handler.py + optional route.py)
 2. Operations are self-contained use cases (no shared state between operations)
-3. Handler 5-step pattern: Fetch Infrastructure → Validate Domain → Persist Infrastructure → Invalidate Cache → Publish Events
+3. Handler 5-step pattern: Fetch Adapters → Validate Domain → Persist Adapters → Invalidate Cache → Publish Events
 4. Routes are thin (parse, delegate, respond)
 5. NO business logic in features/ (all in Application or Domain)
 6. Operation folders may be nested (sync/sync_one/, sync/sync_bulk/)
-7. No cross-feature dependencies (loose coupling via infrastructure singletons)
+7. No cross-feature dependencies (loose coupling via adapter singletons)
 
 **Rationale:**
 - Tight cohesion within feature (all operation code together)
@@ -117,7 +117,7 @@ domain/backtest/
 
 ### 2. Application Layer (Orchestrators & State Machines)
 
-Business logic that coordinates Domain + Infrastructure. Unlike Domain (pure logic), Application can call Infrastructure for I/O.
+Business logic that coordinates Domain + Adapters. Unlike Domain (pure logic), Application can call Adapters for I/O.
 
 **Examples:**
 - **StrategyAppService:** Listen to market events (bars, ticks), call strategy.on_bar(), check risk, submit orders via broker
@@ -129,7 +129,7 @@ Business logic that coordinates Domain + Infrastructure. Unlike Domain (pure log
 **No CQRS in this layer.** These are business orchestrators called by CQRS handlers.
 
 ```python
-# Application-layer service (orchestrates domain + infrastructure)
+# Application-layer service (orchestrates domain + adapters)
 class StrategyAppService:
     def __init__(self, broker: IBroker, event_bus: EventBus):
         self.broker = broker
@@ -139,19 +139,19 @@ class StrategyAppService:
         # 1. Domain: Call strategy logic
         signal = await self.strategy.on_bar(bar)
 
-        # 2. Infrastructure: Check risk
+        # 2. Adapter: Check risk
         approved = await risk_check(signal)
 
-        # 3. Infrastructure: Execute via broker
+        # 3. Adapter: Execute via broker
         if approved:
             order = await self.broker.submit_order(approved.order)
 
-        # 4. Infrastructure: Publish event
+        # 4. Adapter: Publish event
         await self.event_bus.publish(SignalGeneratedEvent(...))
 ```
 
 **Rules:**
-- Can import Domain and Infrastructure
+- Can import Domain and Adapters
 - No CQRS decorators (@handles, @event_handler)
 - Stateful (maintains runtime state)
 - Called by CQRS handlers in features/ layer
@@ -192,9 +192,9 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through instance methods in `packages/pocketquant-infrastructure/src/pocketquant/infrastructure/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
+All data access through instance methods in `packages/pocketquant-core/src/pocketquant/core/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
 
-**12 Repositories:** BarRepository, OrderRepository, PositionRepository, SubscriptionRepository, BacktestRepository, BacktestOrderRepository, BacktestTradeRepository, OptimizationRepository, SymbolRepository, TrackedSymbolRepository, SyncStatusRepository, JobHistoryRepository
+**13 Repositories:** BarRepository, OrderRepository, PositionRepository, SubscriptionRepository, BacktestRepository, BacktestRequestRepository, BacktestOrderRepository, BacktestTradeRepository, OptimizationRepository, SymbolRepository, TrackedSymbolRepository, SyncStatusRepository, JobHistoryRepository
 
 **Key Pattern:**
 ```python
@@ -318,7 +318,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
         self.bar_repo = bar_repo
 
     async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
-        # 1. Fetch from infrastructure (symbol is composite {code}:{exchange})
+        # 1. Fetch from adapters (symbol is composite {code}:{exchange})
         bars = await self.provider.fetch_ohlcv(
             cmd.symbol, cmd.interval, cmd.n_bars
         )
@@ -326,7 +326,7 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
         # 2. Validate via domain (Bar.from_mongo)
         validated_bars = [Bar.from_mongo(bar.to_mongo()) for bar in bars]
 
-        # 3. Persist via infrastructure
+        # 3. Persist via adapters
         await self.bar_repo.upsert_many(validated_bars)
 
         # 4. Publish domain events
@@ -365,9 +365,9 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 
 **Handler Responsibilities (5-step pattern):**
 1. Receive Command/Query from Mediator
-2. Fetch data from Infrastructure (Database, Cache, Providers)
+2. Fetch data from Adapters (Database, Cache, Providers)
 3. Execute domain logic via Domain layer (validation, calculations)
-4. Persist results via Infrastructure (Database writes, Cache invalidation)
+4. Persist results via Adapters (Database writes, Cache invalidation)
 5. Publish DomainEvents to EventBus (for subscribers to react)
 6. Return DTO (never return domain entities)
 
@@ -1093,9 +1093,9 @@ All aggregates migrated:
 | Layer | Rules |
 |-------|-------|
 | **Domain** | ❌ No I/O imports (pymongo, redis, aiohttp) ✅ Pydantic BaseModel with to_mongo/from_mongo ✅ Validation in __post_init__ ✅ Pure logic only |
-| **Application** | ❌ No CQRS decorators ✅ Orchestrate domain + infrastructure ✅ Stateful services ✅ Called by feature handlers |
+| **Application** | ❌ No CQRS decorators ✅ Orchestrate domain + adapters ✅ Stateful services ✅ Called by feature handlers |
 | **Features** | ❌ No business logic ✅ Thin routes ✅ @handles decorator ✅ Call Application services |
-| **Infrastructure** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
+| **Adapters** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
 
 ## Datetime Serialization (API Responses)
 

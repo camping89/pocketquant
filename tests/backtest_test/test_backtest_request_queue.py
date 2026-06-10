@@ -18,6 +18,7 @@ import pytest
 import pytest_asyncio
 from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
+from pocketquant.core.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
@@ -27,32 +28,31 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.interfaces import IBroker
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_request_repository import (
+    BacktestRequestRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.core.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 from pocketquant.execution.app_services.order_app_service import OrderAppService
 from pocketquant.execution.app_services.position_app_service import PositionAppService
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
-from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
-    BacktestOrderRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
-    BacktestRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
-    BacktestTradeRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
-    PositionRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
-    SubscriptionRepository,
-)
 
 _STRATEGY = "hitnrun2"  # must be in STRATEGY_REGISTRY
 _SYMBOL = "BTCUSDT:BINANCE"

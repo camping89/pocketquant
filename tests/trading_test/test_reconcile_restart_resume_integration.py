@@ -23,6 +23,14 @@ from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.core.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 from pocketquant.execution.app_services.order_app_service import OrderAppService
 from pocketquant.execution.app_services.position_app_service import PositionAppService
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
@@ -30,14 +38,6 @@ from pocketquant.execution.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
 from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
-    PositionRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
-    SubscriptionRepository,
-)
 
 pytestmark = pytest.mark.integration
 

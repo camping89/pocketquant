@@ -23,8 +23,8 @@ import asyncio
 
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.sync_status_repository import (
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.sync_status_repository import (
     SyncStatusRepository,
 )
 

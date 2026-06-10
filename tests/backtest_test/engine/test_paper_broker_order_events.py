@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from pocketquant.core.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import (
     clear_simulation_time,
@@ -12,7 +13,6 @@ from pocketquant.core.common.time.simulation import (
 )
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
-from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
 
 
 @pytest.fixture(autouse=True)

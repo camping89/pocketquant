@@ -14,7 +14,6 @@ members = [
     "pocketquant-bff",
     "pocketquant-core",
     "pocketquant-execution",
-    "pocketquant-infrastructure",
     "pocketquant-trading",
     "pocketquant-workspace",
 ]
@@ -728,7 +727,6 @@ dependencies = [
     { name = "pocketquant-backtest" },
     { name = "pocketquant-core" },
     { name = "pocketquant-execution" },
-    { name = "pocketquant-infrastructure" },
     { name = "pocketquant-trading" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -740,7 +738,6 @@ requires-dist = [
     { name = "pocketquant-backtest", editable = "packages/pocketquant-backtest" },
     { name = "pocketquant-core", editable = "packages/pocketquant-core" },
     { name = "pocketquant-execution", editable = "packages/pocketquant-execution" },
-    { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
     { name = "pocketquant-trading", editable = "packages/pocketquant-trading" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0" },
 ]
@@ -754,7 +751,6 @@ dependencies = [
     { name = "pandas" },
     { name = "pocketquant-core" },
     { name = "pocketquant-execution" },
-    { name = "pocketquant-infrastructure" },
 ]
 
 [package.metadata]
@@ -763,7 +759,6 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.1.0" },
     { name = "pocketquant-core", editable = "packages/pocketquant-core" },
     { name = "pocketquant-execution", editable = "packages/pocketquant-execution" },
-    { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
 ]
 
 [[package]]
@@ -775,7 +770,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "pocketquant-backtest" },
     { name = "pocketquant-core" },
-    { name = "pocketquant-infrastructure" },
     { name = "pocketquant-trading" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -786,7 +780,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "pocketquant-backtest", editable = "packages/pocketquant-backtest" },
     { name = "pocketquant-core", editable = "packages/pocketquant-core" },
-    { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
     { name = "pocketquant-trading", editable = "packages/pocketquant-trading" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0" },
 ]
@@ -796,52 +789,18 @@ name = "pocketquant-core"
 version = "2.0.0"
 source = { editable = "packages/pocketquant-core" }
 dependencies = [
+    { name = "apscheduler" },
+    { name = "cachetools" },
+    { name = "httpx" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pymongo" },
     { name = "pyyaml" },
+    { name = "redis" },
     { name = "rich" },
     { name = "structlog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26.0" },
-    { name = "pandas", specifier = ">=2.1.0" },
-    { name = "pydantic", specifier = ">=2.5.0" },
-    { name = "pydantic-settings", specifier = ">=2.1.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "rich", specifier = ">=13.0.0" },
-    { name = "structlog", specifier = ">=24.1.0" },
-]
-
-[[package]]
-name = "pocketquant-execution"
-version = "2.0.0"
-source = { editable = "packages/pocketquant-execution" }
-dependencies = [
-    { name = "pocketquant-core" },
-    { name = "pocketquant-infrastructure" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pocketquant-core", editable = "packages/pocketquant-core" },
-    { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
-]
-
-[[package]]
-name = "pocketquant-infrastructure"
-version = "2.0.0"
-source = { editable = "packages/pocketquant-infrastructure" }
-dependencies = [
-    { name = "apscheduler" },
-    { name = "cachetools" },
-    { name = "httpx" },
-    { name = "pocketquant-core" },
-    { name = "pymongo" },
-    { name = "redis" },
     { name = "websockets" },
 ]
 
@@ -850,11 +809,28 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.10.0" },
     { name = "cachetools", specifier = ">=5.0.0" },
     { name = "httpx", specifier = ">=0.26.0" },
-    { name = "pocketquant-core", editable = "packages/pocketquant-core" },
+    { name = "numpy", specifier = ">=1.26.0" },
+    { name = "pandas", specifier = ">=2.1.0" },
+    { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "pydantic-settings", specifier = ">=2.1.0" },
     { name = "pymongo", specifier = ">=4.16.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "redis", specifier = ">=5.0.0" },
+    { name = "rich", specifier = ">=13.0.0" },
+    { name = "structlog", specifier = ">=24.1.0" },
     { name = "websockets", specifier = ">=12.0" },
 ]
+
+[[package]]
+name = "pocketquant-execution"
+version = "2.0.0"
+source = { editable = "packages/pocketquant-execution" }
+dependencies = [
+    { name = "pocketquant-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pocketquant-core", editable = "packages/pocketquant-core" }]
 
 [[package]]
 name = "pocketquant-trading"
@@ -863,7 +839,6 @@ source = { editable = "packages/pocketquant-trading" }
 dependencies = [
     { name = "pocketquant-core" },
     { name = "pocketquant-execution" },
-    { name = "pocketquant-infrastructure" },
     { name = "python-okx" },
     { name = "websockets" },
 ]
@@ -872,7 +847,6 @@ dependencies = [
 requires-dist = [
     { name = "pocketquant-core", editable = "packages/pocketquant-core" },
     { name = "pocketquant-execution", editable = "packages/pocketquant-execution" },
-    { name = "pocketquant-infrastructure", editable = "packages/pocketquant-infrastructure" },
     { name = "python-okx", specifier = ">=0.4.1" },
     { name = "websockets", specifier = ">=12.0" },
 ]

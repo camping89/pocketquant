@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.infrastructure.persistence.repositories.bar_repository import (
+from pocketquant.core.persistence.repositories.bar_repository import (
     _BAR_VALUE_CACHE,
     BarRepository,
     _cache_key,

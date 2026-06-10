@@ -22,45 +22,45 @@ from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
+from pocketquant.core.persistence.health_checks import check_database, check_redis
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_request_repository import (
+    BacktestRequestRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.job_history_repository import (
+    JobHistoryRepository,
+)
+from pocketquant.core.persistence.repositories.optimization_repository import (
+    OptimizationRepository,
+)
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.core.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
+from pocketquant.core.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.core.persistence.repositories.sync_status_repository import (
+    SyncStatusRepository,
+)
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    TrackedSymbolRepository,
+)
+from pocketquant.core.scheduling.scheduler import JobScheduler
 from pocketquant.execution.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
-from pocketquant.infrastructure.persistence.health_checks import check_database, check_redis
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
-    BacktestOrderRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
-    BacktestRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
-    BacktestTradeRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.job_history_repository import (
-    JobHistoryRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
-    OptimizationRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
-    PositionRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
-    SubscriptionRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.symbol_repository import SymbolRepository
-from pocketquant.infrastructure.persistence.repositories.sync_status_repository import (
-    SyncStatusRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
-    TrackedSymbolRepository,
-)
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
 
 logger = get_logger(__name__)
 
@@ -492,7 +492,7 @@ def handle_startup_failure(error: Exception) -> None:
     )
     console.print("\n[dim]Your code:[/]")
     console.print("  -> [cyan]pocketquant.app.main[/] in lifespan")
-    console.print("  -> [cyan]pocketquant.infrastructure.persistence.mongodb[/] in connect")
+    console.print("  -> [cyan]pocketquant.core.persistence.mongodb[/] in connect")
     raise error
 
 

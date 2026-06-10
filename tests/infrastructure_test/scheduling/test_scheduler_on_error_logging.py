@@ -12,7 +12,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-from pocketquant.infrastructure.scheduling.scheduler import JobScheduler
+from pocketquant.core.scheduling.scheduler import JobScheduler
 
 
 @pytest.mark.parametrize(
