@@ -26,21 +26,6 @@ from pocketquant.engine.market_data.handlers.status.get_sync_status.handler impo
 )
 from pocketquant.engine.market_data.handlers.sync.sync_bulk.handler import BulkSyncHandler
 from pocketquant.engine.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
-from pocketquant.engine.market_data.handlers.tracked_symbols.add.handler import (
-    AddTrackedSymbolHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.backfill.handler import (
-    BackfillTrackedSymbolHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.list_all.handler import (
-    ListTrackedSymbolsHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.remove.handler import (
-    RemoveTrackedSymbolHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.update.handler import (
-    UpdateTrackedSymbolHandler,
-)
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 from pocketquant.trading.handlers.strategy.delete.handler import DeleteStrategyHandler
 from pocketquant.trading.handlers.strategy.get_all.handler import GetStrategiesHandler
@@ -66,10 +51,6 @@ from pocketquant.trading.handlers.strategy.stop.handler import StopStrategyHandl
 
 class BffHandlerProvider(Provider):
     # Market data — execution package
-    list_tracked_symbols_handler = provide(ListTrackedSymbolsHandler, scope=Scope.APP)
-    add_tracked_symbol_handler = provide(AddTrackedSymbolHandler, scope=Scope.APP)
-    update_tracked_symbol_handler = provide(UpdateTrackedSymbolHandler, scope=Scope.APP)
-    remove_tracked_symbol_handler = provide(RemoveTrackedSymbolHandler, scope=Scope.APP)
     sync_symbol_handler = provide(SyncSymbolHandler, scope=Scope.APP)
     bulk_sync_handler = provide(BulkSyncHandler, scope=Scope.APP)
     get_ohlcv_handler = provide(GetOHLCVHandler, scope=Scope.APP)
@@ -77,9 +58,6 @@ class BffHandlerProvider(Provider):
     get_sync_status_handler = provide(GetSyncStatusHandler, scope=Scope.APP)
     get_symbol_sync_status_handler = provide(GetSymbolSyncStatusHandler, scope=Scope.APP)
     list_symbols_handler = provide(ListSymbolsHandler, scope=Scope.APP)
-    # BackfillTrackedSymbolHandler is NOT a Mediator handler (no @handles) — route
-    # instantiates it directly via DI. Provide it so dishka can inject into route.
-    backfill_tracked_symbol_handler = provide(BackfillTrackedSymbolHandler, scope=Scope.APP)
 
     # Trading — pure Mongo writes/reads (declarative after Phase 3)
     # list_orders / get_order / list_positions / get_position excluded: they depend
@@ -106,10 +84,6 @@ class BffHandlerProvider(Provider):
 
 
 ALL_BFF_HANDLER_TYPES: list[type] = [
-    ListTrackedSymbolsHandler,
-    AddTrackedSymbolHandler,
-    UpdateTrackedSymbolHandler,
-    RemoveTrackedSymbolHandler,
     SyncSymbolHandler,
     BulkSyncHandler,
     GetOHLCVHandler,

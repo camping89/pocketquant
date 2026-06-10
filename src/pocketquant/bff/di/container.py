@@ -6,6 +6,7 @@ from pocketquant.bff.di.core import BffCoreProvider
 from pocketquant.bff.di.handlers import ALL_BFF_HANDLER_TYPES, BffHandlerProvider
 from pocketquant.bff.di.market_data import BffMarketDataProvider
 from pocketquant.bff.di.persistence import BffPersistenceProvider
+from pocketquant.bff.di.services import BffServiceProvider
 from pocketquant.core.common.mediator.handler_registry import HandlerRegistry
 from pocketquant.core.common.mediator.mediator import Mediator
 
@@ -16,6 +17,7 @@ def create_bff_container() -> AsyncContainer:
         BffPersistenceProvider(),
         BffMarketDataProvider(),
         BffHandlerProvider(),
+        BffServiceProvider(),
     )
 
 

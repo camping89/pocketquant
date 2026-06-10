@@ -30,18 +30,6 @@ from pocketquant.engine.market_data.handlers.status.get_sync_status.handler impo
 )
 from pocketquant.engine.market_data.handlers.sync.sync_bulk.handler import BulkSyncHandler
 from pocketquant.engine.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
-from pocketquant.engine.market_data.handlers.tracked_symbols.add.handler import (
-    AddTrackedSymbolHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.list_all.handler import (
-    ListTrackedSymbolsHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.remove.handler import (
-    RemoveTrackedSymbolHandler,
-)
-from pocketquant.engine.market_data.handlers.tracked_symbols.update.handler import (
-    UpdateTrackedSymbolHandler,
-)
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 from pocketquant.trading.handlers.strategy.delete.handler import DeleteStrategyHandler
 from pocketquant.trading.handlers.strategy.get_all.handler import GetStrategiesHandler
@@ -66,10 +54,6 @@ from pocketquant.trading.handlers.trading.list_positions.handler import ListPosi
 
 
 class HandlerProvider(Provider):
-    list_tracked_symbols_handler = provide(ListTrackedSymbolsHandler, scope=Scope.APP)
-    add_tracked_symbol_handler = provide(AddTrackedSymbolHandler, scope=Scope.APP)
-    update_tracked_symbol_handler = provide(UpdateTrackedSymbolHandler, scope=Scope.APP)
-    remove_tracked_symbol_handler = provide(RemoveTrackedSymbolHandler, scope=Scope.APP)
     sync_symbol_handler = provide(SyncSymbolHandler, scope=Scope.APP)
     bulk_sync_handler = provide(BulkSyncHandler, scope=Scope.APP)
     get_ohlcv_handler = provide(GetOHLCVHandler, scope=Scope.APP)
@@ -104,10 +88,6 @@ class HandlerProvider(Provider):
 
 
 ALL_HANDLER_TYPES: list[type] = [
-    ListTrackedSymbolsHandler,
-    AddTrackedSymbolHandler,
-    UpdateTrackedSymbolHandler,
-    RemoveTrackedSymbolHandler,
     SyncSymbolHandler,
     BulkSyncHandler,
     GetOHLCVHandler,

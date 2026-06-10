@@ -7,7 +7,7 @@ from pocketquant.bff.market_data.handlers.list_symbols.route import router as li
 from pocketquant.bff.market_data.handlers.ohlcv.router import router as ohlcv_router
 from pocketquant.bff.market_data.handlers.status.router import router as status_router
 from pocketquant.bff.market_data.handlers.sync.router import router as sync_router
-from pocketquant.bff.market_data.handlers.tracked_symbols import router as tracked_symbols_router
+from pocketquant.bff.routes.tracked_symbols import router as tracked_symbols_router
 
 router = APIRouter(prefix="/market-data", tags=["Market Data"])
 
