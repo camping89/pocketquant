@@ -14,12 +14,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
+
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.execution.market_data.handlers.sync.sync_one.bar_filters import (
+from pocketquant.engine.market_data.handlers.sync.sync_one.bar_filters import (
     filter_new_bars,
 )
 

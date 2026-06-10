@@ -15,10 +15,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import structlog
+
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.execution.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
-from pocketquant.execution.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
+from pocketquant.engine.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
+from pocketquant.engine.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
 
 
 def _bar(ts: datetime) -> Bar:
@@ -94,7 +95,7 @@ def _build_handler(
     # Patch fetch_with_retry so we control records + attempts directly.
     fetch_mock = AsyncMock(return_value=(fetch_records, fetch_attempts))
     patch_target = (
-        "pocketquant.execution.market_data.handlers.sync.sync_one.handler.fetch_with_retry"
+        "pocketquant.engine.market_data.handlers.sync.sync_one.handler.fetch_with_retry"
     )
     handler._fetch_patch = patch(patch_target, fetch_mock)  # type: ignore[attr-defined]
     handler._fetch_patch.start()  # type: ignore[attr-defined]

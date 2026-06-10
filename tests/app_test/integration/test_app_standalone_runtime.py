@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 import pytest
 import pytest_asyncio
 from dishka import make_async_container
+
 from pocketquant.app.di import (
     BacktestWorkerProvider,
     ExecutionProvider,
@@ -39,8 +40,8 @@ from pocketquant.core.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.core.scheduling.scheduler import JobScheduler
-from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
-from pocketquant.execution.app_services.strategy_reconcile_service import (
+from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
 

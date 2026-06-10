@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from dishka import make_async_container
+
 from pocketquant.app.di import (
     ExecutionProvider,
     HandlerProvider,
@@ -18,7 +19,7 @@ from pocketquant.app.di import (
     PersistenceProvider,
 )
 from pocketquant.core.config import Settings
-from pocketquant.execution.app_services.strategy_reconcile_service import (
+from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
 from pocketquant.trading.handlers.strategy.list_symbols.handler import ListSymbolsHandler

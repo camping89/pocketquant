@@ -12,9 +12,10 @@ from unittest.mock import AsyncMock
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+
 from pocketquant.core.config import Settings
 from pocketquant.core.scheduling.scheduler import JobScheduler
-from pocketquant.execution.market_data.app_services.sync_jobs import register_sync_jobs
+from pocketquant.engine.market_data.app_services.sync_jobs import register_sync_jobs
 
 # Jobs that ingest bars at fixed intervals — MUST be wall-clock-aligned.
 # sync_1m runs per minute; cascades to higher tfs in-process.

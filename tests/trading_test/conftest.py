@@ -1,13 +1,8 @@
-"""Pytest configuration for pocketquant-trading tests.
+"""Pytest fixtures for trading tests.
 
-Provides the same session-scoped testcontainer fixtures as pocketquant-core's
-conftest so integration tests in this package work both when run in isolation
-(uv run pytest tests/trading_test/) and as part of the full
-workspace suite (uv run pytest).
-
-When pytest collects the full testpaths suite it discovers both conftests; the
-session-scoped fixtures are de-duplicated by pytest automatically (same fixture
-name + same scope → single container instance per session).
+Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
+Session-scoped fixtures here are de-duplicated by pytest across suites
+(same fixture name + same scope → single container instance per session).
 """
 
 from __future__ import annotations
@@ -15,23 +10,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from pocketquant.core.config import Settings
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
-_PROD_HOST_FRAGMENT = "207.148.79.60"
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    import os
-
-    for var in ("MONGODB_URL", "REDIS_URL"):
-        value = os.environ.get(var, "")
-        if _PROD_HOST_FRAGMENT in value:
-            raise RuntimeError(
-                f"Refusing to run tests: {var} points at production "
-                f"({_PROD_HOST_FRAGMENT}). Unset the env var or use a local URL."
-            )
+from pocketquant.core.config import Settings
 
 
 @pytest.fixture(scope="session")

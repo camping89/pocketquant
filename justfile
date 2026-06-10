@@ -34,7 +34,7 @@ test:
 baseline:
     BASELINE_UPDATE=1 {{python}} -m pytest tests/baseline/ -q
 
-# Run tests for a specific package (core, backtest, trading, app)
+# Run tests for a specific subpackage (core, engine, backtest, trading, app, bff)
 test-pkg pkg:
     {{python}} -m pytest tests/{{pkg}}_test/
 

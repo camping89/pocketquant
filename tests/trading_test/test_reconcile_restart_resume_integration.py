@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+
 from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
@@ -31,13 +32,13 @@ from pocketquant.core.persistence.repositories.position_repository import (
 from pocketquant.core.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.execution.app_services.order_app_service import OrderAppService
-from pocketquant.execution.app_services.position_app_service import PositionAppService
-from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
-from pocketquant.execution.app_services.strategy_reconcile_service import (
+from pocketquant.engine.app_services.order_app_service import OrderAppService
+from pocketquant.engine.app_services.position_app_service import PositionAppService
+from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
-from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
+from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
 
 pytestmark = pytest.mark.integration
 
