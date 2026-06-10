@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 
 _START = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 _END = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)

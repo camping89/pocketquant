@@ -9,7 +9,6 @@ FORBIDDEN_IMPORTS = [
     "aiohttp",
     "httpx",
     "fastapi",
-    "pocketquant.infrastructure",
     "pocketquant.execution",
     "pocketquant.trading",
     "pocketquant.backtest",

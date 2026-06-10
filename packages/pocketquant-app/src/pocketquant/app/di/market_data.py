@@ -6,15 +6,15 @@ from pocketquant.app.market_data.app_services.ws_subscription_manager import WsS
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
-from pocketquant.execution.market_data.app_services.bar_app_service import BarAppService
-from pocketquant.infrastructure.market_data.binance.binance_websocket_client import (
+from pocketquant.core.market_data.binance.binance_websocket_client import (
     BinanceWebSocketClient,
 )
-from pocketquant.infrastructure.persistence.redis import Cache
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
+from pocketquant.execution.market_data.app_services.bar_app_service import BarAppService
 
 
 class MarketDataProvider(Provider):

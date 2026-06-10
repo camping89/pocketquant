@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 import pytest
 from pocketquant.core.domain.backtest import Trade
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
 

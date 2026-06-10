@@ -6,11 +6,11 @@ from pocketquant.backtest.optimization.models.optimization_config import Optimiz
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.backtest import OptimizationResult
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
+from pocketquant.core.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.optimization_repository import (
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.optimization_repository import (
     OptimizationRepository,
 )
 

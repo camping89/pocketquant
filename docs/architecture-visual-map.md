@@ -31,7 +31,7 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
     │          │                      │
     ▼          ▼                      ▼
   ╔═══════════════╗  ╔═══════════════╗  ╔═══════════════════╗
-  ║  APPLICATION  ║  ║    DOMAIN     ║  ║  INFRASTRUCTURE   ║
+  ║  APPLICATION  ║  ║    DOMAIN     ║  ║    ADAPTERS       ║
   ║ (Orchestrate) ║  ║ (Pure Logic)  ║  ║  (External I/O)   ║
   ║               ║  ║               ║  ║                   ║
   ║ BacktestApp   ║  ║ TOP-LEVEL:    ║  ║ Brokers           ║
@@ -42,8 +42,8 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   ║ StrategyApp   ║  ║  BacktestRes  ║  ║ BinanceWebSocket  ║
   ║ OrderApp      ║  ║               ║  ║ Scheduling        ║
   ║ PositionApp   ║  ║ CONCEPTS:     ║  ║  APScheduler      ║
-  ║ YamlLoader    ║  ║  Quote (VO)   ║  ║ Webhooks          ║
-  ╚═══════╤═══════╝  ║  Risk (Sizer) ║  ║  Dispatcher       ║
+  ║ YamlLoader    ║  ║  Quote (VO)   ║  ║ HTTP Client       ║
+  ╚═══════╤═══════╝  ║  Risk (Sizer) ║  ║  (Retry/Backoff) ║
           │          ║  Strategy     ║  ╚═════════╤═════════╝
           │          ║   IStrategy   ║            │
           │          ║   HitNRun2    ║            │
@@ -57,10 +57,11 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
           └──────────────────┼────────────────────┘
                              │
   ╔══════════════════════════╧════════════════════════════╗
-  ║  PERSISTENCE  (infrastructure/persistence/)           ║
-  ║  Database(MongoDB)  Cache(Redis)  9 Repositories     ║
-  ║  Bar · Order · Position · Optimization · Symbol      ║
-  ║  SyncStatus · Subscription · TrackedSymbol · JobHist ║
+  ║  PERSISTENCE  (core/persistence/)                     ║
+  ║  Database(MongoDB)  Cache(Redis)  13 Repositories    ║
+  ║  Bar · Order · Position · Backtest* · Optimization    ║
+  ║  Symbol · SyncStatus · Subscription · TrackedSymbol   ║
+  ║  JobHistory (*: backtest_order, backtest_trade)      ║
   ╚══════════╤══════════════════╤═════════════════════════╝
              │                  │
              ▼                  ▼
@@ -73,7 +74,7 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   ╚══════════════════════════════════════════════════════╝
 
   DEPENDENCY DIRECTION (strict, unidirectional):
-    Features ──► Application ──► Domain ◄── Infrastructure
+    Features ──► Application ──► Domain ◄── Adapters
                                    ▲
                               Persistence
   Domain has ZERO I/O imports (enforced by AST test)
@@ -174,23 +175,23 @@ graph TB
         end
     end
 
-    subgraph INFRA["Infrastructure Layer — External I/O"]
+    subgraph ADAPT["Adapter Layer — External I/O"]
         Brokers["Brokers (Paper, OKX)"]
         BinanceClient["BinanceClient (REST)"]
         BinanceWS["BinanceWebSocketClient (@aggTrade)"]
         Scheduler["JobScheduler (APScheduler)"]
     end
 
-    subgraph PERSIST["Persistence Layer"]
+    subgraph PERSIST["Persistence Layer (Adapters)"]
         DB["Database (MongoDB)"]
         Cache["Cache (Redis)"]
-        Repos["9 Repositories"]
+        Repos["13 Repositories"]
     end
 
     Routes --> Commands --> Med --> Handlers
     Handlers --> APP
     APP --> DOMAIN
-    APP --> INFRA
+    APP --> ADAPT
     APP --> PERSIST
     Repos --> DB
 ```

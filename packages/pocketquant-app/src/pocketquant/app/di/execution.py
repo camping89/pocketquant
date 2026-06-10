@@ -10,6 +10,13 @@ from dishka import Provider, Scope, provide
 from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.core.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 from pocketquant.execution.app_services.order_app_service import OrderAppService
 from pocketquant.execution.app_services.position_app_service import PositionAppService
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
@@ -17,13 +24,6 @@ from pocketquant.execution.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
 from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
-    PositionRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
-    SubscriptionRepository,
-)
 
 
 class ExecutionProvider(Provider):

@@ -69,7 +69,6 @@ layers = [
     "pocketquant.app | pocketquant.bff",
     "pocketquant.backtest | pocketquant.trading",
     "pocketquant.execution",
-    "pocketquant.infrastructure",
     "pocketquant.core",
 ]
 
@@ -77,19 +76,6 @@ layers = [
 name = "Core imports no inner package"
 type = "forbidden"
 source_modules = ["pocketquant.core"]
-forbidden_modules = [
-    "pocketquant.infrastructure",
-    "pocketquant.execution",
-    "pocketquant.backtest",
-    "pocketquant.trading",
-    "pocketquant.app",
-    "pocketquant.bff",
-]
-
-[[tool.importlinter.contracts]]
-name = "Infrastructure imports only core"
-type = "forbidden"
-source_modules = ["pocketquant.infrastructure"]
 forbidden_modules = [
     "pocketquant.execution",
     "pocketquant.backtest",

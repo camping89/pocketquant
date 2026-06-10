@@ -15,7 +15,7 @@ import pytest_asyncio
 from dishka import Provider, Scope, make_async_container, provide
 from pocketquant.app.main_extensions import migrate_subscription_desired_state
 from pocketquant.core.config import Settings
-from pocketquant.infrastructure.persistence.mongodb import Database
+from pocketquant.core.persistence.mongodb import Database
 
 
 class _TestProvider(Provider):

@@ -18,8 +18,8 @@ from pocketquant.bff.main_extensions import (
 )
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.redis import Cache
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.redis import Cache
 
 logger = get_logger(__name__)
 

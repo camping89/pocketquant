@@ -14,8 +14,7 @@ Backend packages are managed with a `uv` workspace. The frontend is a separate n
 
 ```text
 packages/
-├── pocketquant-core/           # Domain, concepts, common utilities, config, ports + DTOs, persisted entities
-├── pocketquant-infrastructure/ # Database, Cache, repositories, PaperBroker, binance, scheduler, http client
+├── pocketquant-core/           # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, binance, scheduler, http client
 ├── pocketquant-execution/      # Shared strategy/order/position/risk engine
 ├── pocketquant-backtest/       # Backtest engine, optimization, backtest-run orchestration
 ├── pocketquant-trading/        # Strategy, order, position, OKX broker workflows
@@ -27,7 +26,7 @@ packages/
 Dependency direction:
 
 ```text
-core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}
+core ◁ execution ◁ {backtest, trading} ◁ {app, bff}
 web → bff (HTTP only)
 ```
 

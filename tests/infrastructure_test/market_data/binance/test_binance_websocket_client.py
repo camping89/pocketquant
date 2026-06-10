@@ -11,13 +11,13 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pocketquant.infrastructure.market_data.binance.binance_websocket_client import (
+from pocketquant.core.market_data.binance.binance_websocket_client import (
     _RECONNECT_DELAY_INITIAL,
     _RECONNECT_DELAY_MAX,
     BinanceWebSocketClient,
 )
 
-_WS_MODULE = "pocketquant.infrastructure.market_data.binance.binance_websocket_client"
+_WS_MODULE = "pocketquant.core.market_data.binance.binance_websocket_client"
 
 
 def _aggtrade_frame(
@@ -243,7 +243,7 @@ class TestReconnectBackoff:
         async def _fake_connect(*args, **kwargs):
             return mock_ws
 
-        ws_module = "pocketquant.infrastructure.market_data.binance.binance_websocket_client"
+        ws_module = "pocketquant.core.market_data.binance.binance_websocket_client"
         with patch(f"{ws_module}.websockets.connect", side_effect=_fake_connect):
             await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
             await client.connect()

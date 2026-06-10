@@ -18,13 +18,13 @@ from pocketquant.bff.common.symbol_validation import validate_composite_symbol
 from pocketquant.bff.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
 from pocketquant.execution.market_data.handlers.tracked_symbols.backfill.command import (
     BackfillTrackedSymbolCommand,
 )
 from pocketquant.execution.market_data.handlers.tracked_symbols.backfill.handler import (
     BackfillTrackedSymbolHandler,
 )
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
 
 router = APIRouter(route_class=DishkaRoute)
 

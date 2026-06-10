@@ -16,37 +16,37 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps, run_subscription
+from pocketquant.core.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_request_repository import (
+    BacktestRequestRepository,
+)
+from pocketquant.core.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
+from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.core.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
 from pocketquant.execution.app_services.order_app_service import OrderAppService
 from pocketquant.execution.app_services.position_app_service import PositionAppService
 from pocketquant.execution.app_services.strategy_app_service import StrategyAppService
 from pocketquant.execution.handlers.risk.check_risk.handler import RiskCheckHandler
-from pocketquant.infrastructure.brokers.paper.paper_broker import PaperBroker
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
-    BacktestOrderRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_repository import (
-    BacktestRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
-    BacktestTradeRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.bar_repository import BarRepository
-from pocketquant.infrastructure.persistence.repositories.order_repository import OrderRepository
-from pocketquant.infrastructure.persistence.repositories.position_repository import (
-    PositionRepository,
-)
-from pocketquant.infrastructure.persistence.repositories.subscription_repository import (
-    SubscriptionRepository,
-)
 
 pytestmark = pytest.mark.integration
 
@@ -92,7 +92,7 @@ async def setup_strategy_and_bars(bff_client):
     """Seed bars + tracked symbol; clean prior data. Strategy load happens in the
     worker-side engine the test builds, not in bff (bff is stateless)."""
     from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-    from pocketquant.infrastructure.persistence.repositories.tracked_symbol_repository import (
+    from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )
 

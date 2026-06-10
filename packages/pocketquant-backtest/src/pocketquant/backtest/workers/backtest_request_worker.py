@@ -22,10 +22,10 @@ from pocketquant.backtest.workers.backtest_dispatch import (
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.backtest.request import BacktestRequest
-from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
-from pocketquant.infrastructure.persistence.repositories.backtest_trade_repository import (
+from pocketquant.core.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
 

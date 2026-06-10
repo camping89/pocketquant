@@ -62,7 +62,7 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 
 | Path | Role |
 |---|---|
-| `packages/pocketquant-infrastructure/src/pocketquant/infrastructure/market_data/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
+| `packages/pocketquant-core/src/pocketquant/core/market_data/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
 | `packages/pocketquant-core/src/pocketquant/core/domain/market_data/interfaces.py:16` | `IRealtimeQuoteProvider` Protocol (`@runtime_checkable`, 9 members) |
 | `packages/pocketquant-app/src/pocketquant/app/market_data/app_services/quote_app_service.py:18` | `QuoteAppService` — consumes ticks, writes to Redis + bar builder |
 | `packages/pocketquant-app/src/pocketquant/app/market_data/app_services/ws_subscription_manager.py:22` | `WsSubscriptionManager` — 5s reconcile loop vs `tracked_symbols` |
@@ -269,7 +269,7 @@ SSE polling adds ~0.5–1.2s latency (poll cycle overhead) compared to WebSocket
 
 ## Tests
 
-- `tests/core_test/unit/infrastructure/binance/test_binance_websocket_client.py` — Binance WS unit tests (~15 cases).
+- `tests/core_test/unit/market_data/binance/test_binance_websocket_client.py` — Binance WS unit tests (~15 cases).
 - `tests/api_test/unit/di/test_di_data_provider.py` — DI resolution and `IRealtimeQuoteProvider` Protocol conformance.
 
 ---

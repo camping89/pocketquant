@@ -12,7 +12,7 @@ from pocketquant.backtest.handlers.run.command import RunBacktestCommand
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest.request import BacktestRequest
-from pocketquant.infrastructure.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
 

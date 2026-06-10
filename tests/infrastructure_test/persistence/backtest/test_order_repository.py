@@ -8,8 +8,8 @@ import pytest
 from pocketquant.core.domain.backtest import Fill, Order
 from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
-from pocketquant.infrastructure.persistence.mongodb import Database
-from pocketquant.infrastructure.persistence.repositories.backtest_order_repository import (
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
 

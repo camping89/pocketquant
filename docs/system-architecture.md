@@ -1,12 +1,12 @@
 # System Architecture
 
-Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 6-package layered monorepo (5 Python `uv` workspace + `pocketquant-web`): `core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ app`, `web → app`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
+Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 6-package layered monorepo (5 Python `uv` workspace + `pocketquant-web`): `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
 For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
 ## High-Level Architecture
 
-PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependency flow: Features → Application → Domain, Infrastructure → Domain. A modern React 19 SPA frontend consumes the REST API.
+PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependency flow: Features → Application → Domain, Adapters → Domain. A modern React 19 SPA frontend consumes the REST API.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -69,7 +69,7 @@ PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional 
     └────────┘  └──────────┘  └──────────────┘  └──────────┘
 ```
 
-**Dependency Direction:** Features ← Application ← Domain, Infrastructure ← Domain (no reverse dependencies)
+**Dependency Direction:** Features ← Application ← Domain, Adapters ← Domain (no reverse dependencies)
 
 **Real-Time Streaming:** Frontend receives live market data via Server-Sent Events (SSE) for bars and quotes, backed by Redis as the intermediary between inbound WebSocket sources (Binance, OKX) and outbound HTTP streams. See [WebSocket Architecture](./websocket-architecture.md) for detail on SSE endpoints (`/bars/stream/{symbol}`, `/quotes/stream/{symbol}`), polling intervals, and staleness detection.
 
@@ -182,7 +182,7 @@ BarBuilder and PositionSizer are pure domain services with zero I/O, implementin
 
 ### Layer 2: Application (Orchestrators) — `execution`, `backtest`, `trading`, `api` packages
 
-**Purpose:** Orchestrate domain logic + infrastructure I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `pocketquant-execution` and is consumed by both `backtest` and `trading` (breaks the old backtest↔trading cycle).
+**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `pocketquant-execution` and is consumed by both `backtest` and `trading` (breaks the old backtest↔trading cycle).
 
 **Structure:**
 ```
@@ -205,7 +205,7 @@ pocketquant-app/.../api/market_data/app_services/   # Market-data orchestration
 
 **Example - Application Service:**
 ```python
-# StrategyAppService - orchestrates domain + infrastructure
+# StrategyAppService - orchestrates domain + adapter I/O
 class StrategyAppService:
     def __init__(self, broker: IBroker, event_bus: EventBus):
         self.broker = broker
@@ -217,14 +217,14 @@ class StrategyAppService:
         # 1. Domain: Get strategy signal
         signal = await self.strategy.on_bar(bar)
 
-        # 2. Infrastructure: Check risk
+        # 2. Adapter: Check risk
         approved = await risk_check(signal)
 
-        # 3. Infrastructure: Execute via broker
+        # 3. Adapter: Execute via broker
         if approved:
             order = await self.broker.submit_order(approved.order)
 
-        # 4. Infrastructure: Publish event
+        # 4. Adapter: Publish event
         await self.event_bus.publish(SignalGeneratedEvent(...))
 ```
 
@@ -318,7 +318,7 @@ operation_name/
 ```
 
 **Handler 5-Step Pattern:**
-1. Receive Command/Query → 2. Fetch Infrastructure → 3. Execute Domain → 4. Persist Infrastructure → 5. Return DTO
+1. Receive Command/Query → 2. Fetch Adapters → 3. Execute Domain → 4. Persist Adapters → 5. Return DTO
 
 **Example:**
 ```python
@@ -328,7 +328,7 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         # 1. Resolve strategy class from registry
         strategy_class = STRATEGY_REGISTRY[cmd.strategy_code]
 
-        # 2. Fetch historical bars from infrastructure
+        # 2. Fetch historical bars from adapters
         bars = await BarRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
 
         # 3. Execute domain logic via BacktestAppService
@@ -345,48 +345,52 @@ class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
         )
 ```
 
-### Layer 4: Infrastructure (External I/O) — packages/pocketquant-infrastructure/
+### Layer 4: Adapters (External I/O) — packages/pocketquant-core/ + other packages
 
-**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters only — the abstractions (ports/DTOs) live in `pocketquant-core` (`core.domain.brokers`, `core.domain.market_data`) so execution/backtest/trading depend on contracts, not adapters (DIP).
+**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters live in `core` (non-domain subpackages) alongside the domain layer. Abstractions (ports/DTOs) live in `core.domain.{brokers,market_data}` so execution/backtest/trading depend on contracts, not implementations (DIP). Domain purity enforced: `core.domain` imports zero I/O.
 
 **Structure:**
 ```
-infrastructure/                        # External I/O — concrete adapters
+core/
+├── persistence/                       # Data access (MongoDB, Redis, repositories)
+│   ├── mongodb.py           # Database async singleton (PyMongo)
+│   ├── redis.py             # Cache async singleton (redis-py)
+│   ├── base_repository.py   # BaseRepository mixin (_collection() helper)
+│   ├── health_checks.py     # check_database / check_redis
+│   └── repositories/        # All 12 repos (instance methods via DI)
+│       ├── bar_repository.py
+│       ├── order_repository.py
+│       ├── position_repository.py
+│       ├── subscription_repository.py
+│       ├── backtest_repository.py
+│       ├── backtest_order_repository.py
+│       ├── backtest_trade_repository.py
+│       ├── optimization_repository.py
+│       ├── symbol_repository.py
+│       ├── tracked_symbol_repository.py
+│       ├── sync_status_repository.py
+│       └── job_history_repository.py
 ├── brokers/
 │   └── paper/               # PaperBroker (in-memory simulation)
 │       └── paper_broker.py
 ├── market_data/
 │   └── binance/             # Binance REST + WS integration
-│       ├── binance_client.py            # BinanceClient (implements core IDataProvider)
+│       ├── binance_client.py            # BinanceClient (implements core.domain IDataProvider)
 │       ├── binance_websocket_client.py  # BinanceWebSocketClient (@aggTrade stream)
 │       └── binance_mappers.py           # Binance-specific mapping
-├── http_client/
-│   └── client.py            # ResilientHttpClient (retry/backoff)
 ├── scheduling/
 │   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
-└── persistence/                       # Data access (MongoDB, Redis, repositories)
-    ├── mongodb.py           # Database async singleton (PyMongo)
-    ├── redis.py             # Cache async singleton (redis-py)
-    ├── base_repository.py   # BaseRepository mixin (_collection() helper)
-    ├── health_checks.py     # check_database / check_redis
-    └── repositories/        # All 12 repos (instance methods via DI)
-        ├── bar_repository.py
-        ├── order_repository.py
-        ├── position_repository.py
-        ├── subscription_repository.py
-        ├── backtest_repository.py
-        ├── backtest_order_repository.py
-        ├── backtest_trade_repository.py
-        ├── optimization_repository.py
-        ├── symbol_repository.py
-        ├── tracked_symbol_repository.py
-        ├── sync_status_repository.py
-        └── job_history_repository.py
-# NOTE: no schemas/ directory — persistence lives in domain entities via to_mongo()/from_mongo()
-# OKX live broker (OKXBroker + websocket) lives in pocketquant-trading (trading/brokers/okx/).
-# Ports + DTOs (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent,
-# IDataProvider, IRealtimeQuoteProvider) live in pocketquant-core (core.domain.{brokers,market_data}).
+├── http_client/
+│   └── client.py            # ResilientHttpClient (retry/backoff)
+└── domain/                           # Domain (pure business logic, zero I/O)
+    ├── brokers/            # Ports: IBroker, IBrokerFactory + DTOs
+    └── market_data/        # Ports: IDataProvider, IRealtimeQuoteProvider + DTOs
 ```
+
+**Notes:**
+- OKX live broker (OKXBroker + websocket) lives in `pocketquant-trading/trading/brokers/okx/` (trading-specific, live only).
+- Ports + DTOs (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent, IDataProvider, IRealtimeQuoteProvider) live in `core.domain.{brokers,market_data}`.
+- No schemas/ — persistence lives in domain entities via `to_mongo()`/`from_mongo()` methods.
 
 **Key Services:**
 
@@ -536,13 +540,13 @@ src/
 | CQRS Mediator + Handler base | `core/common/mediator/` |
 | Event bus + @event_handler decorator | `core/common/messaging/` |
 | Middleware (correlation, rate limit, idempotency) | `core/common/middleware/` |
-| MongoDB connection | `infrastructure/persistence/mongodb.py` |
-| Redis connection | `infrastructure/persistence/redis.py` |
-| All repositories | `infrastructure/persistence/repositories/` |
-| Binance REST + WS clients | `infrastructure/market_data/binance/` |
+| MongoDB connection | `core/persistence/mongodb.py` |
+| Redis connection | `core/persistence/redis.py` |
+| All repositories | `core/persistence/repositories/` |
+| Binance REST + WS clients | `core/market_data/binance/` |
 | OKX broker + WS + reconnection | `trading/brokers/okx/` |
-| PaperBroker (simulation) | `infrastructure/brokers/paper/` |
-| APScheduler wrapper | `infrastructure/scheduling/scheduler.py` |
+| PaperBroker (simulation) | `core/brokers/paper/` |
+| APScheduler wrapper | `core/scheduling/scheduler.py` |
 | Dishka DI container (6 providers) | `api/di/` |
 | FastAPI app + middleware wiring | `api/main.py`, `api/main_extensions.py` |
 | CQRS handlers (operations) | `trading/handlers/{strategy,trading}/`, `execution/handlers/risk/`, `backtest/handlers/`, `api/market_data/handlers/` |
@@ -583,12 +587,12 @@ Mediator (core/common/mediator/mediator.py)
   └─ Call handler.handle(command)
   ↓
 Handler (api/market_data/handlers/sync/sync_one/handler.py)
-  ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [infrastructure]
+  ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [adapter]
   │       └─ Excludes the in-progress bar: endTime caps at floor(now/duration)*duration - 1
   │          (in-progress quote remains in Redis via WS @aggTrade)
   ├─ [2] Validate: Bar.from_mongo()                               [domain]
-  ├─ [3] Persist: BarRepository.upsert_many()                     [infrastructure]
-  ├─ [4] Invalidate: Cache.delete_pattern()                       [infrastructure]
+  ├─ [3] Persist: BarRepository.upsert_many()                     [adapter]
+  ├─ [4] Invalidate: Cache.delete_pattern()                       [adapter]
   └─ [5] Publish: EventBus.publish(HistoricalDataSyncedEvent)
   ↓
 Route Response
@@ -596,9 +600,9 @@ Route Response
 ```
 
 **Handler 5-Step Pattern:**
-1. **Fetch** from infrastructure (providers, repositories)
+1. **Fetch** from adapters (providers, repositories)
 2. **Validate** via domain layer (aggregates, value objects)
-3. **Persist** via infrastructure (database, cache writes)
+3. **Persist** via adapters (database, cache writes)
 4. **Invalidate** cache (pattern-based deletion)
 5. **Publish** domain events (event subscribers react async)
 
@@ -791,7 +795,7 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 1. FastAPI lifespan async context manager started
 2. Load settings from .env via pydantic-settings
 3. Setup structured logging (structlog)
-4. Create dishka AsyncContainer with 6 providers (initialization order: Core → Persistence → Infrastructure → MarketData → Trading → Handler)
+4. Create dishka AsyncContainer with 6 providers (initialization order: Core → Persistence → Adapter → MarketData → Execution → Handler)
 5. `register_handlers(container)` resolves all 37 handlers, registers with Mediator
 6. `ensure_all_indexes()` creates MongoDB indexes
 7. `register_health_checks()` registers DB/Redis/job health probes
@@ -857,10 +861,10 @@ graph LR
 **Dependency Graph (top tier only):**
 
 ```
-core ◁ infrastructure ◁ execution ◁ {backtest, trading} ◁ {app, bff}
+core ◁ execution ◁ {backtest, trading} ◁ {app, bff}
        └─ app has NO imports of bff
        └─ bff has NO imports of app
-       └─ both import core + infra + execution + backtest + trading (verified by import-linter contract: bff↛app, app↛bff)
+       └─ both import core + execution + backtest + trading (verified by import-linter contract: bff↛app, app↛bff)
 ```
 
 **Local Dev Ports:**

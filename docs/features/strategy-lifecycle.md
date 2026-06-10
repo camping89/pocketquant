@@ -370,7 +370,7 @@ Live order and position docs (collections `orders` and `positions`) now use
 ### 7. Redis cache contents
 
 `Cache` wraps `redis.asyncio.Redis` and is DI-scoped APP. See
-`packages/pocketquant-infrastructure/src/pocketquant/infrastructure/persistence/redis.py` and
+`packages/pocketquant-core/src/pocketquant/core/persistence/redis.py` and
 the constants at
 `packages/pocketquant-core/src/pocketquant/core/common/constants.py:27-41`.
 

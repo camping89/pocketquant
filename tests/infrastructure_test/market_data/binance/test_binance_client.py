@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.infrastructure.market_data.binance.binance_client import BinanceClient
+from pocketquant.core.market_data.binance.binance_client import BinanceClient
 
 
 def _make_kline(
