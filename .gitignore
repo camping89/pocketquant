@@ -107,3 +107,5 @@ repomix-output.xml
 .claude/settings.local.json
 
 .playwright-mcp/
+
+.import_linter_cache/
