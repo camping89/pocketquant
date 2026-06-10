@@ -12,8 +12,8 @@ from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.sync_status_repository import (
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.sync_status_repository import (
     SyncStatusRepository,
 )
 from pocketquant.engine.market_data.handlers.status.dto import SyncStatusResult

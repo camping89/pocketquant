@@ -91,6 +91,12 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Core domain stays free of infra adapters"
+type = "forbidden"
+source_modules = ["pocketquant.core.domain"]
+forbidden_modules = ["pocketquant.core.infra"]
+
+[[tool.importlinter.contracts]]
 name = "Core imports no inner package"
 type = "forbidden"
 source_modules = ["pocketquant.core"]

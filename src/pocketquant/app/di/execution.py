@@ -11,11 +11,11 @@ from dishka import Provider, Scope, provide
 from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.repositories.order_repository import OrderRepository
-from pocketquant.core.persistence.repositories.position_repository import (
+from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.engine.app_services.order_app_service import OrderAppService

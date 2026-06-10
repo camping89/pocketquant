@@ -11,23 +11,24 @@ from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.core.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.backtest_order_repository import (
+from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_trade_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
 

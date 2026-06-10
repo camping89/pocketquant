@@ -39,10 +39,10 @@ from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.market_data.binance.binance_client import BinanceClient
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+from pocketquant.core.infra.binance.binance_client import BinanceClient
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
@@ -82,9 +82,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print plan + estimate, NO DB writes",
     )
-    parser.add_argument(
-        "--no-cascade", action="store_true", help="Skip cascade aggregation step"
-    )
+    parser.add_argument("--no-cascade", action="store_true", help="Skip cascade aggregation step")
     return parser.parse_args(argv)
 
 
@@ -133,9 +131,7 @@ async def _resync_symbol(
     t0 = time.monotonic()
 
     # 1. Delete existing bars in window across all canonical tfs
-    deleted = await bar_repo.delete_many_by_range(
-        symbol, exchange, CANONICAL_TFS, start_dt, end_dt
-    )
+    deleted = await bar_repo.delete_many_by_range(symbol, exchange, CANONICAL_TFS, start_dt, end_dt)
     logger.info("resync.deleted", symbol=symbol, deleted_count=deleted)
 
     # 2. Fetch 1m bars from Binance (chunked internally, 100ms inter-call)

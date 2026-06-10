@@ -9,20 +9,20 @@ from dishka import Provider, Scope, provide
 from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.persistence.repositories.backtest_order_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_trade_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService

@@ -3,8 +3,8 @@
 from pocketquant.core.common.constants import CACHE_KEY_OHLCV, TTL_OHLCV_QUERY
 from pocketquant.core.common.mediator import Handler, handles
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence import Cache
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence import Cache
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.handlers.ohlcv.get_ohlcv.query import GetOHLCVQuery
 
 

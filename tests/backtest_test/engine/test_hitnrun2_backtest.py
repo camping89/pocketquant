@@ -15,17 +15,17 @@ import pytest
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.core.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
-from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
-from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.interfaces import IBroker
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService

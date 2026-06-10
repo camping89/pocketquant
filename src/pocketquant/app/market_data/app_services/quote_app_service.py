@@ -8,7 +8,7 @@ from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.engine.market_data.app_services.quote_dto import Quote, QuoteTick
 

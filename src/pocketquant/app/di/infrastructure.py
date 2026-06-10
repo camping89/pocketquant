@@ -11,11 +11,11 @@ from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.market_data.binance.binance_client import BinanceClient
-from pocketquant.core.persistence.repositories.job_history_repository import (
+from pocketquant.core.infra.binance.binance_client import BinanceClient
+from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
-from pocketquant.core.scheduling.scheduler import JobScheduler
+from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 
 
 class InfrastructureProvider(Provider):

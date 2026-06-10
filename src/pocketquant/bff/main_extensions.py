@@ -16,9 +16,9 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.health_checks import check_database, check_redis
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.job_history_repository import (
+from pocketquant.core.infra.persistence.health_checks import check_database, check_redis
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
 
@@ -131,9 +131,7 @@ def register_routes(app: FastAPI, settings: Settings) -> None:
 
     # StaticFiles + SPA fallback — after API routes so /api/* is never intercepted
     # repo root = 4 levels up from src/pocketquant/bff/main_extensions.py
-    web_dist = (
-        Path(__file__).resolve().parents[3] / "packages" / "pocketquant-web" / "dist"
-    )
+    web_dist = Path(__file__).resolve().parents[3] / "packages" / "pocketquant-web" / "dist"
     if web_dist.is_dir():
         from fastapi.responses import FileResponse
         from fastapi.staticfiles import StaticFiles

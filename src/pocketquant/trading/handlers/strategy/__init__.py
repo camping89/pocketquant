@@ -1,7 +1,7 @@
 """Strategy feature - trading strategy management and execution."""
 
-from pocketquant.core.concepts.strategy.interfaces import IStrategy
-from pocketquant.core.concepts.strategy.value_objects import OrderConfig, StrategyConfig
+from pocketquant.core.domain.strategy.interfaces import IStrategy
+from pocketquant.core.domain.strategy.value_objects import OrderConfig, StrategyConfig
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 from pocketquant.trading.handlers.strategy.get_all import GetStrategiesHandler, GetStrategiesQuery
 from pocketquant.trading.handlers.strategy.get_one import GetStrategyHandler, GetStrategyQuery

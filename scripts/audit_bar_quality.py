@@ -34,7 +34,7 @@ from pathlib import Path
 
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
-from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.mongodb import Database
 
 logger = get_logger("scripts.audit_bar_quality")
 

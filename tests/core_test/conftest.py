@@ -18,8 +18,8 @@ from testcontainers.redis import RedisContainer
 from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.redis import Cache
 
 
 # Session-scoped containers — started once per pytest run

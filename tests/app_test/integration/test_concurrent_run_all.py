@@ -13,11 +13,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
+
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 
@@ -57,7 +58,7 @@ async def setup(bff_client):
     a clean subscriptions collection are needed.
     """
     from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-    from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
+    from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )
 

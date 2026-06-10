@@ -8,13 +8,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
-from pocketquant.core.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.concepts.strategy.services import STRATEGY_REGISTRY
-from pocketquant.core.concepts.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)

@@ -8,7 +8,7 @@ from typing import Any
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.events import DomainEvent
-from pocketquant.core.http_client.client import ResilientHttpClient
+from pocketquant.core.infra.http_client.client import ResilientHttpClient
 from pocketquant.trading.webhooks.config import WebhookConfig
 
 logger = get_logger(__name__)

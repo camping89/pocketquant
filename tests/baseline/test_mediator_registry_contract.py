@@ -24,9 +24,7 @@ def _registry_for(handler_types: list[type]) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for handler_type in handler_types:
         request_type = getattr(handler_type, _HANDLES_ATTR, None)
-        assert request_type is not None, (
-            f"{handler_type.__name__} lacks @handles decoration"
-        )
+        assert request_type is not None, f"{handler_type.__name__} lacks @handles decoration"
         key = f"{request_type.__module__}.{request_type.__name__}"
         assert key not in mapping, (
             f"Duplicate handler for {key}: {mapping[key]} and {handler_type.__name__}"

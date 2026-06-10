@@ -1,13 +1,13 @@
 """DeleteStrategyHandler — cascade-delete all state for a strategy template."""
 
 from pocketquant.core.common.mediator import Handler, handles
-from pocketquant.core.persistence.repositories.backtest_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.persistence.repositories.backtest_request_repository import (
+from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
     BacktestRequestRepository,
 )
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.trading.handlers.strategy.delete.command import DeleteStrategyCommand

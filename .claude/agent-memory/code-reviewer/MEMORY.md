@@ -15,7 +15,9 @@
 Single package `pocketquant` at root `src/` (PEP 420 namespace — no `__init__.py` at `src/pocketquant/`). Subpackage `execution` renamed `engine`. uv workspace dissolved.
 ```
 src/pocketquant/
-  core/      # 0 internal deps — domain, config, ports+DTOs, persistence (Database/Cache/repos), PaperBroker, binance, scheduling, mediator, messaging
+  core/      # 0 internal deps — core/domain (entities/VOs/ports; ex-concepts quote/risk/strategy merged in), core/infra (persistence, brokers/paper, binance, scheduling, http_client — Phase 3 reshape 2026-06-10), core/common, config
+             # import-linter: core.domain forbidden from core.infra; test_domain_purity FORBIDDEN_IMPORTS has "pocketquant.core.infra"
+             # layout guard: tests/core_test/test_core_layout_contract.py (dead-module imports + stale "core.<old>" fragment scan, .py-only)
   engine/    # -> core — shared strategy/order/position/risk app services + market_data sync jobs/handlers
   backtest/  # -> core, engine
   trading/   # -> core, engine — OKX broker

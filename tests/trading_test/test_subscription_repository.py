@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import (
     Subscription,
     SubscriptionAlreadyExistsError,
 )
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 

@@ -10,7 +10,7 @@ from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.services.bar_builder import get_bar_start, is_bar_aligned
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
-from pocketquant.core.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.handlers.sync import SyncSymbolCommand
 
 logger = get_logger(__name__)

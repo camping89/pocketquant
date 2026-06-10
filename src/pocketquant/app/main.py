@@ -30,8 +30,8 @@ from pocketquant.app.main_extensions import (
 from pocketquant.app.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.redis import Cache
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.app_services.sync_jobs import (
     set_container as set_sync_container,
 )

@@ -12,11 +12,12 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.core.persistence.mongodb import Database
-from pocketquant.core.persistence.repositories.subscription_repository import (
+from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
 from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
