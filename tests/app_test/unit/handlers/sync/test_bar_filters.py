@@ -15,9 +15,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 import structlog
+
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.execution.market_data.handlers.sync.sync_one.bar_filters import (
+from pocketquant.engine.market_data.handlers.sync.sync_one.bar_filters import (
     filter_new_bars,
 )
 

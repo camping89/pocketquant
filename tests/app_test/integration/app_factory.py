@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from dishka import AsyncContainer, Provider, Scope, make_async_container, provide
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+
 from pocketquant.app.di import (
     BacktestWorkerProvider,
     ExecutionProvider,
@@ -39,7 +40,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.persistence.mongodb import Database
 from pocketquant.core.persistence.redis import Cache
-from pocketquant.execution.market_data.app_services.sync_jobs import (
+from pocketquant.engine.market_data.app_services.sync_jobs import (
     set_container as set_sync_container,
 )
 

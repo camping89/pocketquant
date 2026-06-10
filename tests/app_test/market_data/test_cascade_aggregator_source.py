@@ -6,9 +6,10 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+
 from pocketquant.core.domain.bar.entities import SOURCE_CASCADE, Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.execution.market_data.app_services.cascade_aggregator import cascade_for_symbol
+from pocketquant.engine.market_data.app_services.cascade_aggregator import cascade_for_symbol
 
 
 def _make_1m_bars(n: int = 60) -> list[Bar]:

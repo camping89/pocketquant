@@ -12,7 +12,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from pocketquant.execution.market_data.app_services.sync_jobs import (
+
+from pocketquant.engine.market_data.app_services.sync_jobs import (
     PRICE_THRESHOLD_PCT,
     VOLUME_THRESHOLD_PCT,
     _verify_one_symbol,

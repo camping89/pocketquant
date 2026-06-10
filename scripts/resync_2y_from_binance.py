@@ -45,7 +45,7 @@ from pocketquant.core.persistence.repositories.bar_repository import BarReposito
 from pocketquant.core.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
-from pocketquant.execution.market_data.app_services.cascade_aggregator import (
+from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     cascade_for_symbol,
 )

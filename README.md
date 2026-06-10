@@ -8,25 +8,26 @@ PocketQuant is an algorithmic trading monorepo with:
 - strategy orchestration and broker abstractions
 - a React/Vite chart UI for inspecting synced data and backtest overlays
 
-## Monorepo Layout
+## Repo Layout
 
-Backend packages are managed with a `uv` workspace. The frontend is a separate npm app.
+One Python package (`pocketquant`) with subpackage boundaries enforced by import-linter. The frontend is a separate npm app.
 
 ```text
+src/pocketquant/
+├── core/       # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, binance, scheduler, http client
+├── engine/     # Shared strategy/order/position/risk engine
+├── backtest/   # Backtest engine, optimization, backtest-run orchestration
+├── trading/    # Strategy, order, position, OKX broker workflows
+├── app/        # FastAPI headless runtime, scheduler, WS feed, strategy lifecycle, reconcile loop
+└── bff/        # FastAPI stateless gateway for read/write/backtest API routes
 packages/
-├── pocketquant-core/           # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, binance, scheduler, http client
-├── pocketquant-execution/      # Shared strategy/order/position/risk engine
-├── pocketquant-backtest/       # Backtest engine, optimization, backtest-run orchestration
-├── pocketquant-trading/        # Strategy, order, position, OKX broker workflows
-├── pocketquant-app/            # FastAPI headless runtime, scheduler, WS feed, strategy lifecycle, reconcile loop
-├── pocketquant-bff/            # FastAPI stateless gateway for read/write/backtest API routes
 └── pocketquant-web/            # React 19 + Vite chart UI
 ```
 
-Dependency direction:
+Dependency direction (import-linter contracts):
 
 ```text
-core ◁ execution ◁ {backtest, trading} ◁ {app, bff}
+core ◁ engine ◁ {backtest, trading} ◁ {app, bff}
 web → bff (HTTP only)
 ```
 

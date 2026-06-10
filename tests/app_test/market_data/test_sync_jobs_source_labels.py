@@ -5,12 +5,13 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_BACKFILL,
     SOURCE_REST_SYNC_1M,
 )
-from pocketquant.execution.market_data.app_services import sync_jobs
-from pocketquant.execution.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.engine.market_data.app_services import sync_jobs
+from pocketquant.engine.market_data.handlers.sync import SyncSymbolCommand
 
 
 class _FakeContainer:

@@ -1,7 +1,6 @@
-"""Pytest configuration for pocketquant-backtest tests.
+"""Pytest fixtures for backtest tests.
 
-Mirrors the session fixture bootstrap from pocketquant-core so integration
-tests in this package work both standalone and in the full workspace suite.
+Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
 """
 
 from __future__ import annotations
@@ -9,24 +8,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
-from pocketquant.core.config import Settings
-from pocketquant.core.persistence.mongodb import Database
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
-_PROD_HOST_FRAGMENT = "207.148.79.60"
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    import os
-
-    for var in ("MONGODB_URL", "REDIS_URL"):
-        value = os.environ.get(var, "")
-        if _PROD_HOST_FRAGMENT in value:
-            raise RuntimeError(
-                f"Refusing to run tests: {var} points at production "
-                f"({_PROD_HOST_FRAGMENT}). Unset the env var or use a local URL."
-            )
+from pocketquant.core.config import Settings
+from pocketquant.core.persistence.mongodb import Database
 
 
 @pytest.fixture(scope="session")

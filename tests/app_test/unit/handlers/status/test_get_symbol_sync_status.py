@@ -6,14 +6,15 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
-from pocketquant.execution.market_data.handlers.status.get_symbol_sync_status.handler import (
+from pocketquant.engine.market_data.handlers.status.get_symbol_sync_status.handler import (
     GetSymbolSyncStatusHandler,
 )
-from pocketquant.execution.market_data.handlers.status.get_symbol_sync_status.query import (
+from pocketquant.engine.market_data.handlers.status.get_symbol_sync_status.query import (
     GetSymbolSyncStatusQuery,
 )
 

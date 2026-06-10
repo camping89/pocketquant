@@ -13,21 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy workspace definition + lock first (cache layer)
+# Copy project definition + lock first (cache layer)
 COPY pyproject.toml uv.lock README.md ./
 
-# Copy all package pyproject.toml files (needed for dependency resolution)
-COPY packages/pocketquant-core/pyproject.toml packages/pocketquant-core/
-COPY packages/pocketquant-execution/pyproject.toml packages/pocketquant-execution/
-COPY packages/pocketquant-backtest/pyproject.toml packages/pocketquant-backtest/
-COPY packages/pocketquant-trading/pyproject.toml packages/pocketquant-trading/
-COPY packages/pocketquant-app/pyproject.toml packages/pocketquant-app/
-COPY packages/pocketquant-bff/pyproject.toml packages/pocketquant-bff/
+# Copy source code
+COPY src/ src/
 
-# Copy all package source code
-COPY packages/ packages/
-
-# Install all workspace packages (locked, no dev deps)
+# Install the package (locked, no dev deps)
 RUN uv sync --frozen --no-dev --no-editable
 
 # ============================================

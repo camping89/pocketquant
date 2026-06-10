@@ -9,29 +9,17 @@ Local Docker is required.
 
 from __future__ import annotations
 
-import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
-from pocketquant.core.common.mediator import Mediator
-from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.config import Settings
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
-# Safety guard: block tests against any non-localhost / non-testcontainer DB.
-# Even if a stray test reads from os.environ, it must not point at the prod IP.
-_PROD_HOST_FRAGMENT = "207.148.79.60"
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    for var in ("MONGODB_URL", "REDIS_URL"):
-        value = os.environ.get(var, "")
-        if _PROD_HOST_FRAGMENT in value:
-            raise RuntimeError(
-                f"Refusing to run tests: {var} points at production "
-                f"({_PROD_HOST_FRAGMENT}). Unset the env var or use a local URL."
-            )
+from pocketquant.core.common.mediator import Mediator
+from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.config import Settings
+from pocketquant.core.persistence.mongodb import Database
+from pocketquant.core.persistence.redis import Cache
 
 
 # Session-scoped containers — started once per pytest run
@@ -83,3 +71,38 @@ def mediator() -> Mediator:
 @pytest.fixture
 def event_bus() -> EventBus:
     return EventBus()
+
+
+@pytest.fixture
+async def database(settings: Settings) -> AsyncIterator[Database]:
+    """Per-test Mongo Database connected to the testcontainer.
+
+    Drops the backtest collections on teardown so they don't leak between tests.
+    """
+    db = Database()
+    await db.connect(settings)
+    try:
+        yield db
+    finally:
+        for coll in (
+            "backtest_runs",
+            "backtest_orders",
+            "backtest_trades",
+            "backtest_optimization_runs",
+        ):
+            try:
+                await db.get_collection(coll).drop()
+            except Exception:  # noqa: BLE001
+                pass
+        await db.disconnect()
+
+
+@pytest.fixture
+async def cache(settings: Settings) -> AsyncIterator[Cache]:
+    """Per-test Redis Cache connected to the testcontainer."""
+    c = Cache()
+    await c.connect(settings)
+    try:
+        yield c
+    finally:
+        await c.disconnect()

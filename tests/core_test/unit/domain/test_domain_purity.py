@@ -9,7 +9,7 @@ FORBIDDEN_IMPORTS = [
     "aiohttp",
     "httpx",
     "fastapi",
-    "pocketquant.execution",
+    "pocketquant.engine",
     "pocketquant.trading",
     "pocketquant.backtest",
     "pocketquant.app",
@@ -18,9 +18,12 @@ FORBIDDEN_IMPORTS = [
 
 def test_domain_has_no_io_imports():
     """Verify domain layer has no external I/O dependencies."""
+    # tests/core_test/unit/domain → 4 levels up = repo root
     domain_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "src", "pocketquant", "core", "domain"
+        os.path.dirname(__file__), "..", "..", "..", "..", "src", "pocketquant", "core", "domain"
     )
+    # Guard against silent no-op: walking a nonexistent dir yields nothing and passes
+    assert os.path.isdir(domain_path), f"domain dir not found: {os.path.abspath(domain_path)}"
     violations = []
 
     for root, _dirs, files in os.walk(domain_path):
