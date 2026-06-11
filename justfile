@@ -66,7 +66,7 @@ bff:
     BFF_PORT=41921 {{python}} -m uvicorn pocketquant.bff.main:app --reload --host 0.0.0.0 --port 41921
 
 # Start frontend dev server (vite proxies /api → bff on 41921)
-[working-directory: 'packages/pocketquant-web']
+[working-directory: 'web']
 fe:
     npm run dev
 

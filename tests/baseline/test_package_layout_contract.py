@@ -2,7 +2,7 @@
 
 Target layout: one backend pyproject.toml, subpackages
 core / engine / backtest / trading / app / bff, no legacy execution subpackage,
-no uv workspace packages left under packages/ (except pocketquant-web).
+no packages/ dir (the npm SPA lives at repo-root web/).
 """
 
 from __future__ import annotations
@@ -47,14 +47,14 @@ def test_single_backend_pyproject() -> None:
     )
 
 
-def test_no_python_packages_dir_remnants() -> None:
+def test_no_packages_dir() -> None:
     packages_dir = REPO_ROOT / "packages"
-    if not packages_dir.exists():
-        return
-    leftovers = [
-        d.name for d in packages_dir.iterdir() if d.is_dir() and d.name != "pocketquant-web"
-    ]
-    assert leftovers == [], f"Python packages must be merged into src/: {leftovers}"
+    assert not packages_dir.exists(), (
+        "packages/ must not exist: backend lives in src/pocketquant, the npm SPA in web/"
+    )
+    assert (REPO_ROOT / "web" / "package.json").is_file(), (
+        "npm SPA expected at repo-root web/"
+    )
 
 
 def test_no_dishka_fastapi_integration_outside_app_bff() -> None:

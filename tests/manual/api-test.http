@@ -6,7 +6,7 @@
 #   2. just up
 #   3. just check
 #   4. just dev
-#   5. optional UI terminal: cd packages/pocketquant-web && npm run dev
+#   5. optional UI terminal: cd web && npm run dev
 
 ### ===========================================
 ### 1. Health
@@ -123,7 +123,7 @@ curl -X POST http://localhost:41920/api/v1/backtest/optimize \
 ### ===========================================
 
 # 1. Start the UI:
-#    cd packages/pocketquant-web && npm run dev
+#    cd web && npm run dev
 #
 # 2. Open http://localhost:5173
 # 3. Confirm BTCUSDT loads
