@@ -13,7 +13,6 @@ Adding a new CQRS handler:
 from pocketquant.app.di.backtest_worker import BacktestWorkerProvider
 from pocketquant.app.di.core import CoreProvider
 from pocketquant.app.di.execution import ExecutionProvider
-from pocketquant.app.di.handlers import HandlerProvider
 from pocketquant.app.di.infrastructure import InfrastructureProvider
 from pocketquant.app.di.market_data import MarketDataProvider
 from pocketquant.app.di.persistence import PersistenceProvider
@@ -24,7 +23,6 @@ __all__ = [
     "BacktestWorkerProvider",
     "CoreProvider",
     "ExecutionProvider",
-    "HandlerProvider",
     "InfrastructureProvider",
     "MarketDataProvider",
     "PersistenceProvider",

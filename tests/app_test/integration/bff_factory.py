@@ -14,8 +14,6 @@ from dishka import Provider, Scope, make_async_container, provide
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
-from pocketquant.bff.di.container import register_bff_handlers
-from pocketquant.bff.di.handlers import BffHandlerProvider
 from pocketquant.bff.di.market_data import BffMarketDataProvider
 from pocketquant.bff.di.persistence import BffPersistenceProvider
 from pocketquant.bff.di.services import BffServiceProvider
@@ -25,7 +23,6 @@ from pocketquant.bff.main_extensions import (
     register_routes,
 )
 from pocketquant.core.common.logging import setup_logging
-from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -51,10 +48,6 @@ class TestBffCoreProvider(Provider):
     def get_event_bus(self) -> EventBus:
         return EventBus(max_history=100)
 
-    @provide(scope=Scope.APP)
-    def get_mediator(self) -> Mediator:
-        return Mediator()
-
 
 def make_bff_test_app(settings: Settings) -> FastAPI:
     """Build a fully-wired bff FastAPI test app using testcontainer settings.
@@ -67,7 +60,6 @@ def make_bff_test_app(settings: Settings) -> FastAPI:
         BffPersistenceProvider(),
         BffMarketDataProvider(),
         BffServiceProvider(),
-        BffHandlerProvider(),
     ]
     container = make_async_container(*providers)
 
@@ -77,7 +69,6 @@ def make_bff_test_app(settings: Settings) -> FastAPI:
         try:
             app.state.database = await c.get(Database)
             app.state.cache = await c.get(Cache)
-            await register_bff_handlers(c)
             await register_health_checks(c, app)
             yield
         finally:

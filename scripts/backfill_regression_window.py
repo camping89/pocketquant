@@ -28,18 +28,16 @@ import asyncio
 import sys
 from datetime import UTC, datetime
 
-from pocketquant.app.market_data.app_services.cascade_aggregator import cascade_for_symbol
-
-from pocketquant.app.di.container import create_container, register_handlers
-from pocketquant.app.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.app.di.container import create_container
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.entities import SOURCE_REST_BACKFILL
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
+from pocketquant.engine.market_data.app_services.cascade_aggregator import cascade_for_symbol
+from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 logger = get_logger("backfill_regression_window")
 
@@ -71,7 +69,7 @@ async def _backfill_symbol(
     n_bars: int,
     lookback_minutes: int,
     *,
-    mediator: Mediator,
+    sync_service: SyncService,
     bar_repo: BarRepository,
 ) -> dict:
     """Reset, re-sync 1m, cascade for one (symbol, exchange) pair."""
@@ -89,7 +87,7 @@ async def _backfill_symbol(
         n_bars=n_bars,
         source=SOURCE_REST_BACKFILL,
     )
-    sync_result = await mediator.send(cmd)
+    sync_result = await sync_service.sync_one(cmd)
     cascade_counts = await cascade_for_symbol(
         symbol=symbol,
         exchange=exchange,
@@ -119,9 +117,8 @@ async def run(args: argparse.Namespace) -> int:
     lookback = max(args.lookback_minutes, minutes + 60)
 
     container = create_container()
-    await register_handlers(container)
     try:
-        mediator = await container.get(Mediator)
+        sync_service = await container.get(SyncService)
         bar_repo = await container.get(BarRepository)
         ts_repo = await container.get(TrackedSymbolRepository)
 
@@ -153,7 +150,7 @@ async def run(args: argparse.Namespace) -> int:
                     end=end,
                     n_bars=n_bars,
                     lookback_minutes=lookback,
-                    mediator=mediator,
+                    sync_service=sync_service,
                     bar_repo=bar_repo,
                 )
                 summaries.append(summary)

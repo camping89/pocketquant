@@ -15,7 +15,6 @@ import pytest
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -61,11 +60,6 @@ def settings(
         log_format="console",
         enable_jobs=False,
     )
-
-
-@pytest.fixture
-def mediator() -> Mediator:
-    return Mediator()
 
 
 @pytest.fixture

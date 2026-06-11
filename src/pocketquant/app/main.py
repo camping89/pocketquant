@@ -7,7 +7,7 @@ from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
-from pocketquant.app.di.container import create_container, register_handlers
+from pocketquant.app.di.container import create_container
 from pocketquant.app.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
@@ -59,16 +59,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.database = await container.get(Database)
         app.state.cache = await container.get(Cache)
 
-        # Migration must precede register_handlers — handler resolution
-        # cascade-instantiates PositionAppService.start() which loads open
-        # positions with the post-migration field shape. If legacy docs are
-        # still on disk, the read would crash before migration could fix them.
+        # Migration must precede service resolution — PositionAppService.start()
+        # loads open positions with the post-migration field shape. If legacy
+        # docs are still on disk, the read would crash before migration fixed them.
         await migrate_strategy_id_fields(container)
         # Backfill desired_state/actual_state right after the field rename — both
         # are subscriptions-collection migrations; rename first, then state backfill,
         # so rehydrate/reconcile read the final field shape.
         await migrate_subscription_desired_state(container)
-        await register_handlers(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)

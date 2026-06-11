@@ -1,6 +1,6 @@
 """PocketQuant BFF entry point — stateless FE gateway.
 
-Lifespan: connect MongoDB + Redis, register bff handler subset with Mediator,
+Lifespan: connect MongoDB + Redis,
 register health checks. No migrations, no scheduler, no WS, no reconcile loop.
 """
 
@@ -11,7 +11,7 @@ from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
-from pocketquant.bff.di.container import create_bff_container, register_bff_handlers
+from pocketquant.bff.di.container import create_bff_container
 from pocketquant.bff.main_extensions import (
     configure_middleware,
     register_health_checks,
@@ -38,7 +38,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.database = await container.get(Database)
         app.state.cache = await container.get(Cache)
 
-        await register_bff_handlers(container)
         await register_health_checks(container, app)
 
         logger.info("bff_started")
