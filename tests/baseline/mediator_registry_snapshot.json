@@ -5,22 +5,7 @@
     "pocketquant.backtest.handlers.list_results.query.ListBacktestsQuery": "pocketquant.backtest.handlers.list_results.handler.ListBacktestsHandler",
     "pocketquant.backtest.handlers.optimize.command.RunOptimizationCommand": "pocketquant.backtest.handlers.optimize.handler.RunOptimizationHandler",
     "pocketquant.backtest.handlers.run.command.RunBacktestCommand": "pocketquant.backtest.handlers.run.handler.RunBacktestHandler",
-    "pocketquant.backtest.handlers.run_all_backtests.command.RunAllBacktestsCommand": "pocketquant.backtest.handlers.run_all_backtests.handler.RunAllBacktestsHandler",
-    "pocketquant.trading.handlers.strategy.add_symbol.command.AddSymbolCommand": "pocketquant.trading.handlers.strategy.add_symbol.handler.AddSymbolHandler",
-    "pocketquant.trading.handlers.strategy.delete.command.DeleteStrategyCommand": "pocketquant.trading.handlers.strategy.delete.handler.DeleteStrategyHandler",
-    "pocketquant.trading.handlers.strategy.get_all.query.GetStrategiesQuery": "pocketquant.trading.handlers.strategy.get_all.handler.GetStrategiesHandler",
-    "pocketquant.trading.handlers.strategy.get_one.query.GetStrategyQuery": "pocketquant.trading.handlers.strategy.get_one.handler.GetStrategyHandler",
-    "pocketquant.trading.handlers.strategy.get_positions.query.GetStrategyPositionsQuery": "pocketquant.trading.handlers.strategy.get_positions.handler.GetStrategyPositionsHandler",
-    "pocketquant.trading.handlers.strategy.get_subscription_backtest.query.GetSubscriptionBacktestQuery": "pocketquant.trading.handlers.strategy.get_subscription_backtest.handler.GetSubscriptionBacktestHandler",
-    "pocketquant.trading.handlers.strategy.get_trades.query.GetStrategyTradesQuery": "pocketquant.trading.handlers.strategy.get_trades.handler.GetStrategyTradesHandler",
-    "pocketquant.trading.handlers.strategy.list_symbols.query.ListSymbolsQuery": "pocketquant.trading.handlers.strategy.list_symbols.handler.ListSymbolsHandler",
-    "pocketquant.trading.handlers.strategy.remove_symbol.command.RemoveSymbolCommand": "pocketquant.trading.handlers.strategy.remove_symbol.handler.RemoveSymbolHandler",
-    "pocketquant.trading.handlers.strategy.start.command.StartStrategyCommand": "pocketquant.trading.handlers.strategy.start.handler.StartStrategyHandler",
-    "pocketquant.trading.handlers.strategy.stop.command.StopStrategyCommand": "pocketquant.trading.handlers.strategy.stop.handler.StopStrategyHandler",
-    "pocketquant.trading.handlers.trading.get_order.query.GetOrderQuery": "pocketquant.trading.handlers.trading.get_order.handler.GetOrderHandler",
-    "pocketquant.trading.handlers.trading.get_position.query.GetPositionQuery": "pocketquant.trading.handlers.trading.get_position.handler.GetPositionHandler",
-    "pocketquant.trading.handlers.trading.list_orders.query.ListOrdersQuery": "pocketquant.trading.handlers.trading.list_orders.handler.ListOrdersHandler",
-    "pocketquant.trading.handlers.trading.list_positions.query.ListPositionsQuery": "pocketquant.trading.handlers.trading.list_positions.handler.ListPositionsHandler"
+    "pocketquant.backtest.handlers.run_all_backtests.command.RunAllBacktestsCommand": "pocketquant.backtest.handlers.run_all_backtests.handler.RunAllBacktestsHandler"
   },
   "bff": {
     "pocketquant.backtest.handlers.get_optimization.query.GetOptimizationQuery": "pocketquant.backtest.handlers.get_optimization.handler.GetOptimizationHandler",
@@ -28,17 +13,6 @@
     "pocketquant.backtest.handlers.list_results.query.ListBacktestsQuery": "pocketquant.backtest.handlers.list_results.handler.ListBacktestsHandler",
     "pocketquant.backtest.handlers.optimize.command.RunOptimizationCommand": "pocketquant.backtest.handlers.optimize.handler.RunOptimizationHandler",
     "pocketquant.backtest.handlers.run.command.RunBacktestCommand": "pocketquant.backtest.handlers.run.handler.RunBacktestHandler",
-    "pocketquant.backtest.handlers.run_all_backtests.command.RunAllBacktestsCommand": "pocketquant.backtest.handlers.run_all_backtests.handler.RunAllBacktestsHandler",
-    "pocketquant.trading.handlers.strategy.add_symbol.command.AddSymbolCommand": "pocketquant.trading.handlers.strategy.add_symbol.handler.AddSymbolHandler",
-    "pocketquant.trading.handlers.strategy.delete.command.DeleteStrategyCommand": "pocketquant.trading.handlers.strategy.delete.handler.DeleteStrategyHandler",
-    "pocketquant.trading.handlers.strategy.get_all.query.GetStrategiesQuery": "pocketquant.trading.handlers.strategy.get_all.handler.GetStrategiesHandler",
-    "pocketquant.trading.handlers.strategy.get_one.query.GetStrategyQuery": "pocketquant.trading.handlers.strategy.get_one.handler.GetStrategyHandler",
-    "pocketquant.trading.handlers.strategy.get_positions.query.GetStrategyPositionsQuery": "pocketquant.trading.handlers.strategy.get_positions.handler.GetStrategyPositionsHandler",
-    "pocketquant.trading.handlers.strategy.get_subscription_backtest.query.GetSubscriptionBacktestQuery": "pocketquant.trading.handlers.strategy.get_subscription_backtest.handler.GetSubscriptionBacktestHandler",
-    "pocketquant.trading.handlers.strategy.get_trades.query.GetStrategyTradesQuery": "pocketquant.trading.handlers.strategy.get_trades.handler.GetStrategyTradesHandler",
-    "pocketquant.trading.handlers.strategy.list_symbols.query.ListSymbolsQuery": "pocketquant.trading.handlers.strategy.list_symbols.handler.ListSymbolsHandler",
-    "pocketquant.trading.handlers.strategy.remove_symbol.command.RemoveSymbolCommand": "pocketquant.trading.handlers.strategy.remove_symbol.handler.RemoveSymbolHandler",
-    "pocketquant.trading.handlers.strategy.start.command.StartStrategyCommand": "pocketquant.trading.handlers.strategy.start.handler.StartStrategyHandler",
-    "pocketquant.trading.handlers.strategy.stop.command.StopStrategyCommand": "pocketquant.trading.handlers.strategy.stop.handler.StopStrategyHandler"
+    "pocketquant.backtest.handlers.run_all_backtests.command.RunAllBacktestsCommand": "pocketquant.backtest.handlers.run_all_backtests.handler.RunAllBacktestsHandler"
   }
 }

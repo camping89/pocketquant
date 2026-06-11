@@ -17,8 +17,10 @@ from pocketquant.app.di.handlers import HandlerProvider
 from pocketquant.app.di.infrastructure import InfrastructureProvider
 from pocketquant.app.di.market_data import MarketDataProvider
 from pocketquant.app.di.persistence import PersistenceProvider
+from pocketquant.app.di.trading_services import AppTradingServiceProvider
 
 __all__ = [
+    "AppTradingServiceProvider",
     "BacktestWorkerProvider",
     "CoreProvider",
     "ExecutionProvider",

@@ -9,6 +9,7 @@ control-plane (reconcile orphan-unload) tears down the RAM instance later.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -25,10 +26,58 @@ from pocketquant.core.infra.persistence.repositories.backtest_request_repository
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.trading.handlers.strategy.delete.command import DeleteStrategyCommand
-from pocketquant.trading.handlers.strategy.delete.handler import DeleteStrategyHandler
-from pocketquant.trading.handlers.strategy.remove_symbol.command import RemoveSymbolCommand
-from pocketquant.trading.handlers.strategy.remove_symbol.handler import RemoveSymbolHandler
+from pocketquant.trading.strategy_command_service import (
+    DeleteStrategyCommand,
+    RemoveSymbolCommand,
+    StrategyCommandService,
+)
+
+# Shims: map old Handler positional constructor + handle(cmd) to StrategyCommandService.
+
+
+class RemoveSymbolHandler:
+    """Map old (bt_repo, request_repo, sub_repo) args to StrategyCommandService."""
+
+    def __init__(
+        self,
+        backtest_repository: Any,
+        backtest_request_repository: Any,
+        subscription_repository: Any,
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        self._svc = StrategyCommandService(
+            subscription_repository=subscription_repository,
+            backtest_repository=backtest_repository,
+            backtest_request_repository=backtest_request_repository,
+            tracked_symbol_repository=MagicMock(),
+        )
+
+    async def handle(self, request: RemoveSymbolCommand) -> None:
+        await self._svc.remove_symbol(request)
+
+
+class DeleteStrategyHandler:
+    """Map old (sub_repo, bt_repo, request_repo) args to StrategyCommandService."""
+
+    def __init__(
+        self,
+        subscription_repository: Any,
+        backtest_repository: Any,
+        backtest_request_repository: Any,
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        self._svc = StrategyCommandService(
+            subscription_repository=subscription_repository,
+            backtest_repository=backtest_repository,
+            backtest_request_repository=backtest_request_repository,
+            tracked_symbol_repository=MagicMock(),
+        )
+
+    async def handle(self, request: DeleteStrategyCommand) -> None:
+        await self._svc.delete_strategy(request)
+
 
 pytestmark = pytest.mark.integration
 
@@ -73,7 +122,7 @@ def _queued(sub_id: str) -> BacktestRequest:
     )
 
 
-def _has_no_attr(handler: object, *names: str) -> None:
+def _has_no_attr(handler: Any, *names: str) -> None:
     """Assert the handler carries no engine/scheduler reference."""
     for attr in vars(handler):
         val = getattr(handler, attr)

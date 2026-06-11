@@ -89,9 +89,9 @@ def register_routes(app: FastAPI, settings: Settings) -> None:
     from pocketquant.backtest.handlers import backtest_router, run_all_backtests_router
     from pocketquant.bff.routes.market_data import router as market_data_router
     from pocketquant.bff.routes.market_data_quotes import router as quote_router
+    from pocketquant.bff.routes.strategy import strategy_router, subscription_router
     from pocketquant.bff.routes.tracked_symbols import router as tracked_symbols_router
-    from pocketquant.trading.handlers.strategy import strategy_router, subscription_router
-    from pocketquant.trading.handlers.trading import trading_router
+    from pocketquant.bff.routes.trading_orders_positions import trading_router
 
     @app.get("/health")
     @inject

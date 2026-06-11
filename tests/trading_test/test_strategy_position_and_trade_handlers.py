@@ -3,23 +3,53 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
-from pocketquant.trading.handlers.strategy.get_positions.handler import (
-    GetStrategyPositionsHandler,
-)
-from pocketquant.trading.handlers.strategy.get_positions.query import (
+from pocketquant.trading.strategy_query_service import (
     GetStrategyPositionsQuery,
-)
-from pocketquant.trading.handlers.strategy.get_trades.handler import (
-    GetStrategyTradesHandler,
-)
-from pocketquant.trading.handlers.strategy.get_trades.query import (
     GetStrategyTradesQuery,
 )
+
+
+class GetStrategyPositionsHandler:
+    """Shim: map old Handler(position_repository) + handle(query) to StrategyQueryService."""
+
+    def __init__(self, position_repository: Any) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_query_service import StrategyQueryService
+
+        self._svc = StrategyQueryService(
+            subscription_repository=MagicMock(),
+            backtest_repository=MagicMock(),
+            position_repository=position_repository,
+        )
+
+    async def handle(self, request: Any) -> list[dict]:
+        return await self._svc.get_positions(request)  # type: ignore[arg-type]
+
+
+class GetStrategyTradesHandler:
+    """Shim: map old Handler(position_repository) + handle(query) to StrategyQueryService."""
+
+    def __init__(self, position_repository: Any) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_query_service import StrategyQueryService
+
+        self._svc = StrategyQueryService(
+            subscription_repository=MagicMock(),
+            backtest_repository=MagicMock(),
+            position_repository=position_repository,
+        )
+
+    async def handle(self, request: Any) -> list[dict]:
+        return await self._svc.get_trades(request)  # type: ignore[arg-type]
 
 
 def _open_position(subscription_id: str = "strat-1") -> PositionAggregate:

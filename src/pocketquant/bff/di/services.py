@@ -13,6 +13,8 @@ from pocketquant.engine.market_data.sync_service import SyncService
 from pocketquant.engine.market_data.sync_status_service import SyncStatusQueryService
 from pocketquant.engine.market_data.tracked_symbols_backfill import TrackedSymbolBackfillService
 from pocketquant.engine.market_data.tracked_symbols_service import TrackedSymbolService
+from pocketquant.trading.strategy_command_service import StrategyCommandService
+from pocketquant.trading.strategy_query_service import StrategyQueryService
 
 
 class BffServiceProvider(Provider):
@@ -23,3 +25,5 @@ class BffServiceProvider(Provider):
     quote_query_service = provide(QuoteQueryService, scope=Scope.APP)
     sync_status_query_service = provide(SyncStatusQueryService, scope=Scope.APP)
     symbol_query_service = provide(SymbolQueryService, scope=Scope.APP)
+    strategy_command_service = provide(StrategyCommandService, scope=Scope.APP)
+    strategy_query_service = provide(StrategyQueryService, scope=Scope.APP)
