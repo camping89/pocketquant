@@ -10,7 +10,7 @@ import pytest
 
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
-from pocketquant.trading.strategy_query_service import (
+from pocketquant.engine.strategy_query_service import (
     GetStrategyPositionsQuery,
     GetStrategyTradesQuery,
 )
@@ -22,7 +22,7 @@ class GetStrategyPositionsHandler:
     def __init__(self, position_repository: Any) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_query_service import StrategyQueryService
+        from pocketquant.engine.strategy_query_service import StrategyQueryService
 
         self._svc = StrategyQueryService(
             subscription_repository=MagicMock(),
@@ -40,7 +40,7 @@ class GetStrategyTradesHandler:
     def __init__(self, position_repository: Any) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_query_service import StrategyQueryService
+        from pocketquant.engine.strategy_query_service import StrategyQueryService
 
         self._svc = StrategyQueryService(
             subscription_repository=MagicMock(),

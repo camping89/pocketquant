@@ -26,7 +26,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_request_repository
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.trading.strategy_command_service import (
+from pocketquant.engine.strategy_command_service import (
     DeleteStrategyCommand,
     RemoveSymbolCommand,
     StrategyCommandService,

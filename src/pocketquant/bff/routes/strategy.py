@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.trading.strategy_command_service import (
+from pocketquant.engine.strategy_command_service import (
     AddSymbolCommand,
     DeleteStrategyCommand,
     RemoveSymbolCommand,
@@ -19,7 +19,7 @@ from pocketquant.trading.strategy_command_service import (
     StopStrategyCommand,
     StrategyCommandService,
 )
-from pocketquant.trading.strategy_query_service import (
+from pocketquant.engine.strategy_query_service import (
     GetStrategiesQuery,
     GetStrategyPositionsQuery,
     GetStrategyQuery,

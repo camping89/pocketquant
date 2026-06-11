@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.trading.orders_positions_service import (
+from pocketquant.engine.orders_positions_service import (
     GetOrderQuery,
     GetPositionQuery,
     ListOrdersQuery,

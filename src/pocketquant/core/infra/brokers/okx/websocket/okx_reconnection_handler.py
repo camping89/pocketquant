@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from pocketquant.trading.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
+from pocketquant.core.infra.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
 
 if TYPE_CHECKING:
-    from pocketquant.trading.brokers.okx.okx_broker import OKXBroker
+    from pocketquant.core.infra.brokers.okx.okx_broker import OKXBroker
 
 logger = structlog.get_logger(__name__)
 

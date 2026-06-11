@@ -10,12 +10,12 @@ from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderStatus
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.trading.brokers.okx.okx_mapper import (
+from pocketquant.core.infra.brokers.okx.okx_mapper import (
     map_okx_balance_to_domain,
     map_okx_position_to_domain,
     map_order_to_okx_params,
 )
-from pocketquant.trading.brokers.okx.websocket import (
+from pocketquant.core.infra.brokers.okx.websocket import (
     OkxMessageParser,
     OkxOrderMapper,
     OkxPositionMapper,

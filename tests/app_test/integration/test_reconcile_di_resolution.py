@@ -21,8 +21,8 @@ from pocketquant.core.config import Settings
 from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
-from pocketquant.trading.strategy_command_service import StrategyCommandService
-from pocketquant.trading.strategy_query_service import StrategyQueryService
+from pocketquant.engine.strategy_command_service import StrategyCommandService
+from pocketquant.engine.strategy_query_service import StrategyQueryService
 
 from .app_factory import TestCoreProvider
 

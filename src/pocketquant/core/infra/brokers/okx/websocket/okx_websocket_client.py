@@ -9,7 +9,7 @@ import structlog
 import websockets
 from websockets.asyncio.client import ClientConnection
 
-from pocketquant.trading.brokers.okx.websocket.okx_auth import (
+from pocketquant.core.infra.brokers.okx.websocket.okx_auth import (
     build_login_message,
     get_private_ws_url,
 )
