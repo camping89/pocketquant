@@ -1,5 +1,6 @@
 """bff startup helpers: middleware, routes, and health checks."""
 
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -76,10 +77,16 @@ async def _list_jobs_from_mongo(
     result = []
     for doc in raw_jobs:
         job_id = doc["_id"]
+        # MongoDBJobStore stores next_run_time as a UTC float timestamp
+        # (datetime_to_utc_timestamp), None when the job is paused.
         next_run = doc.get("next_run_time")
         entry: dict[str, Any] = {
             "id": job_id,
-            "next_run": next_run.isoformat() if next_run else None,
+            "next_run": (
+                datetime.fromtimestamp(next_run, tz=UTC).isoformat()
+                if next_run is not None
+                else None
+            ),
             "last_run": last_runs.get(job_id),
         }
         result.append(entry)
