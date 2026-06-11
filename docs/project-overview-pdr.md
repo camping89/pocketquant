@@ -1,6 +1,6 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: 5 Python packages in the `uv` workspace + `pocketquant-web` as a separate npm app.
+Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: single Python package `src/pocketquant/` + `web/` as a separate npm app.
 
 Use [README](../README.md) for the current local workflow and verified endpoint names.
 
@@ -352,7 +352,7 @@ src/pocketquant/
     ├── di/               Dishka container (same 6 Providers as app)
     └── main.py           FastAPI gateway app + exception handlers
 
-packages/pocketquant-web/            # React 19 + Vite SPA (separate npm app)
+web/                                 # React 19 + Vite SPA (separate npm app)
 ├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector
 ├── Hooks: useOHLCV, useBacktest, useSymbols, use-realtime-bar, use-realtime-quote
 └── Tech: React 19, Vite, TypeScript, TanStack Router/Query, Lightweight Charts

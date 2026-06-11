@@ -1,6 +1,6 @@
 # CLAUDE.md — PocketQuant
 
-Single Python package `src/pocketquant/` (with subpackages: core, engine, backtest, trading, app, bff) + 1 Node SPA (`packages/pocketquant-web`). Pattern: DDD + Clean Architecture + Dishka DI. Dependency enforcement via import-linter contracts in `pyproject.toml` (10 contracts).
+Single Python package `src/pocketquant/` (with subpackages: core, engine, backtest, trading, app, bff) + 1 Node SPA (`web/`). Pattern: DDD + Clean Architecture + Dishka DI. Dependency enforcement via import-linter contracts in `pyproject.toml` (10 contracts).
 
 ## Layout
 

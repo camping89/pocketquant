@@ -696,7 +696,7 @@ bar = await repo.get(bar_id)
 
 ## Type Hints
 
-Use full type hints on all public APIs: functions, class attributes, complex types. Tools: `pyright packages/` for type checking.
+Use full type hints on all public APIs: functions, class attributes, complex types. Tools: `pyright` for type checking (scopes from `pyrightconfig.json`).
 
 ## Error Handling
 
@@ -790,7 +790,7 @@ We use **Pyright** (via Pylance in VSCode), not mypy:
 - **Pydantic v2 native support** (no plugin needed)
 
 ```bash
-pyright packages/                 # Type check entire packages
+pyright                            # Type check (scopes from pyrightconfig.json)
 pyright src/pocketquant/backtest/  # Check specific module
 ```
 

@@ -1,6 +1,6 @@
 # System Architecture
 
-Pattern: DDD + Clean Architecture + Dishka. Structure: Single Python package at repo-root `src/pocketquant/` with subpackages (core, engine, backtest, trading, app, bff) + Node SPA (`packages/pocketquant-web`). Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
+Pattern: DDD + Clean Architecture + Dishka. Structure: Single Python package at repo-root `src/pocketquant/` with subpackages (core, engine, backtest, trading, app, bff) + Node SPA (`web`). Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
 For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
@@ -385,7 +385,7 @@ common/
 | **Cache** | Redis async singleton |
 | **JobScheduler** | APScheduler async wrapper |
 
-### Layer 6: Presentation (Web UI) — packages/pocketquant-web (React SPA)
+### Layer 6: Presentation (Web UI) — web (React SPA)
 
 **Purpose:** TradingView-like charting interface for real-time market visualization and indicator analysis.
 

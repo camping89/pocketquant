@@ -46,9 +46,9 @@ Tài liệu mô tả feature **Add Symbol** — modal cho phép user đăng ký 
 
 | File | Vai trò |
 |------|---------|
-| `packages/pocketquant-web/src/components/strategy/add-symbol-dialog.tsx` | Modal component — local state `symbol`, `interval`, `errorMsg` |
-| `packages/pocketquant-web/src/hooks/use-subscriptions.ts` | `useAddSymbol(strategyCode)` — TanStack mutation + cache invalidation |
-| `packages/pocketquant-web/src/api/strategy-api.ts` | `addSymbol(strategyCode, body)` — POST client wrapper |
+| `web/src/components/strategy/add-symbol-dialog.tsx` | Modal component — local state `symbol`, `interval`, `errorMsg` |
+| `web/src/hooks/use-subscriptions.ts` | `useAddSymbol(strategyCode)` — TanStack mutation + cache invalidation |
+| `web/src/api/strategy-api.ts` | `addSymbol(strategyCode, body)` — POST client wrapper |
 
 **Constants:**
 - `INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']` (exchange được derive từ composite symbol `{CODE}:{EXCHANGE}`)
