@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Lock baseline net and delete dead webhooks"
-status: pending
+status: completed
 priority: P1
 effort: "2h"
 dependencies: []
@@ -50,18 +50,18 @@ TDD bước khóa: xác nhận regression net SP3 còn xanh trên develop hiện
 
 ## Todo List
 
-- [ ] Baseline gates xanh trên develop sạch
-- [ ] Layout contract test sửa sang end-state 4 subpackages; chỉ test dissolved-gone đánh xfail strict
-- [ ] Xóa trading/webhooks/
-- [ ] Grep webhooks rỗng
-- [ ] Full gates xanh
-- [ ] Commit
+- [x] Baseline gates xanh trên develop sạch
+- [x] Layout contract test sửa sang end-state 4 subpackages; chỉ test dissolved-gone đánh xfail strict
+- [x] Xóa trading/webhooks/
+- [x] Grep webhooks rỗng
+- [x] Full gates xanh
+- [x] Commit
 
 ## Success Criteria
 
-- [ ] `just test` xanh, đúng 1 xfail (`test_dissolved_subpackages_are_gone`) không hơn không kém
-- [ ] `src/pocketquant/trading/webhooks/` không tồn tại
-- [ ] `just lint-imports`, `just types`, `just lint` xanh
+- [x] `just test` xanh, đúng 1 xfail (`test_dissolved_subpackages_are_gone`) không hơn không kém
+- [x] `src/pocketquant/trading/webhooks/` không tồn tại
+- [x] `just lint-imports`, `just types`, `just lint` xanh
 
 ## Risk Assessment
 

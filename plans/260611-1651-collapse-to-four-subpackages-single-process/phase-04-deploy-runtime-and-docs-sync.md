@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Deploy runtime and docs sync"
-status: pending
+status: completed
 priority: P2
 effort: "3h"
 dependencies: [3]
@@ -61,21 +61,21 @@ dependencies: [3]
 
 ## Todo List
 
-- [ ] compose prod 1 backend service + comment single-worker (compose.local không cần sửa)
-- [ ] nginx upstream app:41921
-- [ ] VPS deploy/verify scripts cập nhật + 11-verify.sh probe /api/v1/*
-- [ ] Smoke dev flow: `just be` + Vite → SPA + API OK; `docker compose -f deploy/compose.prod.yml config` pass
-- [ ] CLAUDE.md / README / docs sync AS-IS
-- [ ] Grep guard sạch (gồm pattern 41920)
-- [ ] Full gates xanh, commit
+- [x] compose prod 1 backend service + comment single-worker (compose.local không cần sửa)
+- [x] nginx upstream app:41921
+- [x] VPS deploy/verify scripts cập nhật + 11-verify.sh probe /api/v1/*
+- [x] Smoke dev flow: `just be` + Vite → SPA + API OK; `docker compose -f deploy/compose.prod.yml config` pass
+- [x] CLAUDE.md / README / docs sync AS-IS
+- [x] Grep guard sạch (gồm pattern 41920)
+- [x] Full gates xanh, commit
 - [ ] Push atomic Phase 3+4 cùng 1 lần, theo dõi CI deploy + verify
 
 ## Success Criteria
 
-- [ ] compose prod chỉ còn 1 backend service (`app`), command/healthcheck 41921, comment single-worker
-- [ ] `11-verify.sh` có probe `/api/v1/*`
-- [ ] Không còn reference `bff` / `pocketquant.trading` / `41920` trong README, CLAUDE.md, docs/, deploy/, web/nginx.conf, justfile, pyproject.toml
-- [ ] Full gates xanh
+- [x] compose prod chỉ còn 1 backend service (`app`), command/healthcheck 41921, comment single-worker
+- [x] `11-verify.sh` có probe `/api/v1/*`
+- [x] Không còn reference `bff` / `pocketquant.trading` / `41920` trong README, CLAUDE.md, docs/, deploy/, web/nginx.conf, justfile, pyproject.toml
+- [x] Full gates xanh
 - [ ] Sau deploy thật: web:80 serve SPA, proxy `/api` tới app:41921, tất cả containers healthy, verify probe API pass
 
 ## Risk Assessment
