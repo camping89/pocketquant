@@ -203,7 +203,8 @@ async def _drop_legacy_indexes(db, collection: str, index_names: list[str]) -> N
         except Exception as exc:
             # IndexNotFound (code 27) is benign — already dropped on a prior run.
             msg = str(exc)
-            if "IndexNotFound" in msg or "index not found" in msg.lower() or "27" in msg:
+            code = getattr(exc, "code", None)
+            if code == 27 or "IndexNotFound" in msg or "index not found" in msg.lower():
                 continue
             logger.warning(
                 "mongo_migration.drop_index_failed",
