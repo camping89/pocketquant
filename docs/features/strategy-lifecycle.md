@@ -47,8 +47,8 @@ That distinction drives everything below.
 
 FE entry point: `+ New` button in left sidebar opens `NewSubscriptionDialog`
 which posts via `useCreateSubscription` mutation
-— `packages/pocketquant-web/src/components/strategies/new-subscription-dialog.tsx`
-and `packages/pocketquant-web/src/hooks/use-strategy-mutations.ts:71` (unchanged).
+— `web/src/components/strategies/new-subscription-dialog.tsx`
+and `web/src/hooks/use-strategy-mutations.ts:71` (unchanged).
 
 ### 2. How to update or change config
 
@@ -68,7 +68,7 @@ To change strategy-level parameters (e.g. `entry_lookback_bars`):
   with no parameters override. The runtime parameters override path requires
   editing code and is not exposed via API.
 - FE shows config as **read-only**:
-  `packages/pocketquant-web/src/components/strategies/strategy-config-card.tsx`
+  `web/src/components/strategies/strategy-config-card.tsx`
   exposes only Start / Stop / Delete — no edit form.
 
 To delete an entire strategy (all subscriptions + cached backtests + scheduled
@@ -107,7 +107,7 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — service call at
 Open the chart UI (`http://localhost:5173` in dev, `http://localhost/`
 when the nginx serves the built bundle via bff). The strategies dashboard is a
 **3-pane layout**
-— `packages/pocketquant-web/src/components/strategies/strategies-page-layout.tsx`:
+— `web/src/components/strategies/strategies-page-layout.tsx`:
 
 | Pane | Component | Purpose |
 |---|---|---|

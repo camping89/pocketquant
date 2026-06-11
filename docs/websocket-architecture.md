@@ -228,14 +228,14 @@ async def start_quote_feed(container, app):
 **React Hooks:**
 
 1. **`use-realtime-bar.ts`** — Binds to bars SSE
-   - File: `packages/pocketquant-web/src/hooks/use-realtime-bar.ts`
+   - File: `web/src/hooks/use-realtime-bar.ts`
    - Opens EventSource to `/api/v1/market-data/bars/stream/{symbol}?interval={interval}`
    - 30s stale threshold: marks data stale if no event received (visual indicator)
    - Schedules OHLCV refetch ~5s after bar rollover to sync closed bar with REST
    - Monotonic time guard: drops out-of-order events (guards against clock skew)
 
 2. **`use-realtime-quote.ts`** — Binds to quotes SSE
-   - File: `packages/pocketquant-web/src/hooks/use-realtime-quote.ts`
+   - File: `web/src/hooks/use-realtime-quote.ts`
    - Opens EventSource to `/api/v1/quotes/stream/{symbol}`
    - 10s stale threshold: falls back to REST polling if SSE inactive
    - Fallback: GET `/api/v1/quotes/latest/{symbol}` before SSE connects (warm start)

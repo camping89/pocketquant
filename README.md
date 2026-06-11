@@ -20,8 +20,7 @@ src/pocketquant/
 ├── trading/    # Strategy, order, position, OKX broker workflows
 ├── app/        # FastAPI headless runtime, scheduler, WS feed, strategy lifecycle, reconcile loop
 └── bff/        # FastAPI stateless gateway for read/write/backtest API routes
-packages/
-└── pocketquant-web/            # React 19 + Vite chart UI
+web/            # React 19 + Vite chart UI
 ```
 
 Dependency direction (import-linter contracts):
@@ -68,7 +67,7 @@ If services fail to start, verify that `.env` is internally consistent:
 Run the API first, then start the Vite app in a second terminal:
 
 ```bash
-cd packages/pocketquant-web
+cd web
 npm ci
 npm run dev
 ```
@@ -84,7 +83,7 @@ Vite proxies `/api/*` to `http://localhost:41921` (bff), so the browser app talk
 Build the frontend:
 
 ```bash
-cd packages/pocketquant-web
+cd web
 npm run build
 ```
 
@@ -96,7 +95,7 @@ just up  # starts pocketquant-web (nginx on :80) + bff (:41921) + app (:41920) +
 
 Open: `http://localhost/`
 
-The web container's nginx serves `packages/pocketquant-web/dist` and proxies `/api/*` to bff. Refreshing a client-side route returns `index.html` (SPA fallback).
+The web container's nginx serves `web/dist` and proxies `/api/*` to bff. Refreshing a client-side route returns `index.html` (SPA fallback).
 
 ## Market Data
 
@@ -159,7 +158,7 @@ just types
 Frontend:
 
 ```bash
-cd packages/pocketquant-web
+cd web
 npm run lint
 npm run build
 ```

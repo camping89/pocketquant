@@ -24,7 +24,7 @@ src/pocketquant/
   trading/   # -> core, engine — OKX broker
   app/       # -> all — headless runtime (scheduler, WS feed, reconcile, backtest worker)
   bff/       # -> core, backtest, trading — stateless FE gateway
-packages/pocketquant-web/  # Node SPA, only survivor of packages/
+web/       # Node SPA at repo root (packages/ deleted)
 ```
 - One root pyproject.toml (hatchling, `packages=["src/pocketquant"]`), import-linter contracts enforce layers
 - Tests: `tests/{core,engine,backtest,trading,app,bff}_test` + `tests/baseline` (OpenAPI/route/mediator snapshots + layout contract); root `tests/conftest.py` = single source for env seeding + prod-DB guard (`207.148.79.60` fragment); per-suite conftests fixture-only

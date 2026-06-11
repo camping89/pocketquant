@@ -54,8 +54,7 @@ src/pocketquant/
 ├── trading/    # → core + engine — live trading, OKX broker, strategy/subscription
 ├── app/        # → all — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
 └── bff/        # → all except app — stateless gateway: read/write routes, backtest enqueue
-packages/
-└── pocketquant-web/   # React 19 + Vite SPA (separate npm app)
+web/        # React 19 + Vite SPA (separate npm app)
 ```
 
 Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings. `fastapi` may only be imported by `app`/`bff`.
