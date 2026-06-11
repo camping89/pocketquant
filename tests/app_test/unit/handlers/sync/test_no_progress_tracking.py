@@ -1,7 +1,7 @@
 """Tests for no-progress tracking + anomaly log emission.
 
 Mocks SyncStatusRepository, BarRepository, SymbolRepository, Cache, and
-IDataProvider. Patches `fetch_with_retry` so handler uses scripted
+IDataProvider. Patches `fetch_with_retry` so service uses scripted
 provider responses without retry overhead.
 
 Each test asserts which sync_status_repo method was called (bump vs reset)
@@ -18,8 +18,7 @@ import structlog
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.engine.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
-from pocketquant.engine.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
+from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 
 def _bar(ts: datetime) -> Bar:
@@ -44,7 +43,7 @@ def _misaligned() -> Bar:
     return _bar(datetime(2026, 5, 5, 11, 31, 23, tzinfo=UTC))
 
 
-def _build_handler(
+def _build_service(
     *,
     fetch_records: list[Bar],
     fetch_attempts: int = 1,
@@ -52,8 +51,8 @@ def _build_handler(
     latest_age_seconds: int = 0,
     insert_count: int = 0,
     bump_returns: int = 1,
-) -> tuple[SyncSymbolHandler, dict[str, AsyncMock]]:
-    """Wire a handler with mocks pre-configured for a given scenario."""
+) -> tuple[SyncService, dict[str, AsyncMock]]:
+    """Wire a SyncService with mocks pre-configured for a given scenario."""
     provider = AsyncMock()
     cache = AsyncMock()
     cache.delete_pattern = AsyncMock()
@@ -76,7 +75,7 @@ def _build_handler(
     sync_status_repo.bump_empty_fetch = AsyncMock(return_value=bump_returns)
     sync_status_repo.reset_empty_fetch = AsyncMock()
 
-    handler = SyncSymbolHandler(
+    svc = SyncService(
         provider=provider,
         cache=cache,
         bar_repository=bar_repo,
@@ -94,14 +93,14 @@ def _build_handler(
 
     # Patch fetch_with_retry so we control records + attempts directly.
     fetch_mock = AsyncMock(return_value=(fetch_records, fetch_attempts))
-    patch_target = "pocketquant.engine.market_data.handlers.sync.sync_one.handler.fetch_with_retry"
-    handler._fetch_patch = patch(patch_target, fetch_mock)  # type: ignore[attr-defined]
-    handler._fetch_patch.start()  # type: ignore[attr-defined]
-    return handler, mocks
+    patch_target = "pocketquant.engine.market_data.sync_service.fetch_with_retry"
+    svc._fetch_patch = patch(patch_target, fetch_mock)  # type: ignore[attr-defined]
+    svc._fetch_patch.start()  # type: ignore[attr-defined]
+    return svc, mocks
 
 
-def _stop(handler: SyncSymbolHandler) -> None:
-    handler._fetch_patch.stop()  # type: ignore[attr-defined]
+def _stop(svc: SyncService) -> None:
+    svc._fetch_patch.stop()  # type: ignore[attr-defined]
 
 
 def _command() -> SyncSymbolCommand:
@@ -116,16 +115,16 @@ def _command() -> SyncSymbolCommand:
 @pytest.mark.asyncio
 async def test_empty_fetch_with_existing_data_bumps_streak() -> None:
     """Provider returned [] but DB has bars → bump only, no reset."""
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[],
         existing_count=10,
         insert_count=0,
         bump_returns=1,
     )
     try:
-        await handler.handle(_command())
+        await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     mocks["sync_status_repo"].bump_empty_fetch.assert_awaited_once()
     mocks["sync_status_repo"].reset_empty_fetch.assert_not_called()
@@ -134,16 +133,16 @@ async def test_empty_fetch_with_existing_data_bumps_streak() -> None:
 @pytest.mark.asyncio
 async def test_all_misaligned_bumps_streak() -> None:
     """Provider returned only misaligned bar → all dropped → bump only."""
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[_misaligned()],
         existing_count=10,
         insert_count=0,
         bump_returns=1,
     )
     try:
-        await handler.handle(_command())
+        await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     mocks["sync_status_repo"].bump_empty_fetch.assert_awaited_once()
     mocks["sync_status_repo"].reset_empty_fetch.assert_not_called()
@@ -152,16 +151,16 @@ async def test_all_misaligned_bumps_streak() -> None:
 @pytest.mark.asyncio
 async def test_all_existing_filtered_bumps_streak() -> None:
     """Aligned bars but all already exist → insert_count=0 → bump."""
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[_aligned()],
         existing_count=10,
         insert_count=0,
         bump_returns=1,
     )
     try:
-        await handler.handle(_command())
+        await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     mocks["sync_status_repo"].bump_empty_fetch.assert_awaited_once()
     mocks["sync_status_repo"].reset_empty_fetch.assert_not_called()
@@ -170,16 +169,16 @@ async def test_all_existing_filtered_bumps_streak() -> None:
 @pytest.mark.asyncio
 async def test_successful_insert_resets_streak() -> None:
     """inserted_count > 0 → reset only, no bump."""
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[_aligned()],
         existing_count=10,
         insert_count=2,
         bump_returns=0,
     )
     try:
-        await handler.handle(_command())
+        await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     mocks["sync_status_repo"].reset_empty_fetch.assert_awaited_once()
     mocks["sync_status_repo"].bump_empty_fetch.assert_not_called()
@@ -189,7 +188,7 @@ async def test_successful_insert_resets_streak() -> None:
 async def test_streak_three_with_stale_age_emits_error() -> None:
     """streak==3 AND age > 3× cadence → ERROR stuck_threshold_crossed."""
     cadence = 900  # 15m in seconds
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[],
         existing_count=10,
         latest_age_seconds=cadence * 4,  # > 3× cadence
@@ -198,9 +197,9 @@ async def test_streak_three_with_stale_age_emits_error() -> None:
     )
     try:
         with structlog.testing.capture_logs() as logs:
-            await handler.handle(_command())
+            await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     assert any(
         log.get("event") == "market_data.sync.stuck_threshold_crossed"
@@ -213,7 +212,7 @@ async def test_streak_three_with_stale_age_emits_error() -> None:
 async def test_streak_four_only_warns_no_extra_error() -> None:
     """streak==4 (already past threshold) → WARN no_progress, no extra ERROR."""
     cadence = 900
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[],
         existing_count=10,
         latest_age_seconds=cadence * 5,
@@ -222,9 +221,9 @@ async def test_streak_four_only_warns_no_extra_error() -> None:
     )
     try:
         with structlog.testing.capture_logs() as logs:
-            await handler.handle(_command())
+            await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     has_error = any(log.get("event") == "market_data.sync.stuck_threshold_crossed" for log in logs)
     has_warn = any(
@@ -238,16 +237,16 @@ async def test_streak_four_only_warns_no_extra_error() -> None:
 @pytest.mark.asyncio
 async def test_first_sync_no_data_fails_no_bump_or_reset() -> None:
     """fetched=0 AND no existing bars → _fail; no bump, no reset."""
-    handler, mocks = _build_handler(
+    svc, mocks = _build_service(
         fetch_records=[],
         existing_count=0,
         insert_count=0,
         bump_returns=0,
     )
     try:
-        result = await handler.handle(_command())
+        result = await svc.sync_one(_command())
     finally:
-        _stop(handler)
+        _stop(svc)
 
     assert result.status == "error"
     mocks["sync_status_repo"].bump_empty_fetch.assert_not_called()

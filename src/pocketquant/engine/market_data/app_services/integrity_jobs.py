@@ -6,12 +6,11 @@ All functions accept composite ``symbol`` (``{code}:{exchange}``) — no separat
 from datetime import UTC, datetime, timedelta
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.services.bar_builder import get_bar_start, is_bar_aligned
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.engine.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 logger = get_logger(__name__)
 
@@ -79,7 +78,7 @@ async def repair_integrity(
     symbol: str,
     interval: Interval,
     bar_repo: BarRepository,
-    mediator: Mediator,
+    sync_service: SyncService,
     *,
     source: str,
     days_back: int = 7,
@@ -104,7 +103,7 @@ async def repair_integrity(
                 skip_filter=True,
                 source=source,
             )
-            await mediator.send(command)
+            await sync_service.sync_one(command)
             resynced = len(report["gap_ranges"])
         except Exception as e:
             logger.error(

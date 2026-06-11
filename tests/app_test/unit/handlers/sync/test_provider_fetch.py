@@ -15,8 +15,8 @@ import structlog
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.engine.market_data.handlers.sync.sync_one import provider_fetch
-from pocketquant.engine.market_data.handlers.sync.sync_one.provider_fetch import (
+from pocketquant.engine.market_data.sync_internals import provider_fetch
+from pocketquant.engine.market_data.sync_internals.provider_fetch import (
     fetch_with_retry,
 )
 

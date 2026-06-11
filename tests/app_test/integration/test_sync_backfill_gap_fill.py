@@ -20,7 +20,7 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.engine.market_data.handlers.sync.sync_one.bar_filters import (
+from pocketquant.engine.market_data.sync_internals.bar_filters import (
     filter_new_bars,
 )
 

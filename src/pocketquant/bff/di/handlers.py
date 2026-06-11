@@ -3,6 +3,7 @@
 Excludes the 5 dropped live-runtime quote handlers (get_all, get_status/subscribe-count,
 subscribe, unsubscribe, get_quote_service_status) and any engine/scheduler-only
 handlers (none exist here — all bff handlers are pure Mongo/Cache reads/writes).
+Market-data handlers are removed: those routes now call feature services directly.
 """
 
 from dishka import Provider, Scope, provide
@@ -13,19 +14,6 @@ from pocketquant.backtest.handlers.list_results.handler import ListBacktestsHand
 from pocketquant.backtest.handlers.optimize.handler import RunOptimizationHandler
 from pocketquant.backtest.handlers.run.handler import RunBacktestHandler
 from pocketquant.backtest.handlers.run_all_backtests.handler import RunAllBacktestsHandler
-from pocketquant.engine.market_data.handlers.list_symbols.handler import ListSymbolsHandler
-from pocketquant.engine.market_data.handlers.ohlcv.get_ohlcv.handler import GetOHLCVHandler
-from pocketquant.engine.market_data.handlers.quotes.get_latest.handler import (
-    GetLatestQuoteHandler,
-)
-from pocketquant.engine.market_data.handlers.status.get_symbol_sync_status.handler import (
-    GetSymbolSyncStatusHandler,
-)
-from pocketquant.engine.market_data.handlers.status.get_sync_status.handler import (
-    GetSyncStatusHandler,
-)
-from pocketquant.engine.market_data.handlers.sync.sync_bulk.handler import BulkSyncHandler
-from pocketquant.engine.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 from pocketquant.trading.handlers.strategy.delete.handler import DeleteStrategyHandler
 from pocketquant.trading.handlers.strategy.get_all.handler import GetStrategiesHandler
@@ -50,15 +38,6 @@ from pocketquant.trading.handlers.strategy.stop.handler import StopStrategyHandl
 
 
 class BffHandlerProvider(Provider):
-    # Market data — execution package
-    sync_symbol_handler = provide(SyncSymbolHandler, scope=Scope.APP)
-    bulk_sync_handler = provide(BulkSyncHandler, scope=Scope.APP)
-    get_ohlcv_handler = provide(GetOHLCVHandler, scope=Scope.APP)
-    get_latest_quote_handler = provide(GetLatestQuoteHandler, scope=Scope.APP)
-    get_sync_status_handler = provide(GetSyncStatusHandler, scope=Scope.APP)
-    get_symbol_sync_status_handler = provide(GetSymbolSyncStatusHandler, scope=Scope.APP)
-    list_symbols_handler = provide(ListSymbolsHandler, scope=Scope.APP)
-
     # Trading — pure Mongo writes/reads (declarative after Phase 3)
     # list_orders / get_order / list_positions / get_position excluded: they depend
     # on OrderAppService / PositionAppService which hold live in-RAM engine state.
@@ -84,13 +63,6 @@ class BffHandlerProvider(Provider):
 
 
 ALL_BFF_HANDLER_TYPES: list[type] = [
-    SyncSymbolHandler,
-    BulkSyncHandler,
-    GetOHLCVHandler,
-    GetLatestQuoteHandler,
-    GetSyncStatusHandler,
-    GetSymbolSyncStatusHandler,
-    ListSymbolsHandler,
     StartStrategyHandler,
     StopStrategyHandler,
     GetStrategiesHandler,

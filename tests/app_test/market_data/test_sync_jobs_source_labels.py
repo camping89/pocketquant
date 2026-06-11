@@ -1,4 +1,4 @@
-"""sync_1m and sync_backfill hand-off the correct source label downstream."""
+"""sync_1m and sync_backfill hand-off the correct source label to SyncService."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_SYNC_1M,
 )
 from pocketquant.engine.market_data.app_services import sync_jobs
-from pocketquant.engine.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 
 class _FakeContainer:
@@ -24,8 +24,7 @@ class _FakeContainer:
         return self._mapping[cls]
 
 
-def _wire_container(monkeypatch: pytest.MonkeyPatch, *, mediator) -> None:
-    from pocketquant.core.common.mediator import Mediator
+def _wire_container(monkeypatch: pytest.MonkeyPatch, *, sync_service) -> None:
     from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
     from pocketquant.core.infra.persistence.repositories.job_history_repository import (
         JobHistoryRepository,
@@ -35,10 +34,9 @@ def _wire_container(monkeypatch: pytest.MonkeyPatch, *, mediator) -> None:
     )
 
     tracked_repo = MagicMock()
-    # one tracked symbol triggers one mediator.send per interval.
+    # one tracked symbol triggers one sync_service.sync_one per interval.
     tracked_sym = MagicMock()
-    tracked_sym.symbol = "BTCUSDT"
-    tracked_sym.exchange = "BINANCE"
+    tracked_sym.symbol = "BTCUSDT:BINANCE"
     tracked_repo.list_all = AsyncMock(return_value=[tracked_sym])
 
     history_repo = MagicMock()
@@ -50,7 +48,7 @@ def _wire_container(monkeypatch: pytest.MonkeyPatch, *, mediator) -> None:
 
     container = _FakeContainer(
         {
-            Mediator: mediator,
+            SyncService: sync_service,
             JobHistoryRepository: history_repo,
             TrackedSymbolRepository: tracked_repo,
             BarRepository: bar_repo,
@@ -59,8 +57,8 @@ def _wire_container(monkeypatch: pytest.MonkeyPatch, *, mediator) -> None:
     monkeypatch.setattr(sync_jobs, "_container", container)
 
 
-def _make_mediator() -> MagicMock:
-    mediator = MagicMock()
+def _make_sync_service() -> MagicMock:
+    svc = MagicMock(spec=SyncService)
     result = MagicMock()
     result.bars_synced = 0
     result.bars_fetched = 0
@@ -68,16 +66,16 @@ def _make_mediator() -> MagicMock:
     result.filtered_misaligned = 0
     result.status = "completed"
     result.message = ""
-    mediator.send = AsyncMock(return_value=result)
-    return mediator
+    svc.sync_one = AsyncMock(return_value=result)
+    return svc
 
 
 @pytest.mark.asyncio
 async def test_sync_1m_dispatches_with_rest_sync_1m_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mediator = _make_mediator()
-    _wire_container(monkeypatch, mediator=mediator)
+    sync_service = _make_sync_service()
+    _wire_container(monkeypatch, sync_service=sync_service)
 
     # Stub cascade_for_symbol to avoid touching bar repo.
     monkeypatch.setattr(
@@ -88,7 +86,7 @@ async def test_sync_1m_dispatches_with_rest_sync_1m_source(
 
     await sync_jobs.sync_1m()
 
-    sent = [c.args[0] for c in mediator.send.await_args_list]
+    sent = [c.args[0] for c in sync_service.sync_one.await_args_list]
     assert any(isinstance(s, SyncSymbolCommand) for s in sent)
     for cmd in sent:
         assert cmd.source == SOURCE_REST_SYNC_1M
@@ -98,12 +96,12 @@ async def test_sync_1m_dispatches_with_rest_sync_1m_source(
 async def test_sync_backfill_dispatches_with_rest_backfill_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mediator = _make_mediator()
-    _wire_container(monkeypatch, mediator=mediator)
+    sync_service = _make_sync_service()
+    _wire_container(monkeypatch, sync_service=sync_service)
 
     await sync_jobs.sync_backfill()
 
-    sent = [c.args[0] for c in mediator.send.await_args_list]
+    sent = [c.args[0] for c in sync_service.sync_one.await_args_list]
     assert sent, "expected at least one SyncSymbolCommand dispatched"
     for cmd in sent:
         assert cmd.source == SOURCE_REST_BACKFILL
