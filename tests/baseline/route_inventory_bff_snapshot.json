@@ -355,12 +355,5 @@
     ],
     "name": "health_check",
     "path": "/health"
-  },
-  {
-    "methods": [
-      "GET"
-    ],
-    "name": "spa_fallback",
-    "path": "/{path:path}"
   }
 ]

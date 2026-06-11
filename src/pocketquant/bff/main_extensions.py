@@ -138,7 +138,9 @@ def register_routes(app: FastAPI, settings: Settings) -> None:
 
         app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="static-assets")
 
-        @app.get("/{path:path}")
+        # include_in_schema=False: static-file serving, not API surface — keeps
+        # OpenAPI/route snapshots independent of whether web/dist was built.
+        @app.get("/{path:path}", include_in_schema=False)
         async def spa_fallback(path: str) -> FileResponse:
             """Serve index.html for all non-API routes (SPA fallback)."""
             file = web_dist / path
