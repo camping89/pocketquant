@@ -192,8 +192,8 @@ async def test_optimize_saves_result_and_returns_it() -> None:
 
     with patch(
         "pocketquant.backtest.backtest_command_service.GridOptimizationAppService"
-    ) as MockOptimizer:
-        instance = MockOptimizer.return_value
+    ) as mock_optimizer:
+        instance = mock_optimizer.return_value
         instance.optimize = AsyncMock(return_value=fake_result)
 
         svc = _cmd_svc(optimization_repo=optimization_repo)
@@ -211,8 +211,8 @@ async def test_optimize_builds_correct_config() -> None:
 
     with patch(
         "pocketquant.backtest.backtest_command_service.GridOptimizationAppService"
-    ) as MockOptimizer:
-        instance = MockOptimizer.return_value
+    ) as mock_optimizer:
+        instance = mock_optimizer.return_value
         instance.optimize = AsyncMock(return_value=fake_result)
 
         svc = _cmd_svc(optimization_repo=optimization_repo)
