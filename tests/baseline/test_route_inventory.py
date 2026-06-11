@@ -17,11 +17,14 @@ SNAPSHOT_PATH = Path(__file__).parent / "route_inventory_bff_snapshot.json"
 
 def _current_inventory() -> list[dict[str, Any]]:
     from fastapi.routing import APIRoute
+
     from pocketquant.bff.main import create_app
 
     inventory: list[dict[str, Any]] = []
     for route in create_app().routes:
-        if isinstance(route, APIRoute):
+        # include_in_schema filter keeps the inventory deterministic: the SPA
+        # fallback route only mounts when web/dist exists (absent in CI).
+        if isinstance(route, APIRoute) and route.include_in_schema:
             inventory.append(
                 {
                     "methods": sorted(route.methods),
