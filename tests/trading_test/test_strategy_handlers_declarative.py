@@ -9,6 +9,7 @@ instance without auto-starting; list_symbols sources run-state from the DB.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,14 +21,90 @@ from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
-from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
-from pocketquant.trading.handlers.strategy.list_symbols.handler import ListSymbolsHandler
-from pocketquant.trading.handlers.strategy.list_symbols.query import ListSymbolsQuery
-from pocketquant.trading.handlers.strategy.start.command import StartStrategyCommand
-from pocketquant.trading.handlers.strategy.start.handler import StartStrategyHandler
-from pocketquant.trading.handlers.strategy.stop.command import StopStrategyCommand
-from pocketquant.trading.handlers.strategy.stop.handler import StopStrategyHandler
+from pocketquant.trading.strategy_command_service import (
+    AddSymbolCommand,
+    StartStrategyCommand,
+    StopStrategyCommand,
+)
+from pocketquant.trading.strategy_query_service import ListSymbolsQuery
+
+# Shims: map old Handler(repo) constructor + handle(cmd) API to the new service.
+
+
+class StartStrategyHandler:
+    def __init__(self, subscription_repository: Any) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_command_service import StrategyCommandService
+
+        self._svc = StrategyCommandService(
+            subscription_repository=subscription_repository,
+            backtest_repository=MagicMock(),
+            backtest_request_repository=MagicMock(),
+            tracked_symbol_repository=MagicMock(),
+        )
+
+    async def handle(self, request: Any) -> bool:
+        return await self._svc.start(request)  # type: ignore[arg-type]
+
+
+class StopStrategyHandler:
+    def __init__(self, subscription_repository: Any) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_command_service import StrategyCommandService
+
+        self._svc = StrategyCommandService(
+            subscription_repository=subscription_repository,
+            backtest_repository=MagicMock(),
+            backtest_request_repository=MagicMock(),
+            tracked_symbol_repository=MagicMock(),
+        )
+
+    async def handle(self, request: Any) -> bool:
+        return await self._svc.stop(request)  # type: ignore[arg-type]
+
+
+class AddSymbolHandler:
+    def __init__(
+        self,
+        subscription_repository: Any,
+        tracked_symbol_repository: Any,
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_command_service import StrategyCommandService
+
+        self._svc = StrategyCommandService(
+            subscription_repository=subscription_repository,
+            backtest_repository=MagicMock(),
+            backtest_request_repository=MagicMock(),
+            tracked_symbol_repository=tracked_symbol_repository,
+        )
+
+    async def handle(self, request: Any) -> dict:
+        return await self._svc.add_symbol(request)  # type: ignore[arg-type]
+
+
+class ListSymbolsHandler:
+    def __init__(
+        self,
+        subscription_repository: Any,
+        backtest_repository: Any,
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_query_service import StrategyQueryService
+
+        self._svc = StrategyQueryService(
+            subscription_repository=subscription_repository,
+            backtest_repository=backtest_repository,
+            position_repository=MagicMock(),
+        )
+
+    async def handle(self, request: Any) -> list:
+        return await self._svc.list_symbols(request)  # type: ignore[arg-type]
+
 
 pytestmark = pytest.mark.integration
 

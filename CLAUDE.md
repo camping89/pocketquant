@@ -4,27 +4,11 @@
 
 ## Layout
 
-```
-packages/
-├── pocketquant-core/            # 0 internal deps — domain, concepts, config, ports + DTOs, all persisted entities, AND concrete adapters: Database, Cache, all repositories, PaperBroker, binance, scheduler, HTTP client
-├── pocketquant-execution/       # → core — shared strategy/order/position/risk engine
-├── pocketquant-backtest/        # → core, execution — backtest engine, optimization
-├── pocketquant-trading/         # → core, execution — live trading, OKX broker, handlers
-├── pocketquant-app/             # → all — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile loop, backtest worker
-├── pocketquant-bff/             # → core, backtest, trading — stateless gateway: read/write API routes, backtest enqueue
-└── pocketquant-web/             # Node/Vite SPA — consumes bff over HTTP
-```
-
 Dependency graph: `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. `app` and `bff` are independent siblings with no cross-imports (verified by import-linter). `backtest` and `trading` are independent siblings — neither imports the other.
 
 ## Rules that change decisions
 
-- **Ports + DTOs and concrete adapters both live in core.** Ports `IBroker`/`IBrokerFactory`/`IDataProvider`/`IRealtimeQuoteProvider` + DTOs `OrderResult`/`AccountBalance`/`OrderEvent` → `core.domain.{brokers,market_data}`; concrete adapters → `core.{persistence,brokers,market_data,scheduling,http_client}`. Domain (`core.domain`) stays I/O-free (enforced by `test_domain_purity`).
 - **All repositories in core** (`core.persistence.repositories`) — zero repos in backtest/trading.
-- **PaperBroker in core** (`core.brokers.paper`) — shared by backtest + paper trading.
-- **Shared engine in execution** — `StrategyAppService`/`OrderAppService`/`PositionAppService`/`RiskCheckHandler`; both backtest and trading consume it (breaks the old backtest↔trading cycle).
-- **Strategy injection** via the public `StrategyAppService.inject_prepared_strategy()` — never touch private members.
-- **Namespace packages (PEP 420)** — no `__init__.py` at the `pocketquant/` namespace level.
 - **Routes** use `FromDishka[Mediator]` + `DishkaRoute`, never `Depends()`.
 - **Primary keys: UUIDv7 only** — never hash / natural key / ObjectId.
 - **Async: every `await` is a preemption point** — wire deps before consumers (publish-before-subscribe), no `await` inside atomic blocks.

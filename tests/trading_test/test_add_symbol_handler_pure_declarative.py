@@ -11,10 +11,33 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.trading.handlers.strategy.add_symbol.command import AddSymbolCommand
-from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
+from pocketquant.trading.strategy_command_service import AddSymbolCommand
+
+
+class AddSymbolHandler:
+    """Shim: map old Handler(sub_repo, tracked_repo) + handle(cmd) to StrategyCommandService."""
+
+    def __init__(
+        self,
+        subscription_repository: Any,
+        tracked_symbol_repository: Any,
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from pocketquant.trading.strategy_command_service import StrategyCommandService
+
+        self._svc = StrategyCommandService(
+            subscription_repository=subscription_repository,
+            backtest_repository=MagicMock(),
+            backtest_request_repository=MagicMock(),
+            tracked_symbol_repository=tracked_symbol_repository,
+        )
+
+    async def handle(self, request: Any) -> dict:
+        return await self._svc.add_symbol(request)  # type: ignore[arg-type]
 
 
 def _make_handler(

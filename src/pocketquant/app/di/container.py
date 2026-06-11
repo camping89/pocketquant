@@ -3,6 +3,7 @@
 from dishka import AsyncContainer, make_async_container
 
 from pocketquant.app.di import (
+    AppTradingServiceProvider,
     BacktestWorkerProvider,
     CoreProvider,
     ExecutionProvider,
@@ -21,6 +22,7 @@ PROVIDERS = [
     InfrastructureProvider(),
     ExecutionProvider(),
     MarketDataProvider(),
+    AppTradingServiceProvider(),
     HandlerProvider(),
     BacktestWorkerProvider(),
 ]

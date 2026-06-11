@@ -14,6 +14,7 @@ from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
 from pocketquant.app.di import (
+    AppTradingServiceProvider,
     BacktestWorkerProvider,
     ExecutionProvider,
     HandlerProvider,
@@ -81,6 +82,7 @@ def make_test_app(settings: Settings) -> FastAPI:
         InfrastructureProvider(),
         ExecutionProvider(),
         MarketDataProvider(),
+        AppTradingServiceProvider(),
         HandlerProvider(),
         BacktestWorkerProvider(),
     ]

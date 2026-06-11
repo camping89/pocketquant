@@ -18,6 +18,7 @@ from pocketquant.bff.di.container import register_bff_handlers
 from pocketquant.bff.di.handlers import BffHandlerProvider
 from pocketquant.bff.di.market_data import BffMarketDataProvider
 from pocketquant.bff.di.persistence import BffPersistenceProvider
+from pocketquant.bff.di.services import BffServiceProvider
 from pocketquant.bff.main_extensions import (
     configure_middleware,
     register_health_checks,
@@ -65,6 +66,7 @@ def make_bff_test_app(settings: Settings) -> FastAPI:
         TestBffCoreProvider(settings),
         BffPersistenceProvider(),
         BffMarketDataProvider(),
+        BffServiceProvider(),
         BffHandlerProvider(),
     ]
     container = make_async_container(*providers)
