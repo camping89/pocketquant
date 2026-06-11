@@ -10,7 +10,7 @@ called (same runtime behaviour as the previous handler exclusion).
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 
-from pocketquant.trading.orders_positions_service import (
+from pocketquant.engine.orders_positions_service import (
     GetOrderQuery,
     GetPositionQuery,
     ListOrdersQuery,

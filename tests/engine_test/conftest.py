@@ -1,4 +1,4 @@
-"""Pytest fixtures for trading tests.
+"""Pytest fixtures for engine tests.
 
 Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
 Session-scoped fixtures here are de-duplicated by pytest across suites

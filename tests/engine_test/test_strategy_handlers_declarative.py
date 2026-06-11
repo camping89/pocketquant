@@ -21,12 +21,12 @@ from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.trading.strategy_command_service import (
+from pocketquant.engine.strategy_command_service import (
     AddSymbolCommand,
     StartStrategyCommand,
     StopStrategyCommand,
 )
-from pocketquant.trading.strategy_query_service import ListSymbolsQuery
+from pocketquant.engine.strategy_query_service import ListSymbolsQuery
 
 # Shims: map old Handler(repo) constructor + handle(cmd) API to the new service.
 
@@ -35,7 +35,7 @@ class StartStrategyHandler:
     def __init__(self, subscription_repository: Any) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_command_service import StrategyCommandService
+        from pocketquant.engine.strategy_command_service import StrategyCommandService
 
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
@@ -52,7 +52,7 @@ class StopStrategyHandler:
     def __init__(self, subscription_repository: Any) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_command_service import StrategyCommandService
+        from pocketquant.engine.strategy_command_service import StrategyCommandService
 
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
@@ -73,7 +73,7 @@ class AddSymbolHandler:
     ) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_command_service import StrategyCommandService
+        from pocketquant.engine.strategy_command_service import StrategyCommandService
 
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
@@ -94,7 +94,7 @@ class ListSymbolsHandler:
     ) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_query_service import StrategyQueryService
+        from pocketquant.engine.strategy_query_service import StrategyQueryService
 
         self._svc = StrategyQueryService(
             subscription_repository=subscription_repository,

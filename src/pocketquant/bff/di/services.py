@@ -15,8 +15,8 @@ from pocketquant.engine.market_data.sync_service import SyncService
 from pocketquant.engine.market_data.sync_status_service import SyncStatusQueryService
 from pocketquant.engine.market_data.tracked_symbols_backfill import TrackedSymbolBackfillService
 from pocketquant.engine.market_data.tracked_symbols_service import TrackedSymbolService
-from pocketquant.trading.strategy_command_service import StrategyCommandService
-from pocketquant.trading.strategy_query_service import StrategyQueryService
+from pocketquant.engine.strategy_command_service import StrategyCommandService
+from pocketquant.engine.strategy_query_service import StrategyQueryService
 
 
 class BffServiceProvider(Provider):

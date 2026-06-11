@@ -14,7 +14,7 @@ import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.trading.strategy_command_service import AddSymbolCommand
+from pocketquant.engine.strategy_command_service import AddSymbolCommand
 
 
 class AddSymbolHandler:
@@ -27,7 +27,7 @@ class AddSymbolHandler:
     ) -> None:
         from unittest.mock import MagicMock
 
-        from pocketquant.trading.strategy_command_service import StrategyCommandService
+        from pocketquant.engine.strategy_command_service import StrategyCommandService
 
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,

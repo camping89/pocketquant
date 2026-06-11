@@ -81,7 +81,7 @@ name = "Layered architecture — app/bff top tier"
 type = "layers"
 layers = [
     "pocketquant.app | pocketquant.bff",
-    "pocketquant.backtest | pocketquant.trading",
+    "pocketquant.backtest",
     "pocketquant.engine",
     "pocketquant.core",
 ]
@@ -99,7 +99,6 @@ source_modules = ["pocketquant.core"]
 forbidden_modules = [
     "pocketquant.engine",
     "pocketquant.backtest",
-    "pocketquant.trading",
     "pocketquant.app",
     "pocketquant.bff",
 ]
@@ -110,22 +109,15 @@ type = "forbidden"
 source_modules = ["pocketquant.engine"]
 forbidden_modules = [
     "pocketquant.backtest",
-    "pocketquant.trading",
     "pocketquant.app",
     "pocketquant.bff",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Backtest and Trading are independent siblings"
+name = "Backtest imports no upper package"
 type = "forbidden"
 source_modules = ["pocketquant.backtest"]
-forbidden_modules = ["pocketquant.trading", "pocketquant.app", "pocketquant.bff"]
-
-[[tool.importlinter.contracts]]
-name = "Trading does not import Backtest"
-type = "forbidden"
-source_modules = ["pocketquant.trading"]
-forbidden_modules = ["pocketquant.backtest", "pocketquant.app", "pocketquant.bff"]
+forbidden_modules = ["pocketquant.app", "pocketquant.bff"]
 
 [[tool.importlinter.contracts]]
 name = "bff does not import app"
@@ -146,7 +138,6 @@ source_modules = [
     "pocketquant.core",
     "pocketquant.engine",
     "pocketquant.backtest",
-    "pocketquant.trading",
 ]
 # import-linter rejects external subpackages, so dishka.integrations.fastapi
 # can't be listed here; tests/baseline/test_package_layout_contract.py greps

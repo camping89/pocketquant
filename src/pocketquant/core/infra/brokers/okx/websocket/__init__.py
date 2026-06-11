@@ -1,21 +1,21 @@
 """OKX WebSocket submodule - private channel connection and message handling."""
 
-from pocketquant.trading.brokers.okx.websocket.okx_auth import (
+from pocketquant.core.infra.brokers.okx.websocket.okx_auth import (
     build_login_message,
     generate_ws_signature,
     get_private_ws_url,
 )
-from pocketquant.trading.brokers.okx.websocket.okx_message_parser import OkxMessageParser
-from pocketquant.trading.brokers.okx.websocket.okx_order_mapper import OkxOrderMapper
-from pocketquant.trading.brokers.okx.websocket.okx_position_mapper import (
+from pocketquant.core.infra.brokers.okx.websocket.okx_message_parser import OkxMessageParser
+from pocketquant.core.infra.brokers.okx.websocket.okx_order_mapper import OkxOrderMapper
+from pocketquant.core.infra.brokers.okx.websocket.okx_position_mapper import (
     OkxPositionMapper,
     PositionUpdate,
 )
-from pocketquant.trading.brokers.okx.websocket.okx_reconnection_handler import (
+from pocketquant.core.infra.brokers.okx.websocket.okx_reconnection_handler import (
     OkxReconnectionHandler,
     OkxStateReconciler,
 )
-from pocketquant.trading.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
+from pocketquant.core.infra.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
 
 __all__ = [
     "OkxWebSocketClient",
