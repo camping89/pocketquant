@@ -1,18 +1,4 @@
 {
-  "app": {
-    "pocketquant.backtest.handlers.get_optimization.query.GetOptimizationQuery": "pocketquant.backtest.handlers.get_optimization.handler.GetOptimizationHandler",
-    "pocketquant.backtest.handlers.get_result.query.GetBacktestQuery": "pocketquant.backtest.handlers.get_result.handler.GetBacktestHandler",
-    "pocketquant.backtest.handlers.list_results.query.ListBacktestsQuery": "pocketquant.backtest.handlers.list_results.handler.ListBacktestsHandler",
-    "pocketquant.backtest.handlers.optimize.command.RunOptimizationCommand": "pocketquant.backtest.handlers.optimize.handler.RunOptimizationHandler",
-    "pocketquant.backtest.handlers.run.command.RunBacktestCommand": "pocketquant.backtest.handlers.run.handler.RunBacktestHandler",
-    "pocketquant.backtest.handlers.run_all_backtests.command.RunAllBacktestsCommand": "pocketquant.backtest.handlers.run_all_backtests.handler.RunAllBacktestsHandler"
-  },
-  "bff": {
-    "pocketquant.backtest.handlers.get_optimization.query.GetOptimizationQuery": "pocketquant.backtest.handlers.get_optimization.handler.GetOptimizationHandler",
-    "pocketquant.backtest.handlers.get_result.query.GetBacktestQuery": "pocketquant.backtest.handlers.get_result.handler.GetBacktestHandler",
-    "pocketquant.backtest.handlers.list_results.query.ListBacktestsQuery": "pocketquant.backtest.handlers.list_results.handler.ListBacktestsHandler",
-    "pocketquant.backtest.handlers.optimize.command.RunOptimizationCommand": "pocketquant.backtest.handlers.optimize.handler.RunOptimizationHandler",
-    "pocketquant.backtest.handlers.run.command.RunBacktestCommand": "pocketquant.backtest.handlers.run.handler.RunBacktestHandler",
-    "pocketquant.backtest.handlers.run_all_backtests.command.RunAllBacktestsCommand": "pocketquant.backtest.handlers.run_all_backtests.handler.RunAllBacktestsHandler"
-  }
+  "app": {},
+  "bff": {}
 }

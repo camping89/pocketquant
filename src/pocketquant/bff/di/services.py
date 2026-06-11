@@ -6,6 +6,8 @@ class; routes call its methods via FromDishka injection.
 
 from dishka import Provider, Scope, provide
 
+from pocketquant.backtest.backtest_command_service import BacktestCommandService
+from pocketquant.backtest.backtest_query_service import BacktestQueryService
 from pocketquant.engine.market_data.ohlcv_service import OhlcvService
 from pocketquant.engine.market_data.quotes_service import QuoteQueryService
 from pocketquant.engine.market_data.symbols_service import SymbolQueryService
@@ -27,3 +29,5 @@ class BffServiceProvider(Provider):
     symbol_query_service = provide(SymbolQueryService, scope=Scope.APP)
     strategy_command_service = provide(StrategyCommandService, scope=Scope.APP)
     strategy_query_service = provide(StrategyQueryService, scope=Scope.APP)
+    backtest_command_service = provide(BacktestCommandService, scope=Scope.APP)
+    backtest_query_service = provide(BacktestQueryService, scope=Scope.APP)

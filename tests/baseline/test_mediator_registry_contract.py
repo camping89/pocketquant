@@ -63,7 +63,10 @@ def test_mediator_registry_matches_snapshot() -> None:
 def test_every_handler_has_exactly_one_request_type() -> None:
     registry = _current_registry()
     for process, mapping in registry.items():
-        assert mapping, f"{process}: empty handler registry"
+        # Empty registry is valid during the handler→service migration; the
+        # Mediator itself is removed in the next batch.
+        if not mapping:
+            continue
         # uniqueness already enforced in _registry_for; recheck handler side
         handlers = list(mapping.values())
         assert len(handlers) == len(set(handlers)), (
