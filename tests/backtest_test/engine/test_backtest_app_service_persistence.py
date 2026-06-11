@@ -7,7 +7,7 @@ that backtest_runs / backtest_orders / backtest_trades are populated correctly.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -36,7 +36,7 @@ _SYM = "BTCUSDT:BINANCE"
 
 
 @pytest.fixture(autouse=True)
-def reset_sim() -> None:
+def reset_sim() -> Generator[None]:
     clear_simulation_time()
     yield
     clear_simulation_time()
@@ -103,7 +103,12 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
             )
             await broker.submit_order(o)
             sent_open = True
-        elif sent_open and not sent_close and event.bar_start >= t0 + timedelta(minutes=3):
+        elif (
+            sent_open
+            and not sent_close
+            and event.bar_start is not None
+            and event.bar_start >= t0 + timedelta(minutes=3)
+        ):
             o = OrderAggregate.create(
                 subscription_id="scripted",
                 symbol=_SYM,
@@ -131,7 +136,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
         event_bus=bus,
         broker=broker,
         backtest_repository=backtest_repo,
-        bar_repository=_FakeBarRepo(bars),
+        bar_repository=_FakeBarRepo(bars),  # pyright: ignore[reportArgumentType]
         order_repository=order_repo,
         trade_repository=trade_repo,
         persist_results=True,
@@ -225,7 +230,7 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
         event_bus=bus,
         broker=broker,
         backtest_repository=backtest_repo,
-        bar_repository=_FakeBarRepo(bars),
+        bar_repository=_FakeBarRepo(bars),  # pyright: ignore[reportArgumentType]
         order_repository=order_repo,
         trade_repository=trade_repo,
         persist_results=True,

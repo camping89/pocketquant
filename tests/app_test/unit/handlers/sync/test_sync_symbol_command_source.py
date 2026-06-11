@@ -11,7 +11,7 @@ from pocketquant.engine.market_data.sync_service import SyncSymbolCommand
 
 def test_missing_source_raises_validation_error() -> None:
     with pytest.raises(ValidationError) as excinfo:
-        SyncSymbolCommand(symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1)
+        SyncSymbolCommand(symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1)  # pyright: ignore[reportCallIssue]
     assert "source" in str(excinfo.value)
 
 

@@ -1,6 +1,6 @@
 # Architecture Visual Map
 
-Visual reference for codebase navigation. DDD three-tier structure (top-level, concepts, shared); 6-package layered monorepo (5 Python + `pocketquant-web`); 37 CQRS handlers + route modules + 2 SSE streams.
+Visual reference for codebase navigation. DDD three-tier structure (top-level, concepts, shared); single Python package with subpackages + Node SPA `pocketquant-web`; command/query services + route modules + 2 SSE streams.
 
 ## 1. ASCII Layer Relation Map
 
@@ -16,15 +16,15 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
   └────────────┬─────────────────────────────────┘
                │
   ╔════════════╧═════════════════════════════════════════════╗
-  ║  HANDLERS  (api + trading packages)  37 CQRS Handlers   ║
-  ║  market_data(17) strategy/trading(14) backtest(6)       ║
-  ║  Route → Command/Query → Mediator.send() → Handler      ║
+  ║  ROUTES + SERVICES  Command/Query Services              ║
+  ║  Routes delegate to services (no business logic)        ║
+  ║  Services orchestrate adapters + domain                 ║
   ║  + 2 SSE streams: /bars/stream/{symbol}, /quotes/stream ║
   ╚════════════╤═════════════════════════════════════════════╝
                │
   ┌────────────┴────────────┐
-  │   Mediator (CQRS Hub)   │
-  │  @handles → dispatch    │
+  │  Services (Command/     │
+  │   Query Orchestration)  │
   └────────────┬────────────┘
                │
     ┌──────────┼──────────────────────┐
@@ -69,7 +69,7 @@ Visual reference for codebase navigation. DDD three-tier structure (top-level, c
 
   ╔══════════════════════════════════════════════════════╗
   ║  COMMON  (core/common/)  Cross-Cutting, ALL layers  ║
-  ║  Mediator · EventBus · Middleware(3) · Health(3)    ║
+  ║  EventBus · Middleware(3) · Health(3)              ║
   ║  Logging(structlog) · UUID7 · Constants · Tracing   ║
   ╚══════════════════════════════════════════════════════╝
 
@@ -114,14 +114,13 @@ of control (Mongo) from data (RAM).
 ## 3. Domain Three-Tier Structure
 
 ```
-  packages/pocketquant-core/src/pocketquant/core/domain/
+  src/pocketquant/core/domain/
   │
   ├── TOP-LEVEL (collection-backed, to_mongo/from_mongo)
   │   ├── bar/            Bar entity, BarCompletedEvent✅, OHLCV VO, BarBuilder
   │   ├── order/          OrderAggregate, OrderStatus/Type/Side enums, 5 events
   │   ├── position/       PositionAggregate, PositionSide enum, PnL VO, 3 events
   │   ├── symbol/         Symbol entity (flattened from SymbolAggregate)
-  │   │   (Note: Subscription entity actually lives in pocketquant-trading/domain/subscription.py)
   │   ├── sync_status/    SyncStatus entity
   │   └── backtest/       BacktestResult, OptimizationResult entities
   │
@@ -142,13 +141,12 @@ of control (Mongo) from data (RAM).
 ```mermaid
 graph TB
     subgraph HTTP["HTTP Layer"]
-        Routes["FastAPI Routes<br/><code>*/handlers/*/route.py</code>"]
+        Routes["FastAPI Routes<br/><code>*/routes/*.py</code>"]
     end
 
-    subgraph CQRS["CQRS Layer"]
-        Commands["Commands/Queries<br/><code>*/handlers/*/command.py|query.py</code>"]
-        Med["Mediator<br/><code>core/common/mediator/</code>"]
-        Handlers["37 Handlers<br/><code>*/handlers/*/handler.py</code>"]
+    subgraph Services["Services Layer"]
+        Commands["Commands/Queries<br/><code>*_command_service.py<br/>*_query_service.py</code>"]
+        ServiceMethods["Service Methods<br/><code>async def method(cmd: CommandModel)</code>"]
     end
 
     subgraph APP["Application Layer — Orchestrators"]
@@ -188,8 +186,8 @@ graph TB
         Repos["13 Repositories"]
     end
 
-    Routes --> Commands --> Med --> Handlers
-    Handlers --> APP
+    Routes --> Commands --> ServiceMethods
+    ServiceMethods --> APP
     APP --> DOMAIN
     APP --> ADAPT
     APP --> PERSIST
@@ -203,24 +201,20 @@ sequenceDiagram
     participant Client
     participant Route as route.py
     participant Dishka as DishkaRoute
-    participant Med as Mediator
-    participant Handler as AddSymbolHandler
+    participant Service as StrategyCommandService
     participant Engine as StrategyAppService
     participant Broker as BrokerFactory
 
     Client->>Route: POST /strategies/{code}/subscriptions {symbol, interval}
-    Route->>Dishka: resolve FromDishka[Mediator]
-    Dishka-->>Route: Mediator singleton
-    Route->>Med: send(AddSymbolCommand)
-    Med->>Med: lookup handler by type
-    Med->>Handler: handle(command)
-    Handler->>Handler: STRATEGY_REGISTRY[strategy_code]
-    Handler->>Engine: load_strategy(StrategyConfig, strategy_class)
+    Route->>Dishka: resolve FromDishka[StrategyCommandService]
+    Dishka-->>Route: service singleton
+    Route->>Service: add_symbol(command)
+    Service->>Service: STRATEGY_REGISTRY[strategy_code]
+    Service->>Engine: load_strategy(StrategyConfig, strategy_class)
     Engine->>Broker: create_broker(config)
     Broker-->>Engine: PaperBroker instance
-    Engine-->>Handler: subscription_id
-    Handler-->>Med: subscription_id
-    Med-->>Route: subscription_id
+    Engine-->>Service: subscription_id
+    Service-->>Route: SubscriptionDTO{subscription_id, status}
     Route-->>Client: {subscription_id, status: "created"}
 ```
 
@@ -231,7 +225,6 @@ graph LR
     subgraph CoreProvider
         Settings
         EventBus
-        Mediator
     end
 
     subgraph PersistenceProvider
@@ -325,7 +318,7 @@ flowchart LR
     ┌──────────┐          ┌──────────────────────────────┐
     │  Trader  │─────────>│       PocketQuant            │
     │  (User)  │  REST    │  Algorithmic Trading Platform │
-    │          │<─────────│  DDD + CQRS + Clean Arch     │
+    │          │<─────────│  DDD + Clean Architecture    │
     └──────────┘  JSON    └──────┬───────┬───────┬───────┘
                                  │       │       │
                     ┌────────────┘       │       └────────────┐
@@ -356,7 +349,7 @@ flowchart LR
 │     ┌────────────────────┼────────────────────┐             │
 │     v                    v                    v             │
 │  ┌─────────┐      ┌──────────┐      ┌────────────────┐    │
-│  │  CQRS   │      │ Domain   │      │ Background     │    │
+│  │ Services│      │ Domain   │      │ Background     │    │
 │  │ Handlers│─────>│ Engine   │      │ Jobs           │    │
 │  │ (37)    │      │ (Pure)   │      │ (APScheduler)  │    │
 │  └─────────┘      └──────────┘      └────────────────┘    │
@@ -387,13 +380,13 @@ flowchart LR
        v                                         v
   MarketDataProvider ──> ExecutionProvider ──> HandlerProvider
 
-  Container creates all 37 handlers + registers with Mediator
+  Container creates all services + registers with routes
 ```
 
 ## 11. Event Flow
 
 ```
-  Handler ──publish──> EventBus ──notify──> Subscribers
+  Service ──publish──> EventBus ──notify──> Subscribers
                          │
        ┌─────────────────┼─────────────────┐
        v                 v                 v

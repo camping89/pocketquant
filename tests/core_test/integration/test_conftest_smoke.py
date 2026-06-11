@@ -31,6 +31,7 @@ async def test_redis_container_reachable(settings):
     import redis.asyncio as redis
 
     client = redis.from_url(str(settings.redis_url), socket_timeout=5)
-    pong = await client.ping()
+    # redis-py stubs type ping() as sync bool; the asyncio client returns a coroutine
+    pong = await client.ping()  # pyright: ignore[reportGeneralTypeIssues]
     await client.aclose()
     assert pong is True

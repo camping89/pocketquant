@@ -56,7 +56,7 @@ class TestComputeWindow:
         with patch("scripts.resync_2y_from_binance.datetime") as mock_dt:
             mock_dt.now.return_value = _FROZEN_NOW
             mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-            start_dt, end_dt = _compute_window(730)
+            _start_dt, end_dt = _compute_window(730)
 
         # end = floor(now,1min) - 1s = 2026-05-08T14:30:00Z - 1s = 2026-05-08T14:29:59Z
         expected_end = _FROZEN_NOW.replace(second=0, microsecond=0) - timedelta(seconds=1)

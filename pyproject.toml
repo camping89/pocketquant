@@ -144,6 +144,20 @@ source_modules = ["pocketquant.app"]
 forbidden_modules = ["pocketquant.bff"]
 
 [[tool.importlinter.contracts]]
+name = "fastapi only in app/bff"
+type = "forbidden"
+source_modules = [
+    "pocketquant.core",
+    "pocketquant.engine",
+    "pocketquant.backtest",
+    "pocketquant.trading",
+]
+# import-linter rejects external subpackages, so dishka.integrations.fastapi
+# can't be listed here; tests/baseline/test_package_layout_contract.py greps
+# for it instead.
+forbidden_modules = ["fastapi"]
+
+[[tool.importlinter.contracts]]
 name = "No bson/ObjectId usage — UUID7 only"
 type = "forbidden"
 source_modules = ["pocketquant"]

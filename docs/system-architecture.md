@@ -1,12 +1,12 @@
 # System Architecture
 
-Pattern: DDD + CQRS + Clean Architecture + Dishka. Structure: 6-package layered monorepo (5 Python `uv` workspace + `pocketquant-web`): `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
+Pattern: DDD + Clean Architecture + Dishka. Structure: Single Python package at repo-root `src/pocketquant/` with subpackages (core, engine, backtest, trading, app, bff) + Node SPA (`packages/pocketquant-web`). Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
 For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
 ## High-Level Architecture
 
-PocketQuant uses **Clean Architecture + DDD + CQRS** with strict unidirectional dependency flow: Features → Application → Domain, Adapters → Domain. A modern React 19 SPA frontend consumes the REST API.
+PocketQuant uses **Clean Architecture + DDD** with strict unidirectional dependency flow: Routes → Services → Domain, Adapters → Domain. Command/Query services orchestrate domain logic. A modern React 19 SPA frontend consumes the REST API.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -95,7 +95,7 @@ Control plane (desired state)           Data plane (live engine)
 
 **Handlers are declarative:** `StartStrategyCommand` and `StopStrategyCommand` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
 
-**Reconcile loop:** `StrategyReconcileService` (in `pocketquant-execution`) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
+**Reconcile loop:** `StrategyReconcileService` (in `engine` subpackage) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
 1. Iterates `sub_repo.list_all()` (reads from Mongo)
 2. For each subscription, compares `desired_state` to live `StrategyAppService` instance's run-state
 3. Calls `start_strategy()` or `stop_strategy()` to converge
@@ -110,7 +110,7 @@ Control plane (desired state)           Data plane (live engine)
 
 ## Clean Architecture Layer Breakdown
 
-### Layer 1: Domain (Pure Business Logic) — packages/pocketquant-core/src/pocketquant/core/domain/
+### Layer 1: Domain (Pure Business Logic) — src/pocketquant/core/domain/
 
 **Purpose:** Core business rules with ZERO external dependencies. Reusable domain concepts.
 
@@ -182,25 +182,27 @@ BarBuilder and PositionSizer are pure domain services with zero I/O, implementin
 
 ### Layer 2: Application (Orchestrators) — `execution`, `backtest`, `trading`, `api` packages
 
-**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `pocketquant-execution` and is consumed by both `backtest` and `trading` (breaks the old backtest↔trading cycle).
+**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `engine` subpackage and is consumed by both `backtest` and `trading`.
 
 **Structure:**
 ```
-pocketquant-execution/.../execution/app_services/   # SHARED engine (used by backtest + trading)
-├── strategy_app_service.py     # StrategyAppService (dispatch, signal handling, broker wiring)
-├── order_app_service.py        # OrderAppService (order state, recovery)
-└── position_app_service.py     # PositionAppService (position tracking, P&L)
+src/pocketquant/engine/                # SHARED engine (used by backtest + trading)
+├── strategy_command_service.py        # StrategyCommandService (dispatch, signal handling)
+├── strategy_query_service.py          # StrategyQueryService (read strategies, subscriptions)
+├── order_command_service.py           # OrderCommandService (order state, recovery)
+├── orders_positions_service.py        # OrdersPositionsService (combined query service)
+└── ... (other orchestrators)
 
-pocketquant-backtest/.../backtest/   # Backtest orchestration
-├── engine/backtest_app_service.py    # BacktestAppService (execute backtest)
-├── engine/result_collector.py        # ResultCollector (collect fills, metrics)
-├── optimization/                     # GridOptimizationAppService (parameter search)
-├── jobs/ + handlers/                 # backtest-run orchestration (run_all_backtests)
-└── domain/services/                  # PerformanceCalculator (NumPy metrics)
+src/pocketquant/backtest/              # Backtest orchestration
+├── backtest_command_service.py        # BacktestCommandService (execute backtest)
+├── backtest_query_service.py          # BacktestQueryService (fetch results)
+├── optimization/                      # GridOptimizationAppService (parameter search)
+└── ... (other orchestrators)
 
-pocketquant-app/.../api/market_data/app_services/   # Market-data orchestration
-├── bar_app_service.py          # BarAppService (multi-interval aggregation)
-└── quote_app_service.py        # QuoteAppService (WebSocket lifecycle)
+src/pocketquant/core/domain/services/  # Pure domain services
+├── performance_calculator.py          # PerformanceCalculator (NumPy metrics)
+├── bar_builder.py                     # BarBuilder (OHLCV aggregation)
+└── position_sizer.py                  # PositionSizer (risk calculations)
 ```
 
 **Example - Application Service:**
@@ -228,126 +230,61 @@ class StrategyAppService:
         await self.event_bus.publish(SignalGeneratedEvent(...))
 ```
 
-### Layer 3: Handlers (CQRS Operation Routes) — `trading/handlers/`, `backtest/handlers/`, `api/market_data/handlers/`
+### Layer 3: Routes (API Layer) — `app/routes/`, `bff/routes/`, etc.
 
-**Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to handlers, return responses.
+**Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to command/query services, return responses.
 
-**Pattern:** Operation-first vertical slices. Each operation is a self-contained use case (command/query + handler). The folder layout below illustrates the slice pattern; handlers physically live under each package's `handlers/` root (see "Where Does X Live?" above for exact paths).
+**Pattern:** Routes use FastAPI's `APIRouter(route_class=DishkaRoute)` and inject service dependencies via `FromDishka[CommandService]` or `FromDishka[QueryService]`. Each route accepts a Pydantic command/query model and returns a DTO.
 
 **Structure:**
-```
-features/
-├── backtesting/              # Backtest feature (5 operations)
-│   ├── run/                 # Operation: Execute backtest
-│   │   ├── command.py       # RunBacktestCommand
-│   │   ├── handler.py       # RunBacktestHandler → BacktestAppService.run()
-│   │   └── route.py         # POST /api/v1/backtest/run
-│   ├── optimize/            # Operation: Optimize parameters
-│   │   ├── command.py       # OptimizeCommand
-│   │   ├── handler.py       # OptimizeHandler → GridOptimizationAppService.optimize()
-│   │   └── route.py         # POST /api/v1/backtest/optimize
-│   ├── get_result/          # Operation: Get backtest result
-│   │   ├── query.py
-│   │   └── handler.py
-│   ├── list_results/        # Operation: List results
-│   │   ├── query.py
-│   │   └── handler.py
-│   ├── get_optimization/    # Operation: Get optimization result
-│   │   ├── query.py
-│   │   └── handler.py
-│   └── router.py            # Feature router (aggregates all operations)
-├── market_data/              # Market data feature
-│   ├── sync/                # Nested group
-│   │   ├── sync_one/       # Operation: Sync single symbol
-│   │   ├── sync_bulk/      # Operation: Sync multiple symbols
-│   │   └── router.py
-│   ├── bar/                 # Nested group (renamed from ohlcv/)
-│   │   ├── get_bars/       # Operation: Get bars
-│   │   └── router.py
-│   ├── integrity/           # NEW: Nested group for data integrity
-│   │   ├── check/          # Operation: Check bar alignment + gaps
-│   │   ├── repair/         # Operation: Delete misaligned, resync gaps
-│   │   └── route.py
-│   ├── quotes/              # Nested group (WS feed auto-started by lifespan)
-│   │   ├── subscribe/      # Operation: Subscribe
-│   │   ├── unsubscribe/    # Operation: Unsubscribe
-│   │   ├── get_all/        # Operation: Get all quotes
-│   │   └── router.py
-│   ├── status/              # Nested group
-│   │   ├── get_sync_status/
-│   │   └── router.py
-│   ├── list_symbols/        # Operation: List symbols
-│   └── router.py
-├── strategy/                 # Strategy feature (10 operations)
-│   ├── get_all/            # Operation: List strategy templates (STRATEGY_REGISTRY)
-│   ├── get_one/            # Operation: Get strategy
-│   ├── start/              # Operation: Start strategy
-│   ├── stop/               # Operation: Stop strategy
-│   ├── subscriptions/       # NEW: Nested group for strategy subscriptions
-│   │   ├── add_symbol/     # Operation: POST /strategies/{strategy_code}/subscriptions
-│   │   ├── list_symbols/   # Operation: GET /subscriptions/?strategy_code=...
-│   │   ├── remove_symbol/  # Operation: DELETE /subscriptions/{sub_id}
-│   │   ├── run_all_backtests/ # Operation: POST /strategies/{strategy_code}/run-all-backtests
-│   │   ├── get_subscription_backtest/ # Operation: GET /subscriptions/{sub_id}/backtest
-│   │   ├── start/          # Operation: POST /subscriptions/{sub_id}/start
-│   │   ├── stop/           # Operation: POST /subscriptions/{sub_id}/stop
-│   │   ├── get_positions/  # Operation: GET /subscriptions/{sub_id}/positions
-│   │   ├── get_trades/     # Operation: GET /subscriptions/{sub_id}/trades
-│   │   └── router.py
-│   ├── delete/             # Operation: DELETE /strategies/{strategy_code} (cascade)
-│   └── router.py
-├── trading/                  # Trading feature (3 operations)
-│   ├── list_orders/        # Operation: List orders
-│   ├── get_order/          # Operation: Get order
-│   ├── list_positions/     # Operation: List positions
-│   ├── get_position/       # Operation: Get position
-│   └── router.py
-├── risk/                     # Risk feature (1 operation)
-│   ├── check_risk/         # Operation: Pre-trade validation
-│   └── router.py
-└── __init__.py
+Routes are organized by feature (backtest, strategy, trading, market_data) with APIRouter registering endpoints. Example route calls a command service method directly:
+
+```python
+# src/pocketquant/bff/routes/strategy.py (example)
+router = APIRouter(route_class=DishkaRoute)
+
+@router.post("/strategies/{strategy_code}/subscriptions")
+async def add_symbol(
+    strategy_code: str,
+    cmd: AddSymbolCommand,
+    strategy_svc: FromDishka[StrategyCommandService]
+) -> SubscriptionDTO:
+    return await strategy_svc.add_symbol(cmd.symbol, cmd.interval)
 ```
 
-**Operation Pattern (Inside each operation folder):**
-```
-operation_name/
-├── command.py or query.py    # Request definition (Pydantic model)
-├── handler.py                # CQRS handler (async handle method)
-├── route.py                  # FastAPI route (optional, often in parent router)
-└── __init__.py
-```
-
-**Handler 5-Step Pattern:**
-1. Receive Command/Query → 2. Fetch Adapters → 3. Execute Domain → 4. Persist Adapters → 5. Return DTO
+**Service 5-Step Pattern** (in command/query services):
+1. Receive Command/Query (Pydantic model) → 2. Fetch Adapters → 3. Execute Domain → 4. Persist Adapters → 5. Return DTO
 
 **Example:**
 ```python
-@handles(RunBacktestCommand)
-class RunBacktestHandler(Handler[RunBacktestCommand, BacktestResultDTO]):
-    async def handle(self, cmd: RunBacktestCommand) -> BacktestResultDTO:
+# src/pocketquant/backtest/backtest_command_service.py
+class BacktestCommandService:
+    async def run_backtest(self, cmd: RunBacktestCommand) -> BacktestResultDTO:
         # 1. Resolve strategy class from registry
         strategy_class = STRATEGY_REGISTRY[cmd.strategy_code]
 
         # 2. Fetch historical bars from adapters
-        bars = await BarRepository.get_bars(cmd.symbol, cmd.start_date, cmd.end_date)
+        bars = await self.bar_repo.find(
+            symbol=cmd.symbol, start_date=cmd.start_date, end_date=cmd.end_date
+        )
 
-        # 3. Execute domain logic via BacktestAppService
-        results = BacktestAppService.run(strategy, bars, self.broker)
+        # 3. Execute domain logic via orchestrator
+        results = await self._backtest_app_service.run(strategy_class, bars, self.broker)
 
         # 4. Persist to MongoDB
-        await BacktestRepository.save(results)
+        await self.backtest_repo.save(results)
 
         # 5. Return DTO (not domain entity)
         return BacktestResultDTO(
-            run_id=results.id,
+            run_id=str(results.id),
             sharpe_ratio=results.metrics.sharpe,
             ...
         )
 ```
 
-### Layer 4: Adapters (External I/O) — packages/pocketquant-core/ + other packages
+### Layer 4: Adapters (External I/O) — src/pocketquant/core/ + other subpackages
 
-**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters live in `core` (non-domain subpackages) alongside the domain layer. Abstractions (ports/DTOs) live in `core.domain.{brokers,market_data}` so execution/backtest/trading depend on contracts, not implementations (DIP). Domain purity enforced: `core.domain` imports zero I/O.
+**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters live in `core/infra/` and `core/common/`. Abstractions (ports/DTOs) live in `core/domain/{brokers,market_data}` so engine/backtest/trading depend on contracts, not implementations (DIP). Domain purity enforced: `core/domain/` imports zero I/O.
 
 **Structure:**
 ```
@@ -388,7 +325,7 @@ core/
 ```
 
 **Notes:**
-- OKX live broker (OKXBroker + websocket) lives in `pocketquant-trading/trading/brokers/okx/` (trading-specific, live only).
+- OKX live broker (OKXBroker + websocket) lives in `src/pocketquant/trading/brokers/okx/` (trading-specific, live only).
 - Ports + DTOs (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent, IDataProvider, IRealtimeQuoteProvider) live in `core.domain.{brokers,market_data}`.
 - No schemas/ — persistence lives in domain entities via `to_mongo()`/`from_mongo()` methods.
 
@@ -404,18 +341,13 @@ core/
 | **BinanceWebSocketClient** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProvider. |
 | **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
-### Layer 5: Common (Cross-Cutting) — packages/pocketquant-core/src/pocketquant/core/common/
+### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
 
-**Purpose:** Shared utilities: CQRS mediator, event bus, middleware, tracing, health checks.
+**Purpose:** Shared utilities: event bus, middleware, tracing, health checks, logging, UUID generation.
 
 **Structure:**
 ```
 common/
-├── mediator/
-│   ├── mediator.py           # Mediator (CQRS dispatcher)
-│   ├── handler.py            # Handler[TRequest, TResponse] base + @handles decorator
-│   ├── registry.py           # HandlerRegistry (auto-discovery)
-│   └── exceptions.py         # HandlerNotFoundError, DuplicateHandlerError
 ├── messaging/
 │   ├── event_bus.py          # EventBus (in-memory, FIFO, 50-event history)
 │   ├── event_handler.py      # EventHandler base class
@@ -445,7 +377,6 @@ common/
 
 | Component | Purpose |
 |-----------|---------|
-| **Mediator** | Route commands/queries to handlers, auto-discover via @handles |
 | **EventBus** | Publish domain events, subscribe handlers via @event_handler |
 | **CorrelationIdMiddleware** | Inject request ID for distributed tracing |
 | **RateLimitMiddleware** | Token bucket per IP (200 req/10s) |
@@ -454,7 +385,7 @@ common/
 | **Cache** | Redis async singleton |
 | **JobScheduler** | APScheduler async wrapper |
 
-### Layer 6: Presentation (Web UI) — packages/pocketquant-web/ (React SPA)
+### Layer 6: Presentation (Web UI) — packages/pocketquant-web (React SPA)
 
 **Purpose:** TradingView-like charting interface for real-time market visualization and indicator analysis.
 
@@ -537,7 +468,6 @@ src/
 | Value objects (OHLCV, Signal, PnL, QuoteTick) | `core/domain/{bar,concepts}/value_objects.py` |
 | Domain events (11 events) | `core/domain/{bar,order,position,concepts}/events.py` |
 | Enums (OrderStatus, Interval, Direction, etc.) | `core/domain/{bar,order,position,shared}/enums.py` |
-| CQRS Mediator + Handler base | `core/common/mediator/` |
 | Event bus + @event_handler decorator | `core/common/messaging/` |
 | Middleware (correlation, rate limit, idempotency) | `core/common/middleware/` |
 | MongoDB connection | `core/persistence/mongodb.py` |
@@ -549,7 +479,7 @@ src/
 | APScheduler wrapper | `core/scheduling/scheduler.py` |
 | Dishka DI container (6 providers) | `api/di/` |
 | FastAPI app + middleware wiring | `api/main.py`, `api/main_extensions.py` |
-| CQRS handlers (operations) | `trading/handlers/{strategy,trading}/`, `execution/handlers/risk/`, `backtest/handlers/`, `api/market_data/handlers/` |
+| Command/Query services | `app/`, `bff/`, `trading/`, `engine/`, `backtest/` (subpackage service classes) |
 | Backtest execution engine | `backtest/engine/backtest_app_service.py` |
 | Grid optimization engine | `backtest/optimization/grid_optimization_app_service.py` |
 | Strategy runtime dispatch | `execution/app_services/strategy_app_service.py` |
@@ -570,23 +500,19 @@ src/
 ### Command Flow (State Mutation)
 
 ```
-HTTP Request (POST /market-data/sync)
+HTTP Request (POST /api/v1/market-data/sync)
   ↓
 Middleware Stack
   ├─ CorrelationIdMiddleware → inject correlation_id
   ├─ RateLimitMiddleware → check token bucket (200 req/10s)
   └─ IdempotencyMiddleware → return cached response if duplicate
   ↓
-Route (api/market_data/handlers/sync/sync_one/route.py)
-  ├─ Parse request body
-  ├─ Build SyncSymbolCommand
-  └─ Call Mediator.send(command)
+Route (src/pocketquant/app/routes/market_data.py)
+  ├─ Parse request body → SyncSymbolCommand
+  ├─ Inject FromDishka[MarketDataCommandService]
+  └─ Call service.sync_symbol(command)
   ↓
-Mediator (core/common/mediator/mediator.py)
-  ├─ Lookup handler via @handles(SyncSymbolCommand)
-  └─ Call handler.handle(command)
-  ↓
-Handler (api/market_data/handlers/sync/sync_one/handler.py)
+Command Service (src/pocketquant/app/market_data_command_service.py)
   ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [adapter]
   │       └─ Excludes the in-progress bar: endTime caps at floor(now/duration)*duration - 1
   │          (in-progress quote remains in Redis via WS @aggTrade)
@@ -599,7 +525,7 @@ Route Response
   └─ Return SyncResultDTO as JSON 200
 ```
 
-**Handler 5-Step Pattern:**
+**Service 5-Step Pattern:**
 1. **Fetch** from adapters (providers, repositories)
 2. **Validate** via domain layer (aggregates, value objects)
 3. **Persist** via adapters (database, cache writes)
@@ -609,27 +535,24 @@ Route Response
 ### Query Flow (Read-Only)
 
 ```
-HTTP Request (GET /market-data/ohlcv/{symbol}/{interval}?limit=100)
+HTTP Request (GET /api/v1/market-data/bars/{symbol}/{interval}?limit=100)
   ↓
 Middleware Stack
   ├─ CorrelationIdMiddleware → inject correlation_id
   ├─ RateLimitMiddleware → check token bucket
   └─ (No idempotency for GET)
   ↓
-Route (api/market_data/handlers/ohlcv/get_ohlcv/route.py)
+Route (src/pocketquant/app/routes/market_data.py)
   ├─ Parse params (symbol as composite: BTCUSDT:BINANCE or URL-encoded %3A)
-  ├─ Build GetOHLCVQuery
-  └─ Call Mediator.send(query)
+  ├─ Build GetBarsQuery
+  ├─ Inject FromDishka[MarketDataQueryService]
+  └─ Call service.get_bars(query)
   ↓
-Mediator (core/common/mediator/mediator.py)
-  ├─ Lookup handler via @handles(GetOHLCVQuery)
-  └─ Call handler.handle(query)
-  ↓
-Handler (api/market_data/handlers/ohlcv/get_ohlcv/handler.py)
+Query Service (src/pocketquant/app/market_data_query_service.py)
   ├─ [1] Fetch: Cache.get(key) or BarRepository.get_bars()
   ├─ [2] Validate: Bar value objects
   ├─ [3] Cache: Cache.set(key, result, ttl=300)
-  └─ [4] Return: OHLCVResponse (never return entities)
+  └─ [4] Return: BarsDTO (never return entities)
   ↓
 Route Response
   └─ Return BarsDTO as JSON 200
@@ -727,7 +650,7 @@ Ready to process market events and recover fills
 
 ## Data Pipelines (Overview)
 
-**See [handler-pipelines.md](./handler-pipelines.md) for detailed 27-handler flows.**
+**See [service-and-route-conventions.md](./service-and-route-conventions.md) for the route → service → repository recipe; the per-endpoint inventory lives in FastAPI OpenAPI (`/api/v1/docs`).**
 
 Key pipelines at high level:
 1. **Historical Sync:** BinanceClient.fetch_ohlcv() → BarRepository.upsert_many() → Cache invalidation → EventBus (requires delta-volume contract)
@@ -750,28 +673,16 @@ Key pipelines at high level:
 **Key files:**
 | File | Purpose |
 |------|---------|
-| `packages/pocketquant-app/src/pocketquant/app/di/container.py` | Factory: `create_container()`, handler registration |
-| `packages/pocketquant-app/src/pocketquant/app/di/` | 6 Provider classes |
-| `packages/pocketquant-app/src/pocketquant/app/main.py` | Lifespan: create container, setup_dishka |
+| `src/pocketquant/app/di/` | Providers (Core, Persistence, Infrastructure, etc.) |
+| `src/pocketquant/app/main.py` | Lifespan: create container, setup_dishka |
 
 **6 Providers:**
-- **CoreProvider** - Settings, EventBus (max_history=**50**), Mediator
+- **CoreProvider** - Settings, EventBus (max_history=**50**)
 - **PersistenceProvider** - Database (PyMongo), Cache (Redis), repositories (Bar, Order, Position, Subscription, Symbol, SyncStatus, TrackedSymbol, Optimization, Backtest{Run,Order,Trade}, JobHistory)
 - **InfrastructureProvider** - PaperBroker, OKXBroker, BrokerFactory, BinanceClient (IDataProvider), BinanceWebSocketClient (IRealtimeQuoteProvider), OkxWebSocketClient, OkxReconnectionHandler, HTTP client, WebhookDispatcher, JobScheduler
 - **MarketDataProvider** - BarAppService, QuoteAppService, 8 sync/integrity background jobs
 - **ExecutionProvider** - OrderAppService, PositionAppService, StrategyAppService, RiskCheckHandler
-- **HandlerProvider** - All 37 CQRS handlers (via @handles decorator)
-
-**37 CQRS Handlers by Category** (registered in Dishka HandlerProvider; SSE bars/quotes streams and integrity routes are app-service-direct, not counted here — see [handler-pipelines](./handler-pipelines.md)):
-
-| Category | Count | Handlers (representative) |
-|----------|-------|----------|
-| Market data | 16 | SyncSymbolHandler, GetOHLCVHandler, SubscribeHandler, UnsubscribeHandler, GetLatestQuoteHandler, GetAllQuotesHandler, GetQuotesStatusHandler, GetSyncStatusHandler, GetSymbolSyncStatusHandler, GetQuoteServiceStatusHandler, ListSymbolsHandler, ListTrackedSymbolsHandler, AddTrackedSymbolHandler, UpdateTrackedSymbolHandler, RemoveTrackedSymbolHandler, BackfillTrackedSymbolHandler |
-| Strategy | 12 | GetStrategiesHandler, GetStrategyHandler, DeleteStrategyHandler, RunAllBacktestsHandler, AddSymbolHandler, RemoveSymbolHandler, StartStrategyHandler, StopStrategyHandler, GetStrategyPositionsHandler, GetStrategyTradesHandler, GetSubscriptionBacktestHandler, ListSymbolsHandler (subscriptions) |
-| Backtesting | 5 | RunBacktestHandler, RunOptimizationHandler, GetBacktestHandler, GetOptimizationHandler, ListBacktestsHandler |
-| Trading | 4 | ListOrdersHandler, GetOrderHandler, ListPositionsHandler, GetPositionHandler |
-
-**Handler Registration:** `register_handlers(container)` resolves all 37 handler types and registers with Mediator.
+**Service Methods (representative):** Command/Query services in each subpackage. Routes delegate to service methods which accept Pydantic models and return DTOs. Example: `StrategyCommandService.add_symbol()`, `BacktestQueryService.get()`.
 
 **8 Background Jobs** (registered in `register_sync_jobs()`):
 
@@ -795,8 +706,8 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 1. FastAPI lifespan async context manager started
 2. Load settings from .env via pydantic-settings
 3. Setup structured logging (structlog)
-4. Create dishka AsyncContainer with 6 providers (initialization order: Core → Persistence → Adapter → MarketData → Execution → Handler)
-5. `register_handlers(container)` resolves all 37 handlers, registers with Mediator
+4. Create dishka AsyncContainer with providers (initialization order: Core → Persistence → Infrastructure → MarketData → Execution → Services)
+5. Register command/query services with container
 6. `ensure_all_indexes()` creates MongoDB indexes
 7. `register_health_checks()` registers DB/Redis/job health probes
 8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`
@@ -861,10 +772,10 @@ graph LR
 **Dependency Graph (top tier only):**
 
 ```
-core ◁ execution ◁ {backtest, trading} ◁ {app, bff}
+core ◁ engine ◁ {backtest, trading} ◁ {app, bff}
        └─ app has NO imports of bff
        └─ bff has NO imports of app
-       └─ both import core + execution + backtest + trading (verified by import-linter contract: bff↛app, app↛bff)
+       └─ both import core + engine + backtest + trading (verified by import-linter contracts)
 ```
 
 **Local Dev Ports:**
@@ -901,7 +812,7 @@ core ◁ execution ◁ {backtest, trading} ◁ {app, bff}
 
 ## Performance & Security
 
-**Characteristics:** Sync 1-5s per 5k bars | Quote <100ms | Bar aggregation <1ms/tick | Mediator <0.1ms | Quote throughput 1000+/sec
+**Characteristics:** Sync 1-5s per 5k bars | Quote <100ms | Bar aggregation <1ms/tick | Service dispatch <0.1ms | Quote throughput 1000+/sec
 
 **Security:** Credentials via env vars only | Rate limit 200 req/10s per IP | Idempotency cache 24h TTL | MongoDB/Redis auth via DSN
 
@@ -988,7 +899,7 @@ APScheduler coordinates across processes via the shared `apscheduler_jobs` colle
 
 | Concern | Location |
 |---|---|
-| App layers (DDD/CQRS/DI internals) | this doc + [architecture-visual-map](./architecture-visual-map.md) |
+| App layers (DDD/Services/DI internals) | this doc + [architecture-visual-map](./architecture-visual-map.md) |
 | CI/CD pipeline + ops procedures | [deployment.md](./deployment.md) |
 | Secret/config storage | `pocketquant-config/` (own README) |
 | Container definitions | `deploy/compose.prod.yml`, `deploy/Dockerfile` |
@@ -998,12 +909,12 @@ APScheduler coordinates across processes via the shared `apscheduler_jobs` colle
 
 | Context | Responsibility | Owns | Package |
 |---|---|---|---|
-| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `pocketquant-core` (domain) + `pocketquant-app` (sync jobs) |
-| **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `pocketquant-core` (domain) + `pocketquant-trading` (orchestration) |
-| **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `pocketquant-core` (interfaces) + `pocketquant-trading` (registry, services) |
-| **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `pocketquant-core` (pure calculations) |
-| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity) | `pocketquant-core` |
-| **Backtest** | Historical replay + performance analysis | `BacktestResult`, `TradeRecord`, `PerformanceCalculator` | `pocketquant-backtest` (engine, persistence) |
+| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `Bar`, `SyncStatus`, market-data DTOs | `core` (domain) + `engine`/`app` (sync jobs) |
+| **Trading** | Order execution + position lifecycle | `OrderAggregate`, `PositionAggregate` | `core` (domain) + `trading` (orchestration) |
+| **Strategy** | Trading logic interfaces + signal generation | `IStrategy`, `Signal`, strategy implementations | `core` (interfaces) + `trading` (registry, services) |
+| **Risk** | Position sizing + risk validation | `RiskModel`, `PositionSizer` | `core` (pure calculations) |
+| **Symbol** | Tradeable-asset metadata | `Symbol` (flat entity) | `core` |
+| **Backtest** | Historical replay + performance analysis | `BacktestResult`, `TradeRecord`, `PerformanceCalculator` | `backtest` (engine) + `core` (persistence) |
 
 > A 7th container — `pocketquant-web` (Node/Vite SPA) — is a **UI surface**, not a bounded context. It consumes the API HTTP boundary; no domain logic lives there.
 

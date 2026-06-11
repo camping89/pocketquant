@@ -188,7 +188,7 @@ async def test_successful_insert_resets_streak() -> None:
 async def test_streak_three_with_stale_age_emits_error() -> None:
     """streak==3 AND age > 3× cadence → ERROR stuck_threshold_crossed."""
     cadence = 900  # 15m in seconds
-    svc, mocks = _build_service(
+    svc, _mocks = _build_service(
         fetch_records=[],
         existing_count=10,
         latest_age_seconds=cadence * 4,  # > 3× cadence
@@ -212,7 +212,7 @@ async def test_streak_three_with_stale_age_emits_error() -> None:
 async def test_streak_four_only_warns_no_extra_error() -> None:
     """streak==4 (already past threshold) → WARN no_progress, no extra ERROR."""
     cadence = 900
-    svc, mocks = _build_service(
+    svc, _mocks = _build_service(
         fetch_records=[],
         existing_count=10,
         latest_age_seconds=cadence * 5,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import UTC, datetime
 
 import pytest
@@ -17,7 +18,7 @@ from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 
 
 @pytest.fixture(autouse=True)
-def reset_sim() -> None:
+def reset_sim() -> Generator[None]:
     clear_simulation_time()
     yield
     clear_simulation_time()

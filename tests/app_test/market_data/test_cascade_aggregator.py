@@ -73,6 +73,7 @@ class TestAggregateOhlcv:
             for i in range(5)
         ]
         result = aggregate_ohlcv(bars)
+        assert result is not None
         assert result["open"] == 100.0  # first
         assert result["close"] == 107.0  # last (103.0 + 4)
         assert result["high"] == 109.0  # max (105.0 + 4)
@@ -133,6 +134,7 @@ class TestAggregateOhlcv:
             ),
         ]
         result = aggregate_ohlcv(bars)
+        assert result is not None
         assert result["open"] == 110.0  # first in time
         assert result["close"] == 95.0  # last in time
 
@@ -296,18 +298,22 @@ def mock_bar_repo():
             self,
             symbol: str,
             interval: Interval,
-            start_date: datetime = None,
-            end_date: datetime = None,
+            start_date: datetime | None = None,
+            end_date: datetime | None = None,
             limit: int = 5000,
         ) -> list[Bar]:
-            matching = [b for b in self.bars if b.symbol == symbol and b.interval == interval]
+            matching = [
+                b
+                for b in self.bars
+                if b.symbol == symbol and b.interval == interval and b.datetime is not None
+            ]
             if start_date and end_date:
-                matching = [b for b in matching if start_date <= b.datetime <= end_date]
+                matching = [b for b in matching if start_date <= b.datetime <= end_date]  # type: ignore[operator]
             # Sort by datetime and return limited results
-            return sorted(matching, key=lambda b: b.datetime, reverse=True)[:limit]
+            return sorted(matching, key=lambda b: b.datetime or datetime.min, reverse=True)[:limit]
 
         async def get_latest(self, symbol: str, interval: Interval):
             matching = [b for b in self.bars if b.symbol == symbol and b.interval == interval]
-            return max(matching, key=lambda b: b.datetime) if matching else None
+            return max(matching, key=lambda b: b.datetime or datetime.min) if matching else None
 
     return MockBarRepository()

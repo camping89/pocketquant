@@ -6,11 +6,11 @@
 The PocketQuant strategy model is **template-based**:
 
 - A **template** is a Python class registered in `STRATEGY_REGISTRY` (e.g. `hitnrun2`)
-  — `packages/pocketquant-core/src/pocketquant/core/concepts/strategy/services/__init__.py:5`
+  — `src/pocketquant/core/domain/strategy/services/__init__.py:5`
 - A **subscription** binds a template to a `(symbol, interval)` pair and is the
   unit that lives in MongoDB. Each subscription owns its own in-memory
   `IStrategy` instance keyed by the subscription's deterministic ID
-  — `packages/pocketquant-trading/.../trading/domain/subscription.py:24`
+  — `src/pocketquant/core/domain/subscription/entities.py:24`
 
 **Key terminology:**
 - `strategy_code`: the template name (e.g., `"hitnrun2"`), used to identify which strategy class to instantiate
@@ -26,15 +26,15 @@ That distinction drives everything below.
 
 `POST /api/v1/strategies/{strategy_code}/subscriptions` with body `{symbol, interval}`.
 
-- Route: `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py:22`
-- Handler: `.../add_symbol/handler.py:35`
+- Route: `src/pocketquant/bff/routes/strategy.py:80`
+- Service: `src/pocketquant/trading/strategy_command_service.py:80`
 - Flow:
   1. Validate symbol is tracked — `TrackedSymbolRepository.exists()`; otherwise 404
      `SYMBOL_NOT_TRACKED`.
   2. Lookup template class in `STRATEGY_REGISTRY[strategy_code]`; 404 if missing.
   3. Compute `sub_id = sha256(f"{strategy_code}|{symbol}|{interval}")[:16]`
      — deterministic, idempotent.
-     `packages/pocketquant-trading/.../trading/domain/subscription.py:44`
+     `src/pocketquant/core/domain/subscription/entities.py:44`
   4. If no in-memory `IStrategy` exists for `sub_id`, instantiate one through
      `StrategyAppService.load_strategy(StrategyConfig(id=sub_id, name=strategy_code,
      symbol=symbol, interval=interval), strategy_class=...)`.
@@ -48,7 +48,7 @@ That distinction drives everything below.
 FE entry point: `+ New` button in left sidebar opens `NewSubscriptionDialog`
 which posts via `useCreateSubscription` mutation
 — `packages/pocketquant-web/src/components/strategies/new-subscription-dialog.tsx`
-and `packages/pocketquant-web/src/hooks/use-strategy-mutations.ts:71`.
+and `packages/pocketquant-web/src/hooks/use-strategy-mutations.ts:71` (unchanged).
 
 ### 2. How to update or change config
 
@@ -56,7 +56,7 @@ There is **no edit endpoint**. To change a subscription's config:
 
 1. `DELETE /api/v1/subscriptions/{sub_id}` to remove the subscription.
    Cascade-deletes the cached backtest and unloads the in-memory instance
-   — `packages/pocketquant-trading/.../handlers/strategy/remove_symbol/handler.py:29`.
+   — `src/pocketquant/bff/routes/strategy.py:120`.
 2. Re-create with the new `(symbol, interval)` pair via POST
    `/api/v1/strategies/{strategy_code}/subscriptions` (§1.1).
 
@@ -72,8 +72,8 @@ To change strategy-level parameters (e.g. `entry_lookback_bars`):
   exposes only Start / Stop / Delete — no edit form.
 
 To delete an entire strategy (all subscriptions + cached backtests + scheduled
-jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
-`packages/pocketquant-trading/.../handlers/strategy/delete/handler.py:36`.
+jobs in one go): `DELETE /api/v1/strategies/{template_id}` — service call at
+`src/pocketquant/bff/routes/strategy.py:160`.
 
 ### 3. How to rerun
 
@@ -81,8 +81,8 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
 
 `POST /api/v1/strategies/{strategy_code}/run-all-backtests` → 202 Accepted.
 
-- Route: `packages/pocketquant-trading/.../handlers/strategy/run_all_backtests/route.py:11`
-- Handler: `.../run_all_backtests/handler.py:26`
+- Route: `src/pocketquant/bff/routes/strategy.py:130`
+- Service: `src/pocketquant/trading/strategy_command_service.py:160`
 - Behavior: fans out one `JobScheduler.add_one_off_job(...)` per subscription of
   the strategy, with `job_id = f"bt:{sub.id}"` and module reference
   `pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest`. Returns
@@ -95,8 +95,8 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — handler at
 **Live trading start/stop** (separate from backtests):
 
 - `POST /api/v1/subscriptions/{sub_id}/start` — route
-  `packages/pocketquant-trading/.../handlers/strategy/start/route.py:11`,
-  handler delegates to `StrategyAppService.start_strategy(sub_id)` which calls
+  `src/pocketquant/bff/routes/strategy.py:145`,
+  service calls `StrategyAppService.start_strategy(sub_id)` which calls
   `IStrategy.on_start()` and connects the broker if needed.
 - `POST /api/v1/subscriptions/{sub_id}/stop` — symmetric stop, calls `on_stop()`.
 - Note: `sub_id` is the subscription's deterministic ID (e.g., `"a1b2c3d4e5f6g7h8"`).
@@ -119,20 +119,20 @@ Endpoints feeding the UI:
 
 - `GET /api/v1/strategies/` — list of registered template IDs with metadata
   (returns `[{strategy_code, class_name, description}, ...]`)
-  (`packages/pocketquant-backtest/.../handlers/router.py:10`)
+  (`src/pocketquant/bff/routes/backtest.py:10`)
 - `GET /api/v1/strategies/{strategy_code}` — template metadata
-  (`.../get_one/handler.py`)
+  (`src/pocketquant/bff/routes/strategy.py:68`)
 - `GET /api/v1/subscriptions/?strategy_code=...` — subscriptions enriched with
   backtest status + `is_running` field (optional filter; defaults to all)
-  (`packages/pocketquant-trading/.../handlers/strategy/list_symbols/handler.py:23`)
+  (`src/pocketquant/bff/routes/strategy.py:110`)
 - `GET /api/v1/subscriptions/{sub_id}/backtest` — cached backtest result
-  (`.../get_subscription_backtest/handler.py:25`)
+  (`src/pocketquant/bff/routes/strategy.py:175`)
 - `GET /api/v1/subscriptions/{sub_id}/positions` — open positions
-  (`.../get_positions/handler.py:17`)
+  (`src/pocketquant/bff/routes/strategy.py:180`)
 - `GET /api/v1/subscriptions/{sub_id}/trades` — closed positions as trades
-  (`.../get_trades/handler.py:17`)
+  (`src/pocketquant/bff/routes/strategy.py:185`)
 - `GET /api/v1/system/jobs` — APScheduler job listing for ops visibility
-  (`packages/pocketquant-app/.../main_extensions.py:280`)
+  (`src/pocketquant/app/main_extensions.py:280`)
 
 ---
 
@@ -142,7 +142,7 @@ Endpoints feeding the UI:
 
 #### 5.1 Composition root + DI lifecycle
 
-`packages/pocketquant-app/src/pocketquant/app/main.py:34` defines the FastAPI
+`src/pocketquant/app/main.py:34` defines the FastAPI
 `lifespan` context manager. At startup, in order:
 
 1. `set_sync_container(container)` and `set_backtest_container(container)`
@@ -150,7 +150,7 @@ Endpoints feeding the UI:
    that fire during early Dishka resolves can find their container
    (`main.py:47-48` — explicit comment on the publish-before-subscribe pattern).
 2. Resolve `Database` and `Cache` and stash on `app.state`.
-3. `register_handlers(container)` — wires CQRS handlers into the `Mediator`.
+3. Register exception handlers (AppError → HTTPException mapper).
 4. `migrate_strategy_id_fields(container)` — idempotent Mongo boot migration:
    renames collection `strategy_subscriptions` → `subscriptions`,
    renames legacy fields `strategy_id` → `strategy_code` and `strategy_id` → `subscription_id`
@@ -186,7 +186,7 @@ Cache/Database.disconnect (`main.py:73-74`).
 
 #### 5.2 Reconciliation loop — declaring intent
 
-`StrategyReconcileService` — `packages/pocketquant-execution/.../app_services/strategy_reconcile_service.py`
+`StrategyReconcileService` — `src/pocketquant/engine/app_services/strategy_reconcile_service.py`
 
 Runs as a background `asyncio.Task` started at boot step 13 (after rehydrate).
 Polls every `Settings.reconcile_interval_seconds` (default 5.0s):
@@ -210,7 +210,7 @@ Polls every `Settings.reconcile_interval_seconds` (default 5.0s):
 
 #### 5.3 In-memory state held by `StrategyAppService`
 
-`packages/pocketquant-trading/.../app_services/strategy_app_service.py:24`.
+`src/pocketquant/engine/app_services/strategy_app_service.py:24`.
 
 Per-process dicts (NOT shared across replicas):
 
@@ -226,8 +226,7 @@ Key invariants:
 - `_brokers` reuses a broker if its `.name` matches `broker_type` or
   `"{broker_type}-demo"` — so multiple strategies on the same broker share one
   connection (`_get_or_create_broker`, line 356).
-- `StrategyAppService.start()` registers decorated event handlers via
-  `get_event_registry().register_instance(self, self._event_bus)` — auto-binds
+- `StrategyAppService.start()` registers decorated event handlers (in-process event bus) — auto-binds
   `_on_bar_completed` to `BarCompletedEvent` and `_on_quote_received` to
   `QuoteReceivedEvent`.
 
@@ -264,9 +263,8 @@ When `POST .../run-all-backtests` fires:
    .backtest.jobs.subscription_backtest_jobs:run_subscription_backtest", job_id="bt:{sub.id}",
    subscription_id=sub.id)`. APScheduler serializes this as a `DateTrigger`
    row in `apscheduler_jobs` Mongo collection.
-2. The AsyncIOExecutor picks it up; `run_subscription_backtest(subscription_id)`
-   — `packages/pocketquant-trading/.../jobs/backtest_jobs.py:52` — runs:
-   a. Resolve deps via module-level `_container` (`_get_container()`).
+2. The AsyncIOExecutor picks it up; `run_subscription_backtest(subscription_id)` runs:
+   a. Resolve deps via DI container (Dishka).
    b. Load `Subscription` from Mongo; bail silently if deleted mid-flight.
    c. `BacktestRepository.upsert_status(sub_id, status_code='running', strategy_code=sub.strategy_code)`.
    d. Read base `StrategyConfig` from `strategy_app_service._configs[sub_id]`.
@@ -306,7 +304,7 @@ mapping (`LONG → BUY`, `SHORT → SELL`), `order_type` from
 
 Control-plane truth lives in the `subscriptions` collection (§2).
 
-Sources: `packages/pocketquant-core/src/pocketquant/core/common/constants.py`
+Sources: `src/pocketquant/core/common/constants.py`
 (collection names) and each repository's `_collection_name` plus `to_mongo()`
 serializers.
 
@@ -370,20 +368,20 @@ Live order and position docs (collections `orders` and `positions`) now use
 ### 7. Redis cache contents
 
 `Cache` wraps `redis.asyncio.Redis` and is DI-scoped APP. See
-`packages/pocketquant-core/src/pocketquant/core/persistence/redis.py` and
+`src/pocketquant/core/infra/persistence/redis.py` and
 the constants at
-`packages/pocketquant-core/src/pocketquant/core/common/constants.py:27-41`.
+`src/pocketquant/core/common/constants.py:27-41`.
 
 **Strategy code itself touches no Redis keys directly.** The cache is used
 upstream of strategies by market-data and middleware layers:
 
 | Key pattern | Set by | Read by | TTL |
 |---|---|---|---|
-| `quote:latest:{symbol}` | `QuoteAppService` on `QuoteReceivedEvent` (`packages/pocketquant-app/.../quote_app_service.py:65`) | `GetLatestQuoteHandler`, `GetAllQuotesHandler`, `/quotes/stream` SSE route | 60s (`TTL_QUOTE_LATEST`) |
-| `bar:current:{symbol}:{interval}` | `BarAppService` (`packages/pocketquant-app/.../bar_app_service.py:216`) | `BarAppService.get_current_bar` | 300s (`TTL_BAR_CURRENT`) |
-| `ohlcv:{symbol}:{interval}:{limit}[:from:...][:to:...]` | `GetOHLCVHandler` (`packages/pocketquant-app/.../ohlcv/get_ohlcv/handler.py:46`) | same handler — query-result cache | 300s (`TTL_OHLCV_QUERY`) |
-| `ohlcv:{SYMBOL}:{interval}:*` (delete-pattern) | `SyncOneHandler` after sync completion (`.../sync/sync_one/handler.py:176`) | Cache invalidation — drops every limit variant for that symbol/interval. | n/a (delete) |
-| Idempotency keys | `IdempotencyMiddleware` (`packages/pocketquant-core/.../middleware.py`) | same | request-scoped |
+| `quote:latest:{symbol}` | `QuoteAppService` on `QuoteReceivedEvent` (`src/pocketquant/app/market_data/app_services/quote_app_service.py`) | Quote query services, `/quotes/stream` SSE route | 60s (`TTL_QUOTE_LATEST`) |
+| `bar:current:{symbol}:{interval}` | `BarAppService` (`src/pocketquant/engine/market_data/app_services/bar_app_service.py:216`) | `BarAppService.get_current_bar` | 300s (`TTL_BAR_CURRENT`) |
+| `ohlcv:{symbol}:{interval}:{limit}[:from:...][:to:...]` | OHLCV service (`src/pocketquant/engine/market_data/ohlcv_service.py:46`) | query-result cache | 300s (`TTL_OHLCV_QUERY`) |
+| `ohlcv:{SYMBOL}:{interval}:*` (delete-pattern) | `SyncService` after sync completion (`src/pocketquant/engine/market_data/sync_service.py:176`) | Cache invalidation — drops every limit variant for that symbol/interval. | n/a (delete) |
+| Idempotency keys | `IdempotencyMiddleware` (`src/pocketquant/core/common/middleware.py`) | same | request-scoped |
 | Rate-limit tokens | `RateLimitMiddleware` | same | window-scoped |
 | Health-check liveness | `checks.py` | health endpoint | short |
 
@@ -491,18 +489,18 @@ Backtest path is parallel and isolated:
 
 | Method | Path | Purpose | File |
 |---|---|---|---|
-| GET  | `/api/v1/strategies/` | List template IDs with metadata `{strategy_code, class_name, description}` | `pocketquant-backtest/.../handlers/router.py:10` |
-| GET  | `/api/v1/strategies/{strategy_code}` | Get template metadata | `strategy/get_one/route.py` |
-| POST | `/api/v1/strategies/{strategy_code}/subscriptions` | Create a subscription | `strategy/add_symbol/route.py` |
-| GET  | `/api/v1/subscriptions/?strategy_code=...` | List subscriptions with backtest status (optional filter; defaults to all) | `strategy/list_symbols/route.py` |
-| DELETE | `/api/v1/subscriptions/{sub_id}` | Remove a subscription (cascade) | `strategy/remove_symbol/route.py` |
-| POST | `/api/v1/subscriptions/{sub_id}/start` | Start a live subscription instance | `strategy/start/route.py` |
-| POST | `/api/v1/subscriptions/{sub_id}/stop` | Stop a live subscription instance | `strategy/stop/route.py` |
-| POST | `/api/v1/strategies/{strategy_code}/run-all-backtests` | Enqueue one-off backtest per subscription | `strategy/run_all_backtests/route.py` |
-| GET  | `/api/v1/subscriptions/{sub_id}/backtest` | Read cached backtest doc | `strategy/get_subscription_backtest/route.py` |
-| GET  | `/api/v1/subscriptions/{sub_id}/positions` | Open positions for a subscription | `strategy/get_positions/route.py` |
-| GET  | `/api/v1/subscriptions/{sub_id}/trades` | Closed positions for a subscription | `strategy/get_trades/route.py` |
-| DELETE | `/api/v1/strategies/{strategy_code}` | Cascade delete template + all subs + backtests | `strategy/delete/route.py` |
+| GET  | `/api/v1/strategies/` | List template IDs with metadata `{strategy_code, class_name, description}` | `src/pocketquant/bff/routes/backtest.py:10` |
+| GET  | `/api/v1/strategies/{strategy_code}` | Get template metadata | `src/pocketquant/bff/routes/strategy.py:68` |
+| POST | `/api/v1/strategies/{strategy_code}/subscriptions` | Create a subscription | `src/pocketquant/bff/routes/strategy.py:80` |
+| GET  | `/api/v1/subscriptions/?strategy_code=...` | List subscriptions with backtest status (optional filter; defaults to all) | `src/pocketquant/bff/routes/strategy.py:110` |
+| DELETE | `/api/v1/subscriptions/{sub_id}` | Remove a subscription (cascade) | `src/pocketquant/bff/routes/strategy.py:120` |
+| POST | `/api/v1/subscriptions/{sub_id}/start` | Start a live subscription instance | `src/pocketquant/bff/routes/strategy.py:145` |
+| POST | `/api/v1/subscriptions/{sub_id}/stop` | Stop a live subscription instance | `src/pocketquant/bff/routes/strategy.py:155` |
+| POST | `/api/v1/strategies/{strategy_code}/run-all-backtests` | Enqueue one-off backtest per subscription | `src/pocketquant/bff/routes/strategy.py:130` |
+| GET  | `/api/v1/subscriptions/{sub_id}/backtest` | Read cached backtest doc | `src/pocketquant/bff/routes/strategy.py:175` |
+| GET  | `/api/v1/subscriptions/{sub_id}/positions` | Open positions for a subscription | `src/pocketquant/bff/routes/strategy.py:180` |
+| GET  | `/api/v1/subscriptions/{sub_id}/trades` | Closed positions for a subscription | `src/pocketquant/bff/routes/strategy.py:185` |
+| DELETE | `/api/v1/strategies/{strategy_code}` | Cascade delete template + all subs + backtests | `src/pocketquant/bff/routes/strategy.py:160` |
 
 ---
 
@@ -512,7 +510,7 @@ Backtest path is parallel and isolated:
    delete + re-create. Is an `UpdateSubscriptionCommand` planned that would
    either update `StrategyConfig.parameters` in place (and persist them on the
    subscription row) or hot-reload the in-memory instance?
-2. **`config.parameters` is `{}` for FE-created subscriptions.** `AddSymbolHandler`
+2. **`config.parameters` is `{}` for FE-created subscriptions.** `StrategyCommandService.add_symbol()`
    builds `StrategyConfig` without passing any `parameters` dict, so the
    strategy class falls back to whatever defaults it hard-codes. Should
    parameters be (a) persisted on the subscription, (b) part of the template

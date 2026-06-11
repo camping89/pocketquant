@@ -107,8 +107,10 @@ class _FakeSubRepo:
         return 1
 
 
-def _service(subs, svc) -> StrategyReconcileService:
-    return StrategyReconcileService(_FakeSubRepo(subs), svc, interval_s=0.01)
+def _service(subs, svc) -> tuple[StrategyReconcileService, _FakeSubRepo]:
+    repo = _FakeSubRepo(subs)
+    recon = StrategyReconcileService(repo, svc, interval_s=0.01)  # pyright: ignore[reportArgumentType]
+    return recon, repo
 
 
 @pytest.mark.asyncio
@@ -116,13 +118,13 @@ async def test_running_desired_stopped_actual_starts_and_writes() -> None:
     svc = _FakeStrategyService()
     svc.load("s1", running=False)
     sub = _sub("s1", desired="running", actual="stopped")
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.start_calls == ["s1"]
     assert svc.stop_calls == []
-    assert recon._sub_repo.actual_writes == [("s1", "running")]
+    assert sub_repo.actual_writes == [("s1", "running")]
 
 
 @pytest.mark.asyncio
@@ -130,13 +132,13 @@ async def test_stopped_desired_running_actual_stops_and_writes() -> None:
     svc = _FakeStrategyService()
     svc.load("s1", running=True)
     sub = _sub("s1", desired="stopped", actual="running")
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.stop_calls == ["s1"]
     assert svc.start_calls == []
-    assert recon._sub_repo.actual_writes == [("s1", "stopped")]
+    assert sub_repo.actual_writes == [("s1", "stopped")]
 
 
 @pytest.mark.asyncio
@@ -144,13 +146,13 @@ async def test_stable_running_is_idempotent_no_calls_no_writes() -> None:
     svc = _FakeStrategyService()
     svc.load("s1", running=True)
     sub = _sub("s1", desired="running", actual="running")
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.start_calls == []
     assert svc.stop_calls == []
-    assert recon._sub_repo.actual_writes == []
+    assert sub_repo.actual_writes == []
 
 
 @pytest.mark.asyncio
@@ -158,13 +160,13 @@ async def test_stable_stopped_is_idempotent_no_calls_no_writes() -> None:
     svc = _FakeStrategyService()
     svc.load("s1", running=False)
     sub = _sub("s1", desired="stopped", actual="stopped")
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.start_calls == []
     assert svc.stop_calls == []
-    assert recon._sub_repo.actual_writes == []
+    assert sub_repo.actual_writes == []
 
 
 @pytest.mark.asyncio
@@ -173,13 +175,13 @@ async def test_missing_instance_desired_running_loads_then_starts() -> None:
     then converge starts it — the control-plane now owns lifecycle."""
     svc = _FakeStrategyService()  # no instance loaded for s1
     sub = _sub("s1", desired="running", actual="stopped")
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.load_calls == ["s1"]
     assert svc.start_calls == ["s1"]
-    assert recon._sub_repo.actual_writes == [("s1", "running")]
+    assert sub_repo.actual_writes == [("s1", "running")]
 
 
 @pytest.mark.asyncio
@@ -196,13 +198,13 @@ async def test_unknown_template_skips_load_no_start() -> None:
         desired_state="running",
         actual_state="running",  # DB stale → must drift to stopped
     )
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.load_calls == []
     assert svc.start_calls == []
-    assert recon._sub_repo.actual_writes == [("s1", "stopped")]  # idempotent: nothing to write
+    assert sub_repo.actual_writes == [("s1", "stopped")]  # idempotent: nothing to write
 
 
 @pytest.mark.asyncio
@@ -215,7 +217,7 @@ async def test_per_sub_error_isolation_other_subs_still_reconcile() -> None:
         _sub("bad", desired="running", actual="stopped"),
         _sub("good", desired="running", actual="stopped"),
     ]
-    recon = _service(subs, svc)
+    recon, sub_repo = _service(subs, svc)
 
     # Must not raise — bad sub failure is isolated, good sub still converges.
     await recon._reconcile()
@@ -223,14 +225,14 @@ async def test_per_sub_error_isolation_other_subs_still_reconcile() -> None:
     assert "bad" in svc.start_calls
     assert "good" in svc.start_calls
     # bad never reached the actual write (start raised); good did.
-    assert ("good", "running") in recon._sub_repo.actual_writes
-    assert ("bad", "running") not in recon._sub_repo.actual_writes
+    assert ("good", "running") in sub_repo.actual_writes
+    assert ("bad", "running") not in sub_repo.actual_writes
 
 
 @pytest.mark.asyncio
 async def test_run_loop_cancellation_propagates() -> None:
     svc = _FakeStrategyService()
-    recon = _service([], svc)
+    recon, _sub_repo = _service([], svc)
 
     task = asyncio.create_task(recon.run())
     await asyncio.sleep(0.05)  # let it spin a few ticks
@@ -247,11 +249,13 @@ async def test_injected_backtest_strategy_without_sub_row_is_untouched() -> None
     svc = _FakeStrategyService()
     svc.load("backtest-synthetic-id", running=True)  # injected, no sub row
     sub = _sub("real-sub", desired="stopped", actual="stopped")
-    recon = _service([sub], svc)
+    recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
 
     assert svc.stop_calls == []  # synthetic instance never stopped
     assert svc.start_calls == []
-    assert recon._sub_repo.actual_writes == []
-    assert svc.get_strategy("backtest-synthetic-id").is_running is True
+    assert sub_repo.actual_writes == []
+    strategy = svc.get_strategy("backtest-synthetic-id")
+    assert strategy is not None
+    assert strategy.is_running is True
