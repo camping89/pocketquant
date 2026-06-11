@@ -1,7 +1,7 @@
 """Package layout contract — single `pocketquant` package at repo-root src/.
 
 Target layout: one backend pyproject.toml, subpackages
-core / engine / backtest / trading / app / bff, no legacy execution subpackage,
+core / engine / backtest / app, no legacy execution subpackage,
 no packages/ dir (the npm SPA lives at repo-root web/).
 """
 
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -25,7 +27,7 @@ def test_engine_subpackage_exists_and_execution_is_gone() -> None:
 
 def test_all_subpackages_importable_from_single_src_tree() -> None:
     src_root = REPO_ROOT / "src" / "pocketquant"
-    for sub in ("core", "engine", "backtest", "trading", "app", "bff"):
+    for sub in ("core", "engine", "backtest", "app"):
         spec = importlib.util.find_spec(f"pocketquant.{sub}")
         assert spec is not None, f"pocketquant.{sub} not importable"
         # Regular packages expose origin (__init__.py); namespace packages (PEP 420)
@@ -34,6 +36,16 @@ def test_all_subpackages_importable_from_single_src_tree() -> None:
         assert locations and all(str(src_root) in loc for loc in locations), (
             f"pocketquant.{sub} resolves to {locations}, expected under {src_root}"
         )
+
+
+@pytest.mark.xfail(reason="4-subpackage end-state lands at phase 3", strict=True)
+def test_dissolved_subpackages_are_gone() -> None:
+    assert importlib.util.find_spec("pocketquant.trading") is None, (
+        "pocketquant.trading must be dissolved into engine/core"
+    )
+    assert importlib.util.find_spec("pocketquant.bff") is None, (
+        "pocketquant.bff must be merged into app"
+    )
 
 
 def test_single_backend_pyproject() -> None:
@@ -63,7 +75,7 @@ def test_no_dishka_fastapi_integration_outside_app_bff() -> None:
     src_root = REPO_ROOT / "src" / "pocketquant"
     offenders = [
         str(path.relative_to(REPO_ROOT))
-        for sub in ("core", "engine", "backtest", "trading")
+        for sub in ("core", "engine", "backtest")
         for path in (src_root / sub).rglob("*.py")
         if "dishka.integrations.fastapi" in path.read_text()
     ]
