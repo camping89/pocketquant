@@ -1,7 +1,7 @@
 """Domain exceptions and global HTTP exception handling.
 
 Starlette-only (like the sibling tracing/rate_limit/idempotency middleware) so
-core honours the "fastapi only in app/bff" import contract. Callers pass their
+core honours the "fastapi only in app" import contract. Callers pass their
 framework's request-validation error class at registration time.
 """
 

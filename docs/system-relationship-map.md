@@ -42,25 +42,24 @@ Whole-system **diagrams**: how the two repos, CI/CD, image registry, VPS runtime
         │     web      │                           │  (compose.prod.yml)    │
         └──────────────┘                           └───────────┬────────────┘
                                                                │
-                                                   5 containers on one bridge net
+                                                4 containers on one bridge net
                                                                ▼
                           ┌──────────┬──────────┬──────────┬──────────┬───────────┐
-                          │   web    │   bff    │ mongodb  │  redis   │ portainer │
+                          │   web    │   app    │ mongodb  │  redis   │ portainer │
                           │  :80     │ :41921   │ :27017   │  :6379   │  :9000    │
                           │  nginx   │ FastAPI  │  bars,   │ quote,   │  docker   │
-                          │  /api/*→ │ gateway  │ orders,  │ bar,     │  admin UI │
-                          │  bff:41  │ (uvicorn)│ positions│ idempot, │           │
-                          │    921   │          │ ...      │ rate     │           │
-                          └────┬─────┴──┬───────┘          │ ...      │           │
-                               │        │ depends_on       └──────────┴───────────┘
-                               │        │ service_healthy
-                               │        ▼
-                               │    ┌─────────────┐
-                               │    │ app :41920  │  headless runtime
-                               │    │   (uvicorn) │  scheduler, WS feed
-                               └───▶│             │  strategy lifecycle
-                                    │ /health only│
-                                    └─────────────┘
+                          │  /api/*→ │ routes   │ orders,  │ bar,     │  admin UI │
+                          │  app:41  │ + sched  │ positions│ idempot, │           │
+                          │    921   │ (uvicorn)│ ...      │ rate     │           │
+                          └────┬─────┴──────────┘          │ ...      │           │
+                               │                          └──────────┴───────────┘
+                               │
+                               │ public entry (WEB_PORT)
+                               ▼
+                          ┌──────────┐
+                          │  Trader  │  browser → SPA → /api/* → app
+                          │ (client) │
+                          └──────────┘
                                │ public entry (WEB_PORT)
                                ▼
                           ┌──────────┐

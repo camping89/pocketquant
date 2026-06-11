@@ -8,7 +8,7 @@ CI/CD: GitHub Actions push → Docker Hub → SSH to VPS.
 
 ## Platform
 
-**Vultr VPS** (Ubuntu) with self-managed Docker Compose stack. 6 containers: app (headless runtime), bff (API gateway), web (SPA + reverse proxy), MongoDB, Redis, Portainer. Images built by GitHub Actions, pushed to Docker Hub, pulled on the VPS.
+**Vultr VPS** (Ubuntu) with self-managed Docker Compose stack. 5 containers: app (FastAPI + routes + SPA), web (reverse proxy), MongoDB, Redis, Portainer. Images built by GitHub Actions, pushed to Docker Hub, pulled on the VPS.
 
 Dashboards:
 - Portainer: `http://<vps-ip>:$PORTAINER_PORT`
@@ -16,10 +16,10 @@ Dashboards:
 
 ## Production URL
 
-`http://<vps-ip>:$WEB_PORT/` — public SPA entry point. The web container (nginx) reverse-proxies `/api/*` to the bff container (stateless gateway, internal :41921). Set `$WEB_PORT=443` if terminating TLS directly.
+`http://<vps-ip>:$WEB_PORT/` — public SPA entry point. The web container (nginx) reverse-proxies `/api/*` to the app container (FastAPI, internal :41921). Set `$WEB_PORT=443` if terminating TLS directly.
 
-API: `http://<vps-ip>:$WEB_PORT/api/v1/docs` (Swagger, via web → bff).
-App health: container-internal only — `docker exec pocketquant-app curl http://localhost:41920/health`.
+API: `http://<vps-ip>:$WEB_PORT/api/v1/docs` (Swagger, via web → app).
+App health: container-internal only — `docker exec pocketquant-app curl http://localhost:41921/health`.
 
 ## Deploy Command
 
@@ -57,7 +57,7 @@ Production config (host, SSH key, prod `.env`, Docker Hub creds, Portainer creds
 
 `pocketquant-config/vps/default/.env` is the **single source of truth** for prod runtime env. The CI/CD `deploy` job materializes it as `deploy/.env` on the VPS each run via `rsync`. Any manual `.env` on the VPS is overwritten — edit the file in `pocketquant-config/`, `git push`, then push a commit to `pocketquant` (or `gh workflow run cicd.yml`).
 
-Both `app` and `bff` services consume it directly via `env_file: .env` in `compose.prod.yml` — there is **no** hardcoded `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` in this file use the **internal docker-network service names** (`mongodb:27017`, `redis:6379`) because the file IS the container env; `MONGO_PORT`/`REDIS_PORT` are the host-published ports for external tools. Host-side scripts that need DB access run inside the container (`docker exec pocketquant-app …`), where those names resolve — see the resync/backup procedures below.
+The `app` service consumes it directly via `env_file: .env` in `compose.prod.yml` — there is **no** hardcoded `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` in this file use the **internal docker-network service names** (`mongodb:27017`, `redis:6379`) because the file IS the container env; `MONGO_PORT`/`REDIS_PORT` are the host-published ports for external tools. Host-side scripts that need DB access run inside the container (`docker exec pocketquant-app …`), where those names resolve — see the resync/backup procedures below.
 
 ### `<repo>/.env` — app + Docker/compose vars (local dev only)
 
@@ -130,11 +130,11 @@ ssh <VPS> "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant
 # App logs
 ssh <VPS> "docker logs pocketquant-app --tail 50"
 
-# Health (bff)
-ssh <VPS> "docker exec pocketquant-bff curl -s http://localhost:41921/health"
+# Health (app)
+ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41921/health"
 
-# Restart bff only (safe)
-ssh <VPS> "docker restart pocketquant-bff"
+# Restart app (restarts scheduler + WS)
+ssh <VPS> "docker restart pocketquant-app"
 
 # Restart everything (no rebuild)
 ssh <VPS> "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env restart"
@@ -154,16 +154,10 @@ Everything above this line is what the `/deploy` skill (and a busy operator) nee
 
 ## Services & Health
 
-**app** (headless runtime, internal :41920):
+**app** (FastAPI routes + scheduler, internal :41921):
 ```bash
-ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41920/health"
+ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41921/health"
 ssh <VPS> "docker logs pocketquant-app --tail 50"
-```
-
-**bff** (API gateway, internal :41921):
-```bash
-ssh <VPS> "docker exec pocketquant-bff curl -s http://localhost:41921/health"
-ssh <VPS> "docker logs pocketquant-bff --tail 50"
 ```
 
 **web** (nginx, public port):
@@ -173,9 +167,8 @@ ssh <VPS> "docker logs pocketquant-web --tail 50"
 ```
 
 **Restart strategies:**
-- **Restart just bff** (safe, FE continues): `ssh <VPS> "docker restart pocketquant-bff"` — no effect on live trading
-- **Restart just app** (risky during live trading): stops scheduler + strategy + WS feed; existing orders/positions unaffected in MongoDB
-- **Restart both** (hard reset): use `docker compose restart pocketquant-app pocketquant-bff`
+- **Restart app** (stops scheduler + strategy + WS feed): `ssh <VPS> "docker restart pocketquant-app"` — orders/positions persist in MongoDB
+- **Restart web** (safe): `ssh <VPS> "docker restart pocketquant-web"` — FE restarts, API continues
 
 ## Architecture
 
@@ -195,7 +188,7 @@ git push origin develop (or master)
               ├─ ssh → bash deploy/vps/11-verify.sh    (19 checks → report)
               └─ upload verify-report artifact (30-day retention)
 
-VPS containers: app + web + mongodb + redis + portainer
+VPS containers: app (FastAPI routes + scheduler) + web (nginx) + mongodb + redis + portainer
 ```
 
 ### Distributed Scheduling
@@ -248,13 +241,13 @@ CI/CD reads all of the above at run time via the `POCKETQUANT_CONFIG_DEPLOY_KEY`
 
 | Service | Env Var | Default Container Port |
 |---------|---------|----------------|
-| App API | `APP_PORT` | 41920 |
-| Web (SPA + reverse proxy to API) | `WEB_PORT` | 80 |
+| App (routes + scheduler) | — | 41921 (internal) |
+| Web (SPA + reverse proxy to app) | `WEB_PORT` | 80 |
 | MongoDB | `MONGO_PORT` | 27017 |
 | Redis | `REDIS_PORT` | 6379 |
 | Portainer | `PORTAINER_PORT` | 9000 |
 
-No default values in `.env` — you MUST set them. **`WEB_PORT` is the public entry point** (`80`, or `443` for TLS). All other ports should use obscure values to cut bot-scanner noise — they aren't meant for direct public access.
+No default values in `.env` — you MUST set them. **`WEB_PORT` is the public entry point** (`80`, or `443` for TLS). MongoDB, Redis, and Portainer ports should use obscure values to cut bot-scanner noise — they aren't meant for direct public access.
 
 ---
 
@@ -273,7 +266,7 @@ The `deploy` job will:
   - Installs Docker if missing (then exits — re-run after logging back in).
   - Validates required env vars.
   - Pulls images from Docker Hub.
-  - Starts all 5 services.
+  - Starts all 4 services (app, web, mongodb, redis) + portainer.
   - Waits up to 60s for `pocketquant-app` `/health` to return 200; fails with last 30 log lines + container status if not.
   - Prunes old images.
 - ssh `bash deploy/vps/11-verify.sh` — writes report to `deploy/reports/verify-<utc>.md` on the VPS, uploaded as `verify-report` artifact.
@@ -384,11 +377,10 @@ Run FE + BE on your machine but point them at the production VPS Mongo + Redis f
 
 2. Verify connectivity to `<vps-ip>:<MONGO_PORT>` and `<vps-ip>:<REDIS_PORT>` (mongo shell, redis-cli, or your IDE).
 
-3. Start servers (three terminals):
+3. Start servers (two terminals):
 
    ```bash
-   just be      # app (headless runtime) on :41920
-   just bff     # bff (API gateway) on :41921
+   just be      # app (FastAPI + scheduler) on :41921
    just fe      # Vite dev server on :5173 (proxies /api -> :41921)
    ```
 

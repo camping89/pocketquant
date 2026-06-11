@@ -10,10 +10,10 @@ subscription from Mongo and drives RAM toward it in three steps per tick:
   3. **Converge run-state** — start/stop the instance to match ``desired_state``;
      mirror observed actual back to Mongo only on drift (no per-tick write churn).
 
-Mongo is the single source of truth. Writers (bff) only persist subscription
-docs; this loop materializes and tears down the RAM instances. That is why the
-loop owns load/unload — after the app/bff split, ``add_symbol`` no longer loads,
-so a continuous control-plane must.
+Mongo is the single source of truth. Writers (API route handlers) only persist
+subscription docs; this loop materializes and tears down the RAM instances. That
+is why the loop owns load/unload — ``add_symbol`` does not load, so a continuous
+control-plane must.
 
 Orphan-unload is shape-guarded: it only unloads keys matching the subscription
 ``deterministic_id`` shape (16 lowercase hex). Synthetic backtest instances
@@ -116,8 +116,8 @@ class StrategyReconcileService:
     async def _ensure_instances(self, subs: list[Subscription]) -> None:
         """Load one instance per subscription that lacks a RAM instance.
 
-        After the app/bff split, ``add_symbol`` only persists the subscription
-        doc — this loop materializes the instance. Subscriptions whose template
+        ``add_symbol`` only persists the subscription doc — this loop
+        materializes the instance. Subscriptions whose template
         is unknown are skipped with a warning (mirrors rehydrate). ``load_strategy``
         is ``_lock``-guarded and raises if already loaded; a per-sub guard +
         try/except keeps one failure from starving the rest of the tick.

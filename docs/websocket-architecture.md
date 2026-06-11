@@ -104,13 +104,13 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 
 | Path | Role |
 |---|---|
-| `src/pocketquant/trading/brokers/okx/websocket/okx_websocket_client.py:26` | `OkxWebSocketClient` — auth + subscribe + iterate |
-| `src/pocketquant/trading/brokers/okx/websocket/okx_reconnection_handler.py:22` | `OkxReconnectionHandler` — backoff + REST state sync |
-| `src/pocketquant/trading/brokers/okx/websocket/okx_auth.py` | HMAC-SHA256 login message builder |
-| `src/pocketquant/trading/brokers/okx/websocket/okx_message_parser.py` | Frame routing (orders / positions) |
-| `src/pocketquant/trading/brokers/okx/websocket/okx_order_mapper.py` | OKX → `OrderResult` mapping, terminal-state detection |
-| `src/pocketquant/trading/brokers/okx/websocket/okx_position_mapper.py` | OKX → position update mapping |
-| `src/pocketquant/trading/brokers/okx/okx_broker.py:295` | `_ws_listener` — orchestrates full lifecycle |
+| `src/pocketquant/core/infra/brokers/okx/websocket/okx_websocket_client.py:26` | `OkxWebSocketClient` — auth + subscribe + iterate |
+| `src/pocketquant/core/infra/brokers/okx/websocket/okx_reconnection_handler.py:22` | `OkxReconnectionHandler` — backoff + REST state sync |
+| `src/pocketquant/core/infra/brokers/okx/websocket/okx_auth.py` | HMAC-SHA256 login message builder |
+| `src/pocketquant/core/infra/brokers/okx/websocket/okx_message_parser.py` | Frame routing (orders / positions) |
+| `src/pocketquant/core/infra/brokers/okx/websocket/okx_order_mapper.py` | OKX → `OrderResult` mapping, terminal-state detection |
+| `src/pocketquant/core/infra/brokers/okx/websocket/okx_position_mapper.py` | OKX → position update mapping |
+| `src/pocketquant/core/infra/brokers/okx/okx_broker.py:295` | `_ws_listener` — orchestrates full lifecycle |
 
 ### Flow
 
@@ -173,7 +173,7 @@ async def start_quote_feed(container, app):
 **Route:** GET `/api/v1/market-data/bars/stream/{symbol}?interval={interval}`
 
 **Files:**
-- `src/pocketquant/bff/routes/market_data_ohlcv.py` — SSE route endpoint
+- `src/pocketquant/app/routes/market_data_ohlcv.py` — SSE route endpoint
 
 **Flow:**
 1. Client opens EventSource connection → server enters poll loop.
@@ -202,7 +202,7 @@ async def start_quote_feed(container, app):
 **Route:** GET `/api/v1/quotes/stream/{symbol}`
 
 **Files:**
-- `src/pocketquant/bff/routes/market_data_quotes.py` — SSE route endpoint
+- `src/pocketquant/app/routes/market_data_quotes.py` — SSE route endpoint
 
 **Flow:**
 1. Client opens EventSource connection → server enters poll loop.

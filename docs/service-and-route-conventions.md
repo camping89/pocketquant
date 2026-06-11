@@ -10,18 +10,18 @@ Pattern: mỗi route gọi một command/query service; service chứa logic x�
 
 | Thành phần | Nơi | Trách nhiệm |
 |-----------|-----|-----------|
-| **Route** | `src/pocketquant/bff/routes/{feature}.py` | Parse request → xây Command/Query → gọi service → return DTO |
+| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → xây Command/Query → gọi service → return DTO |
 | **Command Service** | `src/pocketquant/{pkg}/{feature}_command_service.py` | Xử lý write logic: Mongo update, repository calls, cascade |
 | **Query Service** | `src/pocketquant/{pkg}/{feature}_query_service.py` | Xử lý read logic: fetch Mongo, enrich, serialize |
 | **Command/Query DTO** | Định nghĩa trong service file (Pydantic `BaseModel`) | Request body model (e.g. `AddSymbolCommand`, `GetStrategyQuery`) |
 | **Exception handler** | `src/pocketquant/core/common/exceptions.py::register_exception_handlers()` | Global mapping `AppError` → HTTP response |
-| **Repository** | `src/pocketquant/core/infra/persistence/repositories/{entity}_repository.py` (e.g. `subscription_repository.py`) | MongoDB CRUD, queries, upserts |
+| **Repository** | `src/pocketquant/core/persistence/repositories/{entity}_repository.py` (e.g. `subscription_repository.py`) | MongoDB CRUD, queries, upserts |
 
 ---
 
 ## Quy tắc Route
 
-**File structure:** `src/pocketquant/bff/routes/{feature}.py`
+**File structure:** `src/pocketquant/app/routes/{feature}.py`
 
 **Boilerplate:**
 
@@ -257,7 +257,7 @@ class {Entity}Repository:
 
 **End-to-end: POST `/api/v1/strategies/{strategy_code}/subscriptions`**
 
-**Route** (`bff/routes/strategy.py:80–96`):
+**Route** (`app/routes/strategy.py:80–96`):
 
 ```python
 @strategy_router.post("/{strategy_code}/subscriptions", status_code=201)
@@ -276,7 +276,7 @@ async def create_subscription(
     )
 ```
 
-**Service** (`trading/strategy_command_service.py`):
+**Service** (`engine/strategy_command_service.py`):
 
 ```python
 class AddSymbolCommand(BaseModel):
@@ -379,7 +379,7 @@ Route ──→ Service ──────────────────�
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant R as Route<br/>(bff/routes/*)
+    participant R as Route<br/>(app/routes/*)
     participant S as Service<br/>(*_command/query_service)
     participant Repo as Repository<br/>(core/infra/persistence/repositories)
     participant M as MongoDB
@@ -415,7 +415,7 @@ sequenceDiagram
 Route → Service imports:
 
 ```
-bff/routes/{feature}.py
+app/routes/{feature}.py
     ├→ pocketquant.{pkg}.{feature}_command_service
     ├→ pocketquant.{pkg}.{feature}_query_service
     └→ pocketquant.core.common.exceptions
@@ -425,7 +425,7 @@ Service → Repository imports:
 
 ```
 pocketquant.{pkg}.{feature}_*_service
-    └→ pocketquant.core.infra.persistence.repositories.*
+    └→ pocketquant.core.persistence.repositories.*
 ```
 
 Exception imports:
@@ -446,7 +446,7 @@ pocketquant.core.common.exceptions
 - `FromDishka[ServiceType]` dependency không xuất hiện trong Swagger (ẩn)
 - Swagger live tại `/docs` (Swagger UI) hoặc `/openapi.json`
 
-Xem `README.md` → "OpenAPI" hoặc truy cập http://localhost:41921/docs khi chạy server.
+Xem `README.md` → "OpenAPI" hoặc truy cập http://localhost:41921/api/v1/docs khi chạy server.
 
 ---
 
@@ -454,7 +454,7 @@ Xem `README.md` → "OpenAPI" hoặc truy cập http://localhost:41921/docs khi 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ bff/routes/{feature}.py                                     │
+│ app/routes/{feature}.py                                     │
 │  ├─ @router.post("/path")                                   │
 │  └─ FromDishka[SomeCommandService/SomeQueryService]         │
 └─────────────────┬───────────────────────────────────────────┘

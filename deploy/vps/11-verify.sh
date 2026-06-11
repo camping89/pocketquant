@@ -63,7 +63,7 @@ EOF
 
 # ─── 1. Container running checks ───────────────────────────
 
-CONTAINERS="pocketquant-app pocketquant-bff pocketquant-mongodb pocketquant-redis pocketquant-portainer"
+CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-portainer"
 for c in $CONTAINERS; do
   running=$(container_running "$c")
   if [ "$running" = "true" ]; then
@@ -75,7 +75,7 @@ done
 
 # ─── 2. Docker health status ───────────────────────────────
 
-HEALTH_CONTAINERS="pocketquant-app pocketquant-bff pocketquant-mongodb pocketquant-redis"
+HEALTH_CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis"
 for c in $HEALTH_CONTAINERS; do
   health=$(container_health "$c")
   if [ "$health" = "healthy" ]; then
@@ -87,13 +87,15 @@ for c in $HEALTH_CONTAINERS; do
   fi
 done
 
-# ─── 3. App HTTP healthcheck (headless liveness, container-internal) ───────
+# ─── 3. App HTTP healthcheck (container-internal) ──────────────────────────
 
-app_health=$(docker exec pocketquant-app curl -sf http://localhost:41920/health 2>/dev/null || echo "")
+app_health=$(docker exec pocketquant-app curl -sf http://localhost:41921/health 2>/dev/null || echo "")
 if [ -n "$app_health" ]; then
   app_status=$(echo "$app_health" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
   if [ "$app_status" = "healthy" ]; then
-    check "App /health" "$PASS" "headless runtime healthy"
+    db_latency=$(echo "$app_health" | grep -o '"database":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
+    redis_latency=$(echo "$app_health" | grep -o '"redis":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
+    check "App /health" "$PASS" "db=${db_latency:-?}ms redis=${redis_latency:-?}ms"
   else
     check "App /health" "$FAIL" "status=$app_status"
   fi
@@ -101,20 +103,14 @@ else
   check "App /health" "$FAIL" "no response from app"
 fi
 
-# ─── 3a. bff HTTP healthcheck (FE gateway, db+redis readiness) ─────────────
+# ─── 3a. API route probe — /health alone can't tell a routeless backend apart
+# from a working one (an image without feature routes still reports healthy).
 
-bff_health=$(docker exec pocketquant-bff curl -sf http://localhost:41921/health 2>/dev/null || echo "")
-if [ -n "$bff_health" ]; then
-  bff_status=$(echo "$bff_health" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
-  if [ "$bff_status" = "healthy" ]; then
-    db_latency=$(echo "$bff_health" | grep -o '"database":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
-    redis_latency=$(echo "$bff_health" | grep -o '"redis":{[^}]*}' | grep -o '"latency_ms":[0-9.]*' | cut -d: -f2)
-    check "BFF /health" "$PASS" "db=${db_latency:-?}ms redis=${redis_latency:-?}ms"
-  else
-    check "BFF /health" "$FAIL" "status=$bff_status"
-  fi
+api_http=$(docker exec pocketquant-app curl -s -o /dev/null -w "%{http_code}" "http://localhost:41921/api/v1/market-data/symbols" 2>/dev/null || echo "000")
+if [ "$api_http" = "200" ]; then
+  check "API /api/v1 probe" "$PASS" "HTTP 200"
 else
-  check "BFF /health" "$FAIL" "no response from bff"
+  check "API /api/v1 probe" "$FAIL" "HTTP ${api_http} — feature routes missing or broken"
 fi
 
 # ─── 3b. Web container: SPA routes ─────────────────────────
@@ -173,8 +169,8 @@ else
 fi
 
 # ─── 8. Port listening ─────────────────────────────────────
-# app + bff are container-internal (no host-published port after the SP3 split);
-# the only public listener is web (nginx). Verify that.
+# app is container-internal (no host-published port); the only public
+# listener is web (nginx). Verify that.
 
 if command -v ss &>/dev/null; then
   source .env 2>/dev/null || true

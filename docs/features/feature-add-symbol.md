@@ -39,7 +39,7 @@ Tài liệu mô tả feature **Add Symbol** — modal cho phép user đăng ký 
 | Layer | Tech |
 |-------|------|
 | Frontend | React + TanStack Query (`pocketquant-web`) |
-| Backend | FastAPI + Command/Query Service + Dishka DI (`src/pocketquant/trading`) |
+| Backend | FastAPI + Command/Query Service + Dishka DI (`src/pocketquant/engine`) |
 | Storage | MongoDB collection `subscriptions`, deterministic PK trên `(strategy_code, symbol, interval)` |
 
 ### Frontend
@@ -63,10 +63,10 @@ HTTP Route → Command → Service → Domain → Repository → MongoDB
 
 | File | Vai trò |
 |------|---------|
-| `src/pocketquant/bff/routes/strategy.py:80` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, build `AddSymbolCommand`, call service |
-| `src/pocketquant/trading/strategy_command_service.py:80` | `StrategyCommandService.add_symbol()` — auto-load strategy template nếu cần → tạo `Subscription` → persist |
+| `src/pocketquant/app/routes/strategy.py:80` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, build `AddSymbolCommand`, call service |
+| `src/pocketquant/engine/strategy_command_service.py:80` | `StrategyCommandService.add_symbol()` — auto-load strategy template nếu cần → tạo `Subscription` → persist |
 | `src/pocketquant/core/domain/subscription.py` | Aggregate `Subscription` với deterministic ID |
-| `src/pocketquant/core/infra/persistence/repositories/subscription_repository.py` | Mongo persistence trên collection `subscriptions` |
+| `src/pocketquant/core/persistence/repositories/subscription_repository.py` | Mongo persistence trên collection `subscriptions` |
 
 ### Deterministic ID
 
@@ -109,7 +109,7 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
        ▼
 ┌──────────────────────┐
 │ FastAPI route        │
-│ (bff/routes/        │
+│ (app/routes/        │
 │  strategy.py:80)    │
 └──────┬───────────────┘
        │ AddSymbolCommand
