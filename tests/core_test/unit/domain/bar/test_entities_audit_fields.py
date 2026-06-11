@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from pocketquant.core.domain.bar.entities import (
     SOURCE_BULK_SYNC,
@@ -26,7 +27,7 @@ from pocketquant.core.domain.shared.enums import Interval
 
 
 def _build_bar(**overrides):
-    base = dict(
+    base: dict[str, Any] = dict(
         symbol="BTCUSDT",
         exchange="BINANCE",
         interval=Interval.MINUTE_1,

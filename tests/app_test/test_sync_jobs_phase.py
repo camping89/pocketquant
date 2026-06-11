@@ -59,6 +59,7 @@ async def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None
     """No bar-aligned job may use IntervalTrigger — must be CronTrigger only."""
     scheduler = _build_scheduler(settings)
     await register_sync_jobs(_FakeContainer(), scheduler)  # type: ignore[arg-type]
+    assert scheduler._scheduler is not None  # pyright: ignore[reportPrivateUsage]
     jobs = scheduler._scheduler.get_jobs()  # pyright: ignore[reportPrivateUsage]
 
     registered_ids = {j.id for j in jobs}
@@ -80,6 +81,7 @@ async def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None
 def test_scheduler_runs_in_utc(settings: Settings) -> None:
     """Cron expressions evaluate against scheduler timezone — must be UTC."""
     scheduler = _build_scheduler(settings)
+    assert scheduler._scheduler is not None  # pyright: ignore[reportPrivateUsage]
     assert str(scheduler._scheduler.timezone) == "UTC", (  # pyright: ignore[reportPrivateUsage]
         "Scheduler must run in UTC so cron expressions match exchange bar boundaries."
     )

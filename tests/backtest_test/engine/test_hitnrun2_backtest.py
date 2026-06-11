@@ -8,7 +8,7 @@ No MongoDB / Redis required.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -35,7 +35,7 @@ _SYM = "BTCUSDT:BINANCE"
 
 
 @pytest.fixture(autouse=True)
-def _reset_sim_time() -> None:
+def _reset_sim_time() -> Generator[None]:
     clear_simulation_time()
     yield
     clear_simulation_time()

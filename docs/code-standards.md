@@ -1,6 +1,6 @@
 # Code Standards & Patterns
 
-Architecture: Clean Architecture + DDD + CQRS + Dishka. Type checker: Pyright.
+Architecture: Clean Architecture + DDD + Dishka. Type checker: Pyright.
 
 This document focuses on architectural patterns and conventions. For current startup commands and test commands, use [README](../README.md).
 
@@ -25,89 +25,77 @@ CRITICAL: No reverse dependencies.
 | Layer | Responsibility | I/O |
 |-------|---|---|
 | **Domain** | Business rules, validation, events | NONE (zero I/O) |
-| **Application** | Orchestrators, state machines, coordination | Calls adapters |
-| **Features** | HTTP routes, request parsing, response formatting | Calls application handlers |
+| **Services** | Orchestrators, command/query services, coordination | Calls adapters |
+| **Routes** | HTTP routing, request parsing, response formatting | Calls services |
 | **Adapters** | DB, brokers, providers, scheduling, HTTP | All external I/O |
-| **Common** | Mediator, EventBus, middleware, utilities | Cross-cutting concerns |
+| **Common** | EventBus, middleware, utilities | Cross-cutting concerns |
 
 ## Architecture Patterns
 
-### 1. Vertical Slice Architecture (Operation-First)
+### 1. Route + Service Layer Architecture
 
-Features are thin HTTP routing layers. **Operations are primary organizational unit.** All business logic moved to Application layer.
+Routes are thin HTTP layers. **Services provide business logic.** All orchestration moved to command/query service classes.
 
 ```
-features/
-├── market_data/         (routes, commands, queries, handlers)
-├── backtesting/         (routes, commands, queries, handlers)
-├── strategy/            (routes, commands, queries, handlers)
-├── trading/             (routes, commands, queries, handlers)
-└── risk/                (routes, commands, queries, handlers)
+routes/                         # Routes by feature
+├── market_data.py              # Market data routes
+├── backtesting.py              # Backtest routes
+├── strategy.py                 # Strategy routes
+├── trading.py                  # Trading routes
+└── ...
 
-Operation-First Structure:
-├── operation_name/             # Each operation is a folder
-│   ├── command.py or query.py  # Request definition (Pydantic)
-│   ├── handler.py              # CQRS handler (@handles decorator)
-│   ├── route.py                # FastAPI route (optional)
-│   └── __init__.py
-├── router.py                   # Feature router (aggregates all operations)
-└── __init__.py
-# Note: Handler registration in pocketquant/app/di/container.py via register_handlers(container)
+services/                       # Command/Query services by subpackage
+├── strategy_command_service.py # Commands: add symbol, start/stop strategy
+├── strategy_query_service.py   # Queries: list strategies, subscriptions
+├── backtest_command_service.py # Commands: run backtest, optimize
+├── backtest_query_service.py   # Queries: list results, get result
+└── ...
 
-IMPORTANT: No business logic in features/. All logic in:
-- Application layer (orchestrators, state machines)
+IMPORTANT: No business logic in routes. All logic in:
+- Command/Query services (orchestrate adapters + domain)
 - Domain layer (aggregates, value objects, events)
 
 Clean Architecture Example (backtesting):
 
-**Features Layer (Thin routes):**
-```
-features/backtesting/
-├── run/                        # Operation: Execute backtest
-│   ├── command.py              # RunBacktestCommand
-│   ├── handler.py              # RunBacktestHandler (calls Application-layer BacktestAppService)
-│   └── route.py                # POST /api/v1/backtest/run
-├── optimize/                   # Operation: Optimize parameters
-│   ├── command.py
-│   ├── handler.py              # Calls Application-layer GridOptimizationAppService
-│   └── route.py
-├── get_result/
-│   ├── query.py
-│   └── handler.py
-├── list_results/
-│   ├── query.py
-│   └── handler.py
-└── router.py                   # Aggregate all operation routes
-# Handler registration in pocketquant/app/di/ (no separate register.py file)
+**Routes Layer (Thin HTTP):**
+```python
+# src/pocketquant/bff/routes/backtest.py
+@router.post("/backtest/run")
+async def run_backtest(
+    cmd: RunBacktestCommand,
+    backtest_svc: FromDishka[BacktestCommandService]
+) -> BacktestResultDTO:
+    return await backtest_svc.run(cmd)
 ```
 
-**Application Layer (Orchestrators):**
+**Service Layer (Orchestration):**
 ```
-application/backtesting/
-├── backtest_app_service.py          # BacktestAppService (engine, execute backtest)
-├── grid_optimization_app_service.py           # GridOptimizationAppService (parameter search)
-├── historical_replay_app_service.py # HistoricalReplayAppService (inject bars)
-├── result_collector.py         # ResultCollector (collect fills, metrics)
-└── models/                     # DTOs, config models
+src/pocketquant/backtest/backtest_command_service.py
+├── run() — Resolve strategy, fetch bars, execute domain logic, persist
+└── optimize() — Grid search parameter space, persist results
+
+src/pocketquant/backtest/backtest_query_service.py
+├── get() — Fetch by run_id
+└── list() — Fetch by strategy_code
 ```
 
 **Domain Layer (Pure logic):**
 ```
-domain/backtest/
-└── services/
-    └── performance_calculator.py  # Calculate Sharpe, Sortino, max drawdown (pure, no I/O)
+src/pocketquant/core/domain/
+├── backtest/ — BacktestResult, BacktestMetrics (entities)
+└── services/performance_calculator.py — Calculate Sharpe, Sortino, max drawdown (pure, no I/O)
 ```
 
-**Key:** Handler in features/ calls BacktestAppService in application/, which uses PerformanceCalculator from domain/. PerformanceCalculator has ZERO I/O imports.
+**Key:** Route calls BacktestCommandService, which orchestrates BarRepository + PaperBroker + PerformanceCalculator (domain). PerformanceCalculator has ZERO I/O imports.
 
 **Key Rules:**
-1. Each operation is a folder (command/query.py + handler.py + optional route.py)
-2. Operations are self-contained use cases (no shared state between operations)
-3. Handler 5-step pattern: Fetch Adapters → Validate Domain → Persist Adapters → Invalidate Cache → Publish Events
-4. Routes are thin (parse, delegate, respond)
-5. NO business logic in features/ (all in Application or Domain)
-6. Operation folders may be nested (sync/sync_one/, sync/sync_bulk/)
-7. No cross-feature dependencies (loose coupling via adapter singletons)
+1. Routes are thin HTTP layers (parse, inject service, delegate, respond)
+2. Services are self-contained use cases (command or query, no shared state)
+3. Service 5-step pattern: Fetch Adapters → Validate Domain → Persist Adapters → Invalidate Cache → Publish Events
+4. Routes use `FromDishka[ServiceClass]` for dependency injection (never `Depends()`)
+5. NO business logic in routes (all in services or domain)
+6. Service methods accept Pydantic command/query models, return DTOs
+7. No cross-service dependencies in routes (loose coupling via adapter singletons)
 
 **Rationale:**
 - Tight cohesion within feature (all operation code together)
@@ -126,7 +114,7 @@ Business logic that coordinates Domain + Adapters. Unlike Domain (pure logic), A
 - **OrderAppService:** Order state machine, recovery on startup
 - **PositionAppService:** Track open/closed positions, calculate P&L
 
-**No CQRS in this layer.** These are business orchestrators called by CQRS handlers.
+**These are business orchestrators called by service methods (routes delegate to services).**
 
 ```python
 # Application-layer service (orchestrates domain + adapters)
@@ -152,9 +140,9 @@ class StrategyAppService:
 
 **Rules:**
 - Can import Domain and Adapters
-- No CQRS decorators (@handles, @event_handler)
+- No decorators (they're plain classes)
 - Stateful (maintains runtime state)
-- Called by CQRS handlers in features/ layer
+- Called by service methods in subpackages
 - Often singletons (StrategyAppService, QuoteAppService) or per-request (DataSyncService)
 
 ### 3. Dependency Injection (Dishka)
@@ -164,25 +152,22 @@ class StrategyAppService:
 ```python
 # Routes use dishka FastAPI integration
 from dishka.integrations.fastapi import FromDishka
-from pocketquant.core.common.mediator import Mediator
+from pocketquant.app.market_data_command_service import MarketDataCommandService
 
 @router.post("/sync")
-async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
-    return await mediator.send(cmd)
+async def sync(cmd: SyncCommand, service: FromDishka[MarketDataCommandService]):
+    return await service.sync_symbol(cmd)
 ```
 
 **Key Files:**
-- `packages/pocketquant-app/src/pocketquant/app/di/container.py` — `create_container()`, handler registration
-- `packages/pocketquant-app/src/pocketquant/app/di/providers/` — 6 Provider classes
-- `packages/pocketquant-app/src/pocketquant/app/main.py` — Lifespan: create container, `setup_dishka()`
+- `src/pocketquant/app/di/` — Provider classes for Core, Persistence, Infrastructure, etc.
+- `src/pocketquant/app/main.py` — Lifespan: create container, `setup_dishka()`
 
-**6 Providers (initialization order):**
-1. **CoreProvider** - Settings, EventBus (max_history=50), Mediator
+**Providers (initialization order):**
+1. **CoreProvider** - Settings, EventBus (max_history=50)
 2. **PersistenceProvider** - Database, Cache, repositories
 3. **InfrastructureProvider** - BrokerFactory, JobScheduler, IDataProvider, HealthCoordinator
-4. **ExecutionProvider** - OrderAppService, PositionAppService, StrategyAppService, RiskCheckHandler
-5. **MarketDataProvider** - BarAppService, QuoteAppService
-6. **HandlerProvider** - All CQRS handlers
+4. **Other Providers** - Command/Query services (StrategyCommandService, BacktestCommandService, etc.), AppServices (BarAppService, QuoteAppService)
 
 **Benefits:**
 - Auto-resolution by type hint (no manual wiring)
@@ -192,7 +177,7 @@ async def sync(mediator: FromDishka[Mediator], cmd: SyncCommand):
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through instance methods in `packages/pocketquant-core/src/pocketquant/core/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
+All data access through instance methods in `src/pocketquant/core/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
 
 **13 Repositories:** BarRepository, OrderRepository, PositionRepository, SubscriptionRepository, BacktestRepository, BacktestRequestRepository, BacktestOrderRepository, BacktestTradeRepository, OptimizationRepository, SymbolRepository, TrackedSymbolRepository, SyncStatusRepository, JobHistoryRepository
 
@@ -206,14 +191,14 @@ class BarRepository(BaseRepository):
         return len(records)
 ```
 
-**Centralized Persistence (in `pocketquant-core`):**
+**Centralized Persistence (in `core/infra/persistence`):**
 - Database (PyMongo, NOT Motor) and Cache (Redis) managed by dishka
 - BaseRepository: `_collection()` helper, `Database` injected
 - Domain entities handle serialization via `to_mongo()` / `from_mongo()`
 - No schemas/ directory
 
 **`Database` public surface (in order of preference for app code):**
-1. `get_collection(name)` — used by repositories / CQRS handlers (default).
+1. `get_collection(name)` — used by repositories / service methods (default).
 2. `database` property — raw `AsyncDatabase` for migrations and admin ops
    (rename_collection, list_collection_names, drop_index, multi-collection
    aggregations). Avoid in repository or handler code.
@@ -298,26 +283,23 @@ count = registry.register_instance(position_tracker, event_bus)
 **Benefits:**
 - Decorative, self-documenting: Clear which methods handle which events
 - Auto-discovery: No manual subscribe() calls
-- Scalable: Add new handlers without modifying mediator
+- Scalable: Add new event handlers without modifying the event bus
 - Type-safe: Event types checked at decorator definition
 
-### 8. CQRS Handler Pattern (Auto-Discovery)
+### 8. Command/Query Service Pattern
 
-Separate request handlers for commands (mutate state) and queries (read-only). All handlers extend `Handler[TRequest, TResponse]` and use `@handles(RequestType)` for auto-discovery.
+Services handle commands (mutate state) and queries (read-only). Each service method accepts a Pydantic command/query model and returns a DTO.
 
-**Rule: One handler per command/query.** `DuplicateHandlerError` thrown at startup if two handlers claim the same request type.
+**Rule: One service method per command/query.** Each method is independently callable from routes.
 
 ```python
-from pocketquant.core.common.mediator import Handler, handles
-
-# Command Handler (mutates state)
-@handles(SyncSymbolCommand)
-class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
-    def __init__(self, provider: IDataProvider, bar_repo: BarRepository):
+# Command Service (mutates state)
+class MarketDataCommandService:
+    def __init__(self, provider: IDataProvider, bar_repo: BarRepository, ...):
         self.provider = provider
         self.bar_repo = bar_repo
 
-    async def handle(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
+    async def sync_symbol(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
         # 1. Fetch from adapters (symbol is composite {code}:{exchange})
         bars = await self.provider.fetch_ohlcv(
             cmd.symbol, cmd.interval, cmd.n_bars
@@ -335,14 +317,13 @@ class SyncSymbolHandler(Handler[SyncSymbolCommand, SyncResultDTO]):
         # 5. Return DTO (never return entities)
         return SyncResultDTO(bars_synced=len(bars), status="completed")
 
-# Query Handler (read-only)
-@handles(GetBarsQuery)
-class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
+# Query Service (read-only)
+class MarketDataQueryService:
     def __init__(self, bar_repo: BarRepository, cache: Cache):
         self.bar_repo = bar_repo
         self.cache = cache
 
-    async def handle(self, query: GetBarsQuery) -> BarsDTO:
+    async def get_bars(self, query: GetBarsQuery) -> BarsDTO:
         cache_key = f"bar:{query.symbol}:{query.interval}"
 
         # 1. Check cache first
@@ -351,20 +332,20 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
             return cached
 
         # 2. Query database
-        bars = await self.bar_repo.get_bars(
-            query.symbol, query.exchange, query.interval, query.limit
+        bars = await self.bar_repo.find(
+            symbol=query.symbol, interval=query.interval, limit=query.limit
         )
 
         # 3. Cache result (300s TTL)
-        result = BarsDTO(bars=bars, count=len(bars))
+        result = BarsDTO(bars=[bar.to_mongo() for bar in bars], count=len(bars))
         await self.cache.set(cache_key, result, ttl=300)
 
         # 4. Return DTO
         return result
 ```
 
-**Handler Responsibilities (5-step pattern):**
-1. Receive Command/Query from Mediator
+**Service Method Responsibilities (5-step pattern):**
+1. Receive Command/Query (Pydantic model) as method argument
 2. Fetch data from Adapters (Database, Cache, Providers)
 3. Execute domain logic via Domain layer (validation, calculations)
 4. Persist results via Adapters (Database writes, Cache invalidation)
@@ -372,25 +353,23 @@ class GetBarsHandler(Handler[GetBarsQuery, BarsDTO]):
 6. Return DTO (never return domain entities)
 
 **Key Rules:**
-- Every handler MUST use `@handles(RequestType)` decorator
-- One handler per command/query (enforced at startup via `DuplicateHandlerError`)
+- One service method per command/query (no ambiguity about what the method does)
 - Constructor receives dependencies (dishka auto-wires via type hints)
-- `handle()` method must be async or sync as needed
+- Method is async or sync as needed
 - Return DTOs, never domain entities
 - Publish domain events for all state changes
 
 **Registration Pattern:**
-Handlers auto-discovered at container build time:
-1. Implement handler with `@handles(RequestType)` decorator
-2. Add to HandlerProvider in `packages/pocketquant-app/src/pocketquant/app/di/handlers.py` via `provide(HandlerClass, scope=Scope.APP)`
-3. `register_handlers(container)` in container.py resolves all handlers and registers with Mediator at startup
-4. Dependencies resolved by dishka via __init__ type hints (no manual injection)
+Services registered in Dishka providers:
+1. Create service class in subpackage (e.g., `src/pocketquant/app/market_data_command_service.py`)
+2. Add provider in `src/pocketquant/app/di/` that exposes the service class
+3. Routes inject via `FromDishka[ServiceClass]`
 
-### 9. Handler Extract-Method Pattern
+### 9. Service Extract-Method Pattern
 
-For complex handlers exceeding ~30 lines with 8+ operations, extract private helper methods. Simple handlers (1-3 ops) should NOT extract methods.
+For complex service methods exceeding ~30 lines with 8+ operations, extract private helper methods. Simple methods (1-3 ops) should NOT extract methods.
 
-**Guideline:** Extract when handle() becomes unreadable. Each helper does ONE logical operation. Reference: `SyncSymbolHandler` has 8 private helpers (_fetch_bars, _persist_bars, _fail, _success, etc.). See `docs/handler-pipelines.md` for full examples.
+**Guideline:** Extract when the method becomes unreadable. Each helper does ONE logical operation. Reference: complex sync services may have 8 private helpers (_fetch_bars, _persist_bars, _fail, _success, etc.).
 
 **Key Rules:**
 - Prefix with `_` (private) to indicate internal use
@@ -607,7 +586,7 @@ binance_websocket_client.py    # BinanceWebSocketClient for @aggTrade WebSocket
 
 ### Class Naming by Layer
 
-Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domain services) get NO suffix — they ARE the domain language. CQRS handlers live in `{feature}/{operation}/` with `command.py`|`query.py` + `handler.py` + `route.py` + `__init__.py`.
+Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domain services) get NO suffix — they ARE the domain language. Routes and services are organized by subpackage.
 
 | Layer | Pattern | Suffix | Examples |
 |-------|---------|--------|----------|
@@ -620,9 +599,9 @@ Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domai
 | Infra Interfaces | `I{Concept}` | `I` prefix | `IBroker`, `IDataProvider`, `IBrokerFactory` |
 | Infra Impls | `{Source}{Type}` | None (source-prefixed) | `OkxBroker`, `TradingViewClient`, `PaperBroker` |
 | App Services | `{Entity}AppService` | `AppService` | `BarAppService`, `StrategyAppService` |
-| CQRS Queries | `{Get\|List}{Entity}Query` | `Query` | `GetOHLCVQuery`, `ListOrdersQuery` |
-| CQRS Commands | `{Action}{Entity}Command` | `Command` | `SyncSymbolCommand`, `StartStrategyCommand` |
-| CQRS Handlers | `{MatchingRequest}Handler` | `Handler` | `SyncSymbolHandler`, `ListOrdersHandler` |
+| Query Models | `{Get\|List}{Entity}Query` | `Query` | `GetBarsQuery`, `ListOrdersQuery` |
+| Command Models | `{Action}{Entity}Command` | `Command` | `SyncSymbolCommand`, `StartStrategyCommand` |
+| Services | `{Domain}{Command\|Query}Service` | `Service` | `StrategyCommandService`, `BacktestQueryService` |
 | DTOs | `{Name}Response` | `Response` | `SyncResponse`, `QuoteResponse` |
 | Routes | (functions) | — | `async def sync_symbol(...)` |
 | Middleware | `{Name}Middleware` | `Middleware` | `RateLimitMiddleware`, `IdempotencyMiddleware` |
@@ -812,7 +791,7 @@ We use **Pyright** (via Pylance in VSCode), not mypy:
 
 ```bash
 pyright packages/                 # Type check entire packages
-pyright packages/pocketquant-backtest/src/pocketquant/backtest/handlers/  # Check specific module
+pyright src/pocketquant/backtest/  # Check specific module
 ```
 
 ## Performance Considerations
@@ -1026,7 +1005,7 @@ async def transfer():
 Never hardcode configuration. Use `.env` for local development:
 
 ```python
-# In packages/pocketquant-core/src/pocketquant/core/config.py
+# In src/pocketquant/core/config.py
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -1093,8 +1072,8 @@ All aggregates migrated:
 | Layer | Rules |
 |-------|-------|
 | **Domain** | ❌ No I/O imports (pymongo, redis, aiohttp) ✅ Pydantic BaseModel with to_mongo/from_mongo ✅ Validation in __post_init__ ✅ Pure logic only |
-| **Application** | ❌ No CQRS decorators ✅ Orchestrate domain + adapters ✅ Stateful services ✅ Called by feature handlers |
-| **Features** | ❌ No business logic ✅ Thin routes ✅ @handles decorator ✅ Call Application services |
+| **Services** | ❌ No decorators ✅ Orchestrate domain + adapters ✅ Stateful services ✅ Called by routes |
+| **Routes** | ❌ No business logic ✅ Thin HTTP handlers ✅ Inject services via FromDishka ✅ Call service methods |
 | **Adapters** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
 
 ## Datetime Serialization (API Responses)

@@ -104,7 +104,7 @@ class _FakeSubRepo:
 
 
 def _service(subs, svc) -> StrategyReconcileService:
-    return StrategyReconcileService(_FakeSubRepo(subs), svc, interval_s=0.01)
+    return StrategyReconcileService(_FakeSubRepo(subs), svc, interval_s=0.01)  # pyright: ignore[reportArgumentType]
 
 
 @pytest.mark.asyncio

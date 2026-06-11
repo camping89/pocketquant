@@ -34,7 +34,9 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
 
 def configure_middleware(app: FastAPI, settings: Settings) -> None:
     """Attach all middleware layers and global exception handlers."""
-    register_exception_handlers(app)
+    from fastapi.exceptions import RequestValidationError
+
+    register_exception_handlers(app, validation_error_cls=RequestValidationError)
 
     app.add_middleware(
         CORSMiddleware,
@@ -145,3 +147,7 @@ def register_routes(app: FastAPI, settings: Settings) -> None:
             return FileResponse(web_dist / "index.html")
 
         logger.info("spa_mounted", path=str(web_dist))
+    else:
+        # Expected in prod (web ships in its own container); locally it means
+        # `npm run build` hasn't produced packages/pocketquant-web/dist yet.
+        logger.info("spa_not_mounted", path=str(web_dist))

@@ -1,12 +1,15 @@
-"""Global exception handling for FastAPI.
+"""Domain exceptions and global HTTP exception handling.
 
-Registers handlers for domain errors, validation errors, and unhandled exceptions.
-Routes no longer need manual try/except → HTTPException conversion.
+Starlette-only (like the sibling tracing/rate_limit/idempotency middleware) so
+core honours the "fastapi only in app/bff" import contract. Callers pass their
+framework's request-validation error class at registration time.
 """
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from typing import Any, Protocol, cast
+
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
 from pocketquant.core.common.logging import get_logger
 
@@ -37,6 +40,12 @@ class DomainError(AppError):
         super().__init__(message, status_code=400, error_code=error_code)
 
 
+class _ValidationError(Protocol):
+    """Shape of framework validation errors (e.g. fastapi RequestValidationError)."""
+
+    def errors(self) -> list[dict[str, Any]]: ...
+
+
 def _error_response(status_code: int, error_code: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -44,30 +53,35 @@ def _error_response(status_code: int, error_code: str, message: str) -> JSONResp
     )
 
 
-def register_exception_handlers(app: FastAPI) -> None:
-    """Register global exception handlers on the FastAPI app."""
+def register_exception_handlers(app: Starlette, *, validation_error_cls: type[Exception]) -> None:
+    """Register global exception handlers on the ASGI app.
 
-    @app.exception_handler(AppError)
-    async def handle_app_error(_request: Request, exc: AppError) -> JSONResponse:
-        logger.warning("app_error", error_code=exc.error_code, message=exc.message)
-        return _error_response(exc.status_code, exc.error_code, exc.message)
+    Routes no longer need manual try/except → HTTPException conversion.
+    ``validation_error_cls`` is the framework's request-validation error
+    (must expose ``.errors()``), injected so this module stays fastapi-free.
+    """
 
-    @app.exception_handler(ValueError)
-    async def handle_value_error(_request: Request, exc: ValueError) -> JSONResponse:
+    async def handle_app_error(_request: Request, exc: Exception) -> Response:
+        err = cast(AppError, exc)
+        logger.warning("app_error", error_code=err.error_code, message=err.message)
+        return _error_response(err.status_code, err.error_code, err.message)
+
+    async def handle_value_error(_request: Request, exc: Exception) -> Response:
         logger.warning("value_error", message=str(exc))
         return _error_response(400, "VALIDATION_ERROR", str(exc))
 
-    @app.exception_handler(RequestValidationError)
-    async def handle_validation_error(
-        _request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
-        errors = exc.errors()
+    async def handle_validation_error(_request: Request, exc: Exception) -> Response:
+        errors = cast(_ValidationError, exc).errors()
         message = "; ".join(
             f"{'.'.join(str(loc) for loc in e.get('loc', []))}: {e.get('msg', '')}" for e in errors
         )
         return _error_response(422, "VALIDATION_ERROR", message)
 
-    @app.exception_handler(Exception)
-    async def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+    async def handle_unexpected_error(_request: Request, exc: Exception) -> Response:
         logger.error("unhandled_exception", error=str(exc), exc_type=type(exc).__name__)
         return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred")
+
+    app.add_exception_handler(AppError, handle_app_error)
+    app.add_exception_handler(ValueError, handle_value_error)
+    app.add_exception_handler(validation_error_cls, handle_validation_error)
+    app.add_exception_handler(Exception, handle_unexpected_error)

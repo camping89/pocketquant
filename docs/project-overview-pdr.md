@@ -302,51 +302,55 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 | Structured Logging | ✅ Complete | N/A | N/A | 100% |
 | Docker Setup | ✅ Complete | N/A | N/A | N/A |
 
-### Module Breakdown (6-package layered monorepo)
+### Module Breakdown (Single Python package + web)
 
-Dependency direction: `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
+Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
 
 ```
-packages/pocketquant-core/           # 0 deps — domain + adapters
-├── domain/        TOP-LEVEL entities (bar, order, position, symbol, sync_status,
-│                  backtest, subscription) + ports/DTOs (brokers, market_data)
-├── concepts/      non-persisted logic (quote, risk, strategy: IStrategy + hitnrun2)
-├── common/        Mediator, EventBus, middleware, UUID7, health, structlog
-├── config/        Settings
-├── persistence/   Database (MongoDB), Cache (Redis), all 12 repositories
-│                  (bar, order, position, backtest, backtest_order, backtest_trade,
-│                   optimization, symbol, sync_status, subscription, tracked_symbol,
-│                   job_history)
-├── brokers/paper/ PaperBroker (shared by backtest + paper trading)
-├── market_data/binance/  BinanceClient (REST) + BinanceWebSocketClient (@aggTrade)
-├── scheduling/    JobScheduler (APScheduler)
-└── http_client/   ResilientHttpClient (retry/backoff)
-
-packages/pocketquant-execution/      # → core — shared strategy engine
-└── app_services/  StrategyAppService, OrderAppService, PositionAppService
-                   + RiskCheckHandler (consumed by both backtest and trading)
-
-packages/pocketquant-backtest/       # → core + execution
-├── engine/        BacktestAppService, ResultCollector
-├── optimization/  GridOptimizationAppService, config models
-├── jobs/ + handlers/  backtest-run orchestration (run_all_backtests)
-└── domain/services/   PerformanceCalculator (NumPy metrics)
-
-packages/pocketquant-trading/        # → core + execution
-├── brokers/okx/   OKXBroker + WebSocket support (auth, mappers, reconnection)
-├── domain/        Subscription aggregate (deterministic ID)
-└── handlers/      strategy ops (add_symbol/start/stop/delete/list/get) +
-                   trading ops (list_orders/get_order/list_positions/get_position)
-
-packages/pocketquant-app/            # → core, execution, backtest, trading — headless runtime
-├── market_data/   sync/quotes/ohlcv/tracked_symbols/status handlers + app-services
-├── di/            Dishka container + 6 Provider classes + register_handlers()
-└── main.py        FastAPI app + lifespan (WS feed start/stop, boot migrations)
-
-packages/pocketquant-bff/            # → core, execution, backtest, trading — stateless gateway
-├── api/v1/       Read-only query routes + write routes (delegation only)
-├── di/            Dishka container (same 6 Providers as app)
-└── main.py        FastAPI gateway app
+src/pocketquant/
+├── core/                 # 0 deps — domain + adapters
+│   ├── domain/           TOP-LEVEL entities (bar, order, position, symbol, sync_status,
+│   │                     backtest, subscription) + ports/DTOs (brokers, market_data)
+│   ├── concepts/         non-persisted logic (quote, risk, strategy: IStrategy + hitnrun2)
+│   ├── common/           AppError, EventBus, middleware, UUID7, health, structlog
+│   ├── config/           Settings
+│   ├── infra/
+│   │   └── persistence/  Database (MongoDB), Cache (Redis), all 12 repositories
+│   ├── brokers/paper/    PaperBroker (shared by backtest + paper trading)
+│   ├── market_data/binance/  BinanceClient (REST) + BinanceWebSocketClient (@aggTrade)
+│   ├── scheduling/       JobScheduler (APScheduler)
+│   └── http_client/      ResilientHttpClient (retry/backoff)
+│
+├── engine/               # → core — shared market data services
+│   └── market_data/      SyncService, OHLCVService, QuotesService, SyncStatusService,
+│                         TrackedSymbolsService, SymbolsService
+│
+├── backtest/             # → core + engine — backtesting engine
+│   ├── engine/           BacktestAppService, ResultCollector, HistoricalReplayAppService
+│   ├── optimization/     GridOptimizationAppService, config models
+│   ├── jobs/             BackgroundTask runners: run_subscription_backtest, etc.
+│   ├── {feature}_command_service.py  Command service
+│   ├── {feature}_query_service.py    Query service
+│   └── domain/services/  PerformanceCalculator (NumPy metrics)
+│
+├── trading/              # → core + engine — strategy & trading logic
+│   ├── brokers/okx/      OKXBroker + WebSocket support (auth, mappers, reconnection)
+│   ├── domain/           Subscription aggregate (deterministic ID)
+│   ├── strategy_command_service.py   Write: add_symbol, start, stop, delete
+│   ├── strategy_query_service.py     Read: list, get, positions, trades
+│   ├── orders_positions_service.py   Live trading queries
+│   └── app_services/     StrategyAppService, OrderAppService, PositionAppService,
+│                         RiskCheckHandler (shared by backtest + trading)
+│
+├── app/                  # → core, engine, backtest, trading — headless runtime
+│   ├── market_data/      Sync/quotes/ohlcv/status app-services
+│   ├── di/               Dishka container + 6 Provider classes
+│   └── main.py           FastAPI app + lifespan (WS feed start/stop, boot migrations)
+│
+└── bff/                  # → core, engine, backtest, trading — stateless gateway
+    ├── routes/           Feature modules: strategy.py, backtest.py, market_data_sync.py, etc.
+    ├── di/               Dishka container (same 6 Providers as app)
+    └── main.py           FastAPI gateway app + exception handlers
 
 packages/pocketquant-web/            # React 19 + Vite SPA (separate npm app)
 ├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector
@@ -354,7 +358,7 @@ packages/pocketquant-web/            # React 19 + Vite SPA (separate npm app)
 └── Tech: React 19, Vite, TypeScript, TanStack Router/Query, Lightweight Charts
 ```
 
-**Operation-First Pattern:** Each feature is a self-contained operation folder — command/query definition + handler logic + optional route. 37 CQRS handlers total, registered with the Mediator via `ALL_HANDLER_TYPES` in `api/di/handlers.py`.
+**Service + Route Pattern:** Each route calls a command/query service; service contains logic; exceptions handled globally. See [Service & Route Conventions](./service-and-route-conventions.md).
 
 ## Success Criteria
 
@@ -445,7 +449,7 @@ Follow conventional commits:
 
 **Development:**
 ```bash
-# 1. Install dependencies (uv workspace)
+# 1. Install dependencies
 uv sync
 
 # 2. Start infrastructure (MongoDB + Redis)

@@ -89,6 +89,12 @@ async def _rehydrate(engine: StrategyAppService, sub: Subscription) -> None:
     )
 
 
+def _strategy(engine, sub_id):
+    instance = engine.get_strategy(sub_id)
+    assert instance is not None
+    return instance
+
+
 @pytest.mark.asyncio
 async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -> None:
     repo = SubscriptionRepository(db)
@@ -108,27 +114,29 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     # --- Engine A: first boot. Instance loaded (stopped); reconcile starts it.
     engine_a = await _build_engine(db)
     await _rehydrate(engine_a, sub)
-    assert engine_a.get_strategy(sub.id).is_running is False
+    assert _strategy(engine_a, sub.id).is_running is False
 
     recon_a = StrategyReconcileService(repo, engine_a, interval_s=0.01)
     await recon_a._reconcile()
 
-    assert engine_a.get_strategy(sub.id).is_running is True
-    assert (await repo.get(sub.id)).actual_state == "running"
+    assert _strategy(engine_a, sub.id).is_running is True
+    sub_doc = await repo.get(sub.id)
+    assert sub_doc is not None and sub_doc.actual_state == "running"
     await engine_a.stop()
 
     # --- Engine B: simulated restart. Fresh engine, RAM empty, rehydrate stopped.
     engine_b = await _build_engine(db)
     assert engine_b.get_strategy(sub.id) is None  # RAM cleared on restart
     await _rehydrate(engine_b, sub)
-    assert engine_b.get_strategy(sub.id).is_running is False
+    assert _strategy(engine_b, sub.id).is_running is False
 
     recon_b = StrategyReconcileService(repo, engine_b, interval_s=0.01)
     await recon_b._reconcile()
 
     # Auto-resumed with zero manual start_strategy calls in this test.
-    assert engine_b.get_strategy(sub.id).is_running is True
-    assert (await repo.get(sub.id)).actual_state == "running"
+    assert _strategy(engine_b, sub.id).is_running is True
+    sub_doc = await repo.get(sub.id)
+    assert sub_doc is not None and sub_doc.actual_state == "running"
     await engine_b.stop()
 
 
@@ -152,12 +160,13 @@ async def test_stop_convergence_stops_running_strategy(db: Database) -> None:
     await _rehydrate(engine, sub)
     recon = StrategyReconcileService(repo, engine, interval_s=0.01)
     await recon._reconcile()
-    assert engine.get_strategy(sub.id).is_running is True
+    assert _strategy(engine, sub.id).is_running is True
 
     # Human stops it → desired flips → reconcile converges actual to stopped.
     await repo.update_desired_state(sub.id, "stopped")
     await recon._reconcile()
 
-    assert engine.get_strategy(sub.id).is_running is False
-    assert (await repo.get(sub.id)).actual_state == "stopped"
+    assert _strategy(engine, sub.id).is_running is False
+    sub_doc = await repo.get(sub.id)
+    assert sub_doc is not None and sub_doc.actual_state == "stopped"
     await engine.stop()

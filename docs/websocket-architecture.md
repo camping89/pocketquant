@@ -62,12 +62,12 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 
 | Path | Role |
 |---|---|
-| `packages/pocketquant-core/src/pocketquant/core/market_data/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
-| `packages/pocketquant-core/src/pocketquant/core/domain/market_data/interfaces.py:16` | `IRealtimeQuoteProvider` Protocol (`@runtime_checkable`, 9 members) |
-| `packages/pocketquant-app/src/pocketquant/app/market_data/app_services/quote_app_service.py:18` | `QuoteAppService` — consumes ticks, writes to Redis + bar builder |
-| `packages/pocketquant-app/src/pocketquant/app/market_data/app_services/ws_subscription_manager.py:22` | `WsSubscriptionManager` — 5s reconcile loop vs `tracked_symbols` |
-| `packages/pocketquant-app/src/pocketquant/app/di/market_data.py:26` | DI wiring (scope=APP singleton) |
-| `packages/pocketquant-app/src/pocketquant/app/main_extensions.py:110` | `start_quote_feed` lifespan hook |
+| `src/pocketquant/core/infra/binance/binance_websocket_client.py:33` | `BinanceWebSocketClient` — raw WS client |
+| `src/pocketquant/core/domain/market_data/interfaces.py:16` | `IRealtimeQuoteProvider` Protocol (`@runtime_checkable`, 9 members) |
+| `src/pocketquant/app/market_data/app_services/quote_app_service.py` | `QuoteAppService` — consumes ticks, writes to Redis + bar builder |
+| `src/pocketquant/app/market_data/app_services/ws_subscription_manager.py` | `WsSubscriptionManager` — 5s reconcile loop vs `tracked_symbols` |
+| `src/pocketquant/app/di/market_data.py:26` | DI wiring (scope=APP singleton) |
+| `src/pocketquant/app/main_extensions.py:110` | `start_quote_feed` lifespan hook |
 
 ### URLs
 
@@ -104,13 +104,13 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 
 | Path | Role |
 |---|---|
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/websocket/okx_websocket_client.py:26` | `OkxWebSocketClient` — auth + subscribe + iterate |
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/websocket/okx_reconnection_handler.py:22` | `OkxReconnectionHandler` — backoff + REST state sync |
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/websocket/okx_auth.py` | HMAC-SHA256 login message builder |
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/websocket/okx_message_parser.py` | Frame routing (orders / positions) |
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/websocket/okx_order_mapper.py` | OKX → `OrderResult` mapping, terminal-state detection |
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/websocket/okx_position_mapper.py` | OKX → position update mapping |
-| `packages/pocketquant-trading/src/pocketquant/trading/brokers/okx/okx_broker.py:295` | `_ws_listener` — orchestrates full lifecycle |
+| `src/pocketquant/trading/brokers/okx/websocket/okx_websocket_client.py:26` | `OkxWebSocketClient` — auth + subscribe + iterate |
+| `src/pocketquant/trading/brokers/okx/websocket/okx_reconnection_handler.py:22` | `OkxReconnectionHandler` — backoff + REST state sync |
+| `src/pocketquant/trading/brokers/okx/websocket/okx_auth.py` | HMAC-SHA256 login message builder |
+| `src/pocketquant/trading/brokers/okx/websocket/okx_message_parser.py` | Frame routing (orders / positions) |
+| `src/pocketquant/trading/brokers/okx/websocket/okx_order_mapper.py` | OKX → `OrderResult` mapping, terminal-state detection |
+| `src/pocketquant/trading/brokers/okx/websocket/okx_position_mapper.py` | OKX → position update mapping |
+| `src/pocketquant/trading/brokers/okx/okx_broker.py:295` | `_ws_listener` — orchestrates full lifecycle |
 
 ### Flow
 
@@ -132,28 +132,28 @@ Frontend uses SSE push for live bars (1s cadence) and quotes (500ms cadence) wit
 ### Consumers
 
 - `OrderAppService` (live trading) — receives order results via `subscribe_order_updates`.
-- `ResultCollector.on_fill` (`pocketquant-backtest/src/.../engine/result_collector.py:30`) — for backtest engine.
+- `ResultCollector.on_fill` (`src/pocketquant/backtest/engine/result_collector.py`) — for backtest engine.
 
 ---
 
 ## DI Wiring
 
 ```python
-# packages/pocketquant-app/src/pocketquant/app/di/market_data.py
+# src/pocketquant/app/di/market_data.py
 @provide(scope=Scope.APP)
 def get_realtime_quote_provider(self) -> IRealtimeQuoteProvider:
     """Singleton WS client shared by QuoteAppService, WsSubscriptionManager."""
     return BinanceWebSocketClient()
 ```
 
-OKX WS client is **not** in the DI container — it's created lazily inside `OKXBroker._ws_listener` when `subscribe_order_updates` is first called. `OKXBroker` itself comes from `BrokerFactory` (`packages/pocketquant-app/src/pocketquant/app/di/broker_factory.py`).
+OKX WS client is **not** in the DI container — it's created lazily inside `OKXBroker._ws_listener` when `subscribe_order_updates` is first called. `OKXBroker` itself comes from `BrokerFactory` (`src/pocketquant/app/di/broker_factory.py`).
 
 ---
 
 ## Lifespan / Startup
 
 ```python
-# packages/pocketquant-app/src/pocketquant/app/main_extensions.py:110
+# src/pocketquant/app/main_extensions.py:110
 async def start_quote_feed(container, app):
     quote_svc = await container.get(QuoteAppService)
     sub_mgr = await container.get(WsSubscriptionManager)
@@ -173,7 +173,7 @@ async def start_quote_feed(container, app):
 **Route:** GET `/api/v1/market-data/bars/stream/{symbol}?interval={interval}`
 
 **Files:**
-- `packages/pocketquant-app/src/pocketquant/app/market_data/handlers/ohlcv/stream_bars/route.py` — handler + SSE endpoint
+- `src/pocketquant/bff/routes/market_data_ohlcv.py` — SSE route endpoint
 
 **Flow:**
 1. Client opens EventSource connection → server enters poll loop.
@@ -202,7 +202,7 @@ async def start_quote_feed(container, app):
 **Route:** GET `/api/v1/quotes/stream/{symbol}`
 
 **Files:**
-- `packages/pocketquant-app/src/pocketquant/app/market_data/handlers/quotes/stream_quote/route.py` — handler + SSE endpoint
+- `src/pocketquant/bff/routes/market_data_quotes.py` — SSE route endpoint
 
 **Flow:**
 1. Client opens EventSource connection → server enters poll loop.
@@ -238,7 +238,7 @@ async def start_quote_feed(container, app):
    - File: `packages/pocketquant-web/src/hooks/use-realtime-quote.ts`
    - Opens EventSource to `/api/v1/quotes/stream/{symbol}`
    - 10s stale threshold: falls back to REST polling if SSE inactive
-   - Fallback: GET `/api/v1/market-data/quotes/latest/{symbol}` before SSE connects (warm start)
+   - Fallback: GET `/api/v1/quotes/latest/{symbol}` before SSE connects (warm start)
 
 ---
 
@@ -269,8 +269,8 @@ SSE polling adds ~0.5–1.2s latency (poll cycle overhead) compared to WebSocket
 
 ## Tests
 
-- `tests/core_test/unit/market_data/binance/test_binance_websocket_client.py` — Binance WS unit tests (~15 cases).
-- `tests/api_test/unit/di/test_di_data_provider.py` — DI resolution and `IRealtimeQuoteProvider` Protocol conformance.
+- `tests/unit/market_data/binance/test_binance_websocket_client.py` — Binance WS unit tests (~15 cases).
+- `tests/unit/di/test_di_data_provider.py` — DI resolution and `IRealtimeQuoteProvider` Protocol conformance.
 
 ---
 

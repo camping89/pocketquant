@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
@@ -17,7 +18,7 @@ NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
 
 
 def _sub(**overrides) -> Subscription:
-    base = dict(
+    base: dict[str, Any] = dict(
         id=Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", Interval.MINUTE_5),
         strategy_code="hitnrun2",
         symbol="BTCUSDT:BINANCE",

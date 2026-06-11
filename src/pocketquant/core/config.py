@@ -8,13 +8,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _find_project_root() -> Path:
-    """Find workspace root by walking up to pyproject.toml with [tool.uv.workspace]."""
+    """Find repo root by walking up to the pocketquant pyproject.toml."""
     if root := os.environ.get("POCKETQUANT_ROOT"):
         return Path(root)
     current = Path.cwd()
     for parent in [current, *current.parents]:
         pyproject = parent / "pyproject.toml"
-        if pyproject.exists() and "[tool.uv.workspace]" in pyproject.read_text():
+        if pyproject.exists() and 'name = "pocketquant"' in pyproject.read_text():
             return parent
     raise FileNotFoundError(
         "Cannot find project root. Set POCKETQUANT_ROOT env var or run from workspace."

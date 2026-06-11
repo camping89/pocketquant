@@ -94,7 +94,7 @@ async def test_injection_roundtrip_get_then_unload() -> None:
     strat = _CountingStrategy(cfg)
     broker = _FakeBroker()
 
-    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)  # pyright: ignore[reportArgumentType]
 
     assert svc.get_strategy(cfg.id) is strat
     await svc.unload_strategy(cfg.id)
@@ -109,7 +109,7 @@ async def test_injection_connects_broker() -> None:
     broker = _FakeBroker()
     assert broker.is_connected is False
 
-    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)  # pyright: ignore[reportArgumentType]
 
     assert broker.is_connected is True
     assert broker.connect_calls == 1
@@ -122,7 +122,7 @@ async def test_injection_invokes_on_start_once() -> None:
     strat = _CountingStrategy(cfg)
     broker = _FakeBroker()
 
-    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)  # pyright: ignore[reportArgumentType]
 
     assert strat.on_start_calls == 1
     assert strat.is_running is True
@@ -137,7 +137,7 @@ async def test_injection_does_not_reconnect_already_connected_broker() -> None:
     await broker.connect()
     assert broker.connect_calls == 1
 
-    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)  # pyright: ignore[reportArgumentType]
 
     # Guard already-connected: connect() not called a second time.
     assert broker.connect_calls == 1
@@ -151,6 +151,6 @@ async def test_get_config_returns_registered_then_none_for_unknown() -> None:
     broker = _FakeBroker()
 
     assert svc.get_config(cfg.id) is None
-    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)
+    await svc.inject_prepared_strategy(cfg.id, strat, broker, cfg)  # pyright: ignore[reportArgumentType]
     assert svc.get_config(cfg.id) is cfg
     assert svc.get_config("does-not-exist") is None

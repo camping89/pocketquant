@@ -40,15 +40,15 @@ test-pkg pkg:
 
 # Lint check
 lint:
-    ruff check .
+    uv run ruff check .
 
 # Format code
 fmt:
-    ruff format .
+    uv run ruff format .
 
 # Type check
 types:
-    pyright
+    uv run pyright
 
 # Run lint + format + type check
 qa: lint fmt types

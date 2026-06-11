@@ -353,9 +353,9 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
 async def start_background_jobs(container: AsyncContainer) -> None:
     """Register background sync jobs with the scheduler.
 
-    NOTE: sync_jobs and backtest_jobs module-level containers are wired at the
-    top of lifespan() in main.py — before any `await` — to win the race against
-    persisted MongoDBJobStore jobs that may dispatch during early Dishka resolves.
+    NOTE: the sync_jobs module-level container is wired at the top of lifespan()
+    in main.py — before any `await` — to win the race against persisted
+    MongoDBJobStore jobs that may dispatch during early Dishka resolves.
     """
     settings = await container.get(Settings)
     if not settings.enable_jobs:
@@ -499,7 +499,9 @@ def handle_startup_failure(error: Exception) -> None:
 
 def configure_middleware(app: FastAPI, settings) -> None:
     """Attach all middleware layers and global exception handlers."""
-    register_exception_handlers(app)
+    from fastapi.exceptions import RequestValidationError
+
+    register_exception_handlers(app, validation_error_cls=RequestValidationError)
 
     app.add_middleware(
         CORSMiddleware,

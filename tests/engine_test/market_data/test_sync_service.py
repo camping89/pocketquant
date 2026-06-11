@@ -7,6 +7,7 @@ bulk fan-out, and first-sync-no-data failure.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -124,8 +125,10 @@ def _stop(svc: SyncService) -> None:
             p.stop()
 
 
-def _cmd(**kwargs) -> SyncSymbolCommand:  # type: ignore[return]
-    defaults = dict(symbol=SYMBOL, interval=Interval.MINUTE_1, n_bars=100, source="test")
+def _cmd(**kwargs) -> SyncSymbolCommand:
+    defaults: dict[str, Any] = dict(
+        symbol=SYMBOL, interval=Interval.MINUTE_1, n_bars=100, source="test"
+    )
     defaults.update(kwargs)
     return SyncSymbolCommand(**defaults)
 
@@ -159,7 +162,7 @@ async def test_sync_one_happy_path_returns_completed() -> None:
 @pytest.mark.asyncio
 async def test_skip_filter_bypasses_existence_check() -> None:
     bar = _aligned_bar()
-    svc, mocks = _build_service(fetch_records=[bar], insert_count=1)
+    svc, _mocks = _build_service(fetch_records=[bar], insert_count=1)
     try:
         with patch("pocketquant.engine.market_data.sync_service.filter_new_bars") as mock_filter:
             await svc.sync_one(_cmd(skip_filter=True))
@@ -273,7 +276,7 @@ async def test_sync_bulk_fans_out_with_bulk_sync_source() -> None:
 
 @pytest.mark.asyncio
 async def test_provider_exception_returns_error_response() -> None:
-    svc, mocks = _build_service(fetch_records=[])
+    svc, _mocks = _build_service(fetch_records=[])
 
     # Override fetch_with_retry to raise
     async def _raise(*_a, **_kw):

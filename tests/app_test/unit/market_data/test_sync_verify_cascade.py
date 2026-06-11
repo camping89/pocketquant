@@ -100,8 +100,8 @@ class TestVerifyOneSymbol:
 
         out = await _verify_one_symbol(
             "BINANCE:BTCUSDT",
-            provider=provider,
-            bar_repo=bar_repo,
+            provider=provider,  # pyright: ignore[reportArgumentType]
+            bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
         )
         assert out["rest_empty"] is True
         assert out["compared"] == 0
@@ -115,8 +115,8 @@ class TestVerifyOneSymbol:
 
         out = await _verify_one_symbol(
             "BINANCE:BTCUSDT",
-            provider=provider,
-            bar_repo=bar_repo,
+            provider=provider,  # pyright: ignore[reportArgumentType]
+            bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
         )
         assert out["cascade_empty"] is True
         assert out["compared"] == 0
@@ -130,8 +130,8 @@ class TestVerifyOneSymbol:
 
         out = await _verify_one_symbol(
             "BINANCE:BTCUSDT",
-            provider=provider,
-            bar_repo=bar_repo,
+            provider=provider,  # pyright: ignore[reportArgumentType]
+            bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
         )
         assert out["compared"] == 3
         assert out["divergence_count"] == 0
@@ -147,8 +147,8 @@ class TestVerifyOneSymbol:
 
         out = await _verify_one_symbol(
             "BINANCE:BTCUSDT",
-            provider=provider,
-            bar_repo=bar_repo,
+            provider=provider,  # pyright: ignore[reportArgumentType]
+            bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
         )
         assert out["compared"] == 5
         assert out["divergence_count"] == 5

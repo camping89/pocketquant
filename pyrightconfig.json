@@ -4,7 +4,11 @@
     "tests/core_test",
     "tests/backtest_test",
     "tests/trading_test",
-    "tests/app_test"
+    "tests/app_test",
+    "tests/engine_test",
+    "tests/bff_test",
+    "tests/baseline",
+    "tests/scripts"
   ],
   "venvPath": ".",
   "venv": ".venv",
@@ -32,6 +36,24 @@
     {
       "root": "tests/app_test",
       "reportPrivateUsage": "none"
+    },
+    {
+      "root": "tests/engine_test",
+      "reportPrivateUsage": "none"
+    },
+    {
+      "root": "tests/bff_test",
+      "reportPrivateUsage": "none",
+      "extraPaths": ["."]
+    },
+    {
+      "root": "tests/baseline",
+      "reportPrivateUsage": "none"
+    },
+    {
+      "root": "tests/scripts",
+      "reportPrivateUsage": "none",
+      "extraPaths": ["."]
     }
   ]
 }

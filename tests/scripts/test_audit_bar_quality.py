@@ -235,7 +235,11 @@ class TestRunAuditErrorHandling:
 
         class _EmptyCursor:
             def __aiter__(self):
-                return aiter([])
+                async def _gen():
+                    return
+                    yield
+
+                return _gen()
 
         async def _fake_aggregate(pipeline, **_kw):
             # aggregate() is awaited — must be a coroutine returning an async iterable

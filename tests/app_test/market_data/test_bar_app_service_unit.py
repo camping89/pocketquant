@@ -1,6 +1,7 @@
 """Unit tests for BarAppService — throttle, no-Mongo-write, multi-tf state."""
 
 import time
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -106,7 +107,7 @@ class TestThrottle:
                 symbol="BINANCE:BTC",
                 price=100.0,
                 volume=1.0,
-                timestamp=1000.0,
+                timestamp=datetime.fromtimestamp(1000.0, tz=UTC),
             ),
             symbol_key,
             interval,
@@ -120,7 +121,7 @@ class TestThrottle:
                 symbol="BINANCE:BTC",
                 price=101.0,
                 volume=2.0,
-                timestamp=1000.1,  # +100ms
+                timestamp=datetime.fromtimestamp(1000.1, tz=UTC),  # +100ms
             ),
             symbol_key,
             interval,
@@ -132,8 +133,6 @@ class TestThrottle:
     @pytest.mark.asyncio
     async def test_force_flush_bypasses_throttle(self, bar_service, mock_cache):
         """force=True bypasses throttle (used on bar roll)."""
-        from datetime import UTC, datetime
-
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         builder = BarBuilder(
@@ -155,8 +154,6 @@ class TestNoMongoWrite:
     @pytest.mark.asyncio
     async def test_bar_completion_no_mongo_write(self, bar_service, mock_bar_repo):
         """On bar completion, upsert_bar is NOT called."""
-        from datetime import UTC, datetime
-
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         bar = BarBuilder(
@@ -175,8 +172,6 @@ class TestNoMongoWrite:
     @pytest.mark.asyncio
     async def test_event_bus_publishes_on_bar_completion(self, bar_service, mock_event_bus):
         """BarCompletedEvent IS published on bar completion."""
-        from datetime import UTC, datetime
-
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         bar = BarBuilder(
@@ -209,7 +204,7 @@ class TestMultiTfState:
             symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
-            timestamp=1000.0,
+            timestamp=datetime.fromtimestamp(1000.0, tz=UTC),
         )
 
         await bar_service.add_tick(tick)
@@ -228,14 +223,12 @@ class TestMultiTfState:
     @pytest.mark.asyncio
     async def test_5m_bar_rolls_only_on_5min_boundary(self, bar_service):
         """5m bar only completes at 5-minute boundaries, not at every 1m roll."""
-        from datetime import UTC, datetime
-
         # Tick at 10:00 UTC
         tick1 = QuoteTick(
             symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
-            timestamp=datetime(2026, 5, 6, 10, 0, 0, tzinfo=UTC).timestamp(),
+            timestamp=datetime(2026, 5, 6, 10, 0, 0, tzinfo=UTC),
         )
         await bar_service.add_tick(tick1)
 
@@ -244,7 +237,7 @@ class TestMultiTfState:
             symbol="BINANCE:BTC",
             price=101.0,
             volume=2.0,
-            timestamp=datetime(2026, 5, 6, 10, 1, 0, tzinfo=UTC).timestamp(),
+            timestamp=datetime(2026, 5, 6, 10, 1, 0, tzinfo=UTC),
         )
         await bar_service.add_tick(tick2)
 
@@ -266,7 +259,7 @@ class TestMultiTfState:
             symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
-            timestamp=1000.0,
+            timestamp=datetime.fromtimestamp(1000.0, tz=UTC),
         )
         await bar_service.add_tick(tick)
 
@@ -280,8 +273,6 @@ class TestCacheKeyInjection:
     @pytest.mark.asyncio
     async def test_cache_includes_last_update(self, bar_service, mock_cache):
         """Redis cache dict includes last_update (Unix seconds)."""
-        from datetime import UTC, datetime
-
         from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
 
         builder = BarBuilder(
@@ -312,7 +303,7 @@ class TestFlushAllBars:
             symbol="BINANCE:BTC",
             price=100.0,
             volume=1.0,
-            timestamp=1000.0,
+            timestamp=datetime.fromtimestamp(1000.0, tz=UTC),
         )
         await bar_service.add_tick(tick)
 

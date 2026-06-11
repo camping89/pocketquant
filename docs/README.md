@@ -31,8 +31,8 @@ Canonical documentation for the current code layout and workflow. Docs are **AS-
 
 | Doc | Description |
 |-----|-------------|
-| [Strategy Lifecycle](./strategy-lifecycle.md) | Template-based strategy model: load → subscribe → backtest → start/stop. `strategy_code` vs `subscription_id`. |
-| [Handler Pipelines](./handler-pipelines.md) | Per-handler request/processing/side-effect detail for all CQRS handlers. The API-level reference. |
+| [Strategy Lifecycle](./features/strategy-lifecycle.md) | Template-based strategy model: load → subscribe → backtest → start/stop. `strategy_code` vs `subscription_id`. |
+| [Service & Route Conventions](./service-and-route-conventions.md) | Route → service → repository recipe: where routes/services live, DI wiring, command/query models, error handling. API inventory lives in FastAPI OpenAPI (`/api/v1/docs`). |
 | [WebSocket Architecture](./websocket-architecture.md) | Outbound WS ingest (Binance `@aggTrade` quotes, OKX orders) + SSE egress (bars, quotes). No server-side WS. |
 | [Feature: Add Symbol](./features/feature-add-symbol.md) | Worked example of one feature end-to-end (strategy subscription modal). Template for understanding other slices. |
 
@@ -44,23 +44,24 @@ Canonical documentation for the current code layout and workflow. Docs are **AS-
 
 ## Current Repo Shape
 
+One Python package (`pocketquant`) at repo-root `src/`; subpackage boundaries are enforced by import-linter contracts in `pyproject.toml` (see [Root README](../README.md) for the authoritative layout).
+
 ```text
+src/pocketquant/
+├── core/       # 0 deps — domain, common, config, ports/DTOs, persisted entities + infra adapters
+├── engine/     # → core — shared strategy/order/position/risk engine
+├── backtest/   # → core + engine — backtest engine, optimization, run orchestration
+├── trading/    # → core + engine — live trading, OKX broker, strategy/subscription
+├── app/        # → all — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
+└── bff/        # → all except app — stateless gateway: read/write routes, backtest enqueue
 packages/
-├── pocketquant-core/           # 0 deps — domain, concepts, common, config, ports/DTOs, adapters, persisted entities
-├── pocketquant-execution/      # → core — shared strategy/order/position/risk engine
-├── pocketquant-backtest/       # → core + execution — backtest engine, optimization, run orchestration
-├── pocketquant-trading/        # → core + execution — live trading, OKX broker, strategy/subscription
-├── pocketquant-app/            # → core, execution, backtest, trading — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
-├── pocketquant-bff/            # → core, execution, backtest, trading — stateless gateway: read/write routes, backtest enqueue
-└── pocketquant-web/            # React 19 + Vite SPA (separate npm app, excluded from uv workspace)
+└── pocketquant-web/   # React 19 + Vite SPA (separate npm app)
 ```
 
-Dependency direction: `core ◁ execution ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings.
+Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings. `fastapi` may only be imported by `app`/`bff`.
 
 Notes:
 
-- The 5 Python packages share the `pocketquant.*` namespace and form the `uv` workspace.
-- `pocketquant-web` is a separate npm/Vite app, **excluded** from the uv workspace.
 - Two processes run from one image (1-image-2-CMD): app (headless, port 41920 internal, `/health` only) and bff (stateless gateway, port 41921 internal, serves all `/api/*` routes).
 
 ## Maintenance Note

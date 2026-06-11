@@ -39,7 +39,7 @@ Tài liệu mô tả feature **Add Symbol** — modal cho phép user đăng ký 
 | Layer | Tech |
 |-------|------|
 | Frontend | React + TanStack Query (`pocketquant-web`) |
-| Backend | FastAPI + Mediator (CQRS) + Dishka DI (`pocketquant-trading`) |
+| Backend | FastAPI + Command/Query Service + Dishka DI (`src/pocketquant/trading`) |
 | Storage | MongoDB collection `subscriptions`, deterministic PK trên `(strategy_code, symbol, interval)` |
 
 ### Frontend
@@ -55,18 +55,18 @@ Tài liệu mô tả feature **Add Symbol** — modal cho phép user đăng ký 
 
 **Cache invalidation:** Sau success, hook `qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })` → list re-fetch tức thì.
 
-### Backend (CQRS)
+### Backend (Service + Route)
 
 ```
-HTTP Route → Command → Handler → Domain → Repository → MongoDB
+HTTP Route → Command → Service → Domain → Repository → MongoDB
 ```
 
 | File | Vai trò |
 |------|---------|
-| `packages/pocketquant-trading/.../handlers/strategy/add_symbol/route.py` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, build `AddSymbolCommand`, gửi qua Mediator |
-| `packages/pocketquant-trading/.../handlers/strategy/add_symbol/handler.py` | Auto-load strategy template nếu cần → tạo `Subscription` → persist |
-| `packages/pocketquant-trading/.../domain/subscription.py` | Aggregate `Subscription` với deterministic ID |
-| `packages/pocketquant-trading/.../persistence/subscription_repository.py` | Mongo persistence trên collection `subscriptions` |
+| `src/pocketquant/bff/routes/strategy.py:80` | `POST /api/v1/strategies/{strategy_code}/subscriptions`, build `AddSymbolCommand`, call service |
+| `src/pocketquant/trading/strategy_command_service.py:80` | `StrategyCommandService.add_symbol()` — auto-load strategy template nếu cần → tạo `Subscription` → persist |
+| `src/pocketquant/core/domain/subscription.py` | Aggregate `Subscription` với deterministic ID |
+| `src/pocketquant/core/infra/persistence/repositories/subscription_repository.py` | Mongo persistence trên collection `subscriptions` |
 
 ### Deterministic ID
 
@@ -109,13 +109,14 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
        ▼
 ┌──────────────────────┐
 │ FastAPI route        │
-│ (add_symbol/route.py)│
+│ (bff/routes/        │
+│  strategy.py:80)    │
 └──────┬───────────────┘
        │ AddSymbolCommand
        ▼
 ┌──────────────────────┐    ┌─────────────────────┐
-│ AddSymbolHandler     │───▶│ TrackedSymbolRepo   │
-│                      │    │ .exists()           │
+│ StrategyCommand      │───▶│ TrackedSymbolRepo   │
+│ Service.add_symbol() │    │ .exists()           │
 │                      │◀───│ → False? raise 404  │
 └──────┬───────────────┘    └─────────────────────┘
        │ STRATEGY_REGISTRY.get(strategy_code)
@@ -165,10 +166,10 @@ Global handler map `AppError` → JSON `{error: {code, message}}`.
 
 ## 5. Related Docs
 
-- [Handler Pipelines](../handler-pipelines.md) — chi tiết CQRS pipeline pattern
+- [Service & Route Conventions](../service-and-route-conventions.md) — route → service → repository pattern
 - [System Architecture](../system-architecture.md) — overview backend/frontend, subscription entity
-- [Code Standards](../code-standards.md) — CQRS naming conventions + Strategy ID Disambiguation
-- [Strategy Lifecycle](../strategy-lifecycle.md) — bảng routes đầy đủ, mongo collection map
+- [Code Standards](../code-standards.md) — Naming conventions + Strategy ID Disambiguation
+- [Strategy Lifecycle](../strategy-lifecycle.md) — end-to-end example, bảng routes đầy đủ, mongo collection map
 
 ---
 

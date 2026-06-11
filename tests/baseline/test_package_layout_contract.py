@@ -55,3 +55,16 @@ def test_no_python_packages_dir_remnants() -> None:
         d.name for d in packages_dir.iterdir() if d.is_dir() and d.name != "pocketquant-web"
     ]
     assert leftovers == [], f"Python packages must be merged into src/: {leftovers}"
+
+
+def test_no_dishka_fastapi_integration_outside_app_bff() -> None:
+    """import-linter can't forbid external subpackages, so the fastapi-containment
+    contract misses `dishka.integrations.fastapi` — this grep closes that hole."""
+    src_root = REPO_ROOT / "src" / "pocketquant"
+    offenders = [
+        str(path.relative_to(REPO_ROOT))
+        for sub in ("core", "engine", "backtest", "trading")
+        for path in (src_root / sub).rglob("*.py")
+        if "dishka.integrations.fastapi" in path.read_text()
+    ]
+    assert offenders == [], f"dishka.integrations.fastapi only allowed in app/bff: {offenders}"

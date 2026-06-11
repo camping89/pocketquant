@@ -1,5 +1,7 @@
 """Unit tests for TrackedSymbolRepository — persistence layer."""
 
+from collections.abc import AsyncGenerator
+
 import pytest
 
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
@@ -83,7 +85,7 @@ class TestTrackedSymbolRepository:
 
 
 @pytest.fixture
-async def repo(settings) -> TrackedSymbolRepository:
+async def repo(settings) -> AsyncGenerator[TrackedSymbolRepository]:
     """TrackedSymbolRepository connected to test MongoDB."""
     from pocketquant.core.infra.persistence.mongodb import Database
 
