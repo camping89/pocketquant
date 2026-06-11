@@ -8,7 +8,7 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
-from pocketquant.bff.common.symbol_validation import validate_composite_symbol
+from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
@@ -49,9 +49,8 @@ async def get_current_bar(
     bar_service: FromDishka[BarAppService],
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> dict:
-    # bff reads the current bar straight from Cache (live feed writes it) with a
-    # DB fallback — no WS runtime needed, so the bff BarAppService carries only
-    # Cache + BarRepository.
+    # Reads the current bar straight from Cache (live feed writes it) with a
+    # DB fallback — no WS-runtime coupling in the read path.
     symbol = validate_composite_symbol(symbol)
     bar = await bar_service.get_current_bar(symbol, interval)
 

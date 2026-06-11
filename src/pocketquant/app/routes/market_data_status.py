@@ -3,7 +3,7 @@
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
 
-from pocketquant.bff.common.symbol_validation import validate_composite_symbol
+from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.sync_status_service import (
     GetSymbolSyncStatusQuery,

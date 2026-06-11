@@ -1,4 +1,4 @@
-"""Route inventory snapshot for the bff app.
+"""Route inventory snapshot for the app entrypoint.
 
 Records (methods, path, name) for every route. Coarser than the OpenAPI
 snapshot but survives schema-only churn — catches lost/renamed endpoints fast.
@@ -12,13 +12,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-SNAPSHOT_PATH = Path(__file__).parent / "route_inventory_bff_snapshot.json"
+SNAPSHOT_PATH = Path(__file__).parent / "route_inventory_app_snapshot.json"
 
 
 def _current_inventory() -> list[dict[str, Any]]:
     from fastapi.routing import APIRoute
 
-    from pocketquant.bff.main import create_app
+    from pocketquant.app.main import create_app
 
     inventory: list[dict[str, Any]] = []
     for route in create_app().routes:
@@ -36,7 +36,7 @@ def _current_inventory() -> list[dict[str, Any]]:
     return inventory
 
 
-def test_bff_route_inventory_matches_snapshot() -> None:
+def test_app_route_inventory_matches_snapshot() -> None:
     current = json.dumps(_current_inventory(), sort_keys=True, indent=2) + "\n"
 
     if os.environ.get("BASELINE_UPDATE") == "1":
@@ -48,6 +48,6 @@ def test_bff_route_inventory_matches_snapshot() -> None:
     )
     committed = SNAPSHOT_PATH.read_text(encoding="utf-8")
     assert current == committed, (
-        "bff route inventory drifted from baseline. If intentional, "
+        "app route inventory drifted from baseline. If intentional, "
         "regenerate with BASELINE_UPDATE=1 (just baseline) and review the diff."
     )

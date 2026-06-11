@@ -28,7 +28,6 @@ dependencies = [
 
 [project.scripts]
 pocketquant = "pocketquant.app.main:run"
-pocketquant-bff = "pocketquant.bff.main:run"
 
 [dependency-groups]
 dev = [
@@ -77,10 +76,10 @@ root_packages = ["pocketquant"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Layered architecture — app/bff top tier"
+name = "Layered architecture — app top tier"
 type = "layers"
 layers = [
-    "pocketquant.app | pocketquant.bff",
+    "pocketquant.app",
     "pocketquant.backtest",
     "pocketquant.engine",
     "pocketquant.core",
@@ -100,7 +99,6 @@ forbidden_modules = [
     "pocketquant.engine",
     "pocketquant.backtest",
     "pocketquant.app",
-    "pocketquant.bff",
 ]
 
 [[tool.importlinter.contracts]]
@@ -110,29 +108,16 @@ source_modules = ["pocketquant.engine"]
 forbidden_modules = [
     "pocketquant.backtest",
     "pocketquant.app",
-    "pocketquant.bff",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Backtest imports no upper package"
 type = "forbidden"
 source_modules = ["pocketquant.backtest"]
-forbidden_modules = ["pocketquant.app", "pocketquant.bff"]
-
-[[tool.importlinter.contracts]]
-name = "bff does not import app"
-type = "forbidden"
-source_modules = ["pocketquant.bff"]
 forbidden_modules = ["pocketquant.app"]
 
 [[tool.importlinter.contracts]]
-name = "app does not import bff"
-type = "forbidden"
-source_modules = ["pocketquant.app"]
-forbidden_modules = ["pocketquant.bff"]
-
-[[tool.importlinter.contracts]]
-name = "fastapi only in app/bff"
+name = "fastapi only in app"
 type = "forbidden"
 source_modules = [
     "pocketquant.core",

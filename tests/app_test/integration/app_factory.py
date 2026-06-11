@@ -20,6 +20,7 @@ from pocketquant.app.di import (
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
+    ServicesProvider,
 )
 from pocketquant.app.main_extensions import (
     configure_middleware,
@@ -77,6 +78,7 @@ def make_test_app(settings: Settings) -> FastAPI:
         MarketDataProvider(),
         AppTradingServiceProvider(),
         BacktestWorkerProvider(),
+        ServicesProvider(),
     ]
     container = make_async_container(*providers)
 

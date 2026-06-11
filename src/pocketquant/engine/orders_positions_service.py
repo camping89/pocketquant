@@ -1,8 +1,7 @@
 """Orders + positions query service — reads live in-RAM engine state.
 
 These queries depend on OrderAppService / PositionAppService which hold live
-in-RAM state and are only available in the app process. They are excluded from
-the stateless bff DI and registered only in the app DI container.
+in-RAM state — they answer from the running execution engine, not the DB.
 
 Query DTOs keep their original class names so callers that reference them
 by name are unaffected by the handler→service migration.
@@ -45,8 +44,8 @@ class ListPositionsQuery(BaseModel):
 class OrderPositionQueryService:
     """Read live in-RAM order and position state from the execution engine.
 
-    Requires OrderAppService / PositionAppService — only available in the
-    headless app process, never in the stateless bff.
+    Requires OrderAppService / PositionAppService — answers reflect the
+    running engine, not persisted DB rows.
     """
 
     def __init__(

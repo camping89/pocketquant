@@ -713,8 +713,8 @@
     }
   },
   "info": {
-    "description": "FE gateway — stateless FastAPI serving pocketquant-web + DB read/write",
-    "title": "PocketQuant BFF",
+    "description": "Algorithmic trading platform — API, SPA serving, and trading runtime",
+    "title": "PocketQuant",
     "version": "0.0.0"
   },
   "openapi": "3.1.0",

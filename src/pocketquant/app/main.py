@@ -103,9 +103,11 @@ def create_app() -> FastAPI:
     setup_logging(settings)
 
     app = FastAPI(
-        title=settings.app_name,
+        # Literal title — settings.app_name varies per env and would leak into
+        # the OpenAPI snapshot baseline.
+        title="PocketQuant",
         version=settings.app_version,
-        description="Algorithmic trading platform with backtesting and forward testing",
+        description="Algorithmic trading platform — API, SPA serving, and trading runtime",
         lifespan=lifespan,
         docs_url=f"{settings.api_prefix}/docs",
         redoc_url=f"{settings.api_prefix}/redoc",
@@ -129,4 +131,4 @@ def run() -> None:
     """CLI entrypoint for `pocketquant` command."""
     import uvicorn
 
-    uvicorn.run("pocketquant.app.main:app", host="0.0.0.0", port=41920)
+    uvicorn.run("pocketquant.app.main:app", host="0.0.0.0", port=41921)

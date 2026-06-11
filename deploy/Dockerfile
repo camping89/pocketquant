@@ -51,8 +51,10 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:41920/health || exit 1
+    CMD curl -f http://localhost:41921/health || exit 1
 
-EXPOSE 41920
+EXPOSE 41921
 
-CMD ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41920"]
+# Single worker only — scheduler/WS feed/broker are in-process singletons;
+# --workers N would duplicate the reconcile loop and live broker connection.
+CMD ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921"]

@@ -2,11 +2,9 @@
 
 Mirrors StrategyReconcileService.run: a ``while True`` loop with a per-tick
 backstop, claiming one request at a time via the repo's atomic
-``claim_next``. Runs on the headless ``pocketquant-app`` only — the stateless
-``pocketquant-bff`` merely INSERTs requests.
-
-The worker owns ALL backtest compute (single + subscription), replacing the
-removed APScheduler ``bt:*`` one-off jobs.
+``claim_next``. Routes merely INSERT requests; this worker owns ALL backtest
+compute (single + subscription), replacing the removed APScheduler ``bt:*``
+one-off jobs.
 """
 
 from __future__ import annotations
