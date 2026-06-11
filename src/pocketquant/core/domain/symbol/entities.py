@@ -19,7 +19,7 @@ from pocketquant.core.common.uuid import UUID, generate_id
 COMPOSITE_SYMBOL_RE = re.compile(r"^[A-Z0-9_-]+:[A-Z0-9_-]+$")
 
 # Stricter validation pattern for API path/body input: each segment allows dot,
-# bounded to 32 chars. Shared by the bff HTTP validator and the tracked-symbol
+# bounded to 32 chars. Shared by the HTTP route validator and the tracked-symbol
 # command validators so both reject the same shapes.
 COMPOSITE_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]{1,32}:[A-Z0-9._-]{1,32}$")
 

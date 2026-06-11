@@ -26,8 +26,8 @@ That distinction drives everything below.
 
 `POST /api/v1/strategies/{strategy_code}/subscriptions` with body `{symbol, interval}`.
 
-- Route: `src/pocketquant/bff/routes/strategy.py:80`
-- Service: `src/pocketquant/trading/strategy_command_service.py:80`
+- Route: `src/pocketquant/app/routes/strategy.py:80`
+- Service: `src/pocketquant/engine/strategy_command_service.py:80`
 - Flow:
   1. Validate symbol is tracked — `TrackedSymbolRepository.exists()`; otherwise 404
      `SYMBOL_NOT_TRACKED`.
@@ -56,7 +56,7 @@ There is **no edit endpoint**. To change a subscription's config:
 
 1. `DELETE /api/v1/subscriptions/{sub_id}` to remove the subscription.
    Cascade-deletes the cached backtest and unloads the in-memory instance
-   — `src/pocketquant/bff/routes/strategy.py:120`.
+   — `src/pocketquant/app/routes/strategy.py:120`.
 2. Re-create with the new `(symbol, interval)` pair via POST
    `/api/v1/strategies/{strategy_code}/subscriptions` (§1.1).
 
@@ -73,7 +73,7 @@ To change strategy-level parameters (e.g. `entry_lookback_bars`):
 
 To delete an entire strategy (all subscriptions + cached backtests + scheduled
 jobs in one go): `DELETE /api/v1/strategies/{template_id}` — service call at
-`src/pocketquant/bff/routes/strategy.py:160`.
+`src/pocketquant/app/routes/strategy.py:160`.
 
 ### 3. How to rerun
 
@@ -81,8 +81,8 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — service call at
 
 `POST /api/v1/strategies/{strategy_code}/run-all-backtests` → 202 Accepted.
 
-- Route: `src/pocketquant/bff/routes/strategy.py:130`
-- Service: `src/pocketquant/trading/strategy_command_service.py:160`
+- Route: `src/pocketquant/app/routes/strategy.py:130`
+- Service: `src/pocketquant/engine/strategy_command_service.py:160`
 - Behavior: fans out one `JobScheduler.add_one_off_job(...)` per subscription of
   the strategy, with `job_id = f"bt:{sub.id}"` and module reference
   `pocketquant.backtest.jobs.subscription_backtest_jobs:run_subscription_backtest`. Returns
@@ -95,7 +95,7 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — service call at
 **Live trading start/stop** (separate from backtests):
 
 - `POST /api/v1/subscriptions/{sub_id}/start` — route
-  `src/pocketquant/bff/routes/strategy.py:145`,
+  `src/pocketquant/app/routes/strategy.py:145`,
   service calls `StrategyAppService.start_strategy(sub_id)` which calls
   `IStrategy.on_start()` and connects the broker if needed.
 - `POST /api/v1/subscriptions/{sub_id}/stop` — symmetric stop, calls `on_stop()`.
@@ -105,7 +105,7 @@ jobs in one go): `DELETE /api/v1/strategies/{template_id}` — service call at
 ### 4. How to see it on the UI
 
 Open the chart UI (`http://localhost:5173` in dev, `http://localhost/`
-when the nginx serves the built bundle via bff). The strategies dashboard is a
+when nginx serves the built bundle). The strategies dashboard is a
 **3-pane layout**
 — `web/src/components/strategies/strategies-page-layout.tsx`:
 
@@ -119,18 +119,18 @@ Endpoints feeding the UI:
 
 - `GET /api/v1/strategies/` — list of registered template IDs with metadata
   (returns `[{strategy_code, class_name, description}, ...]`)
-  (`src/pocketquant/bff/routes/backtest.py:10`)
+  (`src/pocketquant/app/routes/backtest.py:10`)
 - `GET /api/v1/strategies/{strategy_code}` — template metadata
-  (`src/pocketquant/bff/routes/strategy.py:68`)
+  (`src/pocketquant/app/routes/strategy.py:68`)
 - `GET /api/v1/subscriptions/?strategy_code=...` — subscriptions enriched with
   backtest status + `is_running` field (optional filter; defaults to all)
-  (`src/pocketquant/bff/routes/strategy.py:110`)
+  (`src/pocketquant/app/routes/strategy.py:110`)
 - `GET /api/v1/subscriptions/{sub_id}/backtest` — cached backtest result
-  (`src/pocketquant/bff/routes/strategy.py:175`)
+  (`src/pocketquant/app/routes/strategy.py:175`)
 - `GET /api/v1/subscriptions/{sub_id}/positions` — open positions
-  (`src/pocketquant/bff/routes/strategy.py:180`)
+  (`src/pocketquant/app/routes/strategy.py:180`)
 - `GET /api/v1/subscriptions/{sub_id}/trades` — closed positions as trades
-  (`src/pocketquant/bff/routes/strategy.py:185`)
+  (`src/pocketquant/app/routes/strategy.py:185`)
 - `GET /api/v1/system/jobs` — APScheduler job listing for ops visibility
   (`src/pocketquant/app/main_extensions.py:280`)
 
@@ -489,18 +489,18 @@ Backtest path is parallel and isolated:
 
 | Method | Path | Purpose | File |
 |---|---|---|---|
-| GET  | `/api/v1/strategies/` | List template IDs with metadata `{strategy_code, class_name, description}` | `src/pocketquant/bff/routes/backtest.py:10` |
-| GET  | `/api/v1/strategies/{strategy_code}` | Get template metadata | `src/pocketquant/bff/routes/strategy.py:68` |
-| POST | `/api/v1/strategies/{strategy_code}/subscriptions` | Create a subscription | `src/pocketquant/bff/routes/strategy.py:80` |
-| GET  | `/api/v1/subscriptions/?strategy_code=...` | List subscriptions with backtest status (optional filter; defaults to all) | `src/pocketquant/bff/routes/strategy.py:110` |
-| DELETE | `/api/v1/subscriptions/{sub_id}` | Remove a subscription (cascade) | `src/pocketquant/bff/routes/strategy.py:120` |
-| POST | `/api/v1/subscriptions/{sub_id}/start` | Start a live subscription instance | `src/pocketquant/bff/routes/strategy.py:145` |
-| POST | `/api/v1/subscriptions/{sub_id}/stop` | Stop a live subscription instance | `src/pocketquant/bff/routes/strategy.py:155` |
-| POST | `/api/v1/strategies/{strategy_code}/run-all-backtests` | Enqueue one-off backtest per subscription | `src/pocketquant/bff/routes/strategy.py:130` |
-| GET  | `/api/v1/subscriptions/{sub_id}/backtest` | Read cached backtest doc | `src/pocketquant/bff/routes/strategy.py:175` |
-| GET  | `/api/v1/subscriptions/{sub_id}/positions` | Open positions for a subscription | `src/pocketquant/bff/routes/strategy.py:180` |
-| GET  | `/api/v1/subscriptions/{sub_id}/trades` | Closed positions for a subscription | `src/pocketquant/bff/routes/strategy.py:185` |
-| DELETE | `/api/v1/strategies/{strategy_code}` | Cascade delete template + all subs + backtests | `src/pocketquant/bff/routes/strategy.py:160` |
+| GET  | `/api/v1/strategies/` | List template IDs with metadata `{strategy_code, class_name, description}` | `src/pocketquant/app/routes/backtest.py:10` |
+| GET  | `/api/v1/strategies/{strategy_code}` | Get template metadata | `src/pocketquant/app/routes/strategy.py:68` |
+| POST | `/api/v1/strategies/{strategy_code}/subscriptions` | Create a subscription | `src/pocketquant/app/routes/strategy.py:80` |
+| GET  | `/api/v1/subscriptions/?strategy_code=...` | List subscriptions with backtest status (optional filter; defaults to all) | `src/pocketquant/app/routes/strategy.py:110` |
+| DELETE | `/api/v1/subscriptions/{sub_id}` | Remove a subscription (cascade) | `src/pocketquant/app/routes/strategy.py:120` |
+| POST | `/api/v1/subscriptions/{sub_id}/start` | Start a live subscription instance | `src/pocketquant/app/routes/strategy.py:145` |
+| POST | `/api/v1/subscriptions/{sub_id}/stop` | Stop a live subscription instance | `src/pocketquant/app/routes/strategy.py:155` |
+| POST | `/api/v1/strategies/{strategy_code}/run-all-backtests` | Enqueue one-off backtest per subscription | `src/pocketquant/app/routes/strategy.py:130` |
+| GET  | `/api/v1/subscriptions/{sub_id}/backtest` | Read cached backtest doc | `src/pocketquant/app/routes/strategy.py:175` |
+| GET  | `/api/v1/subscriptions/{sub_id}/positions` | Open positions for a subscription | `src/pocketquant/app/routes/strategy.py:180` |
+| GET  | `/api/v1/subscriptions/{sub_id}/trades` | Closed positions for a subscription | `src/pocketquant/app/routes/strategy.py:185` |
+| DELETE | `/api/v1/strategies/{strategy_code}` | Cascade delete template + all subs + backtests | `src/pocketquant/app/routes/strategy.py:160` |
 
 ---
 

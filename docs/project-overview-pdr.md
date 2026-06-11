@@ -304,7 +304,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### Module Breakdown (Single Python package + web)
 
-Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
+Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
 
 ```
 src/pocketquant/
@@ -342,15 +342,12 @@ src/pocketquant/
 │   └── app_services/     StrategyAppService, OrderAppService, PositionAppService,
 │                         RiskCheckHandler (shared by backtest + trading)
 │
-├── app/                  # → core, engine, backtest, trading — headless runtime
-│   ├── market_data/      Sync/quotes/ohlcv/status app-services
-│   ├── di/               Dishka container + 6 Provider classes
-│   └── main.py           FastAPI app + lifespan (WS feed start/stop, boot migrations)
-│
-└── bff/                  # → core, engine, backtest, trading — stateless gateway
+└── app/                  # → core, engine, backtest — FastAPI runtime + all API routes + SPA
     ├── routes/           Feature modules: strategy.py, backtest.py, market_data_sync.py, etc.
-    ├── di/               Dishka container (same 6 Providers as app)
-    └── main.py           FastAPI gateway app + exception handlers
+    ├── market_data/      Sync/quotes/ohlcv/status app-services
+    ├── middleware/       Admin auth, symbol validation, etc.
+    ├── di/               Dishka container + 6 Provider classes
+    └── main.py           FastAPI app + lifespan (migrations, scheduler, WS feed, SPA serve)
 
 web/                                 # React 19 + Vite SPA (separate npm app)
 ├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector
@@ -456,15 +453,17 @@ uv sync
 docker compose -f deploy/compose.local.yml up -d
 
 # 3. Run app (F5 in VS Code for debugging, or terminal)
-uvicorn pocketquant.app.main:app --reload --port 41920
+uvicorn pocketquant.app.main:app --reload --port 41921
 ```
 
 **Production:**
 ```bash
 docker compose -f deploy/compose.prod.yml --env-file deploy/.env up -d
 uv sync
-uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41920 --workers 4
+uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921
 ```
+
+**Note:** Single worker only. Scheduler/WS/broker are in-process singletons; `--workers N` duplicates the reconcile loop and live broker connection.
 
 ## Contact & Support
 

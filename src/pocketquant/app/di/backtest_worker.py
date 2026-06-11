@@ -1,7 +1,7 @@
 """Backtest worker provider — queue worker + shared dispatch deps.
 
-App-only runtime concern: the headless app drains backtest_requests. bff never
-includes this provider (it only enqueues requests via the repo).
+Runtime concern: the worker drains backtest_requests; API routes only
+enqueue requests via the repo.
 """
 
 from dishka import Provider, Scope, provide

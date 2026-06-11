@@ -14,23 +14,21 @@ One Python package (`pocketquant`) with subpackage boundaries enforced by import
 
 ```text
 src/pocketquant/
-├── core/       # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, binance, scheduler, http client
-├── engine/     # Shared strategy/order/position/risk engine
+├── core/       # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, OKXBroker, binance, scheduler, http client
+├── engine/     # Shared strategy/order/position/risk engine + strategy/orders-positions feature services
 ├── backtest/   # Backtest engine, optimization, backtest-run orchestration
-├── trading/    # Strategy, order, position, OKX broker workflows
-├── app/        # FastAPI headless runtime, scheduler, WS feed, strategy lifecycle, reconcile loop
-└── bff/        # FastAPI stateless gateway for read/write/backtest API routes
+└── app/        # FastAPI single backend: all API routes, SPA serving, scheduler, WS feed, strategy lifecycle, reconcile loop, backtest worker
 web/            # React 19 + Vite chart UI
 ```
 
 Dependency direction (import-linter contracts):
 
 ```text
-core ◁ engine ◁ {backtest, trading} ◁ {app, bff}
-web → bff (HTTP only)
+core ◁ engine ◁ backtest ◁ app
+web → app (HTTP only)
 ```
 
-Note: `app` (headless runtime) and `bff` (stateless gateway) are separate processes from the same image, each in their own container. `bff` has no imports of `app`; they coordinate only via shared MongoDB + Redis.
+Note: the backend is a single process (`pocketquant.app.main`) listening on `:41921`. One DI container wires the full runtime and every API route.
 
 ## Prerequisites
 
@@ -46,16 +44,14 @@ Note: `app` (headless runtime) and `bff` (stateless gateway) are separate proces
 cp ../pocketquant-config/local/all-local.env .env
 just install
 just up
-just be      # app (headless runtime) on :41920
-just bff     # bff (API gateway) on :41921
+just be      # backend (full runtime + API + SPA) on :41921
 ```
 
 Backend URLs:
 
 - API docs: `http://localhost:41921/api/v1/docs`
 - OpenAPI JSON: `http://localhost:41921/api/v1/openapi.json`
-- Health check (app): `http://localhost:41920/health` (container-internal only)
-- Health check (bff): `http://localhost:41921/health`
+- Health check: `http://localhost:41921/health`
 
 If services fail to start, verify that `.env` is internally consistent:
 
@@ -76,7 +72,7 @@ Frontend URL:
 
 - Vite dev UI: `http://localhost:5173` by default
 
-Vite proxies `/api/*` to `http://localhost:41921` (bff), so the browser app talks to the API gateway automatically. If port `5173` is already in use, Vite will choose the next free port.
+Vite proxies `/api/*` to `http://localhost:41921` (the backend), so the browser app talks to the API automatically. If port `5173` is already in use, Vite will choose the next free port.
 
 ## Serve The Built UI Through Docker
 
@@ -90,12 +86,12 @@ npm run build
 Run the full Docker stack:
 
 ```bash
-just up  # starts pocketquant-web (nginx on :80) + bff (:41921) + app (:41920) + mongo + redis
+just up  # starts mongo + redis (local infra; backend runs via `just be`)
 ```
 
 Open: `http://localhost/`
 
-The web container's nginx serves `web/dist` and proxies `/api/*` to bff. Refreshing a client-side route returns `index.html` (SPA fallback).
+In production the web container's nginx serves `web/dist` and proxies `/api/*` to the app container. Refreshing a client-side route returns `index.html` (SPA fallback).
 
 ## Market Data
 

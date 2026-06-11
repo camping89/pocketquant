@@ -51,22 +51,20 @@ src/pocketquant/
 ├── core/       # 0 deps — domain, common, config, ports/DTOs, persisted entities + infra adapters
 ├── engine/     # → core — shared strategy/order/position/risk engine
 ├── backtest/   # → core + engine — backtest engine, optimization, run orchestration
-├── trading/    # → core + engine — live trading, OKX broker, strategy/subscription
-├── app/        # → all — headless runtime: scheduler, WS feed, strategy lifecycle, reconcile, backtest worker
-└── bff/        # → all except app — stateless gateway: read/write routes, backtest enqueue
+└── app/        # → core + engine + backtest — FastAPI routes, scheduler, WS feed, strategy lifecycle, reconcile, backtest worker, SPA serve
 web/        # React 19 + Vite SPA (separate npm app)
 ```
 
-Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff` (HTTP only). `app` and `bff` are independent siblings (no cross-imports). `backtest` and `trading` are independent siblings. `fastapi` may only be imported by `app`/`bff`.
+Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only). `fastapi` may only be imported by `app`.
 
 Notes:
 
-- Two processes run from one image (1-image-2-CMD): app (headless, port 41920 internal, `/health` only) and bff (stateless gateway, port 41921 internal, serves all `/api/*` routes).
+- Single process: app (FastAPI on port 41921, serves all `/api/*` routes + SPA fallback). Scheduler, WS feed, broker, and strategy engine run in the same process; single-worker-only constraint (`--workers 1`).
 
 ## Maintenance Note
 
 When documentation conflicts with the code:
 
 - trust `README.md`
-- verify routes against FastAPI OpenAPI at `http://localhost:41921/api/v1/docs` (bff, not app)
+- verify routes against FastAPI OpenAPI at `http://localhost:41921/api/v1/docs`
 - fold duplicate content into the canonical doc, delete the duplicate, fix inbound links

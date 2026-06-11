@@ -1,6 +1,6 @@
 # System Architecture
 
-Pattern: DDD + Clean Architecture + Dishka. Structure: Single Python package at repo-root `src/pocketquant/` with subpackages (core, engine, backtest, trading, app, bff) + Node SPA (`web`). Dependency direction: `core ◁ engine ◁ {backtest, trading} ◁ {app, bff}`, `web → bff`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
+Pattern: DDD + Clean Architecture + Dishka. Structure: Single Python package at repo-root `src/pocketquant/` with subpackages (core, engine, backtest, app) + Node SPA (`web`). Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app`. Market data: Binance public REST/WS (@aggTrade), no auth required. Streaming: SSE + Redis-backed real-time.
 
 For local run/test steps and canonical route names, use [README](../README.md). This document remains a deeper design reference.
 
@@ -14,17 +14,11 @@ PocketQuant uses **Clean Architecture + DDD** with strict unidirectional depende
 │  pocketquant-web: React 19 + Vite + Lightweight Charts         │
 │  Candlestick chart, 5 indicators, symbol/interval selectors     │
 └──────────────────────┬──────────────────────────────────────────┘
-                       │ HTTP/REST (proxy to :41921 bff)
+                       │ HTTP/REST (proxy to :41921 app)
                        ▼
-          ┌─────────────────────────┐
-          │   pocketquant-bff       │  Stateless gateway
-          │  :41921 (internal)      │  Read/write API routes
-          └──────┬────────┬─────────┘
-                 │        │ depends_on health
-                 │        ▼
           ┌──────────────────────────────────────────────┐
-          │  pocketquant-app (headless runtime)          │
-          │  :41920 (internal, /health only)             │
+          │  pocketquant-app (FastAPI + runtime)         │
+          │  :41921 (all /api/v1/* routes)               │
           │  Scheduler, WS feed, strategy lifecycle,     │
           │  reconcile loop, backtest worker             │
           └──────┬───────────────────────────────────────┘
@@ -180,13 +174,13 @@ Exchange encapsulation replaces standalone `exchange` field across domain entiti
 **Example - Domain Service (Pure Logic):**
 BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
 
-### Layer 2: Application (Orchestrators) — `execution`, `backtest`, `trading`, `api` packages
+### Layer 2: Application (Orchestrators) — `engine`, `backtest`, `app` packages
 
-**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `engine` subpackage and is consumed by both `backtest` and `trading`.
+**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `engine` subpackage.
 
 **Structure:**
 ```
-src/pocketquant/engine/                # SHARED engine (used by backtest + trading)
+src/pocketquant/engine/                # SHARED engine (used by backtest + app)
 ├── strategy_command_service.py        # StrategyCommandService (dispatch, signal handling)
 ├── strategy_query_service.py          # StrategyQueryService (read strategies, subscriptions)
 ├── order_command_service.py           # OrderCommandService (order state, recovery)
@@ -230,17 +224,17 @@ class StrategyAppService:
         await self.event_bus.publish(SignalGeneratedEvent(...))
 ```
 
-### Layer 3: Routes (API Layer) — `app/routes/`, `bff/routes/`, etc.
+### Layer 3: Routes (API Layer) — `app/routes/`
 
 **Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to command/query services, return responses.
 
 **Pattern:** Routes use FastAPI's `APIRouter(route_class=DishkaRoute)` and inject service dependencies via `FromDishka[CommandService]` or `FromDishka[QueryService]`. Each route accepts a Pydantic command/query model and returns a DTO.
 
 **Structure:**
-Routes are organized by feature (backtest, strategy, trading, market_data) with APIRouter registering endpoints. Example route calls a command service method directly:
+Routes are organized by feature (backtest, strategy, market_data) with APIRouter registering endpoints. Example route calls a command service method directly:
 
 ```python
-# src/pocketquant/bff/routes/strategy.py (example)
+# src/pocketquant/app/routes/strategy.py (example)
 router = APIRouter(route_class=DishkaRoute)
 
 @router.post("/strategies/{strategy_code}/subscriptions")
@@ -325,7 +319,7 @@ core/
 ```
 
 **Notes:**
-- OKX live broker (OKXBroker + websocket) lives in `src/pocketquant/trading/brokers/okx/` (trading-specific, live only).
+- OKX live broker (OKXBroker + websocket) lives in `src/pocketquant/core/infra/brokers/okx/` (next to `paper/`).
 - Ports + DTOs (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent, IDataProvider, IRealtimeQuoteProvider) live in `core.domain.{brokers,market_data}`.
 - No schemas/ — persistence lives in domain entities via `to_mongo()`/`from_mongo()` methods.
 
@@ -400,7 +394,7 @@ common/
 ```
 src/
 ├── api/                  # REST client layer
-│   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41921 bff)
+│   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41921 app)
 │   └── market-data-api.ts  # Market data queries
 ├── components/
 │   ├── chart/           # Charting components
@@ -439,7 +433,7 @@ src/
 - **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2)
 - **Symbol/Interval Selectors:** Switch data without page reload
 - **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
-- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41921` (bff)
+- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41921` (app)
 
 **Custom Hooks:**
 
@@ -473,20 +467,20 @@ src/
 | MongoDB connection | `core/persistence/mongodb.py` |
 | Redis connection | `core/persistence/redis.py` |
 | All repositories | `core/persistence/repositories/` |
-| Binance REST + WS clients | `core/market_data/binance/` |
-| OKX broker + WS + reconnection | `trading/brokers/okx/` |
-| PaperBroker (simulation) | `core/brokers/paper/` |
-| APScheduler wrapper | `core/scheduling/scheduler.py` |
-| Dishka DI container (6 providers) | `api/di/` |
-| FastAPI app + middleware wiring | `api/main.py`, `api/main_extensions.py` |
-| Command/Query services | `app/`, `bff/`, `trading/`, `engine/`, `backtest/` (subpackage service classes) |
-| Backtest execution engine | `backtest/engine/backtest_app_service.py` |
+| Binance REST + WS clients | `core/infra/market_data/binance/` |
+| OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
+| PaperBroker (simulation) | `core/infra/brokers/paper/` |
+| APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
+| Dishka DI container (6 providers) | `app/di/` |
+| FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
+| Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
+| Backtest execution engine | `backtest/backtest_command_service.py` |
 | Grid optimization engine | `backtest/optimization/grid_optimization_app_service.py` |
-| Strategy runtime dispatch | `execution/app_services/strategy_app_service.py` |
-| Order state machine | `execution/app_services/order_app_service.py` |
-| Position tracking + P&L | `execution/app_services/position_app_service.py` |
-| HitNRun2 strategy (hitnrun2) | `core/concepts/strategy/services/hitnrun2.py` |
-| Background sync job registration | `api/main_extensions.py` → `register_sync_jobs()` |
+| Strategy runtime dispatch | `engine/strategy_command_service.py`, `engine/strategy_query_service.py` |
+| Order state machine | `engine/order_command_service.py` |
+| Position tracking + P&L | `engine/orders_positions_service.py` |
+| HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2.py` |
+| Background sync job registration | `app/main_extensions.py` → `register_sync_jobs()` |
 | Subscription backtest job worker | `backtest/jobs/subscription_backtest_jobs.py` |
 | UUID7 generation | `core/common/uuid.py` |
 | Cache keys, TTLs, constants | `core/common/constants.py` |
@@ -512,7 +506,7 @@ Route (src/pocketquant/app/routes/market_data.py)
   ├─ Inject FromDishka[MarketDataCommandService]
   └─ Call service.sync_symbol(command)
   ↓
-Command Service (src/pocketquant/app/market_data_command_service.py)
+Command Service (src/pocketquant/app/market_data_command_service.py or engine/)
   ├─ [1] Fetch: IDataProvider.fetch_ohlcv() (impl: BinanceClient)  [adapter]
   │       └─ Excludes the in-progress bar: endTime caps at floor(now/duration)*duration - 1
   │          (in-progress quote remains in Redis via WS @aggTrade)
@@ -548,7 +542,7 @@ Route (src/pocketquant/app/routes/market_data.py)
   ├─ Inject FromDishka[MarketDataQueryService]
   └─ Call service.get_bars(query)
   ↓
-Query Service (src/pocketquant/app/market_data_query_service.py)
+Query Service (src/pocketquant/app/market_data_query_service.py or engine/)
   ├─ [1] Fetch: Cache.get(key) or BarRepository.get_bars()
   ├─ [2] Validate: Bar value objects
   ├─ [3] Cache: Cache.set(key, result, ttl=300)
@@ -715,7 +709,7 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
 10. `seed_tracked_symbols()` ensures at least one symbol in registry
 11. `start_background_jobs()` registers APScheduler sync jobs (with per-job `misfire_grace_time` tuning)
 12. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-13. Server ready: app on port 41920 (internal, `/health` only) + bff on port 41921 (internal, serves `/api/*`)
+13. Server ready: app on port 41921 (serves `/api/*` + SPA) — single process only
 
 > ⚠ **Adding new persistent jobs or async workers?** See `code-standards.md` → "Async Suspension Points — Await Is Preemption" before wiring. The rule: wire every dependency (globals, container handles, registrations) BEFORE the call that starts the worker. APScheduler replays `next_run_time` on startup; first tick fires within `misfire_grace_time` seconds of `start()`. Per-job grace time configured in `register_sync_jobs()`; adjust based on job criticality.
 
@@ -728,65 +722,52 @@ Cron offset (+2s) prevents bar-close race condition. Sub-daily syncs use bounded
    - Cache.disconnect() — close Redis
    - Database.disconnect() — close MongoDB
 
-## SP3: App/BFF Two-Process Architecture
+## SP3: Single-Process Backend Architecture
 
-**Goal:** Isolate live-trading runtime (app) from stateless API gateway (bff) to enable safe FE restarts and independent scaling.
+**Goal:** Unified backend combining all routes, scheduler, WS feed, and strategy lifecycle in one FastAPI process on port 41921.
 
-**One image, two commands:**
+**Single command:**
 
 ```mermaid
 graph LR
     web["pocketquant-web<br/>(nginx)<br/>:80"]
-    bff["pocketquant-bff<br/>(gateway)<br/>:41921"]
-    app["pocketquant-app<br/>(headless runtime)<br/>:41920"]
+    app["pocketquant-app<br/>(FastAPI + runtime)<br/>:41921"]
     mongo["MongoDB<br/>:27017"]
     redis["Redis<br/>:6379"]
     
-    web -->|/api/*| bff
-    bff -->|read/write state| mongo
-    bff -->|cache| redis
+    web -->|/api/*| app
+    app -->|read/write state| mongo
+    app -->|cache| redis
     app -->|scheduler/strategy| mongo
     app -->|quotes/reconcile| redis
-    bff -.->|depends_on<br/>service_healthy| app
     
-    style app fill:#fdd
-    style bff fill:#dfd
+    style app fill:#dfd
     style web fill:#ddf
 ```
 
-**app (Headless Runtime):**
-- Container-internal port 41920, `/health` endpoint only (no `/api/*` routes)
-- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest-request worker
-- Lifespan runs migrations + `ensure_indexes()` before yielding (schema ready before bff accepts traffic)
-- Crash/restart here is isolated — live trading stops but FE is unaffected (bff ≠ app)
-- Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41920`
-
-**bff (Stateless Gateway):**
-- Container-internal port 41921, serves all `/api/v1/*` routes (read operations, desired-state writes, backtest enqueue)
-- NO scheduler, NO WS, NO engine in RAM — restart is cheap
-- Depends on app service healthy before accepting traffic
-- Routes delegate to DI-injected handlers; DI has no access to scheduler/strategy types (raises `NoFactoryError` if attempted)
-- Coordinate with app only via MongoDB (subscriptions, orders, positions, backtest runs) + Redis (quotes, bars, rate-limit state)
-- Command: `uvicorn pocketquant.bff.main:app --host 0.0.0.0 --port 41921`
+**app (Single Process):**
+- Container-internal port 41921, serves all `/api/v1/*` routes + SPA fallback
+- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest worker, all API routes
+- Lifespan runs migrations + `ensure_indexes()` before yielding
+- Single-worker-only constraint: scheduler/WS/broker are in-process singletons; `--workers N` duplicates reconcile loop and live broker connection
+- Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921`
 
 **Dependency Graph (top tier only):**
 
 ```
-core ◁ engine ◁ {backtest, trading} ◁ {app, bff}
-       └─ app has NO imports of bff
-       └─ bff has NO imports of app
-       └─ both import core + engine + backtest + trading (verified by import-linter contracts)
+core ◁ engine ◁ backtest ◁ app
+       └─ app imports core + engine + backtest only (verified by import-linter contracts)
 ```
 
 **Local Dev Ports:**
-- app: `http://localhost:41920/health` (liveness only)
-- bff: `http://localhost:41921/api/v1/docs` (Swagger)
-- Vite proxy: `/api/*` → `http://localhost:41921` (bff)
+- app: `http://localhost:41921/api/v1/docs` (Swagger)
+- app: `http://localhost:41921/` (SPA root)
+- Vite proxy: `/api/*` → `http://localhost:41921` (app)
 
 **Container Network (compose.prod.yml):**
-- web + app + bff + mongo + redis + portainer on same bridge network (`pocketquant-prod`)
-- No published ports for app or bff — nginx in web container reverse-proxies `/api/*` to bff service name (`http://bff:41921`)
-- External clients reach web on `WEB_PORT` (default :80); nginx routes `/api/*` internally to bff on :41921
+- web + app + mongo + redis + portainer on same bridge network (`pocketquant-prod`)
+- No published port for app — nginx in web container reverse-proxies `/api/*` to app service name (`http://app:41921`)
+- External clients reach web on `WEB_PORT` (default :80); nginx routes `/api/*` internally to app on :41921
 
 ## Integration Points
 
@@ -827,7 +808,7 @@ Environment variables (`.env`):
 | `LOG_FORMAT` | `json` (prod) or `console` (dev) | — |
 | `LOG_LEVEL` | `debug`, `info`, `warning`, `error` | — |
 | `ENVIRONMENT` | `development` or `production` | — |
-| `APP_PORT` | Host-mapped port (container always 41920) | `58921` |
+| `APP_PORT` | Host-mapped port (container always 41921) | `58921` |
 | `ENABLE_JOBS` | Enable background sync/integrity jobs | `false` |
 | `OKX_API_KEY` | OKX live trading credential (optional) | — |
 | `OKX_API_SECRET` | OKX live trading credential (optional) | — |

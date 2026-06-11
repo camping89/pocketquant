@@ -114,9 +114,9 @@ class StrategyCommandService:
     async def add_symbol(self, cmd: AddSymbolCommand) -> dict:
         """Persist a new subscription — no RAM instance load.
 
-        Pure Mongo write so the stateless bff can serve this without owning the
-        engine. Fail-fast checks guard against junk subscriptions that reconcile
-        would only later reject.
+        Pure Mongo write — the route handler never touches the engine; the
+        reconcile loop materializes the instance. Fail-fast checks guard against
+        junk subscriptions that reconcile would only later reject.
         """
         symbol = cmd.symbol.upper()
         if not await self._tracked_repo.exists(symbol):

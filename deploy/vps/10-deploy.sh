@@ -49,10 +49,8 @@ docker pull "${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}"
 echo "=== Starting services ==="
 docker compose -f compose.prod.yml --env-file .env up -d --remove-orphans
 
-# Wait for both processes. app (headless runtime) migrates the schema in its
-# lifespan before becoming healthy; bff depends_on app healthy, so it only
-# starts accepting traffic after migration. Probe both — a healthy app with a
-# dead bff means the FE has no API upstream.
+# Wait for the backend. app migrates the schema in its lifespan before
+# becoming healthy — only then does the FE have a live API upstream.
 wait_health() {
   local container="$1" port="$2" timeout="$3"
   echo "=== Waiting for $container health (timeout ${timeout}s) ==="
@@ -71,8 +69,7 @@ wait_health() {
   echo "$container is healthy."
 }
 
-wait_health pocketquant-app 41920 60
-wait_health pocketquant-bff 41921 30
+wait_health pocketquant-app 41921 60
 
 echo "=== Cleaning old images ==="
 docker image prune -f

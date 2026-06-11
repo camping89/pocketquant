@@ -28,10 +28,10 @@ jobs:
       - name: Install Python + deps
         run: uv sync --frozen
 
-      - name: Check import contracts (app/bff isolation)
+      - name: Check import contracts (layered architecture)
         run: uv run lint-imports
 
-      - name: Run pytest (full suite — app + bff + runtime split)
+      - name: Run pytest (full suite)
         run: uv run pytest tests/ -q
 
   build-app:

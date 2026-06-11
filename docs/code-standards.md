@@ -59,7 +59,7 @@ Clean Architecture Example (backtesting):
 
 **Routes Layer (Thin HTTP):**
 ```python
-# src/pocketquant/bff/routes/backtest.py
+# src/pocketquant/app/routes/backtest.py
 @router.post("/backtest/run")
 async def run_backtest(
     cmd: RunBacktestCommand,

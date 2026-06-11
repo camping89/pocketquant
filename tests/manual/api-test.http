@@ -1,5 +1,5 @@
 # PocketQuant Manual API Smoke Test
-# Base URL: http://localhost:41920/api/v1
+# Base URL: http://localhost:41921/api/v1
 #
 # Prerequisites:
 #   1. just install
@@ -12,39 +12,39 @@
 ### 1. Health
 ### ===========================================
 
-curl -X GET http://localhost:41920/health
+curl -X GET http://localhost:41921/health
 
 ###
 
-curl -X GET http://localhost:41920/api/v1/system/jobs
+curl -X GET http://localhost:41921/api/v1/system/jobs
 
 ###
 
-curl -X GET http://localhost:41920/api/v1/backtest/strategies
+curl -X GET http://localhost:41921/api/v1/backtest/strategies
 
 ### ===========================================
 ### 2. Historical Sync
 ### ===========================================
 
-curl -X POST http://localhost:41920/api/v1/market-data/sync \
+curl -X POST http://localhost:41921/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSDT","exchange":"BINANCE","interval":"1d","n_bars":200}'
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/market-data/sync \
+curl -X POST http://localhost:41921/api/v1/market-data/sync \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSDT","exchange":"BINANCE","interval":"4h","n_bars":400}'
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/market-data/sync/background \
+curl -X POST http://localhost:41921/api/v1/market-data/sync/background \
   -H "Content-Type: application/json" \
   -d '{"symbol":"ETHUSDT","exchange":"BINANCE","interval":"1d","n_bars":120}'
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/market-data/sync/bulk \
+curl -X POST http://localhost:41921/api/v1/market-data/sync/bulk \
   -H "Content-Type: application/json" \
   -d '{"symbols":[{"symbol":"BTCUSDT","exchange":"BINANCE"},{"symbol":"ETHUSDT","exchange":"BINANCE"}],"interval":"1d","n_bars":120}'
 
@@ -52,69 +52,69 @@ curl -X POST http://localhost:41920/api/v1/market-data/sync/bulk \
 ### 3. Verify Sync Output
 ### ===========================================
 
-curl -X GET "http://localhost:41920/api/v1/market-data/sync-status/BINANCE/BTCUSDT?interval=1d"
+curl -X GET "http://localhost:41921/api/v1/market-data/sync-status/BINANCE/BTCUSDT?interval=1d"
 
 ###
 
-curl -X GET http://localhost:41920/api/v1/market-data/sync-status
+curl -X GET http://localhost:41921/api/v1/market-data/sync-status
 
 ###
 
-curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSDT?interval=1d&limit=20"
+curl -X GET "http://localhost:41921/api/v1/market-data/ohlcv/BINANCE/BTCUSDT?interval=1d&limit=20"
 
 ###
 
-curl -X GET "http://localhost:41920/api/v1/market-data/ohlcv/BINANCE/BTCUSDT?interval=4h&limit=50"
+curl -X GET "http://localhost:41921/api/v1/market-data/ohlcv/BINANCE/BTCUSDT?interval=4h&limit=50"
 
 ###
 
-curl -X GET "http://localhost:41920/api/v1/market-data/symbols?exchange=BINANCE"
+curl -X GET "http://localhost:41921/api/v1/market-data/symbols?exchange=BINANCE"
 
 ### ===========================================
 ### 4. Quote Service
 ### ===========================================
 
-curl -X POST http://localhost:41920/api/v1/quotes/start
+curl -X POST http://localhost:41921/api/v1/quotes/start
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/quotes/subscribe \
+curl -X POST http://localhost:41921/api/v1/quotes/subscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSD","exchange":"CRYPTO"}'
 
 ###
 
-curl -X GET http://localhost:41920/api/v1/quotes/latest/CRYPTO/BTCUSD
+curl -X GET http://localhost:41921/api/v1/quotes/latest/CRYPTO/BTCUSD
 
 ###
 
-curl -X GET "http://localhost:41920/api/v1/quotes/current-bar/CRYPTO/BTCUSD?interval=1m"
+curl -X GET "http://localhost:41921/api/v1/quotes/current-bar/CRYPTO/BTCUSD?interval=1m"
 
 ###
 
-curl -X GET http://localhost:41920/api/v1/market-data/status
+curl -X GET http://localhost:41921/api/v1/market-data/status
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/quotes/unsubscribe \
+curl -X POST http://localhost:41921/api/v1/quotes/unsubscribe \
   -H "Content-Type: application/json" \
   -d '{"symbol":"BTCUSD","exchange":"CRYPTO"}'
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/quotes/stop
+curl -X POST http://localhost:41921/api/v1/quotes/stop
 
 ### ===========================================
 ### 5. Backtest Smoke Test
 ### ===========================================
 
-curl -X POST http://localhost:41920/api/v1/backtest/run \
+curl -X POST http://localhost:41921/api/v1/backtest/run \
   -H "Content-Type: application/json" \
   -d '{"strategy_id":"hitnrun2","symbol":"BTCUSDT:BINANCE","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"parameters":{"entry_lookback_bars":240,"sl_lookback_bars":480,"tp_lookback_bars":60,"max_loss_pct":0.01,"min_profit_pct":0.02,"direction":"both"}}'
 
 ###
 
-curl -X POST http://localhost:41920/api/v1/backtest/optimize \
+curl -X POST http://localhost:41921/api/v1/backtest/optimize \
   -H "Content-Type: application/json" \
   -d '{"strategy_id":"hitnrun2","symbol":"BTCUSDT:BINANCE","interval":"1m","start_date":"2026-01-01","end_date":"2026-03-30","initial_capital":10000,"parameter_grid":{"entry_lookback_bars":[120,240,480],"sl_lookback_bars":[240,480,720],"tp_lookback_bars":[30,60,120]}}'
 
