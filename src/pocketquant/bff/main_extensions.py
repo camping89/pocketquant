@@ -86,7 +86,7 @@ async def _list_jobs_from_mongo(
 
 def register_routes(app: FastAPI, settings: Settings) -> None:
     """Register health endpoint and all feature routers."""
-    from pocketquant.backtest.handlers import backtest_router, run_all_backtests_router
+    from pocketquant.bff.routes.backtest import backtest_router, run_all_backtests_router
     from pocketquant.bff.routes.market_data import router as market_data_router
     from pocketquant.bff.routes.market_data_quotes import router as quote_router
     from pocketquant.bff.routes.strategy import strategy_router, subscription_router
