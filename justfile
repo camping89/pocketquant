@@ -8,7 +8,7 @@ python := if os() == "windows" { ".venv/Scripts/python.exe" } else { ".venv/bin/
 default:
     @just --list
 
-# Setup: create venv and install all workspace packages
+# Setup: create venv and install dependencies
 install:
     uv sync
 
@@ -61,7 +61,7 @@ redis:
 be:
     {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41920
 
-# Start FE gateway: stateless API serving pocketquant-web + DB read/write (port 41921)
+# Start FE gateway: stateless API serving web/ SPA + DB read/write (port 41921)
 bff:
     BFF_PORT=41921 {{python}} -m uvicorn pocketquant.bff.main:app --reload --host 0.0.0.0 --port 41921
 
@@ -70,6 +70,6 @@ bff:
 fe:
     npm run dev
 
-# Check import-linter contracts (9 layered/forbidden contracts incl. bff isolation)
+# Check import-linter contracts (layered/forbidden contracts incl. bff isolation)
 lint-imports:
     uv run lint-imports

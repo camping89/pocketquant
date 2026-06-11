@@ -1,15 +1,5 @@
 {
-  "include": [
-    "src",
-    "tests/core_test",
-    "tests/backtest_test",
-    "tests/trading_test",
-    "tests/app_test",
-    "tests/engine_test",
-    "tests/bff_test",
-    "tests/baseline",
-    "tests/scripts"
-  ],
+  "include": ["src", "tests"],
   "venvPath": ".",
   "venv": ".venv",
   "pythonVersion": "3.14",
@@ -22,36 +12,7 @@
   "reportPrivateUsage": "error",
   "executionEnvironments": [
     {
-      "root": "tests/core_test",
-      "reportPrivateUsage": "none"
-    },
-    {
-      "root": "tests/backtest_test",
-      "reportPrivateUsage": "none"
-    },
-    {
-      "root": "tests/trading_test",
-      "reportPrivateUsage": "none"
-    },
-    {
-      "root": "tests/app_test",
-      "reportPrivateUsage": "none"
-    },
-    {
-      "root": "tests/engine_test",
-      "reportPrivateUsage": "none"
-    },
-    {
-      "root": "tests/bff_test",
-      "reportPrivateUsage": "none",
-      "extraPaths": ["."]
-    },
-    {
-      "root": "tests/baseline",
-      "reportPrivateUsage": "none"
-    },
-    {
-      "root": "tests/scripts",
+      "root": "tests",
       "reportPrivateUsage": "none",
       "extraPaths": ["."]
     }

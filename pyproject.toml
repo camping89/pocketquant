@@ -61,10 +61,6 @@ ignore = ["UP046"]
 "bson".msg = "Use pocketquant.core.common.uuid (UUID7) — ObjectId is banned"
 "bson.ObjectId".msg = "Use pocketquant.core.common.uuid (UUID7) — ObjectId is banned"
 
-[tool.pyright]
-pythonVersion = "3.14"
-typeCheckingMode = "standard"
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
