@@ -13,7 +13,6 @@ from dishka import make_async_container
 from pocketquant.app.di import (
     AppTradingServiceProvider,
     ExecutionProvider,
-    HandlerProvider,
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
@@ -39,7 +38,6 @@ async def container(settings: Settings):
         ExecutionProvider(),
         MarketDataProvider(),
         AppTradingServiceProvider(),
-        HandlerProvider(),
     )
     yield c
     await c.close()

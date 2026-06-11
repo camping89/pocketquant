@@ -21,7 +21,6 @@ from dishka import make_async_container
 from pocketquant.app.di import (
     BacktestWorkerProvider,
     ExecutionProvider,
-    HandlerProvider,
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
@@ -62,7 +61,6 @@ async def app_container(settings: Settings):
         InfrastructureProvider(),
         ExecutionProvider(),
         MarketDataProvider(),
-        HandlerProvider(),
         BacktestWorkerProvider(),
     )
     yield c

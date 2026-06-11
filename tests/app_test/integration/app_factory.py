@@ -17,12 +17,10 @@ from pocketquant.app.di import (
     AppTradingServiceProvider,
     BacktestWorkerProvider,
     ExecutionProvider,
-    HandlerProvider,
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
 )
-from pocketquant.app.di.container import register_handlers
 from pocketquant.app.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
@@ -36,7 +34,6 @@ from pocketquant.app.main_extensions import (
     stop_backtest_worker,
 )
 from pocketquant.core.common.logging import setup_logging
-from pocketquant.core.common.mediator.mediator import Mediator
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -65,10 +62,6 @@ class TestCoreProvider(Provider):
     def get_event_bus(self) -> EventBus:
         return EventBus(max_history=100)
 
-    @provide(scope=Scope.APP)
-    def get_mediator(self) -> Mediator:
-        return Mediator()
-
 
 def make_test_app(settings: Settings) -> FastAPI:
     """Build a fully-wired FastAPI test app using testcontainer settings.
@@ -83,7 +76,6 @@ def make_test_app(settings: Settings) -> FastAPI:
         ExecutionProvider(),
         MarketDataProvider(),
         AppTradingServiceProvider(),
-        HandlerProvider(),
         BacktestWorkerProvider(),
     ]
     container = make_async_container(*providers)
@@ -97,10 +89,9 @@ def make_test_app(settings: Settings) -> FastAPI:
         try:
             app.state.database = await c.get(Database)
             app.state.cache = await c.get(Cache)
-            # Mirror main.py: migration BEFORE handler registration so that
+            # Mirror main.py: migration BEFORE service resolution so that
             # PositionAppService.load_open_positions() reads post-migration shape.
             await migrate_strategy_id_fields(c)
-            await register_handlers(c)
             await ensure_all_indexes(c)
             await recover_stale_backtests(c)
             await register_health_checks(c, app)

@@ -21,7 +21,6 @@ from pocketquant.engine.market_data.sync_service import SyncService
 
 class MarketDataProvider(Provider):
     # SyncService is used by scheduler jobs (sync_1m, sync_backfill, repair) directly —
-    # no Mediator dispatch needed for market-data paths.
     sync_service = provide(SyncService, scope=Scope.APP)
 
     @provide(scope=Scope.APP)
