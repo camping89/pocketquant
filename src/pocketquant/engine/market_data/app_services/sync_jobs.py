@@ -8,8 +8,8 @@ sync_verify_cascade runs hourly: picks one sample tracked symbol round-robin,
 fetches REST 5m bars, compares with cascade-computed 5m, logs divergence alerts.
 
 All job entrypoints are module-level coroutines so APScheduler can serialize them
-as text references for MongoDBJobStore. Dependencies (mediator, repos) are resolved
-at job-execution time from a module-level container reference set by
+as text references for MongoDBJobStore. Dependencies (SyncService, repos) are
+resolved at job-execution time from a module-level container reference set by
 `register_sync_jobs`.
 
 ``symbol`` is composite ``{code}:{exchange}`` throughout — no separate exchange param.
@@ -21,7 +21,6 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.mediator import Mediator
 from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_BACKFILL,
     SOURCE_REST_REPAIR,
@@ -42,7 +41,7 @@ from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
 )
-from pocketquant.engine.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 if TYPE_CHECKING:
     from dishka import AsyncContainer
@@ -131,7 +130,7 @@ async def _sync_by_intervals(
     intervals: list[Interval],
     n_bars: int,
     job_name: str,
-    mediator: Mediator,
+    sync_service: SyncService,
     tracked_symbol_repo: TrackedSymbolRepository,
     history_repo: JobHistoryRepository,
     doc_id: str | None,
@@ -170,7 +169,7 @@ async def _sync_by_intervals(
                     n_bars=n_bars,
                     source=source,
                 )
-                result = await mediator.send(command)
+                result = await sync_service.sync_one(command)
                 total_inserted += result.bars_synced
                 total_fetched += result.bars_fetched
                 if doc_id:
@@ -239,7 +238,7 @@ async def _run_sync(
 ) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
-    mediator = await container.get(Mediator)
+    sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
 
     started = datetime.now(UTC)
@@ -254,7 +253,7 @@ async def _run_sync(
             intervals,
             n_bars,
             name,
-            mediator,
+            sync_service,
             tracked_symbol_repo,
             history_repo,
             doc_id,
@@ -329,7 +328,7 @@ async def _run_integrity(name: str) -> None:
 async def _run_repair(name: str) -> None:
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
-    mediator = await container.get(Mediator)
+    sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
 
@@ -348,7 +347,7 @@ async def _run_repair(name: str) -> None:
                     ts.symbol,
                     interval,
                     bar_repo,
-                    mediator,
+                    sync_service,
                     source=SOURCE_REST_REPAIR,
                 )
                 if result["deleted"] or result["gaps_resynced"]:
@@ -383,7 +382,7 @@ async def sync_1m() -> None:
     """Fetch last 100 1m bars per tracked symbol, upsert, then cascade to 5m–1d."""
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
-    mediator = await container.get(Mediator)
+    sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
 
@@ -400,7 +399,7 @@ async def sync_1m() -> None:
             [Interval.MINUTE_1],
             100,
             name,
-            mediator,
+            sync_service,
             tracked_symbol_repo,
             history_repo,
             doc_id,

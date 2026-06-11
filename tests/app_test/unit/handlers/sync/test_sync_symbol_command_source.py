@@ -6,19 +6,18 @@ import pytest
 from pydantic import ValidationError
 
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.engine.market_data.handlers.sync.sync_one.command import SyncSymbolCommand
+from pocketquant.engine.market_data.sync_service import SyncSymbolCommand
 
 
 def test_missing_source_raises_validation_error() -> None:
     with pytest.raises(ValidationError) as excinfo:
-        SyncSymbolCommand(symbol="BTCUSDT", exchange="BINANCE", interval=Interval.MINUTE_1)
+        SyncSymbolCommand(symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1)
     assert "source" in str(excinfo.value)
 
 
 def test_source_accepts_arbitrary_string() -> None:
     cmd = SyncSymbolCommand(
-        symbol="BTCUSDT",
-        exchange="BINANCE",
+        symbol="BTCUSDT:BINANCE",
         interval=Interval.MINUTE_1,
         source="rest_sync_1m",
     )
@@ -27,8 +26,7 @@ def test_source_accepts_arbitrary_string() -> None:
 
 def test_source_accepts_custom_label() -> None:
     cmd = SyncSymbolCommand(
-        symbol="BTCUSDT",
-        exchange="BINANCE",
+        symbol="BTCUSDT:BINANCE",
         interval=Interval.MINUTE_1,
         source="my_label",
     )

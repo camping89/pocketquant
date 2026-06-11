@@ -1,4 +1,4 @@
-"""Tests for GetSymbolSyncStatusHandler — bar-derived freshness composition."""
+"""Tests for SyncStatusQueryService.get_symbol_sync_status — bar-derived freshness composition."""
 
 from __future__ import annotations
 
@@ -11,11 +11,9 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
-from pocketquant.engine.market_data.handlers.status.get_symbol_sync_status.handler import (
-    GetSymbolSyncStatusHandler,
-)
-from pocketquant.engine.market_data.handlers.status.get_symbol_sync_status.query import (
+from pocketquant.engine.market_data.sync_status_service import (
     GetSymbolSyncStatusQuery,
+    SyncStatusQueryService,
 )
 
 SYMBOL = "BINANCE:BTCUSDT"
@@ -58,8 +56,8 @@ def bar_repo() -> AsyncMock:
 
 
 @pytest.fixture
-def handler(sync_status_repo, bar_repo) -> GetSymbolSyncStatusHandler:
-    return GetSymbolSyncStatusHandler(sync_status_repo, bar_repo)
+def handler(sync_status_repo, bar_repo) -> SyncStatusQueryService:
+    return SyncStatusQueryService(sync_status_repo, bar_repo)
 
 
 @pytest.mark.asyncio
@@ -70,7 +68,7 @@ async def test_returns_is_stuck_field_populated(handler, sync_status_repo, bar_r
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=2000), Interval.MINUTE_5)
     bar_repo.count.return_value = 100
 
-    result = await handler.handle(
+    result = await handler.get_symbol_sync_status(
         GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
     )
 
@@ -86,7 +84,7 @@ async def test_uses_bars_for_count_and_last_bar(handler, sync_status_repo, bar_r
     bar_repo.get_latest.return_value = _bar(fresh_dt, Interval.HOUR_1)
     bar_repo.count.return_value = 5907
 
-    result = await handler.handle(
+    result = await handler.get_symbol_sync_status(
         GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="1h"),
     )
 
@@ -101,7 +99,7 @@ async def test_not_found_raises(handler, sync_status_repo, bar_repo) -> None:
     sync_status_repo.find_one.return_value = None
 
     with pytest.raises(NotFoundError):
-        await handler.handle(
+        await handler.get_symbol_sync_status(
             GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
         )
 
@@ -115,7 +113,7 @@ async def test_no_bars_yet_returns_not_stuck(handler, sync_status_repo, bar_repo
     bar_repo.get_latest.return_value = None
     bar_repo.count.return_value = 0
 
-    result = await handler.handle(
+    result = await handler.get_symbol_sync_status(
         GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
     )
 
@@ -134,7 +132,7 @@ async def test_status_and_error_from_sync_status(handler, sync_status_repo, bar_
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_5)
     bar_repo.count.return_value = 100
 
-    result = await handler.handle(
+    result = await handler.get_symbol_sync_status(
         GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
     )
 

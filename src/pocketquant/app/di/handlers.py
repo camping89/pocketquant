@@ -1,12 +1,11 @@
 """CQRS handler providers for app — all handlers resolved from execution/backtest/trading.
 
-App is headless (no HTTP), but background jobs dispatch via Mediator:
-  - sync_jobs: SyncSymbolCommand → SyncSymbolHandler (every minute)
-  - integrity/repair: uses SyncSymbolHandler + BarRepository directly
-All other handlers are kept so that the DI graph resolves cleanly and in case
-future runtime paths add Mediator dispatches. HTTP-only quote handlers (get_all,
-get_status/subscribe-count, subscribe, unsubscribe, get_quote_service_status)
-are excluded — they were deleted when bff took over routes.
+App is headless (no HTTP). Background jobs (sync_jobs, integrity_jobs) now call
+SyncService directly — no Mediator dispatch for market-data paths. All other
+handlers are kept so that the DI graph resolves cleanly.
+HTTP-only quote handlers (get_all, get_status/subscribe-count, subscribe,
+unsubscribe, get_quote_service_status) are excluded — they were removed when
+bff took over routes.
 """
 
 from dishka import Provider, Scope, provide
@@ -17,19 +16,6 @@ from pocketquant.backtest.handlers.list_results.handler import ListBacktestsHand
 from pocketquant.backtest.handlers.optimize.handler import RunOptimizationHandler
 from pocketquant.backtest.handlers.run.handler import RunBacktestHandler
 from pocketquant.backtest.handlers.run_all_backtests.handler import RunAllBacktestsHandler
-from pocketquant.engine.market_data.handlers.list_symbols.handler import ListSymbolsHandler
-from pocketquant.engine.market_data.handlers.ohlcv.get_ohlcv.handler import GetOHLCVHandler
-from pocketquant.engine.market_data.handlers.quotes.get_latest.handler import (
-    GetLatestQuoteHandler,
-)
-from pocketquant.engine.market_data.handlers.status.get_symbol_sync_status.handler import (
-    GetSymbolSyncStatusHandler,
-)
-from pocketquant.engine.market_data.handlers.status.get_sync_status.handler import (
-    GetSyncStatusHandler,
-)
-from pocketquant.engine.market_data.handlers.sync.sync_bulk.handler import BulkSyncHandler
-from pocketquant.engine.market_data.handlers.sync.sync_one.handler import SyncSymbolHandler
 from pocketquant.trading.handlers.strategy.add_symbol.handler import AddSymbolHandler
 from pocketquant.trading.handlers.strategy.delete.handler import DeleteStrategyHandler
 from pocketquant.trading.handlers.strategy.get_all.handler import GetStrategiesHandler
@@ -54,14 +40,6 @@ from pocketquant.trading.handlers.trading.list_positions.handler import ListPosi
 
 
 class HandlerProvider(Provider):
-    sync_symbol_handler = provide(SyncSymbolHandler, scope=Scope.APP)
-    bulk_sync_handler = provide(BulkSyncHandler, scope=Scope.APP)
-    get_ohlcv_handler = provide(GetOHLCVHandler, scope=Scope.APP)
-    get_latest_quote_handler = provide(GetLatestQuoteHandler, scope=Scope.APP)
-    get_sync_status_handler = provide(GetSyncStatusHandler, scope=Scope.APP)
-    get_symbol_sync_status_handler = provide(GetSymbolSyncStatusHandler, scope=Scope.APP)
-    list_symbols_handler = provide(ListSymbolsHandler, scope=Scope.APP)
-
     list_orders_handler = provide(ListOrdersHandler, scope=Scope.APP)
     get_order_handler = provide(GetOrderHandler, scope=Scope.APP)
     list_positions_handler = provide(ListPositionsHandler, scope=Scope.APP)
@@ -88,13 +66,6 @@ class HandlerProvider(Provider):
 
 
 ALL_HANDLER_TYPES: list[type] = [
-    SyncSymbolHandler,
-    BulkSyncHandler,
-    GetOHLCVHandler,
-    GetLatestQuoteHandler,
-    GetSyncStatusHandler,
-    GetSymbolSyncStatusHandler,
-    ListSymbolsHandler,
     ListOrdersHandler,
     GetOrderHandler,
     ListPositionsHandler,

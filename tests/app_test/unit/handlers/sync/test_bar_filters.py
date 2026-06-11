@@ -18,7 +18,7 @@ import structlog
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.engine.market_data.handlers.sync.sync_one.bar_filters import (
+from pocketquant.engine.market_data.sync_internals.bar_filters import (
     filter_new_bars,
 )
 

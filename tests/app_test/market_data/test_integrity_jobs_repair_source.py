@@ -1,4 +1,4 @@
-"""repair_integrity forwards source kwarg into the SyncSymbolCommand it sends."""
+"""repair_integrity forwards source kwarg into the SyncSymbolCommand it calls on SyncService."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.app_services.integrity_jobs import repair_integrity
-from pocketquant.engine.market_data.handlers.sync import SyncSymbolCommand
+from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 
 @pytest.mark.asyncio
@@ -17,8 +17,9 @@ async def test_repair_integrity_sends_command_with_source() -> None:
     bar_repo = MagicMock()
     bar_repo.find_datetimes = AsyncMock(return_value=[])
     bar_repo.delete_many_by_ids = AsyncMock(return_value=0)
-    mediator = MagicMock()
-    mediator.send = AsyncMock()
+
+    sync_service = MagicMock(spec=SyncService)
+    sync_service.sync_one = AsyncMock()
 
     # Force a "gap" so the resync command is built and dispatched.
     async def fake_find_datetimes(*_a, **_kw):
@@ -33,14 +34,14 @@ async def test_repair_integrity_sends_command_with_source() -> None:
         symbol="BTCUSDT:BINANCE",
         interval=Interval.MINUTE_1,
         bar_repo=bar_repo,
-        mediator=mediator,
+        sync_service=sync_service,
         source=SOURCE_REST_REPAIR,
         days_back=1,
     )
 
-    # mediator.send must have been called with a SyncSymbolCommand carrying source.
-    assert mediator.send.await_count >= 1
-    sent_cmd = mediator.send.await_args.args[0]
+    # sync_service.sync_one must have been called with a SyncSymbolCommand carrying source.
+    assert sync_service.sync_one.await_count >= 1
+    sent_cmd = sync_service.sync_one.await_args.args[0]
     assert isinstance(sent_cmd, SyncSymbolCommand)
     assert sent_cmd.source == SOURCE_REST_REPAIR
     assert sent_cmd.skip_filter is True

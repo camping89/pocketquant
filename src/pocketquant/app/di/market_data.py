@@ -16,9 +16,14 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
+from pocketquant.engine.market_data.sync_service import SyncService
 
 
 class MarketDataProvider(Provider):
+    # SyncService is used by scheduler jobs (sync_1m, sync_backfill, repair) directly —
+    # no Mediator dispatch needed for market-data paths.
+    sync_service = provide(SyncService, scope=Scope.APP)
+
     @provide(scope=Scope.APP)
     def get_bar_manager(
         self, cache: Cache, bar_repository: BarRepository, event_bus: EventBus

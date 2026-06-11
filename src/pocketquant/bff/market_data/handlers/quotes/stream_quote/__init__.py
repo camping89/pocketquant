@@ -1,1 +1,0 @@
-"""Stream quote SSE handler."""
