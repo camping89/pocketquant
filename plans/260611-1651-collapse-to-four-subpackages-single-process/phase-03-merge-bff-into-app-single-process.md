@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Merge bff into app single process"
-status: pending
+status: completed
 priority: P1
 effort: "6h"
 dependencies: [2]
@@ -79,26 +79,26 @@ Layers cuối: `core ◁ engine ◁ backtest ◁ app`.
 
 ## Todo List
 
-- [ ] TDD-lock: single-entrypoint route test viết trước (đỏ; inventory == bff cũ nguyên văn)
-- [ ] Move routes/middleware/common/di-services sang app (di-services strip 3 duplicate provides)
-- [ ] Container hợp nhất — mỗi type đúng 1 provider; bff DI copies xóa
-- [ ] main (title hardcode, run() 41921) + main_extensions (REPLACE register_routes) merge
-- [ ] bff/ dir xóa; sweep `src tests pyproject.toml justfile` rỗng; console script pocketquant-bff xóa
-- [ ] import-linter contracts cập nhật (cả source_modules)
-- [ ] Tests: repoint imports → diff snapshot commit → regenerate + rename; bff_test merge theo enumeration
-- [ ] Gỡ xfail Phase 1
-- [ ] justfile (+ ENABLE_JOBS=false note) + Dockerfile 41921 + bruno env cập nhật
-- [ ] Smoke: /trading/orders 200
-- [ ] Full gates xanh, commit — KHÔNG push (đợi Phase 4, atomic deploy)
+- [x] TDD-lock: single-entrypoint route test viết trước (đỏ; inventory == bff cũ nguyên văn)
+- [x] Move routes/middleware/common/di-services sang app (di-services strip 3 duplicate provides)
+- [x] Container hợp nhất — mỗi type đúng 1 provider; bff DI copies xóa
+- [x] main (title hardcode, run() 41921) + main_extensions (REPLACE register_routes) merge
+- [x] bff/ dir xóa; sweep `src tests pyproject.toml justfile` rỗng; console script pocketquant-bff xóa
+- [x] import-linter contracts cập nhật (cả source_modules)
+- [x] Tests: repoint imports → diff snapshot commit → regenerate + rename; bff_test merge theo enumeration
+- [x] Gỡ xfail Phase 1
+- [x] justfile (+ ENABLE_JOBS=false note) + Dockerfile 41921 + bruno env cập nhật
+- [x] Smoke: /trading/orders 200
+- [x] Full gates xanh, commit — KHÔNG push (đợi Phase 4, atomic deploy)
 
 ## Success Criteria
 
-- [ ] `find src/pocketquant -maxdepth 1 -type d` → core, engine, backtest, app
-- [ ] `grep -rn "pocketquant.bff" src tests` → rỗng
-- [ ] 1 process `:41921` serve: tất cả API routes + /health + SPA; scheduler/WS/reconcile/worker chạy in-process
-- [ ] `GET /api/v1/trading/orders` → 200
-- [ ] OpenAPI snapshot diff chỉ ở `info.title`/`info.description`
-- [ ] Full gates xanh, 0 xfail còn lại
+- [x] `find src/pocketquant -maxdepth 1 -type d` → core, engine, backtest, app
+- [x] `grep -rn "pocketquant.bff" src tests` → rỗng
+- [x] 1 process `:41921` serve: tất cả API routes + /health + SPA; scheduler/WS/reconcile/worker chạy in-process
+- [x] `GET /api/v1/trading/orders` → 200
+- [x] OpenAPI snapshot diff chỉ ở `info.title`/`info.description`
+- [x] Full gates xanh, 0 xfail còn lại
 
 ## Risk Assessment
 

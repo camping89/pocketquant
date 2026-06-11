@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Dissolve trading into engine and core"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 dependencies: [1]
@@ -80,21 +80,21 @@ Layers sau phase: `core ◁ engine ◁ backtest ◁ {app, bff}` (trading biến 
 
 ## Todo List
 
-- [ ] TDD-lock xanh trước move
-- [ ] Move 3 services → engine
-- [ ] Move okx → core/infra/brokers
-- [ ] Import sweep toàn src + tests
-- [ ] import-linter contracts cập nhật
-- [ ] tests/trading_test phân bổ xong, dir xóa
-- [ ] Full gates xanh, snapshot diff rỗng
-- [ ] Commit
+- [x] TDD-lock xanh trước move
+- [x] Move 3 services → engine
+- [x] Move okx → core/infra/brokers
+- [x] Import sweep toàn src + tests
+- [x] import-linter contracts cập nhật
+- [x] tests/trading_test phân bổ xong, dir xóa
+- [x] Full gates xanh, snapshot diff rỗng
+- [x] Commit
 
 ## Success Criteria
 
-- [ ] `src/pocketquant/trading/` không tồn tại
-- [ ] `core/infra/brokers/` chứa cả `paper/` lẫn `okx/`
-- [ ] `grep -rn "pocketquant.trading" src tests` → rỗng
-- [ ] Full gates xanh; OpenAPI + route inventory snapshot diff rỗng
+- [x] `src/pocketquant/trading/` không tồn tại
+- [x] `core/infra/brokers/` chứa cả `paper/` lẫn `okx/`
+- [x] `grep -rn "pocketquant.trading" src tests` → rỗng
+- [x] Full gates xanh; OpenAPI + route inventory snapshot diff rỗng
 
 ## Risk Assessment
 

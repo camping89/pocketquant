@@ -1,7 +1,7 @@
 ---
 title: "Collapse 6 subpackages → 4, single backend process"
 description: "Giải thể trading (services → engine, OKX → core/infra, xóa webhooks dead code); gộp bff vào app thành 1 process duy nhất trên :41921; fix bug 500 /trading/orders|positions. TDD: regression net từ SP3 lock behavior trước mỗi phase."
-status: pending
+status: completed
 priority: P2
 branch: "develop"
 tags: [restructure, de-over-engineering, tdd, lean]
@@ -26,10 +26,10 @@ TDD mode: regression net từ SP3 (`tests/baseline/` — OpenAPI snapshot, route
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Lock baseline net and delete dead webhooks](./phase-01-lock-baseline-net-and-delete-dead-webhooks.md) | Pending |
-| 2 | [Dissolve trading into engine and core](./phase-02-dissolve-trading-into-engine-and-core.md) | Pending |
-| 3 | [Merge bff into app single process](./phase-03-merge-bff-into-app-single-process.md) | Pending |
-| 4 | [Deploy runtime and docs sync](./phase-04-deploy-runtime-and-docs-sync.md) | Pending |
+| 1 | [Lock baseline net and delete dead webhooks](./phase-01-lock-baseline-net-and-delete-dead-webhooks.md) | Completed |
+| 2 | [Dissolve trading into engine and core](./phase-02-dissolve-trading-into-engine-and-core.md) | Completed |
+| 3 | [Merge bff into app single process](./phase-03-merge-bff-into-app-single-process.md) | Completed |
+| 4 | [Deploy runtime and docs sync](./phase-04-deploy-runtime-and-docs-sync.md) | Completed (committed — push pending) |
 
 ## Verification gates (mỗi phase kết thúc xanh)
 
