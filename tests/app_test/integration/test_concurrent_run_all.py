@@ -1,6 +1,6 @@
 """Integration test: two simultaneous POST /run-all calls → exactly N requests, not 2N.
 
-Runs against the stateless bff (HTTP enqueue only — no worker). Relies on the
+Runs against the HTTP enqueue path only (no worker drain). Relies on the
 deterministic ``bt:{sub_id}`` request id + upsert enqueue so the second fan-out
 collapses onto the first rather than duplicating compute (the queue replacement
 for the old APScheduler replace_existing dedup).
@@ -50,19 +50,19 @@ def _minimal_bars(n: int = 30) -> list[Bar]:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def setup(bff_client):
-    """Track symbol + seed bars + clean prior state via bff repos.
+async def setup(app_client):
+    """Track symbol + seed bars + clean prior state via repos.
 
-    bff is stateless — no StrategyAppService load. run-all enqueue + dedup is a
-    pure Mongo path, so only the tracked symbol (add_symbol fail-fast check) and
-    a clean subscriptions collection are needed.
+    run-all enqueue + dedup is a pure Mongo path — no StrategyAppService load
+    needed; only the tracked symbol (add_symbol fail-fast check) and a clean
+    subscriptions collection are required.
     """
     from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
     from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )
 
-    container = bff_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
+    container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     bar_repo: BarRepository = await container.get(BarRepository)
     sub_repo: SubscriptionRepository = await container.get(SubscriptionRepository)
     tracked_repo: TrackedSymbolRepository = await container.get(TrackedSymbolRepository)
@@ -81,13 +81,13 @@ async def setup(bff_client):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_run_all_no_duplicate_requests(bff_client):
+async def test_concurrent_run_all_no_duplicate_requests(app_client):
     """Two simultaneous run-all calls enqueue exactly 1 request per sub, not 2."""
-    container = bff_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
+    container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     db: Database = await container.get(Database)
 
     # Add a subscription
-    add_r = await bff_client.post(
+    add_r = await app_client.post(
         f"{_API}/{_STRATEGY_ID}/subscriptions",
         json={"symbol": _SYMBOL, "interval": _INTERVAL},
     )
@@ -97,8 +97,8 @@ async def test_concurrent_run_all_no_duplicate_requests(bff_client):
 
     # Both fan-outs must return the same deterministic request id for the sub.
     r1, r2 = await asyncio.gather(
-        bff_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
-        bff_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
+        app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
+        app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
     )
     assert r1.status_code == 202, r1.text
     assert r2.status_code == 202, r2.text

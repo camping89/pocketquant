@@ -1,15 +1,19 @@
-"""Helpers for main.py: middleware, health, and startup utilities.
+"""Helpers for main.py: middleware, routes, health, and startup utilities.
 
-App is headless — no HTTP feature routes, no SPA. Only /health is registered.
-All feature routes live in pocketquant-bff.
+The app process is the single backend entrypoint — it runs the full trading
+runtime (scheduler, WS feed, reconcile loop, backtest worker) AND serves all
+HTTP feature routes plus the SPA.
 """
 
 import asyncio
+from datetime import UTC, datetime
 from functools import partial
+from pathlib import Path
+from typing import Any
 
 from dishka import AsyncContainer
-from dishka.integrations.fastapi import FromDishka, inject
-from fastapi import FastAPI
+from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
@@ -516,8 +520,54 @@ def configure_middleware(app: FastAPI, settings) -> None:
     app.add_middleware(CorrelationIDMiddleware)
 
 
+async def _list_jobs_from_mongo(
+    database: Database, history_repo: JobHistoryRepository
+) -> list[dict[str, Any]]:
+    """Read apscheduler_jobs + job_history directly from Mongo.
+
+    apscheduler_jobs stores serialised APScheduler job docs. We read raw Mongo
+    docs and project only the stable fields (id, next_run_time). The func_ref
+    is stored inside the pickled payload — we skip deserialisation and expose
+    only the last-run enrichment from job_history instead.
+    """
+    coll = database.database["apscheduler_jobs"]
+    raw_jobs = await coll.find({}, {"_id": 1, "next_run_time": 1}).to_list(length=200)
+
+    job_ids = [doc["_id"] for doc in raw_jobs]
+    last_runs: dict[str, dict[str, Any]] = {}
+    if job_ids:
+        try:
+            last_runs = await history_repo.get_latest_by_job_ids(job_ids)
+        except Exception:
+            logger.warning("system_jobs.last_runs_failed", exc_info=True)
+
+    result = []
+    for doc in raw_jobs:
+        job_id = doc["_id"]
+        # MongoDBJobStore stores next_run_time as a UTC float timestamp
+        # (datetime_to_utc_timestamp), None when the job is paused.
+        next_run = doc.get("next_run_time")
+        entry: dict[str, Any] = {
+            "id": job_id,
+            "next_run": (
+                datetime.fromtimestamp(next_run, tz=UTC).isoformat()
+                if next_run is not None
+                else None
+            ),
+            "last_run": last_runs.get(job_id),
+        }
+        result.append(entry)
+    return result
+
+
 def register_routes(app: FastAPI, settings) -> None:
-    """Register /health liveness only — app is headless, all HTTP lives in bff."""
+    """Register health endpoint, all feature routers, and SPA serving."""
+    from pocketquant.app.routes.backtest import backtest_router, run_all_backtests_router
+    from pocketquant.app.routes.market_data import router as market_data_router
+    from pocketquant.app.routes.market_data_quotes import router as quote_router
+    from pocketquant.app.routes.strategy import strategy_router, subscription_router
+    from pocketquant.app.routes.tracked_symbols import router as tracked_symbols_router
+    from pocketquant.app.routes.trading_orders_positions import trading_router
 
     @app.get("/health")
     @inject
@@ -528,3 +578,53 @@ def register_routes(app: FastAPI, settings) -> None:
         result["version"] = settings.app_version
         result["environment"] = settings.environment
         return result
+
+    api = APIRouter(prefix=settings.api_prefix, route_class=DishkaRoute)
+
+    @api.get("/system/jobs")
+    async def list_jobs(
+        database: FromDishka[Database],
+        history_repo: FromDishka[JobHistoryRepository],
+    ) -> list[dict]:
+        # Read the APScheduler Mongo store directly — no scheduler API coupling,
+        # and the route works identically when enable_jobs=false.
+        return await _list_jobs_from_mongo(database, history_repo)
+
+    from pocketquant.app.routes.system_jobs import router as system_jobs_router
+
+    api.include_router(market_data_router)
+    api.include_router(tracked_symbols_router, prefix="/market-data")
+    api.include_router(quote_router)
+    api.include_router(system_jobs_router)
+    api.include_router(strategy_router)
+    api.include_router(run_all_backtests_router)
+    api.include_router(subscription_router)
+    api.include_router(trading_router)
+    api.include_router(backtest_router)
+
+    app.include_router(api)
+
+    # StaticFiles + SPA fallback — after API routes so /api/* is never intercepted
+    # repo root = 4 levels up from src/pocketquant/app/main_extensions.py
+    web_dist = Path(__file__).resolve().parents[3] / "web" / "dist"
+    if web_dist.is_dir():
+        from fastapi.responses import FileResponse
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="static-assets")
+
+        # include_in_schema=False: static-file serving, not API surface — keeps
+        # OpenAPI/route snapshots independent of whether web/dist was built.
+        @app.get("/{path:path}", include_in_schema=False)
+        async def spa_fallback(path: str) -> FileResponse:
+            """Serve index.html for all non-API routes (SPA fallback)."""
+            file = web_dist / path
+            if file.is_file():
+                return FileResponse(file)
+            return FileResponse(web_dist / "index.html")
+
+        logger.info("spa_mounted", path=str(web_dist))
+    else:
+        # Expected in prod (web ships in its own container); locally it means
+        # `npm run build` hasn't produced web/dist yet.
+        logger.info("spa_not_mounted", path=str(web_dist))

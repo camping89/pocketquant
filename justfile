@@ -34,7 +34,7 @@ test:
 baseline:
     BASELINE_UPDATE=1 {{python}} -m pytest tests/baseline/ -q
 
-# Run tests for a specific subpackage (core, engine, backtest, app, bff)
+# Run tests for a specific subpackage (core, engine, backtest, app)
 test-pkg pkg:
     {{python}} -m pytest tests/{{pkg}}_test/
 
@@ -57,19 +57,17 @@ qa: lint fmt types
 redis:
     docker compose -f deploy/compose.local.yml --env-file .env up -d redis
 
-# Start headless runtime: scheduler, WS feed, strategies, reconcile, backtest worker (port 41920, /health only)
+# Start backend: full runtime (scheduler, WS feed, reconcile, backtest worker) + all API routes + SPA (port 41921).
+# Single worker only — scheduler/WS/broker are in-process singletons; --workers N would duplicate them.
+# Route iteration tip: ENABLE_JOBS=false just be — skips the trading runtime so --reload restarts stay light.
 be:
-    {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41920
+    {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41921
 
-# Start FE gateway: stateless API serving web/ SPA + DB read/write (port 41921)
-bff:
-    BFF_PORT=41921 {{python}} -m uvicorn pocketquant.bff.main:app --reload --host 0.0.0.0 --port 41921
-
-# Start frontend dev server (vite proxies /api → bff on 41921)
+# Start frontend dev server (vite proxies /api → app on 41921)
 [working-directory: 'web']
 fe:
     npm run dev
 
-# Check import-linter contracts (layered/forbidden contracts incl. bff isolation)
+# Check import-linter contracts (layered/forbidden contracts)
 lint-imports:
     uv run lint-imports

@@ -10,8 +10,6 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -38,7 +36,6 @@ def test_all_subpackages_importable_from_single_src_tree() -> None:
         )
 
 
-@pytest.mark.xfail(reason="4-subpackage end-state lands at phase 3", strict=True)
 def test_dissolved_subpackages_are_gone() -> None:
     assert importlib.util.find_spec("pocketquant.trading") is None, (
         "pocketquant.trading must be dissolved into engine/core"
@@ -69,7 +66,7 @@ def test_no_packages_dir() -> None:
     )
 
 
-def test_no_dishka_fastapi_integration_outside_app_bff() -> None:
+def test_no_dishka_fastapi_integration_outside_app() -> None:
     """import-linter can't forbid external subpackages, so the fastapi-containment
     contract misses `dishka.integrations.fastapi` — this grep closes that hole."""
     src_root = REPO_ROOT / "src" / "pocketquant"
@@ -79,4 +76,4 @@ def test_no_dishka_fastapi_integration_outside_app_bff() -> None:
         for path in (src_root / sub).rglob("*.py")
         if "dishka.integrations.fastapi" in path.read_text()
     ]
-    assert offenders == [], f"dishka.integrations.fastapi only allowed in app/bff: {offenders}"
+    assert offenders == [], f"dishka.integrations.fastapi only allowed in app: {offenders}"

@@ -16,6 +16,7 @@ from pocketquant.app.di.execution import ExecutionProvider
 from pocketquant.app.di.infrastructure import InfrastructureProvider
 from pocketquant.app.di.market_data import MarketDataProvider
 from pocketquant.app.di.persistence import PersistenceProvider
+from pocketquant.app.di.services import ServicesProvider
 from pocketquant.app.di.trading_services import AppTradingServiceProvider
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "InfrastructureProvider",
     "MarketDataProvider",
     "PersistenceProvider",
+    "ServicesProvider",
 ]

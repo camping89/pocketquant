@@ -10,6 +10,7 @@ from pocketquant.app.di import (
     InfrastructureProvider,
     MarketDataProvider,
     PersistenceProvider,
+    ServicesProvider,
 )
 
 PROVIDERS = [
@@ -20,6 +21,7 @@ PROVIDERS = [
     MarketDataProvider(),
     AppTradingServiceProvider(),
     BacktestWorkerProvider(),
+    ServicesProvider(),
 ]
 
 

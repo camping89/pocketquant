@@ -12,10 +12,10 @@ BacktestRequestStatus = Literal["pending", "running", "done", "failed"]
 class BacktestRequest:
     """A queued backtest execution request — Mongo-backed work item.
 
-    Replaces the APScheduler ``bt:*`` one-off jobs. The ``pocketquant-bff``
-    gateway INSERTs a ``pending`` request (pure DB write, no scheduler); the
-    headless ``pocketquant-app`` worker atomically claims it, dispatches by
-    ``kind``, and writes terminal status.
+    Replaces the APScheduler ``bt:*`` one-off jobs. API routes INSERT a
+    ``pending`` request (pure DB write, no scheduler coupling); the
+    BacktestRequestWorker atomically claims it, dispatches by ``kind``, and
+    writes terminal status.
 
     ``kind == "subscription"``: the worker writes the full result to
     ``backtest_runs`` keyed by ``sub_id`` (existing per-subscription cache);

@@ -4,7 +4,7 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from pocketquant.bff.common.symbol_validation import validate_composite_symbol
+from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository

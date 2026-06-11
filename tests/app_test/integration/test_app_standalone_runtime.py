@@ -1,13 +1,12 @@
-"""App standalone: the headless runtime is fully self-sufficient without bff.
+"""App runtime self-sufficiency: the trading runtime needs no HTTP traffic.
 
-The core SP3 guarantee from the app side — kill/restart bff and live trading is
-untouched — rests on the headless app owning the ENTIRE runtime in its own DI
-graph: scheduler, strategy engine, reconcile service, backtest worker. No part
-of it depends on the bff process existing.
+The app owns the ENTIRE runtime in its own DI graph: scheduler, strategy
+engine, reconcile service, backtest worker — none of it depends on any
+request hitting the API.
 
 These tests resolve each runtime piece from the real app container (built from
 the production providers, wired to ephemeral Mongo/Redis) and drive a reconcile
-tick + a worker drain end-to-end. Zero bff involvement anywhere.
+tick + a worker drain end-to-end, without any HTTP client involved.
 """
 
 from __future__ import annotations
@@ -54,7 +53,7 @@ _SYMBOL = "BTCUSDT:BINANCE"
 
 @pytest_asyncio.fixture
 async def app_container(settings: Settings):
-    """Full app DI graph — every runtime provider, no bff."""
+    """Full app DI graph — every runtime provider."""
     c = make_async_container(
         TestCoreProvider(settings),
         PersistenceProvider(),
@@ -81,7 +80,7 @@ async def test_app_container_resolves_full_runtime(app_container) -> None:
     assert isinstance(worker, BacktestRequestWorker)
 
 
-async def test_app_reconcile_runs_desired_running_without_bff(
+async def test_app_reconcile_runs_desired_running_without_http(
     app_container, settings: Settings
 ) -> None:
     """A desired=running subscription converges to actual=running via a single
@@ -126,9 +125,9 @@ async def test_app_reconcile_runs_desired_running_without_bff(
     await engine.stop()
 
 
-async def test_app_backtest_worker_drains_queue_without_bff(app_container) -> None:
+async def test_app_backtest_worker_drains_queue_without_http(app_container) -> None:
     """The worker claims and fails a malformed request in-process — the queue is
-    drained by the app alone, no bff enqueue path needed for the worker to run."""
+    drained by the app alone — the worker needs no HTTP enqueue path to run."""
     db = await app_container.get(Database)
     await db.get_collection("backtest_requests").drop()
 

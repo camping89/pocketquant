@@ -1,10 +1,9 @@
-"""Integration: bff run-all enqueue → worker dispatch → bff cascade delete cleans DB.
+"""Integration: run-all enqueue → worker dispatch → cascade delete cleans DB.
 
-Spans the split deterministically without a dual lifespan: the stateless bff
-serves the HTTP enqueue + cascade-delete, and the backtest worker dispatch is
-driven directly (the app-runtime path) rather than waiting on a live poll loop.
-This mirrors how the app worker drains the queue, while keeping the test fast
-and flake-free.
+Deterministic without a live poll loop: HTTP serves the enqueue +
+cascade-delete, and the backtest worker dispatch is driven directly. This
+mirrors how the worker drains the queue, while keeping the test fast and
+flake-free.
 
 Skippable with SKIP_SLOW_TESTS=1.
 """
@@ -89,15 +88,15 @@ class _StubBrokerFactory:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def setup_strategy_and_bars(bff_client):
+async def setup_strategy_and_bars(app_client):
     """Seed bars + tracked symbol; clean prior data. Strategy load happens in the
-    worker-side engine the test builds, not in bff (bff is stateless)."""
+    worker-side engine the test builds — the HTTP enqueue path needs none."""
     from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
     from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
         TrackedSymbolRepository,
     )
 
-    container = bff_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
+    container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     bar_repo: BarRepository = await container.get(BarRepository)
     bt_repo: BacktestRepository = await container.get(BacktestRepository)
     sub_repo: SubscriptionRepository = await container.get(SubscriptionRepository)
@@ -163,23 +162,23 @@ async def _build_worker_deps(db: Database) -> BacktestDispatchDeps:
 
 
 @pytest.mark.asyncio
-async def test_run_all_backtest_cascade_delete(bff_client):
-    """bff add sub → bff run-all enqueue → worker dispatch → bff cascade delete cleans DB."""
-    container = bff_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
+async def test_run_all_backtest_cascade_delete(app_client):
+    """add sub → run-all enqueue → worker dispatch → cascade delete cleans DB."""
+    container = app_client._transport.app.state.dishka_container  # type: ignore[attr-defined]
     bt_repo: BacktestRepository = await container.get(BacktestRepository)
     request_repo: BacktestRequestRepository = await container.get(BacktestRequestRepository)
     db: Database = await container.get(Database)
 
-    # 1. Add subscription (bff, pure Mongo)
-    add_r = await bff_client.post(
+    # 1. Add subscription (pure Mongo write)
+    add_r = await app_client.post(
         f"{_API}/{_STRATEGY_ID}/subscriptions",
         json={"symbol": _SYMBOL, "interval": _INTERVAL},
     )
     assert add_r.status_code == 201, add_r.text
     sub_id = add_r.json()["id"]
 
-    # 2. Trigger run-all (bff enqueue → backtest_requests)
-    run_r = await bff_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests")
+    # 2. Trigger run-all (enqueue → backtest_requests)
+    run_r = await app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests")
     assert run_r.status_code == 202, run_r.text
     assert len(run_r.json()["job_ids"]) == 1
 
@@ -198,13 +197,13 @@ async def test_run_all_backtest_cascade_delete(bff_client):
         f"Expected 'completed', got {status_doc}"
     )
 
-    # 4. GET backtest via bff
-    bt_r = await bff_client.get(f"/api/v1/subscriptions/{sub_id}/backtest")
+    # 4. GET backtest over HTTP
+    bt_r = await app_client.get(f"/api/v1/subscriptions/{sub_id}/backtest")
     assert bt_r.status_code == 200, bt_r.text
     assert bt_r.json()["status"] == "completed"
 
-    # 5. Cascade delete (bff)
-    del_r = await bff_client.delete(f"{_API}/{_STRATEGY_ID}")
+    # 5. Cascade delete
+    del_r = await app_client.delete(f"{_API}/{_STRATEGY_ID}")
     assert del_r.status_code == 204, del_r.text
 
     # 6. backtest cache cleared

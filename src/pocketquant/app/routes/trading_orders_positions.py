@@ -1,10 +1,8 @@
 """Trading orders + positions routes — live in-RAM engine state.
 
 These routes depend on OrderPositionQueryService which requires
-OrderAppService / PositionAppService (live in-RAM engine state).
-They are mounted in both bff and app main_extensions but the service
-is only registered in the app DI container — bff will return 500 if
-called (same runtime behaviour as the previous handler exclusion).
+OrderAppService / PositionAppService (live in-RAM engine state), so they
+only work in the process that runs the execution engine.
 """
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka

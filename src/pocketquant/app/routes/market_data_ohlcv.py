@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from pocketquant.bff.common.symbol_validation import validate_composite_symbol
+from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.constants import LIMIT_OHLCV_QUERY_MAX
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.enums import Interval

@@ -9,8 +9,8 @@ from __future__ import annotations
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Depends, Query
 
-from pocketquant.bff.common.symbol_validation import validate_composite_symbol
-from pocketquant.bff.middleware.admin_auth_middleware import verify_admin_token
+from pocketquant.app.common.symbol_validation import validate_composite_symbol
+from pocketquant.app.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.tracked_symbols_backfill import (
     BackfillTrackedSymbolCommand,

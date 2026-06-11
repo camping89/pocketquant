@@ -1,4 +1,4 @@
-"""OpenAPI schema snapshot for the bff app.
+"""OpenAPI schema snapshot for the app entrypoint.
 
 Canonical JSON (sorted keys) of ``app.openapi()`` compared against the
 committed baseline. Regenerate with:
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-SNAPSHOT_PATH = Path(__file__).parent / "openapi_bff_snapshot.json"
+SNAPSHOT_PATH = Path(__file__).parent / "openapi_app_snapshot.json"
 
 
 def _canonical(schema: dict[str, Any]) -> str:
@@ -22,12 +22,12 @@ def _canonical(schema: dict[str, Any]) -> str:
 
 
 def _current_schema() -> dict[str, Any]:
-    from pocketquant.bff.main import create_app
+    from pocketquant.app.main import create_app
 
     return create_app().openapi()
 
 
-def test_bff_openapi_matches_snapshot() -> None:
+def test_app_openapi_matches_snapshot() -> None:
     current = _canonical(_current_schema())
 
     if os.environ.get("BASELINE_UPDATE") == "1":
@@ -39,7 +39,7 @@ def test_bff_openapi_matches_snapshot() -> None:
     )
     committed = SNAPSHOT_PATH.read_text(encoding="utf-8")
     assert current == committed, (
-        "bff OpenAPI schema drifted from baseline snapshot. "
+        "app OpenAPI schema drifted from baseline snapshot. "
         "If intentional, regenerate with BASELINE_UPDATE=1 (just baseline) "
         "and review the diff."
     )
