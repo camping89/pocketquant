@@ -1,6 +1,6 @@
 """Strategy + subscription API routes.
 
-Two top-level routers (mounts unchanged from handlers/strategy/router.py):
+Two top-level routers:
 
 * ``strategy_router``      (prefix ``/strategies``)    — template-scoped operations
 * ``subscription_router``  (prefix ``/subscriptions``) — subscription-instance operations
