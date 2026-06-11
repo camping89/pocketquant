@@ -131,7 +131,7 @@ def register_routes(app: FastAPI, settings: Settings) -> None:
 
     # StaticFiles + SPA fallback — after API routes so /api/* is never intercepted
     # repo root = 4 levels up from src/pocketquant/bff/main_extensions.py
-    web_dist = Path(__file__).resolve().parents[3] / "packages" / "pocketquant-web" / "dist"
+    web_dist = Path(__file__).resolve().parents[3] / "web" / "dist"
     if web_dist.is_dir():
         from fastapi.responses import FileResponse
         from fastapi.staticfiles import StaticFiles
@@ -149,5 +149,5 @@ def register_routes(app: FastAPI, settings: Settings) -> None:
         logger.info("spa_mounted", path=str(web_dist))
     else:
         # Expected in prod (web ships in its own container); locally it means
-        # `npm run build` hasn't produced packages/pocketquant-web/dist yet.
+        # `npm run build` hasn't produced web/dist yet.
         logger.info("spa_not_mounted", path=str(web_dist))
