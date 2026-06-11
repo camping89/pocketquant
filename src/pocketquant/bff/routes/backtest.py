@@ -1,6 +1,6 @@
 """Backtest API routes.
 
-Two top-level routers (mount points unchanged from handlers/backtest/router.py):
+Two top-level routers:
 
 * ``backtest_router``          (prefix ``/backtest``)    — run, optimize, results
 * ``run_all_backtests_router`` (prefix ``/strategies``)  — fan-out per subscription

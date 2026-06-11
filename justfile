@@ -30,7 +30,7 @@ reset:
 test:
     {{python}} -m pytest
 
-# Regenerate baseline regression snapshots (OpenAPI, route inventory, mediator registry)
+# Regenerate baseline regression snapshots (OpenAPI, route inventory)
 baseline:
     BASELINE_UPDATE=1 {{python}} -m pytest tests/baseline/ -q
 

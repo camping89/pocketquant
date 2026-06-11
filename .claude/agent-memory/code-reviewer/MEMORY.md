@@ -2,14 +2,15 @@
 
 ## Project: PocketQuant
 
-### Architecture Pattern (updated 2026-02-14)
-- **Clean Architecture** with 4 layers: Domain -> Application -> Features -> Infrastructure
-- **CQRS**: Operations split into `command.py` + `handler.py` + `route.py` (commands) or `query.py` + `handler.py` + `route.py` (queries)
-- **Each operation folder**: `__init__.py` (re-exports), `handler.py`, `query.py`/`command.py`, `route.py`
-- **Feature `__init__.py`**: Facade re-exports for public API surface with `__all__`
-- **Cross-feature imports**: Use `TYPE_CHECKING` guards to prevent circular deps
-- **Handler registration**: `register.py` per feature, `@handles` decorator, `HandlerRegistry` auto-registration
-- **Event handlers**: `@event_handler` decorator + `EventRegistry` for auto-discovery
+### Architecture Pattern (updated 2026-06-11, Phase 4 "kill mediator", a33917d..ea8f431)
+- **Clean Architecture**; CQRS Mediator DELETED — no `@handles`, no `Mediator.send()`, no dir-per-endpoint command/handler/route triplets
+- **Feature services**: one class per feature area (`SyncService`, `StrategyCommandService`, `BacktestQueryService`, ...); command/query DTOs live in service module, class names preserved as public contract
+- **Routes**: flat modules `bff/routes/*.py`, inject via `FromDishka[XxxService]` + `DishkaRoute` (CLAUDE.md "FromDishka[Mediator]" rule stale until Phase 5 docs sync)
+- **DI**: `bff/di/services.py` (BffServiceProvider) + `app/di/trading_services.py`/`market_data.py` — all Scope.APP, services stateless
+- **Scheduler jobs**: module-level container ref, `container.get(SyncService)`; APScheduler text func refs unchanged
+- **Event handlers**: `@event_handler` + `EventRegistry` still exist (EventBus untouched)
+- `OrderPositionQueryService` only in app DI; its routes also mounted in bff → bff 500s by design (matches old handler-exclusion behavior)
+- Mediator deletion side effect: query routes that returned `result.to_dict()` after `if not result: raise NotFoundError` now raise NotFoundError inside service — same 404, but NoFactoryError from dishka replaces old HandlerNotFoundError for unregistered services (both → 500)
 
 ### Layer Structure (post Phase 2 lean-monorepo collapse, 2026-06-10)
 Single package `pocketquant` at root `src/` (PEP 420 namespace — no `__init__.py` at `src/pocketquant/`). Subpackage `execution` renamed `engine`. uv workspace dissolved.
