@@ -134,20 +134,6 @@
   },
   {
     "methods": [
-      "GET"
-    ],
-    "name": "list_tracked_symbols",
-    "path": "/api/v1/market-data/tracked-symbols"
-  },
-  {
-    "methods": [
-      "POST"
-    ],
-    "name": "add_tracked_symbol",
-    "path": "/api/v1/market-data/tracked-symbols"
-  },
-  {
-    "methods": [
       "POST"
     ],
     "name": "add_tracked_symbol",
@@ -162,31 +148,10 @@
   },
   {
     "methods": [
-      "DELETE"
-    ],
-    "name": "remove_tracked_symbol",
-    "path": "/api/v1/market-data/tracked-symbols/{symbol}"
-  },
-  {
-    "methods": [
       "PUT"
     ],
     "name": "update_tracked_symbol",
     "path": "/api/v1/market-data/tracked-symbols/{symbol}"
-  },
-  {
-    "methods": [
-      "PUT"
-    ],
-    "name": "update_tracked_symbol",
-    "path": "/api/v1/market-data/tracked-symbols/{symbol}"
-  },
-  {
-    "methods": [
-      "POST"
-    ],
-    "name": "backfill_tracked_symbol",
-    "path": "/api/v1/market-data/tracked-symbols/{symbol}/backfill"
   },
   {
     "methods": [
