@@ -2,33 +2,37 @@
 
 ## Project: PocketQuant
 
-### Architecture Pattern (updated 2026-06-11, Phase 4 "kill mediator", a33917d..ea8f431)
-- **Clean Architecture**; CQRS Mediator DELETED — no `@handles`, no `Mediator.send()`, no dir-per-endpoint command/handler/route triplets
+### Architecture Pattern (updated 2026-06-11, 4-subpackage single-process refactor, 23feaa2..53da61f+Phase4)
+- **Clean Architecture**; CQRS Mediator DELETED — no `@handles`, no `Mediator.send()`
 - **Feature services**: one class per feature area (`SyncService`, `StrategyCommandService`, `BacktestQueryService`, ...); command/query DTOs live in service module, class names preserved as public contract
-- **Routes**: flat modules `bff/routes/*.py`, inject via `FromDishka[XxxService]` + `DishkaRoute` (CLAUDE.md "FromDishka[Mediator]" rule stale until Phase 5 docs sync)
-- **DI**: `bff/di/services.py` (BffServiceProvider) + `app/di/trading_services.py`/`market_data.py` — all Scope.APP, services stateless
-- **Scheduler jobs**: module-level container ref, `container.get(SyncService)`; APScheduler text func refs unchanged
-- **Event handlers**: `@event_handler` + `EventRegistry` still exist (EventBus untouched)
-- `OrderPositionQueryService` only in app DI; its routes also mounted in bff → bff 500s by design (matches old handler-exclusion behavior)
-- Mediator deletion side effect: query routes that returned `result.to_dict()` after `if not result: raise NotFoundError` now raise NotFoundError inside service — same 404, but NoFactoryError from dishka replaces old HandlerNotFoundError for unregistered services (both → 500)
+- **Routes**: flat modules `app/routes/*.py`, inject via `FromDishka[XxxService]` + `DishkaRoute`
+- **DI**: all providers in `src/pocketquant/app/di/` — `services.py` (ServicesProvider, route-facing), `trading_services.py` (Strategy*/OrderPosition), `market_data.py` (SyncService + runtime). SyncService/StrategyCommandService/StrategyQueryService each registered EXACTLY once (dishka silent last-wins; ServicesProvider docstring documents the exclusion)
+- **Single process**: `pocketquant.app.main` on :41921 — full runtime + ALL API routes + SPA fallback. Single uvicorn worker only (scheduler/WS/broker are in-process singletons)
+- `OrderPositionQueryService` routes (in-RAM engine state) now WORK publicly via nginx (previously 500'd in bff by design) — unauthenticated read of live orders/positions, consistent with overall no-auth API posture
+- Known wart: tracked_symbols router mounted twice (via market_data.py aggregator AND directly with prefix="/market-data") → 5 duplicate entries in route_inventory snapshot; identical handlers, pre-existing from bff
 
-### Layer Structure (post Phase 2 lean-monorepo collapse, 2026-06-10)
-Single package `pocketquant` at root `src/` (PEP 420 namespace — no `__init__.py` at `src/pocketquant/`). Subpackage `execution` renamed `engine`. uv workspace dissolved.
+### Layer Structure (post 4-subpackage collapse, 2026-06-11)
+Single package `pocketquant` at root `src/` (PEP 420 namespace). `trading` dissolved (services → engine, OKX → core/infra/brokers/okx, webhooks deleted); `bff` merged into `app`.
 ```
 src/pocketquant/
-  core/      # 0 internal deps — core/domain (entities/VOs/ports; ex-concepts quote/risk/strategy merged in), core/infra (persistence, brokers/paper, binance, scheduling, http_client — Phase 3 reshape 2026-06-10), core/common, config
-             # import-linter: core.domain forbidden from core.infra; test_domain_purity FORBIDDEN_IMPORTS has "pocketquant.core.infra"
-             # layout guard: tests/core_test/test_core_layout_contract.py (dead-module imports + stale "core.<old>" fragment scan, .py-only)
-  engine/    # -> core — shared strategy/order/position/risk app services + market_data sync jobs/handlers
+  core/      # 0 internal deps — domain, infra (persistence, brokers/{paper,okx}, binance, scheduling), common, config
+  engine/    # -> core — strategy/order/position/risk app services + market_data services + strategy_command/query + orders_positions services
   backtest/  # -> core, engine
-  trading/   # -> core, engine — OKX broker
-  app/       # -> all — headless runtime (scheduler, WS feed, reconcile, backtest worker)
-  bff/       # -> core, backtest, trading — stateless FE gateway
-web/       # Node SPA at repo root (packages/ deleted)
+  app/       # -> all — single backend: routes/, di/, middleware/, common/, runtime (scheduler, WS feed, reconcile, backtest worker)
+web/       # Node SPA at repo root
 ```
-- One root pyproject.toml (hatchling, `packages=["src/pocketquant"]`), import-linter contracts enforce layers
-- Tests: `tests/{core,engine,backtest,trading,app,bff}_test` + `tests/baseline` (OpenAPI/route/mediator snapshots + layout contract); root `tests/conftest.py` = single source for env seeding + prod-DB guard (`207.148.79.60` fragment); per-suite conftests fixture-only
+- import-linter: 7 contracts, layers `core ◁ engine ◁ backtest ◁ app`
+- Tests: `tests/{core,engine,backtest,app}_test` + `tests/baseline` (openapi_app_snapshot, route_inventory_app_snapshot, layout contract with negative assertions for trading/bff); root `tests/conftest.py` = env seeding + prod-DB guard
+- Baseline snapshots regenerate via `just baseline` (BASELINE_UPDATE=1); test_single_entrypoint_routes.py duplicates test_route_inventory.py signal (same snapshot, no independent check)
+- `tests/app_test/unit/handlers/sync/conftest.py`: autouse fixture rebinds module loggers (structlog cache_logger_on_first_use makes capture_logs order-dependent otherwise)
 - APScheduler MongoDBJobStore (`apscheduler_jobs` collection) persists pickled text func refs `pocketquant.engine.market_data.app_services.sync_jobs:<fn>`; apscheduler 3.11 `_get_jobs` auto-deletes unrestorable jobs, `replace_existing=True` update_job rewrites job_state — module renames self-heal at boot (verified from installed source 2026-06-10)
+
+### ID Convention (Phase 1 done 2026-06-12, uuid7-id-centralization plan)
+- PK attributes are `UUID` in RAM (`generate_id()` = uuid7), `str` in Mongo `_id` (to_mongo `str()`, from_mongo `UUID()`); Bar is the precedent pattern
+- Flipped: OrderAggregate.id, PositionAggregate.id, Fill.fill_id, backtest Order.order_id, Trade.trade_id, OptimizationResult.id
+- Still str (deferred): BacktestRequest.id (P4), BacktestResult.id (P5, `save_for_subscription` overrides id=sub_id 16-hex), Subscription.id (P6, sha256 16-hex)
+- FK reference fields stay str by decision: subscription_id, run_id, Fill.order_id, entry/exit_order_id, resulting_trade_id, broker_order_id, backtest_id
+- Boundary rule: dict keys (paper_broker._orders/_pending_orders/_order_events, order_app_service._orders/_pending/_broker_map, result_collector._orders_by_id), OrderResult.order_id, domain events, structlog kwargs all take `str(id)` — UUID-as-dict-key vs str lookup is the silent-failure class to grep on every later phase
 
 ### Tech Stack
 - Python 3.14, FastAPI, Pydantic, structlog, MongoDB (pymongo native async), Redis, APScheduler
@@ -36,8 +40,11 @@ web/       # Node SPA at repo root (packages/ deleted)
 - Linting: ruff (42 issues, 41 auto-fixable -- mostly import sorting)
 - Tests: pytest + pytest-asyncio (60 tests passing)
 
-### DI Pattern (updated 2026-03-13)
-- [project_dishka_di.md](project_dishka_di.md) -- dishka provider structure, DishkaRoute propagation gotcha
+### DI Pattern (updated 2026-06-11)
+- [project_dishka_di.md](project_dishka_di.md) -- dishka providers per process, DishkaRoute gotcha, silent duplicate-provider override
+
+### Deploy Pipeline
+- [project_deploy_pipeline.md](project_deploy_pipeline.md) -- develop push = prod deploy (no staging); verify never probes /api; rollback = IMAGE_TAG re-deploy
 
 ### Review Reports
 - `plans/reports/code-review-260214-persistence-layer.md` - Persistence layer extraction review
