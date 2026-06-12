@@ -27,7 +27,9 @@ web/       # Node SPA at repo root
 - `tests/app_test/unit/handlers/sync/conftest.py`: autouse fixture rebinds module loggers (structlog cache_logger_on_first_use makes capture_logs order-dependent otherwise)
 - APScheduler MongoDBJobStore (`apscheduler_jobs` collection) persists pickled text func refs `pocketquant.engine.market_data.app_services.sync_jobs:<fn>`; apscheduler 3.11 `_get_jobs` auto-deletes unrestorable jobs, `replace_existing=True` update_job rewrites job_state — module renames self-heal at boot (verified from installed source 2026-06-10)
 
-### ID Convention (Phase 1 done 2026-06-12, uuid7-id-centralization plan)
+### ID Convention (Phase 1+3 done 2026-06-12, uuid7-id-centralization plan)
+- Phase 3: `migrate_job_history_uuid_ids` boot migration re-keys legacy ObjectId `_id` → uuid7 str. Boot migration precedent now: tracked_symbols (delete-then-insert, log-before-delete) + job_history (copy-then-delete w/ `_migrated_from` crash marker; delete-then-insert only for listener docs under unique partial idx_skip_idempotency). `_migrated_from` stays on docs permanently — `_serialize` whitelist hides it from API
+- `bson` import banned via ruff TID251 (pyproject.toml:59-61); the only sanctioned `noqa: TID251` is the migration test that fabricates legacy ObjectId shape
 - PK attributes are `UUID` in RAM (`generate_id()` = uuid7), `str` in Mongo `_id` (to_mongo `str()`, from_mongo `UUID()`); Bar is the precedent pattern
 - Flipped: OrderAggregate.id, PositionAggregate.id, Fill.fill_id, backtest Order.order_id, Trade.trade_id, OptimizationResult.id
 - Still str (deferred): BacktestRequest.id (P4), BacktestResult.id (P5, `save_for_subscription` overrides id=sub_id 16-hex), Subscription.id (P6, sha256 16-hex)

@@ -34,7 +34,7 @@ Pattern chuẩn (đã có ở `Bar`/`Symbol`/`SyncStatus`): entity `id: UUID = F
 |-------|------|------|--------|
 | 1 | [WS1 representation id str to UUID](./phase-01-ws1-representation-id-str-to-uuid.md) | LOW | Completed (deployed, verify HEALTHY) |
 | 2 | [Re-key tracked_symbols](./phase-02-re-key-tracked-symbols.md) | LOW | Completed (deployed, verify HEALTHY) |
-| 3 | [Re-key job_history legacy ObjectId](./phase-03-re-key-job-history-legacy-objectid.md) | LOW | Pending |
+| 3 | [Re-key job_history legacy ObjectId](./phase-03-re-key-job-history-legacy-objectid.md) | LOW | Implemented (gates xanh, chờ deploy + verify) |
 | 4 | [Re-key backtest_requests drop bt prefix](./phase-04-re-key-backtest-requests-drop-bt-prefix.md) | MED | Pending |
 | 5 | [Re-key backtest_runs cache docs](./phase-05-re-key-backtest-runs-cache-docs.md) | MED | Pending |
 | 6 | [Re-key subscriptions and FK rewrite](./phase-06-re-key-subscriptions-and-fk-rewrite.md) | HIGH | Pending |

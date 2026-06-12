@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Re-key job_history legacy ObjectId"
-status: pending
+status: implemented
 priority: P2
 effort: "2h"
 dependencies: []
@@ -40,9 +40,16 @@ KHÔNG đổi: `job_history_repository.py` (đường ghi đã uuid7 sẵn).
 
 ## Success Criteria
 
-- [ ] Test mixed-ids + idempotent + crash-resume pass.
-- [ ] Dashboard stats endpoint trả số liệu y nguyên (so sánh trước/sau trên local data).
+- [x] Test mixed-ids + idempotent + crash-resume pass (5 tests, `tests/app_test/unit/test_job_history_uuid_migration.py`; full suite 591 passed; ruff/pyright/lint-imports clean; baseline snapshot diff rỗng).
+- [x] Dashboard stats không đổi — code-reviewer trace cả 6 consumers (`find_runs`/`get_latest_by_job_ids`/`aggregate_stats`/`get_last_successful_started_at`/`reconcile_orphan_running`/SPA): `_serialize` whitelist che `_migrated_from`, aggregates không đụng `_id`.
 - [ ] Pre-deploy: `mongosh` đếm `{"_id": {"$type": "objectId"}}` trên VPS (ước lượng thời lượng); post-deploy `11-verify.sh` HEALTHY; count check: tổng docs không đổi, ObjectId docs = 0.
+
+## Implementation Notes (260612)
+
+- Architecture deviation (re-discovered khi viết test): unique partial index `idx_skip_idempotency` trên `(job_id, scheduled_run_time)` → listener-path docs (date `scheduled_run_time`) KHÔNG thể insert-copy-trước (collision với legacy doc đang giữ slot). Migration tách 2 nhánh: listener docs delete-first (log full doc trước delete, theo precedent `migrate_tracked_symbols_uuid_ids`); wrapper docs insert-first với marker `_migrated_from` → crash-resume dedup.
+- Chọn marker `_migrated_from` (option 2 của plan) — rẻ hơn check `(job_id, started_at)` vì không cần so timestamp precision.
+- Reviewer note: uuid write path deploy từ 2026-04-13, TTL 30 ngày → prod legacy count khả năng = 0; migration là safety net. KHÔNG thấy log `job_history_uuid_migration.completed` khi deploy = thành công, không phải lỗi. Pre-deploy count vẫn nên chạy để confirm.
+- Known-accepted: rolling-deploy race (2 boot song song có thể dup wrapper doc) — chấp nhận theo single-process deploy model, giống precedent.
 
 ## Risk Assessment
 

@@ -12,6 +12,7 @@ from pocketquant.app.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
+    migrate_job_history_uuid_ids,
     migrate_strategy_id_fields,
     migrate_subscription_desired_state,
     migrate_tracked_symbols_uuid_ids,
@@ -71,6 +72,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Re-key tracked_symbols._id to uuid7 BEFORE seed_tracked_symbols runs,
         # so the seeder's upserts never race legacy symbol-keyed docs.
         await migrate_tracked_symbols_uuid_ids(container)
+        # Re-key legacy ObjectId docs in the append-only job_history log; new
+        # writes are already uuid7, so this only touches pre-uuid history.
+        await migrate_job_history_uuid_ids(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)
