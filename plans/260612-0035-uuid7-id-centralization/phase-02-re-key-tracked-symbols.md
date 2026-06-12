@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Re-key tracked_symbols"
-status: in-progress
+status: completed
 priority: P2
 effort: "3h"
 dependencies: []
@@ -46,7 +46,7 @@ Modify:
 - [x] Unique index `symbol` tồn tại; dedup test pass.
 - [x] `seed_tracked_symbols` boot vẫn idempotent (boot smoke test).
 - [x] Full gates xanh; snapshot diff rỗng.
-- [ ] Pre-deploy: đếm docs trên VPS; post-deploy `11-verify.sh` HEALTHY; spot-check `mongosh`: mọi `tracked_symbols._id` match UUID regex.
+- [x] Pre-deploy: đếm docs trên VPS; post-deploy `11-verify.sh` HEALTHY; spot-check `mongosh`: mọi `tracked_symbols._id` match UUID regex.
 
 ## Risk Assessment
 
