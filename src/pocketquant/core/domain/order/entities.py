@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from typing import Any, ClassVar
+from uuid import UUID
 
 from pydantic import BaseModel, Field, PrivateAttr
 
 from pocketquant.core.common.time import utc_now
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.order.events import (
     OrderCancelledEvent,
@@ -29,7 +30,7 @@ class OrderAggregate(BaseModel):
     Tracks order lifecycle from creation to terminal state.
     """
 
-    id: str
+    id: UUID
     subscription_id: str
     symbol: str
     side: OrderSide
@@ -78,7 +79,7 @@ class OrderAggregate(BaseModel):
             raise ValueError("Stop order requires stop_price")
 
         return cls(
-            id=generate_id_str(),
+            id=generate_id(),
             subscription_id=subscription_id,
             symbol=symbol,
             side=side,
@@ -98,7 +99,7 @@ class OrderAggregate(BaseModel):
         self.updated_at = utc_now()
         self._events.append(
             OrderSubmittedEvent(
-                order_id=self.id,
+                order_id=str(self.id),
                 subscription_id=self.subscription_id,
                 symbol=self.symbol,
                 side=self.side,
@@ -129,7 +130,7 @@ class OrderAggregate(BaseModel):
         self.updated_at = utc_now()
         self._events.append(
             OrderPartiallyFilledEvent(
-                order_id=self.id,
+                order_id=str(self.id),
                 subscription_id=self.subscription_id,
                 filled_quantity=quantity,
                 filled_price=price,
@@ -162,7 +163,7 @@ class OrderAggregate(BaseModel):
 
         self._events.append(
             OrderFilledEvent(
-                order_id=self.id,
+                order_id=str(self.id),
                 subscription_id=self.subscription_id,
                 symbol=self.symbol,
                 side=self.side,
@@ -182,7 +183,7 @@ class OrderAggregate(BaseModel):
         self.updated_at = utc_now()
         self._events.append(
             OrderCancelledEvent(
-                order_id=self.id,
+                order_id=str(self.id),
                 subscription_id=self.subscription_id,
                 reason=reason,
             )
@@ -196,7 +197,7 @@ class OrderAggregate(BaseModel):
         self.updated_at = utc_now()
         self._events.append(
             OrderRejectedEvent(
-                order_id=self.id,
+                order_id=str(self.id),
                 subscription_id=self.subscription_id,
                 reason=reason,
             )
@@ -223,7 +224,7 @@ class OrderAggregate(BaseModel):
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to MongoDB document."""
         return {
-            "_id": self.id,
+            "_id": str(self.id),
             "subscription_id": self.subscription_id,
             "symbol": self.symbol,
             "side": self.side.value,

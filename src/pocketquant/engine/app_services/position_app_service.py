@@ -64,7 +64,7 @@ class PositionAppService:
 
                 await self._event_bus.publish(
                     PositionOpenedEvent(
-                        position_id=position.id,
+                        position_id=str(position.id),
                         subscription_id=event.subscription_id,
                         symbol=event.symbol,
                         side=side,
@@ -129,7 +129,7 @@ class PositionAppService:
             return None
 
         return {
-            "id": position.id,
+            "id": str(position.id),
             "subscription_id": position.subscription_id,
             "symbol": position.symbol,
             "side": position.side.value,

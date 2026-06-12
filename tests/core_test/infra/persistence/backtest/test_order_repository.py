@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
 
@@ -18,6 +19,11 @@ from pocketquant.core.infra.persistence.repositories.backtest_order_repository i
 NOW = datetime(2026, 1, 5, 10, 0, 0)
 
 
+def _oid(name: str) -> str:
+    """Deterministic uuid string for a short test order handle (PKs are UUIDs now)."""
+    return str(uuid5(NAMESPACE_OID, name))
+
+
 def _make_order(
     *,
     order_id: str,
@@ -26,8 +32,8 @@ def _make_order(
     status: OrderStatus = OrderStatus.FILLED,
 ) -> Order:
     fill = Fill(
-        fill_id=f"f-{order_id}",
-        order_id=order_id,
+        fill_id=uuid5(NAMESPACE_OID, f"f-{order_id}"),
+        order_id=_oid(order_id),
         symbol="BTC:BIN",
         side=OrderSide.BUY,
         quantity=1.0,
@@ -48,7 +54,7 @@ def _make_order(
         ),
     ]
     return Order(
-        order_id=order_id,
+        order_id=UUID(_oid(order_id)),
         run_id=run_id,
         strategy_code=strategy_code,
         symbol="BTC:BIN",
@@ -71,7 +77,7 @@ async def test_save_and_get_roundtrip(database: Database) -> None:
     repo = BacktestOrderRepository(database)
     o = _make_order(order_id="o1", run_id="r1")
     await repo.save_many([o])
-    fetched = await repo.get("o1")
+    fetched = await repo.get(_oid("o1"))
     assert fetched == o
 
 
@@ -90,7 +96,7 @@ async def test_save_many_is_idempotent_upsert(database: Database) -> None:
     # Same id again — replace_one upsert, no duplicate key error.
     await repo.save_many([o])
     coll = database.get_collection("backtest_orders")
-    assert await coll.count_documents({"_id": "o1"}) == 1
+    assert await coll.count_documents({"_id": _oid("o1")}) == 1
 
 
 @pytest.mark.asyncio
@@ -104,7 +110,7 @@ async def test_list_by_run_returns_only_matching(database: Database) -> None:
         ]
     )
     runs = await repo.list_by_run("r1")
-    assert {o.order_id for o in runs} == {"o1", "o2"}
+    assert {str(o.order_id) for o in runs} == {_oid("o1"), _oid("o2")}
 
 
 @pytest.mark.asyncio
@@ -118,7 +124,7 @@ async def test_list_by_strategy_status_filters(database: Database) -> None:
         ]
     )
     expired = await repo.list_by_strategy_code_status("A", "expired")
-    assert [o.order_id for o in expired] == ["o2"]
+    assert [str(o.order_id) for o in expired] == [_oid("o2")]
 
 
 @pytest.mark.asyncio
@@ -132,8 +138,8 @@ async def test_delete_by_run_cascades_only_matching(database: Database) -> None:
     )
     n = await repo.delete_by_run("r1")
     assert n == 1
-    assert await repo.get("o1") is None
-    assert await repo.get("o2") is not None
+    assert await repo.get(_oid("o1")) is None
+    assert await repo.get(_oid("o2")) is not None
 
 
 @pytest.mark.asyncio

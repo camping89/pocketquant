@@ -2,13 +2,14 @@ import asyncio
 import itertools
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
@@ -65,7 +66,7 @@ class GridOptimizationAppService:
         """
         config.validate()
 
-        optimization_id = generate_id_str()
+        optimization_id = generate_id()
         started_at = datetime.now(UTC)
 
         combinations = self._generate_combinations(config.parameter_grid)
@@ -73,7 +74,7 @@ class GridOptimizationAppService:
 
         logger.info(
             "optimization_starting",
-            optimization_id=optimization_id,
+            optimization_id=str(optimization_id),
             strategy_code=config.strategy_code,
             total_combinations=total_combinations,
             max_workers=config.max_workers,
@@ -94,7 +95,7 @@ class GridOptimizationAppService:
             if isinstance(result, BaseException):
                 logger.warning(
                     "optimization_backtest_exception",
-                    optimization_id=optimization_id,
+                    optimization_id=str(optimization_id),
                     params=params,
                     error=str(result),
                 )
@@ -109,7 +110,7 @@ class GridOptimizationAppService:
         if not completed_results:
             logger.error(
                 "optimization_all_failed",
-                optimization_id=optimization_id,
+                optimization_id=str(optimization_id),
                 total=total_combinations,
             )
             return OptimizationResult(
@@ -144,7 +145,7 @@ class GridOptimizationAppService:
 
         logger.info(
             "optimization_completed",
-            optimization_id=optimization_id,
+            optimization_id=str(optimization_id),
             completed=len(completed_results),
             failed=failed_count,
             best_metric=round(getattr(best_result.metrics, config.target_metric), 4),
@@ -171,7 +172,7 @@ class GridOptimizationAppService:
         semaphore: asyncio.Semaphore,
         config: OptimizationConfig,
         params: dict[str, Any],
-        optimization_id: str,
+        optimization_id: UUID,
     ) -> BacktestResult:
         async with semaphore:
             backtest_config = BacktestConfig(

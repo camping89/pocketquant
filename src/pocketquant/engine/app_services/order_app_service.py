@@ -42,7 +42,7 @@ class OrderAppService:
             OrderResult from broker
         """
         async with self._lock:
-            self._pending[order.id] = order
+            self._pending[str(order.id)] = order
 
         await self._order_repo.save(order)
 
@@ -51,20 +51,20 @@ class OrderAppService:
 
             async with self._lock:
                 if result.is_success:
-                    self._broker_map[order.id] = result.broker_order_id
+                    self._broker_map[str(order.id)] = result.broker_order_id
                     order.broker_order_id = result.broker_order_id
 
                     if result.status == OrderStatus.FILLED:
                         order.fill(result.filled_quantity, result.filled_price or 0.0)
 
-                        self._orders[order.id] = order
-                        self._pending.pop(order.id, None)
+                        self._orders[str(order.id)] = order
+                        self._pending.pop(str(order.id), None)
 
                         await self._order_repo.save(order)
 
                         await self._event_bus.publish(
                             OrderFilledEvent(
-                                order_id=order.id,
+                                order_id=str(order.id),
                                 subscription_id=order.subscription_id,
                                 symbol=order.symbol,
                                 side=order.side,
@@ -75,7 +75,7 @@ class OrderAppService:
 
                         logger.info(
                             "order_filled",
-                            order_id=order.id,
+                            order_id=str(order.id),
                             subscription_id=order.subscription_id,
                             filled_price=result.filled_price,
                         )
@@ -85,7 +85,7 @@ class OrderAppService:
 
                         logger.info(
                             "order_submitted",
-                            order_id=order.id,
+                            order_id=str(order.id),
                             broker_order_id=result.broker_order_id,
                             status=result.status.value,
                         )
@@ -93,10 +93,10 @@ class OrderAppService:
                     order.reject(result.error_message or "Order rejected")
                     await self._order_repo.save(order)
 
-                    self._pending.pop(order.id, None)
+                    self._pending.pop(str(order.id), None)
                     logger.warning(
                         "order_rejected",
-                        order_id=order.id,
+                        order_id=str(order.id),
                         error=result.error_message,
                     )
 
@@ -106,12 +106,12 @@ class OrderAppService:
             async with self._lock:
                 order.reject(str(e))
                 await self._order_repo.save(order)
-                self._pending.pop(order.id, None)
+                self._pending.pop(str(order.id), None)
 
-            logger.error("order_submit_error", order_id=order.id, error=str(e))
+            logger.error("order_submit_error", order_id=str(order.id), error=str(e))
 
             return OrderResult(
-                order_id=order.id,
+                order_id=str(order.id),
                 broker_order_id="",
                 status=OrderStatus.REJECTED,
                 error_message=str(e),
@@ -184,7 +184,7 @@ class OrderAppService:
 
                 await self._event_bus.publish(
                     OrderFilledEvent(
-                        order_id=order.id,
+                        order_id=str(order.id),
                         subscription_id=order.subscription_id,
                         symbol=order.symbol,
                         side=order.side,
@@ -203,9 +203,9 @@ class OrderAppService:
         pending = await self._order_repo.find_pending()
         async with self._lock:
             for order in pending:
-                self._pending[order.id] = order
+                self._pending[str(order.id)] = order
                 if order.broker_order_id:
-                    self._broker_map[order.id] = order.broker_order_id
+                    self._broker_map[str(order.id)] = order.broker_order_id
         logger.info("loaded_pending_orders", count=len(pending))
 
     async def get_order_async(self, order_id: str) -> OrderAggregate | None:

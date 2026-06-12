@@ -10,7 +10,7 @@ class OptimizationRepository(BaseRepository):
 
     async def save(self, result: OptimizationResult) -> None:
         collection = self._collection()
-        await collection.replace_one({"_id": result.id}, result.to_mongo(), upsert=True)
+        await collection.replace_one({"_id": str(result.id)}, result.to_mongo(), upsert=True)
 
     async def get(self, optimization_id: str) -> OptimizationResult | None:
         collection = self._collection()

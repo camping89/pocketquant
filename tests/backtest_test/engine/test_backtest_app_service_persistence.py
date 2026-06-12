@@ -167,12 +167,12 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     assert t.entry_price == 100.0
     assert t.exit_price == 100.0
     # entry_order_id and exit_order_id link to existing orders.
-    order_ids = {o.order_id for o in orders}
+    order_ids = {str(o.order_id) for o in orders}
     assert t.entry_order_id in order_ids
     assert t.exit_order_id in order_ids
     # Back-link: exit order has resulting_trade_id pointing at this trade.
-    exit_order = next(o for o in orders if o.order_id == t.exit_order_id)
-    assert exit_order.resulting_trade_id == t.trade_id
+    exit_order = next(o for o in orders if str(o.order_id) == t.exit_order_id)
+    assert exit_order.resulting_trade_id == str(t.trade_id)
 
 
 @pytest.mark.asyncio
@@ -245,4 +245,4 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     sell_order = next(o for o in orders if o.side == OrderSide.SELL)
     trades = await trade_repo.list_by_run(result.id)
     assert len(trades) == 1
-    assert sell_order.resulting_trade_id == trades[0].trade_id
+    assert sell_order.resulting_trade_id == str(trades[0].trade_id)

@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field, PrivateAttr
 
 from pocketquant.core.common.time import utc_now
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.core.domain.position.events import (
     PositionClosedEvent,
@@ -25,7 +26,7 @@ class PositionAggregate(BaseModel):
     average price calculation on adds and realized P&L on reduces.
     """
 
-    id: str
+    id: UUID
     subscription_id: str
     symbol: str
     side: PositionSide
@@ -59,7 +60,7 @@ class PositionAggregate(BaseModel):
             raise ValueError("Entry price must be positive")
 
         position = cls(
-            id=generate_id_str(),
+            id=generate_id(),
             subscription_id=subscription_id,
             symbol=symbol,
             side=side,
@@ -71,7 +72,7 @@ class PositionAggregate(BaseModel):
         )
         position._events.append(
             PositionOpenedEvent(
-                position_id=position.id,
+                position_id=str(position.id),
                 subscription_id=subscription_id,
                 symbol=symbol,
                 side=side,
@@ -104,7 +105,7 @@ class PositionAggregate(BaseModel):
 
         self._events.append(
             PositionUpdatedEvent(
-                position_id=self.id,
+                position_id=str(self.id),
                 subscription_id=self.subscription_id,
                 quantity=self.quantity,
                 average_price=self.entry_price,
@@ -133,7 +134,7 @@ class PositionAggregate(BaseModel):
 
         self._events.append(
             PositionUpdatedEvent(
-                position_id=self.id,
+                position_id=str(self.id),
                 subscription_id=self.subscription_id,
                 quantity=self.quantity,
                 average_price=self.entry_price,
@@ -154,7 +155,7 @@ class PositionAggregate(BaseModel):
         self.closed_at = utc_now()
         self._events.append(
             PositionClosedEvent(
-                position_id=self.id,
+                position_id=str(self.id),
                 subscription_id=self.subscription_id,
                 symbol=self.symbol,
                 side=self.side,
@@ -204,7 +205,7 @@ class PositionAggregate(BaseModel):
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to MongoDB document."""
         return {
-            "_id": self.id,
+            "_id": str(self.id),
             "subscription_id": self.subscription_id,
             "symbol": self.symbol,
             "side": self.side.value,

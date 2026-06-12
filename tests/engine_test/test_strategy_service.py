@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
+from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
@@ -83,7 +84,7 @@ def _query_svc(
 
 def _open_position(subscription_id: str = "sub-1") -> PositionAggregate:
     return PositionAggregate(
-        id="pos-open",
+        id=uuid5(NAMESPACE_OID, "pos-open"),
         subscription_id=subscription_id,
         symbol="BTCUSDT:BINANCE",
         side=PositionSide.LONG,
@@ -98,7 +99,7 @@ def _open_position(subscription_id: str = "sub-1") -> PositionAggregate:
 
 def _closed_position(idx: int = 1, subscription_id: str = "sub-1") -> PositionAggregate:
     return PositionAggregate(
-        id=f"pos-closed-{idx}",
+        id=uuid5(NAMESPACE_OID, f"pos-closed-{idx}"),
         subscription_id=subscription_id,
         symbol="BTCUSDT:BINANCE",
         side=PositionSide.SHORT,
@@ -395,7 +396,7 @@ async def test_get_trades_maps_closed_positions() -> None:
     pos_repo.find_closed_by_subscription.assert_awaited_once_with("sub-1", limit=50)
     assert len(result) == 2
     row = result[0]
-    assert row["id"] == "pos-closed-1"
+    assert row["id"] == str(uuid5(NAMESPACE_OID, "pos-closed-1"))
     assert row["direction"] == "SHORT"
     assert row["exit_price"] == 180.0
     assert row["pnl"] == 20.0

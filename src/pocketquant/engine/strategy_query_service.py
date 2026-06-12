@@ -161,7 +161,7 @@ class StrategyQueryService:
         )
         return [
             {
-                "id": p.id,
+                "id": str(p.id),
                 "direction": p.side.value.upper(),
                 "entry_price": p.entry_price,
                 # Position close sets current_price = exit_price.

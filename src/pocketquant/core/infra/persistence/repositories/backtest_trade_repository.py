@@ -22,7 +22,9 @@ class BacktestTradeRepository(BaseRepository):
             return
         collection = self._collection()
         for trade in trades:
-            await collection.replace_one({"_id": trade.trade_id}, trade.to_mongo(), upsert=True)
+            await collection.replace_one(
+                {"_id": str(trade.trade_id)}, trade.to_mongo(), upsert=True
+            )
         logger.debug("backtest_trades_saved", count=len(trades))
 
     async def get(self, trade_id: str) -> Trade | None:

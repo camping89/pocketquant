@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
@@ -54,7 +55,7 @@ class GetStrategyTradesHandler:
 
 def _open_position(subscription_id: str = "strat-1") -> PositionAggregate:
     return PositionAggregate(
-        id="pos-open",
+        id=uuid5(NAMESPACE_OID, "pos-open"),
         subscription_id=subscription_id,
         symbol="BTCUSDT:BINANCE",
         side=PositionSide.LONG,
@@ -69,7 +70,7 @@ def _open_position(subscription_id: str = "strat-1") -> PositionAggregate:
 
 def _closed_position(idx: int, *, subscription_id: str = "strat-1") -> PositionAggregate:
     return PositionAggregate(
-        id=f"pos-closed-{idx}",
+        id=uuid5(NAMESPACE_OID, f"pos-closed-{idx}"),
         subscription_id=subscription_id,
         symbol="BTCUSDT:BINANCE",
         side=PositionSide.SHORT,
@@ -128,7 +129,7 @@ async def test_trades_handler_maps_closed_positions_to_strategy_trade_shape() ->
     repo.find_closed_by_subscription.assert_awaited_once_with("strat-1", limit=50)
     assert len(result) == 2
     row = result[0]
-    assert row["id"] == "pos-closed-1"
+    assert row["id"] == str(uuid5(NAMESPACE_OID, "pos-closed-1"))
     assert row["direction"] == "SHORT"
     assert row["entry_price"] == 200.0
     assert row["exit_price"] == 180.0

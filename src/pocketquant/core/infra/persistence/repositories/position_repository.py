@@ -10,7 +10,7 @@ class PositionRepository(BaseRepository):
 
     async def save(self, position: PositionAggregate) -> None:
         collection = self._collection()
-        await collection.replace_one({"_id": position.id}, position.to_mongo(), upsert=True)
+        await collection.replace_one({"_id": str(position.id)}, position.to_mongo(), upsert=True)
 
     async def get(self, position_id: str) -> PositionAggregate | None:
         collection = self._collection()
