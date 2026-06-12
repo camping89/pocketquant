@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Re-key backtest_requests drop bt prefix"
-status: pending
+status: implemented
 priority: P2
 effort: "6h"
 dependencies: []
@@ -50,14 +50,16 @@ Modify:
 
 ## Success Criteria
 
-- [ ] Toàn bộ tests step 1 pass.
-- [ ] Partial unique index tồn tại; concurrent run-all test chứng minh 1 pending/sub.
-- [ ] Không còn literal `bt:` trong `src/` cho request id (synthetic RAM key `{code}::bt::{sub_id}` ở strategy loader KHÔNG đụng — đó là RAM key, không phải `_id`).
+- [x] Toàn bộ tests step 1 pass (600 passed, 5 skipped full suite; pyright 0 errors; ruff clean; 7 import contracts kept).
+- [x] Partial unique index tồn tại (`ensure_pending_sub_unique_index` — single source, 85/86 conflict handler); concurrent run-all test chứng minh 1 pending/sub (`test_concurrent_run_all_no_duplicate_requests`, `test_concurrent_enqueue_single_pending_no_exception`).
+- [x] Không còn literal `bt:` trong `src/` cho request id (chỉ còn migration regex `^bt:` + docstrings; synthetic RAM key `{code}::bt::{sub_id}` giữ nguyên — RAM key, không phải `_id`).
 - [ ] Pre-deploy: đếm docs `^bt:` trên VPS; post-deploy `11-verify.sh` HEALTHY; run-all smoke trên prod → 1 pending/sub.
 
 ## Risk Assessment
 
-- **Upsert race → DuplicateKeyError leak ra route 500** — bắt trong repo, map về outcome thành công (1 pending đã tồn tại = mục tiêu đạt). Test (c) lock.
-- **Partial index không cover docs sub_id=null** — partialFilterExpression thêm `sub_id: {"$type": "string"}`; test (e) lock single-kind không bị dedup.
+- **Upsert race → DuplicateKeyError leak ra route 500** — bắt trong repo, map về outcome thành công (1 pending đã tồn tại = mục tiêu đạt). Test (c) lock. ✅ resolved.
+- **Partial index không cover docs sub_id=null** — partialFilterExpression thêm `sub_id: {"$type": "string"}`; test (e) lock single-kind không bị dedup. ✅ resolved.
 - **Done-docs growth giữa 2 enqueue xa nhau** — chấp nhận (LOW, brainstorm risk table); cleanup-on-enqueue bound về 1 thế hệ docs/sub.
-- **`recover_stale_backtests`/`reclaim_stale_running` (`:100`) đụng docs mới** — filter theo `status`/`started_at` field, không theo `_id` shape → không ảnh hưởng; confirm bằng test stale-recovery hiện có vẫn xanh.
+- **`recover_stale_backtests`/`reclaim_stale_running` (`:100`) đụng docs mới** — code-review phát hiện collision THẬT: flip stale running → pending khi đã có pending mới hơn cùng sub → DuplicateKeyError mỗi tick, queue stall vĩnh viễn. Fixed: reclaim per-doc, collision → mark stale doc failed (newer pending supersedes); worker tách reclaim khỏi drain để sweep lỗi không chặn queue. Test `test_reclaim_with_newer_pending_marks_stale_failed` lock.
+- **Rollback hazard (code-review M1):** index `ix_backtest_requests_pending_sub` tồn tại sau deploy; code cũ (`replace_one` không bắt DuplicateKeyError) sẽ 500 trên run-all nếu rollback khi có pending doc uuid-keyed. Rollback runbook PHẢI kèm: `db.backtest_requests.dropIndex("ix_backtest_requests_pending_sub")`.
+- **Mixed-version window (LOW):** instance code cũ chạy song song sau migration có thể ghi doc `bt:` mới → worker mới claim rồi `UUID()` ValueError → doc cycle 10-phút. Tự hết khi instance cũ dừng; single-process deploy hiện tại không đụng.

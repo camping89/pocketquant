@@ -384,6 +384,46 @@ async def migrate_job_history_uuid_ids(container: AsyncContainer) -> None:
         logger.info("job_history_uuid_migration.completed", rekeyed=rekeyed)
 
 
+async def migrate_backtest_request_ids(container: AsyncContainer) -> None:
+    """Idempotent boot migration: re-key legacy ``backtest_requests._id`` to uuid7.
+
+    Legacy subscription-kind requests carried a deterministic ``bt:{sub_id}``
+    ``_id`` — the old dedup mechanism. Dedup now lives in the partial unique
+    index on (sub_id, status=pending), so that index is created FIRST: the
+    guarantee must hold the moment ``_id`` stops encoding the subscription.
+
+    Mongo forbids in-place ``_id`` updates, so each ``bt:``-prefixed doc is
+    deleted and re-inserted with a fresh uuid7 ``_id``, all other fields
+    preserved. Pending docs sit inside the unique index, so delete-before-
+    insert is mandatory (the copy would collide while the legacy doc holds the
+    slot). The full doc is logged before the delete — a crash between the two
+    ops is recoverable from the log line, and the worst case is one lost
+    queued request that the next run-all re-creates. Filter
+    ``{"_id": {"$regex": "^bt:"}}`` matches nothing after the first run.
+    """
+    from pocketquant.core.common.uuid import generate_id_str
+    from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
+        ensure_pending_sub_unique_index,
+    )
+
+    database = await container.get(Database)
+    coll = database.database["backtest_requests"]
+
+    await ensure_pending_sub_unique_index(coll)
+
+    rekeyed = 0
+    legacy_docs = await coll.find({"_id": {"$regex": "^bt:"}}).to_list(length=None)
+    for doc in legacy_docs:
+        logger.info("backtest_request_uuid_migration.rekeying", doc=doc)
+        payload = {k: v for k, v in doc.items() if k != "_id"}
+        await coll.delete_one({"_id": doc["_id"]})
+        await coll.insert_one({**payload, "_id": generate_id_str()})
+        rekeyed += 1
+
+    if rekeyed:
+        logger.info("backtest_request_uuid_migration.completed", rekeyed=rekeyed)
+
+
 async def recover_stale_backtests(container: AsyncContainer) -> None:
     """Mark any backtest docs stuck in 'running' as 'failed' on startup.
 

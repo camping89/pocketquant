@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_REQUESTS
 from pocketquant.core.common.logging import get_logger
@@ -9,6 +10,30 @@ from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.infra.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)
+
+
+async def ensure_pending_sub_unique_index(collection: Any) -> None:
+    """Create the pending-sub dedup index — single source for its spec.
+
+    DB-level guarantee: at most one pending request per subscription. The
+    $type guard keeps single-kind docs (sub_id=null) out of the index — two
+    concurrent ad-hoc runs are legitimate. Called from both ensure_indexes and
+    the boot migration so the spec can never drift between the two.
+    """
+    spec = {
+        "unique": True,
+        "partialFilterExpression": {"status": "pending", "sub_id": {"$type": "string"}},
+        "name": "ix_backtest_requests_pending_sub",
+    }
+    try:
+        await collection.create_index([("sub_id", 1)], **spec)
+    except Exception as exc:
+        # A same-name index with a different spec exists from an old deploy —
+        # replace it. IndexOptionsConflict (85) / IndexKeySpecsConflict (86).
+        if getattr(exc, "code", None) not in (85, 86):
+            raise
+        await collection.drop_index("ix_backtest_requests_pending_sub")
+        await collection.create_index([("sub_id", 1)], **spec)
 
 
 class BacktestRequestRepository(BaseRepository):
@@ -22,18 +47,60 @@ class BacktestRequestRepository(BaseRepository):
     _collection_name = COLLECTION_BACKTEST_REQUESTS
 
     async def enqueue(self, request: BacktestRequest) -> str:
-        """Upsert a request by id, resetting it to its enqueued (pending) state.
+        """Persist a pending request and return the persisted doc's id.
 
-        Upsert (not insert) makes re-enqueue idempotent: subscription requests
-        carry a deterministic id keyed on the subscription, so two concurrent
+        Subscription requests dedup on (sub_id, status=pending): an upsert
+        resets the sub's existing pending doc in place, so two concurrent
         run-all fan-outs collapse to a single pending doc per subscription
-        instead of duplicating work. Single ad-hoc requests use unique ids, so
-        the upsert is an insert for them.
+        instead of duplicating work. The partial unique index backs this at
+        the DB level; the returned id is the PERSISTED doc's id, which may
+        differ from ``request.id`` when an existing pending doc absorbed the
+        enqueue. Terminal (done/failed) docs for the sub are dropped first so
+        storage stays bounded at one generation per subscription.
+
+        Single ad-hoc requests are independent work items — plain insert.
         """
         collection = self._collection()
-        await collection.replace_one({"_id": request.id}, request.to_mongo(), upsert=True)
-        logger.debug("backtest_request_enqueued", request_id=request.id, kind=request.kind)
-        return request.id
+        doc = request.to_mongo()
+
+        if request.kind == "subscription" and request.sub_id is not None:
+            return await self._enqueue_subscription(doc, sub_id=request.sub_id)
+
+        await collection.insert_one(doc)
+        logger.debug("backtest_request_enqueued", request_id=doc["_id"], kind=request.kind)
+        return doc["_id"]
+
+    async def _enqueue_subscription(self, doc: dict[str, Any], *, sub_id: str) -> str:
+        """Dedup-enqueue one subscription request; returns the persisted id."""
+        collection = self._collection()
+        await collection.delete_many({"sub_id": sub_id, "status": {"$in": ["done", "failed"]}})
+
+        candidate_id = doc.pop("_id")
+        # Two enqueues racing through the upsert window can both take the
+        # insert branch; the unique index rejects the loser. On retry the
+        # loser's filter matches the winner's pending doc — both callers end
+        # up referencing the single pending doc, which is the goal.
+        for attempt in range(3):
+            try:
+                persisted = await collection.find_one_and_update(
+                    {"sub_id": sub_id, "status": "pending"},
+                    {"$set": doc, "$setOnInsert": {"_id": candidate_id}},
+                    upsert=True,
+                    return_document=ReturnDocument.AFTER,
+                )
+            except DuplicateKeyError:
+                if attempt == 2:
+                    raise
+                continue
+            if persisted is None:
+                # Driver stubs allow None, but upsert + ReturnDocument.AFTER
+                # always yields a doc — guard for type-safety only.
+                raise RuntimeError("upsert returned no document")
+            logger.debug(
+                "backtest_request_enqueued", request_id=persisted["_id"], kind="subscription"
+            )
+            return persisted["_id"]
+        raise RuntimeError("unreachable: enqueue retry loop exited without return/raise")
 
     async def claim_next(self) -> BacktestRequest | None:
         """Atomically flip the oldest pending request to running and return it.
@@ -103,20 +170,42 @@ class BacktestRequestRepository(BaseRepository):
         Guards against a worker that claimed a request then died before writing
         terminal status — the request would otherwise wait forever. Idempotent;
         returns the count reset. Uses ``started_at`` set by ``claim_next``.
+
+        Per-doc updates, not update_many: flipping a subscription doc back to
+        pending moves it INTO the pending-sub unique index, and a newer pending
+        doc for the same sub may legitimately exist (enqueued while the stale
+        one was running). That collision means the newer request supersedes the
+        stale one — mark the stale doc failed instead of pending, otherwise the
+        raised DuplicateKeyError would abort the sweep on every tick.
         """
         cutoff = datetime.now(UTC) - timedelta(minutes=threshold_minutes)
         collection = self._collection()
-        result = await collection.update_many(
-            {"status": "running", "started_at": {"$lt": cutoff}},
-            {"$set": {"status": "pending"}, "$unset": {"started_at": ""}},
-        )
-        if result.modified_count:
+        reclaimed = 0
+        async for doc in collection.find({"status": "running", "started_at": {"$lt": cutoff}}):
+            try:
+                await collection.update_one(
+                    {"_id": doc["_id"], "status": "running"},
+                    {"$set": {"status": "pending"}, "$unset": {"started_at": ""}},
+                )
+            except DuplicateKeyError:
+                await collection.update_one(
+                    {"_id": doc["_id"]},
+                    {
+                        "$set": {
+                            "status": "failed",
+                            "finished_at": datetime.now(UTC),
+                            "error": "stale running request superseded by a newer pending one",
+                        }
+                    },
+                )
+            reclaimed += 1
+        if reclaimed:
             logger.info(
                 "backtest_request_stale_reclaim",
-                reclaimed=result.modified_count,
+                reclaimed=reclaimed,
                 threshold_minutes=threshold_minutes,
             )
-        return result.modified_count
+        return reclaimed
 
     async def ensure_indexes(self) -> None:
         collection = self._collection()
@@ -126,4 +215,5 @@ class BacktestRequestRepository(BaseRepository):
             [("status", 1), ("requested_at", 1)],
             name="ix_backtest_requests_status_requested",
         )
+        await ensure_pending_sub_unique_index(collection)
         logger.info("backtest_request_indexes_created")

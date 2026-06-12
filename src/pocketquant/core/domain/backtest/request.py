@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
+from pocketquant.core.common.uuid import UUID
+
 BacktestRequestKind = Literal["single", "subscription"]
 BacktestRequestStatus = Literal["pending", "running", "done", "failed"]
 
@@ -26,7 +28,7 @@ class BacktestRequest:
     ``positions``) in ``result`` and FE polls ``/backtest/requests/{id}``.
     """
 
-    id: str
+    id: UUID
     kind: BacktestRequestKind
     status: BacktestRequestStatus
     requested_at: datetime
@@ -41,7 +43,7 @@ class BacktestRequest:
 
     def to_mongo(self) -> dict[str, Any]:
         return {
-            "_id": self.id,
+            "_id": str(self.id),
             "kind": self.kind,
             "status": self.status,
             "requested_at": self.requested_at,
@@ -58,7 +60,7 @@ class BacktestRequest:
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> BacktestRequest:
         return cls(
-            id=data["_id"],
+            id=UUID(data["_id"]),
             kind=data["kind"],
             status=data["status"],
             requested_at=data["requested_at"],

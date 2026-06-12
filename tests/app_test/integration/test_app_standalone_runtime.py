@@ -25,7 +25,7 @@ from pocketquant.app.di import (
     PersistenceProvider,
 )
 from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.domain.shared.enums import Interval
@@ -138,7 +138,7 @@ async def test_app_backtest_worker_drains_queue_without_http(app_container) -> N
     # dispatch raises, and it is marked failed — proving the claim→dispatch→write
     # loop runs end-to-end inside the app graph.
     req = BacktestRequest(
-        id=generate_id_str(),
+        id=generate_id(),
         kind="single",
         status="pending",
         requested_at=datetime.now(UTC),
@@ -150,7 +150,7 @@ async def test_app_backtest_worker_drains_queue_without_http(app_container) -> N
     processed = await worker._drain_once()
     assert processed is True
 
-    done = await request_repo.get(req.id)
+    done = await request_repo.get(str(req.id))
     assert done is not None and done.status == "failed"
 
     await db.get_collection("backtest_requests").drop()

@@ -3,7 +3,8 @@
 Mirrors the old handler.handle() bodies so net behavior is preserved:
   - run: persists pending ``single`` BacktestRequest, returns request_id
   - optimize: builds OptimizationConfig, calls optimizer, saves result, returns it
-  - run_all: enqueues one request per sub with deterministic ``bt:{sub_id}`` id
+  - run_all: enqueues one uuid7-keyed request per sub (dedup lives in the repo
+    upsert on (sub_id, status=pending), not in the id)
   - run_all: raises 404 when no subscriptions found
   - get_result: returns BacktestResult or raises 404
   - list_results: delegates to backtest_repo.list_by_strategy_code
@@ -32,6 +33,7 @@ from pocketquant.backtest.backtest_query_service import (
     ListBacktestsQuery,
 )
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.uuid import UUID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,7 +133,7 @@ def _fake_request(request_id: str = "req-1", status: str = "pending") -> MagicMo
 @pytest.mark.asyncio
 async def test_run_enqueues_single_request_and_returns_request_id() -> None:
     request_repo = MagicMock()
-    request_repo.enqueue = AsyncMock()
+    request_repo.enqueue = AsyncMock(side_effect=lambda r: str(r.id))
     svc = _cmd_svc(request_repo=request_repo)
 
     result = await svc.run(_run_cmd())
@@ -142,13 +144,14 @@ async def test_run_enqueues_single_request_and_returns_request_id() -> None:
     assert persisted.status == "pending"
     assert persisted.strategy_code == "hitnrun2"
     assert persisted.config is not None
-    assert result["request_id"] == persisted.id
+    # FE contract: request_id is the uuid string form of the persisted id.
+    assert result["request_id"] == str(persisted.id)
 
 
 @pytest.mark.asyncio
 async def test_run_serialises_dates_to_iso_strings() -> None:
     request_repo = MagicMock()
-    request_repo.enqueue = AsyncMock()
+    request_repo.enqueue = AsyncMock(side_effect=lambda r: str(r.id))
     svc = _cmd_svc(request_repo=request_repo)
 
     await svc.run(_run_cmd())
@@ -161,7 +164,7 @@ async def test_run_serialises_dates_to_iso_strings() -> None:
 @pytest.mark.asyncio
 async def test_run_defaults_empty_parameters_to_dict() -> None:
     request_repo = MagicMock()
-    request_repo.enqueue = AsyncMock()
+    request_repo.enqueue = AsyncMock(side_effect=lambda r: str(r.id))
     svc = _cmd_svc(request_repo=request_repo)
 
     cmd = RunBacktestCommand(
@@ -238,29 +241,38 @@ async def test_run_all_enqueues_one_request_per_subscription() -> None:
         return_value=[_fake_sub("sub-1"), _fake_sub("sub-2")]
     )
     request_repo = MagicMock()
-    request_repo.enqueue = AsyncMock()
+    # Repo returns the persisted doc's id (may differ from the candidate when
+    # an existing pending doc absorbs the enqueue) — run_all echoes it to FE.
+    request_repo.enqueue = AsyncMock(side_effect=lambda r: str(r.id))
 
     svc = _cmd_svc(sub_repo=sub_repo, request_repo=request_repo)
     result = await svc.run_all(RunAllBacktestsCommand(strategy_id="hitnrun2"))
 
     assert request_repo.enqueue.await_count == 2
-    assert set(result["job_ids"]) == {"bt:sub-1", "bt:sub-2"}
+    assert len(result["job_ids"]) == 2
+    for job_id in result["job_ids"]:
+        assert UUID(job_id).version == 7
 
 
 @pytest.mark.asyncio
-async def test_run_all_uses_deterministic_ids() -> None:
-    """bt:{sub_id} id so concurrent fan-outs upsert instead of duplicate."""
+async def test_run_all_uses_uuid_ids_no_bt_prefix() -> None:
+    """Request ids are uuid7 — dedup is the repo's (sub_id, pending) upsert,
+    not a deterministic id."""
     sub_repo = MagicMock()
     sub_repo.list_by_strategy_code = AsyncMock(return_value=[_fake_sub("sub-abc")])
     request_repo = MagicMock()
-    request_repo.enqueue = AsyncMock()
+    request_repo.enqueue = AsyncMock(side_effect=lambda r: str(r.id))
 
     svc = _cmd_svc(sub_repo=sub_repo, request_repo=request_repo)
-    await svc.run_all(RunAllBacktestsCommand(strategy_id="hitnrun2"))
+    result = await svc.run_all(RunAllBacktestsCommand(strategy_id="hitnrun2"))
 
     persisted = request_repo.enqueue.await_args.args[0]
-    assert persisted.id == "bt:sub-abc"
+    assert not str(persisted.id).startswith("bt:")
+    assert UUID(str(persisted.id)).version == 7
     assert persisted.kind == "subscription"
+    assert persisted.sub_id == "sub-abc"
+    # job_ids echo the id the repo persisted, not the candidate.
+    assert result["job_ids"] == [str(persisted.id)]
 
 
 @pytest.mark.asyncio

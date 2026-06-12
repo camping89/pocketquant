@@ -2,7 +2,10 @@
 
 Covers the queue mechanism that replaced APScheduler bt:* jobs:
   - enqueue → pending; claim_next atomic flip → running; 2nd claim → None.
-  - idempotent re-enqueue (deterministic id collapses to one pending doc).
+  - dedup re-enqueue: (sub_id, status=pending) upsert collapses concurrent
+    fan-outs to one pending doc per subscription (partial unique index).
+  - cleanup-on-enqueue: terminal done/failed docs for the sub are dropped.
+  - single-kind requests are independent — never deduped.
   - worker subscription dispatch → backtest_runs result + request done.
   - worker single dispatch → request doc carries embedded FE result + done.
   - per-request failure isolation: one bad request, the next still runs.
@@ -11,6 +14,7 @@ Covers the queue mechanism that replaced APScheduler bt:* jobs:
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, date, datetime, timedelta
 
@@ -21,7 +25,7 @@ from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import UUID, generate_id
 from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.interfaces import IBroker
@@ -69,7 +73,7 @@ def _reset_sim() -> Iterator[None]:
 
 def _request(kind: str, **kwargs) -> BacktestRequest:
     return BacktestRequest(
-        id=kwargs.pop("id", generate_id_str()),
+        id=kwargs.pop("id", generate_id()),
         kind=kind,  # type: ignore[arg-type]
         status="pending",
         requested_at=kwargs.pop("requested_at", datetime.now(UTC)),
@@ -102,6 +106,9 @@ def _synthetic_bars(n: int = 60) -> list[Bar]:
 @pytest_asyncio.fixture
 async def request_repo(database: Database) -> AsyncIterator[BacktestRequestRepository]:
     repo = BacktestRequestRepository(database)
+    # The partial unique index on (sub_id, status=pending) is the DB-level
+    # dedup guarantee the enqueue tests below exercise.
+    await repo.ensure_indexes()
     try:
         yield repo
     finally:
@@ -118,7 +125,7 @@ async def test_enqueue_then_claim_is_atomic(request_repo: BacktestRequestReposit
     req = _request("single", config={"strategy_code": _STRATEGY})
     await request_repo.enqueue(req)
 
-    stored = await request_repo.get(req.id)
+    stored = await request_repo.get(str(req.id))
     assert stored is not None
     assert stored.status == "pending"
 
@@ -144,13 +151,86 @@ async def test_claim_orders_by_requested_at(request_repo: BacktestRequestReposit
 
 
 @pytest.mark.asyncio
-async def test_reenqueue_is_idempotent(request_repo: BacktestRequestRepository) -> None:
-    det_id = f"bt:{_STRATEGY}:sub1"
-    await request_repo.enqueue(_request("subscription", id=det_id, sub_id="sub1"))
-    await request_repo.enqueue(_request("subscription", id=det_id, sub_id="sub1"))
+async def test_subscription_request_id_is_uuid(
+    request_repo: BacktestRequestRepository,
+) -> None:
+    req = _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    returned_id = await request_repo.enqueue(req)
+
+    doc = await request_repo._collection().find_one({"sub_id": "sub1"})
+    assert doc is not None
+    assert doc["_id"] == returned_id
+    assert UUID(doc["_id"]).version == 7
+    assert not doc["_id"].startswith("bt:")
+
+
+@pytest.mark.asyncio
+async def test_subscription_reenqueue_collapses_to_one_pending(
+    request_repo: BacktestRequestRepository,
+) -> None:
+    """Re-enqueue while a pending doc exists resets it in place — one pending
+    per subscription, same idempotency the old deterministic-id upsert gave."""
+    first_id = await request_repo.enqueue(
+        _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    )
+    second_id = await request_repo.enqueue(
+        _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    )
+
+    assert second_id == first_id  # collapsed onto the existing pending doc
+    coll = request_repo._collection()
+    assert await coll.count_documents({"sub_id": "sub1", "status": "pending"}) == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_enqueue_single_pending_no_exception(
+    request_repo: BacktestRequestRepository,
+) -> None:
+    """Two racing enqueues for the same sub: the partial unique index makes
+    one upsert lose; the repo absorbs the DuplicateKeyError — callers always
+    get an id, and exactly one pending doc exists."""
+    reqs = [_request("subscription", sub_id="sub1", strategy_code=_STRATEGY) for _ in range(2)]
+    ids = await asyncio.gather(*(request_repo.enqueue(r) for r in reqs))
 
     coll = request_repo._collection()
-    assert await coll.count_documents({"_id": det_id}) == 1
+    docs = await coll.find({"sub_id": "sub1", "status": "pending"}).to_list(length=10)
+    assert len(docs) == 1
+    assert set(ids) == {docs[0]["_id"]}
+
+
+@pytest.mark.asyncio
+async def test_enqueue_cleans_terminal_docs_for_sub(
+    request_repo: BacktestRequestRepository,
+) -> None:
+    """A fresh enqueue drops the sub's done/failed history — storage stays
+    bounded at one generation of terminal docs per subscription."""
+    first_id = await request_repo.enqueue(
+        _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    )
+    await request_repo.claim_next()
+    await request_repo.mark_done(first_id)
+
+    second_id = await request_repo.enqueue(
+        _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    )
+
+    coll = request_repo._collection()
+    docs = await coll.find({"sub_id": "sub1"}).to_list(length=10)
+    assert len(docs) == 1
+    assert docs[0]["_id"] == second_id
+    assert docs[0]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_single_kind_requests_never_deduped(
+    request_repo: BacktestRequestRepository,
+) -> None:
+    """Ad-hoc single runs are independent work items — two enqueues, two docs."""
+    await request_repo.enqueue(_request("single", config={"strategy_code": _STRATEGY}))
+    await request_repo.enqueue(_request("single", config={"strategy_code": _STRATEGY}))
+
+    coll = request_repo._collection()
+    assert await coll.count_documents({"kind": "single", "status": "pending"}) == 2
 
 
 @pytest.mark.asyncio
@@ -159,8 +239,8 @@ async def test_mark_done_and_failed(request_repo: BacktestRequestRepository) -> 
     await request_repo.enqueue(req)
     await request_repo.claim_next()
 
-    await request_repo.mark_done(req.id, result={"run_id": "x", "status": "completed"})
-    done = await request_repo.get(req.id)
+    await request_repo.mark_done(str(req.id), result={"run_id": "x", "status": "completed"})
+    done = await request_repo.get(str(req.id))
     assert done is not None and done.status == "done"
     assert done.result == {"run_id": "x", "status": "completed"}
     assert done.finished_at is not None
@@ -168,8 +248,8 @@ async def test_mark_done_and_failed(request_repo: BacktestRequestRepository) -> 
     other = _request("single")
     await request_repo.enqueue(other)
     await request_repo.claim_next()
-    await request_repo.mark_failed(other.id, "boom")
-    failed = await request_repo.get(other.id)
+    await request_repo.mark_failed(str(other.id), "boom")
+    failed = await request_repo.get(str(other.id))
     assert failed is not None and failed.status == "failed"
     assert failed.error == "boom"
 
@@ -183,13 +263,13 @@ async def test_reclaim_stale_running(request_repo: BacktestRequestRepository) ->
 
     # Backdate started_at past the staleness threshold.
     await request_repo._collection().update_one(
-        {"_id": req.id},
+        {"_id": str(req.id)},
         {"$set": {"started_at": datetime.now(UTC) - timedelta(minutes=30)}},
     )
 
     reclaimed = await request_repo.reclaim_stale_running(threshold_minutes=10)
     assert reclaimed == 1
-    back = await request_repo.get(req.id)
+    back = await request_repo.get(str(req.id))
     assert back is not None and back.status == "pending"
     # A fresh claim picks it up again.
     assert (await request_repo.claim_next()) is not None
@@ -201,6 +281,40 @@ async def test_fresh_running_not_reclaimed(request_repo: BacktestRequestReposito
     await request_repo.enqueue(req)
     await request_repo.claim_next()
     assert await request_repo.reclaim_stale_running(threshold_minutes=10) == 0
+
+
+@pytest.mark.asyncio
+async def test_reclaim_with_newer_pending_marks_stale_failed(
+    request_repo: BacktestRequestRepository,
+) -> None:
+    """Stale running + newer pending for the same sub: flipping the stale doc
+    back to pending would collide in the unique index. The sweep must not
+    raise — the newer request supersedes, the stale doc is marked failed."""
+    stale = _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    await request_repo.enqueue(stale)
+    claimed = await request_repo.claim_next()
+    assert claimed is not None
+    await request_repo._collection().update_one(
+        {"_id": str(claimed.id)},
+        {"$set": {"started_at": datetime.now(UTC) - timedelta(minutes=30)}},
+    )
+
+    # Enqueue while the stale one is "running" → a second, pending doc.
+    pending_id = await request_repo.enqueue(
+        _request("subscription", sub_id="sub1", strategy_code=_STRATEGY)
+    )
+    assert pending_id != str(claimed.id)
+
+    swept = await request_repo.reclaim_stale_running(threshold_minutes=10)
+    assert swept == 1
+
+    coll = request_repo._collection()
+    stale_doc = await coll.find_one({"_id": str(claimed.id)})
+    assert stale_doc is not None and stale_doc["status"] == "failed"
+    assert await coll.count_documents({"sub_id": "sub1", "status": "pending"}) == 1
+    # The queue keeps draining — the pending doc is claimable.
+    next_claim = await request_repo.claim_next()
+    assert next_claim is not None and str(next_claim.id) == pending_id
 
 
 # ---------------------------------------------------------------------------
@@ -312,14 +426,14 @@ async def test_worker_dispatches_subscription(database: Database, engine_setup) 
     )
     await sub_repo.add(sub)
 
-    req = _request("subscription", id=f"bt:{sub.id}", sub_id=sub.id, strategy_code=_STRATEGY)
+    req = _request("subscription", sub_id=sub.id, strategy_code=_STRATEGY)
     await request_repo.enqueue(req)
 
     worker = BacktestRequestWorker(request_repo, deps)
     processed = await worker._drain_once()
     assert processed is True
 
-    done = await request_repo.get(req.id)
+    done = await request_repo.get(str(req.id))
     assert done is not None and done.status == "done"
 
     status = await bt_repo.get_subscription_status(sub.id)
@@ -354,7 +468,7 @@ async def test_worker_dispatches_single_with_embedded_result(
     worker = BacktestRequestWorker(request_repo, deps)
     assert await worker._drain_once() is True
 
-    done = await request_repo.get(req.id)
+    done = await request_repo.get(str(req.id))
     assert done is not None and done.status == "done"
     assert done.result is not None
     # Embedded FE response shape the chart renders unchanged.
@@ -375,7 +489,7 @@ async def test_worker_failure_isolation(database: Database, engine_setup) -> Non
     bad = _request("single", strategy_code="does-not-exist", config={"strategy_code": "nope"})
     await request_repo.enqueue(bad)
     assert await worker_drain(request_repo, deps) is True
-    bad_doc = await request_repo.get(bad.id)
+    bad_doc = await request_repo.get(str(bad.id))
     assert bad_doc is not None and bad_doc.status == "failed"
 
     # Good: a valid subscription request still processes next.
@@ -387,10 +501,10 @@ async def test_worker_failure_isolation(database: Database, engine_setup) -> Non
         created_at=datetime.now(UTC),
     )
     await sub_repo.add(sub)
-    good = _request("subscription", id=f"bt:{sub.id}", sub_id=sub.id, strategy_code=_STRATEGY)
+    good = _request("subscription", sub_id=sub.id, strategy_code=_STRATEGY)
     await request_repo.enqueue(good)
     assert await worker_drain(request_repo, deps) is True
-    good_doc = await request_repo.get(good.id)
+    good_doc = await request_repo.get(str(good.id))
     assert good_doc is not None and good_doc.status == "done"
 
 

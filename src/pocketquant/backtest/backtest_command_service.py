@@ -17,7 +17,7 @@ from pocketquant.backtest.optimization.grid_optimization_app_service import (
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import OptimizationResult
 from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
@@ -121,15 +121,15 @@ class BacktestCommandService:
             "parameters": cmd.parameters or {},
         }
         bt_request = BacktestRequest(
-            id=generate_id_str(),
+            id=generate_id(),
             kind="single",
             status="pending",
             requested_at=datetime.now(UTC),
             strategy_code=cmd.strategy_id,
             config=config,
         )
-        await self._request_repo.enqueue(bt_request)
-        return {"request_id": bt_request.id}
+        request_id = await self._request_repo.enqueue(bt_request)
+        return {"request_id": request_id}
 
     async def optimize(self, cmd: RunOptimizationCommand) -> OptimizationResult:
         """Run grid optimization synchronously, persist result, and return it."""
@@ -158,10 +158,11 @@ class BacktestCommandService:
     async def run_all(self, cmd: RunAllBacktestsCommand) -> dict[str, list[str]]:
         """Enqueue one backtest request per subscription for a strategy template.
 
-        Uses deterministic id per subscription (``bt:{sub_id}``) so concurrent
-        fan-outs collapse to a single pending request rather than duplicating
-        compute — preserves the dedup invariant the old APScheduler
-        ``replace_existing`` provided.
+        Dedup lives in the repo's (sub_id, status=pending) upsert backed by a
+        partial unique index, so concurrent fan-outs collapse to a single
+        pending request per subscription — preserves the invariant the old
+        APScheduler ``replace_existing`` provided. The persisted id (which may
+        belong to an already-pending doc) is what FE receives.
         """
         subs = await self._sub_repo.list_by_strategy_code(cmd.strategy_id)
         if not subs:
@@ -174,14 +175,14 @@ class BacktestCommandService:
         job_ids: list[str] = []
         for sub in subs:
             bt_request = BacktestRequest(
-                id=f"bt:{sub.id}",
+                id=generate_id(),
                 kind="subscription",
                 status="pending",
                 requested_at=datetime.now(UTC),
                 sub_id=sub.id,
                 strategy_code=sub.strategy_code,
             )
-            await self._request_repo.enqueue(bt_request)
-            job_ids.append(bt_request.id)
+            persisted_id = await self._request_repo.enqueue(bt_request)
+            job_ids.append(persisted_id)
 
         return {"job_ids": job_ids}

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
@@ -113,7 +114,7 @@ def _sub(interval: Interval = Interval.HOUR_1) -> Subscription:
 
 def _queued(sub_id: str) -> BacktestRequest:
     return BacktestRequest(
-        id=f"bt:{sub_id}",
+        id=generate_id(),
         kind="subscription",
         status="pending",
         requested_at=datetime.now(UTC),
@@ -145,7 +146,7 @@ async def test_remove_symbol_pure_db_delete(repos):
 
     assert await sub_repo.get(sub.id) is None
     assert await bt_repo.get_subscription_status(sub.id) is None
-    assert await request_repo.get(f"bt:{sub.id}") is None
+    assert await request_repo._collection().count_documents({"sub_id": sub.id}) == 0
 
 
 @pytest.mark.asyncio
@@ -166,4 +167,4 @@ async def test_delete_strategy_cascades_all_subs(repos):
     assert await sub_repo.list_by_strategy_code(_STRATEGY) == []
     for s in (sub1, sub2):
         assert await bt_repo.get_subscription_status(s.id) is None
-        assert await request_repo.get(f"bt:{s.id}") is None
+        assert await request_repo._collection().count_documents({"sub_id": s.id}) == 0
