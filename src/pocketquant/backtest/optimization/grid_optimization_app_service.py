@@ -135,7 +135,7 @@ class GridOptimizationAppService:
             OptimizationResultEntry(
                 parameters=params,
                 metrics=result.metrics,
-                backtest_id=result.id,
+                backtest_id=str(result.id),
                 rank=rank + 1,
             )
             for rank, (params, result) in enumerate(ranked)

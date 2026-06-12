@@ -1,8 +1,9 @@
 """Backtest VO PK representation lock — UUID in RAM, str in Mongo.
 
-Covers Fill.fill_id, Order.order_id, Trade.trade_id, OptimizationResult.id.
-FK reference fields (order_id on Fill, run_id, entry/exit_order_id,
-resulting_trade_id, backtest_id) stay str — only document PKs flip.
+Covers Fill.fill_id, Order.order_id, Trade.trade_id, OptimizationResult.id,
+BacktestResult.id. FK reference fields (order_id on Fill, run_id,
+entry/exit_order_id, resulting_trade_id, backtest_id) stay str — only
+document PKs flip.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from uuid import UUID, uuid7
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
+    BacktestResult,
     Fill,
     OptimizationResult,
     Order,
@@ -193,3 +195,39 @@ def test_optimization_from_mongo_reads_legacy_str_uuid_doc() -> None:
     doc = _optimization(generate_id()).to_mongo()
     doc["_id"] = legacy
     assert OptimizationResult.from_mongo(doc).id == UUID(legacy)
+
+
+# --- BacktestResult.id ------------------------------------------------------
+
+
+def _backtest_result(run_id: UUID) -> BacktestResult:
+    return BacktestResult(
+        id=run_id,
+        strategy_code="s1",
+        config_snapshot={},
+        metrics=BacktestMetrics.empty(),
+        equity_curve=[],
+        started_at=NOW,
+        completed_at=NOW,
+        status="completed",
+    )
+
+
+def test_backtest_result_to_mongo_writes_str_id() -> None:
+    doc = _backtest_result(generate_id()).to_mongo()
+    assert isinstance(doc["_id"], str)
+    UUID(doc["_id"])
+
+
+def test_backtest_result_roundtrip_preserves_uuid_id() -> None:
+    r = _backtest_result(generate_id())
+    restored = BacktestResult.from_mongo(r.to_mongo())
+    assert restored.id == r.id
+    assert isinstance(restored.id, UUID)
+
+
+def test_backtest_result_from_mongo_reads_legacy_str_uuid_doc() -> None:
+    legacy = str(uuid7())
+    doc = _backtest_result(generate_id()).to_mongo()
+    doc["_id"] = legacy
+    assert BacktestResult.from_mongo(doc).id == UUID(legacy)

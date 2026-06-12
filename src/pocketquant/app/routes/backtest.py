@@ -111,7 +111,7 @@ async def get_backtest_equity(
     """
     result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
     return {
-        "run_id": result.id,
+        "run_id": str(result.id),
         "equity_curve": [
             {"timestamp": p.timestamp.isoformat(), "equity": p.equity, "drawdown": p.drawdown}
             for p in result.equity_curve
@@ -139,7 +139,7 @@ async def list_backtests(
     )
     return [
         {
-            "id": r.id,
+            "id": str(r.id),
             "strategy_code": r.strategy_code,
             "status": r.status,
             "metrics": r.metrics.to_dict(),

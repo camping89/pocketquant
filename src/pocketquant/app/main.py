@@ -13,6 +13,7 @@ from pocketquant.app.main_extensions import (
     ensure_all_indexes,
     handle_startup_failure,
     migrate_backtest_request_ids,
+    migrate_backtest_run_cache_ids,
     migrate_job_history_uuid_ids,
     migrate_strategy_id_fields,
     migrate_subscription_desired_state,
@@ -80,6 +81,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # partial unique index FIRST so the dedup guarantee never lapses, and
         # runs BEFORE the backtest worker starts draining the queue.
         await migrate_backtest_request_ids(container)
+        # Re-key per-subscription cache docs in backtest_runs (_id == sub_id) to
+        # uuid7. Ensures the subscription_id unique index FIRST so the one-doc-
+        # per-sub guarantee never lapses, and runs BEFORE the worker writes caches.
+        await migrate_backtest_run_cache_ids(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)

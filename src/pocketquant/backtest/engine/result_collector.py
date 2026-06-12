@@ -363,7 +363,8 @@ class BacktestResultCollector:
         }
 
         run = BacktestResult(
-            id=run_id,
+            # run_id circulates as str (Order/Trade FK fields); the entity PK is UUID.
+            id=UUID(run_id),
             strategy_code=self._config.strategy_code,
             config_snapshot=config_snapshot,
             metrics=metrics,

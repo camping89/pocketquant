@@ -1,12 +1,39 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from pymongo.errors import DuplicateKeyError
+
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_RUNS
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.infra.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)
+
+
+async def ensure_subscription_cache_unique_index(collection: Any) -> None:
+    """Create the cache-slot index — single source for its spec.
+
+    DB-level guarantee: at most one cache doc per subscription, keyed by the
+    ``subscription_id`` FIELD. Sparse keeps single-run docs (no field) out of
+    the index. Called from both ensure_indexes and the boot migration so the
+    spec can never drift between the two.
+    """
+    spec = {
+        "unique": True,
+        "sparse": True,
+        "name": "ix_backtests_subscription_id_unique",
+    }
+    try:
+        await collection.create_index([("subscription_id", 1)], **spec)
+    except Exception as exc:
+        # A same-name index with a different spec exists from an old deploy —
+        # replace it. IndexOptionsConflict (85) / IndexKeySpecsConflict (86).
+        if getattr(exc, "code", None) not in (85, 86):
+            raise
+        await collection.drop_index("ix_backtests_subscription_id_unique")
+        await collection.create_index([("subscription_id", 1)], **spec)
 
 
 class BacktestRepository(BaseRepository):
@@ -16,9 +43,11 @@ class BacktestRepository(BaseRepository):
         """Save or update a backtest result. Returns the result ID."""
         collection = self._collection()
         doc = result.to_mongo()
-        await collection.replace_one({"_id": result.id}, doc, upsert=True)
-        logger.debug("backtest_result_saved", run_id=result.id, strategy_code=result.strategy_code)
-        return result.id
+        await collection.replace_one({"_id": str(result.id)}, doc, upsert=True)
+        logger.debug(
+            "backtest_result_saved", run_id=str(result.id), strategy_code=result.strategy_code
+        )
+        return str(result.id)
 
     async def get(self, run_id: str) -> BacktestResult | None:
         collection = self._collection()
@@ -72,10 +101,32 @@ class BacktestRepository(BaseRepository):
     async def find_by_subscription(self, sub_id: str) -> BacktestResult | None:
         """Return the cached backtest result for a subscription, or None."""
         collection = self._collection()
-        doc = await collection.find_one({"_id": sub_id})
+        doc = await collection.find_one({"subscription_id": sub_id})
         if not doc:
             return None
         return BacktestResult.from_mongo(doc)
+
+    async def _upsert_cache_slot(self, sub_id: str, set_fields: dict[str, Any]) -> None:
+        """Upsert the one cache doc for a subscription, keyed by the field.
+
+        The slot ``_id`` is a uuid7 allocated on first insert and stable across
+        overwrites. Two writers racing through the upsert window can both take
+        the insert branch; the unique index rejects the loser, whose retry then
+        matches the winner's doc — either way exactly one slot survives.
+        """
+        collection = self._collection()
+        for attempt in range(3):
+            try:
+                await collection.update_one(
+                    {"subscription_id": sub_id},
+                    {"$set": set_fields, "$setOnInsert": {"_id": generate_id_str()}},
+                    upsert=True,
+                )
+                return
+            except DuplicateKeyError:
+                if attempt == 2:
+                    raise
+        raise RuntimeError("unreachable: upsert retry loop exited without return/raise")
 
     async def upsert_status(
         self,
@@ -88,43 +139,35 @@ class BacktestRepository(BaseRepository):
         """Upsert a lightweight status document for a subscription.
 
         Used by the worker to mark a run as 'running' or 'failed' without
-        persisting a full BacktestResult. The _id equals sub_id so there is
-        exactly one doc per subscription in this collection.
+        persisting a full BacktestResult. The unique index on subscription_id
+        guarantees exactly one doc per subscription in this collection.
         """
-        collection = self._collection()
-        now = datetime.now(UTC)
-        await collection.update_one(
-            {"_id": sub_id},
+        await self._upsert_cache_slot(
+            sub_id,
             {
-                "$set": {
-                    "subscription_id": sub_id,
-                    "strategy_code": strategy_code,
-                    "status": status,
-                    "last_run_at": now,
-                    "error_msg": error_msg,
-                },
-                "$setOnInsert": {"_id": sub_id},
+                "subscription_id": sub_id,
+                "strategy_code": strategy_code,
+                "status": status,
+                "last_run_at": datetime.now(UTC),
+                "error_msg": error_msg,
             },
-            upsert=True,
         )
         logger.debug("backtest_status_upserted", sub_id=sub_id, status=status)
 
     async def save_for_subscription(self, sub_id: str, result: BacktestResult) -> None:
-        """Upsert a full BacktestResult keyed by subscription ID.
+        """Upsert a full BacktestResult into the subscription's cache slot.
 
-        Overwrites any previous result for this subscription. The document _id
-        equals sub_id so cache lookups are O(1) primary-key reads.
+        Overwrites any previous result for this subscription; ``result.id``
+        keeps the engine's run uuid (the doc carries both the run identity and
+        the ``subscription_id`` slot key).
 
         Status mapping (subscription vocabulary):
           result.status == 'completed' → stored as 'completed'
           result.status == 'failed'    → stored as 'failed', error_msg copied
           anything else                → stored as 'completed' (safe fallback)
         """
-        collection = self._collection()
-        # BacktestResult is a mutable dataclass; override id so to_mongo() _id is consistent
-        result.id = sub_id
         doc = result.to_mongo()
-        doc["_id"] = sub_id  # ensure _id matches regardless of result.id
+        doc.pop("_id")  # slot _id is allocated once by the upsert, never overwritten
         doc["subscription_id"] = sub_id
         doc["last_run_at"] = datetime.now(UTC)
 
@@ -137,13 +180,13 @@ class BacktestRepository(BaseRepository):
             doc["status"] = "completed"
             doc["error_msg"] = None
 
-        await collection.replace_one({"_id": sub_id}, doc, upsert=True)
+        await self._upsert_cache_slot(sub_id, doc)
         logger.debug("backtest_saved_for_subscription", sub_id=sub_id, status=doc["status"])
 
     async def delete_by_subscription(self, sub_id: str) -> int:
         """Delete the cached result for a single subscription. Returns deleted_count."""
         collection = self._collection()
-        result = await collection.delete_one({"_id": sub_id})
+        result = await collection.delete_one({"subscription_id": sub_id})
         logger.debug("backtest_deleted_by_subscription", sub_id=sub_id, count=result.deleted_count)
         return result.deleted_count
 
@@ -166,7 +209,7 @@ class BacktestRepository(BaseRepository):
         """
         collection = self._collection()
         doc = await collection.find_one(
-            {"_id": sub_id},
+            {"subscription_id": sub_id},
             projection={"status": 1, "last_run_at": 1, "error_msg": 1},
         )
         if doc is None:
@@ -186,18 +229,17 @@ class BacktestRepository(BaseRepository):
             return {}
         collection = self._collection()
         cursor = collection.find(
-            {"_id": {"$in": sub_ids}, "subscription_id": {"$exists": True}},
+            {"subscription_id": {"$in": sub_ids}},
             projection={
                 "subscription_id": 1,
                 "status": 1,
                 "last_run_at": 1,
                 "error_msg": 1,
-                "_id": 1,
             },
         )
         out: dict[str, dict] = {}
         async for doc in cursor:
-            out[doc["_id"]] = {
+            out[doc["subscription_id"]] = {
                 "status": doc.get("status"),
                 "last_run_at": doc["last_run_at"].isoformat() if doc.get("last_run_at") else None,
                 "error_msg": doc.get("error_msg"),
@@ -212,7 +254,7 @@ class BacktestRepository(BaseRepository):
         Replaces '_id' key with 'id' for clean client responses.
         """
         collection = self._collection()
-        doc = await collection.find_one({"_id": sub_id})
+        doc = await collection.find_one({"subscription_id": sub_id})
         if doc is None:
             return None
         doc["id"] = doc.pop("_id")
@@ -266,11 +308,5 @@ class BacktestRepository(BaseRepository):
             [("strategy_code", 1), ("metrics.win_rate", -1)],
             name="ix_backtests_strategy_code_winrate",
         )
-        # Sparse unique index so legacy docs without subscription_id are unaffected
-        await collection.create_index(
-            "subscription_id",
-            name="ix_backtests_subscription_id_unique",
-            unique=True,
-            sparse=True,
-        )
+        await ensure_subscription_cache_unique_index(collection)
         logger.info("backtest_indexes_created")
