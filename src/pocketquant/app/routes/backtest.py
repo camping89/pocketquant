@@ -75,7 +75,7 @@ async def run_optimization(
     """
     result = await cmd_svc.optimize(cmd)
     return {
-        "id": result.id,
+        "id": str(result.id),
         "strategy_code": result.strategy_code,
         "status": result.status,
         "total_combinations": result.total_combinations,

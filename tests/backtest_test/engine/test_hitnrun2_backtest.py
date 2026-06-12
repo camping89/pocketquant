@@ -46,7 +46,7 @@ class _InMemoryOrderRepo:
         self._items: dict[str, OrderAggregate] = {}
 
     async def save(self, order: OrderAggregate) -> None:
-        self._items[order.id] = order
+        self._items[str(order.id)] = order
 
     async def get(self, order_id: str) -> OrderAggregate | None:
         return self._items.get(order_id)
@@ -65,7 +65,7 @@ class _InMemoryPositionRepo:
         self._items: dict[str, PositionAggregate] = {}
 
     async def save(self, position: PositionAggregate) -> None:
-        self._items[position.id] = position
+        self._items[str(position.id)] = position
 
     async def get(self, position_id: str) -> PositionAggregate | None:
         return self._items.get(position_id)

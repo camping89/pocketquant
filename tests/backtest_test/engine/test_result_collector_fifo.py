@@ -11,8 +11,10 @@ instead of a unified ``positions`` list of ``PositionRecord``.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from uuid import NAMESPACE_OID, uuid5
 
 import pytest
+
 from pocketquant.backtest.engine.result_collector import BacktestResultCollector
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
@@ -44,6 +46,13 @@ def reset_sim_time():
     clear_simulation_time()
 
 
+
+
+def _oid(name: str) -> str:
+    """Deterministic uuid string for a short test order handle (collector parses UUIDs)."""
+    return str(uuid5(NAMESPACE_OID, name))
+
+
 def _fill(
     side: OrderSide,
     qty: float,
@@ -53,7 +62,7 @@ def _fill(
     tp: float | None = None,
 ) -> OrderResult:
     return OrderResult(
-        order_id=order_id,
+        order_id=_oid(order_id),
         broker_order_id="b" + order_id,
         status=OrderStatus.FILLED,
         filled_quantity=qty,
@@ -88,11 +97,11 @@ async def test_long_round_trip(collector: BacktestResultCollector) -> None:
     assert collected.run.metrics.total_return == pytest.approx((10009.79 - 10000) / 10000)
     assert collected.run.metrics.total_commission == pytest.approx(0.21)
     # Order link assertions: exit order has resulting_trade_id, entry order does not
-    orders = {o.order_id: o for o in collected.orders}
-    assert orders["o2"].resulting_trade_id == t.trade_id
-    assert orders["o1"].resulting_trade_id is None
-    assert t.entry_order_id == "o1"
-    assert t.exit_order_id == "o2"
+    orders = {str(o.order_id): o for o in collected.orders}
+    assert orders[_oid("o2")].resulting_trade_id == str(t.trade_id)
+    assert orders[_oid("o1")].resulting_trade_id is None
+    assert t.entry_order_id == _oid("o1")
+    assert t.exit_order_id == _oid("o2")
 
 
 @pytest.mark.asyncio
@@ -191,7 +200,7 @@ async def test_open_position_at_end(collector: BacktestResultCollector) -> None:
     assert ol.quantity == 2.0
     assert ol.sl_price == 90
     assert ol.tp_price == 120
-    assert ol.entry_order_id == "o1"
+    assert ol.entry_order_id == _oid("o1")
 
 
 @pytest.mark.asyncio
@@ -201,7 +210,7 @@ async def test_legacy_fill_without_side_long_only_fallback(
     """OrderResult.side=None → fallback to long-only inference (legacy compat)."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     fill_open = OrderResult(
-        order_id="o1",
+        order_id=_oid("o1"),
         broker_order_id="b1",
         status=OrderStatus.FILLED,
         filled_quantity=1.0,
@@ -209,7 +218,7 @@ async def test_legacy_fill_without_side_long_only_fallback(
         side=None,
     )
     fill_close = OrderResult(
-        order_id="o2",
+        order_id=_oid("o2"),
         broker_order_id="b2",
         status=OrderStatus.FILLED,
         filled_quantity=1.0,

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import NAMESPACE_OID, uuid5
 
 import pytest
+
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     EquityPoint,
@@ -18,11 +20,14 @@ from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
+F1 = uuid5(NAMESPACE_OID, "f1")
+O1 = uuid5(NAMESPACE_OID, "o1")
+T1 = uuid5(NAMESPACE_OID, "t1")
 
 
 def test_fill_roundtrip_standalone() -> None:
     f = Fill(
-        fill_id="f1",
+        fill_id=F1,
         order_id="o1",
         symbol="BTC:BIN",
         side=OrderSide.BUY,
@@ -37,7 +42,7 @@ def test_fill_roundtrip_standalone() -> None:
 
 def test_fill_roundtrip_embedded_requires_parent_id() -> None:
     f = Fill(
-        fill_id="f1",
+        fill_id=F1,
         order_id="o1",
         symbol="BTC:BIN",
         side=OrderSide.SELL,
@@ -54,7 +59,7 @@ def test_fill_from_mongo_raises_without_order_id() -> None:
     with pytest.raises(ValueError, match="order_id"):
         Fill.from_mongo(
             {
-                "fill_id": "f1",
+                "fill_id": str(F1),
                 "symbol": "BTC:BIN",
                 "side": "buy",
                 "quantity": 1.0,
@@ -87,8 +92,8 @@ def test_order_event_initial_has_none_from_status() -> None:
 
 def test_order_roundtrip_with_embedded_events_and_fills() -> None:
     fill = Fill(
-        fill_id="f1",
-        order_id="o1",
+        fill_id=F1,
+        order_id=str(O1),
         symbol="BTC:BIN",
         side=OrderSide.BUY,
         quantity=0.01,
@@ -109,7 +114,7 @@ def test_order_roundtrip_with_embedded_events_and_fills() -> None:
         ),
     ]
     o = Order(
-        order_id="o1",
+        order_id=O1,
         run_id="r1",
         strategy_code="s1",
         symbol="BTC:BIN",
@@ -124,14 +129,14 @@ def test_order_roundtrip_with_embedded_events_and_fills() -> None:
         last_updated_at=NOW,
         events=events,
         fills=[fill],
-        resulting_trade_id="t1",
+        resulting_trade_id=str(T1),
     )
     assert Order.from_mongo(o.to_mongo()) == o
 
 
 def test_trade_roundtrip_flat_entry_exit_prefix() -> None:
     t = Trade(
-        trade_id="t1",
+        trade_id=T1,
         run_id="r1",
         strategy_code="s1",
         symbol="BTC:BIN",
@@ -155,7 +160,7 @@ def test_trade_roundtrip_flat_entry_exit_prefix() -> None:
 def test_trade_nullable_order_ids_round_trip() -> None:
     """Migrated trades have None entry/exit_order_id — must round-trip cleanly."""
     t = Trade(
-        trade_id="t1",
+        trade_id=T1,
         run_id="r1",
         strategy_code="s1",
         symbol="BTC:BIN",

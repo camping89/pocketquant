@@ -124,7 +124,7 @@ class OKXBroker(IBroker):
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
         if not self._connected or not self._trade_api:
             return OrderResult(
-                order_id=order.id,
+                order_id=str(order.id),
                 broker_order_id="",
                 status=OrderStatus.REJECTED,
                 error_message="Broker not connected",
@@ -143,11 +143,11 @@ class OKXBroker(IBroker):
                 error_msg = response.get("msg", "Unknown error")
                 logger.warning(
                     "okx_order_rejected",
-                    order_id=order.id,
+                    order_id=str(order.id),
                     error=error_msg,
                 )
                 return OrderResult(
-                    order_id=order.id,
+                    order_id=str(order.id),
                     broker_order_id="",
                     status=OrderStatus.REJECTED,
                     error_message=error_msg,
@@ -162,13 +162,13 @@ class OKXBroker(IBroker):
 
             logger.info(
                 "okx_order_submitted",
-                order_id=order.id,
+                order_id=str(order.id),
                 broker_order_id=broker_order_id,
                 status=status.value,
             )
 
             result = OrderResult(
-                order_id=order.id,
+                order_id=str(order.id),
                 broker_order_id=broker_order_id,
                 status=status,
                 submitted_at=datetime.now(UTC),
@@ -180,9 +180,9 @@ class OKXBroker(IBroker):
             return result
 
         except Exception as e:
-            logger.error("okx_order_submit_failed", order_id=order.id, error=str(e))
+            logger.error("okx_order_submit_failed", order_id=str(order.id), error=str(e))
             return OrderResult(
-                order_id=order.id,
+                order_id=str(order.id),
                 broker_order_id="",
                 status=OrderStatus.REJECTED,
                 error_message=str(e),

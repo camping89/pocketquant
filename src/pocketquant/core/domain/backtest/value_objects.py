@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderType
@@ -59,8 +60,8 @@ class Fill:
     so a standalone Fill carries its parent reference.
     """
 
-    fill_id: str
-    order_id: str
+    fill_id: UUID
+    order_id: str  # FK to parent Order — reference value, stays str
     symbol: str
     side: OrderSide
     quantity: float
@@ -72,7 +73,7 @@ class Fill:
     def to_mongo(self, *, embed: bool = False) -> dict[str, Any]:
         """Serialize. When embedded in an Order doc, drop redundant order_id."""
         doc: dict[str, Any] = {
-            "fill_id": self.fill_id,
+            "fill_id": str(self.fill_id),
             "symbol": self.symbol,
             "side": self.side.value,
             "quantity": self.quantity,
@@ -94,7 +95,7 @@ class Fill:
                 "Fill must have order_id (present in doc or passed as kwarg for embedded fills)"
             )
         return cls(
-            fill_id=data["fill_id"],
+            fill_id=UUID(data["fill_id"]),
             order_id=resolved_order_id,
             symbol=data["symbol"],
             side=OrderSide(data["side"]),
@@ -114,7 +115,7 @@ class Order:
     Side / type / status typed as core enums (not bare strings) for safety.
     """
 
-    order_id: str
+    order_id: UUID
     run_id: str
     strategy_code: str
     symbol: str
@@ -133,7 +134,7 @@ class Order:
 
     def to_mongo(self) -> dict[str, Any]:
         return {
-            "_id": self.order_id,
+            "_id": str(self.order_id),
             "run_id": self.run_id,
             "strategy_code": self.strategy_code,
             "symbol": self.symbol,
@@ -153,9 +154,10 @@ class Order:
 
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> Order:
-        order_id = data["_id"]
+        # Keep the raw str for embedded fills — their order_id FK stays str.
+        raw_order_id = data["_id"]
         return cls(
-            order_id=order_id,
+            order_id=UUID(raw_order_id),
             run_id=data["run_id"],
             strategy_code=data["strategy_code"],
             symbol=data["symbol"],
@@ -169,7 +171,7 @@ class Order:
             submitted_at=data["submitted_at"],
             last_updated_at=data["last_updated_at"],
             events=[OrderEvent.from_mongo(e) for e in data.get("events", [])],
-            fills=[Fill.from_mongo(f, order_id=order_id) for f in data.get("fills", [])],
+            fills=[Fill.from_mongo(f, order_id=raw_order_id) for f in data.get("fills", [])],
             resulting_trade_id=data.get("resulting_trade_id"),
         )
 
@@ -236,7 +238,7 @@ class Trade:
     where the original order ID was not preserved in the old PositionRecord shape.
     """
 
-    trade_id: str
+    trade_id: UUID
     run_id: str
     strategy_code: str
     symbol: str
@@ -256,7 +258,7 @@ class Trade:
 
     def to_mongo(self) -> dict[str, Any]:
         return {
-            "_id": self.trade_id,
+            "_id": str(self.trade_id),
             "run_id": self.run_id,
             "strategy_code": self.strategy_code,
             "symbol": self.symbol,
@@ -278,7 +280,7 @@ class Trade:
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> Trade:
         return cls(
-            trade_id=data["_id"],
+            trade_id=UUID(data["_id"]),
             run_id=data["run_id"],
             strategy_code=data["strategy_code"],
             symbol=data["symbol"],

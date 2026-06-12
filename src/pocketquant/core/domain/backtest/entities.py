@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pocketquant.core.domain.backtest.value_objects import (
     BacktestMetrics,
@@ -75,7 +76,7 @@ class BacktestResult:
 
 @dataclass
 class OptimizationResult:
-    id: str
+    id: UUID
     strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized OptimizationConfig
     target_metric: str
@@ -96,7 +97,7 @@ class OptimizationResult:
 
     def to_mongo(self) -> dict[str, Any]:
         return {
-            "_id": self.id,
+            "_id": str(self.id),
             "strategy_code": self.strategy_code,
             "config_snapshot": self.config_snapshot,
             "target_metric": self.target_metric,
@@ -115,7 +116,7 @@ class OptimizationResult:
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> OptimizationResult:
         return cls(
-            id=data["_id"],
+            id=UUID(data["_id"]),
             strategy_code=data["strategy_code"],
             config_snapshot=data["config_snapshot"],
             target_metric=data["target_metric"],

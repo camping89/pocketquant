@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
 
@@ -16,6 +17,11 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
 T0 = datetime(2026, 1, 5, 10, 0, 0)
 
 
+def _tid(name: str) -> str:
+    """Deterministic uuid string for a short test trade handle (PKs are UUIDs now)."""
+    return str(uuid5(NAMESPACE_OID, name))
+
+
 def _trade(
     *,
     trade_id: str,
@@ -25,7 +31,7 @@ def _trade(
     strategy_code: str = "s1",
 ) -> Trade:
     return Trade(
-        trade_id=trade_id,
+        trade_id=UUID(_tid(trade_id)),
         run_id=run_id,
         strategy_code=strategy_code,
         symbol="BTC:BIN",
@@ -50,7 +56,7 @@ async def test_save_and_get_roundtrip(database: Database) -> None:
     repo = BacktestTradeRepository(database)
     t = _trade(trade_id="t1", run_id="r1")
     await repo.save_many([t])
-    fetched = await repo.get("t1")
+    fetched = await repo.get(_tid("t1"))
     assert fetched == t
 
 
@@ -62,7 +68,7 @@ async def test_list_by_run_chronological(database: Database) -> None:
     newer.entry_time = T0 + timedelta(hours=2)
     await repo.save_many([newer, older])
     out = await repo.list_by_run("r1")
-    assert [t.trade_id for t in out] == ["t1", "t2"]  # sorted by entry_time asc
+    assert [str(t.trade_id) for t in out] == [_tid("t1"), _tid("t2")]  # sorted by entry_time asc
 
 
 @pytest.mark.asyncio
@@ -76,9 +82,9 @@ async def test_list_top_pnl_desc_by_default(database: Database) -> None:
         ]
     )
     top = await repo.list_top_pnl("s1", top=2)
-    assert [t.trade_id for t in top] == ["t2", "t1"]
+    assert [str(t.trade_id) for t in top] == [_tid("t2"), _tid("t1")]
     bottom = await repo.list_top_pnl("s1", top=2, ascending=True)
-    assert [t.trade_id for t in bottom] == ["t3", "t1"]
+    assert [str(t.trade_id) for t in bottom] == [_tid("t3"), _tid("t1")]
 
 
 @pytest.mark.asyncio
@@ -92,8 +98,8 @@ async def test_delete_by_run_only_matches(database: Database) -> None:
     )
     n = await repo.delete_by_run("r1")
     assert n == 1
-    assert await repo.get("t1") is None
-    assert await repo.get("t2") is not None
+    assert await repo.get(_tid("t1")) is None
+    assert await repo.get(_tid("t2")) is not None
 
 
 @pytest.mark.asyncio

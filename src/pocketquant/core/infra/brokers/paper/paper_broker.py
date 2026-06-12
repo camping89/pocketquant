@@ -167,7 +167,7 @@ class PaperBroker(IBroker):
 
         # Dispatch events + fill notification AFTER lock-protected mutations.
         for from_s, to_s, reason, when in pending_events:
-            await self._emit_event(order.id, from_s, to_s, reason, when=when)
+            await self._emit_event(str(order.id), from_s, to_s, reason, when=when)
         await self._notify_callbacks(result)
         return result
 
@@ -176,13 +176,13 @@ class PaperBroker(IBroker):
     ) -> tuple[OrderResult, list[tuple[OrderStatus | None, OrderStatus, str, datetime]]]:
         """Fill MARKET immediately, or REJECT. Returns (result, additional_events)."""
         async with self._lock:
-            self._orders[order.id] = order
+            self._orders[str(order.id)] = order
             try:
                 base_price = order.price if order.price else self._get_market_price(order)
             except ValueError as e:
                 return (
                     OrderResult(
-                        order_id=order.id,
+                        order_id=str(order.id),
                         broker_order_id=broker_order_id,
                         status=OrderStatus.REJECTED,
                         error_message=str(e),
@@ -196,7 +196,7 @@ class PaperBroker(IBroker):
             if not self._can_afford(order, fill_price):
                 return (
                     OrderResult(
-                        order_id=order.id,
+                        order_id=str(order.id),
                         broker_order_id=broker_order_id,
                         status=OrderStatus.REJECTED,
                         error_message="Insufficient balance",
@@ -215,7 +215,7 @@ class PaperBroker(IBroker):
 
             self._execute_fill(order, fill_price)
             result = OrderResult(
-                order_id=order.id,
+                order_id=str(order.id),
                 broker_order_id=broker_order_id,
                 status=OrderStatus.FILLED,
                 filled_quantity=order.quantity,
@@ -232,11 +232,11 @@ class PaperBroker(IBroker):
     ) -> tuple[OrderResult, list[tuple[OrderStatus | None, OrderStatus, str, datetime]]]:
         """Fill LIMIT immediately if price crosses; else queue as pending."""
         async with self._lock:
-            self._orders[order.id] = order
+            self._orders[str(order.id)] = order
             if order.price is None:
                 return (
                     OrderResult(
-                        order_id=order.id,
+                        order_id=str(order.id),
                         broker_order_id=broker_order_id,
                         status=OrderStatus.REJECTED,
                         error_message="LIMIT order requires price",
@@ -259,7 +259,7 @@ class PaperBroker(IBroker):
                 if not self._can_afford(order, fill_price):
                     return (
                         OrderResult(
-                            order_id=order.id,
+                            order_id=str(order.id),
                             broker_order_id=broker_order_id,
                             status=OrderStatus.REJECTED,
                             error_message="Insufficient balance",
@@ -277,7 +277,7 @@ class PaperBroker(IBroker):
                     )
                 self._execute_fill(order, fill_price)
                 result = OrderResult(
-                    order_id=order.id,
+                    order_id=str(order.id),
                     broker_order_id=broker_order_id,
                     status=OrderStatus.FILLED,
                     filled_quantity=order.quantity,
@@ -292,7 +292,7 @@ class PaperBroker(IBroker):
                     [(OrderStatus.SUBMITTED, OrderStatus.FILLED, REASON_LIMIT_IMMEDIATE, now)],
                 )
 
-            self._pending_orders[order.id] = _PendingOrder(
+            self._pending_orders[str(order.id)] = _PendingOrder(
                 order=order,
                 broker_order_id=broker_order_id,
                 submitted_at=now,
@@ -300,7 +300,7 @@ class PaperBroker(IBroker):
             )
             return (
                 OrderResult(
-                    order_id=order.id,
+                    order_id=str(order.id),
                     broker_order_id=broker_order_id,
                     status=OrderStatus.SUBMITTED,
                     filled_quantity=0.0,
@@ -356,14 +356,14 @@ class PaperBroker(IBroker):
 
         for pending in pendings:
             await self._emit_event(
-                pending.order.id,
+                str(pending.order.id),
                 OrderStatus.SUBMITTED,
                 OrderStatus.EXPIRED,
                 REASON_END_OF_RUN,
                 when=when,
             )
             result = OrderResult(
-                order_id=pending.order.id,
+                order_id=str(pending.order.id),
                 broker_order_id=pending.broker_order_id,
                 status=OrderStatus.EXPIRED,
                 filled_quantity=0.0,
@@ -579,7 +579,7 @@ class PaperBroker(IBroker):
                     pending.order.side, pending.limit_price, event.high, event.low
                 ):
                     to_fill.append(pending)
-                    del self._pending_orders[pending.order.id]
+                    del self._pending_orders[str(pending.order.id)]
 
         when = get_current_time()
         for pending in to_fill:
@@ -592,7 +592,7 @@ class PaperBroker(IBroker):
                         REASON_INSUFFICIENT_BALANCE,
                     )
                     result = OrderResult(
-                        order_id=pending.order.id,
+                        order_id=str(pending.order.id),
                         broker_order_id=pending.broker_order_id,
                         status=OrderStatus.REJECTED,
                         error_message="Insufficient balance",
@@ -607,7 +607,7 @@ class PaperBroker(IBroker):
                         REASON_LIMIT_CROSS,
                     )
                     result = OrderResult(
-                        order_id=pending.order.id,
+                        order_id=str(pending.order.id),
                         broker_order_id=pending.broker_order_id,
                         status=OrderStatus.FILLED,
                         filled_quantity=pending.order.quantity,
@@ -617,7 +617,7 @@ class PaperBroker(IBroker):
                         tp_price=pending.order.tp_price,
                         side=pending.order.side,
                     )
-            await self._emit_event(pending.order.id, *event_args, when=when)
+            await self._emit_event(str(pending.order.id), *event_args, when=when)
             await self._notify_callbacks(result)
 
     def _check_sl_tp(
@@ -658,9 +658,9 @@ class PaperBroker(IBroker):
         now = get_current_time()
         async with self._lock:
             self._execute_fill(exit_order, fill_price)
-            self._orders[exit_order.id] = exit_order
+            self._orders[str(exit_order.id)] = exit_order
             result = OrderResult(
-                order_id=exit_order.id,
+                order_id=str(exit_order.id),
                 broker_order_id=broker_order_id,
                 status=OrderStatus.FILLED,
                 filled_quantity=exit_order.quantity,
@@ -670,9 +670,11 @@ class PaperBroker(IBroker):
                 tp_price=None,
                 side=exit_side,
             )
-        await self._emit_event(exit_order.id, None, OrderStatus.SUBMITTED, REASON_SUBMIT, when=now)
         await self._emit_event(
-            exit_order.id, OrderStatus.SUBMITTED, OrderStatus.FILLED, reason, when=now
+            str(exit_order.id), None, OrderStatus.SUBMITTED, REASON_SUBMIT, when=now
+        )
+        await self._emit_event(
+            str(exit_order.id), OrderStatus.SUBMITTED, OrderStatus.FILLED, reason, when=now
         )
         await self._notify_callbacks(result)
 

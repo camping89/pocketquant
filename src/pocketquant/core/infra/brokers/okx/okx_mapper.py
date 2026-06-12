@@ -45,7 +45,7 @@ def map_order_to_okx_params(order: OrderAggregate, inst_suffix: str = "USDT") ->
         "side": map_order_side_to_okx(order.side),
         "ordType": map_order_type_to_okx(order.order_type),
         "sz": str(order.quantity),
-        "clOrdId": order.id,  # Client order ID for tracking
+        "clOrdId": str(order.id),  # Client order ID for tracking
     }
 
     if order.order_type == OrderType.LIMIT and order.price:

@@ -28,7 +28,9 @@ class BacktestOrderRepository(BaseRepository):
         # bulk_write via individual replace_one upserts to keep idempotency
         # without surfacing bson BulkWriteError on duplicate _id replays.
         for order in orders:
-            await collection.replace_one({"_id": order.order_id}, order.to_mongo(), upsert=True)
+            await collection.replace_one(
+                {"_id": str(order.order_id)}, order.to_mongo(), upsert=True
+            )
         logger.debug("backtest_orders_saved", count=len(orders))
 
     async def get(self, order_id: str) -> Order | None:

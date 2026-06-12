@@ -16,13 +16,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pocketquant.backtest.engine.collected_results import CollectedResults
 from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
 from pocketquant.backtest.engine.metrics_builder import build_metrics
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import get_current_time
-from pocketquant.core.common.uuid import generate_id_str
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
@@ -163,7 +164,7 @@ class BacktestResultCollector:
             existing.last_updated_at = timestamp
             return existing
         order = Order(
-            order_id=result.order_id,
+            order_id=UUID(result.order_id),
             run_id=self._run_id,
             strategy_code=self._config.strategy_code,
             symbol=self._config.symbol,
@@ -199,7 +200,7 @@ class BacktestResultCollector:
     def _create_stub_order(self, order_id: str, event: OrderEvent) -> Order:
         """Create a minimal Order from an early-arriving event (no fill yet)."""
         return Order(
-            order_id=order_id,
+            order_id=UUID(order_id),
             run_id=self._run_id,
             strategy_code=self._config.strategy_code,
             symbol=self._config.symbol,
@@ -226,8 +227,8 @@ class BacktestResultCollector:
         side = order.side if isinstance(order.side, OrderSide) else OrderSide(order.side)
         order.fills.append(
             Fill(
-                fill_id=generate_id_str(),
-                order_id=order.order_id,
+                fill_id=generate_id(),
+                order_id=str(order.order_id),
                 symbol=order.symbol,
                 side=side,
                 quantity=fill_qty,
@@ -252,7 +253,7 @@ class BacktestResultCollector:
             commission = consumed.entry_commission_portion + consumed.exit_commission_portion
             duration = (exit_time - consumed.lot.entry_time).total_seconds()
             trade = Trade(
-                trade_id=generate_id_str(),
+                trade_id=generate_id(),
                 run_id=self._run_id,
                 strategy_code=self._config.strategy_code,
                 symbol=self._config.symbol,
@@ -275,7 +276,7 @@ class BacktestResultCollector:
             # Back-link the exit order to its resulting trade.
             exit_order = self._orders_by_id.get(exit_order_id)
             if exit_order is not None and exit_order.resulting_trade_id is None:
-                exit_order.resulting_trade_id = trade.trade_id
+                exit_order.resulting_trade_id = str(trade.trade_id)
 
     def _record_equity_point(self, timestamp: datetime) -> None:
         if self._current_equity > self._peak_equity:

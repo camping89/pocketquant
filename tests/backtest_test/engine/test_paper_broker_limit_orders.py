@@ -47,12 +47,12 @@ async def test_unreachable_limit_remains_submitted_then_expires_at_end_of_run(
     )
     r = await broker.submit_order(o)
     assert r.status == OrderStatus.SUBMITTED
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert log[-1].to_status == OrderStatus.SUBMITTED  # only initial event so far
 
     n = await broker.expire_pending_orders()
     assert n == 1
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert log[-1].to_status == OrderStatus.EXPIRED
     assert log[-1].reason == "end_of_run"
 
@@ -71,7 +71,7 @@ async def test_reachable_limit_fills_immediately(setup: tuple[PaperBroker, Event
     )
     r = await broker.submit_order(o)
     assert r.status == OrderStatus.FILLED
-    assert broker.get_order_events(o.id)[-1].reason == "limit_immediate"
+    assert broker.get_order_events(str(o.id))[-1].reason == "limit_immediate"
 
 
 @pytest.mark.asyncio
@@ -101,7 +101,7 @@ async def test_pending_limit_fills_on_later_bar_with_limit_cross_reason(
         volume=1.0,
     )
     await bus.publish(bar)
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert log[-1].to_status == OrderStatus.FILLED
     assert log[-1].reason == "limit_cross"
 
@@ -120,7 +120,7 @@ async def test_cancel_pending_limit(setup: tuple[PaperBroker, EventBus]) -> None
     r = await broker.submit_order(o)
     ok = await broker.cancel_order(r.broker_order_id)
     assert ok is True
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert log[-1].to_status == OrderStatus.CANCELLED
     assert log[-1].reason == "user_cancel"
 
@@ -158,7 +158,7 @@ async def test_pending_limit_doesnt_cross_in_neutral_bar(
         volume=1.0,
     )
     await bus.publish(bar)
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     # Still SUBMITTED (no terminal event yet)
     assert log[-1].to_status == OrderStatus.SUBMITTED
 
@@ -189,6 +189,6 @@ async def test_sell_limit_fills_on_high_crossing(setup: tuple[PaperBroker, Event
         volume=1.0,
     )
     await bus.publish(bar)
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert log[-1].to_status == OrderStatus.FILLED
     assert log[-1].reason == "limit_cross"

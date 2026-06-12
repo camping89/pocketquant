@@ -12,7 +12,7 @@ class OrderRepository(BaseRepository):
 
     async def save(self, order: OrderAggregate) -> None:
         collection = self._collection()
-        await collection.replace_one({"_id": order.id}, order.to_mongo(), upsert=True)
+        await collection.replace_one({"_id": str(order.id)}, order.to_mongo(), upsert=True)
 
     async def get(self, order_id: str) -> OrderAggregate | None:
         collection = self._collection()

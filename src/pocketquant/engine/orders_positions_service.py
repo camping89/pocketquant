@@ -61,7 +61,7 @@ class OrderPositionQueryService:
         if not order:
             raise NotFoundError(f"Order not found: {query.order_id}")
         return {
-            "id": order.id,
+            "id": str(order.id),
             "subscription_id": order.subscription_id,
             "symbol": order.symbol,
             "side": order.side.value,
@@ -78,7 +78,7 @@ class OrderPositionQueryService:
         filled = self._orders.get_filled_orders()
         return [
             {
-                "id": o.id,
+                "id": str(o.id),
                 "subscription_id": o.subscription_id,
                 "symbol": o.symbol,
                 "side": o.side.value,

@@ -45,7 +45,7 @@ async def test_market_fill_emits_submitted_then_filled(broker: PaperBroker) -> N
         quantity=0.01,
     )
     await broker.submit_order(o)
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert [e.to_status for e in log] == [OrderStatus.SUBMITTED, OrderStatus.FILLED]
     assert [e.reason for e in log] == ["submit", "market_fill"]
     # Callback received both
@@ -65,7 +65,7 @@ async def test_reject_insufficient_balance_emits_submitted_then_rejected(
     )
     result = await broker.submit_order(huge)
     assert result.status == OrderStatus.REJECTED
-    log = broker.get_order_events(huge.id)
+    log = broker.get_order_events(str(huge.id))
     assert [e.to_status for e in log] == [OrderStatus.SUBMITTED, OrderStatus.REJECTED]
     assert log[1].reason == "insufficient_balance"
 
@@ -82,7 +82,7 @@ async def test_event_timestamps_use_simulation_time(broker: PaperBroker) -> None
         quantity=0.01,
     )
     await broker.submit_order(o)
-    log = broker.get_order_events(o.id)
+    log = broker.get_order_events(str(o.id))
     assert all(ev.timestamp == sim_t for ev in log)
 
 
