@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "WS1 representation id str to UUID"
-status: in-progress # code DONE + reviewed; pending deploy verify (11-verify.sh)
+status: completed
 priority: P2
 effort: "4h"
 dependencies: []
@@ -57,7 +57,7 @@ KHÔNG đổi: repositories (filter `{"_id": <str>}` vẫn nhận str từ route
 - [x] `to_mongo()` của mọi entity flip ghi `_id` là str(uuid); `from_mongo` đọc docs cũ không lỗi (legacy-doc tests per entity).
 - [x] OpenAPI + route inventory snapshot không đổi (tests/baseline/ 9 passed, snapshots untouched).
 - [x] Không còn `generate_id_str()` tại construction site của các entity đã flip (grep verified — còn lại chỉ broker_order_id, sync_status, job_history, run_id, BacktestRequest.id: đúng scope Phase 2-5).
-- [ ] Deploy: `11-verify.sh` HEALTHY.
+- [x] Deploy: `11-verify.sh` HEALTHY (CI run 27387118602, deploy job success — verify script chạy trong job này).
 
 ## Risk Assessment
 
