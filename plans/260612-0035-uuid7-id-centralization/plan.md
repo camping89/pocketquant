@@ -32,7 +32,7 @@ Pattern chuẩn (đã có ở `Bar`/`Symbol`/`SyncStatus`): entity `id: UUID = F
 
 | Phase | Name | Risk | Status |
 |-------|------|------|--------|
-| 1 | [WS1 representation id str to UUID](./phase-01-ws1-representation-id-str-to-uuid.md) | LOW | Code done (4/5 criteria) — pending deploy verify |
+| 1 | [WS1 representation id str to UUID](./phase-01-ws1-representation-id-str-to-uuid.md) | LOW | Completed (deployed, verify HEALTHY) |
 | 2 | [Re-key tracked_symbols](./phase-02-re-key-tracked-symbols.md) | LOW | Pending |
 | 3 | [Re-key job_history legacy ObjectId](./phase-03-re-key-job-history-legacy-objectid.md) | LOW | Pending |
 | 4 | [Re-key backtest_requests drop bt prefix](./phase-04-re-key-backtest-requests-drop-bt-prefix.md) | MED | Pending |
