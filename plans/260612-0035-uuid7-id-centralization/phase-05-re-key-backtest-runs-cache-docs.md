@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Re-key backtest_runs cache docs"
-status: pending
+status: completed
 priority: P2
 effort: "5h"
 dependencies: []
@@ -51,10 +51,17 @@ Modify:
 
 ## Success Criteria
 
-- [ ] Tests step 1 pass; cache-slot semantics giữ (1 doc/sub, DB-enforced).
-- [ ] Migration idempotent; single-run docs untouched (count + spot-check).
-- [ ] Không còn chỗ nào gán non-uuid vào `BacktestResult.id` (grep `result.id =`).
-- [ ] Pre-deploy: đếm cache docs (`$expr _id==subscription_id`) trên VPS; post-deploy `11-verify.sh` HEALTHY; FE backtest overlay smoke OK.
+- [x] Tests step 1 pass (13 tests mới: 9 repo cache-slot + 4 migration; full suite 617 passed, 5 skipped; ruff/pyright/lint-imports clean; baseline snapshot diff rỗng). Cache-slot DB-enforced: unique sparse index, test DuplicateKeyError lock.
+- [x] Migration idempotent (test 2-run + filter `$expr` tự hết match); single-run docs untouched (test seed mixed + prod spot-check: 7 single-run docs nguyên, total 8 trước/sau).
+- [x] Không còn chỗ nào gán non-uuid vào `BacktestResult.id` — construction site duy nhất `result_collector.py` `UUID(run_id)`; override `result.id = sub_id` đã xóa + regression test lock.
+- [x] Deploy verify (run 27418600558, 260612): pre-deploy count = 1 cache doc + mongodump backup `backtest_runs`; `11-verify.sh` HEALTHY 20/20; migration log `rekeyed=1` (doc `eef73dffbd77a20b`); post-deploy prod: legacy docs = 0, non-uuid7 `_id` = 0/8; smoke `GET /subscriptions/{id}/backtest` trả full metrics qua field-keyed lookup.
+
+## Implementation Notes (260612)
+
+- **Risk #2 không xảy ra theo thiết kế:** migration dùng delete-before-insert (legacy doc giữ slot unique index → copy-first sẽ collide), giống Phase 4 pattern — không cần crash-resume dedup marker; crash giữa 2 ops mất tối đa 1 cache entry, backtest run kế repopulate.
+- `_upsert_cache_slot` chung cho `upsert_status` + `save_for_subscription`: upsert theo `{subscription_id}`, `$setOnInsert` `_id` uuid7, retry 3 lần DuplicateKeyError (race window converge về update branch).
+- `ensure_subscription_cache_unique_index` — single source (repo `ensure_indexes` + migration), 85/86 conflict-replace handler theo precedent Phase 4. Index prod đã đúng spec từ trước → no-op.
+- Reviewer concerns (non-blocking, ghi nhận): (1) `$set` thay `replace_one` → stray fields trên cache doc tồn tại vĩnh viễn (prod doc hiện slim, moot); (2) `from_mongo` strict `UUID()` → doc 16-hex tái xuất sau migration (backup restore cũ) sẽ 500 ở strategy listing; (3) status-only failed docs crash `from_mongo` qua `list_by_strategy_code(include_failed=True)` — pre-existing, không regression.
 
 ## Risk Assessment
 
