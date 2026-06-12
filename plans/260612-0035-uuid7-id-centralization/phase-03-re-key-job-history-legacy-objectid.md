@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Re-key job_history legacy ObjectId"
-status: implemented
+status: completed
 priority: P2
 effort: "2h"
 dependencies: []
@@ -42,7 +42,7 @@ KHÔNG đổi: `job_history_repository.py` (đường ghi đã uuid7 sẵn).
 
 - [x] Test mixed-ids + idempotent + crash-resume pass (5 tests, `tests/app_test/unit/test_job_history_uuid_migration.py`; full suite 591 passed; ruff/pyright/lint-imports clean; baseline snapshot diff rỗng).
 - [x] Dashboard stats không đổi — code-reviewer trace cả 6 consumers (`find_runs`/`get_latest_by_job_ids`/`aggregate_stats`/`get_last_successful_started_at`/`reconcile_orphan_running`/SPA): `_serialize` whitelist che `_migrated_from`, aggregates không đụng `_id`.
-- [ ] Pre-deploy: `mongosh` đếm `{"_id": {"$type": "objectId"}}` trên VPS (ước lượng thời lượng); post-deploy `11-verify.sh` HEALTHY; count check: tổng docs không đổi, ObjectId docs = 0.
+- [x] Deploy verify (run 27413343487, 260612, chung deploy với Phase 4): `11-verify.sh` HEALTHY 20/20; prod Mongo count: `job_history` ObjectId docs = 0 (đúng dự đoán reviewer — TTL 30 ngày đã xoá hết legacy, migration no-op an toàn).
 
 ## Implementation Notes (260612)
 
