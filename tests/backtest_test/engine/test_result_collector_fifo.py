@@ -18,8 +18,11 @@ import pytest
 from pocketquant.backtest.engine.result_collector import BacktestResultCollector
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
+from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
+
+RUN_ID = generate_id_str()
 
 
 @pytest.fixture
@@ -37,7 +40,7 @@ def config() -> BacktestConfig:
 
 @pytest.fixture
 def collector(config: BacktestConfig) -> BacktestResultCollector:
-    return BacktestResultCollector(config, initial_capital=config.initial_capital, run_id="r1")
+    return BacktestResultCollector(config, initial_capital=config.initial_capital, run_id=RUN_ID)
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +87,7 @@ async def test_long_round_trip(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 100.0, "o1", sl=90, tp=120), t0)
     await _feed(collector, _fill(OrderSide.SELL, 1.0, 110.0, "o2"), t0 + timedelta(hours=1))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     assert len(collected.trades) == 1
     t = collected.trades[0]
     assert t.direction == "LONG"
@@ -110,7 +113,7 @@ async def test_short_round_trip(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.SELL, 1.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 90.0, "o2"), t0 + timedelta(hours=1))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     assert len(collected.trades) == 1
     t = collected.trades[0]
     assert t.direction == "SHORT"
@@ -127,7 +130,7 @@ async def test_fifo_two_buys_one_sell(collector: BacktestResultCollector) -> Non
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 110.0, "o2"), t0 + timedelta(minutes=5))
     await _feed(collector, _fill(OrderSide.SELL, 2.0, 120.0, "o3"), t0 + timedelta(hours=1))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     assert len(collected.trades) == 2
     # FIFO: first close has entry 100, second has entry 110
     assert collected.trades[0].entry_price == 100.0
@@ -144,7 +147,7 @@ async def test_partial_close_then_full(collector: BacktestResultCollector) -> No
     await _feed(collector, _fill(OrderSide.SELL, 4.0, 110.0, "o2"), t0 + timedelta(hours=1))
     await _feed(collector, _fill(OrderSide.SELL, 6.0, 120.0, "o3"), t0 + timedelta(hours=2))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=3))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=3))
     assert len(collected.trades) == 2
     assert collected.trades[0].quantity == pytest.approx(4.0)
     assert collected.trades[0].pnl == pytest.approx(40.0)  # (110-100)*4
@@ -159,7 +162,7 @@ async def test_flip_long_to_short(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.BUY, 10.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.SELL, 15.0, 90.0, "o2"), t0 + timedelta(hours=1))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     # 1 closed LONG + 1 open SHORT
     assert len(collected.trades) == 1
     assert collected.trades[0].direction == "LONG"
@@ -177,7 +180,7 @@ async def test_flip_short_to_long(collector: BacktestResultCollector) -> None:
     await _feed(collector, _fill(OrderSide.SELL, 5.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.BUY, 8.0, 90.0, "o2"), t0 + timedelta(hours=1))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     assert len(collected.trades) == 1
     assert collected.trades[0].direction == "SHORT"
     assert collected.trades[0].pnl == pytest.approx(50.0)  # (100-90)*5
@@ -192,7 +195,7 @@ async def test_open_position_at_end(collector: BacktestResultCollector) -> None:
     """1 BUY with no matching SELL → 1 OpenLot in run.open_positions, 0 trades."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 2.0, 100.0, "o1", sl=90, tp=120), t0)
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     assert len(collected.trades) == 0
     assert len(collected.run.open_positions) == 1
     ol = collected.run.open_positions[0]
@@ -228,7 +231,7 @@ async def test_legacy_fill_without_side_long_only_fallback(
     await _feed(collector, fill_open, t0)
     await _feed(collector, fill_close, t0 + timedelta(hours=1))
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=2))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=2))
     assert len(collected.trades) == 1
     assert collected.trades[0].direction == "LONG"
     assert collected.trades[0].pnl == pytest.approx(10.0)
@@ -253,7 +256,7 @@ async def test_total_return_no_regression_for_long_only(
             t0 + timedelta(hours=2 * i + 1),
         )
 
-    collected = collector.finalize("r1", t0, t0 + timedelta(hours=10))
+    collected = collector.finalize(RUN_ID, t0, t0 + timedelta(hours=10))
     # PnL: 10 - 5 + 10 = 15
     total_pnl = sum(t.pnl for t in collected.trades)
     assert total_pnl == pytest.approx(15.0)

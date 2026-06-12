@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pytest
 
+from pocketquant.core.common.uuid import generate_id, generate_id_str
 from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, EquityPoint, OpenLot
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
@@ -15,10 +16,12 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 # Mongo strips tz info on roundtrip — naive datetime keeps equality clean.
 NOW = datetime(2026, 1, 5, 10, 0, 0)
 
+RUN_ID = generate_id()
+
 
 def _result() -> BacktestResult:
     return BacktestResult(
-        id="r1",
+        id=RUN_ID,
         strategy_code="s1",
         config_snapshot={"symbol": "BTC:BIN", "interval": "1m"},
         metrics=BacktestMetrics.empty(),
@@ -48,7 +51,7 @@ async def test_save_writes_slim_doc_without_legacy_arrays(database: Database) ->
     repo = BacktestRepository(database)
     await repo.save(_result())
     coll = database.get_collection("backtest_runs")
-    doc = await coll.find_one({"_id": "r1"})
+    doc = await coll.find_one({"_id": str(RUN_ID)})
     assert doc is not None
     # Slim invariant: NO legacy arrays
     assert "trades" not in doc
@@ -63,7 +66,7 @@ async def test_roundtrip_preserves_open_positions(database: Database) -> None:
     repo = BacktestRepository(database)
     original = _result()
     await repo.save(original)
-    fetched = await repo.get("r1")
+    fetched = await repo.get(str(RUN_ID))
     assert fetched is not None
     assert fetched.open_positions == original.open_positions
 
@@ -72,8 +75,9 @@ async def test_roundtrip_preserves_open_positions(database: Database) -> None:
 async def test_from_mongo_tolerates_legacy_doc_with_trades_positions(database: Database) -> None:
     """Pre-migration docs with legacy trades[]/positions[] must still deserialise."""
     coll = database.get_collection("backtest_runs")
+    legacy_id = generate_id_str()
     legacy_doc = {
-        "_id": "legacy-1",
+        "_id": legacy_id,
         "strategy_code": "s1",
         "config_snapshot": {"symbol": "BTC:BIN", "interval": "1m"},
         "metrics": BacktestMetrics.empty().to_mongo(),
@@ -112,7 +116,7 @@ async def test_from_mongo_tolerates_legacy_doc_with_trades_positions(database: D
     }
     await coll.insert_one(legacy_doc)
     repo = BacktestRepository(database)
-    fetched = await repo.get("legacy-1")
+    fetched = await repo.get(legacy_id)
     assert fetched is not None
-    assert fetched.id == "legacy-1"
+    assert str(fetched.id) == legacy_id
     assert fetched.open_positions == []

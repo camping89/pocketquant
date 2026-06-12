@@ -145,14 +145,14 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
 
     # Run doc: slim, no trades/positions arrays.
     run_coll = database.get_collection("backtest_runs")
-    doc = await run_coll.find_one({"_id": result.id})
+    doc = await run_coll.find_one({"_id": str(result.id)})
     assert doc is not None
     assert "trades" not in doc
     assert "positions" not in doc
     assert doc["status"] == "completed"
 
     # Orders: 2 (entry + exit), each FILLED with ≥2 events + ≥1 fill.
-    orders = await order_repo.list_by_run(result.id)
+    orders = await order_repo.list_by_run(str(result.id))
     assert len(orders) == 2
     for o in orders:
         assert o.status.value == "filled"
@@ -160,7 +160,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
         assert len(o.fills) >= 1
 
     # Trades: 1 closed round-trip.
-    trades = await trade_repo.list_by_run(result.id)
+    trades = await trade_repo.list_by_run(str(result.id))
     assert len(trades) == 1
     t = trades[0]
     assert t.direction == "LONG"
@@ -237,12 +237,12 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     )
     result = await runner.run(config)
 
-    orders = await order_repo.list_by_run(result.id)
+    orders = await order_repo.list_by_run(str(result.id))
     assert len(orders) == 2
     sides = sorted([o.side.value for o in orders])
     assert sides == ["buy", "sell"], f"expected one buy + one sell, got {sides}"
     # The SELL is the synthetic exit; must back-link to the trade.
     sell_order = next(o for o in orders if o.side == OrderSide.SELL)
-    trades = await trade_repo.list_by_run(result.id)
+    trades = await trade_repo.list_by_run(str(result.id))
     assert len(trades) == 1
     assert sell_order.resulting_trade_id == str(trades[0].trade_id)

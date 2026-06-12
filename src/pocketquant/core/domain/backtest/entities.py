@@ -24,7 +24,7 @@ class BacktestResult:
     join.
     """
 
-    id: str
+    id: UUID
     strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized BacktestConfig
     metrics: BacktestMetrics
@@ -43,7 +43,7 @@ class BacktestResult:
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to a slim ``backtest_runs`` document."""
         return {
-            "_id": self.id,
+            "_id": str(self.id),
             "strategy_code": self.strategy_code,
             "config_snapshot": self.config_snapshot,
             "metrics": self.metrics.to_mongo(),
@@ -60,7 +60,7 @@ class BacktestResult:
     def from_mongo(cls, data: dict[str, Any]) -> BacktestResult:
         """Create from MongoDB document. Tolerates pre-migration shape (ignores legacy keys)."""
         return cls(
-            id=data["_id"],
+            id=UUID(data["_id"]),
             strategy_code=data["strategy_code"],
             config_snapshot=data["config_snapshot"],
             metrics=BacktestMetrics.from_mongo(data["metrics"]),

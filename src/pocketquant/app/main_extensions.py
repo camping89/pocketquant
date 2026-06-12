@@ -424,6 +424,50 @@ async def migrate_backtest_request_ids(container: AsyncContainer) -> None:
         logger.info("backtest_request_uuid_migration.completed", rekeyed=rekeyed)
 
 
+async def migrate_backtest_run_cache_ids(container: AsyncContainer) -> None:
+    """Idempotent boot migration: re-key legacy ``backtest_runs`` cache docs to uuid7.
+
+    Legacy per-subscription cache docs carried ``_id == subscription_id``
+    (16-hex) — the old slot mechanism. The slot guarantee (one cache doc per
+    subscription) now lives in the unique sparse index on ``subscription_id``,
+    so that index is ensured FIRST: the guarantee must hold the moment ``_id``
+    stops encoding the subscription.
+
+    Mongo forbids in-place ``_id`` updates, so each legacy doc is deleted and
+    re-inserted with a fresh uuid7 ``_id``, all other fields preserved. The
+    legacy doc occupies the unique-index slot, so delete-before-insert is
+    mandatory (the copy would collide while the legacy doc holds the slot).
+    Unlike admin-curated collections, only the doc id is logged before the
+    delete: cache docs embed full equity curves (too large for a log line)
+    and a crash between the two ops costs one cache entry that the next
+    backtest run repopulates. Single-run docs never carry ``subscription_id``
+    and are untouched; the filter matches nothing after the first run.
+    """
+    from pocketquant.core.common.uuid import generate_id_str
+    from pocketquant.core.infra.persistence.repositories.backtest_repository import (
+        ensure_subscription_cache_unique_index,
+    )
+
+    database = await container.get(Database)
+    coll = database.database["backtest_runs"]
+
+    await ensure_subscription_cache_unique_index(coll)
+
+    rekeyed = 0
+    legacy_docs = await coll.find(
+        {"$expr": {"$eq": ["$_id", "$subscription_id"]}}
+    ).to_list(length=None)
+    for doc in legacy_docs:
+        logger.info("backtest_run_cache_uuid_migration.rekeying", doc_id=doc["_id"])
+        payload = {k: v for k, v in doc.items() if k != "_id"}
+        await coll.delete_one({"_id": doc["_id"]})
+        await coll.insert_one({**payload, "_id": generate_id_str()})
+        rekeyed += 1
+
+    if rekeyed:
+        logger.info("backtest_run_cache_uuid_migration.completed", rekeyed=rekeyed)
+
+
 async def recover_stale_backtests(container: AsyncContainer) -> None:
     """Mark any backtest docs stuck in 'running' as 'failed' on startup.
 

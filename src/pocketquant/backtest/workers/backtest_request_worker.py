@@ -130,7 +130,7 @@ class BacktestRequestWorker:
         positions: list[dict[str, Any]] = []
         if result.status == "completed":
             trade_repo: BacktestTradeRepository = self._deps.trade_repo
-            closed = await trade_repo.list_by_run(result.id)
+            closed = await trade_repo.list_by_run(str(result.id))
             for t in closed:
                 positions.append(
                     {
@@ -161,7 +161,7 @@ class BacktestRequestWorker:
                 )
 
         return {
-            "run_id": result.id,
+            "run_id": str(result.id),
             "status": result.status,
             "metrics": result.metrics.to_dict() if result.status == "completed" else None,
             "positions": positions,
