@@ -556,14 +556,14 @@ Route Response
 
 ### MongoDB Collections & Repository Access
 
-13 collections. `_id` is a UUIDv7 except three deliberate natural/domain keys (`subscriptions` = deterministic `hash(strategy_code|symbol|interval)` for idempotent re-subscribe; `tracked_symbols` = the composite `symbol` string; `apscheduler_jobs` = the job name, APScheduler-managed). `job_history._id` is a Mongo ObjectId (insert default). Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
+13 collections. `_id` is a UUIDv7 except two deliberate natural/domain keys (`subscriptions` = deterministic `hash(strategy_code|symbol|interval)` for idempotent re-subscribe; `apscheduler_jobs` = the job name, APScheduler-managed). `job_history._id` is a Mongo ObjectId (insert default). Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
 
 | Collection | `_id` strategy | Repository | Logical FK → | Context |
 |---|---|---|---|---|
 | `symbols` | uuid7 | SymbolRepository | — (reference data) | Symbol |
 | `bars` | uuid7 | BarRepository | `symbol` → symbols | Market Data |
 | `sync_status` | uuid7 | SyncStatusRepository | `(symbol,interval)` ↔ bars | Market Data |
-| `tracked_symbols` | natural: `symbol` | TrackedSymbolRepository | drives bars + sync_status | Market Data |
+| `tracked_symbols` | uuid7 (unique index on `symbol`) | TrackedSymbolRepository | drives bars + sync_status | Market Data |
 | `subscriptions` | deterministic hash | SubscriptionRepository | `symbol` → symbols; `strategy_code` → in-code registry | Strategy |
 | `orders` | uuid7 | OrderRepository | `subscription_id`; `broker_order_id` → OKX | Trading |
 | `positions` | uuid7 | PositionRepository | `subscription_id` → subscriptions | Trading |
