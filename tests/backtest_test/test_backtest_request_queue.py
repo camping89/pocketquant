@@ -441,6 +441,42 @@ async def test_worker_dispatches_subscription(database: Database, engine_setup) 
 
 
 @pytest.mark.asyncio
+async def test_worker_dispatches_subscription_without_template_config(
+    database: Database, engine_setup
+) -> None:
+    """No template-keyed config in RAM (the post-restart state: rehydrate and
+    reconcile register configs under sub.id only) — dispatch must fall back to
+    strategy-class defaults instead of failing the request."""
+    deps, sub_repo, bt_repo = engine_setup
+    request_repo = BacktestRequestRepository(database)
+
+    # Drop the template-keyed entry the fixture injected.
+    await deps.strategy_app_service.unload_strategy(_STRATEGY)
+    assert deps.strategy_app_service.get_config(_STRATEGY) is None
+
+    sub = Subscription(
+        id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, _INTERVAL),
+        strategy_code=_STRATEGY,
+        symbol=_SYMBOL,
+        interval=Interval(_INTERVAL),
+        created_at=datetime.now(UTC),
+    )
+    await sub_repo.add(sub)
+
+    req = _request("subscription", sub_id=sub.id, strategy_code=_STRATEGY)
+    await request_repo.enqueue(req)
+
+    worker = BacktestRequestWorker(request_repo, deps)
+    assert await worker._drain_once() is True
+
+    done = await request_repo.get(str(req.id))
+    assert done is not None and done.status == "done"
+
+    status = await bt_repo.get_subscription_status(sub.id)
+    assert status is not None and status["status"] == "completed"
+
+
+@pytest.mark.asyncio
 async def test_worker_dispatches_single_with_embedded_result(
     database: Database, engine_setup
 ) -> None:

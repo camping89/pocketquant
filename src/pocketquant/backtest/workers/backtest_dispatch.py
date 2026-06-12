@@ -170,11 +170,20 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
 
     synthetic_id: str | None = None
     try:
-        base_config = deps.strategy_app_service.get_config(strategy_code)
+        # Config lookup falls back across the three keyspaces a restart can
+        # leave us in: a template-keyed config (explicit load, carries user
+        # parameters) → the sub-keyed config rehydrate/reconcile register →
+        # a bare default (strategy-class parameter defaults apply). Unknown
+        # templates still fail in load_strategy_for_backtest's registry check.
+        base_config = deps.strategy_app_service.get_config(
+            strategy_code
+        ) or deps.strategy_app_service.get_config(sub_id)
         if base_config is None:
-            raise ValueError(
-                f"Strategy config for '{strategy_code}' not in memory. "
-                "Subscribe to the strategy before running backtest."
+            base_config = StrategyConfig(
+                id=strategy_code,
+                name=strategy_code,
+                symbol=symbol,
+                interval=interval,
             )
 
         start_date, end_date = await resolve_date_range(deps.bar_repo, symbol, interval)
