@@ -330,6 +330,60 @@ async def migrate_tracked_symbols_uuid_ids(container: AsyncContainer) -> None:
         logger.info("tracked_symbols_uuid_migration.completed", rekeyed=rekeyed)
 
 
+async def migrate_job_history_uuid_ids(container: AsyncContainer) -> None:
+    """Idempotent boot migration: re-key legacy ``job_history._id`` ObjectIds to uuid7.
+
+    The write path already generates uuid7 ids; only docs from before that
+    change still carry a Mongo ObjectId. The collection is an append-only log
+    with no FK consumers, so each legacy doc is copied with a fresh uuid7
+    ``_id`` (Mongo forbids in-place ``_id`` updates) and the original deleted.
+    Filter ``{"_id": {"$type": "objectId"}}`` matches nothing after the first
+    run — re-runs are no-ops. Cursor iteration keeps memory flat on large
+    collections; inserted copies have string ids so the cursor never revisits.
+
+    Two orderings per doc, dictated by the unique partial index
+    ``idx_skip_idempotency`` on (job_id, scheduled_run_time):
+      - Listener-path docs (``scheduled_run_time`` is a date) sit inside that
+        index, so the copy would collide while the legacy doc holds the slot —
+        delete first, insert after. The full doc is logged before the delete
+        so a crash between the two ops is recoverable from the log line.
+      - Wrapper-path docs (no ``scheduled_run_time``) insert the copy first,
+        tagged ``_migrated_from: <old id>``, then delete — a crash leaves both
+        docs behind, and the tag lets the next run skip the re-insert instead
+        of duplicating the record.
+    """
+    from pocketquant.core.common.uuid import generate_id_str
+
+    database = await container.get(Database)
+    coll = database.database["job_history"]
+
+    rekeyed = 0
+    async for doc in coll.find({"_id": {"$type": "objectId"}}):
+        old_id = doc["_id"]
+        payload = {k: v for k, v in doc.items() if k != "_id"}
+
+        existing_copy = await coll.find_one({"_migrated_from": str(old_id)}, {"_id": 1})
+        if existing_copy is not None:
+            # Crash-resume: copy already on disk from a prior run — just
+            # finish the delete half.
+            await coll.delete_one({"_id": old_id})
+        elif isinstance(doc.get("scheduled_run_time"), datetime):
+            logger.info("job_history_uuid_migration.rekeying", doc=doc)
+            await coll.delete_one({"_id": old_id})
+            await coll.insert_one({**payload, "_id": generate_id_str()})
+        else:
+            await coll.insert_one(
+                {**payload, "_id": generate_id_str(), "_migrated_from": str(old_id)}
+            )
+            await coll.delete_one({"_id": old_id})
+        rekeyed += 1
+        if rekeyed % 500 == 0:
+            logger.info("job_history_uuid_migration.progress", rekeyed=rekeyed)
+
+    if rekeyed:
+        logger.info("job_history_uuid_migration.completed", rekeyed=rekeyed)
+
+
 async def recover_stale_backtests(container: AsyncContainer) -> None:
     """Mark any backtest docs stuck in 'running' as 'failed' on startup.
 
