@@ -54,8 +54,17 @@ class BacktestRequestWorker:
         logger.info("backtest_worker.started", interval_s=self._interval_s)
 
         while True:
+            # Reclaim failures must never block draining — a sweep error on one
+            # doc would otherwise starve every pending request behind it.
             try:
                 await self._request_repo.reclaim_stale_running()
+            except asyncio.CancelledError:
+                logger.info("backtest_worker.cancelled")
+                raise
+            except Exception as exc:
+                logger.error("backtest_worker.reclaim_failed", error=str(exc))
+
+            try:
                 claimed = await self._drain_once()
             except asyncio.CancelledError:
                 logger.info("backtest_worker.cancelled")
@@ -85,11 +94,11 @@ class BacktestRequestWorker:
         except Exception as exc:
             logger.error(
                 "backtest_worker.request_failed",
-                request_id=request.id,
+                request_id=str(request.id),
                 kind=request.kind,
                 error=str(exc),
             )
-            await self._request_repo.mark_failed(request.id, str(exc))
+            await self._request_repo.mark_failed(str(request.id), str(exc))
         return True
 
     async def _dispatch(self, request: BacktestRequest) -> None:
@@ -97,7 +106,7 @@ class BacktestRequestWorker:
             if request.sub_id is None:
                 raise ValueError("subscription request missing sub_id")
             await run_subscription(self._deps, request.sub_id)
-            await self._request_repo.mark_done(request.id)
+            await self._request_repo.mark_done(str(request.id))
             return
 
         if request.kind == "single":
@@ -105,7 +114,7 @@ class BacktestRequestWorker:
                 raise ValueError("single request missing config")
             result = await run_single(self._deps, request.config)
             fe_result = await self._assemble_single_response(result)
-            await self._request_repo.mark_done(request.id, result=fe_result)
+            await self._request_repo.mark_done(str(request.id), result=fe_result)
             return
 
         raise ValueError(f"unknown backtest request kind: {request.kind}")

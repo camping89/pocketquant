@@ -131,7 +131,7 @@ class BacktestQueryService:
         if bt_request is None:
             raise NotFoundError(f"Backtest request not found: {request_id}")
         return {
-            "request_id": bt_request.id,
+            "request_id": str(bt_request.id),
             "status": bt_request.status,
             "result": bt_request.result,
             "error": bt_request.error,

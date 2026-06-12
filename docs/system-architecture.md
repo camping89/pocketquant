@@ -556,7 +556,7 @@ Route Response
 
 ### MongoDB Collections & Repository Access
 
-13 collections. `_id` is a UUIDv7 except two deliberate natural/domain keys (`subscriptions` = deterministic `hash(strategy_code|symbol|interval)` for idempotent re-subscribe; `apscheduler_jobs` = the job name, APScheduler-managed). `job_history._id` is a Mongo ObjectId (insert default). Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
+14 collections. `_id` is a UUIDv7 except two deliberate natural/domain keys (`subscriptions` = deterministic `hash(strategy_code|symbol|interval)` for idempotent re-subscribe; `apscheduler_jobs` = the job name, APScheduler-managed). Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
 
 | Collection | `_id` strategy | Repository | Logical FK → | Context |
 |---|---|---|---|---|
@@ -570,8 +570,9 @@ Route Response
 | `backtest_runs` | uuid7 (`run_id`) | BacktestRepository | `subscription_id` → subscriptions (cache) | Backtest |
 | `backtest_orders` | uuid7 | BacktestOrderRepository | `run_id` → backtest_runs | Backtest |
 | `backtest_trades` | uuid7 | BacktestTradeRepository | `run_id` → backtest_runs | Backtest |
+| `backtest_requests` | uuid7 (partial unique index: ≤1 `pending` per `sub_id`) | BacktestRequestRepository | `sub_id` → subscriptions | Backtest |
 | `backtest_optimization_runs` | uuid7 | OptimizationRepository | — | Backtest |
-| `job_history` | ObjectId | JobHistoryRepository | — | Scheduling |
+| `job_history` | uuid7 | JobHistoryRepository | — | Scheduling |
 | `apscheduler_jobs` | natural: job name | (APScheduler-managed) | — | Scheduling |
 
 **All repositories:**

@@ -1,9 +1,9 @@
 """Integration test: two simultaneous POST /run-all calls → exactly N requests, not 2N.
 
 Runs against the HTTP enqueue path only (no worker drain). Relies on the
-deterministic ``bt:{sub_id}`` request id + upsert enqueue so the second fan-out
-collapses onto the first rather than duplicating compute (the queue replacement
-for the old APScheduler replace_existing dedup).
+partial unique index on (sub_id, status=pending) + upsert enqueue so the
+second fan-out collapses onto the first rather than duplicating compute (the
+queue replacement for the old APScheduler replace_existing dedup).
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 
+from pocketquant.core.common.uuid import UUID
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -93,20 +94,22 @@ async def test_concurrent_run_all_no_duplicate_requests(app_client):
     )
     assert add_r.status_code == 201, add_r.text
     sub_id = add_r.json()["id"]
-    expected_request_id = f"bt:{sub_id}"
 
-    # Both fan-outs must return the same deterministic request id for the sub.
     r1, r2 = await asyncio.gather(
         app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
         app_client.post(f"{_API}/{_STRATEGY_ID}/run-all-backtests"),
     )
     assert r1.status_code == 202, r1.text
     assert r2.status_code == 202, r2.text
-    assert expected_request_id in r1.json()["job_ids"]
-    assert expected_request_id in r2.json()["job_ids"]
+    job_ids_1 = r1.json()["job_ids"]
+    job_ids_2 = r2.json()["job_ids"]
+    assert len(job_ids_1) == 1 and len(job_ids_2) == 1
+    # uuid7 request ids — the bt: prefix coupling is gone.
+    assert UUID(job_ids_1[0]).version == 7
+    assert UUID(job_ids_2[0]).version == 7
 
-    # Deterministic id + upsert ⇒ exactly one request doc for the sub, regardless
-    # of how far the worker has drained it.
+    # Partial unique index on (sub_id, status=pending) + upsert ⇒ exactly one
+    # request doc for the sub, regardless of how far the worker has drained it.
     requests = db.get_collection("backtest_requests")
-    count = await requests.count_documents({"_id": expected_request_id})
-    assert count == 1, f"Expected 1 request doc for {expected_request_id}, got {count}"
+    count = await requests.count_documents({"sub_id": sub_id})
+    assert count == 1, f"Expected 1 request doc for sub {sub_id}, got {count}"

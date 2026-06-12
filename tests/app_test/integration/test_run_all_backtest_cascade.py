@@ -190,7 +190,7 @@ async def test_run_all_backtest_cascade_delete(app_client):
         await run_subscription(deps, sub_id)
     finally:
         await deps.strategy_app_service.stop()
-    await request_repo.mark_done(claimed.id)
+    await request_repo.mark_done(str(claimed.id))
 
     status_doc = await bt_repo.get_subscription_status(sub_id)
     assert status_doc is not None and status_doc["status"] == "completed", (
