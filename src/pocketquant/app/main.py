@@ -14,6 +14,7 @@ from pocketquant.app.main_extensions import (
     handle_startup_failure,
     migrate_strategy_id_fields,
     migrate_subscription_desired_state,
+    migrate_tracked_symbols_uuid_ids,
     recover_orphan_jobs,
     recover_stale_backtests,
     register_health_checks,
@@ -67,6 +68,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # are subscriptions-collection migrations; rename first, then state backfill,
         # so rehydrate/reconcile read the final field shape.
         await migrate_subscription_desired_state(container)
+        # Re-key tracked_symbols._id to uuid7 BEFORE seed_tracked_symbols runs,
+        # so the seeder's upserts never race legacy symbol-keyed docs.
+        await migrate_tracked_symbols_uuid_ids(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)

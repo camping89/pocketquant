@@ -279,6 +279,57 @@ async def migrate_subscription_desired_state(container: AsyncContainer) -> None:
         )
 
 
+async def migrate_tracked_symbols_uuid_ids(container: AsyncContainer) -> None:
+    """Idempotent boot migration: re-key ``tracked_symbols._id`` from composite symbol to uuid7.
+
+    Mongo forbids in-place ``_id`` updates, so each legacy doc (``_id`` is the
+    composite symbol string, not parseable as UUID) is deleted and re-inserted
+    with a fresh uuid7 ``_id``, all other fields preserved. Delete-before-insert
+    is forced by the unique ``symbol`` index — inserting the copy first would
+    collide with the legacy doc. Crash between the two ops loses at most one
+    doc, which ``seed_tracked_symbols`` re-derives for auto-seeded symbols.
+
+    The unique index is ensured FIRST so the dedup guarantee holds the moment
+    ``_id`` stops being the natural key. Docs whose ``_id`` already parses as a
+    UUID are untouched — re-runs are no-ops.
+    """
+    from pocketquant.core.common.uuid import UUID, generate_id_str
+
+    database = await container.get(Database)
+    coll = database.database["tracked_symbols"]
+
+    try:
+        await coll.create_index([("symbol", 1)], unique=True, name="ix_tracked_symbols_symbol")
+    except Exception as exc:
+        # A same-name index with a non-unique spec exists from an old deploy —
+        # replace it. IndexOptionsConflict (85): same keys, different name;
+        # IndexKeySpecsConflict (86): same name, different options.
+        if getattr(exc, "code", None) not in (85, 86):
+            raise
+        await coll.drop_index("ix_tracked_symbols_symbol")
+        await coll.create_index([("symbol", 1)], unique=True, name="ix_tracked_symbols_symbol")
+
+    rekeyed = 0
+    # Collection is small (admin-curated symbol list) — full scan is fine.
+    legacy_docs = await coll.find({}).to_list(length=None)
+    for doc in legacy_docs:
+        try:
+            UUID(str(doc["_id"]))
+            continue  # already migrated
+        except ValueError:
+            pass
+        # Log the full doc before deleting — if the process dies between the
+        # two ops, an admin-added symbol (not re-derivable by the seeder) can
+        # be restored from this line.
+        logger.info("tracked_symbols_uuid_migration.rekeying", doc=doc)
+        await coll.delete_one({"_id": doc["_id"]})
+        await coll.insert_one({**doc, "_id": generate_id_str()})
+        rekeyed += 1
+
+    if rekeyed:
+        logger.info("tracked_symbols_uuid_migration.completed", rekeyed=rekeyed)
+
+
 async def recover_stale_backtests(container: AsyncContainer) -> None:
     """Mark any backtest docs stuck in 'running' as 'failed' on startup.
 

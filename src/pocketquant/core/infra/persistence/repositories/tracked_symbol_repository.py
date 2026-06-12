@@ -8,7 +8,7 @@ from pocketquant.core.infra.persistence.base_repository import BaseRepository
 
 
 class TrackedSymbolRepository(BaseRepository):
-    """Repository for tracked_symbols — composite ``symbol`` is the primary key."""
+    """Repository for tracked_symbols — uuid7 ``_id``, unique index on composite ``symbol``."""
 
     _collection_name = COLLECTION_TRACKED_SYMBOLS
 
