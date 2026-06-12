@@ -53,7 +53,8 @@ Modify:
 - [x] Toàn bộ tests step 1 pass (600 passed, 5 skipped full suite; pyright 0 errors; ruff clean; 7 import contracts kept).
 - [x] Partial unique index tồn tại (`ensure_pending_sub_unique_index` — single source, 85/86 conflict handler); concurrent run-all test chứng minh 1 pending/sub (`test_concurrent_run_all_no_duplicate_requests`, `test_concurrent_enqueue_single_pending_no_exception`).
 - [x] Không còn literal `bt:` trong `src/` cho request id (chỉ còn migration regex `^bt:` + docstrings; synthetic RAM key `{code}::bt::{sub_id}` giữ nguyên — RAM key, không phải `_id`).
-- [x] Deploy verify (run 27413343487, 260612): `11-verify.sh` HEALTHY 20/20; prod Mongo: `^bt:` docs = 0, index `ix_backtest_requests_pending_sub` đúng spec (unique + partial). Concurrent run-all smoke: 2 calls đồng thời → CÙNG 1 uuid `019ebbaa-8925-...`, 1 doc duy nhất — dedup PASS. Request bị worker mark `failed` do bug PRE-EXISTING ngoài scope phase: dispatch `get_config(strategy_code)` cần base template config trong RAM, nhưng boot rehydrate chỉ register config theo `sub.id` (`main_extensions.py:488`) → sau restart, run-all fail tới khi re-subscribe. Queue mechanics (enqueue→dedup→claim→dispatch→mark_failed) đều đúng.
+- [x] Deploy verify (run 27413343487, 260612): `11-verify.sh` HEALTHY 20/20; prod Mongo: `^bt:` docs = 0, index `ix_backtest_requests_pending_sub` đúng spec (unique + partial). Concurrent run-all smoke: 2 calls đồng thời → CÙNG 1 uuid, 1 doc duy nhất — dedup PASS.
+- [x] Follow-up fix (commit `b73270e`, run 27414355552): smoke đầu bị worker mark `failed` do bug PRE-EXISTING — dispatch `get_config(strategy_code)` cần template-keyed config nhưng rehydrate/reconcile chỉ register theo `sub.id` → mọi run-all fail sau restart. Fix: fallback template-key → sub-key → strategy-class defaults. Re-smoke sau deploy: request `done`, `GET /subscriptions/{id}/backtest` trả metrics đầy đủ.
 
 ## Risk Assessment
 
