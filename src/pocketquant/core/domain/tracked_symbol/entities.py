@@ -41,7 +41,8 @@ class TrackedSymbol(BaseModel):
         try:
             parsed_id = UUID(str(raw_id))
         except ValueError:
-            # Legacy doc keyed by composite symbol — boot migration re-keys it.
+            # _id not a UUID (e.g. a composite-symbol key) — mint a fresh uuid7
+            # so the load never crashes on an unparseable id.
             parsed_id = generate_id()
         return cls(
             id=parsed_id,

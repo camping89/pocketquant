@@ -60,8 +60,8 @@ class Subscription:
 
     @classmethod
     def from_mongo(cls, doc: dict) -> Subscription:
-        # .get default tolerates legacy docs written before the state fields
-        # existed (read may happen before the boot migration backfills them).
+        # .get default tolerates docs lacking the control-plane state fields;
+        # a missing state reads as "stopped" rather than crashing the load.
         return cls(
             id=UUID(str(doc["_id"])),
             strategy_code=doc["strategy_code"],

@@ -1,15 +1,15 @@
 """Pytest configuration and fixtures.
 
 Tests run against ephemeral docker containers (testcontainers) so they never
-touch the production VPS database. The session fixture spins up Mongo + Redis
-once per pytest run and tears them down at the end.
+touch the production VPS database. The session-scoped Mongo + Redis containers
+live in the root ``tests/conftest.py`` and resolve here via fixture inheritance.
 
 Local Docker is required.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 
 import pytest
 from testcontainers.mongodb import MongoDbContainer
@@ -19,19 +19,6 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
-
-
-# Session-scoped containers — started once per pytest run
-@pytest.fixture(scope="session")
-def mongo_container() -> Iterator[MongoDbContainer]:
-    with MongoDbContainer("mongo:7.0") as mongo:
-        yield mongo
-
-
-@pytest.fixture(scope="session")
-def redis_container() -> Iterator[RedisContainer]:
-    with RedisContainer("redis:7.2-alpine") as redis:
-        yield redis
 
 
 # Per-test settings — fresh DB names so tests don't bleed state.

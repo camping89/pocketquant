@@ -302,16 +302,6 @@ async def test_get_result_returns_backtest_result() -> None:
     assert result.id == "run-1"
 
 
-@pytest.mark.asyncio
-async def test_get_result_raises_404_when_not_found() -> None:
-    backtest_repo = MagicMock()
-    backtest_repo.get = AsyncMock(return_value=None)
-    svc = _query_svc(backtest_repo=backtest_repo)
-
-    with pytest.raises(NotFoundError):
-        await svc.get_result(GetBacktestQuery(run_id="missing"))
-
-
 # ---------------------------------------------------------------------------
 # BacktestQueryService.list_results
 # ---------------------------------------------------------------------------
@@ -352,16 +342,6 @@ async def test_get_optimization_returns_result() -> None:
     assert result.id == "opt-1"
 
 
-@pytest.mark.asyncio
-async def test_get_optimization_raises_404_when_not_found() -> None:
-    optimization_repo = MagicMock()
-    optimization_repo.get = AsyncMock(return_value=None)
-    svc = _query_svc(optimization_repo=optimization_repo)
-
-    with pytest.raises(NotFoundError):
-        await svc.get_optimization(GetOptimizationQuery(optimization_id="missing"))
-
-
 # ---------------------------------------------------------------------------
 # BacktestQueryService.get_request_status
 # ---------------------------------------------------------------------------
@@ -381,11 +361,39 @@ async def test_get_request_status_returns_poll_dict() -> None:
     assert result["error"] is None
 
 
+# ---------------------------------------------------------------------------
+# Query-service 404s: a missing doc (repo returns None) raises NotFoundError.
+# One shape per read method — folded since the body is identical per method.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "call_with_missing",
+    [
+        pytest.param(
+            lambda svc: svc.get_result(GetBacktestQuery(run_id="missing")),
+            id="get_result",
+        ),
+        pytest.param(
+            lambda svc: svc.get_optimization(GetOptimizationQuery(optimization_id="missing")),
+            id="get_optimization",
+        ),
+        pytest.param(
+            lambda svc: svc.get_request_status("missing"),
+            id="get_request_status",
+        ),
+    ],
+)
 @pytest.mark.asyncio
-async def test_get_request_status_raises_404_when_not_found() -> None:
-    request_repo = MagicMock()
-    request_repo.get = AsyncMock(return_value=None)
-    svc = _query_svc(request_repo=request_repo)
+async def test_query_raises_404_when_repo_returns_none(call_with_missing) -> None:
+    # Every query repo dependency returns None → each read method must 404.
+    none_repo = MagicMock()
+    none_repo.get = AsyncMock(return_value=None)
+    svc = _query_svc(
+        backtest_repo=none_repo,
+        request_repo=none_repo,
+        optimization_repo=none_repo,
+    )
 
     with pytest.raises(NotFoundError):
-        await svc.get_request_status("missing")
+        await call_with_missing(svc)

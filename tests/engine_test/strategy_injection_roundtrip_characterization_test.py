@@ -1,7 +1,8 @@
 """Contract test for the public strategy-injection API on the execution engine.
 
-``inject_prepared_strategy`` replaces the three former private-member injection
-hacks. The load-bearing behavior it MUST reproduce, pinned here:
+``inject_prepared_strategy`` is the single entry point for registering a prepared
+strategy on the running engine. The load-bearing behavior it MUST guarantee,
+pinned here:
 
   1. Round-trip: after injection, ``get_strategy(sid)`` returns the instance and
      ``unload_strategy(sid)`` clears it.

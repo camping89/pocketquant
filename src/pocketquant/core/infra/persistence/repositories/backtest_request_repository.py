@@ -17,8 +17,8 @@ async def ensure_pending_sub_unique_index(collection: Any) -> None:
 
     DB-level guarantee: at most one pending request per subscription. The
     $type guard keeps single-kind docs (sub_id=null) out of the index — two
-    concurrent ad-hoc runs are legitimate. Called from both ensure_indexes and
-    the boot migration so the spec can never drift between the two.
+    concurrent ad-hoc runs are legitimate. Extracted as a standalone helper so
+    any caller mints the index from one spec and it can never drift.
     """
     spec = {
         "unique": True,

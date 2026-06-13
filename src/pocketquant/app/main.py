@@ -12,13 +12,6 @@ from pocketquant.app.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
-    migrate_backtest_request_ids,
-    migrate_backtest_run_cache_ids,
-    migrate_job_history_uuid_ids,
-    migrate_strategy_id_fields,
-    migrate_subscription_desired_state,
-    migrate_subscription_uuid_ids,
-    migrate_tracked_symbols_uuid_ids,
     recover_orphan_jobs,
     recover_stale_backtests,
     register_health_checks,
@@ -64,33 +57,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.database = await container.get(Database)
         app.state.cache = await container.get(Cache)
 
-        # Migration must precede service resolution — PositionAppService.start()
-        # loads open positions with the post-migration field shape. If legacy
-        # docs are still on disk, the read would crash before migration fixed them.
-        await migrate_strategy_id_fields(container)
-        # Backfill desired_state/actual_state right after the field rename — both
-        # are subscriptions-collection migrations; rename first, then state backfill,
-        # so rehydrate/reconcile read the final field shape.
-        await migrate_subscription_desired_state(container)
-        # Re-key tracked_symbols._id to uuid7 BEFORE seed_tracked_symbols runs,
-        # so the seeder's upserts never race legacy symbol-keyed docs.
-        await migrate_tracked_symbols_uuid_ids(container)
-        # Re-key legacy ObjectId docs in the append-only job_history log; new
-        # writes are already uuid7, so this only touches pre-uuid history.
-        await migrate_job_history_uuid_ids(container)
-        # Re-key bt:{sub_id} backtest requests to uuid7. Creates the pending-sub
-        # partial unique index FIRST so the dedup guarantee never lapses, and
-        # runs BEFORE the backtest worker starts draining the queue.
-        await migrate_backtest_request_ids(container)
-        # Re-key per-subscription cache docs in backtest_runs (_id == sub_id) to
-        # uuid7. Ensures the subscription_id unique index FIRST so the one-doc-
-        # per-sub guarantee never lapses, and runs BEFORE the worker writes caches.
-        await migrate_backtest_run_cache_ids(container)
-        # Re-key subscriptions._id (sha256 16-hex) to uuid7 + rewrite the 4 FK
-        # fields, map-based and crash-safe. Runs LAST of the id migrations —
-        # phases above already decoupled every other _id from sub_id — and
-        # BEFORE rehydrate so RAM instance keys are minted from the new ids.
-        await migrate_subscription_uuid_ids(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)

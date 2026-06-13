@@ -5,7 +5,7 @@ Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 
 import pytest
 from testcontainers.mongodb import MongoDbContainer
@@ -13,18 +13,6 @@ from testcontainers.redis import RedisContainer
 
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
-
-
-@pytest.fixture(scope="session")
-def mongo_container() -> Iterator[MongoDbContainer]:
-    with MongoDbContainer("mongo:7.0") as mongo:
-        yield mongo
-
-
-@pytest.fixture(scope="session")
-def redis_container() -> Iterator[RedisContainer]:
-    with RedisContainer("redis:7.2-alpine") as redis:
-        yield redis
 
 
 @pytest.fixture

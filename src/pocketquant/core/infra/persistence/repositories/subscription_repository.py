@@ -16,10 +16,9 @@ logger = get_logger(__name__)
 class SubscriptionRepository(BaseRepository):
     """MongoDB repository for Subscription persistence.
 
-    Collection: subscriptions (legacy name "strategy_subscriptions" is migrated at boot
-    by ``migrate_strategy_id_fields`` in ``api.main_extensions``).
-    PK: _id = uuid7 string; dedup of (strategy_code, symbol, interval) is enforced
-    by the unique compound index ``ix_subscriptions_dedup_triple``.
+    Collection: subscriptions. PK: _id = uuid7 string; dedup of
+    (strategy_code, symbol, interval) is enforced by the unique compound index
+    ``ix_subscriptions_dedup_triple``.
     """
 
     _collection_name = "subscriptions"

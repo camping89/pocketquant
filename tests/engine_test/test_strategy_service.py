@@ -118,48 +118,42 @@ def _closed_position(idx: int = 1, subscription_id: str = "sub-1") -> PositionAg
 # ---------------------------------------------------------------------------
 
 
+# start/stop are mirror operations: each writes one desired_state value via the
+# same repo call, and each 404s when the update matches zero docs. Folded by op.
+@pytest.mark.parametrize(
+    ("op", "command", "written_state"),
+    [
+        pytest.param("start", StartStrategyCommand(subscription_id="sub-1"), "running", id="start"),
+        pytest.param("stop", StopStrategyCommand(subscription_id="sub-1"), "stopped", id="stop"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_start_sets_desired_running() -> None:
+async def test_start_stop_writes_desired_state(op, command, written_state) -> None:
     sub_repo = MagicMock()
     sub_repo.update_desired_state = AsyncMock(return_value=1)
     svc = _cmd_svc(sub_repo=sub_repo)
 
-    result = await svc.start(StartStrategyCommand(subscription_id="sub-1"))
+    result = await getattr(svc, op)(command)
 
     assert result is True
-    sub_repo.update_desired_state.assert_awaited_once_with("sub-1", "running")
+    sub_repo.update_desired_state.assert_awaited_once_with("sub-1", written_state)
 
 
+@pytest.mark.parametrize(
+    ("op", "command"),
+    [
+        pytest.param("start", StartStrategyCommand(subscription_id="missing"), id="start"),
+        pytest.param("stop", StopStrategyCommand(subscription_id="missing"), id="stop"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_start_raises_not_found_when_zero_modified() -> None:
+async def test_start_stop_raises_not_found_when_zero_modified(op, command) -> None:
     sub_repo = MagicMock()
     sub_repo.update_desired_state = AsyncMock(return_value=0)
     svc = _cmd_svc(sub_repo=sub_repo)
 
     with pytest.raises(NotFoundError):
-        await svc.start(StartStrategyCommand(subscription_id="missing"))
-
-
-@pytest.mark.asyncio
-async def test_stop_sets_desired_stopped() -> None:
-    sub_repo = MagicMock()
-    sub_repo.update_desired_state = AsyncMock(return_value=1)
-    svc = _cmd_svc(sub_repo=sub_repo)
-
-    result = await svc.stop(StopStrategyCommand(subscription_id="sub-1"))
-
-    assert result is True
-    sub_repo.update_desired_state.assert_awaited_once_with("sub-1", "stopped")
-
-
-@pytest.mark.asyncio
-async def test_stop_raises_not_found_when_zero_modified() -> None:
-    sub_repo = MagicMock()
-    sub_repo.update_desired_state = AsyncMock(return_value=0)
-    svc = _cmd_svc(sub_repo=sub_repo)
-
-    with pytest.raises(NotFoundError):
-        await svc.stop(StopStrategyCommand(subscription_id="missing"))
+        await getattr(svc, op)(command)
 
 
 # ---------------------------------------------------------------------------
@@ -291,19 +285,29 @@ async def test_get_one_returns_none_for_unknown_code() -> None:
 # ---------------------------------------------------------------------------
 
 
+# is_running derives purely from actual_state (desired_state held at "running"):
+# actual "running" → True, actual "stopped" (still converging) → False.
+@pytest.mark.parametrize(
+    ("actual_state", "expected_is_running"),
+    [
+        pytest.param("running", True, id="actual_running"),
+        pytest.param("stopped", False, id="actual_stopped_converging"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_list_symbols_derives_is_running_from_actual_state() -> None:
+async def test_list_symbols_derives_is_running_from_actual_state(
+    actual_state, expected_is_running
+) -> None:
     from pocketquant.core.domain.shared.enums import Interval
 
-    sub_id = "sub-abc"
     sub = MagicMock()
-    sub.id = sub_id
+    sub.id = "sub-abc"
     sub.strategy_code = "hitnrun2"
     sub.symbol = "BTCUSDT:BINANCE"
     sub.interval = Interval.HOUR_1
     sub.created_at = datetime(2026, 1, 1, tzinfo=UTC)
     sub.desired_state = "running"
-    sub.actual_state = "running"
+    sub.actual_state = actual_state
 
     sub_repo = MagicMock()
     sub_repo.list_all = AsyncMock(return_value=[sub])
@@ -314,33 +318,9 @@ async def test_list_symbols_derives_is_running_from_actual_state() -> None:
     rows = await svc.list_symbols(ListSymbolsQuery())
 
     assert len(rows) == 1
-    assert rows[0]["is_running"] is True
+    assert rows[0]["is_running"] is expected_is_running
     assert rows[0]["desired_state"] == "running"
-    assert rows[0]["actual_state"] == "running"
-
-
-@pytest.mark.asyncio
-async def test_list_symbols_is_running_false_when_actual_stopped() -> None:
-    from pocketquant.core.domain.shared.enums import Interval
-
-    sub = MagicMock()
-    sub.id = "sub-1"
-    sub.strategy_code = "hitnrun2"
-    sub.symbol = "BTCUSDT:BINANCE"
-    sub.interval = Interval.HOUR_1
-    sub.created_at = datetime(2026, 1, 1, tzinfo=UTC)
-    sub.desired_state = "running"  # converging — desired ahead of actual
-    sub.actual_state = "stopped"
-
-    sub_repo = MagicMock()
-    sub_repo.list_all = AsyncMock(return_value=[sub])
-    bt_repo = MagicMock()
-    bt_repo.get_subscription_statuses = AsyncMock(return_value={})
-
-    svc = _query_svc(sub_repo=sub_repo, bt_repo=bt_repo)
-    rows = await svc.list_symbols(ListSymbolsQuery())
-
-    assert rows[0]["is_running"] is False
+    assert rows[0]["actual_state"] == actual_state
 
 
 @pytest.mark.asyncio

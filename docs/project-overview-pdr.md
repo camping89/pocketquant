@@ -2,7 +2,7 @@
 
 Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: single Python package `src/pocketquant/` + `web/` as a separate npm app.
 
-Use [README](../README.md) for the current local workflow and verified endpoint names.
+Discover architecture, code patterns, and conventions in `./docs/` — see [system-architecture.md](./system-architecture.md), [code-standards.md](./code-standards.md), [README.md](../README.md).
 
 ## Project Vision
 
@@ -282,27 +282,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Redis batch operations
 - Bulk database upserts
 
-## Current Implementation Status
-
-### Implemented (Core & Extended)
-
-| Feature | Status | API Complete | Tests | Coverage |
-|---------|--------|--------------|-------|----------|
-| Historical Sync (F1) | ✅ Complete | Yes | Yes | 80%+ |
-| Real-time Quotes (F2) | ✅ Complete | Yes | Yes | 75%+ |
-| Bar Aggregation (F3) | ✅ Complete | Yes | Yes | 85%+ |
-| Data Retrieval (F4) | ✅ Complete | Yes | Yes | 80%+ |
-| Symbol Registry (F5) | ✅ Complete | Yes | Partial | 70% |
-| Background Jobs (F6) | ✅ Complete | Yes | Yes | 75%+ |
-| Strategy Engine (F7) | ✅ Complete | Yes | Yes | 80%+ |
-| Backtesting (F8) | ✅ Complete | Yes | Yes | 78%+ |
-| Order/Position Mgmt (F9) | ✅ Complete | Yes | Yes | 82%+ |
-| Live Trading/OKX (F10) | ✅ Complete | Yes | Yes | 76%+ |
-| DDD Refactoring | ✅ Complete | N/A | Yes | 78%+ |
-| Structured Logging | ✅ Complete | N/A | N/A | 100% |
-| Docker Setup | ✅ Complete | N/A | N/A | N/A |
-
-### Module Breakdown (Single Python package + web)
+## Architecture & Module Breakdown (Single Python package + web)
 
 Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
 
@@ -347,7 +327,7 @@ src/pocketquant/
     ├── market_data/      Sync/quotes/ohlcv/status app-services
     ├── middleware/       Admin auth, symbol validation, etc.
     ├── di/               Dishka container + 6 Provider classes
-    └── main.py           FastAPI app + lifespan (migrations, scheduler, WS feed, SPA serve)
+    └── main.py           FastAPI app + lifespan (indexes, scheduler, WS feed, SPA serve)
 
 web/                                 # React 19 + Vite SPA (separate npm app)
 ├── Components: TradingChart, SymbolSelector, IntervalSelector, StrategySelector
@@ -355,7 +335,7 @@ web/                                 # React 19 + Vite SPA (separate npm app)
 └── Tech: React 19, Vite, TypeScript, TanStack Router/Query, Lightweight Charts
 ```
 
-**Service + Route Pattern:** Each route calls a command/query service; service contains logic; exceptions handled globally. See [Service & Route Conventions](./service-and-route-conventions.md).
+**Service + Route Pattern:** Each route calls a command/query service; service contains logic; exceptions handled globally. See [code-standards.md](./code-standards.md#routes--services) for naming and patterns.
 
 ## Success Criteria
 
