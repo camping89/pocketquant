@@ -32,338 +32,147 @@ CRITICAL: No reverse dependencies.
 
 ## Architecture Patterns
 
+### 0. Route Layer Rules
+
+Routes are thin HTTP handlers. All business logic lives in services.
+
+| Component | Location | Responsibility |
+|-----------|----------|---|
+| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → build Command/Query → call service → return DTO |
+| **Command Service** | `src/pocketquant/{pkg}/{feature}_command_service.py` | Mutate state: validate, persist, publish events |
+| **Query Service** | `src/pocketquant/{pkg}/{feature}_query_service.py` | Read-only: fetch, serialize, return DTO |
+
+**Route signature pattern:**
+```python
+from dishka.integrations.fastapi import FromDishka, DishkaRoute
+
+@router.post("/path", status_code=201, route_class=DishkaRoute)
+async def endpoint_name(
+    body: RequestBody,
+    cmd_svc: FromDishka[SomeCommandService],
+) -> dict:
+    return await cmd_svc.method(SomeCommand(...))
+```
+
+**Key rules:**
+- Never try/catch in routes or services (exceptions propagate → global handler)
+- Use `FromDishka[ServiceType]`, never `Depends()`
+- Pydantic validates input automatically
+- Return status codes explicitly: `201` (created), `204` (no content), `404` (not found)
+
 ### 1. Route + Service Layer Architecture
 
-Routes are thin HTTP layers. **Services provide business logic.** All orchestration moved to command/query service classes.
+Routes are thin HTTP layers. Services provide business logic via 5-step pattern: Fetch → Validate → Persist → Invalidate Cache → Publish Events.
 
+**Structure:**
 ```
-routes/                         # Routes by feature
-├── market_data.py              # Market data routes
-├── backtesting.py              # Backtest routes
-├── strategy.py                 # Strategy routes
-├── trading.py                  # Trading routes
-└── ...
-
-services/                       # Command/Query services by subpackage
-├── strategy_command_service.py # Commands: add symbol, start/stop strategy
-├── strategy_query_service.py   # Queries: list strategies, subscriptions
-├── backtest_command_service.py # Commands: run backtest, optimize
-├── backtest_query_service.py   # Queries: list results, get result
-└── ...
-
-IMPORTANT: No business logic in routes. All logic in:
-- Command/Query services (orchestrate adapters + domain)
-- Domain layer (aggregates, value objects, events)
-
-Clean Architecture Example (backtesting):
-
-**Routes Layer (Thin HTTP):**
-```python
-# src/pocketquant/app/routes/backtest.py
-@router.post("/backtest/run")
-async def run_backtest(
-    cmd: RunBacktestCommand,
-    backtest_svc: FromDishka[BacktestCommandService]
-) -> BacktestResultDTO:
-    return await backtest_svc.run(cmd)
+routes/{feature}.py                    # HTTP handlers
+{pkg}/{feature}_command_service.py    # Write logic
+{pkg}/{feature}_query_service.py      # Read logic (cached)
+core/domain/{entity}/                  # Pure logic (no I/O)
+core/persistence/repositories/         # Data access
 ```
 
-**Service Layer (Orchestration):**
-```
-src/pocketquant/backtest/backtest_command_service.py
-├── run() — Resolve strategy, fetch bars, execute domain logic, persist
-└── optimize() — Grid search parameter space, persist results
-
-src/pocketquant/backtest/backtest_query_service.py
-├── get() — Fetch by run_id
-└── list() — Fetch by strategy_code
-```
-
-**Domain Layer (Pure logic):**
-```
-src/pocketquant/core/domain/
-├── backtest/ — BacktestResult, BacktestMetrics (entities)
-└── services/performance_calculator.py — Calculate Sharpe, Sortino, max drawdown (pure, no I/O)
-```
-
-**Key:** Route calls BacktestCommandService, which orchestrates BarRepository + PaperBroker + PerformanceCalculator (domain). PerformanceCalculator has ZERO I/O imports.
+**Example:** Route → BacktestCommandService → BarRepository + PerformanceCalculator (domain, pure).
 
 **Key Rules:**
-1. Routes are thin HTTP layers (parse, inject service, delegate, respond)
-2. Services are self-contained use cases (command or query, no shared state)
-3. Service 5-step pattern: Fetch Adapters → Validate Domain → Persist Adapters → Invalidate Cache → Publish Events
-4. Routes use `FromDishka[ServiceClass]` for dependency injection (never `Depends()`)
-5. NO business logic in routes (all in services or domain)
-6. Service methods accept Pydantic command/query models, return DTOs
-7. No cross-service dependencies in routes (loose coupling via adapter singletons)
-
-**Rationale:**
-- Tight cohesion within feature (all operation code together)
-- Loose coupling between features (no direct imports)
-- Clean architecture (domain pure, application orchestrates, features delegate)
-- Easy to add/remove operations without cascading changes
+1. Routes: parse, inject service, delegate, respond (no business logic)
+2. Services: one method per command/query, accept Pydantic model, return DTO
+3. Use `FromDishka[ServiceClass]` for DI (never `Depends()`)
+4. NO try/catch in routes/services (propagate to global handler)
+5. Service methods publish domain events for all state changes
 
 ### 2. Application Layer (Orchestrators & State Machines)
 
-Business logic that coordinates Domain + Adapters. Unlike Domain (pure logic), Application can call Adapters for I/O.
+Stateful services orchestrating domain + adapters. Can call Adapters (unlike Domain). Called by service methods, often singletons.
 
-**Examples:**
-- **StrategyAppService:** Listen to market events (bars, ticks), call strategy.on_bar(), check risk, submit orders via broker
-- **BacktestAppService:** Load strategy, inject historical bars, collect fills, calculate metrics
-- **BarAppService:** Aggregate incoming ticks into OHLCV bars at multiple intervals
-- **OrderAppService:** Order state machine, recovery on startup
-- **PositionAppService:** Track open/closed positions, calculate P&L
+**Examples:** StrategyAppService (market events → signals → orders), BarAppService (tick aggregation), OrderAppService (state machine), PositionAppService (P&L tracking).
 
-**These are business orchestrators called by service methods (routes delegate to services).**
-
-```python
-# Application-layer service (orchestrates domain + adapters)
-class StrategyAppService:
-    def __init__(self, broker: IBroker, event_bus: EventBus):
-        self.broker = broker
-        self.event_bus = event_bus
-
-    async def on_bar(self, bar: OHLCVBar) -> None:
-        # 1. Domain: Call strategy logic
-        signal = await self.strategy.on_bar(bar)
-
-        # 2. Adapter: Check risk
-        approved = await risk_check(signal)
-
-        # 3. Adapter: Execute via broker
-        if approved:
-            order = await self.broker.submit_order(approved.order)
-
-        # 4. Adapter: Publish event
-        await self.event_bus.publish(SignalGeneratedEvent(...))
-```
-
-**Rules:**
-- Can import Domain and Adapters
-- No decorators (they're plain classes)
-- Stateful (maintains runtime state)
-- Called by service methods in subpackages
-- Often singletons (StrategyAppService, QuoteAppService) or per-request (DataSyncService)
+**Rules:** Can import Domain + Adapters. Stateless (no decorators). Initialized in lifespan, injected by DI.
 
 ### 3. Dependency Injection (Dishka)
 
-**dishka** library with 6 providers + type-hint-based auto-resolution. Container resolves all dependencies automatically by matching `__init__` parameter types.
-
-```python
-# Routes use dishka FastAPI integration
-from dishka.integrations.fastapi import FromDishka
-from pocketquant.app.market_data_command_service import MarketDataCommandService
-
-@router.post("/sync")
-async def sync(cmd: SyncCommand, service: FromDishka[MarketDataCommandService]):
-    return await service.sync_symbol(cmd)
-```
-
-**Key Files:**
-- `src/pocketquant/app/di/` — Provider classes for Core, Persistence, Infrastructure, etc.
-- `src/pocketquant/app/main.py` — Lifespan: create container, `setup_dishka()`
-
-**Providers (initialization order):**
-1. **CoreProvider** - Settings, EventBus (max_history=50)
-2. **PersistenceProvider** - Database, Cache, repositories
-3. **InfrastructureProvider** - BrokerFactory, JobScheduler, IDataProvider, HealthCoordinator
-4. **Other Providers** - Command/Query services (StrategyCommandService, BacktestCommandService, etc.), AppServices (BarAppService, QuoteAppService)
-
-**Benefits:**
-- Auto-resolution by type hint (no manual wiring)
-- Scoped lifecycle (Scope.APP for singletons, Scope.REQUEST for per-request)
-- Type-safe (IDE autocomplete, pyright validation)
-- Centralized initialization order via PROVIDERS list
+dishka resolves dependencies by type hint. Routes inject via `FromDishka[ServiceType]`. Providers in `src/pocketquant/app/di/` initialized in order: CoreProvider → PersistenceProvider → InfrastructureProvider → Services/AppServices. Setup in lifespan via `setup_dishka(app, container)`.
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access through instance methods in `src/pocketquant/core/persistence/repositories/`. `Database` injected via constructor. All repositories inherit from `BaseRepository`.
-
-**13 Repositories:** BarRepository, OrderRepository, PositionRepository, SubscriptionRepository, BacktestRepository, BacktestRequestRepository, BacktestOrderRepository, BacktestTradeRepository, OptimizationRepository, SymbolRepository, TrackedSymbolRepository, SyncStatusRepository, JobHistoryRepository
-
-**Key Pattern:**
-```python
-class BarRepository(BaseRepository):
-    async def upsert_many(self, records: List[Bar]) -> int:
-        collection = self._collection("bars")
-        docs = [bar.to_mongo() for bar in records]  # Entity serialization
-        # bulk upsert...
-        return len(records)
-```
-
-**Centralized Persistence (in `core/infra/persistence`):**
-- Database (PyMongo, NOT Motor) and Cache (Redis) managed by dishka
-- BaseRepository: `_collection()` helper, `Database` injected
-- Domain entities handle serialization via `to_mongo()` / `from_mongo()`
-- No schemas/ directory
-
-**`Database` public surface (in order of preference for app code):**
-1. `get_collection(name)` — used by repositories / service methods (default).
-2. `database` property — raw `AsyncDatabase` for migrations and admin ops
-   (rename_collection, list_collection_names, drop_index, multi-collection
-   aggregations). Avoid in repository or handler code.
-3. `get_database()` — alias of `database` property, retained for backward
-   compatibility. New code should prefer `database`.
-
-**Benefits:** Instance-based design, easy to test, domain purity, single source of truth
+All data access via instance methods in `src/pocketquant/core/persistence/repositories/`. All repositories inherit from `BaseRepository`, use `_collection(name)` helper, inject `Database` via constructor. Domain entities serialize via `to_mongo()` / `from_mongo()`. No schemas/ directory. Benefits: testable, pure domain, single source of truth.
 
 ### 5. Service Pattern (Business Logic)
 
-All services receive dependencies via constructor, managed by DI container:
-
-#### Stateful Services
-
-```python
-# QuoteAppService - constructed in lifespan, stored in Services dataclass
-class QuoteAppService:
-    def __init__(self, settings: Settings, cache: Cache, bar_manager: BarAppService):
-        self._settings = settings
-        self._cache = cache
-        self._bar_manager = bar_manager
-```
-
-#### Lifecycle-Managed Services (Async Init/Shutdown)
-
-```python
-# OrderAppService - async init in lifespan, explicit shutdown in finally block
-class OrderAppService:
-    def __init__(self, event_bus: EventBus, order_repository: OrderRepository):
-        self._event_bus = event_bus
-        self._order_repo = order_repository
-
-# In lifespan:
-order_manager = OrderAppService(event_bus, order_repo)
-await order_manager.load_pending_orders()  # async init
-```
-
-**Rationale:** All dependencies explicit in constructor. Lifespan manages lifecycle with try/finally for clean shutdown.
+All dependencies via constructor (managed by DI). Stateful services initialized in lifespan with try/finally for clean shutdown. Example: `OrderAppService` calls `await load_pending_orders()` in lifespan before any handler uses it.
 
 ### 6. Provider Pattern (External Integrations)
 
-Encapsulate external API calls with clean interface:
-
-```python
-# BinanceClient implements the IDataProvider port
-class BinanceClient(IDataProvider):
-    async def fetch_ohlcv(self, symbol: str, interval: Interval, n_bars: int = 1000) -> list[Bar]:
-        # symbol is composite {code}:{exchange}; auto-paginates when n_bars > 1000
-        ...
-```
-
-**Rationale:** Concrete adapter behind a core `IDataProvider` port (DIP) — isolates external I/O, clean error handling, easy to mock for testing.
+Concrete adapter (e.g., `BinanceClient`) behind a core interface (e.g., `IDataProvider`). Isolates external I/O, clean error handling, testable.
 
 ### 7. Event Handler Auto-Discovery Pattern
 
-Register event subscribers automatically using the `@event_handler` decorator:
+Use `@event_handler` decorator on service methods. Auto-register at startup via `registry.register_instance(service, event_bus)`. Clear, scalable, type-safe.
+
+### 8. Exception Handler Registration
+
+Global exception handlers automatically map domain errors to HTTP responses. Register at startup in `src/pocketquant/app/main_extensions.py`:
 
 ```python
-from pocketquant.core.common.messaging.event_registry import event_handler
+from pocketquant.core.common.exceptions import register_exception_handlers
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 
-class PositionAppService:
-    @event_handler(OrderFilledEvent)
-    async def _on_order_filled(self, event: OrderFilledEvent) -> None:
-        """Called when order is filled (auto-registered)."""
-        await self.update_position(event)
-
-    @event_handler(BarCompletedEvent, QuoteReceivedEvent)
-    async def _on_market_event(self, event: DomainEvent) -> None:
-        """Called on market data events (auto-registered)."""
-        pass
+register_exception_handlers(app, validation_error_cls=RequestValidationError)
 ```
 
-Auto-registration during startup:
+**Automatic mapping:**
+- `NotFoundError` → 404 JSON `{error: {code, message}}`
+- `DomainError` → 400 JSON `{error: {code, message}}`
+- `AppError` (base) → 500 JSON `{error: {code, message}}`
+
+Services NEVER try/catch; exceptions propagate to the global handler.
+
+### 8.5. Command/Query Service Pattern
+
+One service method per command/query. Constructor receives dependencies (dishka auto-wires). Method: receive Pydantic Command/Query → fetch adapters → validate domain → persist → publish events → return DTO.
+
+**Template:**
 ```python
-from pocketquant.core.common.messaging.event_registry import get_event_registry
+class SomeCommandService:
+    def __init__(self, repo: SomeRepository):
+        self.repo = repo
 
-registry = get_event_registry()
-count = registry.register_instance(position_tracker, event_bus)
-# All @event_handler methods now subscribed to EventBus
+    async def handle(self, cmd: SomeCommand) -> dict:
+        # Fetch + Validate
+        if not await self.repo.exists(cmd.id):
+            raise NotFoundError("NOT_FOUND")
+        # Persist + Publish
+        result = await self.repo.upsert({...})
+        await EventBus.publish(SomeEvent(...))
+        return result.to_dto()
 ```
 
-**Benefits:**
-- Decorative, self-documenting: Clear which methods handle which events
-- Auto-discovery: No manual subscribe() calls
-- Scalable: Add new event handlers without modifying the event bus
-- Type-safe: Event types checked at decorator definition
+**Worked Example: POST `/api/v1/strategies/{strategy_code}/subscriptions`**
 
-### 8. Command/Query Service Pattern
-
-Services handle commands (mutate state) and queries (read-only). Each service method accepts a Pydantic command/query model and returns a DTO.
-
-**Rule: One service method per command/query.** Each method is independently callable from routes.
-
+Route:
 ```python
-# Command Service (mutates state)
-class MarketDataCommandService:
-    def __init__(self, provider: IDataProvider, bar_repo: BarRepository, ...):
-        self.provider = provider
-        self.bar_repo = bar_repo
-
-    async def sync_symbol(self, cmd: SyncSymbolCommand) -> SyncResultDTO:
-        # 1. Fetch from adapters (symbol is composite {code}:{exchange})
-        bars = await self.provider.fetch_ohlcv(
-            cmd.symbol, cmd.interval, cmd.n_bars
-        )
-
-        # 2. Validate via domain (Bar.from_mongo)
-        validated_bars = [Bar.from_mongo(bar.to_mongo()) for bar in bars]
-
-        # 3. Persist via adapters
-        await self.bar_repo.upsert_many(validated_bars)
-
-        # 4. Publish domain events
-        await EventBus.publish(HistoricalDataSyncedEvent(...))
-
-        # 5. Return DTO (never return entities)
-        return SyncResultDTO(bars_synced=len(bars), status="completed")
-
-# Query Service (read-only)
-class MarketDataQueryService:
-    def __init__(self, bar_repo: BarRepository, cache: Cache):
-        self.bar_repo = bar_repo
-        self.cache = cache
-
-    async def get_bars(self, query: GetBarsQuery) -> BarsDTO:
-        cache_key = f"bar:{query.symbol}:{query.interval}"
-
-        # 1. Check cache first
-        cached = await self.cache.get(cache_key)
-        if cached:
-            return cached
-
-        # 2. Query database
-        bars = await self.bar_repo.find(
-            symbol=query.symbol, interval=query.interval, limit=query.limit
-        )
-
-        # 3. Cache result (300s TTL)
-        result = BarsDTO(bars=[bar.to_mongo() for bar in bars], count=len(bars))
-        await self.cache.set(cache_key, result, ttl=300)
-
-        # 4. Return DTO
-        return result
+@strategy_router.post("/{strategy_code}/subscriptions", status_code=201)
+async def create_subscription(
+    strategy_code: str,
+    body: CreateSubscriptionBody,
+    cmd_svc: FromDishka[StrategyCommandService],
+) -> dict:
+    return await cmd_svc.add_symbol(AddSymbolCommand(...))
 ```
 
-**Service Method Responsibilities (5-step pattern):**
-1. Receive Command/Query (Pydantic model) as method argument
-2. Fetch data from Adapters (Database, Cache, Providers)
-3. Execute domain logic via Domain layer (validation, calculations)
-4. Persist results via Adapters (Database writes, Cache invalidation)
-5. Publish DomainEvents to EventBus (for subscribers to react)
-6. Return DTO (never return domain entities)
+Service:
+```python
+async def add_symbol(self, cmd: AddSymbolCommand) -> dict:
+    if not await self.tracked_symbol_repo.exists(cmd.symbol):
+        raise NotFoundError("SYMBOL_NOT_TRACKED")
+    sub = Subscription(id=generate_id(), strategy_code=cmd.strategy_id, ...)
+    await self.subscription_repo.add(sub)
+    return sub.to_dto()
+```
 
-**Key Rules:**
-- One service method per command/query (no ambiguity about what the method does)
-- Constructor receives dependencies (dishka auto-wires via type hints)
-- Method is async or sync as needed
-- Return DTOs, never domain entities
-- Publish domain events for all state changes
-
-**Registration Pattern:**
-Services registered in Dishka providers:
-1. Create service class in subpackage (e.g., `src/pocketquant/app/market_data_command_service.py`)
-2. Add provider in `src/pocketquant/app/di/` that exposes the service class
-3. Routes inject via `FromDishka[ServiceClass]`
+Flow: Route → Service → Repository → MongoDB. Exceptions propagate to global handler → 4xx/5xx JSON.
 
 ### 9. Service Extract-Method Pattern
 
@@ -390,7 +199,7 @@ Bar integrity repair: check → delete misaligned → resync gaps → verify.
 
 **Why skip_filter:** `filter_new_bars` queries `bar_repo.find_datetimes` to drop only records whose datetime already exists. Correct for sparse gaps. `skip_filter=True` is still useful for repair flows that want to force re-upsert (e.g., to refresh OHLCV values that may have shifted), bypassing both the existence check AND the wire-noise reduction.
 
-**Usage:** Background job `sync_repair` (every 12h) or manual `/api/v1/market-data/integrity/repair` endpoint. Returns `RepairResult` with deleted count, gaps_resynced, still_missing, still_missing_ranges.
+**Usage:** Background job `sync_repair` (every 12h) hoặc endpoint `/api/v1/market-data/integrity/repair`. `repair_integrity()` trả về `dict` gồm deleted count, gaps_resynced, still_missing, still_missing_ranges.
 
 ### 10. Schema Consolidation (Use Base Classes)
 
@@ -407,62 +216,19 @@ Eliminate redundant empty Create subclasses. Use base classes directly for repos
 
 ### 11. Strategy Implementation Pattern
 
-Implement IStrategy interface for custom trading strategies:
-
-```python
-from pocketquant.core.domain.concepts.strategy.interfaces import IStrategy
-
-class HitNRun2Strategy(IStrategy):
-    def __init__(self, config: StrategyConfig):
-        super().__init__(config)
-        self.entry_lookback_bars = self.get_parameter("entry_lookback_bars", 240)
-        self.sl_lookback_bars = self.get_parameter("sl_lookback_bars", 480)
-        self.tp_lookback_bars = self.get_parameter("tp_lookback_bars", 60)
-        self.max_loss_pct = self.get_parameter("max_loss_pct", 0.01)
-        self.min_profit_pct = self.get_parameter("min_profit_pct", 0.02)
-
-    async def on_bar(self, bar: dict) -> Signal | None:
-        """Breakdown buy / breakup sell on 1m closed bars."""
-        prev_lows = list(self._lows)[-self.entry_lookback_bars:]
-        self._lows.append(bar["low"])
-        if len(prev_lows) < self.sl_lookback_bars:
-            return None  # warmup
-
-        if bar["close"] < min(prev_lows):
-            sl = max(min(prev_lows), bar["close"] * (1 - self.max_loss_pct))
-            tp = max(max(prev_highs_tp), bar["close"] * (1 + self.min_profit_pct))
-            return Signal(direction=Direction.LONG, entry_price=bar["close"],
-                          stop_loss_price=sl, take_profit_price=tp, ...)
-        return None  # No signal
-
-    async def on_tick(self, quote: QuoteTick) -> Optional[StrategySignal]:
-        """Called on each tick (optional)."""
-        return None
-
-    async def on_fill(self, fill: Fill) -> None:
-        """Called when order is filled (optional)."""
-        pass
-```
-
-**Strategy guidelines:**
-- Implement only methods you need (on_bar is mandatory)
-- Return StrategySignal or None
-- Keep logic pure (use domain layer for calculations)
-- Store state as instance variables
-- No direct broker/database access (StrategyAppService manages execution)
+Implement `IStrategy` interface. Implement `on_bar()` (mandatory), optionally `on_tick()`, `on_fill()`. Return `Signal | None`. Keep pure logic, no broker/database (StrategyAppService manages execution).
 
 ### 12. Domain Layer Patterns (Pydantic BaseModel + MongoDB Persistence)
 
 Domain entities use **Pydantic BaseModel** (not dataclasses) with built-in MongoDB persistence:
 - **Entities (5):** `Bar`, `OrderAggregate`, `PositionAggregate`, `Symbol` (flattened), `SyncStatus`
-- **Deleted Aggregates (Dead Code):** `OHLCVAggregate`, `QuoteAggregate`, `SymbolAggregate`, `SymbolInfo` VO
 - **Pattern:** Each aggregate has `to_mongo()` → dict and `@classmethod from_mongo(doc)` → entity
 - **Benefits:** Validation, serialization, schema evolution via Pydantic
 - **Value Objects:** Frozen via `field(frozen=True)` or `@dataclass(frozen=True)`
 - **Events:** `@dataclass(frozen=True, eq=False)` with custom `__eq__` by event_id
 - **Rules:** Use `generate_id()` (UUID7), immutable VOs/events, all aggregates extend BaseModel
-- **Cache Keys:** Use `build_bar_cache_key()` (renamed from `build_ohlcv_cache_key()`)
-- **Collections:** Use `COLLECTION_BARS` (renamed from `COLLECTION_OHLCV`)
+- **Cache Keys:** `build_bar_cache_key()`
+- **Collections:** `COLLECTION_BARS`
 
 ### 12.5. DDD Classification Guide (When to Use an Aggregate)
 
@@ -599,9 +365,9 @@ Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domai
 | Domain Services | `{DescriptiveName}` | None | `BarBuilder`, `PerformanceCalculator` |
 | Repositories | `{Entity}Repository` | `Repository` | `BarRepository`, `OrderRepository` |
 | Infra Interfaces | `I{Concept}` | `I` prefix | `IBroker`, `IDataProvider`, `IBrokerFactory` |
-| Infra Impls | `{Source}{Type}` | None (source-prefixed) | `OkxBroker`, `TradingViewClient`, `PaperBroker` |
+| Infra Impls | `{Source}{Type}` | None (source-prefixed) | `OKXBroker`, `BinanceClient`, `PaperBroker` |
 | App Services | `{Entity}AppService` | `AppService` | `BarAppService`, `StrategyAppService` |
-| Query Models | `{Get\|List}{Entity}Query` | `Query` | `GetBarsQuery`, `ListOrdersQuery` |
+| Query Models | `{Get\|List}{Entity}Query` | `Query` | `GetOHLCVQuery`, `ListOrdersQuery` |
 | Command Models | `{Action}{Entity}Command` | `Command` | `SyncSymbolCommand`, `StartStrategyCommand` |
 | Services | `{Domain}{Command\|Query}Service` | `Service` | `StrategyCommandService`, `BacktestQueryService` |
 | DTOs | `{Name}Response` | `Response` | `SyncResponse`, `QuoteResponse` |
@@ -609,8 +375,8 @@ Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domai
 | Middleware | `{Name}Middleware` | `Middleware` | `RateLimitMiddleware`, `IdempotencyMiddleware` |
 | Errors | `{Name}Error` | `Error` | `AppError`, `NotFoundError`, `DomainError` |
 | DI Providers | `{Domain}Provider` | `Provider` | `CoreProvider`, `ExecutionProvider` |
-| Configs | `{Name}Config` | `Config` | `BacktestConfig`, `WebhookConfig` |
-| Background Jobs | (functions) | — | `sync_5m()`, `sync_integrity()` |
+| Configs | `{Name}Config` | `Config` | `BacktestConfig`, `RiskConfig` |
+| Background Jobs | (functions) | — | `sync_1m()`, `sync_integrity()` |
 
 ### Module Size
 
@@ -708,57 +474,21 @@ Use full type hints on all public APIs: functions, class attributes, complex typ
 
 ## Testing Standards
 
-### Test Structure
+Minimum 80% code coverage (Service methods, repository methods, error paths, integration points):
 
-```
-tests/
-├── conftest.py              # Pytest fixtures
-├── test_market_data.py      # Feature tests
-└── integration/
-    └── test_sync_service.py
+```bash
+pytest --cov=src --cov-report=term-missing
+pytest tests/test_market_data.py::test_sync --pdb  # Run + debug
 ```
 
-### Mocking Singletons
-
-Use pytest fixtures and monkeypatch:
+Use pytest fixtures + monkeypatch for mocking:
 
 ```python
 @pytest.fixture
 async def mock_database(monkeypatch):
-    """Fixture to mock Database singleton."""
     mock_db = AsyncMock()
     monkeypatch.setattr("src.common.database.Database._database", mock_db)
     return mock_db
-
-@pytest.mark.asyncio
-async def test_sync_symbol(mock_database):
-    mock_database.get_collection.return_value.find_one.return_value = None
-    result = await service.sync_symbol("AAPL", "NASDAQ", "1d", 500)
-    assert result["status"] == "completed"
-```
-
-### Test Coverage
-
-Minimum 80% code coverage:
-
-```bash
-pytest --cov=src --cov-report=term-missing
-```
-
-Focus on:
-- Service methods (business logic)
-- Repository methods (data access)
-- Error paths (exceptions and edge cases)
-- Integration points (API contracts)
-
-### Running Tests
-
-```bash
-pytest                                    # All tests
-pytest tests/test_market_data.py         # Single file
-pytest tests/test_market_data.py::test_sync  # Single test
-pytest -v --tb=short                     # Verbose output
-pytest --pdb                             # Drop into debugger on failure
 ```
 
 ## Code Quality Tools
@@ -1002,72 +732,9 @@ async def transfer():
 
 ## Configuration & Secrets
 
-### Environment Variables
+Never hardcode. Use `.env` (local) and environment variables (prod). Never commit `.env` or secrets. Define in `src/pocketquant/core/config.py::Settings` with Pydantic.
 
-Never hardcode configuration. Use `.env` for local development:
 
-```python
-# In src/pocketquant/core/config.py
-from pydantic_settings import BaseSettings
-
-class Settings(BaseSettings):
-    mongodb_url: MongoDsn
-    redis_url: RedisDsn
-    log_format: str = "json"  # or "console"
-    okx_api_key: Optional[str] = None       # live trading only (Binance market data needs no auth)
-    okx_secret_key: Optional[str] = None
-    okx_passphrase: Optional[str] = None
-
-    class Config:
-        env_file = ".env"
-```
-
-### Secrets (Production)
-
-- Use environment variable in production (from secret management)
-- Never commit `.env` or `.env.example` with secrets
-- Use `.env.example` as template with dummy values
-
-```bash
-# .env.example (dummy values)
-MONGODB_URL=mongodb://localhost:52017
-OKX_API_KEY=api_key_placeholder
-```
-
-## File Size Targets
-
-| Component | Current | Target |
-|-----------|---------|--------|
-| quote_aggregator.py | 368 LOC | <400 (complex algorithm exception) |
-| quote_app_service.py | 236 LOC | <200 (consider split if modified) |
-| data_sync_service.py | 244 LOC | <200 |
-| handler.py (operation) | <150 LOC | <200 (single operation per file) |
-| router.py (feature) | <300 LOC | <400 (all operations for one feature) |
-
-**Current largest files (acceptable but monitor):**
-- `quote_aggregator.py` - 368 LOC (core algorithm, complexity justified)
-- Individual `router.py` files - <300 LOC each (operation-centric routes)
-
-## UUID Generation (Time-Ordered IDs)
-
-All aggregates use UUID7 (time-ordered) for better database indexing:
-
-```python
-from pocketquant.core.common.uuid import generate_id, generate_id_str
-
-# Generate UUID v7 (timestamp-based, sortable)
-order_id = generate_id()        # UUID object
-order_id_str = generate_id_str() # "550e8400-e29b-41d4-a716-446655440000"
-```
-
-**Migration from UUID4:**
-- Old: Random UUID4 (bad for B-tree indexes, cluster keys)
-- New: UUID7 (timestamp-based, naturally sorts chronologically)
-- Benefit: Better MongoDB shard key performance, faster range queries
-
-All aggregates migrated:
-- OHLCVAggregate, OrderAggregate, PositionAggregate, etc.
-- All repositories use UUID7 for _id generation
 
 ## Clean Architecture Rules (MANDATORY)
 
@@ -1108,6 +775,20 @@ from pocketquant.core.common.time import to_utc_iso
 - Manual DI wiring → use Dishka providers
 - Direct Database.get_collection() outside persistence/ → use BaseRepository._collection()
 - Handwritten schema classes → use domain entities with to_mongo/from_mongo
+
+## Import Contracts (Dependency Boundaries)
+
+Enforce via `import-linter` in `pyproject.toml`. Common surface:
+
+| From | To | Via |
+|------|----|----|
+| Routes | Command/Query Service | `FromDishka[ServiceType]` |
+| Services | Repository | Constructor DI |
+| Services | Exceptions | `raise NotFoundError`, `raise DomainError` |
+| Routes | Exception Handler | Global registration |
+| Repositories | MongoDB | `Database.get_collection()` |
+
+No reverse deps (routes ← services, services ← repositories). Domain never imports from Adapters/Application/Features.
 
 ## Quality Checklist
 

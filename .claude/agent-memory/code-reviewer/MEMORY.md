@@ -27,14 +27,13 @@ web/       # Node SPA at repo root
 - `tests/app_test/unit/handlers/sync/conftest.py`: autouse fixture rebinds module loggers (structlog cache_logger_on_first_use makes capture_logs order-dependent otherwise)
 - APScheduler MongoDBJobStore (`apscheduler_jobs` collection) persists pickled text func refs `pocketquant.engine.market_data.app_services.sync_jobs:<fn>`; apscheduler 3.11 `_get_jobs` auto-deletes unrestorable jobs, `replace_existing=True` update_job rewrites job_state — module renames self-heal at boot (verified from installed source 2026-06-10)
 
-### ID Convention (Phase 1+3 done 2026-06-12, uuid7-id-centralization plan)
-- Phase 3: `migrate_job_history_uuid_ids` boot migration re-keys legacy ObjectId `_id` → uuid7 str. Boot migration precedent now: tracked_symbols (delete-then-insert, log-before-delete) + job_history (copy-then-delete w/ `_migrated_from` crash marker; delete-then-insert only for listener docs under unique partial idx_skip_idempotency). `_migrated_from` stays on docs permanently — `_serialize` whitelist hides it from API
-- `bson` import banned via ruff TID251 (pyproject.toml:59-61); the only sanctioned `noqa: TID251` is the migration test that fabricates legacy ObjectId shape
-- PK attributes are `UUID` in RAM (`generate_id()` = uuid7), `str` in Mongo `_id` (to_mongo `str()`, from_mongo `UUID()`); Bar is the precedent pattern
-- Flipped: OrderAggregate.id, PositionAggregate.id, Fill.fill_id, backtest Order.order_id, Trade.trade_id, OptimizationResult.id
-- Still str (deferred): BacktestRequest.id (P4), BacktestResult.id (P5, `save_for_subscription` overrides id=sub_id 16-hex), Subscription.id (P6, sha256 16-hex)
-- FK reference fields stay str by decision: subscription_id, run_id, Fill.order_id, entry/exit_order_id, resulting_trade_id, broker_order_id, backtest_id
-- Boundary rule: dict keys (paper_broker._orders/_pending_orders/_order_events, order_app_service._orders/_pending/_broker_map, result_collector._orders_by_id), OrderResult.order_id, domain events, structlog kwargs all take `str(id)` — UUID-as-dict-key vs str lookup is the silent-failure class to grep on every later phase
+### ID Convention (uuid7-id-centralization plan COMPLETE, P6 done 2026-06-13)
+- ALL PKs now uuid7: entity `id: UUID` in RAM (`generate_id()`), `str` in Mongo `_id` (to_mongo `str()`, from_mongo `UUID()`). No hash/natural/ObjectId PKs remain
+- Subscription dedup moved from sha256-16hex PK to unique compound index `ix_subscriptions_dedup_triple` (strategy_code, symbol, interval) — created in BOTH migration and repo ensure_indexes; `SubscriptionAlreadyExistsError` carries the triple, not id
+- Boot migration precedents: tracked_symbols (delete-then-insert) · job_history (copy-then-delete, `_migrated_from` marker) · subscriptions (map-based: `_id_migration_map` {old_id, new_id, payload}; step1 upsert map → step2 delete/insert + FK update_many → step3 verify then drop map; residue keeps map + error log, boot continues). Map residue across boots = needs-human signal. NOTE: boot migrations have no cross-process lock — safe only under single-instance deploy assumption
+- Subscription FK fields (all str): orders.subscription_id, positions.subscription_id, backtest_runs.subscription_id, backtest_requests.sub_id — `_SUBSCRIPTION_FK_FIELDS` in main_extensions.py is canonical list
+- `_SUB_ID_SHAPE` (strategy_reconcile_service.py) pins uuid version nibble 7 — orphan-unload skips uuid4/legacy-16hex keys (leak-until-restart by design); synthetic `{code}::bt::{sub_id}` never matches
+- `bson` banned via ruff TID251; FK reference fields stay str by decision; boundary rule: dict keys / domain events / structlog kwargs take `str(id)` — UUID-as-dict-key vs str lookup is the silent-failure class
 
 ### Tech Stack
 - Python 3.14, FastAPI, Pydantic, structlog, MongoDB (pymongo native async), Redis, APScheduler

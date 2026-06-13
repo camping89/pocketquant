@@ -106,3 +106,4 @@ repomix-output.xml
 .playwright-mcp/
 
 .import_linter_cache/
+.grimp_cache/
