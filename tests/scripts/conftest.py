@@ -5,7 +5,6 @@ as a Python package. This conftest inserts the workspace root into sys.path
 before pytest collects test modules in this directory, enabling imports like:
 
     from scripts.audit_bar_quality import ...
-    from scripts.backfill_1m_from_binance import ...
 """
 
 from __future__ import annotations

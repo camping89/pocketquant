@@ -16,10 +16,10 @@ holds the internal docker hostname (mongodb:27017), so run via the container:
 
 Production run order (on the VPS):
     1. mongodump the bars collection to an archive (backup before resync)
-    2. audit_bar_quality.py --days 730          # pre-resync baseline
-    3. resync_2y_from_binance.py --days 730 --dry-run
-    4. resync_2y_from_binance.py --days 730
-    5. audit_bar_quality.py --days 730          # post-resync comparison
+    2. audit_bar_quality.py --days 730              # pre-resync baseline
+    3. backfill/binance_bars.py --days 730 --replace --dry-run
+    4. backfill/binance_bars.py --days 730 --replace
+    5. audit_bar_quality.py --days 730              # post-resync comparison
 
 All commands run inside the app container: `docker exec pocketquant-app python <script>`.
 """
