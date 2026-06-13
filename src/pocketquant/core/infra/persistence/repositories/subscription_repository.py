@@ -18,22 +18,31 @@ class SubscriptionRepository(BaseRepository):
 
     Collection: subscriptions (legacy name "strategy_subscriptions" is migrated at boot
     by ``migrate_strategy_id_fields`` in ``api.main_extensions``).
-    PK: _id = deterministic_id(strategy_code, symbol, interval)  — symbol is composite
+    PK: _id = uuid7 string; dedup of (strategy_code, symbol, interval) is enforced
+    by the unique compound index ``ix_subscriptions_dedup_triple``.
     """
 
     _collection_name = "subscriptions"
 
     async def add(self, sub: Subscription) -> None:
-        """Insert a new subscription. Raises SubscriptionAlreadyExistsError if duplicate."""
+        """Insert a new subscription. Raises SubscriptionAlreadyExistsError if duplicate.
+
+        DuplicateKeyError comes from the compound triple index — two adds of the
+        same triple carry different uuid7 ids yet still collide at the DB layer.
+        """
         collection = self._collection()
         try:
             await collection.insert_one(sub.to_mongo())
-            logger.debug("subscription_added", sub_id=sub.id, strategy_code=sub.strategy_code)
+            logger.debug(
+                "subscription_added", sub_id=str(sub.id), strategy_code=sub.strategy_code
+            )
         except DuplicateKeyError:
-            raise SubscriptionAlreadyExistsError(sub.id)
+            raise SubscriptionAlreadyExistsError(
+                sub.strategy_code, sub.symbol, sub.interval.value
+            ) from None
 
     async def get(self, sub_id: str) -> Subscription | None:
-        """Return a subscription by its deterministic ID, or None if not found."""
+        """Return a subscription by its uuid7 ID string, or None if not found."""
         collection = self._collection()
         doc = await collection.find_one({"_id": sub_id})
         if not doc:
@@ -89,5 +98,12 @@ class SubscriptionRepository(BaseRepository):
         await collection.create_index(
             "strategy_code",
             name="ix_subscriptions_strategy_code",
+        )
+        # Sole duplicate guard — ids are random uuid7, so without this index
+        # two adds of the same triple would both land.
+        await collection.create_index(
+            [("strategy_code", 1), ("symbol", 1), ("interval", 1)],
+            unique=True,
+            name="ix_subscriptions_dedup_triple",
         )
         logger.info("subscription_indexes_created")

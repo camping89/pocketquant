@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.core.domain.subscription import Subscription
+from pocketquant.core.common.uuid import UUID
 from pocketquant.engine.strategy_command_service import AddSymbolCommand
 
 
@@ -58,23 +58,38 @@ def _make_handler(
 
 
 @pytest.mark.asyncio
-async def test_persists_subscription_keyed_by_deterministic_id() -> None:
+async def test_persists_subscription_keyed_by_uuid7() -> None:
     handler, sub_add, _ = _make_handler(tracked_exists=True)
 
     result = await handler.handle(
         AddSymbolCommand(strategy_id="hitnrun2", symbol="BTCUSDT:BINANCE", interval="1h")
     )
 
-    expected_sub_id = Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", "1h")
     sub_add.assert_awaited_once()
     assert sub_add.await_args is not None
     persisted: Any = sub_add.await_args.args[0]
-    assert persisted.id == expected_sub_id
+    assert UUID(str(persisted.id)).version == 7
     assert persisted.strategy_code == "hitnrun2"
     assert persisted.desired_state == "stopped"
     assert persisted.actual_state == "stopped"
-    assert result["id"] == expected_sub_id
+    assert result["id"] == str(persisted.id)
     assert result["strategy_code"] == "hitnrun2"
+
+
+@pytest.mark.asyncio
+async def test_two_adds_same_triple_get_distinct_ids() -> None:
+    """Ids are random per add — dedup is the repo's compound index, not the id."""
+    handler, sub_add, _ = _make_handler(tracked_exists=True)
+
+    await handler.handle(
+        AddSymbolCommand(strategy_id="hitnrun2", symbol="BTCUSDT:BINANCE", interval="1h")
+    )
+    await handler.handle(
+        AddSymbolCommand(strategy_id="hitnrun2", symbol="BTCUSDT:BINANCE", interval="1h")
+    )
+
+    first, second = (call.args[0] for call in sub_add.await_args_list)
+    assert first.id != second.id
 
 
 @pytest.mark.asyncio

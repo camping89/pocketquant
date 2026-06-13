@@ -206,7 +206,7 @@ class StrategyAppService:
     def loaded_strategy_ids(self) -> list[str]:
         """Return all currently-loaded instance keys (snapshot, lock-free read).
 
-        Keys are either subscription ids (``deterministic_id`` shape) or synthetic
+        Keys are either subscription ids (uuid7 strings) or synthetic
         backtest ids (``{code}::bt::{sub_id}``). The reconcile orphan-unload pass
         filters on shape so it never touches synthetic backtest instances.
         """

@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import pytest
 from httpx import AsyncClient
 
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
@@ -38,7 +39,7 @@ async def test_start_writes_desired_state_only(
         await repo.ensure_indexes()
 
         sub = Subscription(
-            id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, Interval.MINUTE_1),
+            id=generate_id(),
             strategy_code=_STRATEGY,
             symbol=_SYMBOL,
             interval=Interval.MINUTE_1,
@@ -53,7 +54,7 @@ async def test_start_writes_desired_state_only(
 
         # Declarative boundary: the handler only flips desired_state. actual_state
         # stays stopped because no reconcile loop runs in this test app.
-        stored = await repo.get(sub.id)
+        stored = await repo.get(str(sub.id))
         assert stored is not None
         assert stored.desired_state == "running"
         assert stored.actual_state == "stopped"
@@ -70,7 +71,7 @@ async def test_serves_seeded_read(app_client: AsyncClient, settings: Settings) -
         repo = SubscriptionRepository(db)
         await repo.ensure_indexes()
         sub = Subscription(
-            id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, Interval.MINUTE_1),
+            id=generate_id(),
             strategy_code=_STRATEGY,
             symbol=_SYMBOL,
             interval=Interval.MINUTE_1,
@@ -83,7 +84,7 @@ async def test_serves_seeded_read(app_client: AsyncClient, settings: Settings) -
         )
         assert resp.status_code == 200
         ids = [row["id"] for row in resp.json()]
-        assert sub.id in ids
+        assert str(sub.id) in ids
     finally:
         await db.get_collection("subscriptions").drop()
         await db.disconnect()

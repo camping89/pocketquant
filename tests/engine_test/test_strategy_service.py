@@ -21,9 +21,9 @@ from uuid import NAMESPACE_OID, uuid5
 import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.uuid import UUID
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
-from pocketquant.core.domain.subscription import Subscription
 from pocketquant.engine.strategy_command_service import (
     AddSymbolCommand,
     DeleteStrategyCommand,
@@ -180,13 +180,12 @@ async def test_add_symbol_persists_stopped_state() -> None:
         AddSymbolCommand(strategy_id="hitnrun2", symbol="BTCUSDT:BINANCE", interval="1h")
     )
 
-    expected_id = Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", "1h")
     sub_repo.add.assert_awaited_once()
     persisted = sub_repo.add.await_args.args[0]
-    assert persisted.id == expected_id
+    assert UUID(str(persisted.id)).version == 7
     assert persisted.desired_state == "stopped"
     assert persisted.actual_state == "stopped"
-    assert result["id"] == expected_id
+    assert result["id"] == str(persisted.id)
 
 
 @pytest.mark.asyncio

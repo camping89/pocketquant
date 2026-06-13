@@ -17,6 +17,7 @@ from pocketquant.app.main_extensions import (
     migrate_job_history_uuid_ids,
     migrate_strategy_id_fields,
     migrate_subscription_desired_state,
+    migrate_subscription_uuid_ids,
     migrate_tracked_symbols_uuid_ids,
     recover_orphan_jobs,
     recover_stale_backtests,
@@ -85,6 +86,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # uuid7. Ensures the subscription_id unique index FIRST so the one-doc-
         # per-sub guarantee never lapses, and runs BEFORE the worker writes caches.
         await migrate_backtest_run_cache_ids(container)
+        # Re-key subscriptions._id (sha256 16-hex) to uuid7 + rewrite the 4 FK
+        # fields, map-based and crash-safe. Runs LAST of the id migrations —
+        # phases above already decoupled every other _id from sub_id — and
+        # BEFORE rehydrate so RAM instance keys are minted from the new ids.
+        await migrate_subscription_uuid_ids(container)
         await ensure_all_indexes(container)
         await recover_stale_backtests(container)
         await recover_orphan_jobs(container)

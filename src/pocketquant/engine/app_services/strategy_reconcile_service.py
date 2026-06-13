@@ -16,7 +16,7 @@ is why the loop owns load/unload — ``add_symbol`` does not load, so a continuo
 control-plane must.
 
 Orphan-unload is shape-guarded: it only unloads keys matching the subscription
-``deterministic_id`` shape (16 lowercase hex). Synthetic backtest instances
+id shape (uuid7 string). Synthetic backtest instances
 (``{code}::bt::{sub_id}``) never match, so concurrent backtests are never
 clobbered.
 """
@@ -37,10 +37,12 @@ from pocketquant.engine.app_services.strategy_app_service import StrategyAppServ
 
 logger = get_logger(__name__)
 
-# Subscription ids are 16 lowercase hex chars (Subscription.deterministic_id).
+# Subscription ids are uuid7 strings (8-4-4-4-12 lowercase hex, version nibble 7).
 # Synthetic backtest ids ("{code}::bt::{sub_id}") never match this shape, so the
 # orphan-unload pass that filters on it can never clobber a running backtest.
-_SUB_ID_SHAPE = re.compile(r"^[0-9a-f]{16}$")
+_SUB_ID_SHAPE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 
 
 class StrategyReconcileService:
@@ -81,7 +83,8 @@ class StrategyReconcileService:
     async def _reconcile(self) -> None:
         """One pass: ensure instances, unload orphans, converge run-state."""
         subs = await self._sub_repo.list_all()
-        sub_ids = {sub.id for sub in subs}
+        # RAM instance keys are strings — stringify ids once for membership tests.
+        sub_ids = {str(sub.id) for sub in subs}
 
         await self._ensure_instances(subs)
         await self._unload_orphans(sub_ids)
@@ -89,18 +92,19 @@ class StrategyReconcileService:
         started = 0
         stopped = 0
         for sub in subs:
+            sub_id = str(sub.id)
             # Per-sub isolation: a single failing sub must not starve the rest
             # of this tick. start/stop already lock + early-return on no-op.
             try:
-                observed = await self._converge_one(sub.id, sub.desired_state)
+                observed = await self._converge_one(sub_id, sub.desired_state)
             except Exception as exc:
-                logger.error("reconcile.sub_failed", sub_id=sub.id, error=str(exc))
+                logger.error("reconcile.sub_failed", sub_id=sub_id, error=str(exc))
                 continue
 
             # Mirror observed actual back to Mongo only when the stored value
             # drifts — keeps the loop idempotent (no per-tick write churn).
             if observed != sub.actual_state:
-                await self._sub_repo.update_actual_state(sub.id, observed)
+                await self._sub_repo.update_actual_state(sub_id, observed)
                 if observed == "running":
                     started += 1
                 else:
@@ -108,7 +112,7 @@ class StrategyReconcileService:
                 # A running sub whose instance still vanished after ensure —
                 # genuine anomaly (e.g. unknown template). Warn ONCE on drift.
                 if observed == "stopped" and sub.desired_state == "running":
-                    logger.warning("reconcile.missing_instance", sub_id=sub.id)
+                    logger.warning("reconcile.missing_instance", sub_id=sub_id)
 
         if started or stopped:
             logger.info("reconcile.converged", started=started, stopped=stopped)
@@ -124,20 +128,21 @@ class StrategyReconcileService:
         """
         loaded = 0
         for sub in subs:
-            if self._strategy_service.get_strategy(sub.id) is not None:
+            sub_id = str(sub.id)
+            if self._strategy_service.get_strategy(sub_id) is not None:
                 continue
             strategy_class = STRATEGY_REGISTRY.get(sub.strategy_code)
             if strategy_class is None:
                 logger.warning(
                     "reconcile.unknown_template",
-                    sub_id=sub.id,
+                    sub_id=sub_id,
                     strategy_code=sub.strategy_code,
                 )
                 continue
             try:
                 await self._strategy_service.load_strategy(
                     StrategyConfig(
-                        id=sub.id,
+                        id=sub_id,
                         name=sub.strategy_code,
                         symbol=sub.symbol,
                         interval=sub.interval.value,
@@ -146,7 +151,7 @@ class StrategyReconcileService:
                 )
                 loaded += 1
             except Exception as exc:
-                logger.error("reconcile.load_failed", sub_id=sub.id, error=str(exc))
+                logger.error("reconcile.load_failed", sub_id=sub_id, error=str(exc))
 
         if loaded:
             logger.info("reconcile.instances_loaded", count=loaded)
@@ -154,8 +159,8 @@ class StrategyReconcileService:
     async def _unload_orphans(self, sub_ids: set[str]) -> None:
         """Unload RAM instances whose subscription doc no longer exists.
 
-        Shape-guarded: only keys matching the subscription ``deterministic_id``
-        shape are eligible. Synthetic backtest instances (``{code}::bt::{sub_id}``)
+        Shape-guarded: only keys matching the subscription uuid7 id shape are
+        eligible. Synthetic backtest instances (``{code}::bt::{sub_id}``)
         never match ``_SUB_ID_SHAPE``, so a concurrent backtest is never unloaded.
         """
         unloaded = 0
