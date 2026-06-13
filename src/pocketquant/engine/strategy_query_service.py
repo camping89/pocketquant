@@ -115,12 +115,12 @@ class StrategyQueryService:
         if not subs:
             return []
 
-        sub_ids = [sub.id for sub in subs]
+        sub_ids = [str(sub.id) for sub in subs]
         bt_statuses = await self._bt_repo.get_subscription_statuses(sub_ids)
 
         return [
             {
-                "id": sub.id,
+                "id": str(sub.id),
                 "strategy_code": sub.strategy_code,
                 "symbol": sub.symbol,
                 "interval": sub.interval.value,
@@ -128,7 +128,7 @@ class StrategyQueryService:
                 "desired_state": sub.desired_state,
                 "actual_state": sub.actual_state,
                 "is_running": sub.actual_state == "running",
-                "backtest": bt_statuses.get(sub.id),
+                "backtest": bt_statuses.get(str(sub.id)),
             }
             for sub in subs
         ]

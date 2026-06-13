@@ -179,7 +179,7 @@ class BacktestCommandService:
                 kind="subscription",
                 status="pending",
                 requested_at=datetime.now(UTC),
-                sub_id=sub.id,
+                sub_id=str(sub.id),
                 strategy_code=sub.strategy_code,
             )
             persisted_id = await self._request_repo.enqueue(bt_request)

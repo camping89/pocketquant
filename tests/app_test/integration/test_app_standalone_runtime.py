@@ -93,7 +93,7 @@ async def test_app_reconcile_runs_desired_running_without_http(
     await repo.ensure_indexes()
 
     sub = Subscription(
-        id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, Interval.MINUTE_1),
+        id=generate_id(),
         strategy_code=_STRATEGY,
         symbol=_SYMBOL,
         interval=Interval.MINUTE_1,
@@ -111,17 +111,17 @@ async def test_app_reconcile_runs_desired_running_without_http(
 
     await engine.load_strategy(
         StrategyConfig(
-            id=sub.id, name=sub.strategy_code, symbol=sub.symbol, interval=sub.interval.value
+            id=str(sub.id), name=sub.strategy_code, symbol=sub.symbol, interval=sub.interval.value
         ),
         strategy_class=STRATEGY_REGISTRY[sub.strategy_code],
     )
-    assert engine.get_strategy(sub.id).is_running is False
+    assert engine.get_strategy(str(sub.id)).is_running is False
 
     reconcile = await app_container.get(StrategyReconcileService)
     await reconcile._reconcile()
 
-    assert engine.get_strategy(sub.id).is_running is True
-    assert (await repo.get(sub.id)).actual_state == "running"
+    assert engine.get_strategy(str(sub.id)).is_running is True
+    assert (await repo.get(str(sub.id))).actual_state == "running"
     await engine.stop()
 
 

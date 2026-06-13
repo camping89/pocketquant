@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pydantic import BaseModel
 
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.subscription import Subscription
@@ -128,12 +129,11 @@ class StrategyCommandService:
         if cmd.strategy_id not in STRATEGY_REGISTRY:
             raise NotFoundError(f"Strategy template '{cmd.strategy_id}' not found in registry.")
 
-        sub_id = Subscription.deterministic_id(cmd.strategy_id, symbol, cmd.interval)
-
         # desired_state="stopped" — no surprise auto-trading on add.
         # The user starts it explicitly via the start endpoint.
+        # Duplicate triples are rejected by the repo's compound unique index.
         sub = Subscription(
-            id=sub_id,
+            id=generate_id(),
             strategy_code=cmd.strategy_id,
             symbol=symbol,
             interval=Interval(cmd.interval),
@@ -143,7 +143,7 @@ class StrategyCommandService:
         )
         await self._sub_repo.add(sub)
         return {
-            "id": sub.id,
+            "id": str(sub.id),
             "strategy_code": sub.strategy_code,
             "symbol": sub.symbol,
             "interval": sub.interval.value,

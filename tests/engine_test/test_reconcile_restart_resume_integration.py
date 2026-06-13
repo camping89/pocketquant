@@ -20,6 +20,7 @@ import pytest
 
 from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
@@ -80,7 +81,7 @@ async def _rehydrate(engine: StrategyAppService, sub: Subscription) -> None:
     strategy_class = STRATEGY_REGISTRY[sub.strategy_code]
     await engine.load_strategy(
         StrategyConfig(
-            id=sub.id,
+            id=str(sub.id),
             name=sub.strategy_code,
             symbol=sub.symbol,
             interval=sub.interval.value,
@@ -101,7 +102,7 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     await repo.ensure_indexes()
 
     sub = Subscription(
-        id=Subscription.deterministic_id(STRATEGY_CODE, SYMBOL, Interval.MINUTE_1),
+        id=generate_id(),
         strategy_code=STRATEGY_CODE,
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
@@ -114,28 +115,28 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     # --- Engine A: first boot. Instance loaded (stopped); reconcile starts it.
     engine_a = await _build_engine(db)
     await _rehydrate(engine_a, sub)
-    assert _strategy(engine_a, sub.id).is_running is False
+    assert _strategy(engine_a, str(sub.id)).is_running is False
 
     recon_a = StrategyReconcileService(repo, engine_a, interval_s=0.01)
     await recon_a._reconcile()
 
-    assert _strategy(engine_a, sub.id).is_running is True
-    sub_doc = await repo.get(sub.id)
+    assert _strategy(engine_a, str(sub.id)).is_running is True
+    sub_doc = await repo.get(str(sub.id))
     assert sub_doc is not None and sub_doc.actual_state == "running"
     await engine_a.stop()
 
     # --- Engine B: simulated restart. Fresh engine, RAM empty, rehydrate stopped.
     engine_b = await _build_engine(db)
-    assert engine_b.get_strategy(sub.id) is None  # RAM cleared on restart
+    assert engine_b.get_strategy(str(sub.id)) is None  # RAM cleared on restart
     await _rehydrate(engine_b, sub)
-    assert _strategy(engine_b, sub.id).is_running is False
+    assert _strategy(engine_b, str(sub.id)).is_running is False
 
     recon_b = StrategyReconcileService(repo, engine_b, interval_s=0.01)
     await recon_b._reconcile()
 
     # Auto-resumed with zero manual start_strategy calls in this test.
-    assert _strategy(engine_b, sub.id).is_running is True
-    sub_doc = await repo.get(sub.id)
+    assert _strategy(engine_b, str(sub.id)).is_running is True
+    sub_doc = await repo.get(str(sub.id))
     assert sub_doc is not None and sub_doc.actual_state == "running"
     await engine_b.stop()
 
@@ -146,7 +147,7 @@ async def test_stop_convergence_stops_running_strategy(db: Database) -> None:
     await repo.ensure_indexes()
 
     sub = Subscription(
-        id=Subscription.deterministic_id(STRATEGY_CODE, SYMBOL, Interval.MINUTE_1),
+        id=generate_id(),
         strategy_code=STRATEGY_CODE,
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
@@ -160,13 +161,13 @@ async def test_stop_convergence_stops_running_strategy(db: Database) -> None:
     await _rehydrate(engine, sub)
     recon = StrategyReconcileService(repo, engine, interval_s=0.01)
     await recon._reconcile()
-    assert _strategy(engine, sub.id).is_running is True
+    assert _strategy(engine, str(sub.id)).is_running is True
 
     # Human stops it → desired flips → reconcile converges actual to stopped.
-    await repo.update_desired_state(sub.id, "stopped")
+    await repo.update_desired_state(str(sub.id), "stopped")
     await recon._reconcile()
 
-    assert _strategy(engine, sub.id).is_running is False
-    sub_doc = await repo.get(sub.id)
+    assert _strategy(engine, str(sub.id)).is_running is False
+    sub_doc = await repo.get(str(sub.id))
     assert sub_doc is not None and sub_doc.actual_state == "stopped"
     await engine.stop()

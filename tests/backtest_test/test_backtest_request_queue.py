@@ -418,7 +418,7 @@ async def test_worker_dispatches_subscription(database: Database, engine_setup) 
     request_repo = BacktestRequestRepository(database)
 
     sub = Subscription(
-        id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, _INTERVAL),
+        id=generate_id(),
         strategy_code=_STRATEGY,
         symbol=_SYMBOL,
         interval=Interval(_INTERVAL),
@@ -426,7 +426,7 @@ async def test_worker_dispatches_subscription(database: Database, engine_setup) 
     )
     await sub_repo.add(sub)
 
-    req = _request("subscription", sub_id=sub.id, strategy_code=_STRATEGY)
+    req = _request("subscription", sub_id=str(sub.id), strategy_code=_STRATEGY)
     await request_repo.enqueue(req)
 
     worker = BacktestRequestWorker(request_repo, deps)
@@ -436,7 +436,7 @@ async def test_worker_dispatches_subscription(database: Database, engine_setup) 
     done = await request_repo.get(str(req.id))
     assert done is not None and done.status == "done"
 
-    status = await bt_repo.get_subscription_status(sub.id)
+    status = await bt_repo.get_subscription_status(str(sub.id))
     assert status is not None and status["status"] == "completed"
 
 
@@ -455,7 +455,7 @@ async def test_worker_dispatches_subscription_without_template_config(
     assert deps.strategy_app_service.get_config(_STRATEGY) is None
 
     sub = Subscription(
-        id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, _INTERVAL),
+        id=generate_id(),
         strategy_code=_STRATEGY,
         symbol=_SYMBOL,
         interval=Interval(_INTERVAL),
@@ -463,7 +463,7 @@ async def test_worker_dispatches_subscription_without_template_config(
     )
     await sub_repo.add(sub)
 
-    req = _request("subscription", sub_id=sub.id, strategy_code=_STRATEGY)
+    req = _request("subscription", sub_id=str(sub.id), strategy_code=_STRATEGY)
     await request_repo.enqueue(req)
 
     worker = BacktestRequestWorker(request_repo, deps)
@@ -472,7 +472,7 @@ async def test_worker_dispatches_subscription_without_template_config(
     done = await request_repo.get(str(req.id))
     assert done is not None and done.status == "done"
 
-    status = await bt_repo.get_subscription_status(sub.id)
+    status = await bt_repo.get_subscription_status(str(sub.id))
     assert status is not None and status["status"] == "completed"
 
 
@@ -530,14 +530,14 @@ async def test_worker_failure_isolation(database: Database, engine_setup) -> Non
 
     # Good: a valid subscription request still processes next.
     sub = Subscription(
-        id=Subscription.deterministic_id(_STRATEGY, _SYMBOL, _INTERVAL),
+        id=generate_id(),
         strategy_code=_STRATEGY,
         symbol=_SYMBOL,
         interval=Interval(_INTERVAL),
         created_at=datetime.now(UTC),
     )
     await sub_repo.add(sub)
-    good = _request("subscription", sub_id=sub.id, strategy_code=_STRATEGY)
+    good = _request("subscription", sub_id=str(sub.id), strategy_code=_STRATEGY)
     await request_repo.enqueue(good)
     assert await worker_drain(request_repo, deps) is True
     good_doc = await request_repo.get(str(good.id))

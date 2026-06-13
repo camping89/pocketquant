@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
 
@@ -19,7 +20,7 @@ NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
 
 def _sub(**overrides) -> Subscription:
     base: dict[str, Any] = dict(
-        id=Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", Interval.MINUTE_5),
+        id=generate_id(),
         strategy_code="hitnrun2",
         symbol="BTCUSDT:BINANCE",
         interval=Interval.MINUTE_5,
@@ -43,7 +44,7 @@ def test_to_mongo_writes_both_state_keys() -> None:
 
 def test_from_mongo_legacy_doc_without_keys_defaults_stopped() -> None:
     legacy = {
-        "_id": "abc123",
+        "_id": str(generate_id()),
         "strategy_code": "hitnrun2",
         "symbol": "BTCUSDT:BINANCE",
         "interval": Interval.MINUTE_5.value,
@@ -64,12 +65,6 @@ def test_from_mongo_preserves_running_desired_state() -> None:
 def test_to_from_mongo_roundtrip_stable_with_states() -> None:
     sub = _sub(desired_state="running", actual_state="running")
     assert Subscription.from_mongo(sub.to_mongo()) == sub
-
-
-def test_deterministic_id_unchanged_regardless_of_state() -> None:
-    base = Subscription.deterministic_id("hitnrun2", "BTCUSDT:BINANCE", Interval.MINUTE_5)
-    running = _sub(desired_state="running", actual_state="running")
-    assert running.id == base
 
 
 def test_replace_state_keeps_id_stable() -> None:

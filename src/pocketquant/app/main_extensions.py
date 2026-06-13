@@ -468,6 +468,129 @@ async def migrate_backtest_run_cache_ids(container: AsyncContainer) -> None:
         logger.info("backtest_run_cache_uuid_migration.completed", rekeyed=rekeyed)
 
 
+# Collections referencing subscriptions._id and the field that carries it.
+_SUBSCRIPTION_FK_FIELDS: list[tuple[str, str]] = [
+    ("orders", "subscription_id"),
+    ("positions", "subscription_id"),
+    ("backtest_runs", "subscription_id"),
+    ("backtest_requests", "sub_id"),
+]
+
+
+async def migrate_subscription_uuid_ids(container: AsyncContainer) -> None:
+    """Idempotent boot migration: re-key ``subscriptions._id`` to uuid7 + rewrite FKs.
+
+    Legacy docs carried a deterministic sha256 16-hex ``_id`` derived from the
+    (strategy_code, symbol, interval) triple — the old dedup mechanism. Dedup
+    now lives in the unique compound index on that triple, so the index is
+    created FIRST: the guarantee must hold the moment ``_id`` stops encoding
+    the triple.
+
+    Unlike the other uuid re-keys, four collections reference this ``_id``
+    (see ``_SUBSCRIPTION_FK_FIELDS``), so a crash mid-rewrite must not fork
+    ids between the subscription doc and its references — and a subscription
+    is user data, so the delete/insert gap must not lose it either. The map
+    collection ``_id_migration_map`` makes every step resumable:
+
+      1. Upsert ``{_id: old_id, new_id: uuid7, payload: <doc sans _id>}`` per
+         legacy doc — re-runs keep the already-assigned new_id, and the stored
+         payload survives a crash between the delete and insert below.
+      2. Per map entry: delete the legacy doc, insert ``{payload, _id: new_id}``
+         (delete-first is forced by the triple index — the copy shares the
+         legacy doc's triple slot), then ``update_many`` each FK field
+         ``old_id → new_id``. Every op filters on the old value or checks for
+         the copy first, so a partially-completed run resumes cleanly.
+      3. Verify no old_id remains in ``subscriptions._id`` or any FK field,
+         then drop the map. Residue → log error, KEEP the map, continue boot —
+         the next boot retries; the app never blocks on this.
+
+    Runs BEFORE ``rehydrate_strategies_from_subscriptions`` — RAM is empty at
+    that point, so no live instance key can hold a stale id.
+    """
+    from pocketquant.core.common.uuid import UUID, generate_id_str
+
+    database = await container.get(Database)
+    subs = database.database["subscriptions"]
+    id_map = database.database["_id_migration_map"]
+
+    await subs.create_index(
+        [("strategy_code", 1), ("symbol", 1), ("interval", 1)],
+        unique=True,
+        name="ix_subscriptions_dedup_triple",
+    )
+
+    # Step 1 — persist the old→new map (with payload) before touching any doc.
+    async for doc in subs.find({}):
+        raw_id = str(doc["_id"])
+        try:
+            UUID(raw_id)
+            continue  # already uuid-keyed
+        except ValueError:
+            pass
+        payload = {k: v for k, v in doc.items() if k != "_id"}
+        await id_map.update_one(
+            {"_id": raw_id},
+            {"$setOnInsert": {"new_id": generate_id_str()}, "$set": {"payload": payload}},
+            upsert=True,
+        )
+
+    # Step 2 — rewrite from the map (covers entries from a crashed prior run
+    # whose legacy doc may already be gone, hence map-driven).
+    entries = await id_map.find({}).to_list(length=None)
+    if not entries:
+        return
+
+    for entry in entries:
+        old_id, new_id = entry["_id"], entry["new_id"]
+
+        await subs.delete_one({"_id": old_id})
+        if await subs.find_one({"_id": new_id}, {"_id": 1}) is None:
+            payload = entry.get("payload")
+            if payload is not None:
+                await subs.insert_one({**payload, "_id": new_id})
+            else:
+                # Unreachable via step 1 (payload always stored before any
+                # delete) — loud marker so data loss is never silent.
+                logger.error(
+                    "subscription_uuid_migration.payload_missing",
+                    old_id=old_id,
+                    new_id=new_id,
+                )
+        logger.info("subscription_uuid_migration.rekeying", old_id=old_id, new_id=new_id)
+
+        for coll_name, field in _SUBSCRIPTION_FK_FIELDS:
+            result = await database.database[coll_name].update_many(
+                {field: old_id}, {"$set": {field: new_id}}
+            )
+            if result.modified_count:
+                logger.info(
+                    "subscription_uuid_migration.fk_rewritten",
+                    collection=coll_name,
+                    field=field,
+                    old_id=old_id,
+                    modified_count=result.modified_count,
+                )
+
+    # Step 3 — verify, then self-clean the map.
+    residue = 0
+    for entry in entries:
+        old_id = entry["_id"]
+        if await subs.count_documents({"_id": old_id}):
+            residue += 1
+            continue
+        for coll_name, field in _SUBSCRIPTION_FK_FIELDS:
+            if await database.database[coll_name].count_documents({field: old_id}):
+                residue += 1
+                break
+
+    if residue:
+        # Keep the map so the next boot retries with the same new_ids.
+        logger.error("subscription_uuid_migration.residue", count=residue)
+    else:
+        await id_map.drop()
+        logger.info("subscription_uuid_migration.completed", rekeyed=len(entries))
+
+
 async def recover_stale_backtests(container: AsyncContainer) -> None:
     """Mark any backtest docs stuck in 'running' as 'failed' on startup.
 
@@ -519,19 +642,20 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
 
     loaded = 0
     for sub in subs:
-        if strategy_service.get_strategy(sub.id) is not None:
+        sub_id = str(sub.id)
+        if strategy_service.get_strategy(sub_id) is not None:
             continue
         strategy_class = STRATEGY_REGISTRY.get(sub.strategy_code)
         if strategy_class is None:
             logger.warning(
                 "rehydrate_skipped_unknown_template",
-                sub_id=sub.id,
+                sub_id=sub_id,
                 strategy_code=sub.strategy_code,
             )
             continue
         await strategy_service.load_strategy(
             StrategyConfig(
-                id=sub.id,
+                id=sub_id,
                 name=sub.strategy_code,
                 symbol=sub.symbol,
                 interval=sub.interval.value,

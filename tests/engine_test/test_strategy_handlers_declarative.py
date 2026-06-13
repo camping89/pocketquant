@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -121,7 +122,7 @@ async def repo(settings):
 
 
 def _make_sub(strategy_code: str = "hitnrun2", symbol: str = "BTCUSDT:BINANCE") -> Subscription:
-    sub_id = Subscription.deterministic_id(strategy_code, symbol, Interval.HOUR_1)
+    sub_id = generate_id()
     return Subscription(
         id=sub_id,
         strategy_code=strategy_code,
@@ -137,10 +138,10 @@ async def test_start_handler_writes_running_desired_state(repo):
     await repo.add(sub)
 
     handler = StartStrategyHandler(repo)
-    result = await handler.handle(StartStrategyCommand(subscription_id=sub.id))
+    result = await handler.handle(StartStrategyCommand(subscription_id=str(sub.id)))
 
     assert result is True
-    fetched = await repo.get(sub.id)
+    fetched = await repo.get(str(sub.id))
     assert fetched.desired_state == "running"
     assert fetched.actual_state == "stopped"  # reconcile converges later, not here
 
@@ -156,13 +157,13 @@ async def test_start_handler_missing_sub_raises_not_found(repo):
 async def test_stop_handler_writes_stopped_desired_state(repo):
     sub = _make_sub()
     await repo.add(sub)
-    await repo.update_desired_state(sub.id, "running")
+    await repo.update_desired_state(str(sub.id), "running")
 
     handler = StopStrategyHandler(repo)
-    result = await handler.handle(StopStrategyCommand(subscription_id=sub.id))
+    result = await handler.handle(StopStrategyCommand(subscription_id=str(sub.id)))
 
     assert result is True
-    fetched = await repo.get(sub.id)
+    fetched = await repo.get(str(sub.id))
     assert fetched.desired_state == "stopped"
 
 
@@ -198,8 +199,8 @@ async def test_add_symbol_persists_stopped_pure_db_write(repo):
 async def test_list_symbols_sources_state_from_db_no_ram_read(repo):
     sub = _make_sub()
     await repo.add(sub)
-    await repo.update_desired_state(sub.id, "running")
-    await repo.update_actual_state(sub.id, "running")
+    await repo.update_desired_state(str(sub.id), "running")
+    await repo.update_actual_state(str(sub.id), "running")
 
     bt_repo = MagicMock()
     bt_repo.get_subscription_statuses = AsyncMock(return_value={})
@@ -220,7 +221,7 @@ async def test_list_symbols_sources_state_from_db_no_ram_read(repo):
 async def test_list_symbols_is_running_false_when_actual_stopped(repo):
     sub = _make_sub()
     await repo.add(sub)
-    await repo.update_desired_state(sub.id, "running")  # desired running, actual still stopped
+    await repo.update_desired_state(str(sub.id), "running")  # desired running, actual still stopped
 
     bt_repo = MagicMock()
     bt_repo.get_subscription_statuses = AsyncMock(return_value={})

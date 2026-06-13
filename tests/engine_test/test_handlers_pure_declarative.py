@@ -102,7 +102,7 @@ async def repos(settings):
 
 
 def _sub(interval: Interval = Interval.HOUR_1) -> Subscription:
-    sub_id = Subscription.deterministic_id(_STRATEGY, _SYMBOL, interval)
+    sub_id = generate_id()
     return Subscription(
         id=sub_id,
         strategy_code=_STRATEGY,
@@ -136,17 +136,17 @@ async def test_remove_symbol_pure_db_delete(repos):
     sub_repo, bt_repo, request_repo = repos
     sub = _sub()
     await sub_repo.add(sub)
-    await bt_repo.upsert_status(sub.id, strategy_code=_STRATEGY, status="completed")
-    await request_repo.enqueue(_queued(sub.id))
+    await bt_repo.upsert_status(str(sub.id), strategy_code=_STRATEGY, status="completed")
+    await request_repo.enqueue(_queued(str(sub.id)))
 
     handler = RemoveSymbolHandler(bt_repo, request_repo, sub_repo)
     _has_no_attr(handler, "StrategyAppService", "JobScheduler")
 
-    await handler.handle(RemoveSymbolCommand(sub_id=sub.id))
+    await handler.handle(RemoveSymbolCommand(sub_id=str(sub.id)))
 
-    assert await sub_repo.get(sub.id) is None
-    assert await bt_repo.get_subscription_status(sub.id) is None
-    assert await request_repo._collection().count_documents({"sub_id": sub.id}) == 0
+    assert await sub_repo.get(str(sub.id)) is None
+    assert await bt_repo.get_subscription_status(str(sub.id)) is None
+    assert await request_repo._collection().count_documents({"sub_id": str(sub.id)}) == 0
 
 
 @pytest.mark.asyncio
@@ -156,8 +156,8 @@ async def test_delete_strategy_cascades_all_subs(repos):
     sub2 = _sub(Interval.MINUTE_5)
     for s in (sub1, sub2):
         await sub_repo.add(s)
-        await bt_repo.upsert_status(s.id, strategy_code=_STRATEGY, status="completed")
-        await request_repo.enqueue(_queued(s.id))
+        await bt_repo.upsert_status(str(s.id), strategy_code=_STRATEGY, status="completed")
+        await request_repo.enqueue(_queued(str(s.id)))
 
     handler = DeleteStrategyHandler(sub_repo, bt_repo, request_repo)
     _has_no_attr(handler, "StrategyAppService", "JobScheduler")
@@ -166,5 +166,5 @@ async def test_delete_strategy_cascades_all_subs(repos):
 
     assert await sub_repo.list_by_strategy_code(_STRATEGY) == []
     for s in (sub1, sub2):
-        assert await bt_repo.get_subscription_status(s.id) is None
-        assert await request_repo._collection().count_documents({"sub_id": s.id}) == 0
+        assert await bt_repo.get_subscription_status(str(s.id)) is None
+        assert await request_repo._collection().count_documents({"sub_id": str(s.id)}) == 0
