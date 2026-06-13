@@ -119,8 +119,17 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
     assert hole_bars[0].datetime == hole_dt
 
 
+# KNOWN-GAP SENTINEL (do not delete): real-Mongo backfill behind `latest` is
+# currently unverified. filter_new_bars relies on BarRepository.find_datetimes,
+# which does not return the seeded docs in this real-Mongo path, so the filter
+# keeps bars it should drop. The unit-level filter_new_bars contract is mocked
+# in tests/app_test/unit/handlers/sync/test_bar_filters.py; this integration
+# variant is the only one that touches a live Mongo round-trip. Keep skipped
+# until the find_datetimes mismatch is root-caused, then un-skip — deleting this
+# would hide a production-observed failure pattern, not remove dead code.
 @pytest.mark.skip(
-    reason="filter_new_bars not filtering existing bars — find_datetimes not returning seeded docs"
+    reason="known gap: real-Mongo find_datetimes does not return seeded docs, so "
+    "filter_new_bars under-filters; backfill-behind-latest path unverified"
 )
 @pytest.mark.asyncio
 async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) -> None:
