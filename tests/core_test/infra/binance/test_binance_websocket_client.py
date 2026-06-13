@@ -54,41 +54,35 @@ def _combined_frame(inner: dict) -> str:
 class TestAggTradeFrameParsing:
     """Tests for _handle_frame parsing and callback invocation."""
 
+    @pytest.mark.parametrize(
+        ("frame_kwargs", "field", "expected"),
+        [
+            # volume == raw q (per-trade delta, not cumulative)
+            pytest.param({"qty": "0.01"}, "volume", pytest.approx(0.01), id="volume_is_delta"),
+            # last_price == float(p)
+            pytest.param(
+                {"price": "50000.00"}, "last_price", pytest.approx(50_000.0), id="last_price"
+            ),
+            # timestamp corresponds to aggTrade's T field (trade time ms)
+            pytest.param(
+                {"trade_time_ms": 1_700_000_000_000},
+                "timestamp",
+                datetime.fromtimestamp(1_700_000_000_000 / 1000, tz=UTC),
+                id="timestamp_matches_trade_time",
+            ),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_single_aggtrade_callback_volume_is_delta(self):
-        """Callback receives volume == raw q (per-trade delta, not cumulative)."""
+    async def test_single_aggtrade_callback_field(self, frame_kwargs, field, expected):
+        """A single aggTrade frame maps each field onto the callback payload."""
         client = BinanceWebSocketClient()
         received: list[dict] = []
 
         await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
-        await client._handle_frame(_aggtrade_frame(qty="0.01"))
+        await client._handle_frame(_aggtrade_frame(**frame_kwargs))
 
         assert len(received) == 1
-        assert received[0]["volume"] == pytest.approx(0.01)
-
-    @pytest.mark.asyncio
-    async def test_aggtrade_callback_last_price(self):
-        """Callback receives last_price == float(p)."""
-        client = BinanceWebSocketClient()
-        received: list[dict] = []
-
-        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
-        await client._handle_frame(_aggtrade_frame(price="50000.00"))
-
-        assert received[0]["last_price"] == pytest.approx(50_000.0)
-
-    @pytest.mark.asyncio
-    async def test_aggtrade_callback_timestamp_matches_trade_time(self):
-        """Callback timestamp corresponds to aggTrade's T field (trade time ms)."""
-        ts_ms = 1_700_000_000_000
-        client = BinanceWebSocketClient()
-        received: list[dict] = []
-
-        await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
-        await client._handle_frame(_aggtrade_frame(trade_time_ms=ts_ms))
-
-        expected_dt = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
-        assert received[0]["timestamp"] == expected_dt
+        assert received[0][field] == expected
 
     @pytest.mark.asyncio
     async def test_two_consecutive_frames_produce_delta_not_cumulative(self):

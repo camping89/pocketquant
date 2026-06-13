@@ -1,13 +1,8 @@
 """Characterization test pinning SyncStatusRepository atomic counter semantics.
 
-The repo methods ``bump_empty_fetch``/``reset_empty_fetch`` are pure atomic
-``$inc``/``$set`` ops — no bump-vs-reset rule lives here (that decision sits in
-the api caller ``sync_one/handler.py`` and is pinned by
-``tests/api_test/unit/handlers/sync/test_no_progress_tracking.py``).
-
-Phase 5 moves this repo verbatim to ``pocketquant-infrastructure``; Phase 8
-extracts the handler-level decision to a domain service while leaving the repo
-untouched. This test pins the two invariants that must survive both:
+``bump_empty_fetch``/``reset_empty_fetch`` are pure atomic ``$inc``/``$set`` ops:
+the repo holds no bump-vs-reset policy — that decision belongs to the sync caller.
+The two invariants pinned here:
 
   1. ``bump_empty_fetch`` increments by exactly 1 per call; ``reset_empty_fetch``
      zeroes it.

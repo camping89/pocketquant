@@ -26,7 +26,6 @@ from pocketquant.app.main_extensions import (
     configure_middleware,
     ensure_all_indexes,
     handle_startup_failure,
-    migrate_strategy_id_fields,
     recover_stale_backtests,
     register_health_checks,
     register_routes,
@@ -91,9 +90,6 @@ def make_test_app(settings: Settings) -> FastAPI:
         try:
             app.state.database = await c.get(Database)
             app.state.cache = await c.get(Cache)
-            # Mirror main.py: migration BEFORE service resolution so that
-            # PositionAppService.load_open_positions() reads post-migration shape.
-            await migrate_strategy_id_fields(c)
             await ensure_all_indexes(c)
             await recover_stale_backtests(c)
             await register_health_checks(c, app)

@@ -7,9 +7,12 @@ fixtures (testcontainers, Settings, app objects) on top.
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from testcontainers.mongodb import MongoDbContainer
+from testcontainers.redis import RedisContainer
 
 # Workspace root = parent of this file's directory (tests/). Inserted so the
 # `scripts` package (scripts/audit_bar_quality.py, ...) is importable as
@@ -59,3 +62,20 @@ def pytest_configure(config: pytest.Config) -> None:
     # (direnv/.env) keeps precedence and the prod-guard above still sees real URLs.
     for key, val in _TEST_ENV_DEFAULTS.items():
         os.environ.setdefault(key, val)
+
+
+# Session-scoped containers — started once per pytest run for the whole tree.
+# Session fixtures are keyed by defining module path, so defining them here (the
+# root conftest, visible to every suite via fixture inheritance) means ONE Mongo
+# + ONE Redis for the entire run instead of one pair per suite conftest. Per-test
+# isolation comes from fresh DB names + teardown drops, not from container count.
+@pytest.fixture(scope="session")
+def mongo_container() -> Iterator[MongoDbContainer]:
+    with MongoDbContainer("mongo:7.0") as mongo:
+        yield mongo
+
+
+@pytest.fixture(scope="session")
+def redis_container() -> Iterator[RedisContainer]:
+    with RedisContainer("redis:7.2-alpine") as redis:
+        yield redis

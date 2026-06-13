@@ -1,7 +1,10 @@
 """Backfill OHLCV bars from Binance public klines REST API.
 
-One-off script to fill historical gaps beyond TradingView REST's 5000-bar cap.
-Uses the free, unauthenticated `/api/v3/klines` endpoint with start/end pagination.
+Surgical gap-filler: backfill a specific [start,end] window for one
+symbol/interval, beyond TradingView REST's 5000-bar cap. Distinct from
+resync_2y_from_binance.py, which resyncs a bulk rolling window across all
+tracked symbols. Uses the free, unauthenticated `/api/v3/klines` endpoint
+with start/end pagination.
 
 Example (dry-run):
     uv run python scripts/backfill_1m_from_binance.py \\

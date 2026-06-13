@@ -17,8 +17,8 @@ async def ensure_subscription_cache_unique_index(collection: Any) -> None:
 
     DB-level guarantee: at most one cache doc per subscription, keyed by the
     ``subscription_id`` FIELD. Sparse keeps single-run docs (no field) out of
-    the index. Called from both ensure_indexes and the boot migration so the
-    spec can never drift between the two.
+    the index. Extracted as a standalone helper so any caller mints the index
+    from one spec and it can never drift.
     """
     spec = {
         "unique": True,

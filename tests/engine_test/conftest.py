@@ -1,31 +1,16 @@
 """Pytest fixtures for engine tests.
 
-Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
-Session-scoped fixtures here are de-duplicated by pytest across suites
-(same fixture name + same scope → single container instance per session).
+Prod-DB guard, env seeding, and the session-scoped Mongo/Redis containers live
+in the root ``tests/conftest.py`` and resolve here via fixture inheritance.
 """
 
 from __future__ import annotations
-
-from collections.abc import Iterator
 
 import pytest
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
 from pocketquant.core.config import Settings
-
-
-@pytest.fixture(scope="session")
-def mongo_container() -> Iterator[MongoDbContainer]:
-    with MongoDbContainer("mongo:7.0") as mongo:
-        yield mongo
-
-
-@pytest.fixture(scope="session")
-def redis_container() -> Iterator[RedisContainer]:
-    with RedisContainer("redis:7.2-alpine") as redis:
-        yield redis
 
 
 @pytest.fixture
