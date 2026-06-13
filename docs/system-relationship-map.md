@@ -90,7 +90,7 @@ Any manual `.env` edit on the VPS is **overwritten every deploy**. To change pro
 
 MongoDB has **no enforced foreign keys** — relationships below are *logical* joins the application performs. Two join keys carry the whole model:
 
-- **`subscription_id`** — deterministic hash of `(strategy_code, symbol, interval)`. Links live trading records back to their subscription.
+- **`subscription_id`** — uuid7 string (`subscriptions._id`); the `(strategy_code, symbol, interval)` triple is unique via compound index. Links live trading records back to their subscription.
 - composite **`symbol`** string (`BTCUSDT:BINANCE`) — the shared natural key across market-data + trading collections.
 
 13 collections. Collection `_id` strategies + the per-collection reference table live in [system-architecture.md](./system-architecture.md) → "MongoDB Collections & Repository Access". Rendered PNG: [`visuals/collection-erd.png`](./visuals/collection-erd.png) (source: [`visuals/collection-erd.mmd`](./visuals/collection-erd.mmd)).

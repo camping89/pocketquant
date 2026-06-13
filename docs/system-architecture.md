@@ -556,7 +556,7 @@ Route Response
 
 ### MongoDB Collections & Repository Access
 
-14 collections. `_id` is a UUIDv7 except two deliberate natural/domain keys (`subscriptions` = deterministic `hash(strategy_code|symbol|interval)` for idempotent re-subscribe; `apscheduler_jobs` = the job name, APScheduler-managed). Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
+14 collections. `_id` is a UUIDv7 everywhere we own the writes; the single exception is `apscheduler_jobs` (= the job name, APScheduler-managed — library-owned, see code-standards §12.6). Subscription dedup lives in the unique compound index `ix_subscriptions_dedup_triple` on `(strategy_code, symbol, interval)`, not in the id. Two join keys carry the model: **`subscription_id`** links live trading records to their subscription; the composite **`symbol`** (`BTCUSDT:BINANCE`) is the shared natural key across market-data + trading. ERD diagram: [system-relationship-map](./system-relationship-map.md) §8.
 
 | Collection | `_id` strategy | Repository | Logical FK → | Context |
 |---|---|---|---|---|
@@ -564,7 +564,7 @@ Route Response
 | `bars` | uuid7 | BarRepository | `symbol` → symbols | Market Data |
 | `sync_status` | uuid7 | SyncStatusRepository | `(symbol,interval)` ↔ bars | Market Data |
 | `tracked_symbols` | uuid7 (unique index on `symbol`) | TrackedSymbolRepository | drives bars + sync_status | Market Data |
-| `subscriptions` | deterministic hash | SubscriptionRepository | `symbol` → symbols; `strategy_code` → in-code registry | Strategy |
+| `subscriptions` | uuid7 (unique index on triple) | SubscriptionRepository | `symbol` → symbols; `strategy_code` → in-code registry | Strategy |
 | `orders` | uuid7 | OrderRepository | `subscription_id`; `broker_order_id` → OKX | Trading |
 | `positions` | uuid7 | PositionRepository | `subscription_id` → subscriptions | Trading |
 | `backtest_runs` | uuid7 (`run_id`) | BacktestRepository | `subscription_id` → subscriptions (cache) | Backtest |

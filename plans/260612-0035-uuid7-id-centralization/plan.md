@@ -1,7 +1,7 @@
 ---
 title: "UUID7 ID centralization — re-key all owned _id to uuid7"
 description: "Re-key mọi _id ta sở hữu về UUIDv7 (trừ apscheduler_jobs). 6 phases: WS1 type flip → tracked_symbols → job_history → backtest_requests (bỏ bt: prefix) → backtest_runs cache → subscriptions + FK rewrite. TDD: lock behavior bằng net hiện có trước mỗi phase. Mỗi phase 1 push riêng, migration boot-time idempotent."
-status: in-progress
+status: completed
 priority: P2
 branch: "develop"
 tags: [uuid7, mongodb, migration, tdd, data-integrity]
@@ -37,7 +37,7 @@ Pattern chuẩn (đã có ở `Bar`/`Symbol`/`SyncStatus`): entity `id: UUID = F
 | 3 | [Re-key job_history legacy ObjectId](./phase-03-re-key-job-history-legacy-objectid.md) | LOW | Completed (deployed, verify HEALTHY) |
 | 4 | [Re-key backtest_requests drop bt prefix](./phase-04-re-key-backtest-requests-drop-bt-prefix.md) | MED | Completed (deployed, verify HEALTHY) |
 | 5 | [Re-key backtest_runs cache docs](./phase-05-re-key-backtest-runs-cache-docs.md) | MED | Completed (deployed, verify HEALTHY) |
-| 6 | [Re-key subscriptions and FK rewrite](./phase-06-re-key-subscriptions-and-fk-rewrite.md) | HIGH | Pending |
+| 6 | [Re-key subscriptions and FK rewrite](./phase-06-re-key-subscriptions-and-fk-rewrite.md) | HIGH | Completed (deployed, verify HEALTHY) |
 
 ## Key Dependencies
 

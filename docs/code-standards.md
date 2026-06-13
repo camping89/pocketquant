@@ -539,7 +539,7 @@ await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
 | ID | Type | Meaning | Example | Persistence | Notes |
 |---|---|---|---|---|---|
 | `strategy_code` | string | Template name registered in `STRATEGY_REGISTRY` | `"hitnrun2"` | Class name (immutable) | Identifies which strategy class to instantiate. Used to look up the class and load from persistent subscriptions. |
-| `subscription_id` | string (16-char hex) | Deterministic ID of one (strategy_code, symbol, interval) binding | `"a1b2c3d4e5f6g7h8"` | MongoDB `subscriptions._id` (immutable after creation) | Computed as `sha256(f"{strategy_code}\|{symbol}\|{interval}")[:16]`. Uniquely keys in-memory strategy instance, order, position, backtest result docs. |
+| `subscription_id` | string (uuid7) | ID of one (strategy_code, symbol, interval) binding | `"019ebe98-209c-71f2-af3d-981810e2d783"` | MongoDB `subscriptions._id` (immutable after creation) | Random uuid7 via `generate_id()`. Uniqueness of the triple is enforced by the unique compound index `ix_subscriptions_dedup_triple`, not the id. Keys in-memory strategy instance, order, position, backtest result docs. |
 | `template_id` | **DEPRECATED** | Old name for path param that held strategy_code | was `"hitnrun2"` in URL | — | Not used. Use `strategy_code`; treat any legacy `template_id` reference as `strategy_code`. |
 
 **Field Renames (Live Refactor):**
@@ -560,14 +560,16 @@ await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
 - `POST /subscriptions/{sub_id}/start` — start this subscription instance
 - `GET /subscriptions/?strategy_code=X` — filter subscriptions by template (optional)
 
-**Hash Stability Invariant (CRITICAL):**
-The deterministic subscription ID is computed from the **value**, not the parameter name:
+**Dedup Invariant (CRITICAL):**
+Subscription ids are random uuid7 — they say nothing about the triple. The only duplicate guard is the unique compound index:
 ```python
-subscription_id = sha256(f"{strategy_code}|{symbol.upper()}|{interval_val}")[:16]
+await collection.create_index(
+    [("strategy_code", 1), ("symbol", 1), ("interval", 1)],
+    unique=True, name="ix_subscriptions_dedup_triple",
+)
 ```
-Renaming `strategy_id` → `strategy_code` does NOT change existing subscription IDs.
-Existing subscriptions with hash `a1b2c3...` continue to use that hash even after migration.
-Backward-compatibility test: `tests/trading_test/test_subscription_deterministic_id.py:test_back_compat_known_id_hitnrun2_btc_1m`
+`symbol` is normalized (`.upper()`) in `add_symbol` before store — the index is case-sensitive, so that normalization is load-bearing.
+Concurrency test: `tests/core_test/infra/persistence/test_subscription_repository.py:test_concurrent_add_same_triple_one_doc_one_error`
 
 ## Code Organization Guidelines
 
