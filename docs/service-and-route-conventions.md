@@ -301,28 +301,14 @@ class StrategyCommandService:
             raise NotFoundError("SYMBOL_NOT_TRACKED")
 
         # Validate template exists
-        template = STRATEGY_REGISTRY.get(cmd.strategy_id)
-        if not template:
+        if cmd.strategy_id not in STRATEGY_REGISTRY:
             raise NotFoundError("STRATEGY_NOT_FOUND")
 
-        # Compute deterministic sub_id
-        sub_id = Subscription.deterministic_id(
-            cmd.strategy_id, cmd.symbol, cmd.interval
-        )
-
-        # Load strategy instance if needed
-        if not self.strategy_app_svc.get_strategy(sub_id):
-            config = StrategyConfig(
-                id=sub_id,
-                name=cmd.strategy_id,
-                symbol=cmd.symbol,
-                interval=cmd.interval,
-            )
-            await self.strategy_app_svc.load_strategy(config, template)
-
-        # Persist subscription (Mongo unique index enforces dedup)
+        # Persist only — no RAM load here; the reconcile loop materializes
+        # the instance. Dedup of the (strategy_code, symbol, interval) triple
+        # is enforced by the unique compound index, not the id.
         sub = Subscription(
-            id=sub_id,
+            id=generate_id(),  # uuid7
             strategy_code=cmd.strategy_id,
             symbol=cmd.symbol,
             interval=cmd.interval,

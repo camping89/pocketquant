@@ -335,7 +335,7 @@ src/pocketquant/
 │
 ├── trading/              # → core + engine — strategy & trading logic
 │   ├── brokers/okx/      OKXBroker + WebSocket support (auth, mappers, reconnection)
-│   ├── domain/           Subscription aggregate (deterministic ID)
+│   ├── domain/           Subscription aggregate (uuid7 ID, triple dedup via unique index)
 │   ├── strategy_command_service.py   Write: add_symbol, start, stop, delete
 │   ├── strategy_query_service.py     Read: list, get, positions, trades
 │   ├── orders_positions_service.py   Live trading queries

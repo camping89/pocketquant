@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Re-key subscriptions and FK rewrite"
-status: pending
+status: completed
 priority: P1
 effort: "1.5d"
 dependencies: [4, 5]
@@ -57,12 +57,21 @@ Modify:
 
 ## Success Criteria
 
-- [ ] Reconcile tests (a)-(d) pass — đặc biệt (b): unload xảy ra với UUID shape.
-- [ ] Dedup: trùng triple → 409; concurrent → 1 doc. `deterministic_id` không còn trong codebase (grep).
-- [ ] Migration tests + crash-resume pass; map collection tự dọn.
-- [ ] `mongosh` local: mọi `subscriptions._id` + 4 FK fields match UUID; không doc orphan (FK trỏ id không tồn tại).
-- [ ] Pre-deploy: VPS count subs + FK docs, mongodump backup. Post-deploy: `11-verify.sh` HEALTHY; FE list subscriptions → id uuid; start/stop sub hoạt động; run-all → backtest hiển thị.
-- [ ] `docs/code-standards.md` §12.6 + `docs/system-architecture.md` re-check wording (deterministic id không còn).
+- [x] Reconcile tests (a)-(d) pass — đặc biệt (b): unload xảy ra với UUID shape (test_unloads_orphan_instance_when_sub_deleted fail đỏ trước khi đổi regex, pass sau).
+- [x] Dedup: trùng triple → SubscriptionAlreadyExistsError → HTTP 400 (DomainError mapping, không phải 409 — verified test_strategy_subscriptions_api.py note); concurrent gather(2) → 1 doc + 1 error (real Mongo). `deterministic_id` = 0 references (grep).
+- [x] Migration tests + crash-resume pass (map-only resume, half-FK resume); map collection tự dọn sau verify.
+- [x] `mongosh` local E2E: mọi `subscriptions._id` + 4 FK fields match uuid7 regex, 0 bad; map dropped; `ix_subscriptions_dedup_triple` UNIQUE.
+- [x] Pre-deploy: VPS counts (1 sub 16-hex, 12 orders, 0 positions, 1 backtest_run, 1 backtest_request), mongodump full DB 66M (`pre-phase6-subscriptions-rekey-260613-0124.archive.gz`). Post-deploy run 27452404345: migration rekeyed=1 (old eef73dffbd77a20b → new 019ebe98-209c-71f2-af3d-981810e2d783), FK rewritten orders=5/backtest_runs=1/backtest_requests=1; `11-verify.sh` HEALTHY 20/20; list → id uuid7; stop/start converge qua reconcile; run-all → 202, cache refresh (last_run_at mới, trades=1).
+- [x] Docs re-check: `code-standards.md` (ID table + dedup invariant thay hash-stability), `system-architecture.md` (subscriptions = uuid7, 1 exception duy nhất apscheduler_jobs), `system-relationship-map.md`, `service-and-route-conventions.md` (example code), `project-overview-pdr.md`. Grep "deterministic" trong docs = 0.
+
+## Code Review Outcome (post-implementation)
+
+Reviewer: DONE_WITH_CONCERNS, 0 blocking. Applied trong cùng push: `from None` trên DuplicateKeyError re-raise; `logger.error("subscription_uuid_migration.payload_missing")` khi map entry thiếu payload (unreachable hiện tại nhưng loud-on-corruption). Non-blocking ghi nhận, không sửa:
+
+- `_id_migration_map` tên generic — future migration tái dùng tên này sẽ insert payload lạ vào `subscriptions`. Nếu cần migration map-based khác: dùng tên scoped (vd `_subscription_id_migration_map`).
+- Verify step chỉ check old_id residue, không check new-doc existence.
+- 2 boots đua migration: không fork id ($setOnInsert), nhưng 1 boot có thể crash DuplicateKeyError → restart resume sạch. Theoretical với single-instance deploy.
+- Dedup index case-sensitive trên `symbol` — normalization `.upper()` trong `add_symbol` là load-bearing (đã ghi vào docs/code-standards.md).
 
 ## Risk Assessment
 
