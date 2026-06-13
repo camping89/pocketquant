@@ -287,10 +287,10 @@ ssh <VPS> "docker exec pocketquant-mongodb sh -c 'mongodump --uri=\"mongodb://\$
 ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-pre.md"
 
 # Dry-run resync
-ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --dry-run --days 730"
+ssh <VPS> "docker exec pocketquant-app python scripts/backfill/binance_bars.py --dry-run --days 730 --replace"
 
 # Execute resync (all symbols, ~2-3h)
-ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730"
+ssh <VPS> "docker exec pocketquant-app python scripts/backfill/binance_bars.py --days 730 --replace"
 
 # Post-audit (verify; flat_pct/zerovol_pct should be ≤1%)
 ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-post.md"

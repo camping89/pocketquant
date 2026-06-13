@@ -1,13 +1,12 @@
 # scripts/
 
-> **Scope:** Data-ops scripts (audit, backfill, resync). NOT deployment.
+> **Scope:** Data-ops scripts (audit, backfill). NOT deployment.
 > For deployment, see `.github/workflows/cicd.yml` (CI/CD pipeline) + `deploy/vps/` (VPS-side scripts called by the pipeline).
 
 Operational scripts. Run from repository root.
 
 - `audit_bar_quality.py` — diagnostic, no writes. Flat-bar / zero-volume / abnormal-volume sweep across tracked symbols, outputs Markdown report.
-- `backfill_1m_from_binance.py` — surgical gap-filler: backfill a specific `[start,end]` window per symbol/interval.
-- `resync_2y_from_binance.py` — resync 2-year history per symbol.
+- `backfill/binance_bars.py` — fetch OHLCV bars from Binance klines. Targeted (`--symbol` + explicit `--start/--end` window, insert-only gap-fill) or bulk (all tracked symbols, rolling `--days` window, optional `--replace` delete + cascade-rebuild, resumable via checkpoint). Test beside it (`backfill/test_binance_bars.py`) runs via `pytest scripts/backfill/`, excluded from the default suite.
 
 ## Conventions
 
