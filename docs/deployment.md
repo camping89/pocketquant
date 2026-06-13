@@ -148,27 +148,15 @@ The `11-verify.sh` **Boot integrity** check is a hard FAIL gate — it greps the
 
 ---
 
-# Operator Runbook
+## Operator Runbook
 
-Everything above this line is what the `/deploy` skill (and a busy operator) needs. Everything below is the deep runbook: first-deploy, migrations, gap repair, local-dev-pointing-at-prod, etc.
+### Services & Health
 
-## Services & Health
-
-**app** (FastAPI routes + scheduler, internal :41921):
-```bash
-ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41921/health"
-ssh <VPS> "docker logs pocketquant-app --tail 50"
-```
-
-**web** (nginx, public port):
-```bash
-ssh <VPS> "docker exec pocketquant-web curl -s http://localhost:80"
-ssh <VPS> "docker logs pocketquant-web --tail 50"
-```
-
-**Restart strategies:**
-- **Restart app** (stops scheduler + strategy + WS feed): `ssh <VPS> "docker restart pocketquant-app"` — orders/positions persist in MongoDB
-- **Restart web** (safe): `ssh <VPS> "docker restart pocketquant-web"` — FE restarts, API continues
+| Service | Check | Restart |
+|---------|-------|---------|
+| **app** (routes + scheduler, :41921) | `ssh <VPS> "docker exec pocketquant-app curl -s http://localhost:41921/health"` | `docker restart pocketquant-app` (stops scheduler/WS/strategy; data persists in MongoDB) |
+| **web** (nginx, public) | `ssh <VPS> "docker exec pocketquant-web curl -s http://localhost:80"` | `docker restart pocketquant-web` (safe; API continues) |
+| **Logs** | `ssh <VPS> "docker logs pocketquant-app --tail 50"` | — |
 
 ## Architecture
 
@@ -287,59 +275,29 @@ That's it. CI/CD is the only deploy path. Watch the run on the GitHub Actions ta
 
 ## 2-Year Bar Re-Sync Procedure
 
-**Purpose:** Refresh historical market data after major data source changes (e.g., Binance migration, bug fixes).
+Refresh historical market data after major data source changes (e.g. Binance migration, bug fixes). Scripts ship in app image (`/app/scripts`) and run via `docker exec pocketquant-app`.
 
-**Prerequisites:** VPS deployment running, MongoDB accessible, ~30 GB free disk space for mongodump backup.
+**Backup → Audit (pre) → Dry-run resync → Execute → Post-audit:**
 
-### Step 1: Backup Current Data
 ```bash
-# mongodump lives in the mongodb container; build the URI from that container's
-# own root creds (localhost inside it) — no host-side MONGODB_URL needed:
-ssh <VPS> "docker exec pocketquant-mongodb sh -c 'mongodump --uri=\"mongodb://\$MONGO_INITDB_ROOT_USERNAME:\$MONGO_INITDB_ROOT_PASSWORD@localhost:27017/pocketquant?authSource=admin\" --archive' > /opt/pocketquant/backup-$(date -u +%Y%m%d-%H%M%S).archive"
-```
+# Backup
+ssh <VPS> "docker exec pocketquant-mongodb sh -c 'mongodump --uri=\"mongodb://\$MONGO_INITDB_ROOT_USERNAME:\$MONGO_INITDB_ROOT_PASSWORD@localhost:27017/pocketquant?authSource=admin\" --archive' > /opt/pocketquant/backup-$(date -u +%Y%m%d).archive"
 
-> Scripts ship inside the app image (`/app/scripts`) and read `MONGODB_URL` from
-> the container env, whose internal hostname (`mongodb`) only resolves on the
-> docker network — so run them with `docker exec pocketquant-app`, not on the host.
-
-### Step 2: Pre-Audit (Baseline Quality Check)
-```bash
+# Pre-audit (baseline)
 ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-pre.md"
-ssh <VPS> "docker cp pocketquant-app:/app/audit-pre.md /opt/pocketquant/audit-pre.md"
-# Inspect output — note flat_pct and zerovol_pct per interval
-```
 
-### Step 3: Plan Resync (Dry Run)
-```bash
+# Dry-run resync
 ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --dry-run --days 730"
-```
 
-### Step 4: Execute Resync (Live)
-```bash
-# All symbols (~2-3 hours):
+# Execute resync (all symbols, ~2-3h)
 ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730"
 
-# Specific symbols only (~30 min):
-ssh <VPS> "docker exec pocketquant-app python scripts/resync_2y_from_binance.py --days 730 --symbols BTCUSDT,ETHUSDT"
-```
-
-### Step 5: Higher-Timeframe Direct Fetch
-```bash
-# Binance cascade (1m→5m→15m→...→1M) is slow over WAN. Fetch higher TFs directly:
-ssh <VPS> "curl -X POST http://localhost:\$APP_PORT/api/v1/market-data/sync \
-  -H 'Content-Type: application/json' \
-  -d '{\"symbol\":\"BTCUSDT\",\"exchange\":\"BINANCE\",\"interval\":\"1h\",\"n_bars\":17520}'"
-# Repeat for 4h (4380 bars) and 1d (730 bars)
-```
-
-### Step 6: Post-Audit (Verify Quality)
-```bash
+# Post-audit (verify; flat_pct/zerovol_pct should be ≤1%)
 ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-post.md"
-ssh <VPS> "docker cp pocketquant-app:/app/audit-post.md /opt/pocketquant/audit-post.md"
-# Compare to pre-audit: flat_pct and zerovol_pct should be ≤ 1% (or 0.0% if bug fixed)
-```
 
-**Monitoring:** `docker logs pocketquant-app --tail 100 -f` for rate-limit errors or data quality warnings.
+# Monitor for rate-limit errors
+ssh <VPS> "docker logs pocketquant-app --tail 100 -f"
+```
 
 ---
 

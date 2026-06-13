@@ -17,9 +17,8 @@ Dependency graph: `core ◁ engine ◁ backtest ◁ app`, `web → app`. Backend
 
 ## Reference docs (discover detail here)
 
-- Architecture, layers, DI providers, request flows, "Where does X live" → `docs/system-architecture.md`
-- Naming table, comment policy, async-suspension patterns, schema, testing, perf → `docs/code-standards.md`
-- Dependency + relationship visuals → `docs/architecture-visual-map.md`, `docs/system-relationship-map.md`
+- Architecture, layers, DI providers, request flows, "Where does X live", real-time streaming, strategy lifecycle, ops context, visuals → `docs/system-architecture.md`
+- Naming table, comment policy, route/service/repo conventions, async-suspension patterns, schema, testing, perf → `docs/code-standards.md`
 - Run / test / canonical routes → `README.md`
 
 ## Writing docs & prose
