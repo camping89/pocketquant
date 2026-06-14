@@ -57,7 +57,7 @@ def bar_service(mock_cache, mock_bar_repo, mock_event_bus):
 class TestBarAppServiceDefaults:
     """Test BarAppService initialization with defaults."""
 
-    def test_default_intervals_all_6_tfs(self):
+    def test_default_intervals_all_canonical_tfs(self):
         cache = AsyncMock(spec=Cache)
         bar_repo = AsyncMock(spec=BarRepository)
         event_bus = AsyncMock(spec=EventBus)
@@ -75,6 +75,7 @@ class TestBarAppServiceDefaults:
             Interval.HOUR_1,
             Interval.HOUR_4,
             Interval.DAY_1,
+            Interval.WEEK_1,
         ]
 
     def test_custom_intervals_override_default(self):

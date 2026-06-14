@@ -48,7 +48,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# All timeframes synced / integrity-checked: 1m via REST, 5m–1d via cascade.
+# All timeframes synced / integrity-checked: 1m via REST, 5m–1d via cascade,
+# 1w via REST (Binance serves Monday-aligned weekly klines natively — cascading
+# from 1m would mis-bucket since floor-of-epoch aligns weeks to Thursday).
 SYNC_INTERVALS = [
     Interval.MINUTE_1,
     Interval.MINUTE_5,
@@ -56,6 +58,7 @@ SYNC_INTERVALS = [
     Interval.HOUR_1,
     Interval.HOUR_4,
     Interval.DAY_1,
+    Interval.WEEK_1,
 ]
 
 # Catch-up targets — heavy daily/12h jobs that silently drop runs when a restart

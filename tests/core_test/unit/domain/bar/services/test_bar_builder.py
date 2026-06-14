@@ -7,7 +7,12 @@ as per the documented contract. No I/O, no clock dependency.
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
+
+from pocketquant.core.domain.bar.services.bar_builder import (
+    BarBuilder,
+    get_bar_start,
+    is_bar_aligned,
+)
 from pocketquant.core.domain.shared.enums import Interval
 
 BAR_START = datetime(2026, 5, 8, 10, 0, 0, tzinfo=UTC)
@@ -91,3 +96,32 @@ class TestDeltaSemantics:
         assert builder.volume == before_volume
         assert builder.open == before_open
         assert builder.tick_count == before_tick_count
+
+
+class TestWeeklyAlignment:
+    """get_bar_start(WEEK_1) anchors to Monday 00:00 UTC (Binance convention).
+
+    A plain floor(epoch / 604800) would land on Thursday — the integrity/repair
+    job would then flag every weekly bar as misaligned and purge it.
+    """
+
+    def test_midweek_aligns_to_monday(self) -> None:
+        # 2026-05-08 is a Friday; its week opens Monday 2026-05-04.
+        ts = datetime(2026, 5, 8, 13, 37, 0, tzinfo=UTC)
+        start = get_bar_start(ts, Interval.WEEK_1)
+        assert start == datetime(2026, 5, 4, 0, 0, 0, tzinfo=UTC)
+        assert start.weekday() == 0  # Monday
+
+    def test_monday_midnight_is_its_own_start(self) -> None:
+        monday = datetime(2026, 5, 4, 0, 0, 0, tzinfo=UTC)
+        assert get_bar_start(monday, Interval.WEEK_1) == monday
+        assert is_bar_aligned(monday, Interval.WEEK_1) is True
+
+    def test_sunday_belongs_to_prior_monday(self) -> None:
+        # Sunday 2026-05-10 → still the week starting Monday 2026-05-04.
+        sunday = datetime(2026, 5, 10, 23, 59, 0, tzinfo=UTC)
+        assert get_bar_start(sunday, Interval.WEEK_1) == datetime(2026, 5, 4, tzinfo=UTC)
+
+    def test_non_monday_is_not_aligned(self) -> None:
+        tuesday = datetime(2026, 5, 5, 0, 0, 0, tzinfo=UTC)
+        assert is_bar_aligned(tuesday, Interval.WEEK_1) is False
