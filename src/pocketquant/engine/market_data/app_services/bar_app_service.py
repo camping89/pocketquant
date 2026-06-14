@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 # Minimum seconds between Redis flushes per (symbol, interval) key — throttle high-frequency ticks
 BAR_CURRENT_FLUSH_MIN_INTERVAL_S = 0.2
 
-# All 6 canonical timeframes tracked in-memory per symbol
+# All canonical timeframes tracked in-memory per symbol
 _DEFAULT_INTERVALS = [
     Interval.MINUTE_1,
     Interval.MINUTE_5,
@@ -29,6 +29,7 @@ _DEFAULT_INTERVALS = [
     Interval.HOUR_1,
     Interval.HOUR_4,
     Interval.DAY_1,
+    Interval.WEEK_1,
 ]
 
 

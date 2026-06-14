@@ -13,7 +13,6 @@ class TestInterval:
         assert Interval.HOUR_1 == "1h"
         assert Interval.DAY_1 == "1d"
         assert Interval.WEEK_1 == "1w"
-        assert Interval.MONTH_1 == "1M"
 
     def test_interval_seconds_mapping(self):
         """Test INTERVAL_SECONDS mapping is complete."""

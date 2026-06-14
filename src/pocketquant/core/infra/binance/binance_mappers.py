@@ -15,17 +15,12 @@ from pocketquant.core.domain.shared.enums import Interval
 # Domain Interval → (Binance literal, bar duration ms)
 INTERVAL_TO_BINANCE: dict[Interval, tuple[str, int]] = {
     Interval.MINUTE_1: ("1m", 60_000),
-    Interval.MINUTE_3: ("3m", 3 * 60_000),
     Interval.MINUTE_5: ("5m", 5 * 60_000),
     Interval.MINUTE_15: ("15m", 15 * 60_000),
-    Interval.MINUTE_30: ("30m", 30 * 60_000),
     Interval.HOUR_1: ("1h", 60 * 60_000),
-    Interval.HOUR_2: ("2h", 2 * 60 * 60_000),
     Interval.HOUR_4: ("4h", 4 * 60 * 60_000),
     Interval.DAY_1: ("1d", 24 * 60 * 60_000),
     Interval.WEEK_1: ("1w", 7 * 24 * 60 * 60_000),
-    Interval.MONTH_1: ("1M", 30 * 24 * 60 * 60_000),  # approximate; Binance defines calendar month
-    # HOUR_6, HOUR_8, HOUR_12, DAY_3 omitted — not in current Interval enum.
 }
 
 _SYMBOL_RE = re.compile(r"^[A-Z0-9]{6,12}$")

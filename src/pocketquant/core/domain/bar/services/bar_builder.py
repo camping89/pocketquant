@@ -16,6 +16,14 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     if interval == Interval.DAY_1:
         return timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
 
+    if interval == Interval.WEEK_1:
+        # Weekly bars open Monday 00:00 UTC (Binance convention). A plain
+        # floor(epoch / 604800) lands on Thursday because the Unix epoch
+        # (1970-01-01) was a Thursday — that would make every weekly bar fail
+        # is_bar_aligned and get purged by the integrity/repair job.
+        midnight = timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
+        return midnight - timedelta(days=midnight.weekday())
+
     epoch = datetime(1970, 1, 1, tzinfo=UTC) if timestamp.tzinfo else datetime(1970, 1, 1)
     total_seconds = (timestamp - epoch).total_seconds()
     aligned_seconds = (total_seconds // seconds) * seconds
