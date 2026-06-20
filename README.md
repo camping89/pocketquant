@@ -38,6 +38,13 @@ Note: the backend is a single process (`pocketquant.app.main`) listening on `:41
 - Node.js 22+ and npm
 - `just` is optional but recommended
 
+Works on macOS, Linux, and Windows. The `just` recipes are cross-platform (they pick `.venv/bin/python` on macOS/Linux
+and `.venv\Scripts\python.exe` on Windows automatically). On Windows, run `just` from PowerShell.
+
+> **Windows + `curl`:** the smoke-test snippets below use real `curl`. PowerShell aliases `curl` to `Invoke-WebRequest`,
+> which has different syntax and does not accept the `\` line continuations. Either call `curl.exe` explicitly (bundled
+> with Windows 10+) and put the command on one line, or run the snippets from Git Bash / WSL.
+
 ## Backend Quick Start
 
 ```bash

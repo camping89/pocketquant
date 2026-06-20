@@ -2,18 +2,29 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python: FastAPI",
+      "name": "Backend: FastAPI (app.main)",
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
       "args": [
-        "pocketquant.api.main:app",
+        "pocketquant.app.main:app",
         "--reload",
         "--host", "0.0.0.0",
-        "--port", "41920"
+        "--port",
+        "41921"
       ],
       "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env"
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "osx": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "linux": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "windows": {
+        "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+      }
     },
     {
       "name": "Python: Current File",
@@ -22,7 +33,16 @@
       "program": "${file}",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "envFile": "${workspaceFolder}/.env"
+      "envFile": "${workspaceFolder}/.env",
+      "osx": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "linux": {
+        "python": "${workspaceFolder}/.venv/bin/python"
+      },
+      "windows": {
+        "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+      }
     }
   ]
 }
