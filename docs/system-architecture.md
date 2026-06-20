@@ -375,7 +375,7 @@ src/
 │   │   └── indicator-series.ts  # SMA, EMA, RSI, MACD, Bollinger
 │   ├── controls/        # User controls
 │   │   ├── symbol-selector.tsx   # Symbol dropdown
-│   │   ├── interval-selector.tsx  # Timeframe picker (1m-1M)
+│   │   ├── interval-selector.tsx  # Timeframe picker (1m-1w)
 │   │   └── indicator-toggles.tsx  # Show/hide indicators
 │   └── layout/
 │       └── app-header.tsx  # Navigation + branding

@@ -28,7 +28,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - Background/async sync without blocking client
 - Track sync progress and status
 - Prevent duplicate data via upsert operations
-- Support 13 standard intervals (1m to 1M)
+- Support 7 standard intervals (1m, 5m, 15m, 1h, 4h, 1d, 1w)
 - Auto-paginate when `n_bars > 1000` (Binance returns max 1000 bars/call, 1200 weight/min budget)
 
 **API Endpoints:**
@@ -68,7 +68,8 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 **Requirement:** Aggregate real-time ticks into OHLCV bars at multiple timeframes simultaneously.
 
 **Sub-requirements:**
-- Build bars for all 13 intervals (1m to 1M) from single tick stream
+
+- Build bars for all 7 intervals (1m, 5m, 15m, 1h, 4h, 1d, 1w) from single tick stream
 - Atomic OHLC/V updates (no data corruption)
 - Proper time alignment (midnight UTC for daily, epoch-aligned for intraday)
 - Detect bar completion and auto-save to MongoDB
@@ -344,7 +345,7 @@ web/                                 # React 19 + Vite SPA (separate npm app)
 **Core Features (F1-F6):**
 - [x] Historical OHLCV sync from Binance
 - [x] Real-time quote streaming via WebSocket
-- [x] Multi-interval bar aggregation (1m to 1M)
+- [x] Multi-interval bar aggregation (1m, 5m, 15m, 1h, 4h, 1d, 1w)
 - [x] MongoDB persistence with proper schema
 - [x] Redis caching with TTL management
 - [x] Background job scheduling

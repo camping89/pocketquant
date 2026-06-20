@@ -1,4 +1,4 @@
-# PocketQuant Development Tasks
+# PocketQuant — local dev tasks
 # Requires: just, docker, uv (https://docs.astral.sh/uv/)
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
@@ -22,40 +22,9 @@ up:
 down:
     docker compose -f deploy/compose.local.yml --env-file .env down
 
-# Reset everything: stop containers and delete all data volumes
+# Reset everything: stop containers and delete all data volumes (clean slate)
 reset:
     docker compose -f deploy/compose.local.yml --env-file .env down -v
-
-# Run all tests
-test:
-    {{python}} -m pytest
-
-# Regenerate baseline regression snapshots (OpenAPI, route inventory)
-baseline:
-    BASELINE_UPDATE=1 {{python}} -m pytest tests/baseline/ -q
-
-# Run tests for a specific subpackage (core, engine, backtest, app)
-test-pkg pkg:
-    {{python}} -m pytest tests/{{pkg}}_test/
-
-# Lint check
-lint:
-    uv run ruff check .
-
-# Format code
-fmt:
-    uv run ruff format .
-
-# Type check
-types:
-    uv run pyright
-
-# Run lint + format + type check
-qa: lint fmt types
-
-# Start Redis only (when using remote MongoDB)
-redis:
-    docker compose -f deploy/compose.local.yml --env-file .env up -d redis
 
 # Start backend: full runtime (scheduler, WS feed, reconcile, backtest worker) + all API routes + SPA (port 41921).
 # Single worker only — scheduler/WS/broker are in-process singletons; --workers N would duplicate them.
@@ -68,6 +37,6 @@ be:
 fe:
     npm run dev
 
-# Check import-linter contracts (layered/forbidden contracts)
-lint-imports:
-    uv run lint-imports
+# Run tests
+test:
+    {{python}} -m pytest
