@@ -38,6 +38,18 @@ gh workflow run cicd.yml --ref develop
 # or: GitHub repo → Actions → CI/CD → Run workflow
 ```
 
+### Monitor the run (mandatory)
+
+Every push must be watched to completion — a green push ≠ a healthy deploy. Block on the run, then read the result:
+
+```bash
+RUN_ID=$(gh run list --branch develop --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$RUN_ID" --exit-status   # blocks until done; non-zero exit = a job failed
+gh run view "$RUN_ID"                   # per-job pass/fail summary
+```
+
+If `gh run watch` exits non-zero, open the failing job's log (`gh run view "$RUN_ID" --log-failed`) and jump to [Rollback](#rollback). Do NOT assume the VPS is healthy until the `deploy` job is green AND the post-deploy SSH check below passes.
+
 **What runs:** 5 jobs in `.github/workflows/cicd.yml`
 
 1. `tests` — pre-build gate: `uv sync --frozen` → `pytest tests/api_test/`. `build-api` + `build-web` both `needs: [tests]`, nên build chỉ chạy khi tests xanh.
@@ -48,6 +60,27 @@ gh workflow run cicd.yml --ref develop
 **Concurrency:** `concurrency: deploy / cancel-in-progress: true`. A new push cancels an in-flight deploy — newest wins.
 
 **Verify report:** download from the run's `verify-report` artifact (retained 3 days).
+
+### Post-deploy SSH verification (mandatory)
+
+The `deploy` job already runs `11-verify.sh` in-pipeline, but confirm the live VPS directly after the run goes green — the CI report is a point-in-time snapshot, and only an out-of-band SSH check proves the new image is the one actually serving:
+
+```bash
+HOST="$(cat ../pocketquant-config/vps/default/host)"
+KEY="../pocketquant-config/vps/default/id_rsa"
+
+# 1. Containers — app + web should show "Up <minutes> (healthy)" (freshly restarted);
+#    mongodb/redis/portainer stay up across deploys.
+ssh -i "$KEY" "$HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
+
+# 2. App health (container-internal) — expect HTTP 200.
+ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -o /dev/null -w 'HTTP %{http_code}' http://localhost:41921/health"
+
+# 3. Smoke the change — confirm the new code is live (e.g. strategy registry).
+ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s http://localhost:41921/api/v1/backtest/strategies"
+```
+
+`app`/`web` showing a short uptime + `(healthy)` means the deploy restarted them onto the freshly-pulled image; `mongodb`/`redis` keeping a long uptime is expected (the deploy must not recreate stateful containers). The app runs `camping89/pocketquant:latest` — `compose.prod.yml` pins `IMAGE_TAG=latest` by default, and the deploy pulls the `:latest` built from the pushed commit, so a healthy short-uptime `app` IS the new code. A `(healthy)` app with the smoke check returning the expected payload confirms CD landed; anything else → [Rollback](#rollback).
 
 ## Environment Variables
 
