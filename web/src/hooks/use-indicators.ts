@@ -13,7 +13,8 @@ export interface LinePoint {
 
 export interface IndicatorData {
   sma20: LinePoint[]
-  ema50: LinePoint[]
+  ema9: LinePoint[]
+  ema21: LinePoint[]
   rsi14: LinePoint[]
   macdLine: LinePoint[]
   macdSignal: LinePoint[]
@@ -47,7 +48,8 @@ export function useIndicators(
     const times = candles.map((c) => c.time)
 
     const sma20 = config.sma ? toLinePoints(times, sma(closes, 20)) : []
-    const ema50 = config.ema ? toLinePoints(times, ema(closes, 50)) : []
+    const ema9 = config.ema ? toLinePoints(times, ema(closes, 9)) : []
+    const ema21 = config.ema ? toLinePoints(times, ema(closes, 21)) : []
     const rsi14 = config.rsi ? toLinePoints(times, computeRSI(closes, 14)) : []
 
     let macdLine: LinePoint[] = []
@@ -79,6 +81,6 @@ export function useIndicators(
       bbLower = toLinePoints(times, bb.lower)
     }
 
-    return { sma20, ema50, rsi14, macdLine, macdSignal, macdHistogram, bbUpper, bbMiddle, bbLower }
+    return { sma20, ema9, ema21, rsi14, macdLine, macdSignal, macdHistogram, bbUpper, bbMiddle, bbLower }
   }, [candles, config])
 }
