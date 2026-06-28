@@ -35,8 +35,14 @@ from pocketquant.core.domain.backtest import (
 )
 from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.shared.enums import Interval
 
 logger = logging.getLogger(__name__)
+
+# 1m × 2y ≈ 1.1M points blows past Mongo's 16MB doc cap; cap the persisted curve
+# while keeping every trade-carrying point. Sharpe is computed on the full
+# in-memory series before downsampling.
+_MAX_PERSISTED_EQUITY_POINTS = 5000
 
 
 class BacktestResultCollector:
@@ -60,6 +66,11 @@ class BacktestResultCollector:
         self._run_id = run_id or ""
 
         self._equity_curve: list[EquityPoint] = []
+        # Per-bar mark-to-market curve (realized + unrealized), filled by
+        # ``mark_to_market`` once per bar. Sharpe/Sortino annualize off this even
+        # series; ``_equity_curve`` (realized-only, trade-keyed) drives
+        # total_return/cagr/max_drawdown unchanged.
+        self._mtm_curve: list[EquityPoint] = []
         self._orders_by_id: dict[str, Order] = {}
         self._trades: list[Trade] = []
         self._total_commission = 0.0
@@ -75,11 +86,9 @@ class BacktestResultCollector:
         )
 
     def set_run_id(self, run_id: str) -> None:
-        """Set the run_id after construction (caller convenience)."""
         self._run_id = run_id
 
     async def on_fill(self, result: Any) -> None:
-        """PaperBroker fill callback. Handles FILLED only; non-fills emit no Trade."""
         if result.filled_quantity is None or result.filled_quantity <= 0:
             self._upsert_order_status(result)  # still mirror status (CANCELLED/EXPIRED)
             return
@@ -246,7 +255,6 @@ class BacktestResultCollector:
         exit_price: float,
         exit_time: datetime,
     ) -> None:
-        """Emit one Trade per consumed lot (closes round-trips), update equity."""
         for consumed in outcome.consumed:
             pnl = self._consumed_pnl(consumed, exit_price)
             self._current_equity += pnl
@@ -288,6 +296,70 @@ class BacktestResultCollector:
             EquityPoint(timestamp=timestamp, equity=self._current_equity, drawdown=drawdown)
         )
 
+    def mark_to_market(self, timestamp: datetime, total_equity: float) -> None:
+        """Append a per-bar mark-to-market equity point — READ-ONLY accounting.
+
+        ``total_equity`` is ``broker.get_balance().total_equity`` (realized
+        balance + unrealized PnL), the broker's single source of truth. This
+        feeds the per-bar return series Sharpe/Sortino annualize. It MUST NOT
+        touch ``self._current_equity`` — that stays realized-only so
+        ``total_return``/``cagr`` are unaffected. Drawdown here is marked against
+        a separate MTM peak so the persisted curve's drawdown reflects unrealized
+        swings without polluting realized accounting.
+
+        Points carrying a trade (fill/exit, recorded via ``_record_equity_point``)
+        are preserved at persist time; MTM points fill the gaps for even
+        sampling.
+        """
+        self._mtm_curve.append(
+            EquityPoint(timestamp=timestamp, equity=total_equity, drawdown=0.0)
+        )
+
+    def _downsample_equity_curve(self) -> list[EquityPoint]:
+        """Curve to persist: per-bar MTM series (with drawdown), hard-capped at 5000.
+
+        Uses the MTM curve when present (even per-bar sampling FE plots),
+        otherwise the realized curve. Drawdown is recomputed across the chosen
+        source. When the source exceeds the cap it is strided down while
+        preferentially keeping trade-carrying timestamps (the equity break
+        points). The result is then hard-sliced to the cap so the persisted doc
+        can never exceed Mongo's size budget even with very many trades.
+        """
+        source = self._mtm_curve if self._mtm_curve else self._equity_curve
+        with_dd = self._with_drawdown(source)
+        if len(with_dd) <= _MAX_PERSISTED_EQUITY_POINTS:
+            return with_dd
+
+        trade_timestamps = {p.timestamp for p in self._equity_curve}
+        stride = len(with_dd) // _MAX_PERSISTED_EQUITY_POINTS + 1
+        kept: list[EquityPoint] = []
+        last = len(with_dd) - 1
+        for i, point in enumerate(with_dd):
+            if i % stride == 0 or i == last or point.timestamp in trade_timestamps:
+                kept.append(point)
+        if len(kept) <= _MAX_PERSISTED_EQUITY_POINTS:
+            return kept
+        # Trade points alone exceeded the cap — stride the kept set down too so
+        # the cap is a hard guarantee (preserve first + last). Striding alone
+        # yields ≤ cap points; swap the final sampled point for the true last so
+        # the closing equity survives without growing the list past the cap.
+        final_stride = len(kept) // _MAX_PERSISTED_EQUITY_POINTS + 1
+        capped = kept[::final_stride]
+        if capped[-1] is not kept[-1]:
+            capped[-1] = kept[-1]
+        return capped
+
+    @staticmethod
+    def _with_drawdown(curve: list[EquityPoint]) -> list[EquityPoint]:
+        """Return ``curve`` with drawdown recomputed against a running peak."""
+        out: list[EquityPoint] = []
+        peak = float("-inf")
+        for p in curve:
+            peak = max(peak, p.equity)
+            drawdown = (p.equity - peak) / peak if peak > 0 else 0.0
+            out.append(EquityPoint(timestamp=p.timestamp, equity=p.equity, drawdown=drawdown))
+        return out
+
     @staticmethod
     def _consumed_pnl(consumed: ConsumedLot, exit_price: float) -> float:
         if consumed.lot.direction == "LONG":
@@ -295,7 +367,6 @@ class BacktestResultCollector:
         return (consumed.lot.entry_price - exit_price) * consumed.qty_closed
 
     def _build_open_positions(self) -> list[OpenLot]:
-        """Snapshot still-open lots at run-end as OpenLot[] for the run doc."""
         out: list[OpenLot] = []
         for lot in self._lot_tracker.lots:
             if lot.qty_remaining <= 1e-12:
@@ -328,7 +399,6 @@ class BacktestResultCollector:
         status: str = "completed",
         error_message: str | None = None,
     ) -> CollectedResults:
-        """Compute metrics + bundle Orders+Trades+slim-Run into CollectedResults."""
         # Late-bind run_id onto stubs created before set_run_id was known.
         if not self._run_id:
             self._run_id = run_id
@@ -340,6 +410,12 @@ class BacktestResultCollector:
                     trade.run_id = run_id
 
         open_positions = self._build_open_positions()
+        periods_per_year = Interval.periods_per_year_for(self._config.interval)
+        if periods_per_year is None:
+            logger.warning(
+                "unknown interval %r — skipping Sharpe/Sortino annualization",
+                self._config.interval,
+            )
         metrics: BacktestMetrics = build_metrics(
             closed_trades=self._trades,
             equity_curve=self._equity_curve,
@@ -348,7 +424,10 @@ class BacktestResultCollector:
             total_commission=self._total_commission,
             start_date=self._config.start_date,
             end_date=self._config.end_date,
+            periods_per_year=periods_per_year,
+            returns_curve=self._mtm_curve or None,
         )
+        persisted_curve = self._downsample_equity_curve()
 
         config_snapshot = {
             "strategy_code": self._config.strategy_code,
@@ -368,7 +447,7 @@ class BacktestResultCollector:
             strategy_code=self._config.strategy_code,
             config_snapshot=config_snapshot,
             metrics=metrics,
-            equity_curve=self._equity_curve,
+            equity_curve=persisted_curve,
             open_positions=open_positions,
             started_at=started_at,
             completed_at=completed_at,

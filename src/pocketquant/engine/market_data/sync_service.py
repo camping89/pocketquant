@@ -1,5 +1,3 @@
-"""Sync feature service — single-symbol and bulk OHLCV sync."""
-
 from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC, Bar
@@ -32,14 +30,7 @@ logger = get_logger(__name__)
 __all__ = ["SyncService", "SyncSymbolCommand", "BulkSyncCommand", "SyncResponse"]
 
 
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
-
-
 class SyncService:
-    """Single-symbol and bulk sync — replaces SyncSymbolHandler + BulkSyncHandler."""
-
     def __init__(
         self,
         provider: IDataProvider,
@@ -150,9 +141,7 @@ class SyncService:
             results.append(result)
         return results
 
-    # ------------------------------------------------------------------
     # Private helpers
-    # ------------------------------------------------------------------
 
     async def _persist_bars(self, symbol: str, records: list[Bar], source: str) -> int:
         if not records:

@@ -30,12 +30,9 @@ _TTL_SECONDS = 30 * 86400
 
 
 class JobHistoryRepository(BaseRepository):
-    """Stores job execution records with TTL auto-pruning."""
-
     _collection_name = COLLECTION_JOB_HISTORY
 
     async def record_start(self, job_id: str) -> str:
-        """Insert a 'running' record. Returns doc _id."""
         doc_id = generate_id_str()
         await self._collection().insert_one(
             {
@@ -63,7 +60,6 @@ class JobHistoryRepository(BaseRepository):
         total_inserted: int | None = None,
         total_fetched: int | None = None,
     ) -> None:
-        """Update a running record with completion info."""
         finished_at = datetime.now(UTC)
         update: dict[str, Any] = {
             "finished_at": finished_at,
@@ -191,7 +187,6 @@ class JobHistoryRepository(BaseRepository):
         return coerce_utc(doc["started_at"]) if doc else None
 
     async def get_latest_by_job_ids(self, job_ids: list[str]) -> dict[str, dict[str, Any]]:
-        """Get the latest execution record per job_id. Returns {job_id: doc}."""
         if not job_ids:
             return {}
 
@@ -223,7 +218,6 @@ class JobHistoryRepository(BaseRepository):
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Paginated runs for a job, newest first."""
         q: dict[str, Any] = {"job_id": job_id}
         if since or until:
             range_q: dict[str, Any] = {}
@@ -352,7 +346,6 @@ class JobHistoryRepository(BaseRepository):
 
 
 def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
-    """JSON-safe view of a run doc."""
     return {
         "_id": doc.get("_id"),
         "job_id": doc.get("job_id"),

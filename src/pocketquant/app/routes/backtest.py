@@ -28,16 +28,13 @@ from pocketquant.backtest.backtest_query_service import (
 )
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 
-# ---------------------------------------------------------------------------
 # backtest_router — /backtest prefix
-# ---------------------------------------------------------------------------
 
 backtest_router = APIRouter(prefix="/backtest", tags=["backtest"], route_class=DishkaRoute)
 
 
 @backtest_router.get("/strategies")
 async def list_available_strategies() -> list[str]:
-    """Return strategy IDs available for backtesting."""
     return list(STRATEGY_REGISTRY.keys())
 
 
@@ -59,7 +56,6 @@ async def get_backtest_request(
     request_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    """Poll a single backtest request's status + embedded result."""
     return await query_svc.get_request_status(request_id)
 
 
@@ -92,10 +88,6 @@ async def get_backtest(
     run_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    """Get a specific backtest result by ID.
-
-    Returns full result including equity curve and trade history.
-    """
     result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
     return result.to_dict()
 
@@ -105,10 +97,6 @@ async def get_backtest_equity(
     run_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    """Get equity curve data for a backtest.
-
-    Returns only the equity curve for charting purposes.
-    """
     result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
     return {
         "run_id": str(result.id),
@@ -126,10 +114,6 @@ async def list_backtests(
     limit: int = 20,
     include_failed: bool = False,
 ) -> list[dict[str, Any]]:
-    """List backtest results for a strategy.
-
-    Returns summary information without full equity curves.
-    """
     results = await query_svc.list_results(
         ListBacktestsQuery(
             strategy_id=strategy_id,
@@ -157,17 +141,11 @@ async def get_optimization(
     optimization_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    """Get optimization result by ID.
-
-    Returns full optimization result with all ranked parameter combinations.
-    """
     result = await query_svc.get_optimization(GetOptimizationQuery(optimization_id=optimization_id))
     return result.to_dict()
 
 
-# ---------------------------------------------------------------------------
 # run_all_backtests_router — /strategies prefix (separate mount)
-# ---------------------------------------------------------------------------
 
 run_all_backtests_router = APIRouter(
     prefix="/strategies", tags=["strategies"], route_class=DishkaRoute
@@ -179,5 +157,4 @@ async def run_all_backtests(
     strategy_code: str,
     cmd_svc: FromDishka[BacktestCommandService],
 ) -> dict:
-    """Enqueue an immediate backtest job for every subscription of the strategy template."""
     return await cmd_svc.run_all(RunAllBacktestsCommand(strategy_id=strategy_code))

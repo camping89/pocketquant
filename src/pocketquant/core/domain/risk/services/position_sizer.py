@@ -1,14 +1,7 @@
-"""Position sizing service - pure domain calculation."""
-
 from pocketquant.core.domain.risk.value_objects import RiskConfig, RiskModel
 
 
 class PositionSizer:
-    """Pure domain service for calculating position sizes.
-
-    No I/O, no external dependencies. Takes values, returns size.
-    """
-
     @staticmethod
     def calculate_size(
         account_balance: float,
@@ -50,10 +43,6 @@ class PositionSizer:
         stop_loss_price: float | None,
         risk_config: RiskConfig,
     ) -> float:
-        """Calculate size based on fixed percentage risk.
-
-        Size = (Account * Risk%) / |Entry - StopLoss|
-        """
         if stop_loss_price is None:
             # Without stop loss, use 1% of entry as default risk
             price_risk = entry_price * 0.01
@@ -93,10 +82,6 @@ class PositionSizer:
         entry_price: float,
         risk_config: RiskConfig,
     ) -> float:
-        """Calculate fixed size per trade.
-
-        Uses max_exposure_percent as the fixed allocation.
-        """
         size = (account_balance * risk_config.max_exposure_percent) / entry_price
         return size
 

@@ -1,5 +1,3 @@
-"""TrackedSymbolRepository — CRUD for the tracked_symbols collection."""
-
 from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_TRACKED_SYMBOLS
@@ -35,7 +33,6 @@ class TrackedSymbolRepository(BaseRepository):
         )
 
     async def update(self, symbol: str, fields: dict) -> bool:
-        """Update metadata fields for an existing tracked symbol. Returns True if found."""
         collection = self._collection()
         fields["updated_at"] = datetime.now(UTC)
         result = await collection.update_one(
@@ -45,7 +42,6 @@ class TrackedSymbolRepository(BaseRepository):
         return result.matched_count > 0
 
     async def delete(self, symbol: str) -> bool:
-        """Remove a tracked symbol. Returns True if a document was deleted."""
         result = await self._collection().delete_one({"symbol": symbol})
         return result.deleted_count > 0
 

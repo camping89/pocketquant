@@ -133,7 +133,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 **Sub-requirements:**
 - Load strategy templates from the in-code `STRATEGY_REGISTRY` (e.g. `hitnrun2`)
 - Support multiple strategy implementations via the `IStrategy` interface
-- Route market data events to strategy handlers (on_bar, on_tick, on_fill)
+- Route market data events to strategy handlers (`on_bar_completed`, `on_quote_received`, `on_order_filled`)
 - Broker abstraction: paper trading + live trading support
 - Position/order tracking from execution fills
 - Risk checks before order submission

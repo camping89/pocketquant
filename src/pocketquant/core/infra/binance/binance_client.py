@@ -137,14 +137,9 @@ class BinanceClient(IDataProvider):
         return []
 
     async def close(self) -> None:
-        """Close the underlying httpx async client."""
         await self._http.aclose()
 
     async def _fetch_klines(self, params: dict[str, Any]) -> list[list[Any]]:
-        """Execute one GET /api/v3/klines call.
-
-        Raises httpx.HTTPStatusError on HTTP 429 (caller should backoff).
-        """
         response = await self._http.get(_KLINES_ENDPOINT, params=params)
 
         if response.status_code == 429:

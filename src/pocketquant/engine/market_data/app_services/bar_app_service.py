@@ -1,5 +1,3 @@
-"""BarAppService aggregates real-time ticks into bars at multiple intervals."""
-
 import asyncio
 import time
 from collections import defaultdict

@@ -117,7 +117,6 @@
         "type": "object"
       },
       "EnqueueBacktestResponse": {
-        "description": "Response after enqueuing a single backtest — FE polls for the result.",
         "properties": {
           "request_id": {
             "title": "Request Id",
@@ -169,7 +168,6 @@
         "type": "object"
       },
       "Interval": {
-        "description": "Time interval for OHLCV bars.",
         "enum": [
           "1m",
           "5m",
@@ -216,7 +214,6 @@
         "type": "object"
       },
       "OptimizationSummaryResponse": {
-        "description": "Summary of optimization run.",
         "properties": {
           "best_metric_value": {
             "title": "Best Metric Value",
@@ -541,7 +538,6 @@
         "type": "object"
       },
       "StrategyTemplateResponse": {
-        "description": "Strategy template entry (from STRATEGY_REGISTRY).",
         "properties": {
           "strategy_code": {
             "title": "Strategy Code",
@@ -715,7 +711,6 @@
   "paths": {
     "/api/v1/backtest/optimization/{optimization_id}": {
       "get": {
-        "description": "Get optimization result by ID.\n\nReturns full optimization result with all ranked parameter combinations.",
         "operationId": "get_optimization_api_v1_backtest_optimization__optimization_id__get",
         "parameters": [
           {
@@ -802,7 +797,6 @@
     },
     "/api/v1/backtest/requests/{request_id}": {
       "get": {
-        "description": "Poll a single backtest request's status + embedded result.",
         "operationId": "get_backtest_request_api_v1_backtest_requests__request_id__get",
         "parameters": [
           {
@@ -887,7 +881,6 @@
     },
     "/api/v1/backtest/strategies": {
       "get": {
-        "description": "Return strategy IDs available for backtesting.",
         "operationId": "list_available_strategies_api_v1_backtest_strategies_get",
         "responses": {
           "200": {
@@ -913,7 +906,6 @@
     },
     "/api/v1/backtest/strategy/{strategy_id}": {
       "get": {
-        "description": "List backtest results for a strategy.\n\nReturns summary information without full equity curves.",
         "operationId": "list_backtests_api_v1_backtest_strategy__strategy_id__get",
         "parameters": [
           {
@@ -981,7 +973,6 @@
     },
     "/api/v1/backtest/{run_id}": {
       "get": {
-        "description": "Get a specific backtest result by ID.\n\nReturns full result including equity curve and trade history.",
         "operationId": "get_backtest_api_v1_backtest__run_id__get",
         "parameters": [
           {
@@ -1026,7 +1017,6 @@
     },
     "/api/v1/backtest/{run_id}/equity": {
       "get": {
-        "description": "Get equity curve data for a backtest.\n\nReturns only the equity curve for charting purposes.",
         "operationId": "get_backtest_equity_api_v1_backtest__run_id__equity_get",
         "parameters": [
           {
@@ -1538,7 +1528,6 @@
     },
     "/api/v1/market-data/tracked-symbols": {
       "get": {
-        "description": "List all symbols tracked for live data pipelines. No auth required.",
         "operationId": "list_tracked_symbols_api_v1_market_data_tracked_symbols_get",
         "responses": {
           "200": {
@@ -1979,7 +1968,6 @@
     },
     "/api/v1/strategies/": {
       "get": {
-        "description": "List registered strategy templates from STRATEGY_REGISTRY.",
         "operationId": "list_strategy_templates_api_v1_strategies__get",
         "responses": {
           "200": {
@@ -2005,7 +1993,6 @@
     },
     "/api/v1/strategies/{strategy_code}": {
       "delete": {
-        "description": "Cascade delete a strategy template: unload, cancel jobs, delete subs and backtest cache.",
         "operationId": "delete_strategy_by_code_api_v1_strategies__strategy_code__delete",
         "parameters": [
           {
@@ -2039,7 +2026,6 @@
         ]
       },
       "get": {
-        "description": "Get template metadata for a registered strategy code.",
         "operationId": "get_strategy_template_api_v1_strategies__strategy_code__get",
         "parameters": [
           {
@@ -2084,7 +2070,6 @@
     },
     "/api/v1/strategies/{strategy_code}/run-all-backtests": {
       "post": {
-        "description": "Enqueue an immediate backtest job for every subscription of the strategy template.",
         "operationId": "run_all_backtests_api_v1_strategies__strategy_code__run_all_backtests_post",
         "parameters": [
           {
@@ -2184,7 +2169,6 @@
     },
     "/api/v1/subscriptions/": {
       "get": {
-        "description": "List subscriptions (optionally filter by strategy_code) with backtest + live status.",
         "operationId": "list_subscriptions_api_v1_subscriptions__get",
         "parameters": [
           {
@@ -2236,7 +2220,6 @@
     },
     "/api/v1/subscriptions/{sub_id}": {
       "delete": {
-        "description": "Delete a subscription and its cached backtest result.",
         "operationId": "remove_subscription_api_v1_subscriptions__sub_id__delete",
         "parameters": [
           {
@@ -2317,7 +2300,6 @@
     },
     "/api/v1/subscriptions/{sub_id}/positions": {
       "get": {
-        "description": "Return open positions for a subscription's strategy instance.",
         "operationId": "get_subscription_positions_api_v1_subscriptions__sub_id__positions_get",
         "parameters": [
           {
@@ -2365,7 +2347,6 @@
     },
     "/api/v1/subscriptions/{sub_id}/start": {
       "post": {
-        "description": "Start the strategy instance bound to this subscription.",
         "operationId": "start_subscription_api_v1_subscriptions__sub_id__start_post",
         "parameters": [
           {
@@ -2410,7 +2391,6 @@
     },
     "/api/v1/subscriptions/{sub_id}/stop": {
       "post": {
-        "description": "Stop the strategy instance bound to this subscription.",
         "operationId": "stop_subscription_api_v1_subscriptions__sub_id__stop_post",
         "parameters": [
           {
@@ -2455,7 +2435,6 @@
     },
     "/api/v1/subscriptions/{sub_id}/trades": {
       "get": {
-        "description": "Return recent completed trades for the subscription's strategy instance.",
         "operationId": "get_subscription_trades_api_v1_subscriptions__sub_id__trades_get",
         "parameters": [
           {

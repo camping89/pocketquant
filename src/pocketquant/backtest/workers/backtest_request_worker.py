@@ -50,7 +50,6 @@ class BacktestRequestWorker:
         self._interval_s = interval_s
 
     async def run(self) -> None:
-        """Poll loop. Runs until cancelled by lifespan shutdown."""
         logger.info("backtest_worker.started", interval_s=self._interval_s)
 
         while True:

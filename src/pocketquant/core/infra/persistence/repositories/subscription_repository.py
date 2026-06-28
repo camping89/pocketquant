@@ -32,9 +32,7 @@ class SubscriptionRepository(BaseRepository):
         collection = self._collection()
         try:
             await collection.insert_one(sub.to_mongo())
-            logger.debug(
-                "subscription_added", sub_id=str(sub.id), strategy_code=sub.strategy_code
-            )
+            logger.debug("subscription_added", sub_id=str(sub.id), strategy_code=sub.strategy_code)
         except DuplicateKeyError:
             raise SubscriptionAlreadyExistsError(
                 sub.strategy_code, sub.symbol, sub.interval.value
@@ -49,40 +47,34 @@ class SubscriptionRepository(BaseRepository):
         return Subscription.from_mongo(doc)
 
     async def list_by_strategy_code(self, strategy_code: str) -> list[Subscription]:
-        """Return all subscriptions for a given strategy template."""
         collection = self._collection()
         cursor = collection.find({"strategy_code": strategy_code})
         return [Subscription.from_mongo(doc) async for doc in cursor]
 
     async def list_all(self) -> list[Subscription]:
-        """Return every subscription in the collection — used for startup rehydration."""
         collection = self._collection()
         cursor = collection.find({})
         return [Subscription.from_mongo(doc) async for doc in cursor]
 
     async def update_desired_state(self, sub_id: str, state: RunState) -> int:
-        """Set the control-plane desired_state. Returns modified_count (0 if no such sub)."""
         collection = self._collection()
         result = await collection.update_one({"_id": sub_id}, {"$set": {"desired_state": state}})
         logger.debug("subscription_desired_state_updated", sub_id=sub_id, state=state)
         return result.modified_count
 
     async def update_actual_state(self, sub_id: str, state: RunState) -> int:
-        """Mirror observed RAM run-state into actual_state. Returns modified_count."""
         collection = self._collection()
         result = await collection.update_one({"_id": sub_id}, {"$set": {"actual_state": state}})
         logger.debug("subscription_actual_state_updated", sub_id=sub_id, state=state)
         return result.modified_count
 
     async def delete(self, sub_id: str) -> int:
-        """Delete a subscription by ID. Returns deleted_count (0 or 1)."""
         collection = self._collection()
         result = await collection.delete_one({"_id": sub_id})
         logger.debug("subscription_deleted", sub_id=sub_id, count=result.deleted_count)
         return result.deleted_count
 
     async def delete_by_strategy_code(self, strategy_code: str) -> int:
-        """Delete all subscriptions for a strategy template. Returns deleted_count."""
         collection = self._collection()
         result = await collection.delete_many({"strategy_code": strategy_code})
         logger.debug(

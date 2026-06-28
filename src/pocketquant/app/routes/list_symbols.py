@@ -1,5 +1,3 @@
-"""List symbols route — all known OHLCV-synced symbols."""
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 

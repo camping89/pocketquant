@@ -8,7 +8,13 @@ import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
+from pocketquant.core.domain.order import (
+    OrderAggregate,
+    OrderFilledEvent,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
 from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -191,3 +197,60 @@ async def test_disconnect_unsubscribes() -> None:
     await bus.publish(_bar_event(high=99.0, low=97.0, close=98.5))
     positions = await b.get_positions()
     assert len(positions) == 1  # still open
+
+
+async def test_synthetic_exit_publishes_order_filled_event() -> None:
+    """SL/TP synthetic exit publishes OrderFilledEvent carrying sub_id + side.
+
+    The strategy's on_order_filled reset depends on this exit event reaching the
+    bus (entry fills publish via order_app_service; synthetic exits do not).
+    """
+    b, bus = await _broker()
+    assert bus is not None
+    events: list[OrderFilledEvent] = []
+    bus.subscribe(OrderFilledEvent, lambda e: events.append(e))
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))  # subscription_id="t"
+    await bus.publish(_bar_event(high=99.0, low=97.0, close=98.5))  # hits SL
+
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.subscription_id == "t"
+    assert ev.side == OrderSide.SELL  # opposite of the LONG entry
+    assert ev.filled_price == pytest.approx(98.0)
+
+
+async def test_reentry_after_close_opens_fresh_position() -> None:
+    """A re-entry fill after the position closed must open fresh, not raise.
+
+    A closed position lingers in the broker's dict under its key; without the
+    closed-position guard, the re-entry BUY raises 'Cannot add to closed
+    position' and the round-trip → re-entry loop (multi-trade) breaks.
+    """
+    b, bus = await _broker()
+    assert bus is not None
+    # Open long, then SL closes it.
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+    await bus.publish(_bar_event(high=99.0, low=97.0, close=98.5))
+    assert await b.get_positions() == []
+
+    # Re-entry must succeed and open a new live position.
+    result = await b.submit_order(_order(OrderSide.BUY, price=100.0, sl=98.0, tp=104.0))
+    assert result.status == OrderStatus.FILLED
+    positions = await b.get_positions()
+    assert len(positions) == 1
+    assert positions[0].quantity == pytest.approx(1.0)
+
+
+async def test_short_reentry_after_close_opens_fresh_position() -> None:
+    """Symmetric to the long case — a SHORT re-entry after close opens fresh."""
+    b, bus = await _broker()
+    assert bus is not None
+    await b.submit_order(_order(OrderSide.SELL, sl=102.0, tp=96.0))
+    await bus.publish(_bar_event(high=103.0, low=99.0, close=102.5))  # hits SHORT SL
+    assert await b.get_positions() == []
+
+    result = await b.submit_order(_order(OrderSide.SELL, price=100.0, sl=102.0, tp=96.0))
+    assert result.status == OrderStatus.FILLED
+    positions = await b.get_positions()
+    assert len(positions) == 1
+    assert positions[0].quantity == pytest.approx(1.0)

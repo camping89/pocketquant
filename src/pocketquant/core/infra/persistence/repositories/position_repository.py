@@ -34,7 +34,6 @@ class PositionRepository(BaseRepository):
     async def find_open_by_subscription(
         self, subscription_id: str, limit: int = 50
     ) -> list[PositionAggregate]:
-        """Return all open positions for a subscription (typically 0 or 1)."""
         collection = self._collection()
         cursor = collection.find({"subscription_id": subscription_id, "is_closed": False}).limit(
             limit
@@ -44,7 +43,6 @@ class PositionRepository(BaseRepository):
     async def find_closed_by_subscription(
         self, subscription_id: str, limit: int = 100
     ) -> list[PositionAggregate]:
-        """Return most-recently closed positions for a subscription, newest first."""
         collection = self._collection()
         cursor = (
             collection.find({"subscription_id": subscription_id, "is_closed": True})

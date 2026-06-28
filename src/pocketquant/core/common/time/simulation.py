@@ -32,10 +32,8 @@ def set_simulation_time(timestamp: datetime) -> None:
 
 
 def clear_simulation_time() -> None:
-    """Clear simulated time, returning to real-time clock."""
     _simulated_time.set(None)
 
 
 def is_simulation_active() -> bool:
-    """Check if time simulation is currently active."""
     return _simulated_time.get() is not None

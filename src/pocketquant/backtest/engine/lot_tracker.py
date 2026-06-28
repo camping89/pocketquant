@@ -18,8 +18,6 @@ Direction = Literal["LONG", "SHORT"]
 
 @dataclass
 class OpenLot:
-    """A single open lot — one entry fill with remaining qty to close."""
-
     direction: Direction
     qty_remaining: float
     qty_original: float
@@ -33,11 +31,6 @@ class OpenLot:
 
 @dataclass
 class ConsumedLot:
-    """Represents how much qty was taken from a single lot during a close.
-
-    Used to build closed PositionRecords (one per consumed lot).
-    """
-
     lot: OpenLot  # reference to the underlying lot (qty_remaining already decremented)
     qty_closed: float
     entry_commission_portion: float  # commission proportional to qty_closed
@@ -46,8 +39,6 @@ class ConsumedLot:
 
 @dataclass
 class FillOutcome:
-    """Result of feeding one fill into the tracker."""
-
     consumed: list[ConsumedLot] = field(default_factory=list)
     opened: OpenLot | None = None  # new lot opened (if any qty remained after closing)
 
@@ -73,7 +64,6 @@ class LotTracker:
         return any(lot.direction == "SHORT" and lot.qty_remaining > 0 for lot in self._lots)
 
     def net_qty(self) -> float:
-        """Signed net qty: positive=long-biased, negative=short-biased."""
         net = 0.0
         for lot in self._lots:
             sign = 1.0 if lot.direction == "LONG" else -1.0

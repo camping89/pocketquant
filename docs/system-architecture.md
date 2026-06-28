@@ -208,10 +208,10 @@ class StrategyAppService:
         self.event_bus = event_bus
         self.strategy: Optional[IStrategy] = None
 
-    async def on_bar(self, bar: Bar) -> None:
+    async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Called when bar completes."""
         # 1. Domain: Get strategy signal
-        signal = await self.strategy.on_bar(bar)
+        signal = await self.strategy.on_bar_completed(event.bar)
 
         # 2. Adapter: Check risk
         approved = await risk_check(signal)
@@ -497,13 +497,15 @@ src/
 
 **Run backtest:** `POST /strategies/{strategy_code}/run-all-backtests` → fans out `JobScheduler.add_one_off_job()` per subscription. APScheduler persists to `apscheduler_jobs` Mongo, executes immediately, writes `BacktestResult` to `backtest_runs` collection keyed by `sub_id`.
 
+**Backtest isolation:** Each backtest run executes in a per-run `BacktestSandbox` (isolated EventBus, StrategyAppService, throwaway order/position trackers bound via a local EventRegistry). Live subscriptions never see replayed bars or synthetic fills; concurrent optimization runs don't cross-talk. Sandbox is discarded after run completion.
+
 **Delete:** `DELETE /subscriptions/{sub_id}` cascade-deletes subscription, cached backtest, unloads in-memory instance.
 
 ## Real-Time Streaming
 
 **Inbound (WebSocket):**
 1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketClient` (reconnect 1s→60s backoff). `WsSubscriptionManager` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
-2. **OKX private channels** — per-broker instance. `OkxWebSocketClient` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → `OrderAppService._on_fill`; **positions** → logged only (TODO: emit PositionUpdatedEvent).
+2. **OKX private channels** — per-broker instance. `OkxWebSocketClient` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
 
 **Outbound (SSE):**
 - **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit if `bar_start` changed or volume/price increased. Fields: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Frontend stale threshold: 30s.
@@ -513,11 +515,11 @@ src/
 
 ## In-Memory Runtime State
 
-`StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategy`, `_brokers[sub_id] = IBroker`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed` → `BarCompletedEvent`, `_on_quote_received` → `QuoteReceivedEvent`.
+`StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategy`, `_brokers[sub_id] = IBroker`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
 
-**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar()` / `strategy.on_tick()` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionSizer.calculate_size() 5. OrderAggregate creation 6. OrderAppService.submit()).
+**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionSizer.calculate_size() 5. OrderAggregate creation 6. OrderAppService.submit()).
 
-**Order/Position state:** `OrderRepository.load_pending_orders()` on startup restore in-memory state + broker_order_id mapping. `PositionRepository.find_open()` restore open positions. `OrderFilledEvent` → `PositionAppService._on_fill` → position state update.
+**Order/Position state:** `OrderRepository.load_pending_orders()` on startup restore in-memory state + broker_order_id mapping. `PositionRepository.find_open()` restore open positions. `OrderFilledEvent` → `PositionAppService._on_order_filled` → position state update. Fills route via `StrategyAppService._on_order_filled` to the owning strategy by `subscription_id` → calls `strategy.on_order_filled(order, fill_price)`.
 
 ## Broker & Middleware
 

@@ -1,5 +1,3 @@
-"""Resilient HTTP client with retry logic and correlation ID propagation."""
-
 import asyncio
 from dataclasses import dataclass
 from typing import Any
@@ -15,8 +13,6 @@ logger = get_logger(__name__)
 
 @dataclass
 class RetryConfig:
-    """Configuration for retry behavior."""
-
     max_retries: int = 3
     base_delay: float = 1.0
     max_delay: float = 30.0
@@ -24,14 +20,11 @@ class RetryConfig:
 
 
 class ResilientHttpClient:
-    """HTTP client with automatic retry and correlation ID injection."""
-
     def __init__(self, config: RetryConfig | None = None):
         self.config = config or RetryConfig()
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client instance."""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(timeout=self.config.timeout)
         return self._client
@@ -42,7 +35,6 @@ class ResilientHttpClient:
         json: dict[str, Any],
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """POST request with retry logic and correlation ID."""
         headers = headers or {}
         headers[HEADER_CORRELATION_ID] = get_correlation_id()
 
@@ -89,6 +81,5 @@ class ResilientHttpClient:
         raise RuntimeError(f"HTTP request failed: {url}")
 
     async def close(self) -> None:
-        """Close HTTP client."""
         if self._client and not self._client.is_closed:
             await self._client.aclose()

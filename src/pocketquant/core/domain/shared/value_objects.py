@@ -1,5 +1,3 @@
-"""Shared value objects for the domain layer."""
-
 from pocketquant.core.domain.shared.enums import Interval
 
 INTERVAL_SECONDS = {

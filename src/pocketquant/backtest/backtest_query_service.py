@@ -22,39 +22,22 @@ from pocketquant.core.infra.persistence.repositories.optimization_repository imp
     OptimizationRepository,
 )
 
-# ---------------------------------------------------------------------------
-# Query DTOs  (class names unchanged — public contract)
-# ---------------------------------------------------------------------------
-
 
 class GetBacktestQuery(BaseModel):
-    """Query to get a specific backtest result by ID."""
-
     run_id: str
 
 
 class ListBacktestsQuery(BaseModel):
-    """Query to list backtest results for a strategy."""
-
     strategy_id: str
     limit: int = 20
     include_failed: bool = False
 
 
 class GetOptimizationQuery(BaseModel):
-    """Query to get a specific optimization result by ID."""
-
     optimization_id: str
 
 
-# ---------------------------------------------------------------------------
-# Response models  (OpenAPI components — class names and fields unchanged)
-# ---------------------------------------------------------------------------
-
-
 class EnqueueBacktestResponse(BaseModel):
-    """Response after enqueuing a single backtest — FE polls for the result."""
-
     request_id: str
 
 
@@ -72,8 +55,6 @@ class BacktestRequestStatusResponse(BaseModel):
 
 
 class OptimizationSummaryResponse(BaseModel):
-    """Summary of optimization run."""
-
     id: str
     strategy_code: str
     status: str
@@ -83,11 +64,6 @@ class OptimizationSummaryResponse(BaseModel):
     target_metric: str
     best_parameters: dict[str, Any]
     best_metric_value: float
-
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 
 class BacktestQueryService:
@@ -104,14 +80,12 @@ class BacktestQueryService:
         self._optimization_repo = optimization_repository
 
     async def get_result(self, query: GetBacktestQuery) -> BacktestResult:
-        """Return a backtest result by run_id, or raise 404."""
         result = await self._backtest_repo.get(query.run_id)
         if result is None:
             raise NotFoundError(f"Backtest not found: {query.run_id}")
         return result
 
     async def list_results(self, query: ListBacktestsQuery) -> list[BacktestResult]:
-        """List backtest results for a strategy."""
         return await self._backtest_repo.list_by_strategy_code(
             strategy_code=query.strategy_id,
             limit=query.limit,
@@ -119,14 +93,12 @@ class BacktestQueryService:
         )
 
     async def get_optimization(self, query: GetOptimizationQuery) -> OptimizationResult:
-        """Return an optimization result by id, or raise 404."""
         result = await self._optimization_repo.get(query.optimization_id)
         if result is None:
             raise NotFoundError(f"Optimization not found: {query.optimization_id}")
         return result
 
     async def get_request_status(self, request_id: str) -> dict[str, Any]:
-        """Return the poll payload for a single backtest request."""
         bt_request = await self._request_repo.get(request_id)
         if bt_request is None:
             raise NotFoundError(f"Backtest request not found: {request_id}")

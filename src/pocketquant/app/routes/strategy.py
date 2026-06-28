@@ -29,10 +29,6 @@ from pocketquant.engine.strategy_query_service import (
     StrategyQueryService,
 )
 
-# ---------------------------------------------------------------------------
-# Request bodies
-# ---------------------------------------------------------------------------
-
 
 class CreateSubscriptionBody(BaseModel):
     """Request body for creating a subscription under a strategy template.
@@ -44,16 +40,12 @@ class CreateSubscriptionBody(BaseModel):
     interval: str
 
 
-# ---------------------------------------------------------------------------
 # strategy_router  — /strategies prefix
-# ---------------------------------------------------------------------------
 
 strategy_router = APIRouter(prefix="/strategies", tags=["strategies"], route_class=DishkaRoute)
 
 
 class StrategyTemplateResponse(BaseModel):
-    """Strategy template entry (from STRATEGY_REGISTRY)."""
-
     strategy_code: str
 
 
@@ -61,7 +53,6 @@ class StrategyTemplateResponse(BaseModel):
 async def list_strategy_templates(
     query_svc: FromDishka[StrategyQueryService],
 ) -> list[dict]:
-    """List registered strategy templates from STRATEGY_REGISTRY."""
     return await query_svc.get_all(GetStrategiesQuery())
 
 
@@ -70,7 +61,6 @@ async def get_strategy_template(
     strategy_code: str,
     query_svc: FromDishka[StrategyQueryService],
 ) -> dict:
-    """Get template metadata for a registered strategy code."""
     result = await query_svc.get_one(GetStrategyQuery(strategy_code=strategy_code))
     if not result:
         raise NotFoundError(f"Strategy template not found: {strategy_code}")
@@ -101,14 +91,11 @@ async def delete_strategy_by_code(
     strategy_code: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> Response:
-    """Cascade delete a strategy template: unload, cancel jobs, delete subs and backtest cache."""
     await cmd_svc.delete_strategy(DeleteStrategyCommand(strategy_id=strategy_code))
     return Response(status_code=204)
 
 
-# ---------------------------------------------------------------------------
 # subscription_router  — /subscriptions prefix
-# ---------------------------------------------------------------------------
 
 subscription_router = APIRouter(
     prefix="/subscriptions", tags=["subscriptions"], route_class=DishkaRoute
@@ -120,7 +107,6 @@ async def list_subscriptions(
     query_svc: FromDishka[StrategyQueryService],
     strategy_code: str | None = None,
 ) -> list:
-    """List subscriptions (optionally filter by strategy_code) with backtest + live status."""
     return await query_svc.list_symbols(ListSymbolsQuery(strategy_code=strategy_code))
 
 
@@ -129,7 +115,6 @@ async def start_subscription(
     sub_id: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    """Start the strategy instance bound to this subscription."""
     await cmd_svc.start(StartStrategyCommand(subscription_id=sub_id))
     return {"subscription_id": sub_id, "status": "started"}
 
@@ -139,7 +124,6 @@ async def stop_subscription(
     sub_id: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    """Stop the strategy instance bound to this subscription."""
     await cmd_svc.stop(StopStrategyCommand(subscription_id=sub_id))
     return {"subscription_id": sub_id, "status": "stopped"}
 
@@ -149,7 +133,6 @@ async def get_subscription_positions(
     sub_id: str,
     query_svc: FromDishka[StrategyQueryService],
 ) -> list[dict]:
-    """Return open positions for a subscription's strategy instance."""
     return await query_svc.get_positions(GetStrategyPositionsQuery(subscription_id=sub_id))
 
 
@@ -159,7 +142,6 @@ async def get_subscription_trades(
     query_svc: FromDishka[StrategyQueryService],
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
-    """Return recent completed trades for the subscription's strategy instance."""
     return await query_svc.get_trades(GetStrategyTradesQuery(subscription_id=sub_id, limit=limit))
 
 
@@ -177,6 +159,5 @@ async def remove_subscription(
     sub_id: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> Response:
-    """Delete a subscription and its cached backtest result."""
     await cmd_svc.remove_symbol(RemoveSymbolCommand(sub_id=sub_id))
     return Response(status_code=204)

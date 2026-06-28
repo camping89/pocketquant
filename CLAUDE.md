@@ -26,4 +26,5 @@ Dependency graph: `core ◁ engine ◁ backtest ◁ app`, `web → app`. Backend
 - Markdown only. Bullets/tables over paragraphs; add a Mermaid v11 or ASCII diagram when a concept has 2+ interacting parts.
 - **Prose tiếng Việt.** Giữ nguyên tiếng Anh: tên trong code (`StrategyAppService`, `bar_repository.py`), thuật ngữ kỹ thuật (`dependency injection`, `command service`, `import-linter`), định danh ngoài (`PEP 420`, `OKX`, `MongoDB`). Không trộn nửa Việt nửa Anh — thuật ngữ thì để nguyên cả cụm.
 - **AS-IS only** — docs mô tả hệ thống hiện tại, không phải lịch sử. Không changelog, không banner (`Last Updated`, `Version`, `Status`), không change-narrative ("Previously…", "now / no longer", dated migration). Git giữ lịch sử.
-- Comments & filenames explain WHY, no plan/phase/finding refs. Full policy → `docs/code-standards.md` → "Comment Policy".
+- **Code is the cleanest comment.** Default to no comment. Write one ONLY for: logic genuinely hard to follow in a single spot, or a cheat/hack/workaround (+ external-system quirk, magic-number rationale, `# type: ignore` / `// @ts-expect-error` reason). Never restate the code, never name-echo a symbol, no banners/dividers/section labels, no plan/phase/finding refs. Filenames explain WHY. Full policy → `docs/code-standards.md` → "Comment Policy".
+``

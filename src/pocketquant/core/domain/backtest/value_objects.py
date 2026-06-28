@@ -30,8 +30,6 @@ from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderTyp
 
 @dataclass
 class EquityPoint:
-    """Single point on the equity curve (recorded on position changes only)."""
-
     timestamp: datetime
     equity: float
     drawdown: float  # Current drawdown from peak (negative value)
@@ -88,7 +86,6 @@ class Fill:
 
     @classmethod
     def from_mongo(cls, data: dict[str, Any], *, order_id: str | None = None) -> Fill:
-        """Deserialize. Caller passes parent order_id when reading an embedded fill."""
         resolved_order_id = data.get("order_id") or order_id
         if not resolved_order_id:
             raise ValueError(
@@ -318,7 +315,6 @@ class BacktestMetrics:
     total_commission: float
 
     def to_dict(self) -> dict[str, Any]:
-        """Alias for API serialization."""
         return self.to_mongo()
 
     def to_mongo(self) -> dict[str, Any]:
@@ -365,7 +361,6 @@ class BacktestMetrics:
 
     @classmethod
     def empty(cls) -> BacktestMetrics:
-        """Return empty metrics for failed or no-trade backtests."""
         return cls(
             total_return=0.0,
             cagr=0.0,
@@ -386,8 +381,6 @@ class BacktestMetrics:
 
 @dataclass
 class OptimizationResultEntry:
-    """Single entry in optimization results — one parameter combination."""
-
     parameters: dict[str, Any]
     metrics: BacktestMetrics
     backtest_id: str

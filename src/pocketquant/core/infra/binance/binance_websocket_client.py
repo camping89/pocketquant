@@ -67,7 +67,6 @@ class BinanceWebSocketClient:
         logger.info("binance_ws.connected", url=url, streams=list(self._subscriptions.keys()))
 
     async def disconnect(self) -> None:
-        """Stop run_forever loop and close connection."""
         self._running = False
         if self._ws is not None:
             await self._ws.close()
@@ -164,11 +163,9 @@ class BinanceWebSocketClient:
 
     @property
     def subscriptions(self) -> dict[str, tuple[str, Callable[[dict[str, Any]], Any]]]:
-        """Return subscriptions dict: composite_symbol -> (code, callback)."""
         return self._subscriptions
 
     def _build_url(self) -> str:
-        """Build stream URL: single or combined depending on subscription count."""
         streams = [f"{code.lower()}@aggTrade" for code, _cb in self._subscriptions.values()]
         if len(streams) == 1:
             return f"{_WS_BASE}/ws/{streams[0]}"
@@ -225,7 +222,6 @@ class BinanceWebSocketClient:
             raise
 
     async def _backoff_sleep(self) -> None:
-        """Sleep for current backoff delay then double it (capped at max)."""
         logger.info("binance_ws.reconnecting", delay=self._reconnect_delay)
         await asyncio.sleep(self._reconnect_delay)
         self._reconnect_delay = min(self._reconnect_delay * 2, _RECONNECT_DELAY_MAX)

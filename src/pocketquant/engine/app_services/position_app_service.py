@@ -1,5 +1,3 @@
-"""Position tracker - manages per-strategy position state."""
-
 import asyncio
 
 import structlog
@@ -15,11 +13,6 @@ logger = structlog.get_logger(__name__)
 
 
 class PositionAppService:
-    """Tracks positions per strategy with P&L calculation.
-
-    Subscribes to OrderFilledEvent events to update positions automatically.
-    """
-
     def __init__(self, event_bus: EventBus, position_repository: PositionRepository) -> None:
         self._event_bus = event_bus
         self._position_repo = position_repository

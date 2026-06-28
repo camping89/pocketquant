@@ -1,5 +1,3 @@
-"""Sync-status routes — all-symbol and per-symbol freshness endpoints."""
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query
 

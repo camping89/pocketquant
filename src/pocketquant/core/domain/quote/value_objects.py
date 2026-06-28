@@ -1,13 +1,9 @@
-"""Quote value objects."""
-
 from dataclasses import dataclass
 from datetime import datetime
 
 
 @dataclass(frozen=True)
 class Price:
-    """Immutable price value."""
-
     value: float
 
     def __post_init__(self) -> None:

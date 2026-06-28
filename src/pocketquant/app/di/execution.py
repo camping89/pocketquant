@@ -56,7 +56,6 @@ class ExecutionProvider(Provider):
         risk_check_handler: RiskCheckHandler,
         settings: Settings,
     ) -> AsyncIterator[StrategyAppService]:
-        """Create, start, and yield StrategyAppService. Stop on app shutdown."""
         engine = StrategyAppService(
             event_bus=event_bus,
             broker_factory=broker_factory,

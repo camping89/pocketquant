@@ -1,5 +1,3 @@
-"""Persistence layer - Database, Cache, and repositories."""
-
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
 

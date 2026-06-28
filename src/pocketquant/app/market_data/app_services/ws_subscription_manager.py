@@ -60,7 +60,6 @@ class WsSubscriptionManager:
             await asyncio.sleep(self._interval_s)
 
     async def _reconcile(self) -> None:
-        """Diff desired vs current subscriptions and apply changes."""
         tracked = await self._repo.list_all()
         # tracked_symbols store composite symbol; uppercase to match provider format
         desired: set[str] = {ts.symbol.upper() for ts in tracked}

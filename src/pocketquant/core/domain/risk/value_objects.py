@@ -1,5 +1,3 @@
-"""Risk value objects - RiskConfig."""
-
 from dataclasses import dataclass
 
 from pocketquant.core.domain.risk.enums import RiskModel
@@ -7,11 +5,6 @@ from pocketquant.core.domain.risk.enums import RiskModel
 
 @dataclass(frozen=True)
 class RiskConfig:
-    """Risk configuration for a strategy.
-
-    Loaded from YAML, validated at strategy load time.
-    """
-
     model: RiskModel = RiskModel.PERCENT_RISK
     risk_per_trade: float = 0.02  # 2% default per validation
     max_positions: int = 3

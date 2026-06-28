@@ -44,7 +44,6 @@ def _cmd_svc(
     *,
     request_repo: Any = None,
     sub_repo: Any = None,
-    event_bus: Any = None,
     backtest_repo: Any = None,
     bar_repo: Any = None,
     optimization_repo: Any = None,
@@ -52,7 +51,6 @@ def _cmd_svc(
     return BacktestCommandService(
         backtest_request_repository=request_repo or MagicMock(),
         subscription_repository=sub_repo or MagicMock(),
-        event_bus=event_bus or MagicMock(),
         backtest_repository=backtest_repo or MagicMock(),
         bar_repository=bar_repo or MagicMock(),
         optimization_repository=optimization_repo or MagicMock(),

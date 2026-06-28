@@ -12,8 +12,9 @@ SL/TP per side are the **looser** of the technical level and the account cap:
     SHORT SL = MIN( max(prev_highs[-sl_lookback:]), entry * (1 + max_loss_pct) )
     SHORT TP = MIN( min(prev_lows[-tp_lookback:]),  entry * (1 - min_profit_pct) )
 
-At most one open position. State is reset by ``on_fill`` when an opposite-side
-fill closes the open direction; the PaperBroker SL/TP auto-fill drives this.
+At most one open position. State is reset by ``on_order_filled`` when an
+opposite-side fill closes the open direction; the PaperBroker SL/TP auto-fill
+drives this.
 """
 
 from __future__ import annotations
@@ -22,9 +23,9 @@ from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 
-from pocketquant.core.domain.order import OrderAggregate, OrderSide
+from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.strategy.enums import Direction
-from pocketquant.core.domain.strategy.interfaces import IStrategy
+from pocketquant.core.domain.strategy.interfaces import FilledOrder, IStrategy
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 
 _DEFAULTS = {
@@ -38,8 +39,6 @@ _DEFAULTS = {
 
 
 class HitNRun2Strategy(IStrategy):
-    """1m breakdown/breakup strategy with capped technical SL/TP."""
-
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         p = config.parameters or {}
@@ -70,7 +69,7 @@ class HitNRun2Strategy(IStrategy):
         self._closes.clear()
         self._open_direction = None
 
-    async def on_bar(self, bar: dict) -> Signal | None:
+    async def on_bar_completed(self, bar: dict) -> Signal | None:
         high = float(bar["high"])
         low = float(bar["low"])
         close = float(bar["close"])
@@ -113,7 +112,7 @@ class HitNRun2Strategy(IStrategy):
 
         return None
 
-    async def on_fill(self, order: OrderAggregate, fill_price: float) -> None:
+    async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
         """Reset open-direction when the broker closes our position.
 
         Broker SL/TP auto-fill emits the opposite side (SELL closes LONG,

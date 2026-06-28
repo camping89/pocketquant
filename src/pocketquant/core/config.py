@@ -8,7 +8,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _find_project_root() -> Path:
-    """Find repo root by walking up to the pocketquant pyproject.toml."""
     if root := os.environ.get("POCKETQUANT_ROOT"):
         return Path(root)
     current = Path.cwd()
@@ -22,7 +21,6 @@ def _find_project_root() -> Path:
 
 
 def _resolve_env_file() -> str:
-    """Lazily resolve .env path — tolerates missing root (returns empty string)."""
     try:
         return str(_find_project_root() / ".env")
     except FileNotFoundError:

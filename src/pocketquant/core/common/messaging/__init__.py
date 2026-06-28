@@ -1,5 +1,3 @@
-"""Event messaging for domain events."""
-
 from pocketquant.core.common.messaging.event_bus import EventBus
 from pocketquant.core.common.messaging.event_handler import EventHandler
 from pocketquant.core.common.messaging.event_registry import (

@@ -75,10 +75,6 @@ class BackfillTrackedSymbolCommand(BaseModel):
         return v
 
     def resolved_mode(self) -> str:
-        """Return the effective mode after applying defaults.
-
-        auto → cascade for tfs >= 5m, direct for 1m.
-        """
         if self.mode != "auto":
             return self.mode
         return "cascade" if self.interval in _CASCADE_DEFAULT_TFS else "direct"
@@ -96,7 +92,6 @@ class TrackedSymbolBackfillService:
         self._bar_repo = bar_repository
 
     async def run(self, cmd: BackfillTrackedSymbolCommand) -> dict:
-        """Run backfill. Returns {persisted_count, mode_used}."""
         mode = cmd.resolved_mode()
         symbol = cmd.symbol.upper()
 
@@ -123,7 +118,6 @@ class TrackedSymbolBackfillService:
         return {"persisted_count": persisted, "mode_used": mode}
 
     async def _direct(self, symbol: str, interval: Interval, n: int) -> int:
-        """REST-fetch the requested tf directly and upsert."""
         bars = await self._provider.fetch_ohlcv(
             symbol=symbol,
             interval=interval,
@@ -152,7 +146,6 @@ class TrackedSymbolBackfillService:
         return persisted
 
     async def _cascade(self, symbol: str, interval: Interval, n: int) -> int:
-        """REST-fetch 1m source bars, upsert, then cascade to the requested tf."""
         tf_secs = tf_seconds(interval)
         tf_minutes = tf_secs // 60
         lookback_minutes = n * tf_minutes

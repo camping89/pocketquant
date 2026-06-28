@@ -40,9 +40,7 @@ logger = get_logger(__name__)
 # Subscription ids are uuid7 strings (8-4-4-4-12 lowercase hex, version nibble 7).
 # Synthetic backtest ids ("{code}::bt::{sub_id}") never match this shape, so the
 # orphan-unload pass that filters on it can never clobber a running backtest.
-_SUB_ID_SHAPE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
+_SUB_ID_SHAPE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 class StrategyReconcileService:
@@ -81,7 +79,6 @@ class StrategyReconcileService:
             await asyncio.sleep(self._interval_s)
 
     async def _reconcile(self) -> None:
-        """One pass: ensure instances, unload orphans, converge run-state."""
         subs = await self._sub_repo.list_all()
         # RAM instance keys are strings — stringify ids once for membership tests.
         sub_ids = {str(sub.id) for sub in subs}

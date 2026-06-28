@@ -51,7 +51,7 @@ class RemoveTrackedSymbolCommand(BaseModel):
 
 
 class ListTrackedSymbolsQuery(BaseModel):
-    """List all tracked symbols — no filters (collection is small)."""
+    pass
 
 
 class TrackedSymbolService:
@@ -76,7 +76,6 @@ class TrackedSymbolService:
         }
 
     async def update(self, request: UpdateTrackedSymbolCommand) -> dict:
-        """Update metadata on an existing tracked symbol. 404 if not found."""
         # Currently no mutable metadata beyond the composite symbol itself —
         # update is a no-op placeholder that validates existence.
         # Extend fields in command when needed.

@@ -1,5 +1,3 @@
-"""Pure domain service for building bars from ticks."""
-
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -10,7 +8,6 @@ from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 
 
 def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
-    """Calculate the aligned bar start time for a given timestamp."""
     seconds = INTERVAL_SECONDS[interval]
 
     if interval == Interval.DAY_1:
@@ -32,12 +29,10 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
 
 
 def is_bar_aligned(timestamp: datetime, interval: Interval) -> bool:
-    """Check if timestamp falls on the expected grid for the interval."""
     return timestamp == get_bar_start(timestamp, interval)
 
 
 def filter_aligned_bars(bars: list[Bar], interval: Interval) -> tuple[list[Bar], list[Bar]]:
-    """Split bars into (aligned, misaligned). Pure function, no I/O."""
     aligned, misaligned = [], []
     for bar in bars:
         if bar.datetime and is_bar_aligned(bar.datetime, interval):
@@ -100,15 +95,12 @@ class BarBuilder:
         return True
 
     def is_complete(self, current_time: datetime) -> bool:
-        """Check if the bar period has ended."""
         return self.bar_end is not None and current_time >= self.bar_end
 
     def is_empty(self) -> bool:
-        """Check if no ticks have been added."""
         return self.tick_count == 0
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "symbol": self.symbol,
             "interval": self.interval.value,

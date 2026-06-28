@@ -25,7 +25,6 @@ class SyncStatusRepository(BaseRepository):
         last_bar_at: datetime | None = None,
         error_message: str | None = None,
     ) -> None:
-        """Upsert sync status for (symbol, interval)."""
         collection = self._collection()
 
         update_doc = {
@@ -51,7 +50,6 @@ class SyncStatusRepository(BaseRepository):
         )
 
     async def find_all(self) -> list[SyncStatus]:
-        """Get all sync statuses."""
         collection = self._collection()
         cursor = collection.find()
         return [SyncStatus.from_mongo(doc) async for doc in cursor]
@@ -75,7 +73,6 @@ class SyncStatusRepository(BaseRepository):
         return int(res.get("consecutive_empty_fetches", 0)) if res else 0
 
     async def reset_empty_fetch(self, symbol: str, interval: Interval) -> None:
-        """Reset counter to 0 on a successful insert."""
         await self._collection().update_one(
             {
                 "symbol": symbol.upper(),
@@ -85,7 +82,6 @@ class SyncStatusRepository(BaseRepository):
         )
 
     async def find_one(self, symbol: str, interval: Interval) -> SyncStatus | None:
-        """Get sync status for specific (symbol, interval)."""
         collection = self._collection()
 
         doc = await collection.find_one(
@@ -98,7 +94,6 @@ class SyncStatusRepository(BaseRepository):
         return SyncStatus.from_mongo(doc) if doc else None
 
     async def ensure_indexes(self) -> None:
-        """Create unique compound index on (symbol, interval)."""
         collection = self._collection()
         await collection.create_index(
             [("symbol", 1), ("interval", 1)],

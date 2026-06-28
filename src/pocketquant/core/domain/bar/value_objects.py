@@ -1,5 +1,3 @@
-"""OHLCV value objects."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,8 +6,6 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class OHLCV:
-    """Immutable OHLCV price bar data."""
-
     open: float
     high: float
     low: float
@@ -29,8 +25,6 @@ class OHLCV:
 
 @dataclass(frozen=True)
 class BarRange:
-    """Time range for a bar."""
-
     start: datetime
     end: datetime
 
@@ -39,7 +33,6 @@ class BarRange:
             raise ValueError("End must be after start")
 
     def contains(self, timestamp: datetime) -> bool:
-        """Check if timestamp falls within this bar range."""
         return self.start <= timestamp < self.end
 
     @property

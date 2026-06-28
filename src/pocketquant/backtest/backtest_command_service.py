@@ -16,7 +16,6 @@ from pocketquant.backtest.optimization.grid_optimization_app_service import (
 )
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import OptimizationResult
 from pocketquant.core.domain.backtest.request import BacktestRequest
@@ -33,10 +32,6 @@ from pocketquant.core.infra.persistence.repositories.optimization_repository imp
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-
-# ---------------------------------------------------------------------------
-# Command DTOs  (class names unchanged — public contract)
-# ---------------------------------------------------------------------------
 
 
 class RunBacktestCommand(BaseModel):
@@ -78,37 +73,25 @@ class RunOptimizationCommand(BaseModel):
 
 
 class RunAllBacktestsCommand(BaseModel):
-    """Command to enqueue a backtest job for every subscription of a strategy."""
-
     strategy_id: str
 
 
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
-
-
 class BacktestCommandService:
-    """Write-side backtest operations — enqueue requests and run optimizations."""
-
     def __init__(
         self,
         backtest_request_repository: BacktestRequestRepository,
         subscription_repository: SubscriptionRepository,
-        event_bus: EventBus,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         optimization_repository: OptimizationRepository,
     ) -> None:
         self._request_repo = backtest_request_repository
         self._sub_repo = subscription_repository
-        self._event_bus = event_bus
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository
         self._optimization_repo = optimization_repository
 
     async def run(self, cmd: RunBacktestCommand) -> dict[str, str]:
-        """Enqueue a single ad-hoc backtest. Returns request_id for polling."""
         config = {
             "strategy_code": cmd.strategy_id,
             "symbol": cmd.symbol,
@@ -132,7 +115,6 @@ class BacktestCommandService:
         return {"request_id": request_id}
 
     async def optimize(self, cmd: RunOptimizationCommand) -> OptimizationResult:
-        """Run grid optimization synchronously, persist result, and return it."""
         config = OptimizationConfig(
             strategy_code=cmd.strategy_id,
             symbol=cmd.symbol,
@@ -147,7 +129,6 @@ class BacktestCommandService:
             max_workers=cmd.max_workers,
         )
         optimizer = GridOptimizationAppService(
-            event_bus=self._event_bus,
             backtest_repository=self._backtest_repo,
             bar_repository=self._bar_repo,
         )

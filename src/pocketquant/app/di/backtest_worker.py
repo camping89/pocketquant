@@ -8,7 +8,6 @@ from dishka import Provider, Scope, provide
 
 from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
-from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
@@ -32,7 +31,6 @@ class BacktestWorkerProvider(Provider):
     @provide(scope=Scope.APP)
     def get_dispatch_deps(
         self,
-        event_bus: EventBus,
         bar_repository: BarRepository,
         backtest_repository: BacktestRepository,
         backtest_order_repository: BacktestOrderRepository,
@@ -41,7 +39,6 @@ class BacktestWorkerProvider(Provider):
         subscription_repository: SubscriptionRepository,
     ) -> BacktestDispatchDeps:
         return BacktestDispatchDeps(
-            event_bus=event_bus,
             bar_repo=bar_repository,
             backtest_repo=backtest_repository,
             order_repo=backtest_order_repository,

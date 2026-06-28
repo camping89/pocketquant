@@ -1,5 +1,3 @@
-"""Broker DTOs - data transfer objects for broker communication."""
-
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -36,8 +34,6 @@ class OrderResult:
 
 @dataclass
 class AccountBalance:
-    """Account balance from broker."""
-
     total_equity: float
     available_balance: float
     currency: str = "USDT"
@@ -46,5 +42,4 @@ class AccountBalance:
 
     @property
     def buying_power(self) -> float:
-        """Available buying power (considers margin)."""
         return self.available_balance

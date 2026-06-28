@@ -55,6 +55,12 @@ class OrderAppService:
                     order.broker_order_id = result.broker_order_id
 
                     if result.status == OrderStatus.FILLED:
+                        # An immediate fill still has to pass through SUBMITTED:
+                        # the state machine forbids PENDING→FILLED directly, so
+                        # without this the fill raised and the order was wrongly
+                        # rejected (entry OrderFilledEvent never published).
+                        if order.status == OrderStatus.PENDING:
+                            order.submit(result.broker_order_id)
                         order.fill(result.filled_quantity, result.filled_price or 0.0)
 
                         self._orders[str(order.id)] = order
@@ -199,7 +205,6 @@ class OrderAppService:
                 self._pending.pop(result.order_id, None)
 
     async def load_pending_orders(self) -> None:
-        """Load pending orders from database on startup."""
         pending = await self._order_repo.find_pending()
         async with self._lock:
             for order in pending:

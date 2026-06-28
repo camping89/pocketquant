@@ -20,7 +20,7 @@ from pocketquant.core.domain.shared.events import DomainEvent
 
 
 class InvalidOrderTransitionError(Exception):
-    """Raised when an invalid state transition is attempted."""
+    pass
 
 
 class OrderAggregate(BaseModel):
@@ -92,7 +92,6 @@ class OrderAggregate(BaseModel):
         )
 
     def submit(self, broker_order_id: str) -> OrderAggregate:
-        """Transition to SUBMITTED state."""
         self._validate_transition(OrderStatus.SUBMITTED)
         self.status = OrderStatus.SUBMITTED
         self.broker_order_id = broker_order_id
@@ -110,7 +109,6 @@ class OrderAggregate(BaseModel):
         return self
 
     def partial_fill(self, quantity: float, price: float) -> OrderAggregate:
-        """Record a partial fill."""
         self._validate_transition(OrderStatus.PARTIALLY_FILLED)
         if quantity <= 0:
             raise ValueError("Fill quantity must be positive")
@@ -205,20 +203,17 @@ class OrderAggregate(BaseModel):
         return self
 
     def _validate_transition(self, target: OrderStatus) -> None:
-        """Validate state transition is allowed."""
         allowed = self._VALID_TRANSITIONS.get(self.status, frozenset())
         if target not in allowed:
             raise InvalidOrderTransitionError(f"Cannot transition from {self.status} to {target}")
 
     def collect_events(self) -> list[DomainEvent]:
-        """Collect and clear pending domain events."""
         events = self._events.copy()
         self._events.clear()
         return events
 
     @property
     def remaining_quantity(self) -> float:
-        """Get unfilled quantity."""
         return self.quantity - self.filled_quantity
 
     def to_mongo(self) -> dict[str, Any]:

@@ -37,11 +37,9 @@ class BacktestResult:
     open_positions: list[OpenLot] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """Alias for API serialization."""
         return self.to_mongo()
 
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to a slim ``backtest_runs`` document."""
         return {
             "_id": str(self.id),
             "strategy_code": self.strategy_code,
@@ -92,7 +90,6 @@ class OptimizationResult:
     error_message: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Alias for API serialization."""
         return self.to_mongo()
 
     def to_mongo(self) -> dict[str, Any]:

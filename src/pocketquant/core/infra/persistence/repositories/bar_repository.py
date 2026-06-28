@@ -151,7 +151,6 @@ class BarRepository(BaseRepository):
         end_date=None,
         limit: int = 5000,
     ) -> list[Bar]:
-        """Query OHLCV bars with optional date range. Returns list sorted desc by datetime."""
         collection = self._collection()
 
         query: dict = {
@@ -181,7 +180,6 @@ class BarRepository(BaseRepository):
         start_datetime: datetime,
         end_datetime: datetime,
     ) -> AsyncIterator[Bar]:
-        """Stream OHLCV bars for backtest. Returns async generator sorted asc by datetime."""
         collection = self._collection()
 
         query = {
@@ -199,7 +197,6 @@ class BarRepository(BaseRepository):
             await cursor.close()
 
     async def count(self, symbol: str, interval: Interval) -> int:
-        """Count documents for given symbol/interval."""
         collection = self._collection()
         return await collection.count_documents(
             {
@@ -209,7 +206,6 @@ class BarRepository(BaseRepository):
         )
 
     async def get_latest(self, symbol: str, interval: Interval) -> Bar | None:
-        """Get latest bar for symbol/interval."""
         collection = self._collection()
         doc = await collection.find_one(
             {
@@ -227,7 +223,6 @@ class BarRepository(BaseRepository):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> list[dict]:
-        """Return lightweight [{_id, datetime}] sorted asc for integrity scanning."""
         query: dict = {
             "symbol": symbol.upper(),
             "interval": interval.value,
@@ -247,7 +242,6 @@ class BarRepository(BaseRepository):
         return [doc async for doc in cursor]
 
     async def delete_many_by_ids(self, ids: list[str]) -> int:
-        """Bulk delete bars by _id list."""
         if not ids:
             return 0
         result = await self._collection().delete_many({"_id": {"$in": ids}})
@@ -288,7 +282,6 @@ class BarRepository(BaseRepository):
         return deleted
 
     async def ensure_indexes(self) -> None:
-        """Create unique compound index on (symbol, interval, datetime)."""
         collection = self._collection()
         await collection.create_index(
             [("symbol", 1), ("interval", 1), ("datetime", 1)],

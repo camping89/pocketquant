@@ -1,5 +1,3 @@
-"""PocketQuant application entry point."""
-
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -118,7 +116,6 @@ app = create_app()
 
 
 def run() -> None:
-    """CLI entrypoint for `pocketquant` command."""
     import uvicorn
 
     uvicorn.run("pocketquant.app.main:app", host="0.0.0.0", port=41921)

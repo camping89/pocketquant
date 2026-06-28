@@ -44,7 +44,13 @@ from pocketquant.core.domain.brokers.events import (
 )
 from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.order import (
+    OrderAggregate,
+    OrderFilledEvent,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+)
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
 
 # STOP_LIMIT / STOP_MARKET share the LIMIT pending path until real STOP
@@ -132,7 +138,6 @@ class PaperBroker(IBroker):
         self._slippage = value
 
     async def connect(self) -> None:
-        """Paper broker is always ready. Subscribes to bar events for SL/TP auto-fill."""
         self._connected = True
         if self._event_bus is not None and not self._bar_subscribed:
             # Subscribe LAST so strategy handlers fire first (entry on same bar before exit check).
@@ -174,7 +179,6 @@ class PaperBroker(IBroker):
     async def _handle_market(
         self, order: OrderAggregate, broker_order_id: str, now: datetime
     ) -> tuple[OrderResult, list[tuple[OrderStatus | None, OrderStatus, str, datetime]]]:
-        """Fill MARKET immediately, or REJECT. Returns (result, additional_events)."""
         async with self._lock:
             self._orders[str(order.id)] = order
             try:
@@ -230,7 +234,6 @@ class PaperBroker(IBroker):
     async def _handle_limit(
         self, order: OrderAggregate, broker_order_id: str, now: datetime
     ) -> tuple[OrderResult, list[tuple[OrderStatus | None, OrderStatus, str, datetime]]]:
-        """Fill LIMIT immediately if price crosses; else queue as pending."""
         async with self._lock:
             self._orders[str(order.id)] = order
             if order.price is None:
@@ -457,15 +460,20 @@ class PaperBroker(IBroker):
         position_key = f"{order.subscription_id}:{order.symbol}"
         order_value = fill_price * order.quantity
 
+        # A closed position lingers in the dict under its key; a re-entry fill
+        # must open a fresh position rather than mutate the closed one (which
+        # raises). Treat closed as absent so round-trip → re-entry works.
+        existing = self._positions.get(position_key)
+        live = existing if existing is not None and not existing.is_closed else None
+
         if order.side == OrderSide.BUY:
             self._balance -= order_value
-            if position_key in self._positions:
-                pos = self._positions[position_key]
-                if pos.side == PositionSide.LONG:
-                    pos.add_quantity(order.quantity, fill_price)
+            if live is not None:
+                if live.side == PositionSide.LONG:
+                    live.add_quantity(order.quantity, fill_price)
                 else:
-                    pos.reduce_quantity(order.quantity, fill_price)
-                    self._balance += pos.realized_pnl
+                    live.reduce_quantity(order.quantity, fill_price)
+                    self._balance += live.realized_pnl
             else:
                 self._positions[position_key] = PositionAggregate.open(
                     subscription_id=order.subscription_id,
@@ -478,13 +486,12 @@ class PaperBroker(IBroker):
                 )
         else:  # SELL
             self._balance += order_value
-            if position_key in self._positions:
-                pos = self._positions[position_key]
-                if pos.side == PositionSide.LONG:
-                    pos.reduce_quantity(order.quantity, fill_price)
-                    self._balance += pos.realized_pnl
+            if live is not None:
+                if live.side == PositionSide.LONG:
+                    live.reduce_quantity(order.quantity, fill_price)
+                    self._balance += live.realized_pnl
                 else:
-                    pos.add_quantity(order.quantity, fill_price)
+                    live.add_quantity(order.quantity, fill_price)
             else:
                 self._positions[position_key] = PositionAggregate.open(
                     subscription_id=order.subscription_id,
@@ -528,7 +535,7 @@ class PaperBroker(IBroker):
             raise errors[0]
 
     async def _notify_callbacks(self, result: OrderResult) -> None:
-        """Notify all fill-result callbacks. First raised error re-raised after dispatch."""
+        # Dispatch to every callback even if one raises; re-raise the first error after.
         errors: list[Exception] = []
         for callback in self._order_callbacks:
             try:
@@ -569,7 +576,6 @@ class PaperBroker(IBroker):
             await self._fire_synthetic_exit(pos, exit_price, exit_side, reason)
 
     async def _fill_pending_on_bar(self, event: BarCompletedEvent) -> None:
-        """Scan pending LIMITs against this bar's range; fill any that cross."""
         to_fill: list[_PendingOrder] = []
         async with self._lock:
             for pending in list(self._pending_orders.values()):
@@ -623,7 +629,7 @@ class PaperBroker(IBroker):
     def _check_sl_tp(
         self, pos: PositionAggregate, bar_high: float, bar_low: float
     ) -> tuple[float, OrderSide, str] | None:
-        """Return (trigger_price, exit_side, reason) if SL/TP fires; SL wins ties."""
+        # SL checked before TP so SL wins when a single bar straddles both levels.
         sl, tp = pos.sl_price, pos.tp_price
         if pos.side == PositionSide.LONG:
             if sl is not None and bar_low <= sl:
@@ -644,7 +650,6 @@ class PaperBroker(IBroker):
         exit_side: OrderSide,
         reason: str,
     ) -> None:
-        """Build a synthetic market exit + emit SUBMITTED→FILLED event pair."""
         fill_price = self._apply_slippage(trigger_price, exit_side)
         exit_order = OrderAggregate.create(
             subscription_id=pos.subscription_id,
@@ -677,9 +682,22 @@ class PaperBroker(IBroker):
             str(exit_order.id), OrderStatus.SUBMITTED, OrderStatus.FILLED, reason, when=now
         )
         await self._notify_callbacks(result)
+        # Synthetic exits never pass through order_app_service, so publish the
+        # fill here too — the strategy's on_order_filled reset depends on this
+        # opposite-side exit event. Entry fills already publish via submit().
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                OrderFilledEvent(
+                    order_id=str(exit_order.id),
+                    subscription_id=pos.subscription_id,
+                    symbol=pos.symbol,
+                    side=exit_side,
+                    filled_quantity=exit_order.quantity,
+                    filled_price=fill_price,
+                )
+            )
 
     def reset(self) -> None:
-        """Reset broker to initial state (for backtesting)."""
         self._balance = self._initial_balance
         self._positions.clear()
         self._orders.clear()

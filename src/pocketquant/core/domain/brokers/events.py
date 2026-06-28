@@ -32,11 +32,6 @@ REASON_NO_MARKET_PRICE = "no_market_price"
 
 @dataclass
 class OrderEvent:
-    """Status transition record. Embedded in `backtest_orders.events[]`.
-
-    ``from_status`` is None for the very first event (initial SUBMITTED record).
-    """
-
     timestamp: datetime
     from_status: OrderStatus | None
     to_status: OrderStatus

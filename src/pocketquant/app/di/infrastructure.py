@@ -1,8 +1,3 @@
-"""Infrastructure service providers.
-
-JobScheduler uses a generator factory for start/shutdown lifecycle.
-"""
-
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
@@ -23,7 +18,6 @@ class InfrastructureProvider(Provider):
     async def get_job_scheduler(
         self, settings: Settings, history_repo: JobHistoryRepository
     ) -> AsyncIterator[JobScheduler]:
-        """Initialize and start scheduler. Shutdown on app exit."""
         scheduler = JobScheduler(history_repo=history_repo)
         if settings.enable_jobs:
             scheduler.initialize(settings)

@@ -29,7 +29,6 @@ router = APIRouter(tags=["Tracked Symbols"], route_class=DishkaRoute)
 
 @router.get("/tracked-symbols", response_model=list[dict])
 async def list_tracked_symbols(service: FromDishka[TrackedSymbolService]) -> list[dict]:
-    """List all symbols tracked for live data pipelines. No auth required."""
     return await service.list_all(ListTrackedSymbolsQuery())
 
 

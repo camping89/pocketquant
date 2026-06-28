@@ -47,7 +47,6 @@ class BacktestTradeRepository(BaseRepository):
     async def list_top_pnl(
         self, strategy_code: str, top: int = 10, ascending: bool = False
     ) -> list[Trade]:
-        """Top biggest winners (default) or losers (ascending=True)."""
         collection = self._collection()
         order = 1 if ascending else -1
         cursor = collection.find({"strategy_code": strategy_code}).sort("pnl", order).limit(top)
@@ -64,7 +63,6 @@ class BacktestTradeRepository(BaseRepository):
         return result.deleted_count
 
     async def ensure_indexes(self) -> None:
-        """Create indexes for per-run drill-down + cross-run analytics."""
         collection = self._collection()
         await collection.create_index("run_id", name="ix_bttrades_run_id")
         await collection.create_index(
