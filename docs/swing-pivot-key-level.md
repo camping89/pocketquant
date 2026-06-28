@@ -61,7 +61,7 @@ key-level (102) < tp_rr (105.2) → `TP = max(105.2, 102) = 105.2`. TP luôn ≥
 
 ## Chart "show all patterns" ≠ tập tín hiệu strategy
 
-Nút toggle **Engulfing** trên chart vẽ **mọi** body-engulfing pattern. Strategy chỉ entry một **subset**:
+Nút toggle **Engulfing** trên chart vẽ **mọi** full-candle engulfing pattern (body bao body **và** range bao range — high/low của nến hiện tại phải phủ trọn high/low nến trước). Strategy chỉ entry một **subset**:
 
 - **Warmup**: pattern xuất hiện trong `key_level_lookback_bars` bar đầu (chưa đủ cửa sổ key-level) → có marker trên chart nhưng **không** có trade.
 - **Position cap**: tối đa một vị thế cùng lúc — pattern xuất hiện khi đang có lệnh mở → có marker nhưng **không** entry.

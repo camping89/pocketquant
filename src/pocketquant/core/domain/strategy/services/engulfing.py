@@ -1,6 +1,8 @@
-"""Engulfing — strict-body engulfing entries with a directional quality filter.
+"""Engulfing — full-candle engulfing entries with a directional quality filter.
 
-Entry: a strong engulfing (rejection wick against the trade direction within
+A pattern qualifies only when the current bar covers the previous one on both
+axes: body over body AND range over range (see ``detect_engulfing``). Entry: a
+strong engulfing (rejection wick against the trade direction within
 ``max_rejection_wick_pct``) opens one position.
 
     LONG  entry=close; pattern_low=min(low_curr, low_prev); SL=pattern_low*(1-buf)

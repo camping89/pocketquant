@@ -1,8 +1,12 @@
-"""Strict-body engulfing detection shared by the Python strategy and the TS chart.
+"""Full-candle engulfing detection shared by the Python strategy and the TS chart.
 
 One definition, two consumers: ``EngulfingStrategy`` enters only strong patterns;
 the chart toggle colors every engulfing strong/weak. Locked across both runtimes
 by the golden fixture in ``tests/core_test/.../engulfing_golden_fixture.json``.
+
+Engulfing here means the current bar covers the previous bar on BOTH axes: body
+over body (open/close) AND range over range (high/low) — the current wick must
+not sit inside the previous wick. Body-only overlap is not enough.
 
 Pure function, no state, no I/O — stdlib only so the core import contract holds.
 """
@@ -29,14 +33,17 @@ def detect_engulfing(prev: dict, curr: dict) -> EngulfingResult:
 
     Bars are dicts with float ``open/high/low/close``.
 
-    Bullish (→ LONG): prev red, curr green, ``open <= prev_close`` and
-    ``close >= prev_open``. Bearish mirrors it.
+    Bullish (→ LONG): prev red, curr green, body engulfs (``open <= prev_close``
+    and ``close >= prev_open``) AND range engulfs (``high >= prev_high`` and
+    ``low <= prev_low``). Bearish mirrors it.
 
     ``rejection_wick_pct`` is the wick AGAINST the trade direction over the
     bar range (upper wick for LONG, lower wick for SHORT) — a directional
     close-location quality filter. Consumers threshold it themselves.
     """
     prev_open = float(prev["open"])
+    prev_high = float(prev["high"])
+    prev_low = float(prev["low"])
     prev_close = float(prev["close"])
     open_ = float(curr["open"])
     high = float(curr["high"])
@@ -48,12 +55,16 @@ def detect_engulfing(prev: dict, curr: dict) -> EngulfingResult:
         and close > open_
         and open_ <= prev_close
         and close >= prev_open
+        and high >= prev_high
+        and low <= prev_low
     )
     is_bearish = (
         prev_close > prev_open
         and close < open_
         and open_ >= prev_close
         and close <= prev_open
+        and high >= prev_high
+        and low <= prev_low
     )
 
     if not (is_bullish or is_bearish):

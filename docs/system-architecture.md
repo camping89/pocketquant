@@ -525,6 +525,29 @@ src/
 
 **Brokers:** `PaperBroker` (simulation, slippage/delays), `OKXBroker` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause).
 
+### PaperBroker accounting model (futures/margin, 1× leverage)
+
+`PaperBroker` dùng **futures/margin accounting**, không phải spot. Domain là OKX perpetual SWAP (`okx_broker.py` instType `SWAP`), nên mở vị thế không tiêu cash — chỉ realized pnl mới chạm `_balance`.
+
+| | Spot | Futures/margin (PaperBroker) |
+|---|---|---|
+| Open / add | `cash -= notional` | `_balance` không đổi |
+| Close / reduce | `cash += proceeds` | `_balance += Δrealized` (delta của lần reduce này) |
+| `total_equity` | `cash + Σ market_value` | `_balance + Σ unrealized_pnl` (mark per-bar) |
+| `available_balance` | `cash` | `= _balance` |
+
+**Vì sao futures:** (1) tránh điểm `total_equity ≈ 0` khi mở all-in (notional ≈ balance) — điểm 0 đó từng ép Sharpe/Sortino về 0 và bịa drawdown −100%; (2) `_balance + unrealized` đúng cho cả long lẫn short mà không cần signed market value; (3) khớp domain OKX SWAP. Leverage cố định 1× (không margin call).
+
+**Delta-realized (không cumulative):** `PositionAggregate.reduce_quantity` cộng dồn vào `position.realized_pnl`. Broker credit phần delta kể từ lần reduce trước (`_reduce_and_credit`), không phải giá trị cumulative — nếu credit cumulative thì partial-close lần hai cộng lại toàn bộ → multi-count. Kết quả: `_balance` cuối = `initial + Σ realized` đúng một lần.
+
+**Price propagation:** mark-to-market chạy ở cuối `_on_bar_completed` (sau SL/TP loop), set `current_price = event.close` cho các vị thế còn mở. `get_balance` thuần đọc (không side-effect trong getter). `BacktestAppService._mtm_on_bar` subscribe `BarCompletedEvent` SAU broker handler nên đọc equity đã mark → equity curve track giá per-bar, không phẳng giữa các fill.
+
+**`available_balance = _balance` (known semantics):** field giữ nguyên công thức, không chuyển sang free-margin. Hệ quả: khi đang có vị thế mở, vì futures không trừ notional khỏi `_balance`, `available_balance` cao hơn so với mô hình spot. Strategy round-trip một vị thế (đóng trước khi mở mới — engulfing, hitnrun2) sizing **không đổi**. Pyramiding / multi-symbol (size entry chồng khi đang positioned) sẽ size theo full balance — đúng cho futures (margin không tiêu cash) nhưng là behavior change so với spot; không strategy hiện tại pyramiding nên tác động forward thực tế = 0.
+
+**Affordability gate:** `_can_afford` chỉ gate BUY mở/tăng vị thế (`notional <= _balance`). BUY để cover/reduce một SHORT đang mở không tiêu margin nên không bị gate — nếu không, short thua lỗ có cover notional vượt balance sẽ bị REJECT và kẹt vị thế.
+
+**Live vs paper:** `OKXBroker` lấy balance thẳng từ sàn (`map_okx_balance_to_domain`), KHÔNG qua `_execute_fill`. OKX định nghĩa `availBal`/`eq` riêng cho SWAP account (external) — PaperBroker không claim khớp `availBal`; bảng trên chỉ mô tả model của PaperBroker.
+
 **Middleware:** CorrelationIdMiddleware (tracing) → RateLimitMiddleware (200 req/10s token bucket per IP) → IdempotencyMiddleware (24h TTL POST cache) → Route.
 
 **Event Bus:** In-memory, FIFO, 50-event max history, sync + async handlers, no persistence (lost on crash).

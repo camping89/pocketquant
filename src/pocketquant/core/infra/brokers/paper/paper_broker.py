@@ -441,6 +441,13 @@ class PaperBroker(IBroker):
     def _can_afford(self, order: OrderAggregate, fill_price: float) -> bool:
         if order.side != OrderSide.BUY:
             return True
+        # A BUY that reduces/covers an existing short consumes no margin under the
+        # futures model, so it must never be gated by notional vs cash — otherwise
+        # a losing short whose cover notional exceeds balance gets stuck open.
+        position_key = f"{order.subscription_id}:{order.symbol}"
+        existing = self._positions.get(position_key)
+        if existing is not None and not existing.is_closed and existing.side == PositionSide.SHORT:
+            return True
         return fill_price * order.quantity <= self._balance
 
     @staticmethod
@@ -456,9 +463,15 @@ class PaperBroker(IBroker):
         return high >= limit_price
 
     def _execute_fill(self, order: OrderAggregate, fill_price: float) -> None:
-        """Update balance and positions based on fill. MUST be called under lock."""
+        """Apply a fill under the futures/margin model. MUST be called under lock.
+
+        Opening or adding to a position does not move cash (no notional debit);
+        balance changes only by realized-pnl delta when a position is reduced or
+        closed. ``reduce_quantity`` accumulates into ``position.realized_pnl``, so
+        each reduce credits the delta since the prior call — crediting the
+        cumulative value would multi-count on partial closes.
+        """
         position_key = f"{order.subscription_id}:{order.symbol}"
-        order_value = fill_price * order.quantity
 
         # A closed position lingers in the dict under its key; a re-entry fill
         # must open a fresh position rather than mutate the closed one (which
@@ -467,13 +480,11 @@ class PaperBroker(IBroker):
         live = existing if existing is not None and not existing.is_closed else None
 
         if order.side == OrderSide.BUY:
-            self._balance -= order_value
             if live is not None:
                 if live.side == PositionSide.LONG:
                     live.add_quantity(order.quantity, fill_price)
-                else:
-                    live.reduce_quantity(order.quantity, fill_price)
-                    self._balance += live.realized_pnl
+                else:  # BUY reduces/covers a short
+                    self._reduce_and_credit(live, order.quantity, fill_price)
             else:
                 self._positions[position_key] = PositionAggregate.open(
                     subscription_id=order.subscription_id,
@@ -485,11 +496,9 @@ class PaperBroker(IBroker):
                     tp_price=order.tp_price,
                 )
         else:  # SELL
-            self._balance += order_value
             if live is not None:
-                if live.side == PositionSide.LONG:
-                    live.reduce_quantity(order.quantity, fill_price)
-                    self._balance += live.realized_pnl
+                if live.side == PositionSide.LONG:  # SELL reduces/closes a long
+                    self._reduce_and_credit(live, order.quantity, fill_price)
                 else:
                     live.add_quantity(order.quantity, fill_price)
             else:
@@ -502,6 +511,13 @@ class PaperBroker(IBroker):
                     sl_price=order.sl_price,
                     tp_price=order.tp_price,
                 )
+
+    def _reduce_and_credit(
+        self, position: PositionAggregate, quantity: float, fill_price: float
+    ) -> None:
+        before = position.realized_pnl
+        position.reduce_quantity(quantity, fill_price)
+        self._balance += position.realized_pnl - before
 
     async def _emit_event(
         self,
@@ -574,6 +590,15 @@ class PaperBroker(IBroker):
 
         for pos, exit_price, exit_side, reason in to_close:
             await self._fire_synthetic_exit(pos, exit_price, exit_side, reason)
+
+        # Mark surviving positions to the bar close so unrealized_pnl (and thus
+        # total_equity in get_balance) tracks price per bar. Runs after SL/TP so
+        # exited positions aren't re-marked. BacktestAppService._mtm_on_bar
+        # subscribes after this handler, so it reads the freshly marked equity.
+        async with self._lock:
+            for pos in self._positions.values():
+                if not pos.is_closed and pos.symbol == event.symbol:
+                    pos.update_price(event.close)
 
     async def _fill_pending_on_bar(self, event: BarCompletedEvent) -> None:
         to_fill: list[_PendingOrder] = []
