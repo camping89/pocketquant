@@ -10,7 +10,8 @@ import type { IndicatorConfig } from '../../types/market-data'
 
 const COLORS = {
   sma20: '#2196F3',
-  ema50: '#FF9800',
+  ema9: '#FF9800',
+  ema21: '#42A5F5',
   rsi: '#AB47BC',
   macdLine: '#26C6DA',
   macdSignal: '#FF7043',
@@ -36,10 +37,17 @@ export function addIndicatorSeries(
     all.push(s)
   }
 
-  if (config.ema && data.ema50.length > 0) {
-    const s = chart.addSeries(LineSeries, { color: COLORS.ema50, lineWidth: 1, priceScaleId: 'right' })
-    s.setData(data.ema50)
-    all.push(s)
+  if (config.ema) {
+    if (data.ema9.length > 0) {
+      const s = chart.addSeries(LineSeries, { color: COLORS.ema9, lineWidth: 2, priceScaleId: 'right' })
+      s.setData(data.ema9)
+      all.push(s)
+    }
+    if (data.ema21.length > 0) {
+      const s = chart.addSeries(LineSeries, { color: COLORS.ema21, lineWidth: 1, priceScaleId: 'right' })
+      s.setData(data.ema21)
+      all.push(s)
+    }
   }
 
   if (config.bollinger) {

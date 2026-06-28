@@ -26,11 +26,11 @@ export const Route = createFileRoute('/')({
 const DEFAULT_INTERVAL: Interval = '5m'
 const DEFAULT_INDICATORS: IndicatorConfig = {
   sma: false,
-  ema: false,
+  ema: true,
   rsi: false,
   macd: false,
   bollinger: false,
-  engulfing: false,
+  engulfing: true,
 }
 
 function localStorageKey(symbol: string): string {
