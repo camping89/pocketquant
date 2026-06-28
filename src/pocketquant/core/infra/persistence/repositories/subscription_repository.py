@@ -57,16 +57,19 @@ class SubscriptionRepository(BaseRepository):
         return [Subscription.from_mongo(doc) async for doc in cursor]
 
     async def update_desired_state(self, sub_id: str, state: RunState) -> int:
+        # matched_count, not modified_count: re-setting the same state is a no-op
+        # write (modified_count == 0) yet the sub exists — callers use the return
+        # value as an existence check, so it must count matches, not value changes.
         collection = self._collection()
         result = await collection.update_one({"_id": sub_id}, {"$set": {"desired_state": state}})
         logger.debug("subscription_desired_state_updated", sub_id=sub_id, state=state)
-        return result.modified_count
+        return result.matched_count
 
     async def update_actual_state(self, sub_id: str, state: RunState) -> int:
         collection = self._collection()
         result = await collection.update_one({"_id": sub_id}, {"$set": {"actual_state": state}})
         logger.debug("subscription_actual_state_updated", sub_id=sub_id, state=state)
-        return result.modified_count
+        return result.matched_count
 
     async def delete(self, sub_id: str) -> int:
         collection = self._collection()
