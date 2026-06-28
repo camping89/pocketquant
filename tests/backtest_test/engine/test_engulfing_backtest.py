@@ -243,6 +243,22 @@ async def test_backtest_multi_trade_on_repeated_engulfing_round_trips() -> None:
     assert result.metrics.total_trades > 1
     assert (await broker.get_positions()) == []
 
+    # Sharpe/Sortino must be finite (no NaN/inf) — the accounting fix removed the
+    # 0-equity points that previously seeded divide-by-zero. Not asserting != 0
+    # here: a calm round-trip curve can legitimately be flat. The non-zero
+    # property is pinned on a volatile curve in the calculator unit tests.
+    assert result.metrics.sharpe_ratio == result.metrics.sharpe_ratio  # not NaN
+    assert abs(result.metrics.sharpe_ratio) != float("inf")
+    assert result.metrics.sortino_ratio == result.metrics.sortino_ratio
+    assert abs(result.metrics.sortino_ratio) != float("inf")
+
+    # Broker final cash == initial + Σ realized, re-derived from this run's own
+    # trade stats (no hard-pinned number — sizing drives the magnitude).
+    m = result.metrics
+    realized = m.avg_win * m.winning_trades + m.avg_loss * m.losing_trades
+    balance = await broker.get_balance()
+    assert balance.available_balance == pytest.approx(10_000.0 + realized)
+
 
 async def test_backtest_no_trades_on_choppy_market() -> None:
     bars = [_flat(i) for i in range(40)]

@@ -4,8 +4,9 @@ Complements the existing SL/TP auto-fill suite
 (``test_paper_broker_sl_tp_fill.py``). This file pins the entry-fill state
 machine that Phase 6 moves verbatim to ``pocketquant-infrastructure``:
 
-  - MARKET order fills immediately at the signal price (+ slippage), opens a
-    LONG position, and debits balance.
+  - MARKET order fills immediately at the signal price (+ slippage) and opens a
+    LONG position without debiting cash (futures/margin model — balance moves
+    only on realized close).
   - LIMIT order that does NOT cross stays pending (no position) until a later
     ``BarCompletedEvent`` whose range crosses the limit fills it.
   - SELL MARKET with no existing position opens a SHORT.
@@ -90,15 +91,29 @@ async def test_market_buy_fills_immediately_and_opens_long() -> None:
 
 
 @pytest.mark.asyncio
-async def test_market_buy_applies_slippage_and_debits_balance() -> None:
-    b, _ = await _broker(slippage=0.001)
+async def test_market_buy_opens_position_without_debiting_cash() -> None:
+    b, bus = await _broker(slippage=0.001)
+    assert bus is not None
 
     result = await b.submit_order(_order(OrderSide.BUY, OrderType.MARKET, qty=2.0, price=100.0))
 
     expected_fill = 100.0 * (1 + 0.001)
     assert result.filled_price == pytest.approx(expected_fill)
+
+    # futures: opening does not debit cash; available == total_equity (upl 0 at
+    # entry, no price has moved yet).
     balance = await b.get_balance()
-    assert balance.available_balance == pytest.approx(1_000_000.0 - expected_fill * 2.0)
+    assert balance.available_balance == pytest.approx(1_000_000.0)
+    assert balance.total_equity == pytest.approx(1_000_000.0)
+
+    # a completed bar marks the open position to its close → total_equity tracks
+    # unrealized; available stays = _balance (price propagation lives in
+    # _on_bar_completed, not get_balance).
+    moved_price = expected_fill * 1.10
+    await bus.publish(_bar_event(high=moved_price, low=expected_fill, close=moved_price))
+    moved = await b.get_balance()
+    assert moved.total_equity > 1_000_000.0
+    assert moved.available_balance == pytest.approx(1_000_000.0)
 
 
 @pytest.mark.asyncio

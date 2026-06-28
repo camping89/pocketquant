@@ -25,12 +25,16 @@ export function detectEngulfing(prev: OHLC, curr: OHLC): EngulfingResult {
     prev.close < prev.open &&
     curr.close > curr.open &&
     curr.open <= prev.close &&
-    curr.close >= prev.open
+    curr.close >= prev.open &&
+    curr.high >= prev.high &&
+    curr.low <= prev.low
   const isBearish =
     prev.close > prev.open &&
     curr.close < curr.open &&
     curr.open >= prev.close &&
-    curr.close <= prev.open
+    curr.close <= prev.open &&
+    curr.high >= prev.high &&
+    curr.low <= prev.low
 
   if (!isBullish && !isBearish) {
     return { isBullish: false, isBearish: false, rejectionWickPct: NO_SIGNAL_REJECTION }

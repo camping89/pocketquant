@@ -7,6 +7,7 @@ math, and that cagr stays calendar-based (unaffected by the interval change).
 from __future__ import annotations
 
 import inspect
+import warnings
 
 import numpy as np
 import pytest
@@ -68,6 +69,28 @@ def test_sharpe_realistic_vol_is_bounded() -> None:
 
 def test_sharpe_short_curve_returns_zero() -> None:
     assert PerformanceCalculator.sharpe_ratio(np.array([100.0]), periods_per_year=365) == 0.0
+
+
+def test_sharpe_nonzero_on_volatile_curve() -> None:
+    # A curve with real, persistent variance must produce a finite, non-zero
+    # Sharpe — the post-fix mark-to-market curve no longer flatlines between
+    # fills, so this is the property the accounting fix restores.
+    equity = np.array([100.0, 108.0, 103.0, 115.0, 110.0, 122.0, 118.0, 130.0])
+    sharpe = PerformanceCalculator.sharpe_ratio(equity, periods_per_year=365)
+    assert np.isfinite(sharpe)
+    assert sharpe != 0.0
+
+
+def test_sharpe_guard_tolerates_zero_in_curve() -> None:
+    # A 0 equity point (e.g. legacy all-in spot bug) must not raise or emit a
+    # divide-by-zero RuntimeWarning; the np.divide guard maps that step to 0.
+    equity = np.array([100.0, 0.0, 100.0, 110.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        sharpe = PerformanceCalculator.sharpe_ratio(equity, periods_per_year=365)
+        sortino = PerformanceCalculator.sortino_ratio(equity, periods_per_year=365)
+    assert np.isfinite(sharpe)
+    assert np.isfinite(sortino)
 
 
 def test_cagr_unaffected_remains_calendar_based() -> None:

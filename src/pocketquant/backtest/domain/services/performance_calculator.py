@@ -77,7 +77,13 @@ class PerformanceCalculator:
         if len(equity_curve) < 2:
             return 0.0
 
-        returns = np.diff(equity_curve) / equity_curve[:-1]
+        prev = equity_curve[:-1]
+        returns = np.divide(
+            np.diff(equity_curve),
+            prev,
+            out=np.zeros(len(prev), dtype=float),
+            where=prev != 0,
+        )
 
         # Sample std (ddof=1) needs ≥2 returns; one return divides by zero.
         if len(returns) < 2:
@@ -119,7 +125,13 @@ class PerformanceCalculator:
         if len(equity_curve) < 2:
             return 0.0
 
-        returns = np.diff(equity_curve) / equity_curve[:-1]
+        prev = equity_curve[:-1]
+        returns = np.divide(
+            np.diff(equity_curve),
+            prev,
+            out=np.zeros(len(prev), dtype=float),
+            where=prev != 0,
+        )
 
         if len(returns) < 2:
             return 0.0
