@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Engulfing detector + golden fixture"
-status: pending
+status: completed
 priority: P2
 dependencies: []
 ---

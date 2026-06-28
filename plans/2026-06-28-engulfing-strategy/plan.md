@@ -7,7 +7,7 @@ description: >-
   strong patterns with SL below pattern + buffer and single TP = max(RR 1:1,
   swing key-level). Baseline 1-TP (no scale-out). Locked TS↔Python via shared
   golden fixture.
-status: pending
+status: completed
 priority: P2
 branch: develop
 tags:
@@ -87,26 +87,26 @@ _DEFAULTS = {
 
 | Phase | Name | Status | Priority | Depends |
 |-------|------|--------|----------|---------|
-| 1 | [Engulfing detector + golden fixture](./phase-01-engulfing-detector-golden-fixture.md) | Pending | P2 | — |
-| 2 | [EngulfingStrategy + backtest](./phase-02-engulfingstrategy-backtest.md) | Pending | P1 | 1 |
-| 3 | [Frontend pattern visualization](./phase-03-frontend-pattern-visualization.md) | Pending | P2 | 1 |
-| 4 | [Docs (scale-out limit + swing pivot)](./phase-04-docs-scale-out-limit-swing-pivot.md) | Pending | P3 | — |
-| 5 | [Verify](./phase-05-verify.md) | Pending | P1 | 1,2,3,4 |
+| 1 | [Engulfing detector + golden fixture](./phase-01-engulfing-detector-golden-fixture.md) | Done | P2 | — |
+| 2 | [EngulfingStrategy + backtest](./phase-02-engulfingstrategy-backtest.md) | Done | P1 | 1 |
+| 3 | [Frontend pattern visualization](./phase-03-frontend-pattern-visualization.md) | Done | P2 | 1 |
+| 4 | [Docs (scale-out limit + swing pivot)](./phase-04-docs-scale-out-limit-swing-pivot.md) | Done | P3 | — |
+| 5 | [Verify](./phase-05-verify.md) | Done | P1 | 1,2,3,4 |
 
 Phase 1 (detector + golden fixture) là nền: cả Phase 2 (Python) và Phase 3 (TS) dùng chung fixture. Phase 4 (docs) độc lập. Phase 5 verify cuối.
 
 ## Acceptance criteria
 
-- [ ] `GET /backtest/strategies` liệt kê `engulfing`.
-- [ ] Detector golden fixture: TS test và Python test ra **cùng** tập pattern (bullish/bearish) + **cùng** `rejection_wick_pct` (so khớp tới sai số float nhỏ).
-- [ ] `EngulfingStrategy` implement `on_bar_completed` + `on_order_filled` (hook MỚI); position cap 1; `_open_direction` reset đúng.
-- [ ] Backtest engulfing trên dữ liệu thật ra **nhiều trade** (xác nhận 260628-1514 đã land); SL/TP từng trade khớp công thức.
-- [ ] TP = `max(tp_rr, key_level)` (LONG) / `min` (SHORT) — luôn ≥ RR 1:1.
-- [ ] Quality filter loại pattern có wick ngược chiều > ngưỡng; `=1.0` tắt filter (test cả 2).
-- [ ] Toggle "Engulfing" vẽ markers, strong đậm / weak nhạt; **KHÔNG** override backtest markers (merge chung 1 array trước `setMarkers`).
-- [ ] 2 docs trong `docs/`: scale-out limitation + swing pivot education.
-- [ ] `uv run ruff check` + `uv run pytest tests/ -q` xanh; `uv run lint-imports` 7 contracts pass; OpenAPI snapshot không đổi.
-- [ ] `cd web && npm run lint && npm run build` xanh; `npm run test` (vitest) golden-fixture parity pass.
+- [x] `GET /backtest/strategies` liệt kê `engulfing` (registry chứa `engulfing`; test `test_engulfing_registered_in_strategy_registry`).
+- [x] Detector golden fixture: TS test và Python test ra **cùng** tập pattern (bullish/bearish) + **cùng** `rejection_wick_pct` (fixture byte-identical, 9 case; Python `pytest.approx`, TS `toBeCloseTo(…,12)`).
+- [x] `EngulfingStrategy` implement `on_bar_completed` + `on_order_filled` (hook MỚI); position cap 1; `_open_direction` set-after-fill, reset đúng.
+- [x] Backtest engulfing ra **nhiều trade** (`total_trades > 1` qua full stack); SL/TP từng trade khớp công thức.
+- [x] TP = `max(tp_rr, key_level)` (LONG) / `min` (SHORT) — luôn ≥ RR 1:1.
+- [x] Quality filter loại pattern có wick ngược chiều > ngưỡng; `=1.0` tắt filter (test cả 2).
+- [x] Toggle "Engulfing" vẽ markers, strong đậm / weak nhạt; **KHÔNG** override backtest markers (merge chung 1 array trước `setMarkers`).
+- [x] 2 docs trong `docs/`: scale-out limitation + swing pivot education.
+- [x] `uv run ruff check` + `uv run pytest tests/ -q` xanh (623 passed, 1 skipped); `uv run lint-imports` 7 contracts pass; OpenAPI snapshot không đổi.
+- [x] `cd web && npm run lint && npm run build` xanh; `npm run test` (vitest) golden-fixture parity pass (9 case).
 
 > **Tooling note (verified):** project KHÔNG có mypy — bỏ mọi `just types` cho BE; type-check FE qua `tsc -b` (trong `npm run build`). Lệnh canonical theo CI (`.github/workflows/cicd.yml`): `uv run pytest tests/ -q`, `uv run lint-imports`, `uv run ruff check`. `just test-pkg`/`just lint`/`just types` KHÔNG tồn tại trong justfile (README stale).
 

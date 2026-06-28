@@ -12,6 +12,13 @@ Tài liệu canonical cho code layout và workflow hiện tại. Docs là **AS-I
 | 3 | [Code Standards](./code-standards.md) | Naming, file-size rules, dependency direction, route/service/repository conventions, exception handling, async-suspension patterns, testing, worked example end-to-end. |
 | 4 | [Deployment](./deployment.md) | Production deploy: GitHub Actions → Docker Hub → SSH tới Vultr VPS. Env vars, rollback, operator runbook, port map. |
 
+### Topic docs
+
+| Doc | Description |
+|-----|-------------|
+| [Engine scale-out limitation](./engine-scale-out-limitation.md) | Vì sao engine chốt một entry → một TP → đóng toàn bộ; bốn tầng giới hạn chặn scale-out / multi-TP / partial close. |
+| [Swing pivot & key-level](./swing-pivot-key-level.md) | Key-level cho take-profit: proxy max/min cửa sổ N bar, TP = max(RR 1:1, key-level), và vì sao chart "show all patterns" khác tập tín hiệu strategy. |
+
 ## Current Repo Shape
 
 One Python package (`pocketquant`) tại repo-root `src/`; subpackage boundaries enforced bởi import-linter contracts trong `pyproject.toml` (layout chuẩn xem [Root README](../README.md)).
