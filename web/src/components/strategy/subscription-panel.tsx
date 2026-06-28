@@ -5,8 +5,8 @@ import {
   useRemoveSymbol,
   useDeleteStrategy,
 } from '../../hooks/use-subscriptions'
-import { parseIso } from '../../lib/datetime'
 import { BacktestStatusBadge } from './backtest-status-badge'
+import { ForwardStatusBadge } from './forward-status-badge'
 import { AddSymbolDialog } from './add-symbol-dialog'
 import type { Subscription } from '../../api/strategy-api'
 
@@ -16,22 +16,19 @@ interface SubscriptionPanelProps {
   onSelectSub: (subId: string | null) => void
 }
 
-function relTime(iso: string | null | undefined): string {
-  const parsed = parseIso(iso)
-  if (!parsed) return '—'
-  const ms = Date.now() - parsed.valueOf()
-  if (ms < 60_000) return `${Math.floor(ms / 1000)}s ago`
-  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`
-  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`
-  return `${Math.floor(ms / 86_400_000)}d ago`
-}
-
 interface SubRowProps {
   sub: Subscription
   selected: boolean
   onSelect: () => void
   onRemove: () => void
   removing: boolean
+}
+
+const badgePrefixStyle: React.CSSProperties = {
+  fontSize: 9,
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  letterSpacing: '0.06em',
 }
 
 function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
@@ -52,17 +49,21 @@ function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
         transition: 'background 0.12s',
       }}
     >
-      <BacktestStatusBadge
-        status={bt?.status ?? null}
-        lastRunAt={bt?.last_run_at}
-        errorMsg={bt?.error_msg}
-      />
-      <span style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {sub.symbol} <span style={{ color: 'var(--text-secondary)' }}>• {sub.interval}</span>
-      </span>
-      <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-        {relTime(bt?.last_run_at)}
-      </span>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sub.symbol} <span style={{ color: 'var(--text-secondary)' }}>• {sub.interval}</span>
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={badgePrefixStyle}>BT</span>
+          <BacktestStatusBadge
+            status={bt?.status ?? null}
+            lastRunAt={bt?.last_run_at}
+            errorMsg={bt?.error_msg}
+          />
+          <span style={{ ...badgePrefixStyle, marginLeft: 2 }}>FW</span>
+          <ForwardStatusBadge desiredState={sub.desired_state} actualState={sub.actual_state} />
+        </div>
+      </div>
       <button
         className="btn"
         title="Remove subscription"

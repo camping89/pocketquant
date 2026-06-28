@@ -17,13 +17,15 @@ class SubscriptionAlreadyExistsError(DomainError):
     """Raised when a subscription for the same (strategy, symbol, interval) exists.
 
     Carries the triple, not the id: ids are random uuid7, so only the triple
-    identifies WHICH subscription collided.
+    identifies WHICH subscription collided. Maps to HTTP 409 — a duplicate is a
+    resource conflict, not a malformed request.
     """
 
     def __init__(self, strategy_code: str, symbol: str, interval: str) -> None:
         super().__init__(
             f"Subscription for '{strategy_code}' on '{symbol}' @ '{interval}' already exists.",
             error_code="SUBSCRIPTION_ALREADY_EXISTS",
+            status_code=409,
         )
 
 

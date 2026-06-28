@@ -29,5 +29,6 @@ def test_to_from_mongo_roundtrip() -> None:
 def test_already_exists_error_carries_code_and_triple() -> None:
     err = SubscriptionAlreadyExistsError("hitnrun2", "BTCUSDT:BINANCE", "5m")
     assert err.error_code == "SUBSCRIPTION_ALREADY_EXISTS"
+    assert err.status_code == 409
     for part in ("hitnrun2", "BTCUSDT:BINANCE", "5m"):
         assert part in str(err)

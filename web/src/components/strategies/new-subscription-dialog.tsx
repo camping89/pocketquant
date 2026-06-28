@@ -64,10 +64,12 @@ export function NewSubscriptionDialog({ onClose }: NewSubscriptionDialogProps) {
       {
         onSuccess: () => onClose(),
         onError: (err: unknown) => {
-          const status = (err as { status?: number })?.status
-          if (status === 409) setErrorMsg('Subscription already exists for this symbol/interval.')
-          else if (status === 404) setErrorMsg('Strategy not found. Ensure strategy is loaded.')
-          else setErrorMsg((err as Error)?.message ?? 'Unexpected error.')
+          const { code, message } = err as { code?: string; message?: string }
+          if (code === 'SUBSCRIPTION_ALREADY_EXISTS')
+            setErrorMsg('Subscription already exists for this symbol/interval.')
+          else if (code === 'SYMBOL_NOT_TRACKED')
+            setErrorMsg('Symbol is not tracked. An admin must add it to tracked symbols first.')
+          else setErrorMsg(message ?? 'Unexpected error.')
         },
       },
     )
