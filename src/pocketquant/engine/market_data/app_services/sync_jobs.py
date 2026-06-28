@@ -83,7 +83,6 @@ _container: AsyncContainer | None = None
 # Price relative threshold catches scale-aware drift across assets:
 #   BTC $80k → $8 trigger; ETH $3k → $0.30 trigger.
 # Volume gets its own threshold because exchange-side rounding is noisier than price.
-# ---------------------------------------------------------------------------
 PRICE_THRESHOLD_PCT = 0.0001  # 0.01%
 VOLUME_THRESHOLD_PCT = 0.05  # 5%
 DIVERGENCE_ALERT_FRACTION = 0.05  # alert when >5% of compared bars diverge on any field
@@ -108,7 +107,6 @@ def _ms_since(started: datetime) -> int:
 
 
 def _diff_pct(a: float, b: float) -> float:
-    """Relative absolute diff. Returns 0.0 when |a| is too small to divide safely."""
     if abs(a) < 1e-12:
         return 0.0
     return abs(a - b) / abs(a)
@@ -382,7 +380,6 @@ async def _run_repair(name: str) -> None:
 # APScheduler entrypoints — referenced by text as
 # "pocketquant.engine.market_data.app_services.sync_jobs:<funcname>"
 async def sync_1m() -> None:
-    """Fetch last 100 1m bars per tracked symbol, upsert, then cascade to 5m–1d."""
     container = _get_container()
     history_repo = await container.get(JobHistoryRepository)
     sync_service = await container.get(SyncService)
@@ -610,17 +607,14 @@ async def sync_verify_cascade() -> None:
 
 
 async def sync_backfill() -> None:
-    """Daily deep backfill: REST-fetch 5000 bars for all tracked symbols across all tfs."""
     await _run_sync("sync_backfill", SYNC_INTERVALS, 5000, source=SOURCE_REST_BACKFILL)
 
 
 async def sync_integrity() -> None:
-    """Daily integrity scan across all tfs (1m + cascade outputs)."""
     await _run_integrity("sync_integrity")
 
 
 async def sync_repair() -> None:
-    """Bi-daily gap repair across all tfs."""
     await _run_repair("sync_repair")
 
 

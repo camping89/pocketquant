@@ -71,7 +71,6 @@ class BacktestRequestRepository(BaseRepository):
         return doc["_id"]
 
     async def _enqueue_subscription(self, doc: dict[str, Any], *, sub_id: str) -> str:
-        """Dedup-enqueue one subscription request; returns the persisted id."""
         collection = self._collection()
         await collection.delete_many({"sub_id": sub_id, "status": {"$in": ["done", "failed"]}})
 
@@ -159,7 +158,6 @@ class BacktestRequestRepository(BaseRepository):
         return result.deleted_count
 
     async def delete_by_strategy_code(self, strategy_code: str) -> int:
-        """Delete queued requests for a strategy template. Returns deleted_count."""
         collection = self._collection()
         result = await collection.delete_many({"strategy_code": strategy_code})
         return result.deleted_count

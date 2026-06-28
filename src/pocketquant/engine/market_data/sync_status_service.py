@@ -32,8 +32,6 @@ _STUCK_MULTIPLIER = 3
 
 @dataclass
 class GetSyncStatusQuery:
-    """Query to get all sync statuses."""
-
     pass
 
 
@@ -80,7 +78,6 @@ async def _enrich_with_bars(
     interval_value: str,
     bar_repo: BarRepository,
 ) -> tuple[int, datetime | None]:
-    """Return (bar_count, latest_bar_dt) read directly from bars collection."""
     interval = Interval(interval_value)
     latest = await bar_repo.get_latest(symbol, interval)
     count = await bar_repo.count(symbol, interval)
@@ -88,8 +85,6 @@ async def _enrich_with_bars(
 
 
 class SyncStatusQueryService:
-    """Query sync status for all symbols or a single symbol."""
-
     def __init__(
         self,
         sync_status_repository: SyncStatusRepository,
@@ -99,7 +94,6 @@ class SyncStatusQueryService:
         self._bar_repo = bar_repository
 
     async def get_sync_status(self, request: GetSyncStatusQuery) -> list[SyncStatusResult]:
-        """Return all sync statuses with bar-derived freshness."""
         statuses = await self._sync_status_repo.find_all()
         if not statuses:
             return []

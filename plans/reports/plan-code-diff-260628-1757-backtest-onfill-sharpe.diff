@@ -1,0 +1,1623 @@
+diff --git a/src/pocketquant/backtest/domain/services/performance_calculator.py b/src/pocketquant/backtest/domain/services/performance_calculator.py
+index 1bb68b0..6a879b1 100644
+--- a/src/pocketquant/backtest/domain/services/performance_calculator.py
++++ b/src/pocketquant/backtest/domain/services/performance_calculator.py
+@@ -46,13 +46,29 @@ class PerformanceCalculator:
+         return (final_equity / initial_equity) ** (1 / years) - 1
+ 
+     @staticmethod
+-    def sharpe_ratio(equity_curve: np.ndarray, risk_free_rate: float = RISK_FREE_RATE) -> float:
+-        """Calculate annualized Sharpe ratio from equity curve.
+-
+-        Sharpe = (mean return - risk free rate) / volatility
++    def sharpe_ratio(
++        equity_curve: np.ndarray,
++        *,
++        periods_per_year: float,
++        risk_free_rate: float = RISK_FREE_RATE,
++    ) -> float:
++        """Calculate annualized Sharpe ratio from a per-bar equity curve.
++
++        Sharpe = (mean return - risk free rate) / volatility, annualized by the
++        number of bars per year for the backtest interval.
++
++        ``periods_per_year`` is **keyword-only** so it never positionally
++        collides with ``risk_free_rate``.
++
++        Caveat (per-bar definition): the equity curve carries one point per bar,
++        including flat bars with no open position. Those flat bars dilute the
++        return std, so this Sharpe measures whole-period **capital efficiency**,
++        not active-position risk. This is the industry-standard per-bar
++        definition and is comparable across strategies on the same interval.
+ 
+         Args:
+-            equity_curve: Array of equity values over time.
++            equity_curve: Array of equity values, one per bar.
++            periods_per_year: Bars per year for the interval (Interval.periods_per_year).
+             risk_free_rate: Annual risk-free rate (default 0).
+ 
+         Returns:
+@@ -72,20 +88,28 @@ class PerformanceCalculator:
+         if std_return == 0 or np.isnan(std_return):
+             return 0.0
+ 
+-        annual_return = mean_return * TRADING_DAYS_PER_YEAR
+-        annual_std = std_return * np.sqrt(TRADING_DAYS_PER_YEAR)
++        annual_return = mean_return * periods_per_year
++        annual_std = std_return * np.sqrt(periods_per_year)
+ 
+         return (annual_return - risk_free_rate) / annual_std
+ 
+     @staticmethod
+-    def sortino_ratio(equity_curve: np.ndarray, risk_free_rate: float = RISK_FREE_RATE) -> float:
+-        """Calculate annualized Sortino ratio from equity curve.
+-
+-        Sortino = (mean return - risk free rate) / downside volatility
+-        Only penalizes negative returns (downside deviation).
++    def sortino_ratio(
++        equity_curve: np.ndarray,
++        *,
++        periods_per_year: float,
++        risk_free_rate: float = RISK_FREE_RATE,
++    ) -> float:
++        """Calculate annualized Sortino ratio from a per-bar equity curve.
++
++        Sortino = (mean return - risk free rate) / downside volatility, annualized
++        by the number of bars per year for the backtest interval. Only penalizes
++        negative returns (downside deviation). ``periods_per_year`` is
++        keyword-only (see ``sharpe_ratio``).
+ 
+         Args:
+-            equity_curve: Array of equity values over time.
++            equity_curve: Array of equity values, one per bar.
++            periods_per_year: Bars per year for the interval (Interval.periods_per_year).
+             risk_free_rate: Annual risk-free rate (default 0).
+ 
+         Returns:
+@@ -112,8 +136,8 @@ class PerformanceCalculator:
+         if downside_std == 0 or np.isnan(downside_std):
+             return 0.0
+ 
+-        annual_return = mean_return * TRADING_DAYS_PER_YEAR
+-        annual_downside_std = downside_std * np.sqrt(TRADING_DAYS_PER_YEAR)
++        annual_return = mean_return * periods_per_year
++        annual_downside_std = downside_std * np.sqrt(periods_per_year)
+ 
+         return (annual_return - risk_free_rate) / annual_downside_std
+ 
+diff --git a/src/pocketquant/backtest/engine/backtest_app_service.py b/src/pocketquant/backtest/engine/backtest_app_service.py
+index b242f05..ce35ef4 100644
+--- a/src/pocketquant/backtest/engine/backtest_app_service.py
++++ b/src/pocketquant/backtest/engine/backtest_app_service.py
+@@ -12,6 +12,7 @@ from pocketquant.core.common.time.simulation import clear_simulation_time
+ from pocketquant.core.common.uuid import generate_id_str
+ from pocketquant.core.domain.backtest import BacktestResult
+ from pocketquant.core.domain.bar.entities import Bar
++from pocketquant.core.domain.bar.events import BarCompletedEvent
+ from pocketquant.core.domain.shared.enums import Interval
+ from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+ from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
+@@ -82,6 +83,16 @@ class BacktestAppService:
+ 
+         collector = BacktestResultCollector(config, config.initial_capital, run_id=run_id)
+ 
++        # Mark-to-market per bar for an evenly-sampled equity curve (Sharpe
++        # input). Registered AFTER the broker's BarCompletedEvent handler
++        # (subscribed in broker.connect during strategy injection), so the equity
++        # snapshot is taken once the bar's SL/TP exits have settled.
++        async def _mtm_on_bar(event: BarCompletedEvent) -> None:
++            if event.bar_start is None:
++                return
++            balance = await self._broker.get_balance()
++            collector.mark_to_market(event.bar_start, balance.total_equity)
++
+         try:
+             self._broker.reset()
+             self._broker.slippage = config.slippage_percent
+@@ -89,6 +100,7 @@ class BacktestAppService:
+             # Subscribe to BOTH channels — fills for trade-building, events for audit log.
+             await self._broker.subscribe_order_updates(collector.on_fill)
+             await self._broker.subscribe_order_event(collector.on_event)
++            self._event_bus.subscribe(BarCompletedEvent, _mtm_on_bar)
+ 
+             bars = self._load_bars(config)
+             bars_with_price = self._wrap_bars_with_price_update(config, bars)
+@@ -157,6 +169,7 @@ class BacktestAppService:
+         finally:
+             await self._broker.unsubscribe_order_updates()
+             await self._broker.unsubscribe_order_event()
++            self._event_bus.unsubscribe(BarCompletedEvent, _mtm_on_bar)
+             clear_simulation_time()
+ 
+     async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[Bar]:
+@@ -172,7 +185,6 @@ class BacktestAppService:
+     async def _wrap_bars_with_price_update(
+         self, config: BacktestConfig, bars: AsyncIterator[Bar]
+     ) -> AsyncIterator[Bar]:
+-        """Wrap bar iterator to set broker price before each bar (market orders use bar close)."""
+         async for bar in bars:
+             self._broker.set_current_price(config.symbol, bar.close)
+             yield bar
+diff --git a/src/pocketquant/backtest/engine/metrics_builder.py b/src/pocketquant/backtest/engine/metrics_builder.py
+index 69acad8..353d6b9 100644
+--- a/src/pocketquant/backtest/engine/metrics_builder.py
++++ b/src/pocketquant/backtest/engine/metrics_builder.py
+@@ -1,8 +1,3 @@
+-"""Build BacktestMetrics from closed Trades + equity curve.
+-
+-Extracted from BacktestResultCollector to keep result_collector under 200 LOC.
+-"""
+-
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
+@@ -21,14 +16,34 @@ def build_metrics(
+     total_commission: float,
+     start_date: date,
+     end_date: date,
++    periods_per_year: float | None,
++    returns_curve: list[EquityPoint] | None = None,
+ ) -> BacktestMetrics:
+-    """Compute aggregate performance metrics for a finished backtest."""
++    """Build metrics. ``equity_curve`` (realized, trade-keyed) drives
++    total_return/cagr/max_drawdown; ``returns_curve`` (per-bar mark-to-market,
++    when supplied) drives Sharpe/Sortino so they annualize on evenly-sampled
++    returns. ``periods_per_year`` of None (unknown interval) skips annualization
++    → Sharpe/Sortino = 0.
++    """
+     if not closed_trades:
+         return BacktestMetrics.empty()
+ 
+     equity_values = np.array([p.equity for p in equity_curve])
++    returns_source = returns_curve if returns_curve else equity_curve
++    returns_values = np.array([p.equity for p in returns_source])
+     days = max((end_date - start_date).days, 1)
+ 
++    if periods_per_year is None:
++        sharpe = 0.0
++        sortino = 0.0
++    else:
++        sharpe = PerformanceCalculator.sharpe_ratio(
++            returns_values, periods_per_year=periods_per_year
++        )
++        sortino = PerformanceCalculator.sortino_ratio(
++            returns_values, periods_per_year=periods_per_year
++        )
++
+     pnl_list = [t.pnl for t in closed_trades]
+     avg_win, avg_loss, winning, losing = PerformanceCalculator.average_win_loss(pnl_list)
+     gross_profit = sum(p for p in pnl_list if p > 0)
+@@ -38,8 +53,8 @@ def build_metrics(
+     return BacktestMetrics(
+         total_return=PerformanceCalculator.total_return(initial_capital, current_equity),
+         cagr=PerformanceCalculator.cagr(initial_capital, current_equity, days),
+-        sharpe_ratio=PerformanceCalculator.sharpe_ratio(equity_values),
+-        sortino_ratio=PerformanceCalculator.sortino_ratio(equity_values),
++        sharpe_ratio=sharpe,
++        sortino_ratio=sortino,
+         max_drawdown=PerformanceCalculator.max_drawdown(equity_values),
+         win_rate=PerformanceCalculator.win_rate(winning, len(closed_trades)),
+         profit_factor=PerformanceCalculator.profit_factor(gross_profit, gross_loss),
+diff --git a/src/pocketquant/backtest/engine/result_collector.py b/src/pocketquant/backtest/engine/result_collector.py
+index 86fd6aa..e2f4ccd 100644
+--- a/src/pocketquant/backtest/engine/result_collector.py
++++ b/src/pocketquant/backtest/engine/result_collector.py
+@@ -35,9 +35,15 @@ from pocketquant.core.domain.backtest import (
+ )
+ from pocketquant.core.domain.brokers.events import OrderEvent
+ from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
++from pocketquant.core.domain.shared.enums import Interval
+ 
+ logger = logging.getLogger(__name__)
+ 
++# 1m × 2y ≈ 1.1M points blows past Mongo's 16MB doc cap; cap the persisted curve
++# while keeping every trade-carrying point. Sharpe is computed on the full
++# in-memory series before downsampling.
++_MAX_PERSISTED_EQUITY_POINTS = 5000
++
+ 
+ class BacktestResultCollector:
+     """Collects Orders + Trades + equity snapshots during backtest, then computes metrics.
+@@ -60,6 +66,11 @@ class BacktestResultCollector:
+         self._run_id = run_id or ""
+ 
+         self._equity_curve: list[EquityPoint] = []
++        # Per-bar mark-to-market curve (realized + unrealized), filled by
++        # ``mark_to_market`` once per bar. Sharpe/Sortino annualize off this even
++        # series; ``_equity_curve`` (realized-only, trade-keyed) drives
++        # total_return/cagr/max_drawdown unchanged.
++        self._mtm_curve: list[EquityPoint] = []
+         self._orders_by_id: dict[str, Order] = {}
+         self._trades: list[Trade] = []
+         self._total_commission = 0.0
+@@ -75,11 +86,9 @@ class BacktestResultCollector:
+         )
+ 
+     def set_run_id(self, run_id: str) -> None:
+-        """Set the run_id after construction (caller convenience)."""
+         self._run_id = run_id
+ 
+     async def on_fill(self, result: Any) -> None:
+-        """PaperBroker fill callback. Handles FILLED only; non-fills emit no Trade."""
+         if result.filled_quantity is None or result.filled_quantity <= 0:
+             self._upsert_order_status(result)  # still mirror status (CANCELLED/EXPIRED)
+             return
+@@ -246,7 +255,6 @@ class BacktestResultCollector:
+         exit_price: float,
+         exit_time: datetime,
+     ) -> None:
+-        """Emit one Trade per consumed lot (closes round-trips), update equity."""
+         for consumed in outcome.consumed:
+             pnl = self._consumed_pnl(consumed, exit_price)
+             self._current_equity += pnl
+@@ -288,6 +296,68 @@ class BacktestResultCollector:
+             EquityPoint(timestamp=timestamp, equity=self._current_equity, drawdown=drawdown)
+         )
+ 
++    def mark_to_market(self, timestamp: datetime, total_equity: float) -> None:
++        """Append a per-bar mark-to-market equity point — READ-ONLY accounting.
++
++        ``total_equity`` is ``broker.get_balance().total_equity`` (realized
++        balance + unrealized PnL), the broker's single source of truth. This
++        feeds the per-bar return series Sharpe/Sortino annualize. It MUST NOT
++        touch ``self._current_equity`` — that stays realized-only so
++        ``total_return``/``cagr`` are unaffected. Drawdown here is marked against
++        a separate MTM peak so the persisted curve's drawdown reflects unrealized
++        swings without polluting realized accounting.
++
++        Points carrying a trade (fill/exit, recorded via ``_record_equity_point``)
++        are preserved at persist time; MTM points fill the gaps for even
++        sampling.
++        """
++        self._mtm_curve.append(
++            EquityPoint(timestamp=timestamp, equity=total_equity, drawdown=0.0)
++        )
++
++    def _downsample_equity_curve(self) -> list[EquityPoint]:
++        """Curve to persist: per-bar MTM series (with drawdown), hard-capped at 5000.
++
++        Uses the MTM curve when present (even per-bar sampling FE plots),
++        otherwise the realized curve. Drawdown is recomputed across the chosen
++        source. When the source exceeds the cap it is strided down while
++        preferentially keeping trade-carrying timestamps (the equity break
++        points). The result is then hard-sliced to the cap so the persisted doc
++        can never exceed Mongo's size budget even with very many trades.
++        """
++        source = self._mtm_curve if self._mtm_curve else self._equity_curve
++        with_dd = self._with_drawdown(source)
++        if len(with_dd) <= _MAX_PERSISTED_EQUITY_POINTS:
++            return with_dd
++
++        trade_timestamps = {p.timestamp for p in self._equity_curve}
++        stride = len(with_dd) // _MAX_PERSISTED_EQUITY_POINTS + 1
++        kept: list[EquityPoint] = []
++        last = len(with_dd) - 1
++        for i, point in enumerate(with_dd):
++            if i % stride == 0 or i == last or point.timestamp in trade_timestamps:
++                kept.append(point)
++        if len(kept) <= _MAX_PERSISTED_EQUITY_POINTS:
++            return kept
++        # Trade points alone exceeded the cap — stride the kept set down too so
++        # the cap is a hard guarantee (preserve first + last).
++        final_stride = len(kept) // _MAX_PERSISTED_EQUITY_POINTS + 1
++        capped = [p for i, p in enumerate(kept) if i % final_stride == 0]
++        if capped[-1] is not kept[-1]:
++            capped.append(kept[-1])
++        return capped
++
++    @staticmethod
++    def _with_drawdown(curve: list[EquityPoint]) -> list[EquityPoint]:
++        """Return ``curve`` with drawdown recomputed against a running peak."""
++        out: list[EquityPoint] = []
++        peak = float("-inf")
++        for p in curve:
++            peak = max(peak, p.equity)
++            drawdown = (p.equity - peak) / peak if peak > 0 else 0.0
++            out.append(EquityPoint(timestamp=p.timestamp, equity=p.equity, drawdown=drawdown))
++        return out
++
+     @staticmethod
+     def _consumed_pnl(consumed: ConsumedLot, exit_price: float) -> float:
+         if consumed.lot.direction == "LONG":
+@@ -295,7 +365,6 @@ class BacktestResultCollector:
+         return (consumed.lot.entry_price - exit_price) * consumed.qty_closed
+ 
+     def _build_open_positions(self) -> list[OpenLot]:
+-        """Snapshot still-open lots at run-end as OpenLot[] for the run doc."""
+         out: list[OpenLot] = []
+         for lot in self._lot_tracker.lots:
+             if lot.qty_remaining <= 1e-12:
+@@ -328,7 +397,6 @@ class BacktestResultCollector:
+         status: str = "completed",
+         error_message: str | None = None,
+     ) -> CollectedResults:
+-        """Compute metrics + bundle Orders+Trades+slim-Run into CollectedResults."""
+         # Late-bind run_id onto stubs created before set_run_id was known.
+         if not self._run_id:
+             self._run_id = run_id
+@@ -340,6 +408,12 @@ class BacktestResultCollector:
+                     trade.run_id = run_id
+ 
+         open_positions = self._build_open_positions()
++        periods_per_year = Interval.periods_per_year_for(self._config.interval)
++        if periods_per_year is None:
++            logger.warning(
++                "unknown interval %r — skipping Sharpe/Sortino annualization",
++                self._config.interval,
++            )
+         metrics: BacktestMetrics = build_metrics(
+             closed_trades=self._trades,
+             equity_curve=self._equity_curve,
+@@ -348,7 +422,10 @@ class BacktestResultCollector:
+             total_commission=self._total_commission,
+             start_date=self._config.start_date,
+             end_date=self._config.end_date,
++            periods_per_year=periods_per_year,
++            returns_curve=self._mtm_curve or None,
+         )
++        persisted_curve = self._downsample_equity_curve()
+ 
+         config_snapshot = {
+             "strategy_code": self._config.strategy_code,
+@@ -368,7 +445,7 @@ class BacktestResultCollector:
+             strategy_code=self._config.strategy_code,
+             config_snapshot=config_snapshot,
+             metrics=metrics,
+-            equity_curve=self._equity_curve,
++            equity_curve=persisted_curve,
+             open_positions=open_positions,
+             started_at=started_at,
+             completed_at=completed_at,
+diff --git a/src/pocketquant/backtest/jobs/backtest_strategy_loader.py b/src/pocketquant/backtest/jobs/backtest_strategy_loader.py
+index 12dc5f3..84a6d8f 100644
+--- a/src/pocketquant/backtest/jobs/backtest_strategy_loader.py
++++ b/src/pocketquant/backtest/jobs/backtest_strategy_loader.py
+@@ -1,21 +1,15 @@
+-"""Helpers for backtest_jobs.py — build BacktestConfig and inject strategy into engine.
+-
+-Extracted to keep backtest_jobs.py under 200 lines. Not intended for use outside jobs/.
+-"""
+-
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
+ 
++from pocketquant.backtest.engine.backtest_engine_sandbox import BacktestSandbox
+ from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+ from pocketquant.core.common.logging import get_logger
+-from pocketquant.core.common.messaging import EventBus
+ from pocketquant.core.domain.shared.enums import Interval
+ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+ from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+ from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+ from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+ 
+ logger = get_logger(__name__)
+ 
+@@ -67,24 +61,25 @@ def build_backtest_config(
+     )
+ 
+ 
+-async def load_strategy_for_backtest(
+-    strategy_app_service: StrategyAppService,
++async def inject_strategy_into_sandbox(
++    sandbox: BacktestSandbox,
+     base_config: StrategyConfig,
+     strategy_id: str,
+     sub_id: str,
+     symbol: str,
+     interval: str,
+-    event_bus: EventBus | None = None,
+-) -> tuple[PaperBroker, str]:
+-    """Resolve strategy class, create instance, inject into StrategyAppService.
++    initial_capital: float = 10_000.0,
++) -> PaperBroker:
++    """Resolve strategy class, build its broker, inject into the sandbox engine.
+ 
+     ``symbol`` is composite ``{code}:{exchange}``.
+ 
+-    Uses a synthetic strategy_id scoped to this subscription so concurrent jobs
+-    never clobber each other and the user's live strategy entry is untouched.
++    Uses a synthetic strategy_id scoped to this subscription so the user's live
++    strategy entry is untouched. The sandbox owns its EventBus, so the broker and
++    strategy are isolated from the live engine and from other concurrent runs.
+ 
+-    Returns (broker, synthetic_id) so the caller can pass broker to BacktestAppService
+-    and later call unload_strategy(synthetic_id) for cleanup.
++    Returns the run's PaperBroker (wired to the sandbox bus). Cleanup happens via
++    ``sandbox.aclose()``.
+ 
+     Raises ValueError if strategy_id is not in STRATEGY_REGISTRY.
+     """
+@@ -95,7 +90,6 @@ async def load_strategy_for_backtest(
+             f"Available: {list(STRATEGY_REGISTRY.keys())}"
+         )
+ 
+-    # Unique per-job id — prevents concurrent jobs from clobbering each other
+     synthetic_id = f"{strategy_id}::bt::{sub_id}"
+ 
+     bt_strategy_cfg = StrategyConfig(
+@@ -108,15 +102,10 @@ async def load_strategy_for_backtest(
+         parameters=dict(base_config.parameters) if base_config.parameters else {},
+     )
+ 
+-    broker = PaperBroker(initial_balance=10_000.0, event_bus=event_bus)
++    broker = sandbox.create_broker(initial_balance=initial_capital)
+     strategy_instance = strategy_class(bt_strategy_cfg)
+-
+-    # Clean up any stale run for this synthetic id (e.g. previous failed cleanup)
+-    if strategy_app_service.get_strategy(synthetic_id) is not None:
+-        await strategy_app_service.unload_strategy(synthetic_id)
+-
+-    await strategy_app_service.inject_prepared_strategy(
++    await sandbox.strategy_app_service.inject_prepared_strategy(
+         synthetic_id, strategy_instance, broker, bt_strategy_cfg
+     )
+ 
+-    return broker, synthetic_id
++    return broker
+diff --git a/src/pocketquant/backtest/optimization/grid_optimization_app_service.py b/src/pocketquant/backtest/optimization/grid_optimization_app_service.py
+index bfc9ae8..d3cccbc 100644
+--- a/src/pocketquant/backtest/optimization/grid_optimization_app_service.py
++++ b/src/pocketquant/backtest/optimization/grid_optimization_app_service.py
+@@ -5,10 +5,11 @@ from typing import Any
+ from uuid import UUID
+ 
+ from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
++from pocketquant.backtest.engine.backtest_engine_sandbox import build_backtest_sandbox
++from pocketquant.backtest.jobs.backtest_strategy_loader import inject_strategy_into_sandbox
+ from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+ from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
+ from pocketquant.core.common.logging import get_logger
+-from pocketquant.core.common.messaging import EventBus
+ from pocketquant.core.common.uuid import generate_id
+ from pocketquant.core.domain.backtest import (
+     BacktestMetrics,
+@@ -16,7 +17,7 @@ from pocketquant.core.domain.backtest import (
+     OptimizationResult,
+     OptimizationResultEntry,
+ )
+-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
++from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+ from pocketquant.core.infra.persistence.repositories.backtest_repository import (
+     BacktestRepository,
+ )
+@@ -37,18 +38,19 @@ class GridOptimizationAppService:
+     - Results ranked by configurable target metric
+     - Memory efficient - doesn't store full equity curves in optimization result
+ 
++    Each combination runs in its own sandbox (isolated EventBus +
++    StrategyAppService), so concurrent runs never share a bus.
++
+     Usage:
+-        optimizer = GridOptimizationAppService(event_bus, backtest_repo, bar_repo)
++        optimizer = GridOptimizationAppService(backtest_repo, bar_repo)
+         result = await optimizer.optimize(config)
+     """
+ 
+     def __init__(
+         self,
+-        event_bus: EventBus,
+         backtest_repository: BacktestRepository,
+         bar_repository: BarRepository,
+     ) -> None:
+-        self._event_bus = event_bus
+         self._backtest_repo = backtest_repository
+         self._bar_repo = bar_repository
+ 
+@@ -188,23 +190,42 @@ class GridOptimizationAppService:
+                 parameters=params,
+             )
+ 
+-            # Create fresh broker for this backtest. event_bus enables SL/TP auto-fill.
+-            broker = PaperBroker(
+-                initial_balance=config.initial_capital,
+-                slippage_percent=backtest_config.slippage_percent,
+-                event_bus=self._event_bus,
+-            )
+-
+-            # Create runner (don't persist individual results during optimization)
+-            runner = BacktestAppService(
+-                event_bus=self._event_bus,
+-                broker=broker,
+-                backtest_repository=self._backtest_repo,
+-                bar_repository=self._bar_repo,
+-                persist_results=False,  # Optimization persists summary only
++            base_config = StrategyConfig(
++                id=config.strategy_code,
++                name=config.strategy_code,
++                symbol=config.symbol,
++                interval=config.interval,
++                trigger="bar",
++                broker="paper",
++                parameters=dict(params),
+             )
+ 
+-            return await runner.run(backtest_config)
++            # Per-run sandbox: own EventBus + StrategyAppService so concurrent
++            # combinations never cross-talk on bar dispatch or fills, and the
++            # strategy actually runs (the prior code never injected one → 0 trades).
++            sandbox = await build_backtest_sandbox()
++            try:
++                broker = await inject_strategy_into_sandbox(
++                    sandbox,
++                    base_config,
++                    config.strategy_code,
++                    str(optimization_id),
++                    config.symbol,
++                    config.interval,
++                    initial_capital=config.initial_capital,
++                )
++                broker.slippage = backtest_config.slippage_percent
++
++                runner = BacktestAppService(
++                    event_bus=sandbox.event_bus,
++                    broker=broker,
++                    backtest_repository=self._backtest_repo,
++                    bar_repository=self._bar_repo,
++                    persist_results=False,  # Optimization persists summary only
++                )
++                return await runner.run(backtest_config)
++            finally:
++                await sandbox.aclose()
+ 
+     def _generate_combinations(self, parameter_grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
+         if not parameter_grid:
+@@ -224,7 +245,6 @@ class GridOptimizationAppService:
+         results: list[tuple[dict[str, Any], BacktestResult]],
+         target_metric: str,
+     ) -> list[tuple[dict[str, Any], BacktestResult]]:
+-        """Rank results by target metric (descending - higher is better)."""
+         return sorted(
+             results,
+             key=lambda x: getattr(x[1].metrics, target_metric, 0),
+diff --git a/src/pocketquant/backtest/workers/backtest_dispatch.py b/src/pocketquant/backtest/workers/backtest_dispatch.py
+index 3508b8e..4830893 100644
+--- a/src/pocketquant/backtest/workers/backtest_dispatch.py
++++ b/src/pocketquant/backtest/workers/backtest_dispatch.py
+@@ -13,18 +13,20 @@ from datetime import date
+ from typing import Any
+ 
+ from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
++from pocketquant.backtest.engine.backtest_engine_sandbox import (
++    BacktestSandbox,
++    build_backtest_sandbox,
++)
+ from pocketquant.backtest.jobs.backtest_strategy_loader import (
+     build_backtest_config,
+-    load_strategy_for_backtest,
++    inject_strategy_into_sandbox,
+     resolve_date_range,
+ )
+ from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+ from pocketquant.core.common.logging import get_logger
+-from pocketquant.core.common.messaging import EventBus
+ from pocketquant.core.domain.backtest import BacktestResult
+ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+ from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+ from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
+     BacktestOrderRepository,
+ )
+@@ -45,19 +47,17 @@ logger = get_logger(__name__)
+ 
+ @dataclass
+ class BacktestDispatchDeps:
+-    """Injected dependencies for a dispatch call — resolved once per worker tick."""
+-
+-    event_bus: EventBus
+     bar_repo: BarRepository
+     backtest_repo: BacktestRepository
+     order_repo: BacktestOrderRepository
+     trade_repo: BacktestTradeRepository
++    # Live engine — read-only here, for the user's per-subscription StrategyConfig
++    # (parameters) lookup. Backtests run in their own sandbox, never on this engine.
+     strategy_app_service: StrategyAppService
+     subscription_repo: SubscriptionRepository
+ 
+ 
+ def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
+-    """Rebuild a BacktestConfig from the serialized request payload."""
+     return BacktestConfig(
+         strategy_code=payload["strategy_code"],
+         symbol=payload["symbol"],
+@@ -92,9 +92,9 @@ def config_to_dict(cmd: dict[str, Any]) -> dict[str, Any]:
+ async def run_single(deps: BacktestDispatchDeps, config_payload: dict[str, Any]) -> BacktestResult:
+     """Execute one ad-hoc backtest and persist results to backtest_* collections.
+ 
+-    Mirrors the former synchronous RunBacktestHandler: a fresh PaperBroker wired
+-    to the event bus (so SL/TP auto-fill on BarCompletedEvent), the strategy
+-    injected under its own id, run, then unloaded in finally so it never lingers.
++    Runs in an isolated sandbox (own EventBus + StrategyAppService) so replayed
++    bars and synthetic exit fills never reach the live execution engine, and the
++    strategy is injected under its own id then torn down with the sandbox.
+     """
+     config = _config_from_dict(config_payload)
+ 
+@@ -115,23 +115,19 @@ async def run_single(deps: BacktestDispatchDeps, config_payload: dict[str, Any])
+         parameters={**config.parameters},
+     )
+ 
+-    broker = PaperBroker(
+-        initial_balance=config.initial_capital,
+-        slippage_percent=config.slippage_percent,
+-        event_bus=deps.event_bus,
+-    )
+-
+-    strategy_instance = strategy_class(strategy_cfg)
+-    sid = strategy_instance.id
+-    if deps.strategy_app_service.get_strategy(sid) is not None:
+-        await deps.strategy_app_service.unload_strategy(sid)
+-    await deps.strategy_app_service.inject_prepared_strategy(
+-        sid, strategy_instance, broker, strategy_instance.config
+-    )
+-
++    sandbox = await build_backtest_sandbox()
+     try:
++        broker = sandbox.create_broker(
++            initial_balance=config.initial_capital,
++            slippage_percent=config.slippage_percent,
++        )
++        strategy_instance = strategy_class(strategy_cfg)
++        await sandbox.strategy_app_service.inject_prepared_strategy(
++            strategy_instance.id, strategy_instance, broker, strategy_instance.config
++        )
++
+         runner = BacktestAppService(
+-            event_bus=deps.event_bus,
++            event_bus=sandbox.event_bus,
+             broker=broker,
+             backtest_repository=deps.backtest_repo,
+             bar_repository=deps.bar_repo,
+@@ -140,7 +136,7 @@ async def run_single(deps: BacktestDispatchDeps, config_payload: dict[str, Any])
+         )
+         return await runner.run(config)
+     finally:
+-        await deps.strategy_app_service.unload_strategy(sid)
++        await sandbox.aclose()
+ 
+ 
+ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
+@@ -151,11 +147,12 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
+     cache that FE polls at ``/subscriptions/{id}/backtest``.
+ 
+     Preserves the prior job's safety properties:
+-      - synthetic_id scoped per subscription so concurrent runs never clobber;
++      - synthetic_id scoped per subscription so the user's live strategy is
++        untouched;
+       - TOCTOU re-check before writing results (subscription may be deleted
+         mid-run);
+-      - synthetic instance unloaded in finally — the user's live strategy is
+-        untouched.
++      - the sandbox (own EventBus + engine) is torn down in finally, so the run
++        is isolated from the live engine and from concurrent runs.
+     """
+     sub = await deps.subscription_repo.get(sub_id)
+     if sub is None:
+@@ -168,13 +165,13 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
+ 
+     await deps.backtest_repo.upsert_status(sub_id, strategy_code=strategy_code, status="running")
+ 
+-    synthetic_id: str | None = None
++    sandbox: BacktestSandbox | None = None
+     try:
+         # Config lookup falls back across the three keyspaces a restart can
+         # leave us in: a template-keyed config (explicit load, carries user
+         # parameters) → the sub-keyed config rehydrate/reconcile register →
+         # a bare default (strategy-class parameter defaults apply). Unknown
+-        # templates still fail in load_strategy_for_backtest's registry check.
++        # templates still fail in inject_strategy_into_sandbox's registry check.
+         base_config = deps.strategy_app_service.get_config(
+             strategy_code
+         ) or deps.strategy_app_service.get_config(sub_id)
+@@ -191,18 +188,19 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
+             base_config, strategy_code, symbol, interval, start_date, end_date
+         )
+ 
+-        broker, synthetic_id = await load_strategy_for_backtest(
+-            deps.strategy_app_service,
++        sandbox = await build_backtest_sandbox()
++        broker = await inject_strategy_into_sandbox(
++            sandbox,
+             base_config,
+             strategy_code,
+             sub_id,
+             symbol,
+             interval,
+-            event_bus=deps.event_bus,
++            initial_capital=config.initial_capital,
+         )
+ 
+         runner = BacktestAppService(
+-            event_bus=deps.event_bus,
++            event_bus=sandbox.event_bus,
+             broker=broker,
+             backtest_repository=deps.backtest_repo,
+             bar_repository=deps.bar_repo,
+@@ -244,13 +242,5 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
+         raise
+ 
+     finally:
+-        if synthetic_id is not None:
+-            try:
+-                await deps.strategy_app_service.unload_strategy(synthetic_id)
+-            except Exception as cleanup_exc:
+-                logger.warning(
+-                    "backtest_dispatch.cleanup_failed",
+-                    sub_id=sub_id,
+-                    synthetic_id=synthetic_id,
+-                    error=str(cleanup_exc),
+-                )
++        if sandbox is not None:
++            await sandbox.aclose()
+diff --git a/src/pocketquant/core/domain/shared/enums.py b/src/pocketquant/core/domain/shared/enums.py
+index ae21cdf..3a36bbe 100644
+--- a/src/pocketquant/core/domain/shared/enums.py
++++ b/src/pocketquant/core/domain/shared/enums.py
+@@ -1,11 +1,19 @@
+-"""Shared enums for the domain layer."""
+-
+ from enum import Enum
+ 
++# Crypto trades every calendar day, so a year is 365 days for annualization.
++_DAYS_PER_YEAR = 365
++_PERIODS_PER_YEAR: dict[str, float] = {
++    "1m": _DAYS_PER_YEAR * 24 * 60,  # 525600
++    "5m": _DAYS_PER_YEAR * 24 * 12,  # 105120
++    "15m": _DAYS_PER_YEAR * 24 * 4,  # 35040
++    "1h": _DAYS_PER_YEAR * 24,  # 8760
++    "4h": _DAYS_PER_YEAR * 6,  # 2190
++    "1d": _DAYS_PER_YEAR,  # 365
++    "1w": _DAYS_PER_YEAR / 7,  # 52.142857...
++}
+ 
+-class Interval(str, Enum):
+-    """Time interval for OHLCV bars."""
+ 
++class Interval(str, Enum):
+     MINUTE_1 = "1m"
+     MINUTE_5 = "5m"
+     MINUTE_15 = "15m"
+@@ -13,3 +21,20 @@ class Interval(str, Enum):
+     HOUR_4 = "4h"
+     DAY_1 = "1d"
+     WEEK_1 = "1w"
++
++    @property
++    def periods_per_year(self) -> float:
++        """Number of bars of this interval in one calendar year (crypto, 365d).
++
++        Used to annualize per-bar return statistics (Sharpe/Sortino).
++        """
++        return _PERIODS_PER_YEAR[self.value]
++
++    @staticmethod
++    def periods_per_year_for(interval: str) -> float | None:
++        """Safe lookup by raw string; returns None for an unknown interval.
++
++        Annualization callers skip scaling (Sharpe=0) rather than raise on a
++        stale/queued request carrying an interval no longer in the enum.
++        """
++        return _PERIODS_PER_YEAR.get(interval)
+diff --git a/src/pocketquant/core/domain/strategy/interfaces.py b/src/pocketquant/core/domain/strategy/interfaces.py
+index 622923a..b08e1a5 100644
+--- a/src/pocketquant/core/domain/strategy/interfaces.py
++++ b/src/pocketquant/core/domain/strategy/interfaces.py
+@@ -1,11 +1,23 @@
+-"""Strategy interface - base class for all trading strategies."""
+-
+ from abc import ABC, abstractmethod
++from typing import Protocol
+ 
+-from pocketquant.core.domain.order import OrderAggregate
++from pocketquant.core.domain.order import OrderAggregate, OrderSide
+ from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
+ 
+ 
++class FilledOrder(Protocol):
++    """Structural type for ``on_order_filled``: any fill carrying a ``side``.
++
++    Both ``OrderAggregate`` and ``OrderFilledEvent`` satisfy it, so the fill
++    handler accepts either without coupling the strategy contract to the
++    OrderFilledEvent routing. Declared read-only so a frozen-dataclass event
++    (``OrderFilledEvent``) matches alongside the mutable ``OrderAggregate``.
++    """
++
++    @property
++    def side(self) -> OrderSide: ...
++
++
+ class IStrategy(ABC):
+     """Abstract base class for trading strategies.
+ 
+@@ -15,8 +27,8 @@ class IStrategy(ABC):
+     Lifecycle:
+         1. __init__(config) - Initialize with configuration
+         2. on_start() - Called when strategy starts
+-        3. on_bar()/on_tick() - Called on market data
+-        4. on_fill() - Called when orders are filled
++        3. on_bar_completed()/on_quote_received() - Called on market data
++        4. on_order_filled() - Called when orders are filled
+         5. on_stop() - Called when strategy stops
+     """
+ 
+@@ -27,19 +39,16 @@ class IStrategy(ABC):
+ 
+     @property
+     def is_running(self) -> bool:
+-        """Check if strategy is currently running."""
+         return self._is_running
+ 
+     async def on_start(self) -> None:
+-        """Called when strategy starts. Override for initialization."""
+         self._is_running = True
+ 
+     async def on_stop(self) -> None:
+-        """Called when strategy stops. Override for cleanup."""
+         self._is_running = False
+ 
+     @abstractmethod
+-    async def on_bar(self, bar: dict) -> Signal | None:
++    async def on_bar_completed(self, bar: dict) -> Signal | None:
+         """Process completed bar, return signal if entry/exit.
+ 
+         Args:
+@@ -50,7 +59,7 @@ class IStrategy(ABC):
+         """
+         ...
+ 
+-    async def on_tick(self, tick: dict) -> OrderAggregate | None:
++    async def on_quote_received(self, tick: dict) -> OrderAggregate | None:
+         """Process tick for intra-bar adjustments (optional).
+ 
+         Override this for tick-triggered strategies or for managing
+@@ -64,17 +73,18 @@ class IStrategy(ABC):
+         """
+         return None
+ 
+-    async def on_fill(self, order: OrderAggregate, fill_price: float) -> None:
++    async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
+         """Called when an order is filled (optional).
+ 
+-        Override to update internal state after fills.
++        Override to update internal state after fills. ``order`` is structural:
++        the OrderFilledEvent handler passes the event itself, which carries the
++        ``.side`` the strategy needs to detect a round-trip close.
+ 
+         Args:
+-            order: The filled order
++            order: The filled order (anything with ``.side: OrderSide``)
+             fill_price: Actual fill price
+         """
+         pass
+ 
+     def get_parameter(self, key: str, default: object = None) -> object:
+-        """Get strategy parameter from config."""
+         return self.config.parameters.get(key, default)
+diff --git a/src/pocketquant/core/domain/strategy/services/hitnrun2.py b/src/pocketquant/core/domain/strategy/services/hitnrun2.py
+index 2f90a4e..840347d 100644
+--- a/src/pocketquant/core/domain/strategy/services/hitnrun2.py
++++ b/src/pocketquant/core/domain/strategy/services/hitnrun2.py
+@@ -12,8 +12,9 @@ SL/TP per side are the **looser** of the technical level and the account cap:
+     SHORT SL = MIN( max(prev_highs[-sl_lookback:]), entry * (1 + max_loss_pct) )
+     SHORT TP = MIN( min(prev_lows[-tp_lookback:]),  entry * (1 - min_profit_pct) )
+ 
+-At most one open position. State is reset by ``on_fill`` when an opposite-side
+-fill closes the open direction; the PaperBroker SL/TP auto-fill drives this.
++At most one open position. State is reset by ``on_order_filled`` when an
++opposite-side fill closes the open direction; the PaperBroker SL/TP auto-fill
++drives this.
+ """
+ 
+ from __future__ import annotations
+@@ -22,9 +23,9 @@ from collections import deque
+ from datetime import UTC, datetime
+ from typing import Any
+ 
+-from pocketquant.core.domain.order import OrderAggregate, OrderSide
++from pocketquant.core.domain.order import OrderSide
+ from pocketquant.core.domain.strategy.enums import Direction
+-from pocketquant.core.domain.strategy.interfaces import IStrategy
++from pocketquant.core.domain.strategy.interfaces import FilledOrder, IStrategy
+ from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
+ 
+ _DEFAULTS = {
+@@ -38,8 +39,6 @@ _DEFAULTS = {
+ 
+ 
+ class HitNRun2Strategy(IStrategy):
+-    """1m breakdown/breakup strategy with capped technical SL/TP."""
+-
+     def __init__(self, config: StrategyConfig) -> None:
+         super().__init__(config)
+         p = config.parameters or {}
+@@ -70,7 +69,7 @@ class HitNRun2Strategy(IStrategy):
+         self._closes.clear()
+         self._open_direction = None
+ 
+-    async def on_bar(self, bar: dict) -> Signal | None:
++    async def on_bar_completed(self, bar: dict) -> Signal | None:
+         high = float(bar["high"])
+         low = float(bar["low"])
+         close = float(bar["close"])
+@@ -113,7 +112,7 @@ class HitNRun2Strategy(IStrategy):
+ 
+         return None
+ 
+-    async def on_fill(self, order: OrderAggregate, fill_price: float) -> None:
++    async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
+         """Reset open-direction when the broker closes our position.
+ 
+         Broker SL/TP auto-fill emits the opposite side (SELL closes LONG,
+diff --git a/src/pocketquant/core/infra/brokers/paper/paper_broker.py b/src/pocketquant/core/infra/brokers/paper/paper_broker.py
+index c05f706..3b1668e 100644
+--- a/src/pocketquant/core/infra/brokers/paper/paper_broker.py
++++ b/src/pocketquant/core/infra/brokers/paper/paper_broker.py
+@@ -44,7 +44,13 @@ from pocketquant.core.domain.brokers.events import (
+ )
+ from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
+ from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
+-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
++from pocketquant.core.domain.order import (
++    OrderAggregate,
++    OrderFilledEvent,
++    OrderSide,
++    OrderStatus,
++    OrderType,
++)
+ from pocketquant.core.domain.position import PositionAggregate, PositionSide
+ 
+ # STOP_LIMIT / STOP_MARKET share the LIMIT pending path until real STOP
+@@ -132,7 +138,6 @@ class PaperBroker(IBroker):
+         self._slippage = value
+ 
+     async def connect(self) -> None:
+-        """Paper broker is always ready. Subscribes to bar events for SL/TP auto-fill."""
+         self._connected = True
+         if self._event_bus is not None and not self._bar_subscribed:
+             # Subscribe LAST so strategy handlers fire first (entry on same bar before exit check).
+@@ -174,7 +179,6 @@ class PaperBroker(IBroker):
+     async def _handle_market(
+         self, order: OrderAggregate, broker_order_id: str, now: datetime
+     ) -> tuple[OrderResult, list[tuple[OrderStatus | None, OrderStatus, str, datetime]]]:
+-        """Fill MARKET immediately, or REJECT. Returns (result, additional_events)."""
+         async with self._lock:
+             self._orders[str(order.id)] = order
+             try:
+@@ -230,7 +234,6 @@ class PaperBroker(IBroker):
+     async def _handle_limit(
+         self, order: OrderAggregate, broker_order_id: str, now: datetime
+     ) -> tuple[OrderResult, list[tuple[OrderStatus | None, OrderStatus, str, datetime]]]:
+-        """Fill LIMIT immediately if price crosses; else queue as pending."""
+         async with self._lock:
+             self._orders[str(order.id)] = order
+             if order.price is None:
+@@ -457,15 +460,20 @@ class PaperBroker(IBroker):
+         position_key = f"{order.subscription_id}:{order.symbol}"
+         order_value = fill_price * order.quantity
+ 
++        # A closed position lingers in the dict under its key; a re-entry fill
++        # must open a fresh position rather than mutate the closed one (which
++        # raises). Treat closed as absent so round-trip → re-entry works.
++        existing = self._positions.get(position_key)
++        live = existing if existing is not None and not existing.is_closed else None
++
+         if order.side == OrderSide.BUY:
+             self._balance -= order_value
+-            if position_key in self._positions:
+-                pos = self._positions[position_key]
+-                if pos.side == PositionSide.LONG:
+-                    pos.add_quantity(order.quantity, fill_price)
++            if live is not None:
++                if live.side == PositionSide.LONG:
++                    live.add_quantity(order.quantity, fill_price)
+                 else:
+-                    pos.reduce_quantity(order.quantity, fill_price)
+-                    self._balance += pos.realized_pnl
++                    live.reduce_quantity(order.quantity, fill_price)
++                    self._balance += live.realized_pnl
+             else:
+                 self._positions[position_key] = PositionAggregate.open(
+                     subscription_id=order.subscription_id,
+@@ -478,13 +486,12 @@ class PaperBroker(IBroker):
+                 )
+         else:  # SELL
+             self._balance += order_value
+-            if position_key in self._positions:
+-                pos = self._positions[position_key]
+-                if pos.side == PositionSide.LONG:
+-                    pos.reduce_quantity(order.quantity, fill_price)
+-                    self._balance += pos.realized_pnl
++            if live is not None:
++                if live.side == PositionSide.LONG:
++                    live.reduce_quantity(order.quantity, fill_price)
++                    self._balance += live.realized_pnl
+                 else:
+-                    pos.add_quantity(order.quantity, fill_price)
++                    live.add_quantity(order.quantity, fill_price)
+             else:
+                 self._positions[position_key] = PositionAggregate.open(
+                     subscription_id=order.subscription_id,
+@@ -528,7 +535,7 @@ class PaperBroker(IBroker):
+             raise errors[0]
+ 
+     async def _notify_callbacks(self, result: OrderResult) -> None:
+-        """Notify all fill-result callbacks. First raised error re-raised after dispatch."""
++        # Dispatch to every callback even if one raises; re-raise the first error after.
+         errors: list[Exception] = []
+         for callback in self._order_callbacks:
+             try:
+@@ -569,7 +576,6 @@ class PaperBroker(IBroker):
+             await self._fire_synthetic_exit(pos, exit_price, exit_side, reason)
+ 
+     async def _fill_pending_on_bar(self, event: BarCompletedEvent) -> None:
+-        """Scan pending LIMITs against this bar's range; fill any that cross."""
+         to_fill: list[_PendingOrder] = []
+         async with self._lock:
+             for pending in list(self._pending_orders.values()):
+@@ -623,7 +629,7 @@ class PaperBroker(IBroker):
+     def _check_sl_tp(
+         self, pos: PositionAggregate, bar_high: float, bar_low: float
+     ) -> tuple[float, OrderSide, str] | None:
+-        """Return (trigger_price, exit_side, reason) if SL/TP fires; SL wins ties."""
++        # SL checked before TP so SL wins when a single bar straddles both levels.
+         sl, tp = pos.sl_price, pos.tp_price
+         if pos.side == PositionSide.LONG:
+             if sl is not None and bar_low <= sl:
+@@ -644,7 +650,6 @@ class PaperBroker(IBroker):
+         exit_side: OrderSide,
+         reason: str,
+     ) -> None:
+-        """Build a synthetic market exit + emit SUBMITTED→FILLED event pair."""
+         fill_price = self._apply_slippage(trigger_price, exit_side)
+         exit_order = OrderAggregate.create(
+             subscription_id=pos.subscription_id,
+@@ -677,9 +682,22 @@ class PaperBroker(IBroker):
+             str(exit_order.id), OrderStatus.SUBMITTED, OrderStatus.FILLED, reason, when=now
+         )
+         await self._notify_callbacks(result)
++        # Synthetic exits never pass through order_app_service, so publish the
++        # fill here too — the strategy's on_order_filled reset depends on this
++        # opposite-side exit event. Entry fills already publish via submit().
++        if self._event_bus is not None:
++            await self._event_bus.publish(
++                OrderFilledEvent(
++                    order_id=str(exit_order.id),
++                    subscription_id=pos.subscription_id,
++                    symbol=pos.symbol,
++                    side=exit_side,
++                    filled_quantity=exit_order.quantity,
++                    filled_price=fill_price,
++                )
++            )
+ 
+     def reset(self) -> None:
+-        """Reset broker to initial state (for backtesting)."""
+         self._balance = self._initial_balance
+         self._positions.clear()
+         self._orders.clear()
+diff --git a/src/pocketquant/engine/app_services/order_app_service.py b/src/pocketquant/engine/app_services/order_app_service.py
+index 8088c35..924a3e5 100644
+--- a/src/pocketquant/engine/app_services/order_app_service.py
++++ b/src/pocketquant/engine/app_services/order_app_service.py
+@@ -55,6 +55,12 @@ class OrderAppService:
+                     order.broker_order_id = result.broker_order_id
+ 
+                     if result.status == OrderStatus.FILLED:
++                        # An immediate fill still has to pass through SUBMITTED:
++                        # the state machine forbids PENDING→FILLED directly, so
++                        # without this the fill raised and the order was wrongly
++                        # rejected (entry OrderFilledEvent never published).
++                        if order.status == OrderStatus.PENDING:
++                            order.submit(result.broker_order_id)
+                         order.fill(result.filled_quantity, result.filled_price or 0.0)
+ 
+                         self._orders[str(order.id)] = order
+@@ -199,7 +205,6 @@ class OrderAppService:
+                 self._pending.pop(result.order_id, None)
+ 
+     async def load_pending_orders(self) -> None:
+-        """Load pending orders from database on startup."""
+         pending = await self._order_repo.find_pending()
+         async with self._lock:
+             for order in pending:
+diff --git a/src/pocketquant/engine/app_services/strategy_app_service.py b/src/pocketquant/engine/app_services/strategy_app_service.py
+index d258997..9267b8f 100644
+--- a/src/pocketquant/engine/app_services/strategy_app_service.py
++++ b/src/pocketquant/engine/app_services/strategy_app_service.py
+@@ -1,14 +1,22 @@
+-"""Strategy engine - orchestrates strategy execution and event dispatch."""
+-
+ import asyncio
+ from typing import TYPE_CHECKING
+ 
+ import structlog
+ 
+-from pocketquant.core.common.messaging import EventBus, event_handler, get_event_registry
++from pocketquant.core.common.messaging import (
++    EventBus,
++    EventRegistry,
++    event_handler,
++    get_event_registry,
++)
+ from pocketquant.core.domain.bar.events import BarCompletedEvent
+ from pocketquant.core.domain.brokers.interfaces import IBroker, IBrokerFactory
+-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
++from pocketquant.core.domain.order import (
++    OrderAggregate,
++    OrderFilledEvent,
++    OrderSide,
++    OrderType,
++)
+ from pocketquant.core.domain.quote.events import QuoteReceivedEvent
+ from pocketquant.core.domain.risk import PositionSizer
+ from pocketquant.core.domain.strategy.interfaces import IStrategy
+@@ -55,11 +63,18 @@ class StrategyAppService:
+     def is_running(self) -> bool:
+         return self._running
+ 
+-    async def start(self) -> None:
++    async def start(self, registry: EventRegistry | None = None) -> None:
++        """Subscribe handlers to the event bus and mark running.
++
++        Per-run backtest engines pass a local ``registry`` so their handler
++        bindings don't accumulate in the process-global registry across many
++        runs; the local registry (and the per-run bus it bound to) is discarded
++        when the run ends. The live engine passes nothing → global registry.
++        """
+         if self._running:
+             return
+ 
+-        registry = get_event_registry()
++        registry = registry or get_event_registry()
+         registry.register_instance(self, self._event_bus)
+         self._running = True
+ 
+@@ -229,7 +244,7 @@ class StrategyAppService:
+                     "timestamp": event.bar_start,
+                 }
+ 
+-                signal = await strategy.on_bar(bar)
++                signal = await strategy.on_bar_completed(bar)
+ 
+                 if signal:
+                     await self._process_signal(strategy, signal, event.close)
+@@ -254,7 +269,7 @@ class StrategyAppService:
+                     "timestamp": event.timestamp,
+                 }
+ 
+-                order = await strategy.on_tick(tick)
++                order = await strategy.on_quote_received(tick)
+ 
+                 if order:
+                     broker = self._brokers.get(strategy.id)
+@@ -268,6 +283,28 @@ class StrategyAppService:
+                     error=str(e),
+                 )
+ 
++    @event_handler(OrderFilledEvent)
++    async def _on_order_filled(self, event: OrderFilledEvent) -> None:
++        """Route a fill to its owning strategy by subscription_id.
++
++        ``event.subscription_id`` equals the strategy's registration key
++        (Signal.subscription_id = strategy.id propagates through Order →
++        OrderFilledEvent). The strategy uses the fill's ``side`` to reset its
++        open-direction on a round-trip close. Entry, synthetic SL/TP exit, and
++        live broker fills all flow through this one handler.
++        """
++        strategy = self._strategies.get(event.subscription_id)
++        if strategy is None or not strategy.is_running:
++            return
++        try:
++            await strategy.on_order_filled(event, event.filled_price)
++        except Exception as e:
++            logger.error(
++                "strategy_on_order_filled_error",
++                strategy_id=event.subscription_id,
++                error=str(e),
++            )
++
+     def _find_strategies(
+         self,
+         symbol: str,
+@@ -382,5 +419,5 @@ class StrategyAppService:
+ class _DefaultStrategy(IStrategy):
+     """Default pass-through strategy that never generates signals."""
+ 
+-    async def on_bar(self, bar: dict) -> Signal | None:
++    async def on_bar_completed(self, bar: dict) -> Signal | None:
+         return None
+diff --git a/tests/backtest_test/engine/test_hitnrun2_backtest.py b/tests/backtest_test/engine/test_hitnrun2_backtest.py
+index d8dc90d..f65ed86 100644
+--- a/tests/backtest_test/engine/test_hitnrun2_backtest.py
++++ b/tests/backtest_test/engine/test_hitnrun2_backtest.py
+@@ -22,6 +22,7 @@ from pocketquant.core.domain.bar.entities import Bar
+ from pocketquant.core.domain.brokers.interfaces import IBroker
+ from pocketquant.core.domain.order import OrderAggregate
+ from pocketquant.core.domain.position import PositionAggregate
++from pocketquant.core.domain.risk import RiskConfig
+ from pocketquant.core.domain.shared.enums import Interval
+ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+ from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+@@ -182,6 +183,33 @@ def _choppy_bars(n: int = 60, base: float = 100.0) -> list[Bar]:
+     return [_ohlcv_bar(i, o=base, h=base + 0.2, lo=base - 0.2, c=base, t0=t0) for i in range(n)]
+ 
+ 
++def _oscillating_bars(cycles: int = 4) -> list[Bar]:
++    """Repeated: new-low breakdown entry, then a bar whose HIGH pops up to hit TP.
++
++    Each cycle dips to a fresh lower low (LONG breakdown entry), then a recovery
++    bar's HIGH clears the TP so the position round-trips. Drives multiple trades
++    only if on_order_filled resets the open-direction AND the broker reopens after
++    close (Bug #1 + closed-position re-entry).
++    """
++    t0 = datetime(2026, 1, 1, tzinfo=UTC)
++    bars: list[Bar] = []
++    idx = 0
++    lvl = 100.0
++    for _ in range(25):
++        bars.append(_ohlcv_bar(idx, o=lvl, h=lvl + 0.05, lo=lvl - 0.05, c=lvl, t0=t0))
++        idx += 1
++    for cyc in range(cycles):
++        low = lvl - 1.0 - cyc * 0.5
++        bars.append(_ohlcv_bar(idx, o=lvl, h=lvl + 0.05, lo=low - 0.05, c=low, t0=t0))
++        idx += 1
++        bars.append(_ohlcv_bar(idx, o=low, h=lvl + 0.5, lo=low - 0.05, c=lvl, t0=t0))
++        idx += 1
++        for _ in range(3):
++            bars.append(_ohlcv_bar(idx, o=lvl, h=lvl + 0.05, lo=lvl - 0.05, c=lvl, t0=t0))
++            idx += 1
++    return bars
++
++
+ async def _run_backtest(
+     bars: list[Bar],
+     direction: str,
+@@ -190,6 +218,7 @@ async def _run_backtest(
+     tp_lookback: int = 5,
+     max_loss_pct: float = 0.01,
+     min_profit_pct: float = 0.005,
++    max_exposure_percent: float | None = None,
+ ) -> tuple[BacktestResult, PaperBroker, StrategyAppService]:
+     """Wire pipeline and return result + handles for assertion."""
+     bus = EventBus()
+@@ -219,6 +248,7 @@ async def _run_backtest(
+     await strategy_svc.start()
+ 
+     strategy_cls = STRATEGY_REGISTRY["hitnrun2"]
++    risk = RiskConfig(max_exposure_percent=max_exposure_percent) if max_exposure_percent else None
+     strategy_cfg = StrategyConfig(
+         id="hitnrun2",
+         name="hitnrun2",
+@@ -234,6 +264,7 @@ async def _run_backtest(
+             "min_profit_pct": min_profit_pct,
+             "direction": direction,
+         },
++        risk=risk or RiskConfig(),
+     )
+     strategy = strategy_cls(strategy_cfg)
+ 
+@@ -287,3 +318,41 @@ async def test_backtest_no_trades_on_choppy_market() -> None:
+     assert result.status == "completed", result.error_message
+     assert result.metrics.total_trades == 0
+     assert (await broker.get_positions()) == []
++
++
++async def test_backtest_multi_trade_after_fill_reset() -> None:
++    """Bug #1: with on_order_filled reset wired, repeated round-trips → many trades.
++
++    Before the fix, the strategy's open-direction never reset → at most 1 trade.
++    Uses a wide max_exposure RiskConfig so the one-position cap (not risk) governs.
++    """
++    bars = _oscillating_bars(cycles=4)
++    result, broker, _ = await _run_backtest(
++        bars,
++        direction="long",
++        max_loss_pct=0.05,
++        min_profit_pct=0.002,
++        max_exposure_percent=1.0,
++    )
++    assert result.status == "completed", result.error_message
++    assert result.metrics.total_trades > 1
++    assert (await broker.get_positions()) == []
++
++
++async def test_backtest_sharpe_bounded_and_realized_metrics_present() -> None:
++    """Per-bar MTM annualization yields a finite Sharpe; realized metrics intact."""
++    bars = _oscillating_bars(cycles=4)
++    result, _, _ = await _run_backtest(
++        bars,
++        direction="long",
++        max_loss_pct=0.05,
++        min_profit_pct=0.002,
++        max_exposure_percent=1.0,
++    )
++    m = result.metrics
++    # Sharpe is finite (not NaN/inf) — annualization used a valid periods_per_year.
++    assert m.sharpe_ratio == m.sharpe_ratio  # not NaN
++    assert abs(m.sharpe_ratio) != float("inf")
++    # Realized metrics computed from the trade-keyed curve.
++    assert m.total_trades > 1
++    assert m.max_drawdown <= 0.0
+diff --git a/tests/core_test/infra/brokers/test_paper_broker_sl_tp_fill.py b/tests/core_test/infra/brokers/test_paper_broker_sl_tp_fill.py
+index b6af028..0bd1802 100644
+--- a/tests/core_test/infra/brokers/test_paper_broker_sl_tp_fill.py
++++ b/tests/core_test/infra/brokers/test_paper_broker_sl_tp_fill.py
+@@ -8,7 +8,13 @@ import pytest
+ 
+ from pocketquant.core.common.messaging import EventBus
+ from pocketquant.core.domain.bar.events import BarCompletedEvent
+-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
++from pocketquant.core.domain.order import (
++    OrderAggregate,
++    OrderFilledEvent,
++    OrderSide,
++    OrderStatus,
++    OrderType,
++)
+ from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+ 
+ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
+@@ -191,3 +197,60 @@ async def test_disconnect_unsubscribes() -> None:
+     await bus.publish(_bar_event(high=99.0, low=97.0, close=98.5))
+     positions = await b.get_positions()
+     assert len(positions) == 1  # still open
++
++
++async def test_synthetic_exit_publishes_order_filled_event() -> None:
++    """SL/TP synthetic exit publishes OrderFilledEvent carrying sub_id + side.
++
++    The strategy's on_order_filled reset depends on this exit event reaching the
++    bus (entry fills publish via order_app_service; synthetic exits do not).
++    """
++    b, bus = await _broker()
++    assert bus is not None
++    events: list[OrderFilledEvent] = []
++    bus.subscribe(OrderFilledEvent, lambda e: events.append(e))
++    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))  # subscription_id="t"
++    await bus.publish(_bar_event(high=99.0, low=97.0, close=98.5))  # hits SL
++
++    assert len(events) == 1
++    ev = events[0]
++    assert ev.subscription_id == "t"
++    assert ev.side == OrderSide.SELL  # opposite of the LONG entry
++    assert ev.filled_price == pytest.approx(98.0)
++
++
++async def test_reentry_after_close_opens_fresh_position() -> None:
++    """A re-entry fill after the position closed must open fresh, not raise.
++
++    A closed position lingers in the broker's dict under its key; without the
++    closed-position guard, the re-entry BUY raises 'Cannot add to closed
++    position' and the round-trip → re-entry loop (multi-trade) breaks.
++    """
++    b, bus = await _broker()
++    assert bus is not None
++    # Open long, then SL closes it.
++    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
++    await bus.publish(_bar_event(high=99.0, low=97.0, close=98.5))
++    assert await b.get_positions() == []
++
++    # Re-entry must succeed and open a new live position.
++    result = await b.submit_order(_order(OrderSide.BUY, price=100.0, sl=98.0, tp=104.0))
++    assert result.status == OrderStatus.FILLED
++    positions = await b.get_positions()
++    assert len(positions) == 1
++    assert positions[0].quantity == pytest.approx(1.0)
++
++
++async def test_short_reentry_after_close_opens_fresh_position() -> None:
++    """Symmetric to the long case — a SHORT re-entry after close opens fresh."""
++    b, bus = await _broker()
++    assert bus is not None
++    await b.submit_order(_order(OrderSide.SELL, sl=102.0, tp=96.0))
++    await bus.publish(_bar_event(high=103.0, low=99.0, close=102.5))  # hits SHORT SL
++    assert await b.get_positions() == []
++
++    result = await b.submit_order(_order(OrderSide.SELL, price=100.0, sl=102.0, tp=96.0))
++    assert result.status == OrderStatus.FILLED
++    positions = await b.get_positions()
++    assert len(positions) == 1
++    assert positions[0].quantity == pytest.approx(1.0)
+diff --git a/tests/core_test/unit/domain/strategy/test_hitnrun2.py b/tests/core_test/unit/domain/strategy/test_hitnrun2.py
+index 6dccf62..3224539 100644
+--- a/tests/core_test/unit/domain/strategy/test_hitnrun2.py
++++ b/tests/core_test/unit/domain/strategy/test_hitnrun2.py
+@@ -1,7 +1,7 @@
+ """Unit tests for HitNRun2Strategy.
+ 
+ Synthetic OHLCV is crafted so each test exercises a single rule branch.
+-Direct ``on_bar`` calls — no EventBus / broker plumbing needed.
++Direct ``on_bar_completed`` calls — no EventBus / broker plumbing needed.
+ """
+ 
+ from __future__ import annotations
+@@ -80,16 +80,16 @@ def _exit_order(side: OrderSide) -> OrderAggregate:
+ async def test_warmup_returns_none_until_sl_lookback_full() -> None:
+     s = await _strategy(sl=8)
+     for i in range(7):
+-        assert await s.on_bar(_bar(i)) is None
++        assert await s.on_bar_completed(_bar(i)) is None
+ 
+ 
+ async def test_long_entry_on_breakdown_below_prev_window_low() -> None:
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
+     # 8 warmup bars at base=100 -> lows=99.5
+     for i in range(8):
+-        await s.on_bar(_bar(i))
++        await s.on_bar_completed(_bar(i))
+     # Trigger bar: close 99.0 breaks below min(prev_lows[-5:]) = 99.5
+-    sig = await s.on_bar(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
++    sig = await s.on_bar_completed(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
+     assert sig is not None
+     assert sig.direction == Direction.LONG
+     assert sig.entry_price == 99.0
+@@ -98,8 +98,8 @@ async def test_long_entry_on_breakdown_below_prev_window_low() -> None:
+ async def test_short_entry_on_breakup_above_prev_window_high() -> None:
+     s = await _strategy(direction="short", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
+-    sig = await s.on_bar(_bar(8, h=101.5, lo=100.5, c=101.0, base=101.0))
++        await s.on_bar_completed(_bar(i))
++    sig = await s.on_bar_completed(_bar(8, h=101.5, lo=100.5, c=101.0, base=101.0))
+     assert sig is not None
+     assert sig.direction == Direction.SHORT
+     assert sig.entry_price == 101.0
+@@ -109,10 +109,10 @@ async def test_sl_capped_at_max_loss_pct_when_window_low_too_far() -> None:
+     """Window-min low = 50, entry=99 -> raw SL = 50, cap = 99*(1-0.01)=98.01 -> SL = 98.01."""
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3, max_loss=0.01)
+     # 8 warmup bars: first has low=50 (extreme), rest at 99.5
+-    await s.on_bar(_bar(0, h=51, lo=50, c=50.5, base=50.5))
++    await s.on_bar_completed(_bar(0, h=51, lo=50, c=50.5, base=50.5))
+     for i in range(1, 8):
+-        await s.on_bar(_bar(i))
+-    sig = await s.on_bar(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
++        await s.on_bar_completed(_bar(i))
++    sig = await s.on_bar_completed(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
+     assert sig is not None
+     assert sig.stop_loss_price == pytest.approx(99.0 * 0.99)
+ 
+@@ -120,10 +120,10 @@ async def test_sl_capped_at_max_loss_pct_when_window_low_too_far() -> None:
+ async def test_sl_uses_technical_when_within_cap() -> None:
+     """Window-min low = 98.5 within 1% cap (97.02) -> SL = 98.5."""
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3, max_loss=0.02)
+-    await s.on_bar(_bar(0, h=99.0, lo=98.5, c=98.7, base=98.7))
++    await s.on_bar_completed(_bar(0, h=99.0, lo=98.5, c=98.7, base=98.7))
+     for i in range(1, 8):
+-        await s.on_bar(_bar(i, base=99.0))
+-    sig = await s.on_bar(_bar(8, h=99.0, lo=97.5, c=98.0, base=98.0))
++        await s.on_bar_completed(_bar(i, base=99.0))
++    sig = await s.on_bar_completed(_bar(8, h=99.0, lo=97.5, c=98.0, base=98.0))
+     assert sig is not None
+     # min(prev_lows_sl) = 98.5 ; cap = 98 * 0.98 = 96.04 -> max = 98.5
+     assert sig.stop_loss_price == pytest.approx(98.5)
+@@ -133,8 +133,8 @@ async def test_tp_uses_min_profit_pct_when_window_high_too_close() -> None:
+     """Window-max high = 100.5, entry=99 -> raw TP=100.5, cap=99*1.02=100.98 -> TP=100.98."""
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3, min_profit=0.02)
+     for i in range(8):
+-        await s.on_bar(_bar(i, h=100.5, lo=99.5, c=100.0, base=100.0))
+-    sig = await s.on_bar(_bar(8, h=100.0, lo=98.5, c=99.0, base=99.0))
++        await s.on_bar_completed(_bar(i, h=100.5, lo=99.5, c=100.0, base=100.0))
++    sig = await s.on_bar_completed(_bar(8, h=100.0, lo=98.5, c=99.0, base=99.0))
+     assert sig is not None
+     assert sig.take_profit_price == pytest.approx(99.0 * 1.02)
+ 
+@@ -144,9 +144,9 @@ async def test_tp_uses_technical_when_above_min_target() -> None:
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3, min_profit=0.02)
+     # First 7 bars at base=100 ; bar idx=7 spikes high=105 so prev_highs_tp[-3:] includes 105.
+     for i in range(7):
+-        await s.on_bar(_bar(i, h=100.5, lo=99.5, c=100.0, base=100.0))
+-    await s.on_bar(_bar(7, h=105.0, lo=99.5, c=100.0, base=100.0))
+-    sig = await s.on_bar(_bar(8, h=100.0, lo=98.5, c=99.0, base=99.0))
++        await s.on_bar_completed(_bar(i, h=100.5, lo=99.5, c=100.0, base=100.0))
++    await s.on_bar_completed(_bar(7, h=105.0, lo=99.5, c=100.0, base=100.0))
++    sig = await s.on_bar_completed(_bar(8, h=100.0, lo=98.5, c=99.0, base=99.0))
+     assert sig is not None
+     assert sig.take_profit_price == pytest.approx(105.0)
+ 
+@@ -154,47 +154,47 @@ async def test_tp_uses_technical_when_above_min_target() -> None:
+ async def test_direction_long_only_skips_short_signal() -> None:
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
++        await s.on_bar_completed(_bar(i))
+     # Breakup bar — should be ignored under direction=long.
+-    assert await s.on_bar(_bar(8, h=101.5, lo=100.5, c=101.0, base=101.0)) is None
++    assert await s.on_bar_completed(_bar(8, h=101.5, lo=100.5, c=101.0, base=101.0)) is None
+ 
+ 
+ async def test_direction_short_only_skips_long_signal() -> None:
+     s = await _strategy(direction="short", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
+-    assert await s.on_bar(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0)) is None
++        await s.on_bar_completed(_bar(i))
++    assert await s.on_bar_completed(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0)) is None
+ 
+ 
+ async def test_position_cap_blocks_second_signal_while_open() -> None:
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
+-    first = await s.on_bar(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
++        await s.on_bar_completed(_bar(i))
++    first = await s.on_bar_completed(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
+     assert first is not None
+     # Next breakdown bar — must be ignored because position is open.
+-    second = await s.on_bar(_bar(9, h=98.5, lo=97.0, c=97.5, base=97.5))
++    second = await s.on_bar_completed(_bar(9, h=98.5, lo=97.0, c=97.5, base=97.5))
+     assert second is None
+ 
+ 
+ async def test_on_fill_long_close_resets_state_for_next_entry() -> None:
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
+-    await s.on_bar(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
+-    await s.on_fill(_exit_order(OrderSide.SELL), fill_price=98.5)
++        await s.on_bar_completed(_bar(i))
++    await s.on_bar_completed(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
++    await s.on_order_filled(_exit_order(OrderSide.SELL), fill_price=98.5)
+     assert s._open_direction is None
+     # Next breakdown bar — can enter again.
+-    sig = await s.on_bar(_bar(9, h=98.5, lo=97.0, c=97.5, base=97.5))
++    sig = await s.on_bar_completed(_bar(9, h=98.5, lo=97.0, c=97.5, base=97.5))
+     assert sig is not None and sig.direction == Direction.LONG
+ 
+ 
+ async def test_on_fill_short_close_resets_state() -> None:
+     s = await _strategy(direction="short", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
+-    await s.on_bar(_bar(8, h=101.5, lo=100.5, c=101.0, base=101.0))
+-    await s.on_fill(_exit_order(OrderSide.BUY), fill_price=101.5)
++        await s.on_bar_completed(_bar(i))
++    await s.on_bar_completed(_bar(8, h=101.5, lo=100.5, c=101.0, base=101.0))
++    await s.on_order_filled(_exit_order(OrderSide.BUY), fill_price=101.5)
+     assert s._open_direction is None
+ 
+ 
+@@ -202,9 +202,9 @@ async def test_on_fill_same_side_does_not_reset() -> None:
+     """A BUY-side fill while LONG (scale-in) must NOT reset _open_direction."""
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
+     for i in range(8):
+-        await s.on_bar(_bar(i))
+-    await s.on_bar(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
+-    await s.on_fill(_exit_order(OrderSide.BUY), fill_price=99.0)
++        await s.on_bar_completed(_bar(i))
++    await s.on_bar_completed(_bar(8, h=99.5, lo=98.5, c=99.0, base=99.0))
++    await s.on_order_filled(_exit_order(OrderSide.BUY), fill_price=99.0)
+     assert s._open_direction == Direction.LONG
+ 
+ 
+@@ -213,13 +213,13 @@ async def test_current_bar_low_excluded_from_prev_window() -> None:
+     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
+     # 8 warm bars at 100 +/- 0.5 -> prev_lows = 99.5
+     for i in range(8):
+-        await s.on_bar(_bar(i))
++        await s.on_bar_completed(_bar(i))
+     # 9th bar low=98 dips below 99.5; close above prev_low_4h(99.5) -> no signal.
+-    sig = await s.on_bar(_bar(8, h=100.0, lo=98.0, c=99.6, base=99.6))
++    sig = await s.on_bar_completed(_bar(8, h=100.0, lo=98.0, c=99.6, base=99.6))
+     assert sig is None  # close (99.6) is NOT below min(prev_lows_entry)=99.5
+     # 10th bar: window now includes idx8 low=98 -> prev_low_4h=98.
+     # Close 97.5 < 98 -> signal.
+-    sig2 = await s.on_bar(_bar(9, h=98.5, lo=97.0, c=97.5, base=97.5))
++    sig2 = await s.on_bar_completed(_bar(9, h=98.5, lo=97.0, c=97.5, base=97.5))
+     assert sig2 is not None
+     assert sig2.direction == Direction.LONG
+ 
+diff --git a/tests/engine_test/strategy_injection_roundtrip_characterization_test.py b/tests/engine_test/strategy_injection_roundtrip_characterization_test.py
+index 499b2db..b590e4d 100644
+--- a/tests/engine_test/strategy_injection_roundtrip_characterization_test.py
++++ b/tests/engine_test/strategy_injection_roundtrip_characterization_test.py
+@@ -62,7 +62,7 @@ class _CountingStrategy(IStrategy):
+         self.on_start_calls += 1
+         await super().on_start()
+ 
+-    async def on_bar(self, bar: dict) -> Signal | None:
++    async def on_bar_completed(self, bar: dict) -> Signal | None:
+         return None
+ 
+ 

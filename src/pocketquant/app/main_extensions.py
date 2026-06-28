@@ -210,7 +210,6 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 
 
 async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
-    """Cancel WS + subscription tasks then disconnect the provider. 5s timeout each."""
     for attr in ("ws_task", "subscription_task"):
         task: asyncio.Task | None = getattr(app.state, attr, None)
         if task and not task.done():
@@ -287,7 +286,6 @@ async def stop_backtest_worker(container: AsyncContainer, app: FastAPI) -> None:
 
 
 async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
-    """Register health check functions with the coordinator."""
     hc = await container.get(HealthCoordinator)
     hc.register("database", partial(check_database, app.state.database))
     hc.register("redis", partial(check_redis, app.state.cache))
@@ -319,7 +317,6 @@ def handle_startup_failure(error: Exception) -> None:
 
 
 def configure_middleware(app: FastAPI, settings) -> None:
-    """Attach all middleware layers and global exception handlers."""
     from fastapi.exceptions import RequestValidationError
 
     register_exception_handlers(app, validation_error_cls=RequestValidationError)
@@ -378,7 +375,6 @@ async def _list_jobs_from_mongo(
 
 
 def register_routes(app: FastAPI, settings) -> None:
-    """Register health endpoint, all feature routers, and SPA serving."""
     from pocketquant.app.routes.backtest import backtest_router, run_all_backtests_router
     from pocketquant.app.routes.market_data import router as market_data_router
     from pocketquant.app.routes.market_data_quotes import router as quote_router
@@ -434,7 +430,6 @@ def register_routes(app: FastAPI, settings) -> None:
         # OpenAPI/route snapshots independent of whether web/dist was built.
         @app.get("/{path:path}", include_in_schema=False)
         async def spa_fallback(path: str) -> FileResponse:
-            """Serve index.html for all non-API routes (SPA fallback)."""
             file = web_dist / path
             if file.is_file():
                 return FileResponse(file)

@@ -12,6 +12,7 @@ from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -82,6 +83,16 @@ class BacktestAppService:
 
         collector = BacktestResultCollector(config, config.initial_capital, run_id=run_id)
 
+        # Mark-to-market per bar for an evenly-sampled equity curve (Sharpe
+        # input). Registered AFTER the broker's BarCompletedEvent handler
+        # (subscribed in broker.connect during strategy injection), so the equity
+        # snapshot is taken once the bar's SL/TP exits have settled.
+        async def _mtm_on_bar(event: BarCompletedEvent) -> None:
+            if event.bar_start is None:
+                return
+            balance = await self._broker.get_balance()
+            collector.mark_to_market(event.bar_start, balance.total_equity)
+
         try:
             self._broker.reset()
             self._broker.slippage = config.slippage_percent
@@ -89,6 +100,7 @@ class BacktestAppService:
             # Subscribe to BOTH channels — fills for trade-building, events for audit log.
             await self._broker.subscribe_order_updates(collector.on_fill)
             await self._broker.subscribe_order_event(collector.on_event)
+            self._event_bus.subscribe(BarCompletedEvent, _mtm_on_bar)
 
             bars = self._load_bars(config)
             bars_with_price = self._wrap_bars_with_price_update(config, bars)
@@ -157,6 +169,7 @@ class BacktestAppService:
         finally:
             await self._broker.unsubscribe_order_updates()
             await self._broker.unsubscribe_order_event()
+            self._event_bus.unsubscribe(BarCompletedEvent, _mtm_on_bar)
             clear_simulation_time()
 
     async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[Bar]:
@@ -172,7 +185,6 @@ class BacktestAppService:
     async def _wrap_bars_with_price_update(
         self, config: BacktestConfig, bars: AsyncIterator[Bar]
     ) -> AsyncIterator[Bar]:
-        """Wrap bar iterator to set broker price before each bar (market orders use bar close)."""
         async for bar in bars:
             self._broker.set_current_price(config.symbol, bar.close)
             yield bar

@@ -1,5 +1,3 @@
-"""Health check functions for infrastructure dependencies."""
-
 import time
 
 from pocketquant.core.infra.persistence.mongodb import Database

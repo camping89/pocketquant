@@ -22,51 +22,32 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
     SubscriptionRepository,
 )
 
-# ---------------------------------------------------------------------------
-# Query DTOs
-# ---------------------------------------------------------------------------
-
 
 @dataclass
 class GetStrategiesQuery:
-    """List all registered strategy templates."""
+    pass
 
 
 @dataclass
 class GetStrategyQuery:
-    """Template metadata for a specific strategy code."""
-
     strategy_code: str
 
 
 class ListSymbolsQuery(BaseModel):
-    """List subscriptions with backtest status, optionally filtered by strategy template."""
-
     strategy_code: str | None = None
 
 
 class GetStrategyPositionsQuery(BaseModel):
-    """Open positions for a subscription instance."""
-
     subscription_id: str
 
 
 class GetStrategyTradesQuery(BaseModel):
-    """Completed trades (closed positions) for a subscription."""
-
     subscription_id: str
     limit: int = 100
 
 
 class GetSubscriptionBacktestQuery(BaseModel):
-    """Cached backtest result for a single subscription."""
-
     sub_id: str
-
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 
 class StrategyQueryService:
@@ -83,11 +64,9 @@ class StrategyQueryService:
         self._position_repo = position_repository
 
     async def get_all(self, query: GetStrategiesQuery) -> list[dict]:
-        """List registered strategy templates from STRATEGY_REGISTRY."""
         return [{"strategy_code": code} for code in STRATEGY_REGISTRY.keys()]
 
     async def get_one(self, query: GetStrategyQuery) -> dict | None:
-        """Return template metadata for a strategy code, or None if not registered."""
         strategy_class = STRATEGY_REGISTRY.get(query.strategy_code)
         if strategy_class is None:
             return None
@@ -134,7 +113,6 @@ class StrategyQueryService:
         ]
 
     async def get_positions(self, query: GetStrategyPositionsQuery) -> list[dict]:
-        """Return open positions (0 or more) as FE-friendly dicts."""
         positions = await self._position_repo.find_open_by_subscription(query.subscription_id)
         return [
             {

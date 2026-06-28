@@ -1,5 +1,3 @@
-"""Strategy domain - Signal generation, strategy config and interfaces."""
-
 from pocketquant.core.domain.strategy.events import SignalGeneratedEvent
 from pocketquant.core.domain.strategy.value_objects import (
     Direction,

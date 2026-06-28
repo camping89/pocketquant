@@ -39,7 +39,6 @@ class OrderStatus(Enum):
 
     @property
     def is_terminal(self) -> bool:
-        """Check if status is terminal (no further transitions)."""
         return self in (
             OrderStatus.FILLED,
             OrderStatus.CANCELLED,

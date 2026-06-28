@@ -1,5 +1,3 @@
-"""Response DTO builders for sync_one. Pure functions — no I/O."""
-
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.sync_dtos import SyncResponse

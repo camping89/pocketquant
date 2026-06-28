@@ -1,5 +1,3 @@
-"""Rate limiting with token bucket algorithm."""
-
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -8,8 +6,6 @@ from starlette.responses import Response
 
 
 class TokenBucket:
-    """Token bucket for rate limiting with refill."""
-
     def __init__(self, capacity: int = 100, refill_rate: float = 10.0):
         self.capacity = capacity
         self.refill_rate = refill_rate
@@ -17,7 +13,6 @@ class TokenBucket:
         self.last_refill = time.time()
 
     def consume(self, tokens: int = 1) -> bool:
-        """Consume tokens if available."""
         now = time.time()
         elapsed = now - self.last_refill
         self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)

@@ -16,8 +16,6 @@ from pocketquant.core.domain.shared.enums import Interval
 
 
 class IDataProvider(ABC):
-    """Abstract base class for data providers."""
-
     @abstractmethod
     async def fetch_ohlcv(
         self,
@@ -32,14 +30,10 @@ class IDataProvider(ABC):
     async def search_symbols(
         self,
         query: str,
-    ) -> list[dict]:
-        """Search available symbols."""
-        ...
+    ) -> list[dict]: ...
 
     @abstractmethod
-    async def close(self) -> None:
-        """Clean up resources."""
-        ...
+    async def close(self) -> None: ...
 
 
 @runtime_checkable
@@ -60,9 +54,7 @@ class IRealtimeQuoteProvider(Protocol):
         """Open the WebSocket connection."""
         ...
 
-    async def disconnect(self) -> None:
-        """Close connection and stop the run loop."""
-        ...
+    async def disconnect(self) -> None: ...
 
     async def subscribe(
         self,
@@ -76,20 +68,14 @@ class IRealtimeQuoteProvider(Protocol):
         """Remove a symbol subscription. ``symbol`` is composite ``{code}:{exchange}``."""
         ...
 
-    async def run_forever(self) -> None:
-        """Start the receive loop; reconnects on connection drop."""
-        ...
+    async def run_forever(self) -> None: ...
 
     def is_connected(self) -> bool:
         """Return True when the underlying WebSocket is open."""
         ...
 
     @property
-    def subscription_count(self) -> int:
-        """Number of active symbol subscriptions."""
-        ...
+    def subscription_count(self) -> int: ...
 
     @property
-    def subscriptions(self) -> dict:
-        """Active subscriptions mapping (symbol_key → implementation-specific value)."""
-        ...
+    def subscriptions(self) -> dict: ...

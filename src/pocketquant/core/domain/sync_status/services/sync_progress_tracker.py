@@ -12,15 +12,11 @@ from enum import Enum
 
 
 class SyncProgressDecision(Enum):
-    """Which empty-fetch counter op a sync outcome warrants."""
-
     RESET = "reset"
     BUMP = "bump"
 
 
 class SyncProgressTracker:
-    """Decides reset-vs-bump from the sync outcome already in hand."""
-
     @staticmethod
     def decide(inserted_count: int) -> SyncProgressDecision:
         """Reset when new bars were persisted, else bump the empty-fetch streak.

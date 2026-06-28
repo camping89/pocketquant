@@ -1,5 +1,3 @@
-"""Strategy value objects - Signal, StrategyConfig."""
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
@@ -11,11 +9,6 @@ from pocketquant.core.domain.strategy.enums import Direction
 
 @dataclass(frozen=True)
 class Signal:
-    """Immutable trading signal from a strategy.
-
-    Represents a trade intention before risk validation and sizing.
-    """
-
     symbol: str
     direction: Direction
     confidence: float  # 0.0 - 1.0
@@ -32,27 +25,21 @@ class Signal:
 
     @property
     def is_entry(self) -> bool:
-        """Check if signal is an entry (long or short)."""
         return self.direction in (Direction.LONG, Direction.SHORT)
 
     @property
     def is_exit(self) -> bool:
-        """Check if signal is an exit."""
         return self.direction == Direction.EXIT
 
 
 @dataclass
 class StopLossConfig:
-    """Stop loss configuration."""
-
     enabled: bool = True
     distance_percent: float = 0.01  # 1% default
 
 
 @dataclass
 class TakeProfitConfig:
-    """Take profit configuration."""
-
     enabled: bool = True
     distance_percent: float = 0.02  # 2% default
 
@@ -102,7 +89,6 @@ class StrategyConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> StrategyConfig:
-        """Create StrategyConfig from dictionary (parsed YAML)."""
         # Parse risk config
         risk_data = data.get("risk", {})
         risk_model = risk_data.get("model", "percent_risk")
@@ -143,7 +129,6 @@ class StrategyConfig:
         )
 
     def validate(self) -> list[str]:
-        """Validate configuration, return list of errors."""
         errors = []
         if not self.id:
             errors.append("Strategy id is required")

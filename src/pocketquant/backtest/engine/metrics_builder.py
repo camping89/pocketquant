@@ -1,8 +1,3 @@
-"""Build BacktestMetrics from closed Trades + equity curve.
-
-Extracted from BacktestResultCollector to keep result_collector under 200 LOC.
-"""
-
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -21,13 +16,33 @@ def build_metrics(
     total_commission: float,
     start_date: date,
     end_date: date,
+    periods_per_year: float | None,
+    returns_curve: list[EquityPoint] | None = None,
 ) -> BacktestMetrics:
-    """Compute aggregate performance metrics for a finished backtest."""
+    """Build metrics. ``equity_curve`` (realized, trade-keyed) drives
+    total_return/cagr/max_drawdown; ``returns_curve`` (per-bar mark-to-market,
+    when supplied) drives Sharpe/Sortino so they annualize on evenly-sampled
+    returns. ``periods_per_year`` of None (unknown interval) skips annualization
+    → Sharpe/Sortino = 0.
+    """
     if not closed_trades:
         return BacktestMetrics.empty()
 
     equity_values = np.array([p.equity for p in equity_curve])
+    returns_source = returns_curve if returns_curve else equity_curve
+    returns_values = np.array([p.equity for p in returns_source])
     days = max((end_date - start_date).days, 1)
+
+    if periods_per_year is None:
+        sharpe = 0.0
+        sortino = 0.0
+    else:
+        sharpe = PerformanceCalculator.sharpe_ratio(
+            returns_values, periods_per_year=periods_per_year
+        )
+        sortino = PerformanceCalculator.sortino_ratio(
+            returns_values, periods_per_year=periods_per_year
+        )
 
     pnl_list = [t.pnl for t in closed_trades]
     avg_win, avg_loss, winning, losing = PerformanceCalculator.average_win_loss(pnl_list)
@@ -38,8 +53,8 @@ def build_metrics(
     return BacktestMetrics(
         total_return=PerformanceCalculator.total_return(initial_capital, current_equity),
         cagr=PerformanceCalculator.cagr(initial_capital, current_equity, days),
-        sharpe_ratio=PerformanceCalculator.sharpe_ratio(equity_values),
-        sortino_ratio=PerformanceCalculator.sortino_ratio(equity_values),
+        sharpe_ratio=sharpe,
+        sortino_ratio=sortino,
         max_drawdown=PerformanceCalculator.max_drawdown(equity_values),
         win_rate=PerformanceCalculator.win_rate(winning, len(closed_trades)),
         profit_factor=PerformanceCalculator.profit_factor(gross_profit, gross_loss),

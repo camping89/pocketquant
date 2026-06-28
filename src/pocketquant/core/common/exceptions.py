@@ -17,8 +17,6 @@ logger = get_logger(__name__)
 
 
 class AppError(Exception):
-    """Base application error with HTTP status code."""
-
     def __init__(self, message: str, *, status_code: int = 400, error_code: str = "APP_ERROR"):
         self.message = message
         self.status_code = status_code
@@ -27,22 +25,16 @@ class AppError(Exception):
 
 
 class NotFoundError(AppError):
-    """Resource not found (404)."""
-
     def __init__(self, message: str = "Resource not found", *, error_code: str = "NOT_FOUND"):
         super().__init__(message, status_code=404, error_code=error_code)
 
 
 class DomainError(AppError):
-    """Domain rule violation (400)."""
-
     def __init__(self, message: str, *, error_code: str = "DOMAIN_ERROR"):
         super().__init__(message, status_code=400, error_code=error_code)
 
 
 class _ValidationError(Protocol):
-    """Shape of framework validation errors (e.g. fastapi RequestValidationError)."""
-
     def errors(self) -> list[dict[str, Any]]: ...
 
 

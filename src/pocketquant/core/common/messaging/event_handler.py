@@ -1,5 +1,3 @@
-"""Event handler type definition."""
-
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 

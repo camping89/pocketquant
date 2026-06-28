@@ -1,5 +1,3 @@
-"""Integrity check and repair endpoints for bar data."""
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 from pydantic import BaseModel, Field

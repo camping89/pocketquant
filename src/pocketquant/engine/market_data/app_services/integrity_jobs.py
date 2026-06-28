@@ -16,7 +16,6 @@ logger = get_logger(__name__)
 
 
 def _group_gaps(missing: list[datetime], step: timedelta) -> list[tuple[datetime, datetime]]:
-    """Group consecutive missing timestamps into (start, end) ranges."""
     if not missing:
         return []
     ranges: list[tuple[datetime, datetime]] = []

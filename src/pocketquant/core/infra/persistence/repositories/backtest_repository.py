@@ -40,7 +40,6 @@ class BacktestRepository(BaseRepository):
     _collection_name = COLLECTION_BACKTEST_RUNS
 
     async def save(self, result: BacktestResult) -> str:
-        """Save or update a backtest result. Returns the result ID."""
         collection = self._collection()
         doc = result.to_mongo()
         await collection.replace_one({"_id": str(result.id)}, doc, upsert=True)
@@ -89,17 +88,13 @@ class BacktestRepository(BaseRepository):
         return results
 
     async def delete(self, run_id: str) -> bool:
-        """Delete a backtest result. Returns True if deleted."""
         collection = self._collection()
         result = await collection.delete_one({"_id": run_id})
         return result.deleted_count > 0
 
-    # ------------------------------------------------------------------
     # Subscription-scoped methods (one cached result per subscription)
-    # ------------------------------------------------------------------
 
     async def find_by_subscription(self, sub_id: str) -> BacktestResult | None:
-        """Return the cached backtest result for a subscription, or None."""
         collection = self._collection()
         doc = await collection.find_one({"subscription_id": sub_id})
         if not doc:
@@ -184,14 +179,12 @@ class BacktestRepository(BaseRepository):
         logger.debug("backtest_saved_for_subscription", sub_id=sub_id, status=doc["status"])
 
     async def delete_by_subscription(self, sub_id: str) -> int:
-        """Delete the cached result for a single subscription. Returns deleted_count."""
         collection = self._collection()
         result = await collection.delete_one({"subscription_id": sub_id})
         logger.debug("backtest_deleted_by_subscription", sub_id=sub_id, count=result.deleted_count)
         return result.deleted_count
 
     async def delete_by_strategy_code(self, strategy_code: str) -> int:
-        """Delete all backtest docs for a strategy template. Returns deleted_count."""
         collection = self._collection()
         result = await collection.delete_many({"strategy_code": strategy_code})
         logger.debug(
@@ -221,10 +214,6 @@ class BacktestRepository(BaseRepository):
         }
 
     async def get_subscription_statuses(self, sub_ids: list[str]) -> dict[str, dict]:
-        """Return {sub_id: {status, last_run_at, error_msg}} for given sub_ids.
-
-        Single batched query — use instead of calling get_subscription_status() in a loop.
-        """
         if not sub_ids:
             return {}
         collection = self._collection()
@@ -287,7 +276,6 @@ class BacktestRepository(BaseRepository):
         return result.modified_count
 
     async def ensure_indexes(self) -> None:
-        """Create indexes for efficient queries."""
         collection = self._collection()
         await collection.create_index("strategy_code", name="ix_backtests_strategy_code")
         await collection.create_index("started_at", name="ix_backtests_started_at")

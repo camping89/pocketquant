@@ -86,7 +86,6 @@ class OkxOrderMapper:
 
     @staticmethod
     def get_symbol(data: dict[str, Any]) -> str:
-        """Get trading symbol from instId — strips -SWAP suffix and dashes."""
         inst_id = data.get("instId", "")
         return inst_id.replace("-SWAP", "").replace("-", "")
 

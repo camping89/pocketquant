@@ -5,10 +5,11 @@ from typing import Any
 from uuid import UUID
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
+from pocketquant.backtest.engine.backtest_engine_sandbox import build_backtest_sandbox
+from pocketquant.backtest.jobs.backtest_strategy_loader import inject_strategy_into_sandbox
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.backtest.optimization.models.optimization_config import OptimizationConfig
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
@@ -16,7 +17,7 @@ from pocketquant.core.domain.backtest import (
     OptimizationResult,
     OptimizationResultEntry,
 )
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
@@ -37,18 +38,19 @@ class GridOptimizationAppService:
     - Results ranked by configurable target metric
     - Memory efficient - doesn't store full equity curves in optimization result
 
+    Each combination runs in its own sandbox (isolated EventBus +
+    StrategyAppService), so concurrent runs never share a bus.
+
     Usage:
-        optimizer = GridOptimizationAppService(event_bus, backtest_repo, bar_repo)
+        optimizer = GridOptimizationAppService(backtest_repo, bar_repo)
         result = await optimizer.optimize(config)
     """
 
     def __init__(
         self,
-        event_bus: EventBus,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
     ) -> None:
-        self._event_bus = event_bus
         self._backtest_repo = backtest_repository
         self._bar_repo = bar_repository
 
@@ -188,23 +190,42 @@ class GridOptimizationAppService:
                 parameters=params,
             )
 
-            # Create fresh broker for this backtest. event_bus enables SL/TP auto-fill.
-            broker = PaperBroker(
-                initial_balance=config.initial_capital,
-                slippage_percent=backtest_config.slippage_percent,
-                event_bus=self._event_bus,
+            base_config = StrategyConfig(
+                id=config.strategy_code,
+                name=config.strategy_code,
+                symbol=config.symbol,
+                interval=config.interval,
+                trigger="bar",
+                broker="paper",
+                parameters=dict(params),
             )
 
-            # Create runner (don't persist individual results during optimization)
-            runner = BacktestAppService(
-                event_bus=self._event_bus,
-                broker=broker,
-                backtest_repository=self._backtest_repo,
-                bar_repository=self._bar_repo,
-                persist_results=False,  # Optimization persists summary only
-            )
+            # Per-run sandbox: own EventBus + StrategyAppService so concurrent
+            # combinations never cross-talk on bar dispatch or fills, and the
+            # strategy actually runs (the prior code never injected one → 0 trades).
+            sandbox = await build_backtest_sandbox()
+            try:
+                broker = await inject_strategy_into_sandbox(
+                    sandbox,
+                    base_config,
+                    config.strategy_code,
+                    str(optimization_id),
+                    config.symbol,
+                    config.interval,
+                    initial_capital=config.initial_capital,
+                )
+                broker.slippage = backtest_config.slippage_percent
 
-            return await runner.run(backtest_config)
+                runner = BacktestAppService(
+                    event_bus=sandbox.event_bus,
+                    broker=broker,
+                    backtest_repository=self._backtest_repo,
+                    bar_repository=self._bar_repo,
+                    persist_results=False,  # Optimization persists summary only
+                )
+                return await runner.run(backtest_config)
+            finally:
+                await sandbox.aclose()
 
     def _generate_combinations(self, parameter_grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
         if not parameter_grid:
@@ -224,7 +245,6 @@ class GridOptimizationAppService:
         results: list[tuple[dict[str, Any], BacktestResult]],
         target_metric: str,
     ) -> list[tuple[dict[str, Any], BacktestResult]]:
-        """Rank results by target metric (descending - higher is better)."""
         return sorted(
             results,
             key=lambda x: getattr(x[1].metrics, target_metric, 0),

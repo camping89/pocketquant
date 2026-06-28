@@ -67,14 +67,11 @@ class Database:
 
     @property
     def database(self) -> AsyncDatabase:
-        """Raw AsyncDatabase. Use for migrations and admin ops; prefer
-        get_collection() in repository / CQRS-handler code."""
         if self.__database is None:
             raise RuntimeError("Database not connected. Call Database.connect() first.")
         return self.__database
 
     def get_database(self) -> AsyncDatabase:
-        """Alias of `database` property. Retained for backward compatibility."""
         return self.database
 
     def get_collection(self, name: str):

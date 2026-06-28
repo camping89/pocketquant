@@ -1,5 +1,3 @@
-"""Bar domain - Historical bar data."""
-
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.value_objects import OHLCV, BarRange

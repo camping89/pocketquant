@@ -1,5 +1,3 @@
-"""Risk check handler - validates signals against risk limits."""
-
 import structlog
 
 from pocketquant.core.domain.brokers.value_objects import AccountBalance

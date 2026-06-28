@@ -65,7 +65,6 @@ class BacktestOrderRepository(BaseRepository):
         return result.deleted_count
 
     async def ensure_indexes(self) -> None:
-        """Create indexes for per-run, per-strategy, and time-range queries."""
         collection = self._collection()
         await collection.create_index("run_id", name="ix_btorders_run_id")
         await collection.create_index(

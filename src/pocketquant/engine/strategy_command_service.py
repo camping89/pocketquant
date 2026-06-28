@@ -28,20 +28,12 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 
-# ---------------------------------------------------------------------------
-# Command DTOs
-# ---------------------------------------------------------------------------
-
 
 class StartStrategyCommand(BaseModel):
-    """Start the strategy instance for a subscription."""
-
     subscription_id: str
 
 
 class StopStrategyCommand(BaseModel):
-    """Stop the strategy instance for a subscription."""
-
     subscription_id: str
 
 
@@ -57,20 +49,11 @@ class AddSymbolCommand(BaseModel):
 
 
 class RemoveSymbolCommand(BaseModel):
-    """Remove a subscription by sub_id."""
-
     sub_id: str
 
 
 class DeleteStrategyCommand(BaseModel):
-    """Cascade-delete a strategy template: unload, cancel jobs, wipe subs + backtests."""
-
     strategy_id: str
-
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 
 class StrategyCommandService:

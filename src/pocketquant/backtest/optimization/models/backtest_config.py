@@ -34,7 +34,6 @@ class BacktestConfig:
     parameters: dict[str, Any] = field(default_factory=dict)
 
     def with_parameters(self, params: dict[str, Any]) -> BacktestConfig:
-        """Create new config with updated parameters (for grid optimizer)."""
         return BacktestConfig(
             strategy_code=self.strategy_code,
             symbol=self.symbol,
@@ -50,7 +49,6 @@ class BacktestConfig:
 
     @property
     def slippage_percent(self) -> float:
-        """Convert slippage BPS to decimal percent for broker."""
         return self.slippage_bps / 10_000
 
     @property

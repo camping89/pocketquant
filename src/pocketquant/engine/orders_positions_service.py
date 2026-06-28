@@ -15,10 +15,6 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 
-# ---------------------------------------------------------------------------
-# Query DTOs
-# ---------------------------------------------------------------------------
-
 
 class GetOrderQuery(BaseModel):
     order_id: str
@@ -34,11 +30,6 @@ class GetPositionQuery(BaseModel):
 
 class ListPositionsQuery(BaseModel):
     pass
-
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 
 class OrderPositionQueryService:

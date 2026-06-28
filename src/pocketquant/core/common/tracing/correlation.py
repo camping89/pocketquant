@@ -1,5 +1,3 @@
-"""Correlation ID middleware for request tracing."""
-
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -10,8 +8,6 @@ from pocketquant.core.common.uuid import generate_id_str
 
 
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
-    """Injects correlation ID into request context and response headers."""
-
     async def dispatch(self, request: Request, call_next) -> Response:
         request_id = request.headers.get(HEADER_CORRELATION_ID) or generate_id_str()
         token = request_id_contextvar.set(request_id)

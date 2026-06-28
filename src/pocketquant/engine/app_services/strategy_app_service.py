@@ -1,14 +1,22 @@
-"""Strategy engine - orchestrates strategy execution and event dispatch."""
-
 import asyncio
 from typing import TYPE_CHECKING
 
 import structlog
 
-from pocketquant.core.common.messaging import EventBus, event_handler, get_event_registry
+from pocketquant.core.common.messaging import (
+    EventBus,
+    EventRegistry,
+    event_handler,
+    get_event_registry,
+)
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.interfaces import IBroker, IBrokerFactory
-from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
+from pocketquant.core.domain.order import (
+    OrderAggregate,
+    OrderFilledEvent,
+    OrderSide,
+    OrderType,
+)
 from pocketquant.core.domain.quote.events import QuoteReceivedEvent
 from pocketquant.core.domain.risk import PositionSizer
 from pocketquant.core.domain.strategy.interfaces import IStrategy
@@ -55,11 +63,18 @@ class StrategyAppService:
     def is_running(self) -> bool:
         return self._running
 
-    async def start(self) -> None:
+    async def start(self, registry: EventRegistry | None = None) -> None:
+        """Subscribe handlers to the event bus and mark running.
+
+        Per-run backtest engines pass a local ``registry`` so their handler
+        bindings don't accumulate in the process-global registry across many
+        runs; the local registry (and the per-run bus it bound to) is discarded
+        when the run ends. The live engine passes nothing → global registry.
+        """
         if self._running:
             return
 
-        registry = get_event_registry()
+        registry = registry or get_event_registry()
         registry.register_instance(self, self._event_bus)
         self._running = True
 
@@ -229,7 +244,7 @@ class StrategyAppService:
                     "timestamp": event.bar_start,
                 }
 
-                signal = await strategy.on_bar(bar)
+                signal = await strategy.on_bar_completed(bar)
 
                 if signal:
                     await self._process_signal(strategy, signal, event.close)
@@ -254,7 +269,7 @@ class StrategyAppService:
                     "timestamp": event.timestamp,
                 }
 
-                order = await strategy.on_tick(tick)
+                order = await strategy.on_quote_received(tick)
 
                 if order:
                     broker = self._brokers.get(strategy.id)
@@ -267,6 +282,28 @@ class StrategyAppService:
                     strategy_id=strategy.id,
                     error=str(e),
                 )
+
+    @event_handler(OrderFilledEvent)
+    async def _on_order_filled(self, event: OrderFilledEvent) -> None:
+        """Route a fill to its owning strategy by subscription_id.
+
+        ``event.subscription_id`` equals the strategy's registration key
+        (Signal.subscription_id = strategy.id propagates through Order →
+        OrderFilledEvent). The strategy uses the fill's ``side`` to reset its
+        open-direction on a round-trip close. Entry, synthetic SL/TP exit, and
+        live broker fills all flow through this one handler.
+        """
+        strategy = self._strategies.get(event.subscription_id)
+        if strategy is None or not strategy.is_running:
+            return
+        try:
+            await strategy.on_order_filled(event, event.filled_price)
+        except Exception as e:
+            logger.error(
+                "strategy_on_order_filled_error",
+                strategy_id=event.subscription_id,
+                error=str(e),
+            )
 
     def _find_strategies(
         self,
@@ -382,5 +419,5 @@ class StrategyAppService:
 class _DefaultStrategy(IStrategy):
     """Default pass-through strategy that never generates signals."""
 
-    async def on_bar(self, bar: dict) -> Signal | None:
+    async def on_bar_completed(self, bar: dict) -> Signal | None:
         return None

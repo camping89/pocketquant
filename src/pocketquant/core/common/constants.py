@@ -1,6 +1,3 @@
-"""Centralized constants with prefixed sections for discoverability."""
-
-
 def build_bar_cache_key(symbol: str, interval: str) -> str:
     """Build base bar cache key for pattern matching.
 

@@ -1,5 +1,3 @@
-"""Subscription — runtime mapping of a strategy template to a market symbol/interval."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

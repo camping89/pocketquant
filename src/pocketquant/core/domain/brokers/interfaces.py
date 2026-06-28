@@ -1,5 +1,3 @@
-"""Broker interface - abstract base class for all brokers."""
-
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import Protocol
@@ -22,25 +20,17 @@ class IBroker(ABC):
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        """Broker identifier name."""
-        ...
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def is_connected(self) -> bool:
-        """Check if broker connection is active."""
-        ...
+    def is_connected(self) -> bool: ...
 
     @abstractmethod
-    async def connect(self) -> None:
-        """Establish connection to broker."""
-        ...
+    async def connect(self) -> None: ...
 
     @abstractmethod
-    async def disconnect(self) -> None:
-        """Close broker connection."""
-        ...
+    async def disconnect(self) -> None: ...
 
     @abstractmethod
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
@@ -100,6 +90,4 @@ class IBroker(ABC):
 
 
 class IBrokerFactory(Protocol):
-    """Factory protocol for creating broker instances from type and config."""
-
     def create(self, broker_type: str, config: dict) -> IBroker: ...

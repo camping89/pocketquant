@@ -1,5 +1,3 @@
-"""Sync routes — single-symbol and bulk OHLCV sync endpoints."""
-
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, BackgroundTasks
 

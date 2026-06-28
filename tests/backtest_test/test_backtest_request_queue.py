@@ -383,7 +383,6 @@ async def engine_setup(database: Database):
     await strategy_service.inject_prepared_strategy(_STRATEGY, base_instance, base_broker, base_cfg)
 
     deps = BacktestDispatchDeps(
-        event_bus=event_bus,
         bar_repo=bar_repo,
         backtest_repo=bt_repo,
         order_repo=order_repo,

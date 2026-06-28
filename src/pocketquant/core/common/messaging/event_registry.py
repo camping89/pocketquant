@@ -1,5 +1,3 @@
-"""Event handler decorator and auto-registration."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -37,8 +35,6 @@ def event_handler(*event_types: type[DomainEvent]) -> Callable[[T], T]:
 
 
 class EventRegistry:
-    """Registry for auto-discovering and binding event handlers."""
-
     def __init__(self) -> None:
         self._registered: list[tuple[type[DomainEvent], object, str]] = []
 
@@ -69,11 +65,9 @@ class EventRegistry:
         return count
 
     def get_registered(self) -> list[tuple[type[DomainEvent], object, str]]:
-        """Get list of registered handlers for debugging."""
         return self._registered.copy()
 
     def clear(self) -> None:
-        """Clear registration tracking (for testing)."""
         self._registered.clear()
 
 
@@ -81,5 +75,4 @@ _registry = EventRegistry()
 
 
 def get_event_registry() -> EventRegistry:
-    """Get the global event registry."""
     return _registry

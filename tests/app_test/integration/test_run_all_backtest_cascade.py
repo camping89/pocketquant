@@ -151,7 +151,6 @@ async def _build_worker_deps(db: Database) -> BacktestDispatchDeps:
     await strategy_svc.inject_prepared_strategy(_STRATEGY_ID, instance, base_broker, base_cfg)
 
     return BacktestDispatchDeps(
-        event_bus=event_bus,
         bar_repo=BarRepository(db),
         backtest_repo=BacktestRepository(db),
         order_repo=BacktestOrderRepository(db),

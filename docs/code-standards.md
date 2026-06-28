@@ -216,7 +216,7 @@ Eliminate redundant empty Create subclasses. Use base classes directly for repos
 
 ### 11. Strategy Implementation Pattern
 
-Implement `IStrategy` interface. Implement `on_bar()` (mandatory), optionally `on_tick()`, `on_fill()`. Return `Signal | None`. Keep pure logic, no broker/database (StrategyAppService manages execution).
+Implement `IStrategy` interface. Implement `on_bar_completed(bar)` (mandatory), optionally `on_quote_received(tick)`, `on_order_filled(order, fill_price)`. Return `Signal | None`. Keep pure logic, no broker/database (StrategyAppService manages execution). Lifecycle: `on_start()` → `on_bar_completed()` / `on_quote_received()` / `on_order_filled()` → `on_stop()`.
 
 ### 12. Domain Layer Patterns (Pydantic BaseModel + MongoDB Persistence)
 

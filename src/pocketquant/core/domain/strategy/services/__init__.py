@@ -1,5 +1,3 @@
-"""Strategy services - concrete strategy implementations."""
-
 from pocketquant.core.domain.strategy.services.hitnrun2 import HitNRun2Strategy
 
 STRATEGY_REGISTRY: dict[str, type] = {

@@ -1,5 +1,3 @@
-"""Market data service providers."""
-
 from dishka import Provider, Scope, provide
 
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
@@ -31,7 +29,6 @@ class MarketDataProvider(Provider):
 
     @provide(scope=Scope.APP)
     def get_realtime_quote_provider(self) -> IRealtimeQuoteProvider:
-        """Singleton WS client shared by QuoteAppService, WsSubscriptionManager, status handler."""
         return BinanceWebSocketClient()  # type: ignore[return-value]  # Protocol satisfied structurally
 
     @provide(scope=Scope.APP)

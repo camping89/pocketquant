@@ -1,5 +1,3 @@
-"""Time utilities module - simulation and real-time clock."""
-
 from datetime import UTC, datetime
 
 from pocketquant.core.common.time.simulation import (

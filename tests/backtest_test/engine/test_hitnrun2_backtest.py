@@ -22,6 +22,7 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.interfaces import IBroker
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
+from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
@@ -182,6 +183,33 @@ def _choppy_bars(n: int = 60, base: float = 100.0) -> list[Bar]:
     return [_ohlcv_bar(i, o=base, h=base + 0.2, lo=base - 0.2, c=base, t0=t0) for i in range(n)]
 
 
+def _oscillating_bars(cycles: int = 4) -> list[Bar]:
+    """Repeated: new-low breakdown entry, then a bar whose HIGH pops up to hit TP.
+
+    Each cycle dips to a fresh lower low (LONG breakdown entry), then a recovery
+    bar's HIGH clears the TP so the position round-trips. Drives multiple trades
+    only if on_order_filled resets the open-direction AND the broker reopens after
+    close (Bug #1 + closed-position re-entry).
+    """
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    bars: list[Bar] = []
+    idx = 0
+    lvl = 100.0
+    for _ in range(25):
+        bars.append(_ohlcv_bar(idx, o=lvl, h=lvl + 0.05, lo=lvl - 0.05, c=lvl, t0=t0))
+        idx += 1
+    for cyc in range(cycles):
+        low = lvl - 1.0 - cyc * 0.5
+        bars.append(_ohlcv_bar(idx, o=lvl, h=lvl + 0.05, lo=low - 0.05, c=low, t0=t0))
+        idx += 1
+        bars.append(_ohlcv_bar(idx, o=low, h=lvl + 0.5, lo=low - 0.05, c=lvl, t0=t0))
+        idx += 1
+        for _ in range(3):
+            bars.append(_ohlcv_bar(idx, o=lvl, h=lvl + 0.05, lo=lvl - 0.05, c=lvl, t0=t0))
+            idx += 1
+    return bars
+
+
 async def _run_backtest(
     bars: list[Bar],
     direction: str,
@@ -190,6 +218,7 @@ async def _run_backtest(
     tp_lookback: int = 5,
     max_loss_pct: float = 0.01,
     min_profit_pct: float = 0.005,
+    max_exposure_percent: float | None = None,
 ) -> tuple[BacktestResult, PaperBroker, StrategyAppService]:
     """Wire pipeline and return result + handles for assertion."""
     bus = EventBus()
@@ -219,6 +248,7 @@ async def _run_backtest(
     await strategy_svc.start()
 
     strategy_cls = STRATEGY_REGISTRY["hitnrun2"]
+    risk = RiskConfig(max_exposure_percent=max_exposure_percent) if max_exposure_percent else None
     strategy_cfg = StrategyConfig(
         id="hitnrun2",
         name="hitnrun2",
@@ -234,6 +264,7 @@ async def _run_backtest(
             "min_profit_pct": min_profit_pct,
             "direction": direction,
         },
+        risk=risk or RiskConfig(),
     )
     strategy = strategy_cls(strategy_cfg)
 
@@ -287,3 +318,41 @@ async def test_backtest_no_trades_on_choppy_market() -> None:
     assert result.status == "completed", result.error_message
     assert result.metrics.total_trades == 0
     assert (await broker.get_positions()) == []
+
+
+async def test_backtest_multi_trade_after_fill_reset() -> None:
+    """Bug #1: with on_order_filled reset wired, repeated round-trips → many trades.
+
+    Before the fix, the strategy's open-direction never reset → at most 1 trade.
+    Uses a wide max_exposure RiskConfig so the one-position cap (not risk) governs.
+    """
+    bars = _oscillating_bars(cycles=4)
+    result, broker, _ = await _run_backtest(
+        bars,
+        direction="long",
+        max_loss_pct=0.05,
+        min_profit_pct=0.002,
+        max_exposure_percent=1.0,
+    )
+    assert result.status == "completed", result.error_message
+    assert result.metrics.total_trades > 1
+    assert (await broker.get_positions()) == []
+
+
+async def test_backtest_sharpe_bounded_and_realized_metrics_present() -> None:
+    """Per-bar MTM annualization yields a finite Sharpe; realized metrics intact."""
+    bars = _oscillating_bars(cycles=4)
+    result, _, _ = await _run_backtest(
+        bars,
+        direction="long",
+        max_loss_pct=0.05,
+        min_profit_pct=0.002,
+        max_exposure_percent=1.0,
+    )
+    m = result.metrics
+    # Sharpe is finite (not NaN/inf) — annualization used a valid periods_per_year.
+    assert m.sharpe_ratio == m.sharpe_ratio  # not NaN
+    assert abs(m.sharpe_ratio) != float("inf")
+    # Realized metrics computed from the trade-keyed curve.
+    assert m.total_trades > 1
+    assert m.max_drawdown <= 0.0

@@ -46,13 +46,29 @@ class PerformanceCalculator:
         return (final_equity / initial_equity) ** (1 / years) - 1
 
     @staticmethod
-    def sharpe_ratio(equity_curve: np.ndarray, risk_free_rate: float = RISK_FREE_RATE) -> float:
-        """Calculate annualized Sharpe ratio from equity curve.
+    def sharpe_ratio(
+        equity_curve: np.ndarray,
+        *,
+        periods_per_year: float,
+        risk_free_rate: float = RISK_FREE_RATE,
+    ) -> float:
+        """Calculate annualized Sharpe ratio from a per-bar equity curve.
 
-        Sharpe = (mean return - risk free rate) / volatility
+        Sharpe = (mean return - risk free rate) / volatility, annualized by the
+        number of bars per year for the backtest interval.
+
+        ``periods_per_year`` is **keyword-only** so it never positionally
+        collides with ``risk_free_rate``.
+
+        Caveat (per-bar definition): the equity curve carries one point per bar,
+        including flat bars with no open position. Those flat bars dilute the
+        return std, so this Sharpe measures whole-period **capital efficiency**,
+        not active-position risk. This is the industry-standard per-bar
+        definition and is comparable across strategies on the same interval.
 
         Args:
-            equity_curve: Array of equity values over time.
+            equity_curve: Array of equity values, one per bar.
+            periods_per_year: Bars per year for the interval (Interval.periods_per_year).
             risk_free_rate: Annual risk-free rate (default 0).
 
         Returns:
@@ -63,7 +79,8 @@ class PerformanceCalculator:
 
         returns = np.diff(equity_curve) / equity_curve[:-1]
 
-        if len(returns) == 0:
+        # Sample std (ddof=1) needs ≥2 returns; one return divides by zero.
+        if len(returns) < 2:
             return 0.0
 
         mean_return = np.mean(returns)
@@ -72,20 +89,28 @@ class PerformanceCalculator:
         if std_return == 0 or np.isnan(std_return):
             return 0.0
 
-        annual_return = mean_return * TRADING_DAYS_PER_YEAR
-        annual_std = std_return * np.sqrt(TRADING_DAYS_PER_YEAR)
+        annual_return = mean_return * periods_per_year
+        annual_std = std_return * np.sqrt(periods_per_year)
 
         return (annual_return - risk_free_rate) / annual_std
 
     @staticmethod
-    def sortino_ratio(equity_curve: np.ndarray, risk_free_rate: float = RISK_FREE_RATE) -> float:
-        """Calculate annualized Sortino ratio from equity curve.
+    def sortino_ratio(
+        equity_curve: np.ndarray,
+        *,
+        periods_per_year: float,
+        risk_free_rate: float = RISK_FREE_RATE,
+    ) -> float:
+        """Calculate annualized Sortino ratio from a per-bar equity curve.
 
-        Sortino = (mean return - risk free rate) / downside volatility
-        Only penalizes negative returns (downside deviation).
+        Sortino = (mean return - risk free rate) / downside volatility, annualized
+        by the number of bars per year for the backtest interval. Only penalizes
+        negative returns (downside deviation). ``periods_per_year`` is
+        keyword-only (see ``sharpe_ratio``).
 
         Args:
-            equity_curve: Array of equity values over time.
+            equity_curve: Array of equity values, one per bar.
+            periods_per_year: Bars per year for the interval (Interval.periods_per_year).
             risk_free_rate: Annual risk-free rate (default 0).
 
         Returns:
@@ -96,7 +121,7 @@ class PerformanceCalculator:
 
         returns = np.diff(equity_curve) / equity_curve[:-1]
 
-        if len(returns) == 0:
+        if len(returns) < 2:
             return 0.0
 
         mean_return = np.mean(returns)
@@ -107,13 +132,17 @@ class PerformanceCalculator:
             # No downside = infinite Sortino, cap at high value
             return 10.0 if mean_return > 0 else 0.0
 
+        # Sample std (ddof=1) needs ≥2 downside returns; one divides by zero.
+        if len(downside_returns) < 2:
+            return 0.0
+
         downside_std = np.std(downside_returns, ddof=1)
 
         if downside_std == 0 or np.isnan(downside_std):
             return 0.0
 
-        annual_return = mean_return * TRADING_DAYS_PER_YEAR
-        annual_downside_std = downside_std * np.sqrt(TRADING_DAYS_PER_YEAR)
+        annual_return = mean_return * periods_per_year
+        annual_downside_std = downside_std * np.sqrt(periods_per_year)
 
         return (annual_return - risk_free_rate) / annual_downside_std
 

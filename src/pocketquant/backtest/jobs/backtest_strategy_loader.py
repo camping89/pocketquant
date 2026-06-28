@@ -1,21 +1,15 @@
-"""Helpers for backtest_jobs.py — build BacktestConfig and inject strategy into engine.
-
-Extracted to keep backtest_jobs.py under 200 lines. Not intended for use outside jobs/.
-"""
-
 from __future__ import annotations
 
 from datetime import date, timedelta
 
+from pocketquant.backtest.engine.backtest_engine_sandbox import BacktestSandbox
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 
@@ -67,24 +61,25 @@ def build_backtest_config(
     )
 
 
-async def load_strategy_for_backtest(
-    strategy_app_service: StrategyAppService,
+async def inject_strategy_into_sandbox(
+    sandbox: BacktestSandbox,
     base_config: StrategyConfig,
     strategy_id: str,
     sub_id: str,
     symbol: str,
     interval: str,
-    event_bus: EventBus | None = None,
-) -> tuple[PaperBroker, str]:
-    """Resolve strategy class, create instance, inject into StrategyAppService.
+    initial_capital: float = 10_000.0,
+) -> PaperBroker:
+    """Resolve strategy class, build its broker, inject into the sandbox engine.
 
     ``symbol`` is composite ``{code}:{exchange}``.
 
-    Uses a synthetic strategy_id scoped to this subscription so concurrent jobs
-    never clobber each other and the user's live strategy entry is untouched.
+    Uses a synthetic strategy_id scoped to this subscription so the user's live
+    strategy entry is untouched. The sandbox owns its EventBus, so the broker and
+    strategy are isolated from the live engine and from other concurrent runs.
 
-    Returns (broker, synthetic_id) so the caller can pass broker to BacktestAppService
-    and later call unload_strategy(synthetic_id) for cleanup.
+    Returns the run's PaperBroker (wired to the sandbox bus). Cleanup happens via
+    ``sandbox.aclose()``.
 
     Raises ValueError if strategy_id is not in STRATEGY_REGISTRY.
     """
@@ -95,7 +90,6 @@ async def load_strategy_for_backtest(
             f"Available: {list(STRATEGY_REGISTRY.keys())}"
         )
 
-    # Unique per-job id — prevents concurrent jobs from clobbering each other
     synthetic_id = f"{strategy_id}::bt::{sub_id}"
 
     bt_strategy_cfg = StrategyConfig(
@@ -108,15 +102,10 @@ async def load_strategy_for_backtest(
         parameters=dict(base_config.parameters) if base_config.parameters else {},
     )
 
-    broker = PaperBroker(initial_balance=10_000.0, event_bus=event_bus)
+    broker = sandbox.create_broker(initial_balance=initial_capital)
     strategy_instance = strategy_class(bt_strategy_cfg)
-
-    # Clean up any stale run for this synthetic id (e.g. previous failed cleanup)
-    if strategy_app_service.get_strategy(synthetic_id) is not None:
-        await strategy_app_service.unload_strategy(synthetic_id)
-
-    await strategy_app_service.inject_prepared_strategy(
+    await sandbox.strategy_app_service.inject_prepared_strategy(
         synthetic_id, strategy_instance, broker, bt_strategy_cfg
     )
 
-    return broker, synthetic_id
+    return broker

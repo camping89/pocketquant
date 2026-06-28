@@ -1,5 +1,3 @@
-"""Request/Response logging middleware."""
-
 import time
 from collections.abc import Callable
 
@@ -18,8 +16,6 @@ MAX_BODY_LOG_SIZE = 10_000
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Logs HTTP request and response details including bodies."""
-
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.url.path in SKIP_PATHS:
             return await call_next(request)

@@ -97,7 +97,6 @@ class Bar(BaseModel):
         )
 
     def to_dict(self) -> dict:
-        """Convert to dictionary for API serialization."""
         return {
             "id": str(self.id),
             "symbol": self.symbol,

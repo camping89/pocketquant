@@ -13,18 +13,20 @@ from datetime import date
 from typing import Any
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
+from pocketquant.backtest.engine.backtest_engine_sandbox import (
+    BacktestSandbox,
+    build_backtest_sandbox,
+)
 from pocketquant.backtest.jobs.backtest_strategy_loader import (
     build_backtest_config,
-    load_strategy_for_backtest,
+    inject_strategy_into_sandbox,
     resolve_date_range,
 )
 from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
@@ -45,19 +47,17 @@ logger = get_logger(__name__)
 
 @dataclass
 class BacktestDispatchDeps:
-    """Injected dependencies for a dispatch call — resolved once per worker tick."""
-
-    event_bus: EventBus
     bar_repo: BarRepository
     backtest_repo: BacktestRepository
     order_repo: BacktestOrderRepository
     trade_repo: BacktestTradeRepository
+    # Live engine — read-only here, for the user's per-subscription StrategyConfig
+    # (parameters) lookup. Backtests run in their own sandbox, never on this engine.
     strategy_app_service: StrategyAppService
     subscription_repo: SubscriptionRepository
 
 
 def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
-    """Rebuild a BacktestConfig from the serialized request payload."""
     return BacktestConfig(
         strategy_code=payload["strategy_code"],
         symbol=payload["symbol"],
@@ -92,9 +92,9 @@ def config_to_dict(cmd: dict[str, Any]) -> dict[str, Any]:
 async def run_single(deps: BacktestDispatchDeps, config_payload: dict[str, Any]) -> BacktestResult:
     """Execute one ad-hoc backtest and persist results to backtest_* collections.
 
-    Mirrors the former synchronous RunBacktestHandler: a fresh PaperBroker wired
-    to the event bus (so SL/TP auto-fill on BarCompletedEvent), the strategy
-    injected under its own id, run, then unloaded in finally so it never lingers.
+    Runs in an isolated sandbox (own EventBus + StrategyAppService) so replayed
+    bars and synthetic exit fills never reach the live execution engine, and the
+    strategy is injected under its own id then torn down with the sandbox.
     """
     config = _config_from_dict(config_payload)
 
@@ -115,23 +115,19 @@ async def run_single(deps: BacktestDispatchDeps, config_payload: dict[str, Any])
         parameters={**config.parameters},
     )
 
-    broker = PaperBroker(
-        initial_balance=config.initial_capital,
-        slippage_percent=config.slippage_percent,
-        event_bus=deps.event_bus,
-    )
-
-    strategy_instance = strategy_class(strategy_cfg)
-    sid = strategy_instance.id
-    if deps.strategy_app_service.get_strategy(sid) is not None:
-        await deps.strategy_app_service.unload_strategy(sid)
-    await deps.strategy_app_service.inject_prepared_strategy(
-        sid, strategy_instance, broker, strategy_instance.config
-    )
-
+    sandbox = await build_backtest_sandbox()
     try:
+        broker = sandbox.create_broker(
+            initial_balance=config.initial_capital,
+            slippage_percent=config.slippage_percent,
+        )
+        strategy_instance = strategy_class(strategy_cfg)
+        await sandbox.strategy_app_service.inject_prepared_strategy(
+            strategy_instance.id, strategy_instance, broker, strategy_instance.config
+        )
+
         runner = BacktestAppService(
-            event_bus=deps.event_bus,
+            event_bus=sandbox.event_bus,
             broker=broker,
             backtest_repository=deps.backtest_repo,
             bar_repository=deps.bar_repo,
@@ -140,7 +136,7 @@ async def run_single(deps: BacktestDispatchDeps, config_payload: dict[str, Any])
         )
         return await runner.run(config)
     finally:
-        await deps.strategy_app_service.unload_strategy(sid)
+        await sandbox.aclose()
 
 
 async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
@@ -151,11 +147,12 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
     cache that FE polls at ``/subscriptions/{id}/backtest``.
 
     Preserves the prior job's safety properties:
-      - synthetic_id scoped per subscription so concurrent runs never clobber;
+      - synthetic_id scoped per subscription so the user's live strategy is
+        untouched;
       - TOCTOU re-check before writing results (subscription may be deleted
         mid-run);
-      - synthetic instance unloaded in finally — the user's live strategy is
-        untouched.
+      - the sandbox (own EventBus + engine) is torn down in finally, so the run
+        is isolated from the live engine and from concurrent runs.
     """
     sub = await deps.subscription_repo.get(sub_id)
     if sub is None:
@@ -168,13 +165,13 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
 
     await deps.backtest_repo.upsert_status(sub_id, strategy_code=strategy_code, status="running")
 
-    synthetic_id: str | None = None
+    sandbox: BacktestSandbox | None = None
     try:
         # Config lookup falls back across the three keyspaces a restart can
         # leave us in: a template-keyed config (explicit load, carries user
         # parameters) → the sub-keyed config rehydrate/reconcile register →
         # a bare default (strategy-class parameter defaults apply). Unknown
-        # templates still fail in load_strategy_for_backtest's registry check.
+        # templates still fail in inject_strategy_into_sandbox's registry check.
         base_config = deps.strategy_app_service.get_config(
             strategy_code
         ) or deps.strategy_app_service.get_config(sub_id)
@@ -191,18 +188,19 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
             base_config, strategy_code, symbol, interval, start_date, end_date
         )
 
-        broker, synthetic_id = await load_strategy_for_backtest(
-            deps.strategy_app_service,
+        sandbox = await build_backtest_sandbox()
+        broker = await inject_strategy_into_sandbox(
+            sandbox,
             base_config,
             strategy_code,
             sub_id,
             symbol,
             interval,
-            event_bus=deps.event_bus,
+            initial_capital=config.initial_capital,
         )
 
         runner = BacktestAppService(
-            event_bus=deps.event_bus,
+            event_bus=sandbox.event_bus,
             broker=broker,
             backtest_repository=deps.backtest_repo,
             bar_repository=deps.bar_repo,
@@ -244,13 +242,5 @@ async def run_subscription(deps: BacktestDispatchDeps, sub_id: str) -> None:
         raise
 
     finally:
-        if synthetic_id is not None:
-            try:
-                await deps.strategy_app_service.unload_strategy(synthetic_id)
-            except Exception as cleanup_exc:
-                logger.warning(
-                    "backtest_dispatch.cleanup_failed",
-                    sub_id=sub_id,
-                    synthetic_id=synthetic_id,
-                    error=str(cleanup_exc),
-                )
+        if sandbox is not None:
+            await sandbox.aclose()

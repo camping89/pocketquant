@@ -7,12 +7,12 @@ interface StatusDotProps {
 }
 
 const DOT_COLORS: Record<StrategyStatus, string> = {
-  running: '#26a69a',   // emerald-500
-  idle: '#607d8b',      // slate-500
-  stopped: '#607d8b',   // slate-500
-  error: '#ef5350',     // rose-500
-  starting: '#ffa726',  // amber-400
-  stopping: '#ffa726',  // amber-400
+  running: '#26a69a',
+  idle: '#607d8b',
+  stopped: '#607d8b',
+  error: '#ef5350',
+  starting: '#ffa726',
+  stopping: '#ffa726',
 }
 
 export function StatusDot({ status }: StatusDotProps) {

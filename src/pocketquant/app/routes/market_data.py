@@ -1,5 +1,3 @@
-"""Market data router — aggregates all market data feature routers under /market-data."""
-
 from fastapi import APIRouter
 
 from pocketquant.app.routes.integrity import router as integrity_router

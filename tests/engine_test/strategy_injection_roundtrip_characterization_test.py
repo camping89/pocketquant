@@ -62,7 +62,7 @@ class _CountingStrategy(IStrategy):
         self.on_start_calls += 1
         await super().on_start()
 
-    async def on_bar(self, bar: dict) -> Signal | None:
+    async def on_bar_completed(self, bar: dict) -> Signal | None:
         return None
 
 

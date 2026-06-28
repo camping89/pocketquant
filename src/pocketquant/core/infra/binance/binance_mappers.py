@@ -27,10 +27,6 @@ _SYMBOL_RE = re.compile(r"^[A-Z0-9]{6,12}$")
 
 
 def validate_symbol(symbol: str) -> str:
-    """Return uppercase symbol after validating format (A-Z0-9, length 6-12).
-
-    Raises ValueError on invalid input to prevent URL injection.
-    """
     upper = symbol.strip().upper()
     if not _SYMBOL_RE.match(upper):
         raise ValueError(

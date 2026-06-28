@@ -1,5 +1,3 @@
-"""Broker factory for creating broker instances."""
-
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.interfaces import IBroker
 from pocketquant.core.infra.brokers.okx.okx_broker import OKXBroker
@@ -61,5 +59,4 @@ class BrokerFactory:
 
     @staticmethod
     def get_available_types() -> list[str]:
-        """Get list of available broker types."""
         return ["paper", "okx"]
