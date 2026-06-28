@@ -6,6 +6,7 @@ const INDICATORS: { key: keyof IndicatorConfig; label: string; color: string }[]
   { key: 'rsi', label: 'RSI', color: '#AB47BC' },
   { key: 'macd', label: 'MACD', color: '#26C6DA' },
   { key: 'bollinger', label: 'BB', color: '#2196F3' },
+  { key: 'engulfing', label: 'Engulf', color: '#16a34a' },
 ]
 
 interface IndicatorTogglesProps {

@@ -1,0 +1,59 @@
+{
+  "_doc": "Canonical engulfing detector fixture. Source of truth for BOTH the Python detector (detect_engulfing) and the TS chart port (web/src/lib/indicators/engulfing.ts). Phase 3 keeps a byte-identical copy at web/src/lib/indicators/__fixtures__/; Phase 5 diffs them. rejection_wick_pct is ALWAYS a float (sentinel 1.0 for non-engulfing or zero-range).",
+  "cases": [
+    {
+      "name": "bullish_strong_small_upper_wick",
+      "prev": { "open": 100.0, "high": 100.5, "low": 97.5, "close": 98.0 },
+      "curr": { "open": 97.0, "high": 101.2, "low": 96.8, "close": 101.0 },
+      "expected": { "is_bullish": true, "is_bearish": false, "rejection_wick_pct": 0.045454545454545456 }
+    },
+    {
+      "name": "bullish_weak_long_upper_wick",
+      "prev": { "open": 100.0, "high": 100.5, "low": 97.5, "close": 98.0 },
+      "curr": { "open": 97.0, "high": 104.0, "low": 96.8, "close": 100.2 },
+      "expected": { "is_bullish": true, "is_bearish": false, "rejection_wick_pct": 0.5277777777777778 }
+    },
+    {
+      "name": "bearish_strong_small_lower_wick",
+      "prev": { "open": 98.0, "high": 100.5, "low": 97.5, "close": 100.0 },
+      "curr": { "open": 101.0, "high": 101.2, "low": 96.8, "close": 97.0 },
+      "expected": { "is_bullish": false, "is_bearish": true, "rejection_wick_pct": 0.045454545454545456 }
+    },
+    {
+      "name": "bearish_weak_long_lower_wick",
+      "prev": { "open": 98.0, "high": 100.5, "low": 97.5, "close": 100.0 },
+      "curr": { "open": 101.0, "high": 101.2, "low": 94.0, "close": 97.8 },
+      "expected": { "is_bullish": false, "is_bearish": true, "rejection_wick_pct": 0.5277777777777778 }
+    },
+    {
+      "name": "no_engulf_curr_body_inside_prev",
+      "prev": { "open": 100.0, "high": 100.5, "low": 97.5, "close": 98.0 },
+      "curr": { "open": 98.5, "high": 99.8, "low": 98.2, "close": 99.5 },
+      "expected": { "is_bullish": false, "is_bearish": false, "rejection_wick_pct": 1.0 }
+    },
+    {
+      "name": "doji_curr_zero_range",
+      "prev": { "open": 100.0, "high": 100.5, "low": 97.5, "close": 98.0 },
+      "curr": { "open": 98.0, "high": 98.0, "low": 98.0, "close": 98.0 },
+      "expected": { "is_bullish": false, "is_bearish": false, "rejection_wick_pct": 1.0 }
+    },
+    {
+      "name": "bullish_equal_body_boundary_inclusive",
+      "prev": { "open": 100.0, "high": 100.5, "low": 97.5, "close": 98.0 },
+      "curr": { "open": 98.0, "high": 100.5, "low": 97.5, "close": 100.0 },
+      "expected": { "is_bullish": true, "is_bearish": false, "rejection_wick_pct": 0.16666666666666666 }
+    },
+    {
+      "name": "two_green_curr_engulfs_body_but_prev_not_red",
+      "prev": { "open": 98.0, "high": 100.5, "low": 97.5, "close": 100.0 },
+      "curr": { "open": 97.0, "high": 101.5, "low": 96.5, "close": 101.0 },
+      "expected": { "is_bullish": false, "is_bearish": false, "rejection_wick_pct": 1.0 }
+    },
+    {
+      "name": "bullish_zero_upper_wick_close_equals_high",
+      "prev": { "open": 100.0, "high": 100.5, "low": 97.5, "close": 98.0 },
+      "curr": { "open": 97.0, "high": 101.0, "low": 96.0, "close": 101.0 },
+      "expected": { "is_bullish": true, "is_bearish": false, "rejection_wick_pct": 0.0 }
+    }
+  ]
+}

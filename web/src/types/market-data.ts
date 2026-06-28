@@ -132,4 +132,5 @@ export interface IndicatorConfig {
   rsi: boolean
   macd: boolean
   bollinger: boolean
+  engulfing: boolean
 }

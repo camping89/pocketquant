@@ -18,6 +18,7 @@ import {
   type IndicatorSeriesRefs,
 } from './indicator-series'
 import { useRealtimeBar } from '../../hooks/use-realtime-bar'
+import { engulfingMarkers } from '../../lib/indicators/engulfing'
 import { toUTCTimestamp } from '../../api/market-data-api'
 import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { BacktestPosition } from '../../api/backtest-api'
@@ -227,22 +228,41 @@ export function TradingChart({
     return result.sort((a, b) => (a.time as number) - (b.time as number))
   }, [positions])
 
+  // Pattern markers from the engulfing toggle — independent of backtest positions.
+  const engulfMarkers = useMemo<SeriesMarker<Time>[]>(() => {
+    if (!indicators.engulfing || !data?.candles) return []
+    return engulfingMarkers(data.candles)
+  }, [indicators.engulfing, data])
+
+  // One marker set drives one plugin instance: backtest + engulfing share the
+  // candle series, so merge into a single sorted array before setMarkers — a
+  // second createSeriesMarkers call would replace, not add.
+  const mergedMarkers = useMemo<SeriesMarker<Time>[]>(
+    () => [...markers, ...engulfMarkers].sort((a, b) => (a.time as number) - (b.time as number)),
+    [markers, engulfMarkers],
+  )
+
   useEffect(() => {
     if (!candleRef.current) return
 
     if (markersRef.current) {
-      markersRef.current.setMarkers(markers)
-    } else if (markers.length > 0) {
-      markersRef.current = createSeriesMarkers(candleRef.current, markers)
+      markersRef.current.setMarkers(mergedMarkers)
+    } else if (mergedMarkers.length > 0) {
+      markersRef.current = createSeriesMarkers(candleRef.current, mergedMarkers)
     }
+  }, [mergedMarkers])
 
+  // Detach the markers plugin only on unmount — toggling to an empty set clears
+  // markers via setMarkers([]) above, so detaching on empty would churn the
+  // plugin and flicker when markers return.
+  useEffect(() => {
     return () => {
-      if (markersRef.current && markers.length === 0) {
+      if (markersRef.current) {
         markersRef.current.detach()
         markersRef.current = null
       }
     }
-  }, [markers])
+  }, [])
 
   useEffect(() => {
     const candle = candleRef.current

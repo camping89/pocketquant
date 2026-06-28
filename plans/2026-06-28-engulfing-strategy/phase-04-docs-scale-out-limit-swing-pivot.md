@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Docs (scale-out limit + swing pivot)"
-status: pending
+status: completed
 priority: P3
 dependencies: []
 ---

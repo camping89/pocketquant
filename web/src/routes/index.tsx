@@ -30,6 +30,7 @@ const DEFAULT_INDICATORS: IndicatorConfig = {
   rsi: false,
   macd: false,
   bollinger: false,
+  engulfing: false,
 }
 
 function localStorageKey(symbol: string): string {
