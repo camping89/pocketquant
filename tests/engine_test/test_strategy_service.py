@@ -147,7 +147,7 @@ async def test_start_stop_writes_desired_state(op, command, written_state) -> No
     ],
 )
 @pytest.mark.asyncio
-async def test_start_stop_raises_not_found_when_zero_modified(op, command) -> None:
+async def test_start_stop_raises_not_found_when_no_sub_matches(op, command) -> None:
     sub_repo = MagicMock()
     sub_repo.update_desired_state = AsyncMock(return_value=0)
     svc = _cmd_svc(sub_repo=sub_repo)
