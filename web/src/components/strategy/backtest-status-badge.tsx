@@ -42,7 +42,7 @@ export function BacktestStatusBadge({ status, lastRunAt, errorMsg }: BacktestSta
       }}
     >
       {key === 'running' && (
-        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: s.color, animation: 'pulse 1.4s ease infinite' }} />
+        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: s.color, animation: 'status-pulse 1.4s ease infinite' }} />
       )}
       {s.label}
     </span>

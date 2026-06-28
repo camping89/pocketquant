@@ -1,24 +1,18 @@
-import { apiFetch, apiPost } from './api-client'
+import { apiFetch, apiPost, ApiError } from './api-client'
 import type { SubscriptionBacktest } from './backtest-api'
 
 // Re-export so existing consumers importing from strategy-api continue to work.
 export type { SubscriptionBacktest } from './backtest-api'
-
-// Custom error that carries HTTP status so callers can branch on 404 etc.
-export class ApiError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
+export { ApiError } from './api-client'
 
 export interface SubscriptionBacktestStatus {
   status: 'running' | 'completed' | 'failed'
   last_run_at: string | null
   error_msg: string | null
 }
+
+/** Reconcile-loop run state: desired = what the user asked for, actual = live truth. */
+export type RunState = 'running' | 'stopped'
 
 export interface Subscription {
   id: string
@@ -27,6 +21,11 @@ export interface Subscription {
   symbol: string
   interval: string
   created_at: string
+  /** Target state written by start/stop; reconcile converges actual toward it. */
+  desired_state: RunState
+  /** Reconcile loop's mirror of live engine state. */
+  actual_state: RunState
+  /** Derived: actual_state === 'running'. Kept for back-compat. */
   is_running: boolean
   backtest: SubscriptionBacktestStatus | null
 }

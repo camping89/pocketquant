@@ -30,8 +30,10 @@ class NotFoundError(AppError):
 
 
 class DomainError(AppError):
-    def __init__(self, message: str, *, error_code: str = "DOMAIN_ERROR"):
-        super().__init__(message, status_code=400, error_code=error_code)
+    def __init__(
+        self, message: str, *, error_code: str = "DOMAIN_ERROR", status_code: int = 400
+    ):
+        super().__init__(message, status_code=status_code, error_code=error_code)
 
 
 class _ValidationError(Protocol):
