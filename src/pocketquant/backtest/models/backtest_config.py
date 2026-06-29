@@ -33,20 +33,6 @@ class BacktestConfig:
     replay_speed: float = 0.0  # 0 = max speed, 1 = real-time, 10 = 10x
     parameters: dict[str, Any] = field(default_factory=dict)
 
-    def with_parameters(self, params: dict[str, Any]) -> BacktestConfig:
-        return BacktestConfig(
-            strategy_code=self.strategy_code,
-            symbol=self.symbol,
-            interval=self.interval,
-            start_date=self.start_date,
-            end_date=self.end_date,
-            initial_capital=self.initial_capital,
-            slippage_bps=self.slippage_bps,
-            commission_bps=self.commission_bps,
-            replay_speed=self.replay_speed,
-            parameters={**self.parameters, **params},
-        )
-
     @property
     def slippage_percent(self) -> float:
         return self.slippage_bps / 10_000

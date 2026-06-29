@@ -10,8 +10,9 @@ StrategyQueryService:
   ephemeral Mongo container.
 - start/stop are pure DB writes of desired_state (reconcile converges actual_state
   later); missing subscription raises NotFoundError.
-- remove_symbol / delete_strategy cascade-delete the subscription, its cached
-  backtest, and queued requests, holding no engine/scheduler reference.
+- remove_symbol deletes the subscription doc; delete_strategy cascade-deletes the
+  subscriptions plus this strategy's ad-hoc backtest runs. Subscriptions own no
+  backtest state (forward-testing only).
 - list_symbols sources run-state from the DB; is_running derives from actual_state.
 
 Handler classes below are thin shims mapping the old Handler(repo) + handle(cmd)
@@ -29,15 +30,11 @@ import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.uuid import UUID, generate_id
-from pocketquant.core.domain.backtest.request import BacktestRequest
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
-)
-from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
 )
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
@@ -58,7 +55,6 @@ class StartStrategyHandler:
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
             backtest_repository=MagicMock(),
-            backtest_request_repository=MagicMock(),
             tracked_symbol_repository=MagicMock(),
         )
 
@@ -71,7 +67,6 @@ class StopStrategyHandler:
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
             backtest_repository=MagicMock(),
-            backtest_request_repository=MagicMock(),
             tracked_symbol_repository=MagicMock(),
         )
 
@@ -88,7 +83,6 @@ class AddSymbolHandler:
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
             backtest_repository=MagicMock(),
-            backtest_request_repository=MagicMock(),
             tracked_symbol_repository=tracked_symbol_repository,
         )
 
@@ -97,16 +91,11 @@ class AddSymbolHandler:
 
 
 class ListSymbolsHandler:
-    def __init__(
-        self,
-        subscription_repository: Any,
-        backtest_repository: Any,
-    ) -> None:
+    def __init__(self, subscription_repository: Any) -> None:
         from pocketquant.engine.strategy_query_service import StrategyQueryService
 
         self._svc = StrategyQueryService(
             subscription_repository=subscription_repository,
-            backtest_repository=backtest_repository,
             position_repository=MagicMock(),
         )
 
@@ -115,18 +104,16 @@ class ListSymbolsHandler:
 
 
 class RemoveSymbolHandler:
-    """Map old (bt_repo, request_repo, sub_repo) args to StrategyCommandService."""
+    """Map old (bt_repo, sub_repo) args to StrategyCommandService."""
 
     def __init__(
         self,
         backtest_repository: Any,
-        backtest_request_repository: Any,
         subscription_repository: Any,
     ) -> None:
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
             backtest_repository=backtest_repository,
-            backtest_request_repository=backtest_request_repository,
             tracked_symbol_repository=MagicMock(),
         )
 
@@ -135,18 +122,16 @@ class RemoveSymbolHandler:
 
 
 class DeleteStrategyHandler:
-    """Map old (sub_repo, bt_repo, request_repo) args to StrategyCommandService."""
+    """Map old (sub_repo, bt_repo) args to StrategyCommandService."""
 
     def __init__(
         self,
         subscription_repository: Any,
         backtest_repository: Any,
-        backtest_request_repository: Any,
     ) -> None:
         self._svc = StrategyCommandService(
             subscription_repository=subscription_repository,
             backtest_repository=backtest_repository,
-            backtest_request_repository=backtest_request_repository,
             tracked_symbol_repository=MagicMock(),
         )
 
@@ -172,17 +157,6 @@ def _make_sub(
     )
 
 
-def _queued(sub_id: str) -> BacktestRequest:
-    return BacktestRequest(
-        id=generate_id(),
-        kind="subscription",
-        status="pending",
-        requested_at=datetime.now(UTC),
-        sub_id=sub_id,
-        strategy_code=_STRATEGY,
-    )
-
-
 def _has_no_attr(handler: Any, *names: str) -> None:
     """Assert the handler carries no engine/scheduler reference."""
     for attr in vars(handler):
@@ -205,16 +179,15 @@ async def repo(settings):
 
 @pytest.fixture
 async def repos(settings):
-    """(sub_repo, bt_repo, request_repo) trio for cascade-delete tests."""
+    """(sub_repo, bt_repo) pair for cascade-delete tests."""
     db = Database()
     await db.connect(settings)
     sub_repo = SubscriptionRepository(db)
     bt_repo = BacktestRepository(db)
-    request_repo = BacktestRequestRepository(db)
-    for coll in ("subscriptions", "backtest_runs", "backtest_requests"):
+    for coll in ("subscriptions", "backtest_runs"):
         await db.get_collection(coll).drop()
-    yield sub_repo, bt_repo, request_repo
-    for coll in ("subscriptions", "backtest_runs", "backtest_requests"):
+    yield sub_repo, bt_repo
+    for coll in ("subscriptions", "backtest_runs"):
         await db.get_collection(coll).drop()
     await db.disconnect()
 
@@ -383,11 +356,8 @@ async def test_list_symbols_sources_state_from_db_no_ram_read(repo):
     await repo.update_desired_state(str(sub.id), "running")
     await repo.update_actual_state(str(sub.id), "running")
 
-    bt_repo = MagicMock()
-    bt_repo.get_subscription_statuses = AsyncMock(return_value={})
-
     # No strategy_service dependency — handler must not need RAM to report state.
-    handler = ListSymbolsHandler(subscription_repository=repo, backtest_repository=bt_repo)
+    handler = ListSymbolsHandler(subscription_repository=repo)
 
     rows = await handler.handle(ListSymbolsQuery())
 
@@ -405,10 +375,7 @@ async def test_list_symbols_is_running_false_when_actual_stopped(repo):
     await repo.add(sub)
     await repo.update_desired_state(str(sub.id), "running")  # desired running, actual still stopped
 
-    bt_repo = MagicMock()
-    bt_repo.get_subscription_statuses = AsyncMock(return_value={})
-
-    handler = ListSymbolsHandler(subscription_repository=repo, backtest_repository=bt_repo)
+    handler = ListSymbolsHandler(subscription_repository=repo)
     rows = await handler.handle(ListSymbolsQuery())
 
     row = rows[0]
@@ -417,45 +384,36 @@ async def test_list_symbols_is_running_false_when_actual_stopped(repo):
     assert row["is_running"] is False  # converging — actual lags desired
 
 
-# --- remove_symbol / delete_strategy: cascade DB deletes, no engine reference ---
+# --- remove_symbol / delete_strategy: DB deletes, no engine reference ---
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_remove_symbol_pure_db_delete(repos):
-    sub_repo, bt_repo, request_repo = repos
+    sub_repo, bt_repo = repos
     sub = _make_sub()
     await sub_repo.add(sub)
-    await bt_repo.upsert_status(str(sub.id), strategy_code=_STRATEGY, status="completed")
-    await request_repo.enqueue(_queued(str(sub.id)))
 
-    handler = RemoveSymbolHandler(bt_repo, request_repo, sub_repo)
+    handler = RemoveSymbolHandler(bt_repo, sub_repo)
     _has_no_attr(handler, "StrategyAppService", "JobScheduler")
 
     await handler.handle(RemoveSymbolCommand(sub_id=str(sub.id)))
 
     assert await sub_repo.get(str(sub.id)) is None
-    assert await bt_repo.get_subscription_status(str(sub.id)) is None
-    assert await request_repo._collection().count_documents({"sub_id": str(sub.id)}) == 0
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_delete_strategy_cascades_all_subs(repos):
-    sub_repo, bt_repo, request_repo = repos
+    sub_repo, bt_repo = repos
     sub1 = _make_sub(interval=Interval.HOUR_1)
     sub2 = _make_sub(interval=Interval.MINUTE_5)
     for s in (sub1, sub2):
         await sub_repo.add(s)
-        await bt_repo.upsert_status(str(s.id), strategy_code=_STRATEGY, status="completed")
-        await request_repo.enqueue(_queued(str(s.id)))
 
-    handler = DeleteStrategyHandler(sub_repo, bt_repo, request_repo)
+    handler = DeleteStrategyHandler(sub_repo, bt_repo)
     _has_no_attr(handler, "StrategyAppService", "JobScheduler")
 
     await handler.handle(DeleteStrategyCommand(strategy_id=_STRATEGY))
 
     assert await sub_repo.list_by_strategy_code(_STRATEGY) == []
-    for s in (sub1, sub2):
-        assert await bt_repo.get_subscription_status(str(s.id)) is None
-        assert await request_repo._collection().count_documents({"sub_id": str(s.id)}) == 0

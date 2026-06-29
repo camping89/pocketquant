@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
-import type { SubscriptionBacktest } from '../../../api/backtest-api'
+import type { BacktestRunResult } from '../../../api/backtest-api'
 import { MetricCard } from './metric-card'
 import { buildMetricCards } from './metric-cards'
 
 interface MetricsTabProps {
-  backtest: SubscriptionBacktest
+  backtest: BacktestRunResult
 }
 
 export function MetricsTab({ backtest }: MetricsTabProps) {

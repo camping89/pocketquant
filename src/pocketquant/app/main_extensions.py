@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
 from pocketquant.app.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
-from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
@@ -35,18 +34,12 @@ from pocketquant.core.infra.persistence.repositories.backtest_order_repository i
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
 from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
-)
-from pocketquant.core.infra.persistence.repositories.optimization_repository import (
-    OptimizationRepository,
 )
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -74,13 +67,11 @@ _REPO_TYPES: list[type] = [
     OrderRepository,
     PositionRepository,
     BacktestRepository,
-    BacktestRequestRepository,
     BacktestOrderRepository,
     BacktestTradeRepository,
     BarRepository,
     SyncStatusRepository,
     SymbolRepository,
-    OptimizationRepository,
     JobHistoryRepository,
     SubscriptionRepository,
     TrackedSymbolRepository,
@@ -94,15 +85,16 @@ async def ensure_all_indexes(container: AsyncContainer) -> None:
     logger.info("database_indexes_ensured")
 
 
-async def recover_stale_backtests(container: AsyncContainer) -> None:
-    """Mark any backtest docs stuck in 'running' as 'failed' on startup.
+async def recover_orphan_backtests(container: AsyncContainer) -> None:
+    """Flip any run left ``started`` by a killed task to ``failed`` on startup.
 
-    Safe to call repeatedly — idempotent. Logs once if any docs were updated.
+    Single uvicorn worker → no legitimately in-flight run survives a restart, so
+    every ``started`` doc is an orphan. Without this, FE would poll it forever.
     """
     repo = await container.get(BacktestRepository)
-    n = await repo.mark_stale_running_as_failed()
+    n = await repo.mark_orphaned_started_as_failed()
     if n:
-        logger.info("stale_backtest_recovery", marked_failed=n)
+        logger.info("orphan_backtest_recovery", marked_failed=n)
 
 
 async def recover_orphan_jobs(container: AsyncContainer) -> None:
@@ -255,34 +247,31 @@ async def stop_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
     logger.info("reconcile_loop.stopped")
 
 
-async def start_backtest_worker(container: AsyncContainer, app: FastAPI) -> None:
-    """Start the backtest-request queue worker as a background task.
+def init_backtest_tasks(app: FastAPI) -> None:
+    """Hold strong refs to in-flight ``/backtest/run`` tasks.
 
-    Gated on ``enable_jobs`` (same as scheduler/reconcile) so the test/CLI
-    profile never drains the queue. The worker owns ALL backtest compute,
-    replacing the removed APScheduler ``bt:*`` one-off jobs.
+    asyncio only weak-references tasks, so without this set a run could be GC'd
+    mid-flight. The route adds each task and discards it on completion.
     """
-    settings = await container.get(Settings)
-    if not settings.enable_jobs:
-        logger.info("backtest_worker_disabled")
+    app.state.backtest_tasks = set()
+
+
+async def drain_backtest_tasks(app: FastAPI, timeout: float = 10.0) -> None:
+    """Let in-flight backtests finish persisting before container.close().
+
+    Drain (await) rather than cancel: cancelling mid-write risks a half-persisted
+    run, and ``CancelledError`` is a ``BaseException`` the engine's ``except
+    Exception`` would miss. Runs still ``started`` past the timeout are left for
+    the next boot's orphan sweep to flip to ``failed``.
+    """
+    tasks: set[asyncio.Task] = getattr(app.state, "backtest_tasks", set())
+    pending = {t for t in tasks if not t.done()}
+    if not pending:
         return
-
-    worker = await container.get(BacktestRequestWorker)
-    app.state.backtest_worker_task = asyncio.create_task(worker.run())
-    logger.info("backtest_worker.started")
-
-
-async def stop_backtest_worker(container: AsyncContainer, app: FastAPI) -> None:
-    """Cancel the backtest-worker task. Must run BEFORE container.close so the
-    worker never dispatches against an engine that is shutting down."""
-    task: asyncio.Task | None = getattr(app.state, "backtest_worker_task", None)
-    if task and not task.done():
-        task.cancel()
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
-        except (TimeoutError, asyncio.CancelledError):
-            pass
-    logger.info("backtest_worker.stopped")
+    logger.info("backtest_tasks.draining", count=len(pending))
+    _, still_pending = await asyncio.wait(pending, timeout=timeout)
+    if still_pending:
+        logger.warning("backtest_tasks.drain_timeout", abandoned=len(still_pending))
 
 
 async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
@@ -375,7 +364,7 @@ async def _list_jobs_from_mongo(
 
 
 def register_routes(app: FastAPI, settings) -> None:
-    from pocketquant.app.routes.backtest import backtest_router, run_all_backtests_router
+    from pocketquant.app.routes.backtest import backtest_router
     from pocketquant.app.routes.market_data import router as market_data_router
     from pocketquant.app.routes.market_data_quotes import router as quote_router
     from pocketquant.app.routes.strategy import strategy_router, subscription_router
@@ -410,7 +399,6 @@ def register_routes(app: FastAPI, settings) -> None:
     api.include_router(quote_router)
     api.include_router(system_jobs_router)
     api.include_router(strategy_router)
-    api.include_router(run_all_backtests_router)
     api.include_router(subscription_router)
     api.include_router(trading_router)
     api.include_router(backtest_router)

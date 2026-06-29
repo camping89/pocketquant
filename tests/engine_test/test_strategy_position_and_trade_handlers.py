@@ -27,7 +27,6 @@ class GetStrategyPositionsHandler:
 
         self._svc = StrategyQueryService(
             subscription_repository=MagicMock(),
-            backtest_repository=MagicMock(),
             position_repository=position_repository,
         )
 
@@ -45,7 +44,6 @@ class GetStrategyTradesHandler:
 
         self._svc = StrategyQueryService(
             subscription_repository=MagicMock(),
-            backtest_repository=MagicMock(),
             position_repository=position_repository,
         )
 

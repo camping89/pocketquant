@@ -18,48 +18,6 @@
         "title": "AddTrackedSymbolCommand",
         "type": "object"
       },
-      "BacktestRequestStatusResponse": {
-        "description": "Poll response for a single backtest request.\n\n``result`` carries the assembled FE payload (run_id/status/metrics/positions)\nonce ``status == 'done'``; it is None while pending/running and on failure.",
-        "properties": {
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "request_id": {
-            "title": "Request Id",
-            "type": "string"
-          },
-          "result": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "request_id",
-          "status"
-        ],
-        "title": "BacktestRequestStatusResponse",
-        "type": "object"
-      },
       "BulkSyncCommand": {
         "description": "Sync multiple composite symbols in sequence.\n\nEach entry in ``symbols`` must be a composite ``{code}:{exchange}`` string\n(e.g. ``\"BTCUSDT:BINANCE\"``).",
         "properties": {
@@ -211,60 +169,6 @@
           "count"
         ],
         "title": "OHLCVResponse",
-        "type": "object"
-      },
-      "OptimizationSummaryResponse": {
-        "properties": {
-          "best_metric_value": {
-            "title": "Best Metric Value",
-            "type": "number"
-          },
-          "best_parameters": {
-            "additionalProperties": true,
-            "title": "Best Parameters",
-            "type": "object"
-          },
-          "completed_combinations": {
-            "title": "Completed Combinations",
-            "type": "integer"
-          },
-          "failed_combinations": {
-            "title": "Failed Combinations",
-            "type": "integer"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "strategy_code": {
-            "title": "Strategy Code",
-            "type": "string"
-          },
-          "target_metric": {
-            "title": "Target Metric",
-            "type": "string"
-          },
-          "total_combinations": {
-            "title": "Total Combinations",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "strategy_code",
-          "status",
-          "total_combinations",
-          "completed_combinations",
-          "failed_combinations",
-          "target_metric",
-          "best_parameters",
-          "best_metric_value"
-        ],
-        "title": "OptimizationSummaryResponse",
         "type": "object"
       },
       "QuoteResponse": {
@@ -454,89 +358,6 @@
         "title": "RunBacktestCommand",
         "type": "object"
       },
-      "RunOptimizationCommand": {
-        "description": "Command to run grid optimization across parameter combinations.\n\n``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).",
-        "properties": {
-          "commission_bps": {
-            "default": 10.0,
-            "minimum": 0.0,
-            "title": "Commission Bps",
-            "type": "number"
-          },
-          "end_date": {
-            "description": "Backtest end date",
-            "format": "date",
-            "title": "End Date",
-            "type": "string"
-          },
-          "initial_capital": {
-            "default": 10000.0,
-            "minimum": 100.0,
-            "title": "Initial Capital",
-            "type": "number"
-          },
-          "interval": {
-            "description": "Bar interval",
-            "title": "Interval",
-            "type": "string"
-          },
-          "max_workers": {
-            "default": 4,
-            "description": "Max concurrent backtests",
-            "maximum": 16.0,
-            "minimum": 1.0,
-            "title": "Max Workers",
-            "type": "integer"
-          },
-          "parameter_grid": {
-            "additionalProperties": {
-              "items": {},
-              "type": "array"
-            },
-            "description": "Parameter grid (e.g., {'ma_fast': [5,10,20]})",
-            "title": "Parameter Grid",
-            "type": "object"
-          },
-          "slippage_bps": {
-            "default": 10.0,
-            "minimum": 0.0,
-            "title": "Slippage Bps",
-            "type": "number"
-          },
-          "start_date": {
-            "description": "Backtest start date",
-            "format": "date",
-            "title": "Start Date",
-            "type": "string"
-          },
-          "strategy_id": {
-            "description": "Strategy identifier",
-            "title": "Strategy Id",
-            "type": "string"
-          },
-          "symbol": {
-            "description": "Composite symbol (e.g. BTCUSDT:BINANCE)",
-            "title": "Symbol",
-            "type": "string"
-          },
-          "target_metric": {
-            "default": "sharpe_ratio",
-            "description": "Metric to optimize",
-            "title": "Target Metric",
-            "type": "string"
-          }
-        },
-        "required": [
-          "strategy_id",
-          "symbol",
-          "interval",
-          "start_date",
-          "end_date",
-          "parameter_grid"
-        ],
-        "title": "RunOptimizationCommand",
-        "type": "object"
-      },
       "StrategyTemplateResponse": {
         "properties": {
           "strategy_code": {
@@ -709,137 +530,9 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/v1/backtest/optimization/{optimization_id}": {
-      "get": {
-        "operationId": "get_optimization_api_v1_backtest_optimization__optimization_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "optimization_id",
-            "required": true,
-            "schema": {
-              "title": "Optimization Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Optimization Api V1 Backtest Optimization  Optimization Id  Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Optimization",
-        "tags": [
-          "backtest"
-        ]
-      }
-    },
-    "/api/v1/backtest/optimize": {
-      "post": {
-        "description": "Run grid optimization across parameter combinations.\n\nTests all combinations of parameters and returns ranked results.\nMaximum 1000 combinations allowed.",
-        "operationId": "run_optimization_api_v1_backtest_optimize_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunOptimizationCommand"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OptimizationSummaryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Run Optimization",
-        "tags": [
-          "backtest"
-        ]
-      }
-    },
-    "/api/v1/backtest/requests/{request_id}": {
-      "get": {
-        "operationId": "get_backtest_request_api_v1_backtest_requests__request_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "request_id",
-            "required": true,
-            "schema": {
-              "title": "Request Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BacktestRequestStatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Backtest Request",
-        "tags": [
-          "backtest"
-        ]
-      }
-    },
     "/api/v1/backtest/run": {
       "post": {
-        "description": "Enqueue a single backtest run. Returns a request id for polling.\n\nExecution is async: the headless app's worker runs the engine and embeds the\nresult in the request doc. Poll ``GET /backtest/requests/{request_id}``.",
+        "description": "Start a single backtest. Returns ``run_id`` (202); poll ``GET /backtest/{run_id}``.\n\nThe engine runs in-process via ``asyncio.create_task`` — uncapped by design\n(the operator owns traffic). Concurrent runs share the live Mongo pool\n(``MONGODB_MAX_POOL_SIZE``, default 50), so a flood of large runs can starve\nlive-trading order persistence; that trade-off is accepted, not guarded here.",
         "operationId": "run_backtest_api_v1_backtest_run_post",
         "requestBody": {
           "content": {
@@ -1054,6 +747,51 @@
           }
         },
         "summary": "Get Backtest Equity",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
+    "/api/v1/backtest/{run_id}/trades": {
+      "get": {
+        "description": "Closed round-trip trades for a run (joined from ``backtest_trades``).",
+        "operationId": "get_backtest_trades_api_v1_backtest__run_id__trades_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Backtest Trades Api V1 Backtest  Run Id  Trades Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backtest Trades",
         "tags": [
           "backtest"
         ]
@@ -2068,50 +1806,6 @@
         ]
       }
     },
-    "/api/v1/strategies/{strategy_code}/run-all-backtests": {
-      "post": {
-        "operationId": "run_all_backtests_api_v1_strategies__strategy_code__run_all_backtests_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "strategy_code",
-            "required": true,
-            "schema": {
-              "title": "Strategy Code",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run All Backtests Api V1 Strategies  Strategy Code  Run All Backtests Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Run All Backtests",
-        "tags": [
-          "strategies"
-        ]
-      }
-    },
     "/api/v1/strategies/{strategy_code}/subscriptions": {
       "post": {
         "description": "Create a subscription that binds a strategy template to (symbol, interval).\n\n``symbol`` must be composite ``{code}:{exchange}``.",
@@ -2248,51 +1942,6 @@
           }
         },
         "summary": "Remove Subscription",
-        "tags": [
-          "subscriptions"
-        ]
-      }
-    },
-    "/api/v1/subscriptions/{sub_id}/backtest": {
-      "get": {
-        "description": "Return the cached backtest result for a subscription (200) or 404 if never run.",
-        "operationId": "get_subscription_backtest_api_v1_subscriptions__sub_id__backtest_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "sub_id",
-            "required": true,
-            "schema": {
-              "title": "Sub Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Subscription Backtest Api V1 Subscriptions  Sub Id  Backtest Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Subscription Backtest",
         "tags": [
           "subscriptions"
         ]

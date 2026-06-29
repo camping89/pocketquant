@@ -41,9 +41,8 @@ export function useDeleteSubscription(strategyCode: string | null) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (subId: string) => removeSubscription(subId),
-    onSuccess: (_, subId) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
-      qc.invalidateQueries({ queryKey: ['subscription-backtest', subId] })
     },
   })
 }
@@ -54,7 +53,6 @@ export function useDeleteStrategyById() {
     mutationFn: (strategyCode: string) => deleteStrategy(strategyCode),
     onSuccess: (_, strategyCode) => {
       qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
-      qc.removeQueries({ queryKey: ['subscription-backtest'] })
       qc.invalidateQueries({ queryKey: ['strategies'] })
     },
   })

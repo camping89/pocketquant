@@ -1,15 +1,6 @@
 import { apiFetch, apiPost, ApiError } from './api-client'
-import type { SubscriptionBacktest } from './backtest-api'
 
-// Re-export so existing consumers importing from strategy-api continue to work.
-export type { SubscriptionBacktest } from './backtest-api'
 export { ApiError } from './api-client'
-
-export interface SubscriptionBacktestStatus {
-  status: 'running' | 'completed' | 'failed'
-  last_run_at: string | null
-  error_msg: string | null
-}
 
 /** Reconcile-loop run state: desired = what the user asked for, actual = live truth. */
 export type RunState = 'running' | 'stopped'
@@ -27,7 +18,6 @@ export interface Subscription {
   actual_state: RunState
   /** Derived: actual_state === 'running'. Kept for back-compat. */
   is_running: boolean
-  backtest: SubscriptionBacktestStatus | null
 }
 
 export async function listSubscriptions(strategyCode?: string): Promise<Subscription[]> {
@@ -47,19 +37,6 @@ export async function removeSubscription(subId: string): Promise<void> {
     method: 'DELETE',
   })
   if (!res.ok) throw new ApiError(`DELETE subscription failed: ${res.status}`, res.status)
-}
-
-export async function runAllBacktests(strategyCode: string): Promise<{ job_ids: string[] }> {
-  return apiPost<{ job_ids: string[] }>(
-    `/api/v1/strategies/${strategyCode}/run-all-backtests`,
-    {},
-  )
-}
-
-export async function getSubscriptionBacktest(subId: string): Promise<SubscriptionBacktest> {
-  const res = await fetch(`/api/v1/subscriptions/${subId}/backtest`)
-  if (!res.ok) throw new ApiError(`GET backtest failed: ${res.status}`, res.status)
-  return res.json()
 }
 
 export async function deleteStrategy(strategyCode: string): Promise<void> {

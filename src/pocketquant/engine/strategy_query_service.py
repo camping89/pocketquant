@@ -10,11 +10,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
-from pocketquant.core.infra.persistence.repositories.backtest_repository import (
-    BacktestRepository,
-)
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
@@ -46,21 +42,15 @@ class GetStrategyTradesQuery(BaseModel):
     limit: int = 100
 
 
-class GetSubscriptionBacktestQuery(BaseModel):
-    sub_id: str
-
-
 class StrategyQueryService:
     """Read-side strategy operations — all reads from Mongo/RAM registries."""
 
     def __init__(
         self,
         subscription_repository: SubscriptionRepository,
-        backtest_repository: BacktestRepository,
         position_repository: PositionRepository,
     ) -> None:
         self._sub_repo = subscription_repository
-        self._bt_repo = backtest_repository
         self._position_repo = position_repository
 
     async def get_all(self, query: GetStrategiesQuery) -> list[dict]:
@@ -94,9 +84,6 @@ class StrategyQueryService:
         if not subs:
             return []
 
-        sub_ids = [str(sub.id) for sub in subs]
-        bt_statuses = await self._bt_repo.get_subscription_statuses(sub_ids)
-
         return [
             {
                 "id": str(sub.id),
@@ -107,7 +94,6 @@ class StrategyQueryService:
                 "desired_state": sub.desired_state,
                 "actual_state": sub.actual_state,
                 "is_running": sub.actual_state == "running",
-                "backtest": bt_statuses.get(str(sub.id)),
             }
             for sub in subs
         ]
@@ -151,18 +137,3 @@ class StrategyQueryService:
             }
             for p in closed
         ]
-
-    async def get_subscription_backtest(self, query: GetSubscriptionBacktestQuery) -> dict:
-        """Return the backtest doc for the subscription, or 404 if never run.
-
-        Uses find_doc_by_subscription() rather than find_by_subscription() so
-        that status-only docs ('running', 'failed') that lack full BacktestResult
-        fields are returned cleanly without deserialisation errors.
-        """
-        doc = await self._bt_repo.find_doc_by_subscription(query.sub_id)
-        if doc is None:
-            raise NotFoundError(
-                f"No backtest found for subscription '{query.sub_id}'. "
-                "Trigger a run via POST /strategies/{strategy_code}/run-all-backtests first."
-            )
-        return doc

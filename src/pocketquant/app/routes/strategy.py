@@ -24,7 +24,6 @@ from pocketquant.engine.strategy_query_service import (
     GetStrategyPositionsQuery,
     GetStrategyQuery,
     GetStrategyTradesQuery,
-    GetSubscriptionBacktestQuery,
     ListSymbolsQuery,
     StrategyQueryService,
 )
@@ -143,15 +142,6 @@ async def get_subscription_trades(
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
     return await query_svc.get_trades(GetStrategyTradesQuery(subscription_id=sub_id, limit=limit))
-
-
-@subscription_router.get("/{sub_id}/backtest")
-async def get_subscription_backtest(
-    sub_id: str,
-    query_svc: FromDishka[StrategyQueryService],
-) -> dict:
-    """Return the cached backtest result for a subscription (200) or 404 if never run."""
-    return await query_svc.get_subscription_backtest(GetSubscriptionBacktestQuery(sub_id=sub_id))
 
 
 @subscription_router.delete("/{sub_id}", status_code=204)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -9,7 +9,6 @@ from pocketquant.core.domain.backtest.value_objects import (
     BacktestMetrics,
     EquityPoint,
     OpenLot,
-    OptimizationResultEntry,
 )
 
 
@@ -31,10 +30,32 @@ class BacktestResult:
     equity_curve: list[EquityPoint]
     started_at: datetime
     completed_at: datetime
-    status: str  # "completed", "failed"
+    status: str  # "started", "finished", "failed"
     error_message: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)  # For optimizer
     open_positions: list[OpenLot] = field(default_factory=list)
+
+    @classmethod
+    def started(cls, run_id: str, config_snapshot: dict[str, Any]) -> BacktestResult:
+        """Placeholder doc the route persists before spawning the engine task.
+
+        Zeroed metrics keep ``from_mongo`` round-tripping while FE polls — the
+        engine overwrites this same ``run_id`` with the real result on finish.
+        ``completed_at`` mirrors ``started_at`` so the slim doc stays well-formed
+        until then.
+        """
+        now = datetime.now(UTC)
+        return cls(
+            id=UUID(run_id),
+            strategy_code=config_snapshot["strategy_code"],
+            config_snapshot=config_snapshot,
+            metrics=BacktestMetrics.empty(),
+            equity_curve=[],
+            started_at=now,
+            completed_at=now,
+            status="started",
+            parameters=config_snapshot.get("parameters", {}),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return self.to_mongo()
@@ -69,62 +90,4 @@ class BacktestResult:
             status=data["status"],
             error_message=data.get("error_message"),
             parameters=data.get("parameters", {}),
-        )
-
-
-@dataclass
-class OptimizationResult:
-    id: UUID
-    strategy_code: str
-    config_snapshot: dict[str, Any]  # Serialized OptimizationConfig
-    target_metric: str
-    total_combinations: int
-    completed_combinations: int
-    failed_combinations: int
-    results: list[OptimizationResultEntry]  # Ranked by target metric
-    best_parameters: dict[str, Any]
-    best_metrics: BacktestMetrics
-    started_at: datetime
-    completed_at: datetime
-    status: str  # "running", "completed", "failed"
-    error_message: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.to_mongo()
-
-    def to_mongo(self) -> dict[str, Any]:
-        return {
-            "_id": str(self.id),
-            "strategy_code": self.strategy_code,
-            "config_snapshot": self.config_snapshot,
-            "target_metric": self.target_metric,
-            "total_combinations": self.total_combinations,
-            "completed_combinations": self.completed_combinations,
-            "failed_combinations": self.failed_combinations,
-            "results": [r.to_mongo() for r in self.results],
-            "best_parameters": self.best_parameters,
-            "best_metrics": self.best_metrics.to_mongo(),
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "status": self.status,
-            "error_message": self.error_message,
-        }
-
-    @classmethod
-    def from_mongo(cls, data: dict[str, Any]) -> OptimizationResult:
-        return cls(
-            id=UUID(data["_id"]),
-            strategy_code=data["strategy_code"],
-            config_snapshot=data["config_snapshot"],
-            target_metric=data["target_metric"],
-            total_combinations=data["total_combinations"],
-            completed_combinations=data["completed_combinations"],
-            failed_combinations=data["failed_combinations"],
-            results=[OptimizationResultEntry.from_mongo(r) for r in data.get("results", [])],
-            best_parameters=data["best_parameters"],
-            best_metrics=BacktestMetrics.from_mongo(data["best_metrics"]),
-            started_at=data["started_at"],
-            completed_at=data["completed_at"],
-            status=data["status"],
-            error_message=data.get("error_message"),
         )

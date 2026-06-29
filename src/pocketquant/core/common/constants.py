@@ -15,8 +15,6 @@ COLLECTION_POSITIONS = "positions"
 COLLECTION_BACKTEST_RUNS = "backtest_runs"
 COLLECTION_BACKTEST_ORDERS = "backtest_orders"
 COLLECTION_BACKTEST_TRADES = "backtest_trades"
-COLLECTION_BACKTEST_OPTIMIZATION_RUNS = "backtest_optimization_runs"
-COLLECTION_BACKTEST_REQUESTS = "backtest_requests"
 COLLECTION_JOB_HISTORY = "job_history"
 COLLECTION_TRACKED_SYMBOLS = "tracked_symbols"
 

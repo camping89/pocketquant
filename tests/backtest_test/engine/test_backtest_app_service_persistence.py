@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
@@ -149,7 +149,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     assert doc is not None
     assert "trades" not in doc
     assert "positions" not in doc
-    assert doc["status"] == "completed"
+    assert doc["status"] == "finished"
 
     # Orders: 2 (entry + exit), each FILLED with ≥2 events + ≥1 fill.
     orders = await order_repo.list_by_run(str(result.id))

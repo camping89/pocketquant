@@ -1,8 +1,11 @@
-"""Integration tests for BacktestRepository.mark_stale_running_as_failed."""
+"""Integration tests for BacktestRepository.mark_orphaned_started_as_failed.
+
+Single-worker boot sweep: every run still ``started`` is an orphan from a killed
+task and must be flipped to ``failed`` (no age threshold — there is no legitimate
+in-flight run across a restart).
+"""
 
 from __future__ import annotations
-
-from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -12,9 +15,6 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 )
 
 pytestmark = pytest.mark.integration
-
-
-# Fixtures
 
 
 @pytest.fixture
@@ -28,83 +28,43 @@ async def repo(settings):
     await db.disconnect()
 
 
-# Helpers
-
-
-async def _insert_running(repo: BacktestRepository, sub_id: str, age_minutes: float) -> None:
-    """Directly insert a minimal 'running' doc into the backtest_runs collection."""
-    collection = repo._collection()
-    now = datetime.now(UTC)
-    await collection.insert_one(
-        {
-            "_id": sub_id,
-            "subscription_id": sub_id,
-            "strategy_code": "strat-test",
-            "status": "running",
-            "last_run_at": now - timedelta(minutes=age_minutes),
-        }
+async def _insert(repo: BacktestRepository, run_id: str, status: str) -> None:
+    await repo._collection().insert_one(
+        {"_id": run_id, "strategy_code": "strat-test", "status": status}
     )
 
 
-# Tests
-
-
 @pytest.mark.asyncio
-async def test_stale_running_doc_is_marked_failed(repo):
-    """Doc running for 30 min exceeds 10-min threshold → marked failed."""
-    await _insert_running(repo, "sub-stale", age_minutes=30)
+async def test_started_doc_is_marked_failed(repo):
+    await _insert(repo, "run-orphan", status="started")
 
-    count = await repo.mark_stale_running_as_failed(threshold_minutes=10)
+    count = await repo.mark_orphaned_started_as_failed()
     assert count == 1
 
-    collection = repo._collection()
-    doc = await collection.find_one({"_id": "sub-stale"})
+    doc = await repo._collection().find_one({"_id": "run-orphan"})
     assert doc is not None
     assert doc["status"] == "failed"
-    assert doc["error_msg"] == "stale_recovery"
+    assert doc["error_message"] == "interrupted_by_restart"
 
 
 @pytest.mark.asyncio
-async def test_mark_stale_is_idempotent(repo):
-    """Second call on already-failed doc returns 0 — no double-update."""
-    await _insert_running(repo, "sub-idem", age_minutes=30)
+async def test_sweep_is_idempotent(repo):
+    await _insert(repo, "run-idem", status="started")
 
-    first = await repo.mark_stale_running_as_failed(threshold_minutes=10)
-    assert first == 1
-
-    second = await repo.mark_stale_running_as_failed(threshold_minutes=10)
-    assert second == 0
+    assert await repo.mark_orphaned_started_as_failed() == 1
+    assert await repo.mark_orphaned_started_as_failed() == 0
 
 
 @pytest.mark.asyncio
-async def test_fresh_running_doc_is_not_touched(repo):
-    """Doc running for 1 min is below threshold → not modified."""
-    await _insert_running(repo, "sub-fresh", age_minutes=1)
+async def test_finished_and_failed_docs_untouched(repo):
+    await _insert(repo, "run-finished", status="finished")
+    await _insert(repo, "run-failed", status="failed")
+    await _insert(repo, "run-started", status="started")
 
-    count = await repo.mark_stale_running_as_failed(threshold_minutes=10)
-    assert count == 0
+    count = await repo.mark_orphaned_started_as_failed()
+    assert count == 1
 
-    collection = repo._collection()
-    doc = await collection.find_one({"_id": "sub-fresh"})
-    assert doc is not None
-    assert doc["status"] == "running"
-
-
-@pytest.mark.asyncio
-async def test_only_stale_docs_affected_mixed_ages(repo):
-    """Mixed-age docs: only stale ones are updated."""
-    await _insert_running(repo, "sub-old-1", age_minutes=60)
-    await _insert_running(repo, "sub-old-2", age_minutes=20)
-    await _insert_running(repo, "sub-new-1", age_minutes=5)
-
-    count = await repo.mark_stale_running_as_failed(threshold_minutes=10)
-    assert count == 2
-
-    collection = repo._collection()
-    old1 = await collection.find_one({"_id": "sub-old-1"})
-    old2 = await collection.find_one({"_id": "sub-old-2"})
-    new1 = await collection.find_one({"_id": "sub-new-1"})
-
-    assert old1["status"] == "failed"
-    assert old2["status"] == "failed"
-    assert new1["status"] == "running"
+    coll = repo._collection()
+    assert (await coll.find_one({"_id": "run-finished"}))["status"] == "finished"
+    assert (await coll.find_one({"_id": "run-failed"}))["status"] == "failed"
+    assert (await coll.find_one({"_id": "run-started"}))["status"] == "failed"

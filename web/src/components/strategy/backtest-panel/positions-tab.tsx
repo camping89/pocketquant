@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { BacktestPosition, SubscriptionBacktest } from '../../../api/backtest-api'
+import type { BacktestPosition, BacktestRunResult } from '../../../api/backtest-api'
 import { PositionsFilter } from './positions-filter'
 import { PositionsTable } from './positions-table'
 import {
@@ -14,7 +14,7 @@ import {
 } from './positions-utils'
 
 interface PositionsTabProps {
-  backtest: SubscriptionBacktest
+  backtest: BacktestRunResult
   highlightedIndex: number | null
   onPositionClick?: (index: number, position: BacktestPosition) => void
   onPositionHover?: (index: number | null, position: BacktestPosition | null) => void

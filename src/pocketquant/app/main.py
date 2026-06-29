@@ -8,18 +8,18 @@ from fastapi import FastAPI
 from pocketquant.app.di.container import create_container
 from pocketquant.app.main_extensions import (
     configure_middleware,
+    drain_backtest_tasks,
     ensure_all_indexes,
     handle_startup_failure,
+    init_backtest_tasks,
+    recover_orphan_backtests,
     recover_orphan_jobs,
-    recover_stale_backtests,
     register_health_checks,
     register_routes,
     rehydrate_strategies_from_subscriptions,
     start_background_jobs,
-    start_backtest_worker,
     start_quote_feed,
     start_reconcile_loop,
-    stop_backtest_worker,
     stop_quote_feed,
     stop_reconcile_loop,
 )
@@ -55,8 +55,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.database = await container.get(Database)
         app.state.cache = await container.get(Cache)
 
+        init_backtest_tasks(app)
+
         await ensure_all_indexes(container)
-        await recover_stale_backtests(container)
+        await recover_orphan_backtests(container)
         await recover_orphan_jobs(container)
         await seed_tracked_symbols(container)
         await rehydrate_strategies_from_subscriptions(container)
@@ -66,7 +68,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Start LAST — instances are rehydrated, so the first tick has no spurious
         # missing_instance warnings.
         await start_reconcile_loop(container, app)
-        await start_backtest_worker(container, app)
 
         logger.info("application_started")
         yield
@@ -74,10 +75,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception as e:
         handle_startup_failure(e)
     finally:
-        # Stop worker + reconcile FIRST — before quote feed and container.close()
-        # (which stops StrategyAppService) — so neither dispatches against a
-        # stopping engine.
-        await stop_backtest_worker(container, app)
+        # Drain in-flight backtests + stop reconcile FIRST — before quote feed and
+        # container.close() (which stops StrategyAppService) — so neither runs
+        # against a stopping engine. Drain (not cancel) lets persistence finish.
+        await drain_backtest_tasks(app)
         await stop_reconcile_loop(container, app)
         await stop_quote_feed(container, app)
         # container.close() runs generator cleanup in reverse order:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from pocketquant.backtest.engine.backtest_engine_sandbox import BacktestSandbox
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY

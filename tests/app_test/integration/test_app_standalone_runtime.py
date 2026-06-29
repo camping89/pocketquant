@@ -1,12 +1,12 @@
 """App runtime self-sufficiency: the trading runtime needs no HTTP traffic.
 
 The app owns the ENTIRE runtime in its own DI graph: scheduler, strategy
-engine, reconcile service, backtest worker — none of it depends on any
-request hitting the API.
+engine, reconcile service, single-run backtest execution — none of it depends
+on any request hitting the API.
 
 These tests resolve each runtime piece from the real app container (built from
 the production providers, wired to ephemeral Mongo/Redis) and drive a reconcile
-tick + a worker drain end-to-end, without any HTTP client involved.
+tick + a backtest run end-to-end, without any HTTP client involved.
 """
 
 from __future__ import annotations
@@ -24,15 +24,15 @@ from pocketquant.app.di import (
     MarketDataProvider,
     PersistenceProvider,
 )
-from pocketquant.backtest.workers.backtest_request_worker import BacktestRequestWorker
+from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.backtest.request import BacktestRequest
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.infra.persistence.mongodb import Database
-from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
+    BacktestRepository,
 )
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
@@ -67,17 +67,17 @@ async def app_container(settings: Settings):
 
 
 async def test_app_container_resolves_full_runtime(app_container) -> None:
-    """The headless runtime — scheduler, engine, reconcile, worker — all resolve
-    from the app container with no external process."""
+    """The headless runtime — scheduler, engine, reconcile, backtest execution —
+    all resolve from the app container with no external process."""
     scheduler = await app_container.get(JobScheduler)
     engine = await app_container.get(StrategyAppService)
     reconcile = await app_container.get(StrategyReconcileService)
-    worker = await app_container.get(BacktestRequestWorker)
+    execution = await app_container.get(BacktestExecutionService)
 
     assert isinstance(scheduler, JobScheduler)
     assert isinstance(engine, StrategyAppService)
     assert isinstance(reconcile, StrategyReconcileService)
-    assert isinstance(worker, BacktestRequestWorker)
+    assert isinstance(execution, BacktestExecutionService)
 
 
 async def test_app_reconcile_runs_desired_running_without_http(
@@ -125,32 +125,26 @@ async def test_app_reconcile_runs_desired_running_without_http(
     await engine.stop()
 
 
-async def test_app_backtest_worker_drains_queue_without_http(app_container) -> None:
-    """The worker claims and fails a malformed request in-process — the queue is
-    drained by the app alone — the worker needs no HTTP enqueue path to run."""
+async def test_app_backtest_execution_runs_without_http(app_container) -> None:
+    """A malformed run is executed + marked failed in-process — the engine drains
+    via the execution service inside the app graph, no HTTP enqueue path needed."""
     db = await app_container.get(Database)
-    await db.get_collection("backtest_requests").drop()
+    await db.get_collection("backtest_runs").drop()
 
-    request_repo = await app_container.get(BacktestRequestRepository)
-    worker = await app_container.get(BacktestRequestWorker)
+    backtest_repo = await app_container.get(BacktestRepository)
+    execution = await app_container.get(BacktestExecutionService)
 
-    # A single request with a non-existent strategy: the worker claims it,
-    # dispatch raises, and it is marked failed — proving the claim→dispatch→write
-    # loop runs end-to-end inside the app graph.
-    req = BacktestRequest(
-        id=generate_id(),
-        kind="single",
-        status="pending",
-        requested_at=datetime.now(UTC),
-        strategy_code="does-not-exist",
-        config={"strategy_code": "does-not-exist"},
-    )
-    await request_repo.enqueue(req)
+    # A run for a non-existent strategy: run_single raises before the engine's own
+    # guard, execute_and_persist's outer guard flips the doc to failed — proving
+    # the run→persist path runs end-to-end inside the app graph.
+    run_id = generate_id()
+    config = {"strategy_code": "does-not-exist", "symbol": _SYMBOL, "interval": "1m",
+              "start_date": "2026-01-01", "end_date": "2026-01-02"}
+    await backtest_repo.save(BacktestResult.started(str(run_id), config))
 
-    processed = await worker._drain_once()
-    assert processed is True
+    await execution.execute_and_persist(str(run_id), config)
 
-    done = await request_repo.get(str(req.id))
+    done = await backtest_repo.get(str(run_id))
     assert done is not None and done.status == "failed"
 
-    await db.get_collection("backtest_requests").drop()
+    await db.get_collection("backtest_runs").drop()

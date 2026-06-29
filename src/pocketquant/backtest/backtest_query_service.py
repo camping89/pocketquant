@@ -1,4 +1,4 @@
-"""Backtest query service — read-side: get result, list results, get optimization, poll request.
+"""Backtest query service — read-side: get run, list runs, list trades.
 
 DTO class names are preserved from the handlers layer so call-sites that
 reference them by name require no import-path changes beyond the module prefix.
@@ -11,15 +11,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.core.domain.backtest import BacktestResult, OptimizationResult
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
-from pocketquant.core.infra.persistence.repositories.optimization_repository import (
-    OptimizationRepository,
+from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
 )
 
 
@@ -33,37 +30,8 @@ class ListBacktestsQuery(BaseModel):
     include_failed: bool = False
 
 
-class GetOptimizationQuery(BaseModel):
-    optimization_id: str
-
-
 class EnqueueBacktestResponse(BaseModel):
     request_id: str
-
-
-class BacktestRequestStatusResponse(BaseModel):
-    """Poll response for a single backtest request.
-
-    ``result`` carries the assembled FE payload (run_id/status/metrics/positions)
-    once ``status == 'done'``; it is None while pending/running and on failure.
-    """
-
-    request_id: str
-    status: str
-    result: dict[str, Any] | None = None
-    error: str | None = None
-
-
-class OptimizationSummaryResponse(BaseModel):
-    id: str
-    strategy_code: str
-    status: str
-    total_combinations: int
-    completed_combinations: int
-    failed_combinations: int
-    target_metric: str
-    best_parameters: dict[str, Any]
-    best_metric_value: float
 
 
 class BacktestQueryService:
@@ -72,12 +40,10 @@ class BacktestQueryService:
     def __init__(
         self,
         backtest_repository: BacktestRepository,
-        backtest_request_repository: BacktestRequestRepository,
-        optimization_repository: OptimizationRepository,
+        backtest_trade_repository: BacktestTradeRepository,
     ) -> None:
         self._backtest_repo = backtest_repository
-        self._request_repo = backtest_request_repository
-        self._optimization_repo = optimization_repository
+        self._trade_repo = backtest_trade_repository
 
     async def get_result(self, query: GetBacktestQuery) -> BacktestResult:
         result = await self._backtest_repo.get(query.run_id)
@@ -85,26 +51,30 @@ class BacktestQueryService:
             raise NotFoundError(f"Backtest not found: {query.run_id}")
         return result
 
+    async def list_trades(self, run_id: str) -> list[dict[str, Any]]:
+        """Closed round-trip trades for a run, shaped for the result view."""
+        trades = await self._trade_repo.list_by_run(run_id)
+        return [
+            {
+                "trade_id": str(t.trade_id),
+                "direction": t.direction,
+                "entry_price": t.entry_price,
+                "entry_time": t.entry_time.isoformat(),
+                "exit_price": t.exit_price,
+                "exit_time": t.exit_time.isoformat() if t.exit_time else None,
+                "quantity": t.quantity,
+                "sl_price": t.sl_price,
+                "tp_price": t.tp_price,
+                "pnl": t.pnl,
+                "commission": t.commission,
+                "duration_seconds": t.duration_seconds,
+            }
+            for t in trades
+        ]
+
     async def list_results(self, query: ListBacktestsQuery) -> list[BacktestResult]:
         return await self._backtest_repo.list_by_strategy_code(
             strategy_code=query.strategy_id,
             limit=query.limit,
             include_failed=query.include_failed,
         )
-
-    async def get_optimization(self, query: GetOptimizationQuery) -> OptimizationResult:
-        result = await self._optimization_repo.get(query.optimization_id)
-        if result is None:
-            raise NotFoundError(f"Optimization not found: {query.optimization_id}")
-        return result
-
-    async def get_request_status(self, request_id: str) -> dict[str, Any]:
-        bt_request = await self._request_repo.get(request_id)
-        if bt_request is None:
-            raise NotFoundError(f"Backtest request not found: {request_id}")
-        return {
-            "request_id": str(bt_request.id),
-            "status": bt_request.status,
-            "result": bt_request.result,
-            "error": bt_request.error,
-        }

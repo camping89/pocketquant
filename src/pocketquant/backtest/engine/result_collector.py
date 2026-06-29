@@ -21,7 +21,7 @@ from uuid import UUID
 from pocketquant.backtest.engine.collected_results import CollectedResults
 from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
 from pocketquant.backtest.engine.metrics_builder import build_metrics
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import (
@@ -396,7 +396,7 @@ class BacktestResultCollector:
         run_id: str,
         started_at: datetime,
         completed_at: datetime,
-        status: str = "completed",
+        status: str = "finished",
         error_message: str | None = None,
     ) -> CollectedResults:
         # Late-bind run_id onto stubs created before set_run_id was known.
