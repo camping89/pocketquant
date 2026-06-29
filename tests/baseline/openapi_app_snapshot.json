@@ -294,8 +294,8 @@
             "type": "number"
           },
           "end_date": {
-            "description": "Backtest end date",
-            "format": "date",
+            "description": "Backtest end datetime (minute precision)",
+            "format": "date-time",
             "title": "End Date",
             "type": "string"
           },
@@ -332,8 +332,8 @@
             "type": "number"
           },
           "start_date": {
-            "description": "Backtest start date",
-            "format": "date",
+            "description": "Backtest start datetime (minute precision)",
+            "format": "date-time",
             "title": "Start Date",
             "type": "string"
           },

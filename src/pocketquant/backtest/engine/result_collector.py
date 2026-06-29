@@ -79,7 +79,7 @@ class BacktestResultCollector:
 
         self._equity_curve.append(
             EquityPoint(
-                timestamp=datetime.combine(config.start_date, datetime.min.time()),
+                timestamp=config.start_date,
                 equity=initial_capital,
                 drawdown=0.0,
             )

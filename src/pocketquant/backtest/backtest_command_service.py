@@ -6,7 +6,7 @@ reference them by name require no import-path changes beyond the module prefix.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -27,8 +27,8 @@ class RunBacktestCommand(BaseModel):
     strategy_id: str = Field(..., description="Strategy identifier")
     symbol: str = Field(..., description="Composite symbol (e.g. BTCUSDT:BINANCE)")
     interval: str = Field(..., description="Bar interval (e.g. 5m, 1h)")
-    start_date: date = Field(..., description="Backtest start date")
-    end_date: date = Field(..., description="Backtest end date")
+    start_date: datetime = Field(..., description="Backtest start datetime (minute precision)")
+    end_date: datetime = Field(..., description="Backtest end datetime (minute precision)")
     initial_capital: float = Field(default=10_000.0, ge=100, description="Starting capital")
     slippage_bps: float = Field(default=10.0, ge=0, description="Slippage in basis points")
     commission_bps: float = Field(default=10.0, ge=0, description="Commission in basis points")

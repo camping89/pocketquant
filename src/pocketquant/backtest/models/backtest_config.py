@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import datetime
 from typing import Any
 
 
@@ -13,8 +13,8 @@ class BacktestConfig:
         strategy_code: Unique identifier for the strategy to backtest.
         symbol: Composite trading symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
         interval: Bar interval (e.g., "5m", "1h", "1d").
-        start_date: Start date for historical replay.
-        end_date: End date for historical replay.
+        start_date: Start datetime for historical replay (minute precision).
+        end_date: End datetime for historical replay (minute precision).
         initial_capital: Starting capital for the backtest.
         slippage_bps: Slippage in basis points (10 = 0.1%).
         commission_bps: Commission in basis points (10 = 0.1%).
@@ -25,8 +25,8 @@ class BacktestConfig:
     strategy_code: str
     symbol: str
     interval: str
-    start_date: date
-    end_date: date
+    start_date: datetime
+    end_date: datetime
     initial_capital: float = 10_000.0
     slippage_bps: float = 10.0  # 0.1% default
     commission_bps: float = 10.0  # 0.1% default (validated requirement)

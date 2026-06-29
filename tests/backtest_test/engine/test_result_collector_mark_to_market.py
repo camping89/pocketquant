@@ -9,7 +9,7 @@ Pins the invariants Bug #2's fix must preserve:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_OID, uuid5
 
 import pytest
@@ -35,8 +35,8 @@ def _config() -> BacktestConfig:
         strategy_code="s1",
         symbol="BTCUSDT:OKX",
         interval="1m",
-        start_date=date(2024, 1, 1),
-        end_date=date(2024, 1, 31),
+        start_date=datetime(2024, 1, 1),
+        end_date=datetime(2024, 1, 31),
         initial_capital=10_000.0,
         commission_bps=10.0,
     )

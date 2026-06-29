@@ -9,7 +9,7 @@ reset, and re-enter → many trades.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Generator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -222,8 +222,8 @@ async def _run_backtest(
         strategy_code="engulfing",
         symbol=_SYM,
         interval="1m",
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31),
+        start_date=datetime(2026, 1, 1),
+        end_date=datetime(2026, 12, 31),
         initial_capital=10_000.0,
         slippage_bps=0.0,
         commission_bps=0.0,

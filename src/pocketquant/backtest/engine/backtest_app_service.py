@@ -177,12 +177,13 @@ class BacktestAppService:
             clear_simulation_time()
 
     async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[Bar]:
-        """Load OHLCV bars from MongoDB for the configured date range."""
-        start_datetime = datetime.combine(config.start_date, datetime.min.time())
-        end_datetime = datetime.combine(config.end_date, datetime.max.time())
+        """Load OHLCV bars from MongoDB for the configured datetime range.
 
+        ``stream`` is end-inclusive (``$lte end``), so a minute-precise end keeps
+        the bar at that exact minute and excludes later bars.
+        """
         async for bar in self._bar_repo.stream(
-            config.symbol, Interval(config.interval), start_datetime, end_datetime
+            config.symbol, Interval(config.interval), config.start_date, config.end_date
         ):
             yield bar
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from pocketquant.backtest.engine.backtest_engine_sandbox import BacktestSandbox
 from pocketquant.backtest.models.backtest_config import BacktestConfig
@@ -48,14 +48,15 @@ def build_backtest_config(
 ) -> BacktestConfig:
     """Build a BacktestConfig from base strategy config overriding symbol/interval.
 
-    ``symbol`` is composite ``{code}:{exchange}``.
+    ``symbol`` is composite ``{code}:{exchange}``. The date-range inputs are
+    widened to a full-day datetime window (``BacktestConfig`` is datetime-typed).
     """
     return BacktestConfig(
         strategy_code=strategy_id,
         symbol=symbol,
         interval=interval,
-        start_date=start_date,
-        end_date=end_date,
+        start_date=datetime.combine(start_date, datetime.min.time()),
+        end_date=datetime.combine(end_date, datetime.max.time()),
         initial_capital=10_000.0,
         parameters=dict(base_config.parameters) if base_config.parameters else {},
     )
