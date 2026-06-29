@@ -8,25 +8,31 @@ import {
   type ChartOptions,
 } from 'lightweight-charts'
 import { makeChartTimeFormatter, type TimezoneMode } from '../../lib/datetime'
+import { readChartColors } from '../../lib/theme-colors'
+import type { ThemeMode } from '../../lib/theme-context'
 
-const DEFAULT_OPTIONS: DeepPartial<ChartOptions> = {
-  layout: {
-    background: { type: ColorType.Solid, color: '#1a1a2e' },
-    textColor: '#d1d4dc',
-  },
-  grid: {
-    vertLines: { color: '#2B2B43' },
-    horzLines: { color: '#2B2B43' },
-  },
-  crosshair: { mode: CrosshairMode.Normal },
-  rightPriceScale: { borderColor: '#2B2B43' },
-  timeScale: { borderColor: '#2B2B43', timeVisible: true },
+function themedOptions(): DeepPartial<ChartOptions> {
+  const c = readChartColors()
+  return {
+    layout: {
+      background: { type: ColorType.Solid, color: c.background },
+      textColor: c.text,
+    },
+    grid: {
+      vertLines: { color: c.grid },
+      horzLines: { color: c.grid },
+    },
+    crosshair: { mode: CrosshairMode.Normal },
+    rightPriceScale: { borderColor: c.border },
+    timeScale: { borderColor: c.border, timeVisible: true },
+  }
 }
 
 export function useChart(
   containerRef: RefObject<HTMLDivElement | null>,
   options?: DeepPartial<ChartOptions>,
   mode: TimezoneMode = 'utc',
+  themeMode: ThemeMode = 'dark',
 ) {
   const chartRef = useRef<IChartApi | null>(null)
 
@@ -35,16 +41,17 @@ export function useChart(
     if (!el) return
 
     const initFormatter = makeChartTimeFormatter(mode)
+    const base = themedOptions()
     const chart = createChart(el, {
-      ...DEFAULT_OPTIONS,
+      ...base,
       ...options,
       localization: {
-        ...DEFAULT_OPTIONS.localization,
+        ...base.localization,
         ...options?.localization,
         timeFormatter: initFormatter,
       },
       timeScale: {
-        ...DEFAULT_OPTIONS.timeScale,
+        ...base.timeScale,
         ...options?.timeScale,
         tickMarkFormatter: initFormatter,
       },
@@ -76,6 +83,27 @@ export function useChart(
       timeScale: { tickMarkFormatter: formatter },
     })
   }, [mode])
+
+  // Re-apply layout/grid/scale colors on theme flip — instance preserved
+  // (zoom/series intact). Candle colors are re-applied by the chart components
+  // themselves (they own the series refs).
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const c = readChartColors()
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: c.background },
+        textColor: c.text,
+      },
+      grid: {
+        vertLines: { color: c.grid },
+        horzLines: { color: c.grid },
+      },
+      rightPriceScale: { borderColor: c.border },
+      timeScale: { borderColor: c.border },
+    })
+  }, [themeMode])
 
   return chartRef
 }

@@ -8,10 +8,11 @@ import { StrategyListSidebar } from './strategy-list-sidebar'
 import { StrategyConfigCard } from './strategy-config-card'
 import { DashboardColumn } from './dashboard-column'
 import { StrategyChart } from './strategy-chart'
+import { IndicatorToggles } from '../controls/indicator-toggles'
 import { useStrategyTrades } from '../../hooks/use-strategy-trades'
 import { useOpenPosition } from '../../hooks/use-open-position'
 import type { Subscription } from '../../api/strategy-api'
-import type { Interval } from '../../types/market-data'
+import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { Trade, OpenPosition as ChartOpenPosition } from '../../types/strategy'
 
 type MobileTab = 'list' | 'config' | 'dashboard'
@@ -22,9 +23,34 @@ const MOBILE_TABS: { key: MobileTab; label: string }[] = [
   { key: 'dashboard', label: 'Dashboard' },
 ]
 
+const INDICATORS_STORAGE_KEY = 'strategies.indicators'
+
+const DEFAULT_INDICATORS: IndicatorConfig = {
+  sma: false,
+  ema: true,
+  rsi: false,
+  macd: false,
+  bollinger: false,
+  engulfing: true,
+}
+
+function readStoredIndicators(): IndicatorConfig {
+  try {
+    const raw = localStorage.getItem(INDICATORS_STORAGE_KEY)
+    if (raw) return { ...DEFAULT_INDICATORS, ...JSON.parse(raw) }
+  } catch { /* fall through to default */ }
+  return DEFAULT_INDICATORS
+}
+
 export function StrategiesPageLayout() {
   const [selectedSub, setSelectedSub] = useState<Subscription | null>(null)
   const [mobileTab, setMobileTab] = useState<MobileTab>('list')
+  const [indicators, setIndicators] = useState<IndicatorConfig>(readStoredIndicators)
+
+  function handleIndicatorsChange(next: IndicatorConfig) {
+    setIndicators(next)
+    try { localStorage.setItem(INDICATORS_STORAGE_KEY, JSON.stringify(next)) } catch { /* swallow */ }
+  }
 
   const { data: rawTrades = [] } = useStrategyTrades(selectedSub?.id ?? null)
   const { data: apiPosition = null } = useOpenPosition(selectedSub?.id ?? null)
@@ -108,12 +134,16 @@ export function StrategiesPageLayout() {
           {selectedSub ? (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               {/* Embedded chart — locked to subscription's symbol + interval */}
+              <div style={{ padding: '8px 16px 0', flexShrink: 0 }}>
+                <IndicatorToggles value={indicators} onChange={handleIndicatorsChange} />
+              </div>
               <div style={{ height: 400, flexShrink: 0 }}>
                 <StrategyChart
                   symbol={selectedSub.symbol}
                   interval={selectedSub.interval as Interval}
                   trades={trades}
                   openPosition={openPos}
+                  indicators={indicators}
                 />
               </div>
               <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
@@ -169,12 +199,16 @@ export function StrategiesPageLayout() {
           {mobileTab === 'config' && (
             selectedSub ? (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '8px 16px 0' }}>
+                  <IndicatorToggles value={indicators} onChange={handleIndicatorsChange} />
+                </div>
                 <div style={{ height: 300 }}>
                   <StrategyChart
                     symbol={selectedSub.symbol}
                     interval={selectedSub.interval as Interval}
                     trades={trades}
                     openPosition={openPos}
+                    indicators={indicators}
                   />
                 </div>
                 <div style={{ padding: 16 }}>

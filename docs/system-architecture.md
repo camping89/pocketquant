@@ -354,12 +354,13 @@ common/
 
 ### Layer 6: Presentation (Web UI) — web (React SPA)
 
-**Purpose:** TradingView-like charting interface for real-time market visualization and indicator analysis.
+**Purpose:** TradingView-like charting interface for real-time market visualization, indicator analysis, strategy management, and backtesting.
 
 **Tech Stack:**
 - **Vite 8** - Build tool with HMR
 - **React 19** - UI framework with Hooks
 - **TypeScript 5.9** - Type safety
+- **TanStack Router** - File-based routing (layout routes via `__root.tsx`)
 - **Lightweight Charts 5.1** - High-performance candlestick rendering
 - **TanStack Query 5.x** - Server state management, real-time polling
 
@@ -368,7 +369,9 @@ common/
 src/
 ├── api/                  # REST client layer
 │   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41921 app)
-│   └── market-data-api.ts  # Market data queries
+│   ├── market-data-api.ts   # Market data queries
+│   ├── backtest-api.ts      # Backtest run + poll
+│   └── strategy-api.ts      # Strategy subscription queries
 ├── components/
 │   ├── chart/           # Charting components
 │   │   ├── trading-chart.tsx  # Candlestick + volume + indicators
@@ -378,33 +381,53 @@ src/
 │   │   ├── symbol-selector.tsx   # Symbol dropdown
 │   │   ├── interval-selector.tsx  # Timeframe picker (1m-1w)
 │   │   └── indicator-toggles.tsx  # Show/hide indicators
+│   ├── backtest/        # Backtest run components
+│   │   └── backtest-form.tsx  # Strategy/symbol/dates + timezone, trigger run
 │   └── layout/
-│       └── app-header.tsx  # Navigation + branding
+│       ├── app-header.tsx       # Symbol + interval + indicators
+│       ├── theme-toggle.tsx     # Dark/light mode switcher
+│       ├── timezone-switcher.tsx # Timezone picker
+│       └── live-clock.tsx       # Realtime clock in app-nav
 ├── hooks/               # React custom hooks
 │   ├── use-ohlcv.ts     # Fetch historical bars
 │   ├── use-realtime-bar.ts  # Real-time polling (TanStack Query)
 │   ├── use-symbols.ts   # Fetch symbol list
-│   └── use-indicators.ts  # Indicator calculation
+│   ├── use-indicators.ts  # Indicator calculation
+│   ├── use-run-backtest.ts  # Start single backtest run
+│   └── use-timezone.ts  # Timezone context consumer
 ├── lib/
+│   ├── theme-context.tsx  # Dark/light mode state + localStorage persist
+│   ├── theme-colors.ts    # Read CSS tokens for chart colors
+│   ├── timezone-context.tsx # Timezone picker state
 │   └── indicators/      # Pure indicator algorithms
 │       ├── moving-average.ts  # SMA, EMA
 │       ├── rsi.ts             # Relative Strength Index
 │       ├── macd.ts            # MACD + signal line
 │       └── bollinger-bands.ts # Upper, middle, lower bands
-├── App.tsx              # Root component
-└── main.tsx             # Vite entry point
+├── routes/              # TanStack Router file-based routes
+│   ├── __root.tsx       # Root layout: nav + theme toggle + timezone + clock
+│   ├── index.tsx        # Charts page
+│   ├── strategies.tsx   # Strategy dashboard
+│   ├── backtest.tsx     # Backtest runner
+│   └── monitor.tsx      # System monitoring
+├── main.tsx             # App entry: QueryClient + Providers + Router
+└── index.css            # Global styles + theme tokens (data-theme: dark|light)
 ```
 
 **Routes:**
 - `/` — Charts: TradingChart + SymbolSelector + IntervalSelector + StrategySelector + IndicatorToggles + AppHeader
-- `/strategies` — Operator Dashboard: 3-pane layout (list/start/stop strategies, config+chart embed, positions/metrics)
+- `/strategies` — Operator Dashboard: 3-pane layout (list/start/stop strategies, config+chart embed with indicator toggles, positions/metrics)
+- `/backtest` — Ad-hoc Backtest Runner: form with symbol/interval/strategy/date range (datetime-local inputs with timezone dropdown), run job, poll + display results
 - `/monitor` — System Monitoring: HealthBanner + DataHealthTable (sync/integrity, expandable rows, check/repair) + BackgroundJobsList (auto-poll 30s)
 
 **Key Features:**
-- **Candlestick Chart:** Real-time OHLCV visualization via Lightweight Charts
+- **Candlestick Chart:** Real-time OHLCV visualization via Lightweight Charts with theme-aware colors
 - **Volume Overlay:** Trading volume as histogram below price
-- **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2)
+- **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2) with show/hide toggles (reusable on strategies page)
 - **Symbol/Interval Selectors:** Switch data without page reload
+- **Theme Toggle:** Dark/light mode switcher in top-right; persists to `localStorage:pq.theme.mode`, applies `data-theme` attribute to `<html>`, chart re-reads colors on flip
+- **Timezone Picker:** Select timezone for backtest date inputs; displayed as `datetime-local` UI for minute-precision selection
+- **Live Clock:** Realtime wall-clock in app-nav
 - **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
 - **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41921` (app)
 
@@ -460,6 +483,11 @@ src/
 | Frontend API client layer | `web/src/api/` |
 | Frontend custom hooks | `web/src/hooks/` |
 | Chart + indicator components | `web/src/components/chart/` |
+| Theme context + toggle + colors | `web/src/lib/theme-context.tsx`, `web/src/components/layout/theme-toggle.tsx`, `web/src/lib/theme-colors.ts` |
+| Timezone context + picker | `web/src/lib/timezone-context.tsx`, `web/src/components/layout/timezone-switcher.tsx` |
+| Live clock | `web/src/components/layout/live-clock.tsx` |
+| Theme CSS tokens + data-theme attribute | `web/src/index.css` (`:root[data-theme="dark|light"]` with token definitions) |
+| Backtest form (datetime-local + timezone) | `web/src/components/backtest/backtest-form.tsx` |
 | Domain purity test (AST check) | `tests/core_test/unit/domain/test_domain_purity.py` |
 
 ## Request Flow
@@ -499,7 +527,7 @@ src/
 
 ### Backtest (ad-hoc single run)
 
-Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest:
+Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest. `start_date` and `end_date` are `datetime` with minute precision (format: ISO 8601, e.g. `2024-01-15T09:30:00`); date-only strings are accepted and parsed as 00:00:00 UTC for backward compatibility.
 
 1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
 2. The engine runs in a per-run `BacktestSandbox` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).

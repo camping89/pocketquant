@@ -8,6 +8,10 @@ import {
 import type { IndicatorData } from '../../hooks/use-indicators'
 import type { IndicatorConfig } from '../../types/market-data'
 
+// Indicator lines should not draw the horizontal last-value price line / axis
+// label — that visual is reserved for the live candle price.
+const NO_PRICE_LINE = { priceLineVisible: false, lastValueVisible: false } as const
+
 const COLORS = {
   sma20: '#2196F3',
   ema9: '#FF9800',
@@ -32,19 +36,19 @@ export function addIndicatorSeries(
   const all: ISeriesApi<SeriesType>[] = []
 
   if (config.sma && data.sma20.length > 0) {
-    const s = chart.addSeries(LineSeries, { color: COLORS.sma20, lineWidth: 1, priceScaleId: 'right' })
+    const s = chart.addSeries(LineSeries, { color: COLORS.sma20, lineWidth: 1, priceScaleId: 'right', ...NO_PRICE_LINE })
     s.setData(data.sma20)
     all.push(s)
   }
 
   if (config.ema) {
     if (data.ema9.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.ema9, lineWidth: 2, priceScaleId: 'right' })
+      const s = chart.addSeries(LineSeries, { color: COLORS.ema9, lineWidth: 2, priceScaleId: 'right', ...NO_PRICE_LINE })
       s.setData(data.ema9)
       all.push(s)
     }
     if (data.ema21.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.ema21, lineWidth: 1, priceScaleId: 'right' })
+      const s = chart.addSeries(LineSeries, { color: COLORS.ema21, lineWidth: 1, priceScaleId: 'right', ...NO_PRICE_LINE })
       s.setData(data.ema21)
       all.push(s)
     }
@@ -52,17 +56,17 @@ export function addIndicatorSeries(
 
   if (config.bollinger) {
     if (data.bbUpper.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.bbUpper, lineWidth: 1, priceScaleId: 'right' })
+      const s = chart.addSeries(LineSeries, { color: COLORS.bbUpper, lineWidth: 1, priceScaleId: 'right', ...NO_PRICE_LINE })
       s.setData(data.bbUpper)
       all.push(s)
     }
     if (data.bbMiddle.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.bbMiddle, lineWidth: 1, priceScaleId: 'right', lineStyle: 2 })
+      const s = chart.addSeries(LineSeries, { color: COLORS.bbMiddle, lineWidth: 1, priceScaleId: 'right', lineStyle: 2, ...NO_PRICE_LINE })
       s.setData(data.bbMiddle)
       all.push(s)
     }
     if (data.bbLower.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.bbLower, lineWidth: 1, priceScaleId: 'right' })
+      const s = chart.addSeries(LineSeries, { color: COLORS.bbLower, lineWidth: 1, priceScaleId: 'right', ...NO_PRICE_LINE })
       s.setData(data.bbLower)
       all.push(s)
     }
@@ -72,7 +76,7 @@ export function addIndicatorSeries(
   let nextPane = 1
 
   if (config.rsi && data.rsi14.length > 0) {
-    const s = chart.addSeries(LineSeries, { color: COLORS.rsi, lineWidth: 1 }, nextPane)
+    const s = chart.addSeries(LineSeries, { color: COLORS.rsi, lineWidth: 1, ...NO_PRICE_LINE }, nextPane)
     s.setData(data.rsi14)
     all.push(s)
     nextPane++
@@ -81,17 +85,17 @@ export function addIndicatorSeries(
   if (config.macd) {
     const pane = nextPane
     if (data.macdLine.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.macdLine, lineWidth: 1 }, pane)
+      const s = chart.addSeries(LineSeries, { color: COLORS.macdLine, lineWidth: 1, ...NO_PRICE_LINE }, pane)
       s.setData(data.macdLine)
       all.push(s)
     }
     if (data.macdSignal.length > 0) {
-      const s = chart.addSeries(LineSeries, { color: COLORS.macdSignal, lineWidth: 1 }, pane)
+      const s = chart.addSeries(LineSeries, { color: COLORS.macdSignal, lineWidth: 1, ...NO_PRICE_LINE }, pane)
       s.setData(data.macdSignal)
       all.push(s)
     }
     if (data.macdHistogram.length > 0) {
-      const s = chart.addSeries(HistogramSeries, {}, pane)
+      const s = chart.addSeries(HistogramSeries, { ...NO_PRICE_LINE }, pane)
       s.setData(data.macdHistogram)
       all.push(s)
     }
