@@ -52,7 +52,7 @@ If `gh run watch` exits non-zero, open the failing job's log (`gh run view "$RUN
 
 **What runs:** 5 jobs in `.github/workflows/cicd.yml`
 
-1. `tests` — pre-build gate: `uv sync --frozen` → `pytest tests/api_test/`. `build-api` + `build-web` both `needs: [tests]`, nên build chỉ chạy khi tests xanh.
+1. `tests` — pre-build gate: `uv sync --frozen` → `uv run lint-imports` (import-linter contracts) → `uv run pytest tests/ -q` (full suite). `build-api` + `build-web` both `needs: [tests]`, nên build chỉ chạy khi tests xanh.
 2. `build-api` + `build-web` (parallel, ~3-5 min) — build + push Docker images, tagged `:latest` và `:sha-<short>`.
 3. `cleanup-tags` — prune old Docker Hub SHA tags.
 4. `deploy` (needs both builds green): `get-vps-config` composite action fetches config from `pocketquant-config` → setup SSH → write `deploy/.env` → rsync `compose.prod.yml` + `.env` + `deploy/vps/` → ssh `bash deploy/vps/10-deploy.sh` (pull, up, ≤60s health gate, prune) → ssh `bash deploy/vps/11-verify.sh` (19 checks) → upload verify report as artifact.
