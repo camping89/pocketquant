@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
@@ -33,6 +34,15 @@ class RunBacktestCommand(BaseModel):
     slippage_bps: float = Field(default=10.0, ge=0, description="Slippage in basis points")
     commission_bps: float = Field(default=10.0, ge=0, description="Commission in basis points")
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")
+
+
+class SetVerdictCommand(BaseModel):
+    """Command to set (or clear) the human-readable verdict on a finished run."""
+
+    run_id: str = Field(..., description="Backtest run id")
+    verdict: str | None = Field(
+        default=None, max_length=2000, description="Conclusion text; null clears it"
+    )
 
 
 class BacktestCommandService:
@@ -60,3 +70,9 @@ class BacktestCommandService:
         }
         await self._backtest_repo.save(BacktestResult.started(run_id, config))
         return run_id, config
+
+    async def set_verdict(self, cmd: SetVerdictCommand) -> None:
+        """Set the run's verdict; raise NotFoundError if the run does not exist."""
+        matched = await self._backtest_repo.set_verdict(cmd.run_id, cmd.verdict)
+        if not matched:
+            raise NotFoundError(f"Backtest not found: {cmd.run_id}")

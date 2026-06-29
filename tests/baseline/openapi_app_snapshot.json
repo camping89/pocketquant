@@ -358,6 +358,25 @@
         "title": "RunBacktestCommand",
         "type": "object"
       },
+      "SetVerdictBody": {
+        "properties": {
+          "verdict": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Conclusion text; null clears it",
+            "title": "Verdict"
+          }
+        },
+        "title": "SetVerdictBody",
+        "type": "object"
+      },
       "StrategyTemplateResponse": {
         "properties": {
           "strategy_code": {
@@ -792,6 +811,61 @@
           }
         },
         "summary": "Get Backtest Trades",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
+    "/api/v1/backtest/{run_id}/verdict": {
+      "patch": {
+        "description": "Set (or clear) the human-readable verdict on a run. 404 if run unknown.",
+        "operationId": "set_backtest_verdict_api_v1_backtest__run_id__verdict_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVerdictBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Backtest Verdict Api V1 Backtest  Run Id  Verdict Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Backtest Verdict",
         "tags": [
           "backtest"
         ]
