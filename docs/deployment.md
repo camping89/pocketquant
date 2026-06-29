@@ -16,9 +16,9 @@ Dashboards:
 
 ## Production URL
 
-`http://<vps-ip>:$WEB_PORT/` — public SPA entry point. The web container (nginx) reverse-proxies `/api/*` to the app container (FastAPI, internal :41921). Set `$WEB_PORT=443` if terminating TLS directly.
+`https://pocketquant.xyz/` — public SPA entry point, served through Cloudflare (orange-cloud proxy) → the `web` container (nginx) → the app container (FastAPI, internal :41921). Cloudflare terminates browser-facing TLS; the origin `web` container listens on `$WEB_PORT`.
 
-API: `http://<vps-ip>:$WEB_PORT/api/v1/docs` (Swagger, via web → app).
+API: `https://pocketquant.xyz/api/v1/docs` (Swagger, via Cloudflare → web → app).
 App health: container-internal only — `docker exec pocketquant-app curl http://localhost:41921/health`.
 
 ## Deploy Command
@@ -120,12 +120,13 @@ Adding a new env var:
 
 ## Custom Domain
 
-Not configured by default — the VPS is reached by IP. To add a domain:
+Public traffic enters through `pocketquant.xyz`, fronted by Cloudflare:
 
-1. Point an A record at `<vps-ip>`.
-2. Edit `pocketquant-config/vps/default/.env`: set `WEB_PORT=443`. `git push` from `pocketquant-config`.
-3. Add Caddy or nginx + certbot in front of the `web` container, OR enable Cloudflare proxy (orange cloud) and let it terminate TLS.
-4. Push any commit to `pocketquant` (or `gh workflow run cicd.yml`) — CI/CD re-deploys with the new env.
+- DNS: `A @ → <vps-ip>` and `CNAME www → pocketquant.xyz`, both proxied (orange cloud). The origin IP is reached only via Cloudflare for HTTP/HTTPS.
+- Cloudflare terminates browser TLS (Universal SSL) and proxies to the origin `web` container on `$WEB_PORT`.
+- The SPA is domain-agnostic: it calls the API at `window.location.origin + /api/...`, so no rebuild is needed when the domain changes — nginx (`server_name _`) and the same-origin reverse proxy handle any host.
+
+Cloudflare proxies HTTP/HTTPS only. SSH (22) and the published DB ports (`$MONGO_PORT`/`$REDIS_PORT`) do **not** route through Cloudflare — those reach the VPS by IP directly (see [Connecting from Local Machine](#connecting-from-local-machine)).
 
 ## Rollback
 
@@ -338,10 +339,10 @@ ssh <VPS> "docker logs pocketquant-app --tail 100 -f"
 
 | Tool | Connection |
 |------|------------|
-| Swagger | `http://<vps-ip>:$APP_PORT/api/v1/docs` |
-| DataGrip | `mongodb://pocketquant:PASSWORD@<vps-ip>:$MONGO_PORT/pocketquant?authSource=admin` |
-| RedisInsight | `<vps-ip>:$REDIS_PORT` |
-| Portainer | `http://<vps-ip>:$PORTAINER_PORT` |
+| Swagger | `https://pocketquant.xyz/api/v1/docs` (via Cloudflare → web → app) |
+| DataGrip | `mongodb://pocketquant:PASSWORD@<vps-ip>:$MONGO_PORT/pocketquant?authSource=admin` (direct, not via Cloudflare) |
+| RedisInsight | `<vps-ip>:$REDIS_PORT` (direct, not via Cloudflare) |
+| Portainer | `http://<vps-ip>:$PORTAINER_PORT` (direct, not via Cloudflare) |
 
 ### SSH Tunnel (if firewall blocks DB ports)
 
