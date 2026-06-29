@@ -644,7 +644,7 @@ core ◁ engine ◁ backtest ◁ app
 **Container Network (compose.prod.yml):**
 - web + app + mongo + redis + portainer on same bridge network (`pocketquant-prod`)
 - No published port for app — nginx in web container reverse-proxies `/api/*` to app service name (`http://app:41921`)
-- External clients reach web on `WEB_PORT` (default :80); nginx routes `/api/*` internally to app on :41921
+- External clients reach the public domain `pocketquant.xyz` via Cloudflare (orange-cloud proxy, terminates browser TLS) → web origin on `WEB_PORT`; nginx (`server_name _`) routes `/api/*` internally to app on :41921. SPA is host-agnostic (calls `window.location.origin + /api/...`)
 
 ## Integration & Performance
 
@@ -683,7 +683,7 @@ FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT 
 
 **External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), Docker Hub, GitHub Actions.
 
-**Deployment:** Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Config flow: `pocketquant-config/.env` → CI reads at deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler coordinates via `apscheduler_jobs` Mongo collection; first to claim `next_run_time` wins. Remote-DB dev mode must set `ENABLE_JOBS=false` (else double-schedule).
+**Deployment:** Public entry `pocketquant.xyz` via Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare proxies HTTP/HTTPS only — SSH + published DB ports reach the VPS by IP directly. Config flow: `pocketquant-config/.env` → CI reads at deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler coordinates via `apscheduler_jobs` Mongo collection; first to claim `next_run_time` wins. Remote-DB dev mode must set `ENABLE_JOBS=false` (else double-schedule).
 
 See [deployment.md](./deployment.md) for CI/CD runbook, `.github/workflows/cicd.yml` for build→ship→run.
 
