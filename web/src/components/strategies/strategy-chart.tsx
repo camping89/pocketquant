@@ -1,15 +1,16 @@
 /**
  * Embedded chart for the strategy operator dashboard.
- * Displays candles + live-trade markers + open-position price lines.
+ * Displays candles + live-trade markers + open-position price lines, plus the
+ * shared indicator series (toggled by the parent) reused from the charts page.
  *
- * Intentionally has NO symbol/interval/indicator controls — those are locked
- * to the selected subscription's values.
+ * Intentionally has NO symbol/interval controls — those are locked to the
+ * selected subscription's values.
  *
  * Architecture: wraps useChart + useOHLCV directly (not TradingChart) to avoid
- * pulling in backtest primitives (PositionBoxPrimitive, indicator series, etc.)
- * that are irrelevant here.
+ * pulling in backtest primitives (PositionBoxPrimitive) that are irrelevant
+ * here. Indicator series are shared via indicator-series.ts (no duplicate logic).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   CandlestickSeries,
   HistogramSeries,
@@ -17,15 +18,25 @@ import {
   LineStyle,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type SeriesMarker,
   type Time,
   type IPriceLine,
 } from 'lightweight-charts'
 import { useChart } from '../chart/use-chart'
 import { useOHLCV } from '../../hooks/use-ohlcv'
+import { useIndicators } from '../../hooks/use-indicators'
+import {
+  addIndicatorSeries,
+  removeIndicatorSeries,
+  type IndicatorSeriesRefs,
+} from '../chart/indicator-series'
+import { engulfingMarkers } from '../../lib/indicators/engulfing'
 import { tradesToMarkers } from '../../lib/trades-to-markers'
 import { useTimezone } from '../../lib/use-timezone'
+import { useTheme } from '../../lib/use-theme'
+import { readChartColors } from '../../lib/theme-colors'
 import type { Trade, OpenPosition } from '../../types/strategy'
-import type { Interval } from '../../types/market-data'
+import type { Interval, IndicatorConfig } from '../../types/market-data'
 
 // TODO(realtime): wire useRealtimeBar(symbol, interval, candleRef, volumeRef)
 // once the strategy WS subscription endpoint is available. Trades + open
@@ -36,17 +47,21 @@ interface StrategyChartProps {
   interval: Interval
   trades: Trade[]
   openPosition: OpenPosition | null
+  indicators: IndicatorConfig
 }
 
-export function StrategyChart({ symbol, interval, trades, openPosition }: StrategyChartProps) {
+export function StrategyChart({ symbol, interval, trades, openPosition, indicators }: StrategyChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { mode } = useTimezone()
-  const chartRef = useChart(containerRef, undefined, mode)
+  const { mode: themeMode } = useTheme()
+  const chartRef = useChart(containerRef, undefined, mode, themeMode)
   const { data, isLoading, error } = useOHLCV(symbol, interval)
+  const indicatorData = useIndicators(data?.candles, indicators)
 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
+  const indicatorRefs = useRef<IndicatorSeriesRefs | null>(null)
   const entryLineRef = useRef<IPriceLine | null>(null)
   const liqLineRef = useRef<IPriceLine | null>(null)
 
@@ -59,18 +74,21 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
       if (markersRef.current) { markersRef.current.detach(); markersRef.current = null }
       if (candleRef.current) { chart.removeSeries(candleRef.current); candleRef.current = null }
       if (volumeRef.current) { chart.removeSeries(volumeRef.current); volumeRef.current = null }
+      if (indicatorRefs.current) { removeIndicatorSeries(chart, indicatorRefs.current); indicatorRefs.current = null }
     } catch {
       candleRef.current = null
       volumeRef.current = null
       markersRef.current = null
+      indicatorRefs.current = null
     }
 
+    const cc = readChartColors()
     const candle = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: cc.up,
+      downColor: cc.down,
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
+      wickUpColor: cc.up,
+      wickDownColor: cc.down,
     })
     candle.setData(data.candles)
     candleRef.current = candle
@@ -102,25 +120,75 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
     }
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Re-color candles on theme flip — series is created in the [data] effect.
   useEffect(() => {
-    const candle = candleRef.current
-    if (!candle) return
+    const c = readChartColors()
+    candleRef.current?.applyOptions({
+      upColor: c.up,
+      downColor: c.down,
+      wickUpColor: c.up,
+      wickDownColor: c.down,
+    })
+  }, [themeMode])
 
-    const markers = tradesToMarkers(trades)
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !indicatorData) return
 
-    if (markersRef.current) {
-      markersRef.current.setMarkers(markers)
-    } else if (markers.length > 0) {
-      markersRef.current = createSeriesMarkers(candle, markers)
+    if (indicatorRefs.current) {
+      removeIndicatorSeries(chart, indicatorRefs.current)
+      indicatorRefs.current = null
     }
 
+    indicatorRefs.current = addIndicatorSeries(chart, indicatorData, indicators)
+
     return () => {
-      if (markersRef.current && markers.length === 0) {
+      if (chartRef.current && indicatorRefs.current) {
+        removeIndicatorSeries(chartRef.current, indicatorRefs.current)
+        indicatorRefs.current = null
+      }
+    }
+  }, [indicatorData, indicators]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tradeMarkers = useMemo<SeriesMarker<Time>[]>(
+    () => tradesToMarkers(trades) as SeriesMarker<Time>[],
+    [trades],
+  )
+
+  const engulfMarkers = useMemo<SeriesMarker<Time>[]>(() => {
+    if (!indicators.engulfing || !data?.candles) return []
+    return engulfingMarkers(data.candles)
+  }, [indicators.engulfing, data])
+
+  // One marker set drives one plugin instance: trade + engulfing share the
+  // candle series, so merge into a single sorted array before setMarkers — a
+  // second createSeriesMarkers call would replace, not add.
+  const mergedMarkers = useMemo<SeriesMarker<Time>[]>(
+    () => [...tradeMarkers, ...engulfMarkers].sort((a, b) => (a.time as number) - (b.time as number)),
+    [tradeMarkers, engulfMarkers],
+  )
+
+  useEffect(() => {
+    if (!candleRef.current) return
+
+    if (markersRef.current) {
+      markersRef.current.setMarkers(mergedMarkers)
+    } else if (mergedMarkers.length > 0) {
+      markersRef.current = createSeriesMarkers(candleRef.current, mergedMarkers)
+    }
+  }, [mergedMarkers])
+
+  // Detach the markers plugin only on unmount — toggling to an empty set clears
+  // markers via setMarkers([]) above, so detaching on empty would churn the
+  // plugin and flicker when markers return.
+  useEffect(() => {
+    return () => {
+      if (markersRef.current) {
         markersRef.current.detach()
         markersRef.current = null
       }
     }
-  }, [trades]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const candle = candleRef.current
@@ -170,7 +238,7 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
         }
       } catch { /* ignore */ }
     }
-  }, [openPosition]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [openPosition])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -185,7 +253,7 @@ export function StrategyChart({ symbol, interval, trades, openPosition }: Strate
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(15,15,30,0.6)',
+            background: 'color-mix(in srgb, var(--bg-primary) 60%, transparent)',
             color: 'var(--text-secondary)',
             fontSize: 12,
             pointerEvents: 'none',

@@ -1,8 +1,16 @@
 import { useState, type FormEvent } from 'react'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
 import { useStrategyList } from '../../hooks/use-backtest-run'
+import { useTimezone } from '../../lib/use-timezone'
 import type { RunBacktestBody } from '../../api/backtest-api'
 
+dayjs.extend(utc) // idempotent — also extended in datetime.ts
+
 const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']
+
+// datetime-local control format (minute precision, sortable as string).
+const DT_LOCAL_FMT = 'YYYY-MM-DDTHH:mm'
 
 interface BacktestFormProps {
   onSubmit: (body: RunBacktestBody) => void
@@ -29,13 +37,26 @@ const inputStyle: React.CSSProperties = {
 
 export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
   const { data: strategies = [], isLoading: stratLoading } = useStrategyList()
+  const { mode, suffix } = useTimezone()
   const [strategyId, setStrategyId] = useState('')
   const [symbol, setSymbol] = useState('BTCUSDT:BINANCE')
   const [interval, setInterval] = useState('1m')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  // Inputs are wall-clock in the active tz mode; default end=now, start=now−1y.
+  const [startDate, setStartDate] = useState(() => {
+    const base = mode === 'utc' ? dayjs().utc() : dayjs()
+    return base.subtract(1, 'year').format(DT_LOCAL_FMT)
+  })
+  const [endDate, setEndDate] = useState(() => {
+    const base = mode === 'utc' ? dayjs().utc() : dayjs()
+    return base.format(DT_LOCAL_FMT)
+  })
   const [paramsText, setParamsText] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // Inputs hold wall-clock in the selected mode. UTC → send as-is (already UTC);
+  // local → reinterpret via browser tz and convert to UTC naive for the backend.
+  const toUtcSubmit = (v: string) =>
+    mode === 'utc' ? `${v}:00` : dayjs(v).utc().format('YYYY-MM-DDTHH:mm:ss')
 
   // Default the strategy dropdown to the first available once loaded.
   const effectiveStrategy = strategyId || strategies[0] || ''
@@ -47,8 +68,8 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
     const sym = symbol.trim().toUpperCase()
     if (!effectiveStrategy) { setErrorMsg('Select a strategy.'); return }
     if (!sym.includes(':')) { setErrorMsg('Symbol must be CODE:EXCHANGE (e.g. BTCUSDT:BINANCE).'); return }
-    if (!startDate || !endDate) { setErrorMsg('Start and end dates are required.'); return }
-    if (startDate > endDate) { setErrorMsg('Start date must be on or before end date.'); return }
+    if (!startDate || !endDate) { setErrorMsg('Start and end datetimes are required.'); return }
+    if (startDate > endDate) { setErrorMsg('Start must be on or before end.'); return }
 
     let parameters: Record<string, unknown> | undefined
     if (paramsText.trim()) {
@@ -64,8 +85,8 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
       strategy_id: effectiveStrategy,
       symbol: sym,
       interval,
-      start_date: startDate,
-      end_date: endDate,
+      start_date: toUtcSubmit(startDate),
+      end_date: toUtcSubmit(endDate),
       parameters,
     })
   }
@@ -105,12 +126,12 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
           </select>
         </div>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Start date</label>
-          <input style={inputStyle} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <label style={labelStyle}>Start ({suffix})</label>
+          <input style={inputStyle} type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>End date</label>
-          <input style={inputStyle} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <label style={labelStyle}>End ({suffix})</label>
+          <input style={inputStyle} type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
       </div>
 

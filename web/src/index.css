@@ -1,13 +1,29 @@
-:root {
-  --bg-primary: #1a1a2e;
-  --bg-secondary: #16213e;
-  --bg-tertiary: #0f3460;
-  --text-primary: #d1d4dc;
-  --text-secondary: #8b8b9a;
-  --border-color: #2b2b43;
-  --accent: #26a69a;
-  --up-color: #26a69a;
-  --down-color: #ef5350;
+/* Dark defaults double as a fallback when data-theme is absent (e.g. the
+   no-flash inline script in index.html fails) — keeps the UI from rendering
+   with empty var() values. The [data-theme] blocks win on specificity. */
+:root,
+:root[data-theme="dark"] {
+  --bg-primary: #1F1E1D;
+  --bg-secondary: #262624;
+  --bg-tertiary: #30302E;
+  --text-primary: #F5F4EE;
+  --text-secondary: #B8B5AD;
+  --border-color: #3A3937;
+  --accent: #D97757;
+  --up-color: #4A9782;
+  --down-color: #C96442;
+}
+
+:root[data-theme="light"] {
+  --bg-primary: #F5F4EE;
+  --bg-secondary: #ECEAE1;
+  --bg-tertiary: #E3E0D5;
+  --text-primary: #1F1E1D;
+  --text-secondary: #6B6258;
+  --border-color: #D6D3C8;
+  --accent: #C15F3C;
+  --up-color: #3E7D6B;
+  --down-color: #B55031;
 }
 
 *,
@@ -321,10 +337,17 @@ input, select {
   color: var(--text-secondary);
   letter-spacing: 0.5px;
 }
+.live-clock {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
 
 /* Card containers */
 .monitor-card {
-  background: rgba(22, 33, 62, 0.5);
+  background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 16px;
@@ -369,7 +392,7 @@ input, select {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: rgba(22, 33, 62, 0.92);
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
   backdrop-filter: blur(6px);
   text-align: left;
   padding: 9px 12px;
@@ -429,7 +452,7 @@ input, select {
   border-bottom: none;
   border-top: 1px solid var(--border-color);
   padding: 10px 12px;
-  background: rgba(22, 33, 62, 0.4);
+  background: color-mix(in srgb, var(--bg-secondary) 40%, transparent);
 }
 
 /* Row highlighting */
@@ -534,7 +557,7 @@ input, select {
 /* Expanded detail panel */
 .detail-panel {
   padding: 12px 16px 12px 32px;
-  background: rgba(15, 52, 96, 0.3);
+  background: color-mix(in srgb, var(--bg-tertiary) 30%, transparent);
   border-left: 2px solid var(--border-color);
   font-size: 12px;
   line-height: 1.6;

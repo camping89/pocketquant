@@ -24,6 +24,8 @@ import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { BacktestPosition } from '../../api/backtest-api'
 import { PositionBoxPrimitive, type PositionData } from './position-box-primitive'
 import { useTimezone } from '../../lib/use-timezone'
+import { useTheme } from '../../lib/use-theme'
+import { readChartColors } from '../../lib/theme-colors'
 import { makeChartTimeFormatter, type TimezoneMode } from '../../lib/datetime'
 
 interface TradingChartProps {
@@ -48,7 +50,8 @@ export function TradingChart({
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { mode } = useTimezone()
-  const chartRef = useChart(containerRef, undefined, mode)
+  const { mode: themeMode } = useTheme()
+  const chartRef = useChart(containerRef, undefined, mode, themeMode)
   const { data, error, isLoading } = useOHLCV(symbol, interval)
   const indicatorData = useIndicators(data?.candles, indicators)
 
@@ -91,12 +94,13 @@ export function TradingChart({
       markersRef.current = null
     }
 
+    const cc = readChartColors()
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: cc.up,
+      downColor: cc.down,
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
+      wickUpColor: cc.up,
+      wickDownColor: cc.down,
     })
     candleSeries.setData(data.candles)
     candleRef.current = candleSeries
@@ -168,6 +172,18 @@ export function TradingChart({
     const text = makeChartTimeFormatter(mode)(t)
     setOhlcv((prev) => (prev ? { ...prev, t: text } : prev))
   }, [mode])
+
+  // Re-color candles on theme flip — series is created in the [data] effect, so
+  // without this a toggle wouldn't update colors until data reloads.
+  useEffect(() => {
+    const c = readChartColors()
+    candleRef.current?.applyOptions({
+      upColor: c.up,
+      downColor: c.down,
+      wickUpColor: c.up,
+      wickDownColor: c.down,
+    })
+  }, [themeMode])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -325,7 +341,7 @@ export function TradingChart({
           <span>O <b>{ohlcv.o.toFixed(2)}</b></span>
           <span>H <b>{ohlcv.h.toFixed(2)}</b></span>
           <span>L <b>{ohlcv.l.toFixed(2)}</b></span>
-          <span>C <b style={{ color: ohlcv.c >= ohlcv.o ? '#26a69a' : '#ef5350' }}>{ohlcv.c.toFixed(2)}</b></span>
+          <span>C <b style={{ color: ohlcv.c >= ohlcv.o ? 'var(--up-color)' : 'var(--down-color)' }}>{ohlcv.c.toFixed(2)}</b></span>
           <span>V <b>{ohlcv.v.toFixed(2)}</b></span>
         </div>
       )}

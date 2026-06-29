@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>pocketquant-web</title>
+    <script>
+      // Set theme before first paint to avoid flash. Mirrors readInitialMode().
+      (function () {
+        try {
+          var m = localStorage.getItem('pq.theme.mode');
+          document.documentElement.setAttribute('data-theme', m === 'light' ? 'light' : 'dark');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
