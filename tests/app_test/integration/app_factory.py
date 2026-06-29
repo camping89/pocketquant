@@ -24,14 +24,14 @@ from pocketquant.app.di import (
 )
 from pocketquant.app.main_extensions import (
     configure_middleware,
+    drain_backtest_tasks,
     ensure_all_indexes,
     handle_startup_failure,
-    recover_stale_backtests,
+    init_backtest_tasks,
+    recover_orphan_backtests,
     register_health_checks,
     register_routes,
     start_background_jobs,
-    start_backtest_worker,
-    stop_backtest_worker,
 )
 from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.common.messaging import EventBus
@@ -90,16 +90,16 @@ def make_test_app(settings: Settings) -> FastAPI:
         try:
             app.state.database = await c.get(Database)
             app.state.cache = await c.get(Cache)
+            init_backtest_tasks(app)
             await ensure_all_indexes(c)
-            await recover_stale_backtests(c)
+            await recover_orphan_backtests(c)
             await register_health_checks(c, app)
             await start_background_jobs(c)
-            await start_backtest_worker(c, app)
             yield
         except Exception as e:
             handle_startup_failure(e)
         finally:
-            await stop_backtest_worker(c, app)
+            await drain_backtest_tasks(app)
             await c.close()
 
     setup_logging(settings)

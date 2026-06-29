@@ -18,9 +18,6 @@ from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -67,12 +64,10 @@ class StrategyCommandService:
         self,
         subscription_repository: SubscriptionRepository,
         backtest_repository: BacktestRepository,
-        backtest_request_repository: BacktestRequestRepository,
         tracked_symbol_repository: TrackedSymbolRepository,
     ) -> None:
         self._sub_repo = subscription_repository
         self._bt_repo = backtest_repository
-        self._request_repo = backtest_request_repository
         self._tracked_repo = tracked_symbol_repository
 
     async def start(self, cmd: StartStrategyCommand) -> bool:
@@ -137,21 +132,17 @@ class StrategyCommandService:
         """Cascade-delete a subscription's persisted state — pure Mongo write.
 
         No RAM unload: the app control-plane (reconcile orphan-unload) tears down
-        the instance once the subscription doc is gone. Queued backtest requests
-        are dropped to prevent the worker from running work for a removed sub.
+        the instance once the subscription doc is gone. Subscriptions no longer
+        own any backtest state (forward-testing only), so only the sub doc drops.
         """
-        await self._request_repo.delete_by_subscription(cmd.sub_id)
-        await self._bt_repo.delete_by_subscription(cmd.sub_id)
         await self._sub_repo.delete(cmd.sub_id)
 
     async def delete_strategy(self, cmd: DeleteStrategyCommand) -> None:
         """Cascade-delete every persisted doc for a strategy template — pure Mongo.
 
         No RAM unload, no scheduler: the app control-plane (reconcile orphan-unload)
-        tears down each instance once its subscription doc is gone.
-        Order: drop queued requests + cached backtests first, then the subscriptions
-        that key them.
+        tears down each instance once its subscription doc is gone. Ad-hoc backtest
+        runs for this strategy are dropped too; then the subscriptions.
         """
-        await self._request_repo.delete_by_strategy_code(cmd.strategy_id)
         await self._bt_repo.delete_by_strategy_code(cmd.strategy_id)
         await self._sub_repo.delete_by_strategy_code(cmd.strategy_id)

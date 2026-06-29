@@ -21,6 +21,9 @@ function RootLayout() {
         <Link to="/strategies" activeProps={{ className: 'active' }}>
           Strategies
         </Link>
+        <Link to="/backtest" activeProps={{ className: 'active' }}>
+          Backtest
+        </Link>
         <Link to="/monitor" activeProps={{ className: 'active' }}>
           Monitor
         </Link>

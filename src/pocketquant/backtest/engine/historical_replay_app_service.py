@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from time import perf_counter
 
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import set_simulation_time
@@ -33,8 +33,9 @@ class HistoricalReplayAppService:
     - Yields to event loop periodically to prevent blocking
     """
 
-    # Yield to event loop every N bars to prevent blocking
-    YIELD_INTERVAL = 100
+    # Yield to event loop every N bars so a multi-hundred-thousand-bar run can't
+    # starve the WS feed / reconcile loop / health checks sharing this process.
+    YIELD_INTERVAL = 10
 
     def __init__(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus

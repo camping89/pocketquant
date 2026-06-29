@@ -1,27 +1,6 @@
 [
   {
     "methods": [
-      "GET"
-    ],
-    "name": "get_optimization",
-    "path": "/api/v1/backtest/optimization/{optimization_id}"
-  },
-  {
-    "methods": [
-      "POST"
-    ],
-    "name": "run_optimization",
-    "path": "/api/v1/backtest/optimize"
-  },
-  {
-    "methods": [
-      "GET"
-    ],
-    "name": "get_backtest_request",
-    "path": "/api/v1/backtest/requests/{request_id}"
-  },
-  {
-    "methods": [
       "POST"
     ],
     "name": "run_backtest",
@@ -54,6 +33,13 @@
     ],
     "name": "get_backtest_equity",
     "path": "/api/v1/backtest/{run_id}/equity"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_backtest_trades",
+    "path": "/api/v1/backtest/{run_id}/trades"
   },
   {
     "methods": [
@@ -206,13 +192,6 @@
     "methods": [
       "POST"
     ],
-    "name": "run_all_backtests",
-    "path": "/api/v1/strategies/{strategy_code}/run-all-backtests"
-  },
-  {
-    "methods": [
-      "POST"
-    ],
     "name": "create_subscription",
     "path": "/api/v1/strategies/{strategy_code}/subscriptions"
   },
@@ -229,13 +208,6 @@
     ],
     "name": "remove_subscription",
     "path": "/api/v1/subscriptions/{sub_id}"
-  },
-  {
-    "methods": [
-      "GET"
-    ],
-    "name": "get_subscription_backtest",
-    "path": "/api/v1/subscriptions/{sub_id}/backtest"
   },
   {
     "methods": [

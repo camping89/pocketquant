@@ -1,34 +1,28 @@
-"""Backtest API routes.
+"""Backtest API routes — single ad-hoc run + result reads (``/backtest`` prefix).
 
-Two top-level routers:
-
-* ``backtest_router``          (prefix ``/backtest``)    — run, optimize, results
-* ``run_all_backtests_router`` (prefix ``/strategies``)  — fan-out per subscription
+``POST /backtest/run`` allocates a run id, persists the ``started`` doc, then
+spawns the engine as an in-process asyncio task (no queue). FE polls
+``GET /backtest/{run_id}`` until ``finished``/``failed``.
 """
 
+import asyncio
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from pocketquant.backtest.backtest_command_service import (
     BacktestCommandService,
-    RunAllBacktestsCommand,
     RunBacktestCommand,
-    RunOptimizationCommand,
 )
+from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.backtest.backtest_query_service import (
     BacktestQueryService,
-    BacktestRequestStatusResponse,
     EnqueueBacktestResponse,
     GetBacktestQuery,
-    GetOptimizationQuery,
     ListBacktestsQuery,
-    OptimizationSummaryResponse,
 )
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
-
-# backtest_router — /backtest prefix
 
 backtest_router = APIRouter(prefix="/backtest", tags=["backtest"], route_class=DishkaRoute)
 
@@ -41,46 +35,23 @@ async def list_available_strategies() -> list[str]:
 @backtest_router.post("/run", response_model=EnqueueBacktestResponse, status_code=202)
 async def run_backtest(
     cmd: RunBacktestCommand,
+    request: Request,
     cmd_svc: FromDishka[BacktestCommandService],
+    execution_svc: FromDishka[BacktestExecutionService],
 ) -> dict:
-    """Enqueue a single backtest run. Returns a request id for polling.
+    """Start a single backtest. Returns ``run_id`` (202); poll ``GET /backtest/{run_id}``.
 
-    Execution is async: the headless app's worker runs the engine and embeds the
-    result in the request doc. Poll ``GET /backtest/requests/{request_id}``.
+    The engine runs in-process via ``asyncio.create_task`` — uncapped by design
+    (the operator owns traffic). Concurrent runs share the live Mongo pool
+    (``MONGODB_MAX_POOL_SIZE``, default 50), so a flood of large runs can starve
+    live-trading order persistence; that trade-off is accepted, not guarded here.
     """
-    return await cmd_svc.run(cmd)
-
-
-@backtest_router.get("/requests/{request_id}", response_model=BacktestRequestStatusResponse)
-async def get_backtest_request(
-    request_id: str,
-    query_svc: FromDishka[BacktestQueryService],
-) -> dict:
-    return await query_svc.get_request_status(request_id)
-
-
-@backtest_router.post("/optimize", response_model=OptimizationSummaryResponse)
-async def run_optimization(
-    cmd: RunOptimizationCommand,
-    cmd_svc: FromDishka[BacktestCommandService],
-) -> dict:
-    """Run grid optimization across parameter combinations.
-
-    Tests all combinations of parameters and returns ranked results.
-    Maximum 1000 combinations allowed.
-    """
-    result = await cmd_svc.optimize(cmd)
-    return {
-        "id": str(result.id),
-        "strategy_code": result.strategy_code,
-        "status": result.status,
-        "total_combinations": result.total_combinations,
-        "completed_combinations": result.completed_combinations,
-        "failed_combinations": result.failed_combinations,
-        "target_metric": result.target_metric,
-        "best_parameters": result.best_parameters,
-        "best_metric_value": getattr(result.best_metrics, result.target_metric, 0),
-    }
+    run_id, config = await cmd_svc.run(cmd)
+    tasks: set[asyncio.Task] = request.app.state.backtest_tasks
+    task = asyncio.create_task(execution_svc.execute_and_persist(run_id, config))
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return {"request_id": run_id}
 
 
 @backtest_router.get("/{run_id}")
@@ -105,6 +76,16 @@ async def get_backtest_equity(
             for p in result.equity_curve
         ],
     }
+
+
+@backtest_router.get("/{run_id}/trades")
+async def get_backtest_trades(
+    run_id: str,
+    query_svc: FromDishka[BacktestQueryService],
+) -> dict:
+    """Closed round-trip trades for a run (joined from ``backtest_trades``)."""
+    trades = await query_svc.list_trades(run_id)
+    return {"run_id": run_id, "trades": trades}
 
 
 @backtest_router.get("/strategy/{strategy_id}")
@@ -134,27 +115,3 @@ async def list_backtests(
         }
         for r in results
     ]
-
-
-@backtest_router.get("/optimization/{optimization_id}")
-async def get_optimization(
-    optimization_id: str,
-    query_svc: FromDishka[BacktestQueryService],
-) -> dict:
-    result = await query_svc.get_optimization(GetOptimizationQuery(optimization_id=optimization_id))
-    return result.to_dict()
-
-
-# run_all_backtests_router — /strategies prefix (separate mount)
-
-run_all_backtests_router = APIRouter(
-    prefix="/strategies", tags=["strategies"], route_class=DishkaRoute
-)
-
-
-@run_all_backtests_router.post("/{strategy_code}/run-all-backtests", status_code=202)
-async def run_all_backtests(
-    strategy_code: str,
-    cmd_svc: FromDishka[BacktestCommandService],
-) -> dict:
-    return await cmd_svc.run_all(RunAllBacktestsCommand(strategy_id=strategy_code))

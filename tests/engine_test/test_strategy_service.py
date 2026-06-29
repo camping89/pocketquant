@@ -4,12 +4,11 @@ Covers the same scenarios as the old handlers so the net behavior is preserved:
   - start/stop write desired_state declaratively
   - add_symbol: fail-fast 404 for untracked symbol or unknown template
   - add_symbol: persists desired_state="stopped", no auto-start
-  - remove_symbol: cascade-deletes sub + backtest + queued request
-  - delete_strategy: cascade-deletes all subs + backtests + requests
+  - remove_symbol: deletes the subscription (forward-testing only, no backtest state)
+  - delete_strategy: cascade-deletes all subs + ad-hoc backtest runs
   - get_all / get_one return from STRATEGY_REGISTRY
-  - list_symbols: join subscriptions with backtest statuses + derive is_running
+  - list_symbols: maps subscriptions + derives is_running (no backtest join)
   - get_positions / get_trades: map repo entities to FE shapes
-  - get_subscription_backtest: 404 when no doc
 """
 
 from __future__ import annotations
@@ -37,7 +36,6 @@ from pocketquant.engine.strategy_query_service import (
     GetStrategyPositionsQuery,
     GetStrategyQuery,
     GetStrategyTradesQuery,
-    GetSubscriptionBacktestQuery,
     ListSymbolsQuery,
     StrategyQueryService,
 )
@@ -51,17 +49,14 @@ def _cmd_svc(
     *,
     sub_repo: object | None = None,
     bt_repo: object | None = None,
-    request_repo: object | None = None,
     tracked_repo: object | None = None,
 ) -> StrategyCommandService:
     sub_repo = sub_repo or MagicMock()
     bt_repo = bt_repo or MagicMock()
-    request_repo = request_repo or MagicMock()
     tracked_repo = tracked_repo or MagicMock()
     return StrategyCommandService(
         subscription_repository=sub_repo,
         backtest_repository=bt_repo,
-        backtest_request_repository=request_repo,
         tracked_symbol_repository=tracked_repo,
     )
 
@@ -69,15 +64,12 @@ def _cmd_svc(
 def _query_svc(
     *,
     sub_repo: object | None = None,
-    bt_repo: object | None = None,
     position_repo: object | None = None,
 ) -> StrategyQueryService:
     sub_repo = sub_repo or MagicMock()
-    bt_repo = bt_repo or MagicMock()
     position_repo = position_repo or MagicMock()
     return StrategyQueryService(
         subscription_repository=sub_repo,
-        backtest_repository=bt_repo,
         position_repository=position_repo,
     )
 
@@ -219,23 +211,14 @@ async def test_add_symbol_404_when_unknown_template() -> None:
 
 
 @pytest.mark.asyncio
-async def test_remove_symbol_cascades_in_order() -> None:
+async def test_remove_symbol_deletes_subscription() -> None:
     sub_repo = MagicMock()
     sub_repo.delete = AsyncMock()
-    bt_repo = MagicMock()
-    bt_repo.delete_by_subscription = AsyncMock()
-    request_repo = MagicMock()
-    request_repo.delete_by_subscription = AsyncMock()
 
-    call_order: list[str] = []
-    request_repo.delete_by_subscription.side_effect = lambda _: call_order.append("request")
-    bt_repo.delete_by_subscription.side_effect = lambda _: call_order.append("bt")
-    sub_repo.delete.side_effect = lambda _: call_order.append("sub")
-
-    svc = _cmd_svc(sub_repo=sub_repo, bt_repo=bt_repo, request_repo=request_repo)
+    svc = _cmd_svc(sub_repo=sub_repo)
     await svc.remove_symbol(RemoveSymbolCommand(sub_id="sub-1"))
 
-    assert call_order == ["request", "bt", "sub"]
+    sub_repo.delete.assert_awaited_once_with("sub-1")
 
 
 @pytest.mark.asyncio
@@ -244,18 +227,15 @@ async def test_delete_strategy_cascades_in_order() -> None:
     sub_repo.delete_by_strategy_code = AsyncMock()
     bt_repo = MagicMock()
     bt_repo.delete_by_strategy_code = AsyncMock()
-    request_repo = MagicMock()
-    request_repo.delete_by_strategy_code = AsyncMock()
 
     call_order: list[str] = []
-    request_repo.delete_by_strategy_code.side_effect = lambda _: call_order.append("request")
     bt_repo.delete_by_strategy_code.side_effect = lambda _: call_order.append("bt")
     sub_repo.delete_by_strategy_code.side_effect = lambda _: call_order.append("sub")
 
-    svc = _cmd_svc(sub_repo=sub_repo, bt_repo=bt_repo, request_repo=request_repo)
+    svc = _cmd_svc(sub_repo=sub_repo, bt_repo=bt_repo)
     await svc.delete_strategy(DeleteStrategyCommand(strategy_id="hitnrun2"))
 
-    assert call_order == ["request", "bt", "sub"]
+    assert call_order == ["bt", "sub"]
 
 
 # ---------------------------------------------------------------------------
@@ -311,10 +291,8 @@ async def test_list_symbols_derives_is_running_from_actual_state(
 
     sub_repo = MagicMock()
     sub_repo.list_all = AsyncMock(return_value=[sub])
-    bt_repo = MagicMock()
-    bt_repo.get_subscription_statuses = AsyncMock(return_value={})
 
-    svc = _query_svc(sub_repo=sub_repo, bt_repo=bt_repo)
+    svc = _query_svc(sub_repo=sub_repo)
     rows = await svc.list_symbols(ListSymbolsQuery())
 
     assert len(rows) == 1
@@ -388,29 +366,3 @@ async def test_get_trades_returns_empty_when_no_closed() -> None:
     pos_repo.find_closed_by_subscription = AsyncMock(return_value=[])
     svc = _query_svc(position_repo=pos_repo)
     assert await svc.get_trades(GetStrategyTradesQuery(subscription_id="sub-1")) == []
-
-
-# ---------------------------------------------------------------------------
-# StrategyQueryService — get_subscription_backtest
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_get_subscription_backtest_returns_doc() -> None:
-    bt_repo = MagicMock()
-    bt_repo.find_doc_by_subscription = AsyncMock(return_value={"status": "completed"})
-    svc = _query_svc(bt_repo=bt_repo)
-
-    result = await svc.get_subscription_backtest(GetSubscriptionBacktestQuery(sub_id="sub-1"))
-
-    assert result == {"status": "completed"}
-
-
-@pytest.mark.asyncio
-async def test_get_subscription_backtest_404_when_no_doc() -> None:
-    bt_repo = MagicMock()
-    bt_repo.find_doc_by_subscription = AsyncMock(return_value=None)
-    svc = _query_svc(bt_repo=bt_repo)
-
-    with pytest.raises(NotFoundError):
-        await svc.get_subscription_backtest(GetSubscriptionBacktestQuery(sub_id="sub-1"))

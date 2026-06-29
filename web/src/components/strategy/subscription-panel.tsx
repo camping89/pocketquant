@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import {
   useSubscriptions,
-  useRunAllBacktests,
   useRemoveSymbol,
   useDeleteStrategy,
 } from '../../hooks/use-subscriptions'
-import { BacktestStatusBadge } from './backtest-status-badge'
 import { ForwardStatusBadge } from './forward-status-badge'
 import { AddSymbolDialog } from './add-symbol-dialog'
 import type { Subscription } from '../../api/strategy-api'
@@ -32,8 +30,6 @@ const badgePrefixStyle: React.CSSProperties = {
 }
 
 function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
-  const bt = sub.backtest
-
   return (
     <div
       onClick={onSelect}
@@ -54,13 +50,7 @@ function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
           {sub.symbol} <span style={{ color: 'var(--text-secondary)' }}>• {sub.interval}</span>
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={badgePrefixStyle}>BT</span>
-          <BacktestStatusBadge
-            status={bt?.status ?? null}
-            lastRunAt={bt?.last_run_at}
-            errorMsg={bt?.error_msg}
-          />
-          <span style={{ ...badgePrefixStyle, marginLeft: 2 }}>FW</span>
+          <span style={badgePrefixStyle}>FW</span>
           <ForwardStatusBadge desiredState={sub.desired_state} actualState={sub.actual_state} />
         </div>
       </div>
@@ -80,7 +70,6 @@ function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
 export function SubscriptionPanel({ strategyId, selectedSubId, onSelectSub }: SubscriptionPanelProps) {
   const [showDialog, setShowDialog] = useState(false)
   const { data: subs, isLoading } = useSubscriptions(strategyId)
-  const runAll = useRunAllBacktests(strategyId)
   const removeSymbol = useRemoveSymbol(strategyId)
   const deleteStrat = useDeleteStrategy()
 
@@ -92,13 +81,6 @@ export function SubscriptionPanel({ strategyId, selectedSubId, onSelectSub }: Su
         </div>
       </div>
     )
-  }
-
-  const allRunning = subs?.every((s) => s.backtest?.status === 'running') ?? false
-  const hasRunning = subs?.some((s) => s.backtest?.status === 'running') ?? false
-
-  function handleRunAll() {
-    runAll.mutate()
   }
 
   function handleDeleteStrategy() {
@@ -121,14 +103,6 @@ export function SubscriptionPanel({ strategyId, selectedSubId, onSelectSub }: Su
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>Symbols</span>
         <button className="btn-sm" onClick={() => setShowDialog(true)} style={{ padding: '2px 8px', fontSize: 11 }}>
           + Add
-        </button>
-        <button
-          className="btn-sm"
-          onClick={handleRunAll}
-          disabled={!subs?.length || allRunning || hasRunning || runAll.isPending}
-          style={{ padding: '2px 8px', fontSize: 11 }}
-        >
-          {runAll.isPending ? 'Starting…' : 'Run All'}
         </button>
         <button
           className="btn"

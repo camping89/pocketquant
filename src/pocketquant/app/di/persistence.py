@@ -18,18 +18,12 @@ from pocketquant.core.infra.persistence.repositories.backtest_order_repository i
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
-from pocketquant.core.infra.persistence.repositories.backtest_request_repository import (
-    BacktestRequestRepository,
-)
 from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
-)
-from pocketquant.core.infra.persistence.repositories.optimization_repository import (
-    OptimizationRepository,
 )
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -69,10 +63,8 @@ class PersistenceProvider(Provider):
     order_repository = provide(OrderRepository, scope=Scope.APP)
     position_repository = provide(PositionRepository, scope=Scope.APP)
     backtest_repository = provide(BacktestRepository, scope=Scope.APP)
-    backtest_request_repository = provide(BacktestRequestRepository, scope=Scope.APP)
     backtest_order_repository = provide(BacktestOrderRepository, scope=Scope.APP)
     backtest_trade_repository = provide(BacktestTradeRepository, scope=Scope.APP)
-    optimization_repository = provide(OptimizationRepository, scope=Scope.APP)
     symbol_repository = provide(SymbolRepository, scope=Scope.APP)
     sync_status_repository = provide(SyncStatusRepository, scope=Scope.APP)
     job_history_repository = provide(JobHistoryRepository, scope=Scope.APP)

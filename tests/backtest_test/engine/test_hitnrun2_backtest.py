@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestResult
@@ -296,7 +296,7 @@ async def _run_backtest(
 async def test_backtest_long_round_trip_on_downtrend() -> None:
     bars = _downtrend_bars(n_warm=30, n_trend=20, start_price=100.0)
     result, broker, _ = await _run_backtest(bars, direction="long")
-    assert result.status == "completed", result.error_message
+    assert result.status == "finished", result.error_message
     assert result.metrics.total_trades >= 1
     assert len(result.equity_curve) > 1
     # SL/TP auto-fill must have closed the position before end-of-data.
@@ -307,7 +307,7 @@ async def test_backtest_long_round_trip_on_downtrend() -> None:
 async def test_backtest_short_round_trip_on_uptrend() -> None:
     bars = _uptrend_bars(n_warm=30, n_trend=20, start_price=100.0)
     result, broker, _ = await _run_backtest(bars, direction="short")
-    assert result.status == "completed", result.error_message
+    assert result.status == "finished", result.error_message
     assert result.metrics.total_trades >= 1
     assert (await broker.get_positions()) == []
 
@@ -315,7 +315,7 @@ async def test_backtest_short_round_trip_on_uptrend() -> None:
 async def test_backtest_no_trades_on_choppy_market() -> None:
     bars = _choppy_bars(n=60)
     result, broker, _ = await _run_backtest(bars, direction="both")
-    assert result.status == "completed", result.error_message
+    assert result.status == "finished", result.error_message
     assert result.metrics.total_trades == 0
     assert (await broker.get_positions()) == []
 
@@ -334,7 +334,7 @@ async def test_backtest_multi_trade_after_fill_reset() -> None:
         min_profit_pct=0.002,
         max_exposure_percent=1.0,
     )
-    assert result.status == "completed", result.error_message
+    assert result.status == "finished", result.error_message
     assert result.metrics.total_trades > 1
     assert (await broker.get_positions()) == []
 

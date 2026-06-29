@@ -1,9 +1,8 @@
 """Backtest VO PK representation lock — UUID in RAM, str in Mongo.
 
-Covers Fill.fill_id, Order.order_id, Trade.trade_id, OptimizationResult.id,
-BacktestResult.id. FK reference fields (order_id on Fill, run_id,
-entry/exit_order_id, resulting_trade_id, backtest_id) stay str — only
-document PKs flip.
+Covers Fill.fill_id, Order.order_id, Trade.trade_id, BacktestResult.id. FK
+reference fields (order_id on Fill, run_id, entry/exit_order_id,
+resulting_trade_id) stay str — only document PKs flip.
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from pocketquant.core.domain.backtest import (
     BacktestMetrics,
     BacktestResult,
     Fill,
-    OptimizationResult,
     Order,
     Trade,
 )
@@ -77,24 +75,6 @@ def _trade(trade_id: UUID) -> Trade:
         pnl=10.0,
         commission=0.21,
         duration_seconds=3600.0,
-    )
-
-
-def _optimization(opt_id: UUID) -> OptimizationResult:
-    return OptimizationResult(
-        id=opt_id,
-        strategy_code="s1",
-        config_snapshot={},
-        target_metric="sharpe_ratio",
-        total_combinations=1,
-        completed_combinations=1,
-        failed_combinations=0,
-        results=[],
-        best_parameters={},
-        best_metrics=BacktestMetrics.empty(),
-        started_at=NOW,
-        completed_at=NOW,
-        status="completed",
     )
 
 
@@ -174,29 +154,6 @@ def test_trade_from_mongo_reads_legacy_str_uuid_doc() -> None:
     assert Trade.from_mongo(doc).trade_id == UUID(legacy)
 
 
-# --- OptimizationResult.id ------------------------------------------------
-
-
-def test_optimization_to_mongo_writes_str_id() -> None:
-    doc = _optimization(generate_id()).to_mongo()
-    assert isinstance(doc["_id"], str)
-    UUID(doc["_id"])
-
-
-def test_optimization_roundtrip_preserves_uuid_id() -> None:
-    r = _optimization(generate_id())
-    restored = OptimizationResult.from_mongo(r.to_mongo())
-    assert restored.id == r.id
-    assert isinstance(restored.id, UUID)
-
-
-def test_optimization_from_mongo_reads_legacy_str_uuid_doc() -> None:
-    legacy = str(uuid7())
-    doc = _optimization(generate_id()).to_mongo()
-    doc["_id"] = legacy
-    assert OptimizationResult.from_mongo(doc).id == UUID(legacy)
-
-
 # --- BacktestResult.id ------------------------------------------------------
 
 
@@ -209,7 +166,7 @@ def _backtest_result(run_id: UUID) -> BacktestResult:
         equity_curve=[],
         started_at=NOW,
         completed_at=NOW,
-        status="completed",
+        status="finished",
     )
 
 

@@ -12,18 +12,16 @@ interface StrategyCardProps {
   onClick: () => void
 }
 
-/** Map backtest status → strategy display status. */
-function toStrategyStatus(bt: Subscription['backtest']): StrategyStatus {
-  if (!bt) return 'idle'
-  if (bt.status === 'running') return 'running'
-  if (bt.status === 'failed') return 'error'
-  if (bt.status === 'completed') return 'idle'
+/** Map forward run-state → strategy display status. */
+function toStrategyStatus(sub: Subscription): StrategyStatus {
+  if (sub.actual_state === 'running') return 'running'
+  if (sub.desired_state === 'running') return 'starting'  // converging
   return 'idle'
 }
 
 export function StrategyCard({ sub, selected, onClick }: StrategyCardProps) {
   const { code, exchange } = parseSymbol(sub.symbol)
-  const status = toStrategyStatus(sub.backtest)
+  const status = toStrategyStatus(sub)
 
   return (
     <button

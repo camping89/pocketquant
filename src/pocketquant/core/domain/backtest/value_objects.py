@@ -8,7 +8,6 @@ Consolidated single-file module (was a per-file ``value_objects/`` package):
 - ``OpenLot``                 — still-open lot snapshot at run-end
 - ``EquityPoint``             — equity curve point
 - ``BacktestMetrics``         — performance summary
-- ``OptimizationResultEntry`` — single optimizer grid entry
 
 ``OrderEvent`` (the lifecycle audit record embedded in ``Order.events[]``) is
 defined alongside the broker port DTOs so the emitter (PaperBroker) and the
@@ -376,29 +375,4 @@ class BacktestMetrics:
             avg_loss=0.0,
             avg_trade_duration=None,
             total_commission=0.0,
-        )
-
-
-@dataclass
-class OptimizationResultEntry:
-    parameters: dict[str, Any]
-    metrics: BacktestMetrics
-    backtest_id: str
-    rank: int  # 1 = best
-
-    def to_mongo(self) -> dict[str, Any]:
-        return {
-            "parameters": self.parameters,
-            "metrics": self.metrics.to_mongo(),
-            "backtest_id": self.backtest_id,
-            "rank": self.rank,
-        }
-
-    @classmethod
-    def from_mongo(cls, data: dict[str, Any]) -> OptimizationResultEntry:
-        return cls(
-            parameters=data["parameters"],
-            metrics=BacktestMetrics.from_mongo(data["metrics"]),
-            backtest_id=data["backtest_id"],
-            rank=data["rank"],
         )

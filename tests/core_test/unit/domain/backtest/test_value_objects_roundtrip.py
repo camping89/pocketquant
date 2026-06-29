@@ -12,7 +12,6 @@ from pocketquant.core.domain.backtest import (
     EquityPoint,
     Fill,
     OpenLot,
-    OptimizationResultEntry,
     Order,
     Trade,
 )
@@ -233,13 +232,3 @@ def test_metrics_empty_factory() -> None:
     m = BacktestMetrics.empty()
     assert m.total_trades == 0
     assert m.avg_trade_duration is None
-
-
-def test_optimization_entry_roundtrip() -> None:
-    e = OptimizationResultEntry(
-        parameters={"lookback": 10, "threshold": 0.02},
-        metrics=BacktestMetrics.empty(),
-        backtest_id="bt-1",
-        rank=1,
-    )
-    assert OptimizationResultEntry.from_mongo(e.to_mongo()) == e

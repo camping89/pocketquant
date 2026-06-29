@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestResult
@@ -239,7 +239,7 @@ async def test_engulfing_registered_in_strategy_registry() -> None:
 async def test_backtest_multi_trade_on_repeated_engulfing_round_trips() -> None:
     bars = _engulfing_long_cycle_bars(cycles=3, lookback=5)
     result, broker = await _run_backtest(bars, direction="long", lookback=5)
-    assert result.status == "completed", result.error_message
+    assert result.status == "finished", result.error_message
     assert result.metrics.total_trades > 1
     assert (await broker.get_positions()) == []
 
@@ -263,6 +263,6 @@ async def test_backtest_multi_trade_on_repeated_engulfing_round_trips() -> None:
 async def test_backtest_no_trades_on_choppy_market() -> None:
     bars = [_flat(i) for i in range(40)]
     result, broker = await _run_backtest(bars, direction="long", lookback=5)
-    assert result.status == "completed", result.error_message
+    assert result.status == "finished", result.error_message
     assert result.metrics.total_trades == 0
     assert (await broker.get_positions()) == []

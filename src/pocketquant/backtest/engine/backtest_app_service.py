@@ -5,7 +5,7 @@ from pocketquant.backtest.engine.historical_replay_app_service import (
     HistoricalReplayAppService,
 )
 from pocketquant.backtest.engine.result_collector import BacktestResultCollector
-from pocketquant.backtest.optimization.models.backtest_config import BacktestConfig
+from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
@@ -62,14 +62,18 @@ class BacktestAppService:
         self._replay_engine = HistoricalReplayAppService(event_bus)
         self._persist_results = persist_results
 
-    async def run(self, config: BacktestConfig) -> BacktestResult:
+    async def run(self, config: BacktestConfig, run_id: str | None = None) -> BacktestResult:
         """Execute a single backtest run with full metrics collection.
+
+        ``run_id`` is allocated by the caller (the route) so the started doc, the
+        finished doc, and every persisted order/trade share one id; only the
+        legacy in-engine path leaves it None and self-allocates.
 
         Returns the slim BacktestResult (metrics + equity_curve + open_positions);
         Orders and Trades are persisted to ``backtest_orders`` and ``backtest_trades``
         respectively and must be queried via their dedicated repositories.
         """
-        run_id = generate_id_str()
+        run_id = run_id or generate_id_str()
         started_at = datetime.now(UTC)
 
         logger.info(
@@ -118,7 +122,7 @@ class BacktestAppService:
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
-                status="completed",
+                status="finished",
             )
 
             logger.info(
