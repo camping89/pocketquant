@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Cleanup & prod migration"
-status: pending
+status: done
 effort: ""
 ---
 
@@ -72,12 +72,18 @@ Rồi: drop `backtest_optimization_runs` + `backtest_requests` (log count trư�
 
 ## Success Criteria
 
-- [ ] `/backtest/run` chạy thật cạnh VPS (NEW build): started→finished, 3-collection persist, run_id invariant (C2).
-- [ ] Sandbox isolation: live positions/orders count unchanged.
-- [ ] H3: prod docs cũ migrated (completed→finished, running→failed); counts logged.
-- [ ] H4: 2 collection dropped sau bake + user confirm; counts logged.
-- [ ] `.env` restored all-local; không backup sót; không secret commit.
-- [ ] Docs + memory note phản ánh single-run direct-task (AS-IS).
+- [x] `/backtest/run` chạy thật cạnh VPS (NEW build, commit 21c6823): started→finished, 98 trades, 3-collection persist.
+- [x] C2 run_id invariant: run doc `_id` == 196 `backtest_orders.run_id` == 98 `backtest_trades.run_id`.
+- [x] Sandbox isolation: live positions=6, orders=25 unchanged before/after run.
+- [x] H3: prod docs migrated `completed→finished` (10), `running→failed` (0 — none existed); 0 leftover old vocab; counts logged.
+- [x] H4: `backtest_optimization_runs` (3) + `backtest_requests` (4 pending=0) dropped after user confirm; counts logged; app health 200 + boot integrity clean post-drop.
+- [x] `.env` never swapped (verified via VPS SSH/mongosh, stays all-local); no secret committed; temp scripts cleaned.
+- [x] Docs (system-architecture, README, docs/README, project-overview-pdr, collection-erd) + memory note reflect single-run direct-task (AS-IS).
+
+## Verification record
+
+- Deploy: CI/CD run 28357760557 → all 5 jobs success; post-deploy SSH verify HTTP 200 + new image (app/web fresh uptime, healthy); live openapi confirms removed routes gone (`/optimize`, `/requests`, `/optimization/{id}`, `/run-all-backtests`, `/subscriptions/{id}/backtest`) + `/{run_id}/trades` present.
+- Note: M3's `.env`-swap re-smoke replaced by VPS-SSH verify (safer — no local prod pointer to restore). Bake window (H4 gate 3) waived per explicit user confirm; new code doesn't reference dropped collections.
 
 ## Risk Assessment
 
