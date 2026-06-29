@@ -34,6 +34,7 @@ class BacktestResult:
     error_message: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)  # For optimizer
     open_positions: list[OpenLot] = field(default_factory=list)
+    verdict: str | None = None  # Human-readable conclusion (set post-run via PATCH)
 
     @classmethod
     def started(cls, run_id: str, config_snapshot: dict[str, Any]) -> BacktestResult:
@@ -73,6 +74,7 @@ class BacktestResult:
             "status": self.status,
             "error_message": self.error_message,
             "parameters": self.parameters,
+            "verdict": self.verdict,
         }
 
     @classmethod
@@ -90,4 +92,5 @@ class BacktestResult:
             status=data["status"],
             error_message=data.get("error_message"),
             parameters=data.get("parameters", {}),
+            verdict=data.get("verdict"),
         )

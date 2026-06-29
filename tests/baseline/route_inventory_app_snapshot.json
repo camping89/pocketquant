@@ -43,6 +43,13 @@
   },
   {
     "methods": [
+      "PATCH"
+    ],
+    "name": "set_backtest_verdict",
+    "path": "/api/v1/backtest/{run_id}/verdict"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "stream_bars",

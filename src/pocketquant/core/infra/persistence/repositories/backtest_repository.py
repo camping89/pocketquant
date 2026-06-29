@@ -76,6 +76,17 @@ class BacktestRepository(BaseRepository):
         )
         logger.debug("backtest_marked_failed", run_id=run_id)
 
+    async def set_verdict(self, run_id: str, verdict: str | None) -> bool:
+        """Set the human-readable verdict on a run without touching metrics.
+
+        Returns False if no run matches ``run_id`` so the caller can 404.
+        """
+        collection = self._collection()
+        result = await collection.update_one(
+            {"_id": run_id}, {"$set": {"verdict": verdict}}
+        )
+        return result.matched_count > 0
+
     async def mark_orphaned_started_as_failed(self) -> int:
         """Flip every run still ``started`` to ``failed`` — call once at boot.
 

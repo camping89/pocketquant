@@ -10,10 +10,12 @@ from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
 
 from pocketquant.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
+    SetVerdictCommand,
 )
 from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.backtest.backtest_query_service import (
@@ -25,6 +27,12 @@ from pocketquant.backtest.backtest_query_service import (
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 
 backtest_router = APIRouter(prefix="/backtest", tags=["backtest"], route_class=DishkaRoute)
+
+
+class SetVerdictBody(BaseModel):
+    verdict: str | None = Field(
+        default=None, max_length=2000, description="Conclusion text; null clears it"
+    )
 
 
 @backtest_router.get("/strategies")
@@ -61,6 +69,17 @@ async def get_backtest(
 ) -> dict:
     result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
     return result.to_dict()
+
+
+@backtest_router.patch("/{run_id}/verdict")
+async def set_backtest_verdict(
+    run_id: str,
+    body: SetVerdictBody,
+    cmd_svc: FromDishka[BacktestCommandService],
+) -> dict:
+    """Set (or clear) the human-readable verdict on a run. 404 if run unknown."""
+    await cmd_svc.set_verdict(SetVerdictCommand(run_id=run_id, verdict=body.verdict))
+    return {"run_id": run_id, "verdict": body.verdict}
 
 
 @backtest_router.get("/{run_id}/equity")
