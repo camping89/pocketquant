@@ -27,8 +27,8 @@ One Python package (`pocketquant`) tại repo-root `src/`; subpackage boundaries
 src/pocketquant/
 ├── core/       # 0 deps — domain, common, config, ports/DTOs, persisted entities + infra adapters
 ├── engine/     # → core — shared strategy/order/position/risk engine
-├── backtest/   # → core + engine — backtest engine, optimization, run orchestration
-└── app/        # → core + engine + backtest — FastAPI routes, scheduler, WS feed, strategy lifecycle, reconcile, backtest worker, SPA serve
+├── backtest/   # → core + engine — backtest engine + single-run orchestration
+└── app/        # → core + engine + backtest — FastAPI routes, scheduler, WS feed, strategy lifecycle, reconcile, backtest tasks, SPA serve
 web/        # React 19 + Vite SPA (separate npm app)
 ```
 

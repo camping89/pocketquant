@@ -20,7 +20,7 @@ PocketQuant uses **Clean Architecture + DDD** with strict unidirectional depende
           │  pocketquant-app (FastAPI + runtime)         │
           │  :41921 (all /api/v1/* routes)               │
           │  Scheduler, WS feed, strategy lifecycle,     │
-          │  reconcile loop, backtest worker             │
+          │  reconcile loop, backtest tasks              │
           └──────┬───────────────────────────────────────┘
                  │
                  ▼
@@ -139,7 +139,7 @@ domain/
 ├── sync_status/            # TOP-LEVEL: Sync tracking
 │   └── entities.py         # SyncStatus
 ├── backtest/               # TOP-LEVEL: Backtest results
-│   ├── entities.py         # BacktestResult, OptimizationResult
+│   ├── entities.py         # BacktestResult
 │   ├── value_objects.py    # TradeRecord, EquityPoint, BacktestMetrics
 │   └── services/performance_calculator.py  # NumPy metrics
 ├── concepts/               # NON-PERSISTED logic
@@ -188,10 +188,12 @@ src/pocketquant/engine/                # SHARED engine (used by backtest + app)
 └── ... (other orchestrators)
 
 src/pocketquant/backtest/              # Backtest orchestration
-├── backtest_command_service.py        # BacktestCommandService (execute backtest)
-├── backtest_query_service.py          # BacktestQueryService (fetch results)
-├── optimization/                      # GridOptimizationAppService (parameter search)
-└── ... (other orchestrators)
+├── backtest_command_service.py        # BacktestCommandService (allocate run_id + save started doc)
+├── backtest_execution_service.py      # BacktestExecutionService (asyncio task body: run + persist)
+├── backtest_query_service.py          # BacktestQueryService (fetch run + trades)
+├── models/backtest_config.py          # BacktestConfig
+├── engine/                            # BacktestAppService + sandbox + replay + result collector
+└── workers/backtest_dispatch.py       # run_single (engine setup + sandbox)
 
 src/pocketquant/core/domain/services/  # Pure domain services
 ├── performance_calculator.py          # PerformanceCalculator (NumPy metrics)
@@ -268,7 +270,6 @@ core/
 │       ├── backtest_repository.py
 │       ├── backtest_order_repository.py
 │       ├── backtest_trade_repository.py
-│       ├── optimization_repository.py
 │       ├── symbol_repository.py
 │       ├── tracked_symbol_repository.py
 │       ├── sync_status_repository.py
@@ -412,7 +413,7 @@ src/
 | Hook | Purpose | Interval |
 |------|---------|----------|
 | `useOHLCV()` | Fetch historical bars (TanStack Query + cache) | on-demand |
-| `useSubscriptionBacktest()` / `useRunAllBacktests()` | Execute and track backtest runs | on-demand |
+| `useRunBacktest()` / `useBacktestRun()` | Start a single backtest + poll the run to terminal | poll 1.5s while `started` |
 | `useSymbols()` | List available symbols | on-demand |
 | `useAvailableIntervals()` | Get compatible timeframes from sync status | on-demand |
 | `useRealtimeBar()` / `useRealtimeQuote()` | Poll API for latest bar/quote | 5–10s |
@@ -446,14 +447,14 @@ src/
 | Dishka DI container (6 providers) | `app/di/` |
 | FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
 | Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
-| Backtest execution engine | `backtest/backtest_command_service.py` |
-| Grid optimization engine | `backtest/optimization/grid_optimization_app_service.py` |
+| Backtest trigger (save started doc) | `backtest/backtest_command_service.py` |
+| Backtest task body (run + persist) | `backtest/backtest_execution_service.py` |
+| Backtest engine setup + replay | `backtest/workers/backtest_dispatch.py`, `backtest/engine/backtest_app_service.py` |
 | Strategy runtime dispatch | `engine/strategy_command_service.py`, `engine/strategy_query_service.py` |
 | Order state machine | `engine/order_command_service.py` |
 | Position tracking + P&L | `engine/orders_positions_service.py` |
 | HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2.py` |
 | Background sync job registration | `app/main_extensions.py` → `register_sync_jobs()` |
-| Subscription backtest job worker | `backtest/jobs/subscription_backtest_jobs.py` |
 | UUID7 generation | `core/common/uuid.py` |
 | Cache keys, TTLs, constants | `core/common/constants.py` |
 | Frontend API client layer | `web/src/api/` |
@@ -469,7 +470,7 @@ src/
 
 ## MongoDB & Repositories
 
-14 collections. All `_id` are UUIDv7 except `apscheduler_jobs` (job name, APScheduler-managed). Two join keys: **`subscription_id`** (uuid7 string) links trading records to subscription; composite **`symbol`** (`BTCUSDT:BINANCE`) shared across market-data + trading. Unique index on `(strategy_code, symbol, interval)` dedup subscriptions. All repositories in `core/persistence/repositories/`, inherit `BaseRepository`, injected with `Database`, zero direct collection calls outside persistence layer.
+12 collections. All `_id` are UUIDv7 except `apscheduler_jobs` (job name, APScheduler-managed). Two join keys: **`subscription_id`** (uuid7 string) links trading records to subscription; composite **`symbol`** (`BTCUSDT:BINANCE`) shared across market-data + trading. Unique index on `(strategy_code, symbol, interval)` dedup subscriptions. All repositories in `core/persistence/repositories/`, inherit `BaseRepository`, injected with `Database`, zero direct collection calls outside persistence layer.
 
 | Collection | `_id` | Repository | Purpose |
 |---|---|---|---|
@@ -480,10 +481,9 @@ src/
 | `subscriptions` | uuid7 | SubscriptionRepository | Strategy subscriptions + control plane (desired_state, actual_state) |
 | `orders` | uuid7 | OrderRepository | Live orders, subscription_id FK |
 | `positions` | uuid7 | PositionRepository | Live positions, subscription_id FK |
-| `backtest_runs` | uuid7 | BacktestRepository | Cached backtest results per subscription |
+| `backtest_runs` | uuid7 | BacktestRepository | Single-run backtest results, keyed by run_id |
 | `backtest_orders` | uuid7 | BacktestOrderRepository | Backtest order fills |
 | `backtest_trades` | uuid7 | BacktestTradeRepository | Backtest round-trip trades |
-| `backtest_optimization_runs` | uuid7 | OptimizationRepository | Grid optimization results |
 | `job_history` | uuid7 | JobHistoryRepository | APScheduler job execution history |
 | `apscheduler_jobs` | job name | (APScheduler) | Serialized scheduled jobs |
 
@@ -495,11 +495,21 @@ src/
 
 **Reconcile loop:** `StrategyReconcileService` (background task, started at boot) every 5s: (1) fetch all subscriptions from Mongo, (2) compare `desired_state` vs live `is_running` (RAM), (3) call `start_strategy()` or `stop_strategy()` on drift, (4) mirror `actual_state` back to Mongo (idempotent, no churn unless drift).
 
-**Run backtest:** `POST /strategies/{strategy_code}/run-all-backtests` → fans out `JobScheduler.add_one_off_job()` per subscription. APScheduler persists to `apscheduler_jobs` Mongo, executes immediately, writes `BacktestResult` to `backtest_runs` collection keyed by `sub_id`.
+**Delete:** `DELETE /subscriptions/{sub_id}` deletes the subscription; the reconcile orphan-unload tears down the in-memory instance out of band. Subscriptions hold no backtest state — forward-testing only.
 
-**Backtest isolation:** Each backtest run executes in a per-run `BacktestSandbox` (isolated EventBus, StrategyAppService, throwaway order/position trackers bound via a local EventRegistry). Live subscriptions never see replayed bars or synthetic fills; concurrent optimization runs don't cross-talk. Sandbox is discarded after run completion.
+### Backtest (ad-hoc single run)
 
-**Delete:** `DELETE /subscriptions/{sub_id}` cascade-deletes subscription, cached backtest, unloads in-memory instance.
+Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest:
+
+1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
+2. The engine runs in a per-run `BacktestSandbox` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
+3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity` and `GET /backtest/{run_id}/trades` serve the result detail.
+
+**Run-id invariant:** the route-allocated `run_id` is the run doc `_id` and every `backtest_orders.run_id` / `backtest_trades.run_id`.
+
+**Isolation:** the sandbox owns its own bus, so live subscriptions never see replayed bars or synthetic fills, and concurrent runs don't cross-talk. No concurrency cap — runs share the live Mongo pool (`MONGODB_MAX_POOL_SIZE`); the operator owns traffic.
+
+**Resilience:** in-flight tasks are held in `app.state.backtest_tasks`, drained (awaited) on shutdown; a boot sweep flips any orphan `started` run (killed mid-run) to `failed`. Status vocabulary is `started`/`finished`/`failed`.
 
 ## Real-Time Streaming
 
@@ -614,7 +624,7 @@ graph LR
 
 **app (Single Process):**
 - Container-internal port 41921, serves all `/api/v1/*` routes + SPA fallback
-- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest worker, all API routes
+- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest tasks, all API routes
 - Lifespan runs `ensure_all_indexes()` + recovery/seeding steps before yielding
 - Single-worker-only constraint: scheduler/WS/broker are in-process singletons; `--workers N` duplicates reconcile loop and live broker connection
 - Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921`

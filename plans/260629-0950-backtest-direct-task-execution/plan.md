@@ -9,7 +9,7 @@ description: >-
   Status vocab running/completed → started/finished/failed (+ data migration prod). Thêm UI
   single-run mới (form + trang kết quả). No concurrency cap (user tự quản, đã chấp nhận
   evidence pool dùng chung live engine). Red-team 15 findings applied. TDD.
-status: pending
+status: done
 priority: P2
 branch: "develop"
 tags: [backtest, execution-model, refactor, di, tdd, fastapi, react, red-teamed]
@@ -51,7 +51,7 @@ Red-team adjudication: `reports/from-code-reviewer-to-planner-red-team-adjudicat
 | 3 | [Remove queue optimize run-all](./phase-03-remove-queue-optimize-run-all.md) | Done |
 | 4 | [Decouple subscription backtest](./phase-04-decouple-subscription-backtest.md) | Done |
 | 5 | [Frontend single-run UI](./phase-05-frontend-single-run-ui.md) | Done |
-| 6 | [Cleanup & prod migration](./phase-06-cleanup-prod-migration.md) | Pending (đụng prod, dừng chờ user) |
+| 6 | [Cleanup & prod migration](./phase-06-cleanup-prod-migration.md) | Done |
 
 Thứ tự: 1 → 2 → 3 → 4 → 5 → 6. Phase 1 khóa hành vi engine/persist (TDD). Phase 2 core. Phase 3 gỡ queue/optimize/run-all. Phase 4 gỡ backtest khỏi subscription (backend + FE remove). Phase 5 thêm UI single-run. Phase 6 verify + prod.
 

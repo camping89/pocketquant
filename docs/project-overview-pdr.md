@@ -146,19 +146,19 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F8: Backtesting Engine
 
-**Requirement:** Run historical backtests with parameter optimization.
+**Requirement:** Run ad-hoc single backtests with historical bar replay.
 
 **Sub-requirements:**
-- Backtest runner with historical bar replay
-- GridOptimizationAppService for parallel parameter searches
+- Single-run backtest via in-process async task (no queue): save `started` doc → spawn engine → persist `finished`/`failed`
+- Per-run sandbox isolation from the live engine
 - Performance metrics (Sharpe, Sortino, max drawdown, win rate)
-- Results storage in MongoDB
-- Parameter optimization support
+- Results storage in MongoDB (runs + orders + trades, sharing one run_id)
 
 **API Endpoints:**
-- POST `/api/v1/backtest/run` - Execute backtest
-- POST `/api/v1/backtest/optimize` - Run parameter optimization
-- GET `/api/v1/backtest/{run_id}` - Retrieve results
+- POST `/api/v1/backtest/run` - Start a backtest (202, returns run_id)
+- GET `/api/v1/backtest/{run_id}` - Poll status + result
+- GET `/api/v1/backtest/{run_id}/equity` - Equity curve
+- GET `/api/v1/backtest/{run_id}/trades` - Closed trades
 
 ### F9: Order & Position Management
 
@@ -307,9 +307,10 @@ src/pocketquant/
 │                         TrackedSymbolsService, SymbolsService
 │
 ├── backtest/             # → core + engine — backtesting engine
-│   ├── engine/           BacktestAppService, ResultCollector, HistoricalReplayAppService
-│   ├── optimization/     GridOptimizationAppService, config models
-│   ├── jobs/             BackgroundTask runners: run_subscription_backtest, etc.
+│   ├── engine/           BacktestAppService, ResultCollector, HistoricalReplayAppService, sandbox
+│   ├── models/           BacktestConfig
+│   ├── workers/          backtest_dispatch.run_single (engine setup)
+│   ├── backtest_execution_service.py  Async task body (run + persist)
 │   ├── {feature}_command_service.py  Command service
 │   ├── {feature}_query_service.py    Query service
 │   └── domain/services/  PerformanceCalculator (NumPy metrics)
@@ -352,7 +353,7 @@ web/                                 # React 19 + Vite SPA (separate npm app)
 
 **Extended Features (F7-F10):**
 - [x] Strategy Engine with YAML loader and IStrategy interface
-- [x] Backtesting Engine with historical replay and GridOptimizationAppService
+- [x] Backtesting Engine with historical replay (single-run direct-task)
 - [x] Order & Position Management with MongoDB persistence
 - [x] Live Trading via OKX WebSocket (HMAC-SHA256, reconnection, circuit breaker)
 

@@ -4,7 +4,7 @@ PocketQuant is an algorithmic trading monorepo with:
 
 - historical market-data sync from Binance public REST/WS (no auth required)
 - live quote ingestion via Binance @aggTrade and bar aggregation
-- backtesting and optimization APIs
+- single-run backtesting API (direct async task)
 - strategy orchestration and broker abstractions
 - a React/Vite chart UI for inspecting synced data and backtest overlays
 
@@ -16,8 +16,8 @@ One Python package (`pocketquant`) with subpackage boundaries enforced by import
 src/pocketquant/
 ├── core/       # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, OKXBroker, binance, scheduler, http client
 ├── engine/     # Shared strategy/order/position/risk engine + strategy/orders-positions feature services
-├── backtest/   # Backtest engine, optimization, backtest-run orchestration
-└── app/        # FastAPI single backend: all API routes, SPA serving, scheduler, WS feed, strategy lifecycle, reconcile loop, backtest worker
+├── backtest/   # Backtest engine + single-run orchestration (sandbox, replay, result collector)
+└── app/        # FastAPI single backend: all API routes, SPA serving, scheduler, WS feed, strategy lifecycle, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI
 ```
 
