@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 
 import numpy as np
 
@@ -14,8 +14,8 @@ def build_metrics(
     initial_capital: float,
     current_equity: float,
     total_commission: float,
-    start_date: date,
-    end_date: date,
+    start_date: datetime,
+    end_date: datetime,
     periods_per_year: float | None,
     returns_curve: list[EquityPoint] | None = None,
 ) -> BacktestMetrics:

@@ -8,7 +8,7 @@ never on the live execution engine.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 from typing import Any
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
@@ -45,8 +45,8 @@ def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
         strategy_code=payload["strategy_code"],
         symbol=payload["symbol"],
         interval=payload["interval"],
-        start_date=date.fromisoformat(payload["start_date"]),
-        end_date=date.fromisoformat(payload["end_date"]),
+        start_date=datetime.fromisoformat(payload["start_date"]),
+        end_date=datetime.fromisoformat(payload["end_date"]),
         initial_capital=payload.get("initial_capital", 10_000.0),
         slippage_bps=payload.get("slippage_bps", 10.0),
         commission_bps=payload.get("commission_bps", 10.0),

@@ -8,7 +8,7 @@ that backtest_runs / backtest_orders / backtest_trades are populated correctly.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Generator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -125,8 +125,8 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
         strategy_code="scripted",
         symbol=_SYM,
         interval="1m",
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 1, 31),
+        start_date=datetime(2026, 1, 1),
+        end_date=datetime(2026, 1, 31),
         initial_capital=100_000.0,
         slippage_bps=0.0,
         commission_bps=10.0,
@@ -220,8 +220,8 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
         strategy_code="sl-test",
         symbol=_SYM,
         interval="1m",
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 1, 31),
+        start_date=datetime(2026, 1, 1),
+        end_date=datetime(2026, 1, 31),
         initial_capital=100_000.0,
         slippage_bps=0.0,
         commission_bps=0.0,
