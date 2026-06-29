@@ -1,142 +1,183 @@
 # Slice 2 — Ad-hoc Backtest Run — Brainstorm Report
 
+> **Re-scout 2026-06-29**: codebase đã đổi căn bản kể từ bản report đầu. Toàn bộ citations đã được verify lại bằng Read/Grep. Các thay đổi lớn (architecture, premise) được note tại §0 và rải trong từng section.
+
 ## Metadata
 
 | Field | Value |
 |---|---|
 | Priority | 2/5 |
 | Scope | FE + BE |
-| Depends on | **Slice 1** (history store + Backtest tab shell + deep-link select) |
-| Unblocks | Hoàn thiện Backtest tab (trader chạy run mới rồi xem ngay trong history) |
-| Date | 2026-06-28 |
+| Depends on | **Slice 1** (premise: history store + Backtest tab shell + deep-link) — **xem §0: premise này KHÔNG còn khớp code AS-IS** |
+| Unblocks | Hoàn thiện trải nghiệm ad-hoc backtest |
+| Date | 2026-06-29 |
 | Constraints | import-linter (`fastapi` only in `app`; `core ◁ engine ◁ backtest ◁ app`), PK uuid7 only, single uvicorn worker |
+
+---
+
+## 0. Đổi căn bản so với bản report đầu (PHẢI đọc trước)
+
+| # | Bản cũ giả định | Code AS-IS (verified) |
+|---|---|---|
+| C1 | Backtest nằm trong "Backtest tab của subscription" (1 sub → chart + 2 tab Backtest\|Forward) | Backtest **đã decoupled khỏi subscription**. Có route riêng `/backtest` (`web/src/routes/backtest.tsx`). `DashboardColumn` giờ là **forward-testing only** — docstring `dashboard-column.tsx:1-6` ghi rõ "Backtest now lives on its own /backtest page, decoupled from subscriptions" |
+| C2 | Enqueue → `BacktestRequestWorker` poll-loop → `kind="single/subscription"` | **Không còn queue/worker**. `POST /backtest/run` spawn `asyncio.create_task(execution_svc.execute_and_persist(...))` in-process (`backtest.py:49-54`). `BacktestRequest` domain + `backtest_request_worker.py` đã bị **gỡ** |
+| C3 | Poll `GET /backtest/requests/{request_id}` trả `{status,result,error}` | Poll `GET /backtest/{run_id}` trả full `BacktestResult.to_dict()` (`backtest.py:57-63`) |
+| C4 | `RunBacktestCommand` cần thêm `sub_id` để vào history sub | Không có `sub_id` ở đâu cả; subscription↔backtest link đã bị gỡ luôn (endpoint `GET /subscriptions/{id}/backtest` + `getSubscriptionBacktest` FE đều **biến mất**) |
+| C5 | FE "chưa có form ad-hoc run nào" | FE **đã có**: `backtest-form.tsx`, `use-backtest-run.ts` (`useRunBacktest`+`useBacktestRun`), `backtest-result-view.tsx`, route `/backtest`. runBacktest + poll đã hoạt động |
+| C6 | Status `pending/running/done/failed` | Status `started / finished / failed` (`entities.py:33`, FE `BacktestStatus` `backtest-api.ts:40`) |
+
+⇒ **Slice 2 phần lớn đã được implement** dưới dạng standalone page. Gap còn lại nhỏ hơn nhiều, và **mâu thuẫn premise** (decoupled vs "vào history của sub") là quyết định cần chốt lại — xem §10.
 
 ---
 
 ## 1. Problem Statement
 
-- Trong Backtest tab (do Slice 1 dựng), trader **chưa** có cách chạy backtest mới on-demand cho subscription đang chọn.
-- Hiện chỉ có 2 đường chạy backtest:
-  - `run-all-backtests` fan-out per subscription (`kind="subscription"`, không chọn date/params) — `backtest_command_service.py:139-169`.
-  - `POST /backtest/run` (`kind="single"`, đủ date/capital/bps/params) — **nhưng kết quả KHÔNG gắn `sub_id`** ⇒ không vào history của subscription.
-- Cần: form input (date range, capital, slippage_bps, commission_bps, strategy params động) → enqueue → poll → kết quả mới xuất hiện trong history table của Slice 1 → auto-select xem detail.
+- Trader cần chạy backtest mới on-demand với: date range, initial_capital, slippage_bps, commission_bps, strategy parameters động → submit → poll → xem kết quả.
+- **AS-IS**: luồng này đã chạy được ở `/backtest` page (form → `runBacktest` → poll `useBacktestRun` → `BacktestResultView`).
+- Gap thực tế còn lại:
+  - Form **chưa** có preset date ranges (30d/90d/1y/YTD/all) — `backtest-form.tsx:108-114` chỉ có 2 native `input[type=date]` rỗng.
+  - **Chưa** disable submit theo data availability (`use-sync-status.ts` tồn tại nhưng form không dùng).
+  - Params là **JSON textarea thô** (`backtest-form.tsx:117-125`), không phải dynamic form theo schema; không validate `initial_capital`/`bps` (FE không expose 2 field này — chỉ dựa BE default).
+  - **Không có** history table/list các run trước (cả BE lẫn FE) — mỗi lần chỉ giữ `activeRunId` hiện tại trong `useState` (`backtest.tsx:14`).
+  - Mâu thuẫn premise: nếu vẫn muốn "run gắn vào subscription đang chọn" thì link sub↔backtest đã bị gỡ, phải dựng lại.
 
 ---
 
-## 2. Current State (evidence)
+## 2. Current State (evidence — verified 2026-06-29)
 
-### 2.1 Backend — đã có sẵn enqueue→worker→poll cho `kind="single"`
-
-| Thành phần | File:line | Ghi chú |
-|---|---|---|
-| Route enqueue | `app/routes/backtest.py:41-51` | `POST /backtest/run` → `cmd_svc.run(cmd)`, trả `{request_id}`, status 202 |
-| Route poll | `app/routes/backtest.py:54-59` | `GET /backtest/requests/{request_id}` → status/result/error |
-| Command DTO | `backtest/backtest_command_service.py:37-51` | `RunBacktestCommand`: strategy_id/symbol/interval/start_date/end_date/initial_capital/slippage_bps/commission_bps/parameters. **Không có `sub_id`** |
-| Enqueue logic | `backtest/backtest_command_service.py:94-115` | Build `config` dict, INSERT `BacktestRequest(kind="single", sub_id=None)` — `sub_id` để trống |
-| Request domain | `core/domain/backtest/request.py:13-58` | `BacktestRequest` đã có field `sub_id: str \| None`; docstring nói rõ "single kind: no subscription to key on → embed result" |
-| Worker dispatch | `backtest/workers/backtest_request_worker.py:103-119` | `kind=="single"` → `run_single` → `_assemble_single_response` → `mark_done(result=...)`. `kind=="subscription"` → `run_subscription` ghi `backtest_runs` keyed `sub_id` |
-| Single dispatch | `backtest/workers/backtest_dispatch.py:92-139` | Chạy isolated sandbox, persist vào `backtest_*` collections (`persist_results` mặc định True) |
-| Poll response | `backtest/backtest_query_service.py:44-55,101-110` | `BacktestRequestStatusResponse`: request_id/status/result/error |
-
-### 2.2 Backend — strategy param schema CHƯA expose
+### 2.1 Backend — luồng ad-hoc run (no queue, in-process task)
 
 | Thành phần | File:line | Ghi chú |
 |---|---|---|
-| Strategy registry | `core/domain/strategy/services/__init__.py:4-7` | Chỉ 2 strategies: `hitnrun2`, `engulfing` |
-| Param defaults | `core/domain/strategy/services/hitnrun2.py:31-54` | `_DEFAULTS` dict (entry_lookback_bars, sl/tp_lookback_bars, max_loss_pct, min_profit_pct, direction) — **chỉ trong code**, đọc qua `config.parameters.get(...)` |
-| Strategy detail route | `app/routes/strategy.py:59-67` → `engine/strategy_query_service.py:69-76` | `GET /strategies/{code}` trả `class_name` + `description` (docstring dòng đầu). **KHÔNG có param schema** |
+| Route enqueue | `app/routes/backtest.py:35-54` | `POST /backtest/run` → `cmd_svc.run(cmd)` trả `(run_id, config)`; spawn `asyncio.create_task(execution_svc.execute_and_persist(run_id, config))`; giữ strong-ref trong `request.app.state.backtest_tasks`; trả `{request_id: run_id}` status 202 |
+| Route poll | `app/routes/backtest.py:57-63` | `GET /backtest/{run_id}` → `BacktestResult.to_dict()` (full doc, không phải `{status,result,error}`) |
+| Route trades | `app/routes/backtest.py:81-88` | `GET /backtest/{run_id}/trades` → `{run_id, trades}` (joined `backtest_trades`) |
+| Route equity | `app/routes/backtest.py:66-78` | `GET /backtest/{run_id}/equity` |
+| Route list | `app/routes/backtest.py:91-117` | `GET /backtest/strategy/{strategy_id}` — list runs theo **strategy_code** (không phải sub_id), limit + include_failed |
+| Command DTO | `backtest/backtest_command_service.py:21-35` | `RunBacktestCommand`: strategy_id/symbol/interval/start_date/end_date/initial_capital(ge=100)/slippage_bps(ge=0)/commission_bps(ge=0)/parameters. **Không có `sub_id`** |
+| Command run | `backtest/backtest_command_service.py:42-62` | `run_id = generate_id_str()` (uuid7); build `config` dict; `save(BacktestResult.started(run_id, config))`; return `(run_id, config)`. Không enqueue, không `sub_id` |
+| Execution svc | `backtest/backtest_execution_service.py:21-46` | `execute_and_persist(run_id, config)` → `run_single(deps, config, run_id=run_id)`; engine tự catch lỗi và **return** `failed` (không raise); `except` ngoài flip started doc → `mark_failed` |
+| Dispatch | `backtest/workers/backtest_dispatch.py:57-111` | `run_single(deps, config_payload, run_id=None)` — isolated sandbox, inject strategy, `BacktestAppService.run(config, run_id=run_id)`, teardown finally. Chỉ còn **single** path (đã gỡ `run_subscription`) |
+| Result entity | `core/domain/backtest/entities.py:33,38-58,60-76` | `status: "started"\|"finished"\|"failed"`; `BacktestResult.started(run_id, config)` zeroed metrics; `to_dict()`=`to_mongo()` |
+| Query svc | `backtest/backtest_query_service.py:23-30,48-80` | `GetBacktestQuery`/`ListBacktestsQuery`/`EnqueueBacktestResponse(request_id)`; `get_result`/`list_trades`/`list_results`. **KHÔNG còn** `get_request_status`, `BacktestRequestStatusResponse` |
+| Repo | `core/infra/persistence/repositories/backtest_repository.py:15,24,31,63` | `save`/`get`/`list_by_strategy_code`/`mark_failed`. **KHÔNG còn** `save_for_subscription`/`upsert_status` |
 
-### 2.3 Backend — tín hiệu data availability (cho "disable submit")
+### 2.2 Backend — KHÔNG còn link subscription ↔ backtest
+
+- `app/routes/strategy.py` (verified full): `subscription_router` chỉ còn start/stop/positions/trades/delete. **Không còn** `GET /subscriptions/{sub_id}/backtest`, không `GetSubscriptionBacktestQuery`.
+- Grep `get_subscription_backtest|save_for_subscription|GetSubscriptionBacktestQuery` trong `src/` → 0 hit (chỉ comment/constant `COLLECTION_BACKTEST_RUNS` còn).
+
+### 2.3 Backend — strategy param schema vẫn CHƯA expose
 
 | Thành phần | File:line | Ghi chú |
 |---|---|---|
-| Date range từ bars | `backtest/jobs/backtest_strategy_loader.py:17-38` | `resolve_date_range` đọc `bar_repo.find_datetimes` → (first, last); fallback 365d |
-| Sync status route | `app/routes/market_data_status.py:38-58` | `GET /sync-status/{symbol}?interval=` trả `bar_count` + `last_bar_at` + `status` — FE dùng được để gate submit |
+| Registry | `core/domain/strategy/services/__init__.py:4-7` | `{"hitnrun2": HitNRun2Strategy, "engulfing": EngulfingStrategy}` — 2 strategies |
+| Param defaults | `core/domain/strategy/services/hitnrun2.py:31-37` | `_DEFAULTS`: entry_lookback_bars=240, sl_lookback_bars=480, tp_lookback_bars=60, max_loss_pct=0.01, min_profit_pct=0.02, direction="both". Đọc qua `p.get(...)` (`:45-52`); `direction` validate long\|short\|both (`:53`) |
+| Strategy detail route | `app/routes/strategy.py:58-66` → `engine/strategy_query_service.py` `get_one` | Trả `strategy_code` + `class_name` + `description` (docstring dòng đầu). **KHÔNG có param schema** |
 
-### 2.4 Frontend — CHƯA có form ad-hoc run
+### 2.4 Backend — tín hiệu data availability (cho "disable submit")
 
 | Thành phần | File:line | Ghi chú |
 |---|---|---|
-| backtest-api | `web/src/api/backtest-api.ts:60-62` | Chỉ `fetchStrategies()`. **Không có `runBacktest` / `pollRequest`** |
-| strategy-api | `web/src/api/strategy-api.ts:53-64` | `runAllBacktests` (fan-out) + `getSubscriptionBacktest`. Không có ad-hoc run |
-| hooks | `web/src/hooks/use-subscriptions.ts:79-85` | `useRunAllBacktests` chỉ invalidate. Không có poll-by-request-id |
-| dashboard-column | `web/src/components/strategies/dashboard-column.tsx:110-114` | Empty state "No backtest data. Run a backtest first." — chưa có nút run |
-| Form pattern tham khảo | `web/src/components/strategies/new-subscription-dialog.tsx:36-186` | Modal + `useState` per field + `handleSubmit` + error branch theo HTTP status — pattern tái dùng cho run form |
-| datetime helper | `web/src/lib/datetime.ts:6-23` | `dayjs` + `utc` plugin có sẵn; `parseIso` xử lý naive-UTC. **Không có date-picker lib** trong `package.json:14-22` (dayjs có; echarts/lightweight-charts; không date picker) |
+| Sync status route | `app/routes/market_data_status.py:15-35,38-56` | `GET /sync-status` (list) + `GET /sync-status/{symbol}?interval=` trả `bar_count`+`last_bar_at`+`status` |
+| Date range từ bars | `backtest/jobs/backtest_strategy_loader.py:17-38` | `resolve_date_range` đọc `bar_repo.find_datetimes` → (first,last); fallback 365d. **Lưu ý**: chỉ dùng nội bộ — route `/backtest/run` KHÔNG auto-resolve, FE phải gửi start/end |
 
-### 2.5 Diagram — luồng enqueue→worker→poll (hiện có cho `kind="single"`)
+### 2.5 Frontend — ad-hoc run ĐÃ implement (standalone `/backtest`)
+
+| Thành phần | File:line | Ghi chú |
+|---|---|---|
+| API run | `web/src/api/backtest-api.ts:111-113` | `runBacktest(body: RunBacktestBody)` → `POST /api/v1/backtest/run` → `{request_id}` |
+| API poll+join | `web/src/api/backtest-api.ts:117-166` | `fetchBacktestRun(runId)` → `GET /backtest/{runId}`; khi `finished` join `GET /backtest/{runId}/trades` + open_positions → unified `positions[]` |
+| Types | `web/src/api/backtest-api.ts:40,44-69` | `BacktestStatus='started'\|'finished'\|'failed'`; `BacktestRunResult`; `RunBacktestBody` |
+| Hooks | `web/src/hooks/use-backtest-run.ts:9-31` | `useStrategyList`, `useRunBacktest` (mutation), `useBacktestRun` (poll `refetchInterval` dừng khi status≠'started') |
+| Page | `web/src/routes/backtest.tsx:13-68` | `activeRunId` trong `useState`; form → mutate → `onSuccess` set activeRunId; render spinner(started)/error(failed)/`BacktestResultView`(finished) |
+| Form | `web/src/components/backtest/backtest-form.tsx:30-138` | strategy select + symbol text + interval select + 2 native `input[type=date]` + **JSON textarea** cho params. Validate: strategy, symbol có `:`, start≤end, JSON parse. **Không** có capital/bps input, **không** presets, **không** sync gate |
+| Result view | `web/src/components/backtest/backtest-result-view.tsx` | render `BacktestRunResult` |
+| datetime helper | `web/src/lib/datetime.ts:6-23,69-74` | `dayjs`+`utc` plugin; `parseIso`; `INTERVAL_MS`. Không date-picker lib |
+| sync-status hook | `web/src/hooks/use-sync-status.ts:4-10` | `useSyncStatus()` poll 30s — **tồn tại nhưng form chưa dùng để gate** |
+| Form pattern tham khảo | `web/src/components/strategies/new-subscription-dialog.tsx:11,55,148` | INTERVALS const + handleSubmit + error branch theo HTTP status |
+| package.json deps | `web/package.json:14-22` | dayjs có; echarts/lightweight-charts; **không** date-picker lib |
+
+### 2.6 Frontend — KHÔNG có backtest history table
+
+- Mỗi lần chỉ giữ 1 `activeRunId` (`backtest.tsx:14`). Không list run cũ.
+- `web/src/types/job-history.ts` là **data-sync scheduler job history** (`JobRun`/`JobRunDetail`/`JobStats`), KHÔNG phải backtest run history — không liên quan Slice 1 premise.
+- `useSubscriptionBacktest`/`useRunAllBacktests` đã **bị gỡ** khỏi `use-subscriptions.ts` (verified: chỉ còn `useSubscriptions`/`useAddSymbol`/`useRemoveSymbol`/`useDeleteStrategy`).
+
+### 2.7 Diagram — luồng run→task→poll (AS-IS, no queue)
 
 ```
-FE run form                BE app                     BacktestRequestWorker (in-proc, single)
+FE /backtest page         BE app (single uvicorn)          asyncio task (in-process)
    |                          |                                  |
-   | POST /backtest/run ----> | cmd_svc.run()                    |
-   |   (RunBacktestCommand)   |   INSERT BacktestRequest          |
-   |                          |   kind="single" status=pending   |
-   | <--- 202 {request_id} ---|   (sub_id=None  <-- GAP)          |
-   |                          |                                  | claim_next() (poll 2s)
-   |                          |                                  | run_single(config)
-   |                          |                                  |   sandbox engine → backtest_* collections
-   | GET /backtest/requests/{id} (poll 1-2s)                     | _assemble_single_response()
-   | ---------------------->  | query_svc.get_request_status() ->| mark_done(result=fe_payload)
-   | <-- {status, result} ----|                                  |
+   | POST /backtest/run ----> | cmd_svc.run(cmd)                 |
+   |  (RunBacktestBody)       |   run_id=generate_id_str (uuid7) |
+   |                          |   save(BacktestResult.started)   |
+   |                          |   create_task(execute_and_persist)----> run_single(deps,config,run_id)
+   | <-- 202 {request_id} ----|   (held in app.state.backtest_tasks)    sandbox engine
+   |                          |                                  |       → backtest_*  (overwrite run_id)
+   | GET /backtest/{run_id}   |                                  |       → mark_failed nếu fault ngoài engine
+   |   (poll 1.5s khi started)| query_svc.get_result() ---------|
+   | <-- BacktestResult doc --|  (status started→finished/failed)|
+   |  khi finished: + GET /backtest/{run_id}/trades  (join positions)
    |                          |                                  |
- status=done → render detail; (GAP: result không tự vào history store keyed sub_id)
+ status=finished → BacktestResultView;  (KHÔNG tự vào history list keyed sub — không có store đó)
 ```
 
 ---
 
 ## 3. Requirements
 
-| # | Requirement (verify được) |
-|---|---|
-| R1 | Backtest tab hiển thị form với: start_date, end_date (range), initial_capital, slippage_bps, commission_bps, và params động theo strategy của subscription đang chọn. |
-| R2 | Submit gọi enqueue trả `request_id`, FE poll status mỗi 1-2s cho tới terminal (`done`/`failed`). |
-| R3 | Khi `done`, run mới phải xuất hiện trong history table (Slice 1) **và** được auto-select để xem detail — không cần reload trang. |
-| R4 | Form có preset date ranges: last 30d / 90d / 1y / YTD / all (= toàn bộ bar coverage). |
-| R5 | Submit bị disable khi data chưa sync đủ cho range (dựa `bar_count`/`last_bar_at` từ `GET /sync-status/{symbol}`). |
-| R6 | Validate client-side: `start_date < end_date`, `initial_capital >= 100`, `slippage_bps >= 0`, `commission_bps >= 0` (khớp ràng buộc `RunBacktestCommand` BE). |
-| R7 | Hiển thị progress khi `pending`/`running` (spinner + trạng thái). |
-| **Scope boundary** | Slice 2 KHÔNG làm: live equity/KPI (S3), orders (S4), explain trade (S5), grid optimization UI (đã có `POST /backtest/optimize`, ngoài scope). |
-| **Constraint** | Giữ import-linter (run logic ở `backtest`, route ở `app`), uuid7 cho `request_id`, single worker (không thêm worker process). |
-| **Touchpoints** | BE: `RunBacktestCommand` + `BacktestCommandService.run` + worker `_dispatch`; FE: `backtest-api.ts` + hooks + Backtest tab component (Slice 1 shell). |
+| # | Requirement (verify được) | AS-IS |
+|---|---|---|
+| R1 | Form có start/end date, initial_capital, slippage_bps, commission_bps, params động theo strategy | Một phần: date + JSON params có; **thiếu** capital/bps input + dynamic schema |
+| R2 | Submit → run_id → poll tới terminal (`finished`/`failed`) | **Đạt** (`use-backtest-run.ts:24-30`) |
+| R3 | Run mới xuất hiện trong history table → auto-select detail | **Chưa**: không có history table; chỉ giữ activeRunId |
+| R4 | Preset date ranges 30d/90d/1y/YTD/all | **Chưa** |
+| R5 | Disable submit khi data chưa sync đủ (dùng `/sync-status`) | **Chưa** (hook có sẵn, form chưa wire) |
+| R6 | Client validate start≤end, capital≥100, bps≥0 | Một phần: start≤end + JSON parse; thiếu capital/bps (chưa expose field) |
+| R7 | Hiển thị progress khi `started` | **Đạt** (`backtest.tsx:49-54`) |
+| **Scope boundary** | KHÔNG làm: live equity/KPI (S3), orders (S4), explain trade (S5), grid optimization (đã gỡ khỏi BE — không có route optimize nữa) |
+| **Constraint** | Giữ import-linter (run logic ở `backtest`, route ở `app`), uuid7 (`generate_id_str`), single worker (task in-process, không thêm process) |
+| **Touchpoints** | BE (optional): param-schema endpoint. FE: `backtest-form.tsx` (presets/capital/bps/sync gate/schema), `backtest.tsx` (history list), (nếu re-link sub) BE `RunBacktestCommand`+repo |
 
 ---
 
 ## 4. Approaches Evaluated
 
-### 4.1 Gắn ad-hoc run vào subscription
+### 4.1 Gắn ad-hoc run vào subscription (premise C1/C4 — quyết định lại)
 
 | Approach | Pros | Cons |
 |---|---|---|
-| **A. Thêm `sub_id` optional vào `RunBacktestCommand` + worker ghi history store** | Run mới vào đúng history của sub; auto-select dễ; tái dùng path `kind="single"` (đã embed config + params đầy đủ) | Phụ thuộc storage choice của Slice 1 (history table key gì); cần worker ghi thêm 1 nơi |
-| B. Để run rời rạc (`sub_id=None`), FE poll `/backtest/requests/{id}` rồi link sau | Zero BE đổi DTO | Run không nằm trong history Slice 1 → R3 không đạt nếu Slice 1 query theo `sub_id`; trader phải nhớ request_id |
-| C. Reuse `kind="subscription"` (`run_subscription`) với params override | Đã ghi `backtest_runs` keyed `sub_id` | `run_subscription` KHÔNG nhận date/capital/bps/params từ FE — `resolve_date_range` tự suy từ bars (`backtest_dispatch.py:186`); phải đại tu signature → vi phạm KISS |
+| **A. Giữ decoupled (AS-IS)** — backtest là page riêng, không gắn sub_id | Khớp hướng refactor đang có; zero BE đổi; KISS | Trader không xem được "lịch sử backtest của sub đang chọn" như premise Slice 1 |
+| B. Re-link: thêm `sub_id` optional vào `RunBacktestCommand` + `BacktestResult` + `list_by_sub` query | Đúng premise gốc | Đảo ngược refactor vừa làm; phải dựng lại endpoint/store đã gỡ; rủi ro cao, cần user chốt |
+| C. FE-only link: list run theo `strategy_code` (đã có `GET /backtest/strategy/{id}`) + filter symbol/interval client-side để xấp xỉ "của sub" | Không đụng BE schema; tái dùng route sẵn có | Lọc client thô; nhiều sub cùng strategy_code+symbol+interval sẽ lẫn |
 
-### 4.2 Param schema source (render dynamic form)
-
-| Approach | Pros | Cons |
-|---|---|---|
-| **(a) BE endpoint `GET /strategies/{code}/parameters` trả JSON schema từ strategy class** | Single source of truth; FE generic; thêm strategy mới không đụng FE | Cần strategy expose schema (hiện chỉ có `_DEFAULTS` dict trong code, không typed schema) → phải thêm contract `parameters_schema()` cho mỗi `IStrategy` |
-| (b) Hardcode FE form per known strategy | Nhanh nhất; chỉ 2 strategies | Drift khi đổi defaults; trùng kiến thức code↔FE; vi phạm DRY |
-| (c) Generic key-value JSON editor (textarea / rows) | Zero BE đổi; chạy được mọi strategy | UX kém (trader gõ JSON thô); không validate type/range; dễ sai key |
-
-### 4.3 Date picker
+### 4.2 Param schema source (R1 dynamic form)
 
 | Approach | Pros | Cons |
 |---|---|---|
-| **Native `input[type=date]` + dayjs** | 0 dep mới (KISS); dayjs đã có (`package.json:18`); đủ cho date-only | UI mộc, tùy theo browser |
-| Thêm lib (react-day-picker / mui) | UX đẹp hơn | Thêm bundle + dep; thừa cho date-only range |
+| **(a) BE `GET /strategies/{code}/parameters` trả schema từ class** | Single source of truth; FE generic | Cần thêm contract `parameters_schema()` cho `IStrategy` (chỉ có `_DEFAULTS` dict) |
+| (b) Hardcode FE per strategy | Nhanh; chỉ 2 strategies | Drift; DRY vi phạm |
+| **(c) Generic JSON editor (AS-IS)** | Đã chạy (`backtest-form.tsx:117-125`); zero BE | UX thô; không validate type/range; dễ sai key |
+
+### 4.3 Date picker + presets
+
+| Approach | Pros | Cons |
+|---|---|---|
+| **Native `input[type=date]` + dayjs presets (AS-IS + thêm preset buttons)** | 0 dep mới (KISS); date input đã có; dayjs sẵn (`package.json:18`) | UI mộc |
+| Thêm lib | UX đẹp | Thêm bundle thừa cho date-only |
 
 ---
 
 ## 5. Recommended Solution
 
-- **4.1 → Approach A**: thêm `sub_id: str | None` vào `RunBacktestCommand`; `BacktestCommandService.run` set `bt_request.sub_id = cmd.sub_id` (giữ `kind="single"` vì cần config-driven date/params). Worker `_dispatch` nhánh single, **sau** `mark_done`, nếu `request.sub_id` not None thì ghi result vào history store của Slice 1 (`backtest_repo.save_for_subscription` hoặc store mới Slice 1 chọn).
-  - Rationale: path `kind="single"` đã carry đủ config (`backtest_command_service.py:94-104`) + đã assemble FE payload (`backtest_request_worker.py:121-167`). Chỉ cần "rót" thêm vào history khi có `sub_id`. Không đụng `run_subscription`.
-- **4.2 → Approach (a) nếu rẻ, fallback (c)**: thêm classmethod `parameters_schema() -> list[ParamSpec]` cho `IStrategy`, `HitNRun2Strategy`/`EngulfingStrategy` trả spec từ `_DEFAULTS` (name/type/default/min/max). Route `GET /strategies/{code}/parameters` ở `app` (giữ import-linter). Nếu schema contract đắt → tạm fallback (c) generic JSON editor, để trống `parameters` ⇒ BE dùng strategy defaults (đã có `p.get(..., _DEFAULTS[...])`).
-- **4.3 → Native `input[type=date]` + dayjs**. Preset ranges compute bằng dayjs; "all" = lấy từ `/sync-status` first/last hoặc để BE `resolve_date_range`.
-- **Giữ invariants**: `request_id` = uuid7 (đã `generate_id()` ở `backtest_command_service.py:107`); single worker không đổi; run logic ở layer `backtest`, route ở `app`.
-- **Phụ thuộc storage Slice 1 (nêu rõ)**: nơi worker ghi history (`save_for_subscription` keyed `sub_id` vs một collection runs mới có nhiều rows/sub) **do Slice 1 quyết**. Slice 2 chỉ cần "khi `sub_id` set, ghi vào store đó". Nếu Slice 1 chọn 1-row-per-sub cache (`backtest_runs`), ad-hoc run sẽ **ghi đè** cache → cân nhắc với Slice 1 (xem Open Questions).
+- **4.1 → Approach A (giữ decoupled) cho v1**, vì code đã đi hướng này và đảo ngược (B) là user-decision đắt. Nếu cần "history của sub", dùng **C** (list theo `strategy_code` + filter) như bước nhẹ. **B chỉ làm khi user xác nhận muốn quay lại premise sub-coupled** (xem OQ-1).
+- **4.2 → giữ (c) JSON editor cho v1**, nâng cấp **(a)** khi rẻ. (a) thêm `IStrategy.parameters_schema()` + 2 implementations + route ở `app` (giữ import-linter). Để trống params ⇒ BE dùng strategy defaults (`hitnrun2.py:45-52`).
+- **4.3 → Native + dayjs presets**: thêm preset buttons compute start/end bằng dayjs; "all" = lấy `last_bar_at` (và sớm nhất nếu cần) từ `/sync-status`.
+- **Wire sync gate (R5)**: dùng `useSyncStatus` (đã có) → tra `bar_count`/`last_bar_at` cho `symbol`+`interval` đang chọn → disable submit + cảnh báo khi range vượt coverage.
+- **Expose capital/bps (R1/R6)**: thêm 2 input vào `backtest-form.tsx`, validate `>=100`/`>=0` khớp BE (`RunBacktestCommand` ge constraints).
+- **History (R3)**: thêm list dùng `GET /backtest/strategy/{strategy_id}` + auto-select row mới sau khi `finished`. (Không cần BE mới.)
+- **Giữ invariants**: uuid7 (`generate_id_str`), single worker (task in-process — KHÔNG thêm worker process), run logic ở `backtest`, route ở `app`.
 
 ---
 
@@ -144,38 +185,36 @@ FE run form                BE app                     BacktestRequestWorker (in-
 
 ### 6.1 Backend
 
-- `RunBacktestCommand` (`backtest_command_service.py:37-51`): thêm `sub_id: str | None = Field(default=None)`.
-- `BacktestCommandService.run` (`:94-115`): `BacktestRequest(..., sub_id=cmd.sub_id)`. Giữ `kind="single"`.
-- Worker `_dispatch` single nhánh (`backtest_request_worker.py:111-117`): sau `mark_done(result=fe_result)`, nếu `request.sub_id`: ghi history store (gọi method Slice 1 cung cấp). Giữ per-request isolation.
-- (Optional, approach a) `IStrategy.parameters_schema()` + 2 implementations + route `GET /strategies/{code}/parameters` ở `app/routes/strategy.py` (query svc ở `engine`).
+- **Không bắt buộc đổi** cho v1 (luồng run/poll đã đủ).
+- (Optional, approach a) `IStrategy.parameters_schema()` + `HitNRun2Strategy`/`EngulfingStrategy` impl + route `GET /strategies/{code}/parameters` ở `app/routes/strategy.py`.
+- (Chỉ nếu chọn 4.1-B) thêm `sub_id` vào `RunBacktestCommand` (`backtest_command_service.py:21-35`) + `BacktestResult` + query `list_by_sub` + dựng lại endpoint sub backtest — **cần user chốt**.
 
 ### 6.2 Frontend
 
-- `backtest-api.ts`: thêm `runBacktest(body): Promise<{request_id}>` (`POST /api/v1/backtest/run`) + `pollBacktestRequest(id): Promise<{status, result, error}>` (`GET /api/v1/backtest/requests/{id}`); (optional) `fetchStrategyParams(code)`.
-- Hook `useRunBacktest`: mutation enqueue → lưu `request_id` → `useQuery` poll với `refetchInterval` dừng khi terminal (pattern giống `use-subscriptions.ts:21-24` đang poll `running`).
-- Run form component (trong Backtest tab shell Slice 1): date range native inputs + preset buttons + capital/bps inputs + params editor (schema-driven hoặc JSON fallback) + submit disabled theo `/sync-status` gate. Pattern form theo `new-subscription-dialog.tsx`.
-- On `done`: invalidate history query (Slice 1 key) + auto-select run mới (qua deep-link state Slice 1).
+- `backtest-form.tsx`: thêm preset buttons (30d/90d/1y/YTD/all via dayjs); thêm `initial_capital`/`slippage_bps`/`commission_bps` inputs + validate; wire `useSyncStatus` để gate submit (R5); (nếu a) đổi JSON textarea → schema-driven fields.
+- `backtest.tsx`: thêm history list (`GET /backtest/strategy/{strategy_id}`) + auto-select run mới khi `finished` (invalidate list).
+- (nếu cần "all" preset) FE đọc `/sync-status/{symbol}?interval=` cho first/last.
 
-### 6.3 API Contract
+### 6.3 API Contract (AS-IS)
 
 | Method | Path | Body / Params | Response |
 |---|---|---|---|
-| POST | `/api/v1/backtest/run` | `RunBacktestCommand` + `sub_id?` | 202 `{ request_id }` |
-| GET | `/api/v1/backtest/requests/{id}` | — | `{ request_id, status, result?, error? }` |
-| GET | `/api/v1/sync-status/{symbol}?interval=` | symbol composite, interval | `{ bar_count, last_bar_at, status, ... }` (gate submit) |
+| POST | `/api/v1/backtest/run` | `RunBacktestBody` (strategy_id/symbol/interval/start_date/end_date/initial_capital?/slippage_bps?/commission_bps?/parameters?) | 202 `{ request_id }` |
+| GET | `/api/v1/backtest/{run_id}` | — | full `BacktestResult` doc (`status: started\|finished\|failed`) |
+| GET | `/api/v1/backtest/{run_id}/trades` | — | `{ run_id, trades[] }` |
+| GET | `/api/v1/backtest/strategy/{strategy_id}` | `limit`, `include_failed` | list run docs (theo strategy_code) |
+| GET | `/api/v1/sync-status/{symbol}?interval=` | — | `{ bar_count, last_bar_at, status, ... }` (gate submit) |
 | GET *(optional a)* | `/api/v1/strategies/{code}/parameters` | — | `[ { name, type, default, min?, max?, enum? } ]` |
 
 ---
 
 ## 7. Decomposition into Sub-tasks (ordered, shippable)
 
-1. **BE-1** — `RunBacktestCommand.sub_id` + `run()` set `sub_id`; worker single ghi history khi `sub_id` set. (depends Slice 1 store API)
-2. **FE-1** — `backtest-api.ts`: `runBacktest` + `pollBacktestRequest`. Shippable standalone (poll `/backtest/requests` đã có).
-3. **FE-2** — `useRunBacktest` hook (enqueue + poll + terminal stop).
-4. **FE-3** — Run form: date range + presets + capital/bps inputs + client validate (R4/R6/R7).
-5. **FE-4** — Submit gate qua `/sync-status` (R5).
-6. **FE-5** — On-done: invalidate + auto-select history row (R3, qua Slice 1 deep-link).
-7. **BE-2 / FE-6** *(optional)* — param schema endpoint (a) + schema-driven params editor; fallback (c) JSON editor nếu (a) đắt.
+1. **FE-1** — `backtest-form.tsx`: thêm preset date buttons (R4) + `initial_capital`/`bps` inputs với validate (R1/R6). Shippable standalone.
+2. **FE-2** — Wire `useSyncStatus` gate submit (R5) + warning khi range vượt coverage.
+3. **FE-3** — `backtest.tsx`: history list via `GET /backtest/strategy/{id}` + auto-select run mới khi `finished` (R3).
+4. **BE-1 / FE-4** *(optional)* — param schema endpoint (a) + schema-driven params editor; fallback giữ JSON (c).
+5. **(blocked, cần user chốt)** — re-link sub_id (4.1-B) nếu user muốn quay lại premise sub-coupled.
 
 ---
 
@@ -183,35 +222,40 @@ FE run form                BE app                     BacktestRequestWorker (in-
 
 | Risk | Mitigation |
 |---|---|
-| Data chưa sync đủ cho range chọn → run rỗng/lỗi warmup (hitnrun2 cần `sl_lookback_bars` bars, `hitnrun2.py:90`) | Gate submit qua `/sync-status` `bar_count`; preset "all" clamp theo `last_bar_at`; show warning khi range vượt coverage |
-| Param validation: type/range sai (vd `direction` phải long\|short\|both, `hitnrun2.py:53`) | Approach (a) emit min/max/enum cho client validate; BE vẫn raise `ValueError` → worker `mark_failed`, FE show error |
-| **Coupling storage Slice 1**: nếu Slice 1 = 1-row-per-sub cache thì ad-hoc run đè cache, mất history nhiều run | Chốt với Slice 1: ad-hoc run cần many-rows-per-sub (history) hay đè cache (xem OQ-1) |
-| Poll không bao terminal `failed` → spinner treo | `refetchInterval` dừng khi `status ∈ {done, failed}`; render `error` field |
-| Run đè backtest cache đang dùng cho dashboard hiện tại (`/subscriptions/{id}/backtest`, `strategy.py:148-154`) | Nếu store riêng cho history thì không đè; nếu đè thì invalidate `['subscription-backtest', subId]` (đã có pattern `use-subscriptions.ts:36-38`) |
+| Data chưa sync đủ → run rỗng/lỗi warmup (hitnrun2 cần `sl_lookback_bars`=480 bars, `hitnrun2.py:34,90` context) | Gate submit qua `useSyncStatus` `bar_count`; "all" preset clamp theo `last_bar_at` |
+| Param JSON sai key/range (vd `direction` phải long\|short\|both, `hitnrun2.py:53`) | (a) emit min/max/enum cho client validate; BE engine return `failed` (không raise, `backtest_execution_service.py:35-42`) → FE show `error_message` |
+| FE `BacktestRunResult.error_msg` field thừa | `error_msg` không tồn tại trong BE doc (`to_mongo` chỉ có `error_message`); FE fallback `error_message ?? error_msg` (`backtest.tsx:19`) — vô hại, có thể dọn |
+| Concurrent runs starve live Mongo pool (no cap, `backtest.py:44-47` ghi rõ accepted) | Trade-off đã chấp nhận; không guard ở Slice 2 |
+| Premise mismatch (decoupled vs sub-history) gây hiểu nhầm scope | Chốt OQ-1 trước khi làm bất kỳ BE re-link |
 
 ---
 
 ## 9. Success Metrics & Validation
 
-- BE: `pytest` cho `backtest_command_service` (sub_id propagate) + worker dispatch (ghi history khi sub_id set). `import-linter` pass (không thêm import lệch layer).
+- BE (nếu đụng): `pytest` cho `backtest_command_service`/`backtest_query_service`; `import-linter` pass.
 - FE: `cd web && npm run lint && npm run build` (tsc-b + vite) pass; `npm run test` nếu thêm hook test.
-- Manual: chọn sub → mở Backtest tab → submit run với preset 90d → thấy spinner → done → row mới trong history → auto-select detail render metrics.
+- Manual: `/backtest` → chọn strategy + preset 90d → (gate cho phép) → submit → spinner(started) → finished → result render; history list hiện run mới + auto-select.
 
 ---
 
 ## 10. Dependencies & Open Questions
 
-**Cross-ref**: Slice 1 report (history store + Backtest tab shell + deep-link) — file `slice-1-*-report.md` cùng thư mục `plans/reports/` (đặt tên theo Slice 1 khi có).
+**Cross-ref**: Slice 1 report (history store + Backtest tab shell + deep-link) — `slice-1-*-report.md` cùng `plans/reports/`. **Lưu ý premise Slice 1 (sub → 2 tab Backtest|Forward) không còn khớp code AS-IS** (backtest đã tách page riêng) — Slice 1 cần re-scout tương tự.
 
 **Quyết định cần chốt:**
 
-- **OQ-1 (BLOCKING, với Slice 1)**: history store là **many-rows-per-sub** (mỗi ad-hoc run 1 row) hay **1-row-per-sub cache** (`backtest_runs`, `save_for_subscription`)? Slice 2 R3 (run mới xuất hiện + giữ các run cũ) cần many-rows. Nếu Slice 1 chọn cache → cần thống nhất schema bổ sung.
-- **OQ-2**: Param schema dùng approach (a) hay fallback (c) cho v1? Phụ thuộc chi phí thêm `IStrategy.parameters_schema()` contract (verify độ phức tạp `EngulfingStrategy` defaults trước khi cam kết).
-- **OQ-3**: Worker ghi history bằng method nào của Slice 1 (tên + signature)? Slice 2 BE-1 chờ contract này.
-- **OQ-4**: "all" preset lấy range từ FE (`/sync-status`) hay để BE auto (`resolve_date_range`) khi FE gửi date trống? (KISS: FE compute từ sync-status).
+- **OQ-1 (BLOCKING, user-decision)**: Giữ backtest **decoupled** (AS-IS, hướng refactor đang đi) hay **re-link vào subscription** theo premise gốc? Ảnh hưởng toàn bộ scope BE. Code đã gỡ link sub↔backtest ⇒ quay lại là đảo ngược user-decision, cần xác nhận.
+- **OQ-2**: Param editor giữ JSON (c) hay nâng schema (a) cho v1?
+- **OQ-3**: History list theo `strategy_code` (route sẵn có) có đủ không, hay cần key chặt hơn (symbol+interval, hoặc sub_id nếu OQ-1=re-link)?
+- **OQ-4**: "all" preset lấy range từ `/sync-status` (FE) — đủ chưa, hay cần thêm "first_bar_at" (route hiện chỉ trả `last_bar_at`, không có first)?
 
 ---
 
-Status: DONE
-Summary: Slice 2 ad-hoc backtest run — BE đã có sẵn enqueue→worker→poll cho `kind="single"`; gap chính là `RunBacktestCommand` không carry `sub_id` (kết quả không vào history sub) và FE chưa có form/api/hook nào. Recommend: thêm `sub_id` optional + worker ghi history store của Slice 1, param schema endpoint (a) fallback JSON editor (c), date picker native + dayjs.
-Concerns: Coupling chặt với storage choice của Slice 1 (OQ-1/OQ-3 blocking) — nếu Slice 1 chọn 1-row-per-sub cache thì R3 (giữ nhiều run trong history) không đạt; cần chốt many-rows-per-sub trước khi implement BE-1.
+Status: DONE_WITH_CONCERNS
+Summary: Re-scout phát hiện codebase đã đổi căn bản — backtest đã decoupled khỏi subscription, bỏ queue/worker (dùng asyncio.create_task in-process), và FE đã implement phần lớn Slice 2 (form+poll+result ở route /backtest). Report viết lại toàn bộ theo AS-IS; gap còn lại: presets, capital/bps inputs, sync gate, dynamic param schema, history list.
+Changes:
+- Citations sửa: POST /backtest/run giờ spawn asyncio task (backtest.py:35-54, KHÔNG còn enqueue); poll = GET /backtest/{run_id} (KHÔNG còn /backtest/requests/{id}); RunBacktestCommand KHÔNG có sub_id (backtest_command_service.py:21-35, run() trả tuple, save started doc); status started/finished/failed (entities.py:33).
+- File mới phát hiện: backtest_execution_service.py, web/src/routes/backtest.tsx, web/src/components/backtest/backtest-form.tsx + backtest-result-view.tsx, web/src/hooks/use-backtest-run.ts, web/src/hooks/use-sync-status.ts.
+- File đã GỠ (sửa citation cũ): backtest_request_worker.py, BacktestRequest domain (request.py), run_subscription trong dispatch, GET /subscriptions/{id}/backtest, getSubscriptionBacktest/runAllBacktests/useSubscriptionBacktest/useRunAllBacktests (FE), RunOptimizationCommand/RunAllBacktestsCommand.
+- Premise mismatch ghi rõ tại §0 (C1: backtest decoupled khỏi sub) và OQ-1.
+Concerns: Premise gốc (run gắn vào subscription, vào history của sub) MÂU THUẪN với code AS-IS (đã decoupled). OQ-1 là user-decision blocking — không tự ý re-link. Slice 1 premise cũng cần re-scout vì cùng giả định sub→2-tab không còn khớp.

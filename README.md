@@ -146,6 +146,7 @@ If the UI is empty:
 Current backtest strategy IDs exposed by the API:
 
 - `hitnrun2` — 1m breakdown/breakup with capped technical SL/TP (entry 4h window, SL 8h technical with 1% account cap, TP 1h technical with 2% account minimum)
+- `engulfing` — full-candle engulfing entries (body-over-body AND range-over-range) with a directional rejection-wick quality filter; SL at the pattern extreme, TP at max(risk-reward, key level)
 
 ## Test Commands
 

@@ -2,118 +2,145 @@
 
 ## Metadata
 
-Priority 1/5 · Vertical slice FE+BE · Depends on: none · Unblocks: Slice 2 (ad-hoc run dùng history store + tab shell), Slice 3/4/5 (dùng deep-link 2-tab shell) · Date 2026-06-28
+Priority 1/5 · Vertical slice FE+BE · Depends on: none · Unblocks: Slice 2 (ad-hoc run dùng history store + tab shell), Slice 3/4/5 (dùng deep-link 2-tab shell) · Date 2026-06-29
+
+> **RE-SCOUT NOTE (2026-06-29):** codebase đã refactor lớn kể từ bản brainstorm đầu. **Backtest đã được tách HOÀN TOÀN khỏi subscription** — có trang riêng `/backtest` (ad-hoc form + poll), `StrategyQueryService` không còn `_bt_repo`, cache-slot per-subscription + unique sparse index + worker `run_subscription` đã **bị gỡ**. Premise "1 Subscription phục vụ cả backtest+forward, detail 2-tab" KHÔNG còn khớp AS-IS. Report cập nhật theo thực tế; các quyết định A/B/C được re-frame và cần user chốt lại (xem §4, §10).
 
 ---
 
 ## 1. Problem Statement
 
-- Một `Subscription` = `(strategy_code, symbol, interval)` immutable uuid7. Phục vụ CẢ backtest (historical replay) lẫn forward (live từ `start`).
-- Hiện BE chỉ giữ **đúng 1 backtest cache-slot mỗi subscription** → không có history. Mỗi lần `run-all-backtests` ghi đè slot cũ; người dùng không xem lại được run trước, không so sánh 2 run (đổi date-range / params), không thấy run nào sinh ra metrics đang hiển thị.
-- UI hiện trộn backtest + forward trong 1 cột `DashboardColumn` 360px (3 tab Metrics/Positions/Trades), không deep-link được tới 1 subscription, không có tab tách bạch Backtest vs Forward.
-- Slice 1 phải: (a) dựng **UI foundation** dùng chung cho 4 slice sau — deep-link route subscription detail + shell 2-tab (Backtest | Forward); (b) ship **Backtest tab** đầu tiên — history table nhiều run/sub + run-detail (metrics + positions overlay + equity) + compare 2 run.
+- Premise dùng chung của 5 slice: 1 `Subscription` = `(strategy_code, symbol, interval)` immutable uuid7, phục vụ cả backtest (historical replay) lẫn forward (live), detail có chart + 2 tab Backtest|Forward.
+- **AS-IS xung đột premise**: backtest hiện đã decoupled khỏi subscription, sống ở `/backtest` page riêng (`web/src/routes/backtest.tsx`). `DashboardColumn` (cột phải `/strategies`) giờ **forward-only** (docstring `dashboard-column.tsx:1-6`). Subscription list không còn enrich backtest status (`strategy_query_service.py:87-99`).
+- Backtest run hiện: `POST /backtest/run` cấp uuid7 `run_id`, lưu doc `started`, spawn `asyncio` task, FE poll `GET /backtest/{run_id}` (`backtest.py:35-54`). Run keyed theo `strategy_code` (KHÔNG `subscription_id`).
+- **Gap còn lại cho Slice 1**:
+  - Không có **history view có cấu trúc**: `GET /backtest/strategy/{code}` list theo `strategy_code` only, KHÔNG filter symbol+interval, KHÔNG link subscription (`backtest.py:91-117`). FE `/backtest` page chỉ hiển thị **1 run đang chạy** (`activeRunId` state, `backtest.tsx:14`) — không có bảng N run, không compare.
+  - Không có **deep-link** tới 1 run hay 1 subscription detail: `/strategies` dùng `selectedSub` local state (`strategies-page-layout.tsx:26`), `/backtest` dùng `activeRunId` local state — cả hai không URL-driven, không shareable, back/forward không chạy.
+  - Không có **compare** 2 run cạnh nhau.
+- Slice 1 phải quyết: history + compare gắn vào **subscription detail** (tái-coupling theo premise) hay vào **`/backtest` page** (theo AS-IS đã decoupled) — đây là quyết định kiến trúc lớn nhất, xem §4.
 
 ---
 
 ## 2. Current State (evidence)
 
-### 2.1 Storage — cache-slot, KHÔNG history
+### 2.1 Storage — per-run doc keyed `strategy_code`, KHÔNG cache-slot, KHÔNG subscription
 
-- `COLLECTION_BACKTEST_RUNS = "backtest_runs"` (`core/common/constants.py:15`) là collection chung cho cả: full run docs (keyed `strategy_code`) lẫn subscription cache-slot (keyed field `subscription_id`).
-- **Unique sparse index** `ix_backtests_subscription_id_unique` trên field `subscription_id` (`backtest_repository.py:15-37`, mint trong `ensure_indexes` `:299`) → **tối đa 1 doc/subscription**. Sparse để full-run docs (không có field này) không vào index.
-- `save_for_subscription` (`:152-179`) upsert ghi đè slot theo `subscription_id`; pop `_id`, slot `_id` cố định 1 lần qua `_upsert_cache_slot` (`:104-124`). `upsert_status` (`:126-150`) ghi status-only doc ('running'/'failed') cùng slot.
-- Worker `run_subscription` (`backtest_dispatch.py:166,219,236`) gọi `upsert_status` → run → `save_for_subscription` → ghi đè. Mỗi run mất run trước.
+- `COLLECTION_BACKTEST_RUNS = "backtest_runs"`, `COLLECTION_BACKTEST_ORDERS`, `COLLECTION_BACKTEST_TRADES` (`core/common/constants.py:15-17`). **KHÔNG còn** `COLLECTION_BACKTEST_OPTIMIZATION_RUNS`/`_REQUESTS`.
+- `BacktestRepository` (`backtest_repository.py`) đã viết lại slim: `save`/`get`/`list_by_strategy_code`/`get_best_by_metric`/`mark_failed`/`mark_orphaned_started_as_failed`/`delete`/`delete_by_strategy_code`/`ensure_indexes`. **KHÔNG còn** `save_for_subscription`, `upsert_status`, `find_by_subscription`, `find_doc_by_subscription`, `get_subscription_statuses`, `_upsert_cache_slot`, `mark_stale_running_as_failed`, `ensure_subscription_cache_unique_index`.
+- **KHÔNG còn unique sparse index** `ix_backtests_subscription_id_unique`. `ensure_indexes` (`:111-132`) chỉ tạo index theo `strategy_code`/`started_at`/`status`/`metrics.*`. KHÔNG có index nào theo `subscription_id`.
+- Mỗi `POST /backtest/run` cấp `run_id` mới (`backtest_command_service.py:49`), lưu doc `started` (`BacktestResult.started`, `entities.py:38-58`); engine overwrite **cùng** run_id khi xong → **mỗi run là 1 doc riêng, không overwrite chéo** ⇒ history "thô" đã tồn tại trong `backtest_runs` keyed `strategy_code`, chỉ thiếu scoping symbol+interval + UI.
+- Status vocab MỚI: `"started"` → `"finished"` | `"failed"` (`entities.py:33`, `backtest_repository.py:38,53`). (Bản cũ là `"completed"`.)
 
-### 2.2 Read paths
+### 2.2 Read / Write paths (AS-IS)
 
 | Endpoint | Service → repo | Scope | Evidence |
 |---|---|---|---|
-| `GET /subscriptions/{id}/backtest` | `StrategyQueryService.get_subscription_backtest` → `find_doc_by_subscription` | latest cache-slot, 404 nếu chưa chạy | `strategy.py:148-154`, `strategy_query_service.py:155-168`, `backtest_repository.py:238-254` |
-| `GET /backtest/strategy/{code}` | `BacktestQueryService.list_results` → `list_by_strategy_code` | list theo **strategy_code only**, KHÔNG filter symbol+interval | `backtest.py:110-136`, `backtest_query_service.py:88-93`, `backtest_repository.py:58-72` |
-| `GET /backtest/{run_id}` | `get_result` → `get(_id)` | 1 run by uuid | `backtest.py:86-92` |
-| sidebar enrich | `list_symbols` → `get_subscription_statuses` (`$in` sub_ids) | status-only/run projection mỗi sub | `strategy_query_service.py:98`, `backtest_repository.py:216-236` |
+| `POST /backtest/run` (202) | `BacktestCommandService.run` → `save(started)` + route spawn `BacktestExecutionService.execute_and_persist` | cấp run_id, async | `backtest.py:35-54`, `backtest_command_service.py:42-62`, `backtest_execution_service.py:26-45` |
+| `GET /backtest/{run_id}` | `get_result` → `get(_id)` | 1 run by uuid (poll) | `backtest.py:57-63`, `backtest_query_service.py:48-52` |
+| `GET /backtest/{run_id}/equity` | `get_result` | equity curve của run | `backtest.py:66-78` |
+| `GET /backtest/{run_id}/trades` | `list_trades` → `BacktestTradeRepository.list_by_run` | closed trades của run | `backtest.py:81-88`, `backtest_query_service.py:54-73` |
+| `GET /backtest/strategy/{code}` | `list_results` → `list_by_strategy_code` | list theo **strategy_code only**, KHÔNG symbol+interval, KHÔNG sub | `backtest.py:91-117`, `backtest_query_service.py:75-80`, `backtest_repository.py:31-45` |
+| `GET /backtest/strategies` | route inline `STRATEGY_REGISTRY.keys()` | list template names | `backtest.py:30-32` |
 
-### 2.3 `positions` không nằm trong cache-slot doc
+- **KHÔNG còn** `GET /subscriptions/{id}/backtest`, `POST /strategies/{code}/run-all-backtests`, `run_all_backtests_router`, `/backtest/requests/{id}`, `/backtest/optimize`, `/backtest/optimization/{id}`.
+- `subscription_router` (`strategy.py:99-153`): chỉ start/stop/positions/trades/delete. Không backtest.
+- Route mount (`app/main_extensions.py:401-404`): `strategy_router` → `subscription_router` → `trading_router` → `backtest_router`.
 
-- `BacktestResult.to_mongo` (`entities.py:42-55`) ghi `open_positions[]` (still-open lots), **KHÔNG có `positions[]`**.
-- Round-trip closed trades nằm collection riêng `backtest_trades` (`constants.py:17`), scoped theo `run_id` (`backtest_trade_repository.py:35 list_by_run`).
-- FE-facing `positions[]` (closed Trades + open lots) được **assemble runtime** chỉ trong path single-run worker `_assemble_single_response` (`backtest_request_worker.py:121-167`). Cache-slot path KHÔNG assemble → `GET /subscriptions/{id}/backtest` trả doc **thiếu `positions`**; FE `DashboardColumn` cứu bằng `backtest?.positions ?? []` (`dashboard-column.tsx:43-55`). → Run-detail slice 1 PHẢI build `positions` từ `backtest_trades(run_id)` + `open_positions`, không đọc thẳng doc.
+### 2.3 `positions` được assemble CLIENT-SIDE từ trades + open_positions
+
+- `BacktestResult.to_mongo` (`entities.py:63-76`) ghi `open_positions[]` (still-open lots), **KHÔNG có `positions[]`**. Closed round-trip Trades nằm collection riêng `backtest_trades` scoped `run_id` (`backtest_trade_repository.py:35 list_by_run`).
+- FE `fetchBacktestRun` (`backtest-api.ts:117-166`) tự join: fetch run doc → nếu `finished` thì fetch `/{runId}/trades` → ghép closed trades + `open_positions` thành `positions[]`. **Logic assemble đã chuyển sang FE** (bản cũ assemble ở BE worker). Run-detail của slice 1 tái dùng được hàm này.
 
 ### 2.4 Frontend
 
-- Routes: chỉ `/` (charts), `/strategies`, `/monitor` (`__root.tsx:13-26`). `/strategies` = `StrategiesPageLayout` (`strategies.tsx`), KHÔNG có param route per-subscription.
-- `StrategiesPageLayout` (`strategies-page-layout.tsx`): 3-pane grid `240px | 1fr | 360px`, state `selectedSub` cục bộ (`useState`, `:26`) — **không URL-driven**, không shareable, back/forward không hoạt động.
-- `DashboardColumn` (`dashboard-column.tsx`): 3 tab Metrics/Positions/Trades, đọc `useSubscriptionBacktest(sub.id)` (latest slot). `MetricsTab`/`PositionsTab` consume `SubscriptionBacktest` (`backtest-api.ts:42-58`); `EquityTab` render equity_curve lên sub-pane chart (`equity-tab.tsx`).
-- `BacktestPanel` (`backtest-panel/index.tsx`) là 1 component đầy đủ hơn (collapsible, drag, 3 tab metrics/positions/equity) nhưng hiện không gắn vào `/strategies` layout — tái dùng tốt cho run-detail.
-- API client: `getSubscriptionBacktest` (`strategy-api.ts:60-64`) chỉ có latest. KHÔNG có client list-runs-by-sub / get-run / compare. `backtest-api.ts` chỉ export `fetchStrategies`.
-- Hook: `useSubscriptionBacktest` (`use-subscriptions.ts:46-57`) query `['subscription-backtest', subId]`.
+- Routes (`web/src/routes/`): `__root.tsx`, `index.tsx` (Charts), `strategies.tsx`, `backtest.tsx` (MỚI), `monitor.tsx`, `monitor_.jobs.$jobId.tsx`. Nav có link `/backtest` (`__root.tsx:24-26`). **KHÔNG có** param route per-subscription / per-run.
+- `/backtest` page (`backtest.tsx`): `BacktestForm` + `BacktestResultView`, state `activeRunId` local (`:14`), poll qua `useBacktestRun` (`use-backtest-run.ts:24-31`, refetch 1500ms khi `started`). Chỉ 1 run hiển thị, không history table, không compare.
+- `BacktestResultView` (`components/backtest/backtest-result-view.tsx`): 3 tab Metrics/Equity/Trades, tái dùng `MetricsTab`/`PositionsTab` (`backtest-panel/`) + `EquitySparkline`.
+- `MetricsTab`/`PositionsTab` (`backtest-panel/metrics-tab.tsx:6-8`, `positions-tab.tsx:2,17`) giờ nhận prop `backtest: BacktestRunResult` (KHÔNG còn `SubscriptionBacktest`). **`backtest-panel/index.tsx` và `equity-tab.tsx` đã bị XOÁ**; thư mục còn metric-card/metric-cards/metrics-tab/positions-{filter,tab,table,utils}.
+- `/strategies` (`strategies-page-layout.tsx`): 3-pane `selectedSub` local state (`:26`), cột phải `DashboardColumn` giờ **forward-only** (PnlBadge + RecentTradesTable live, `dashboard-column.tsx:17-57`). Sidebar `StrategyListSidebar` dùng `onSelect` callback + `selectedSubId` prop (`strategy-list-sidebar.tsx:13-17,113-114`) — không Link/deep-link.
+- API client: `backtest-api.ts` — `BacktestStatus = 'started'|'finished'|'failed'` (`:40`), `BacktestRunResult` (`:44-57`), `runBacktest` (`:111`), `fetchBacktestRun` (`:117`). `strategy-api.ts` — `listSubscriptions`/`addSymbol`/`removeSubscription`/`deleteStrategy`; **KHÔNG còn** `runAllBacktests`, `getSubscriptionBacktest`, `SubscriptionBacktest`, `SubscriptionBacktestStatus`.
+- Hooks: `use-backtest-run.ts` — `useStrategyList`/`useRunBacktest`/`useBacktestRun`. `use-subscriptions.ts` — `useSubscriptions` (poll khi `desired_state !== actual_state`, `:17-21`)/`useAddSymbol`/`useRemoveSymbol`/`useDeleteStrategy`. **KHÔNG còn** `useSubscriptionBacktest`/`useRunAllBacktests`.
 
-### 2.5 Luồng dữ liệu backtest hiện tại (overwrite)
+### 2.5 Luồng dữ liệu backtest hiện tại (ad-hoc, decoupled)
 
 ```mermaid
 flowchart LR
-  FE["FE Sidebar select sub<br/>(local useState)"] -->|GET /subscriptions/{id}/backtest| QS[StrategyQueryService]
-  QS --> FD["find_doc_by_subscription<br/>(latest slot)"]
-  RUN["POST /strategies/{code}/run-all-backtests"] --> W[run_subscription worker]
-  W -->|upsert_status running| SLOT[("backtest_runs<br/>1 cache-slot / sub<br/>UNIQUE sparse idx")]
-  W -->|save_for_subscription OVERWRITE| SLOT
-  FD --> SLOT
-  W -.->|trades scoped run_id| TR[("backtest_trades")]
-  classDef bad fill:#fdd,stroke:#c00;
-  class SLOT bad;
+  FORM["/backtest page<br/>BacktestForm (activeRunId local)"] -->|POST /backtest/run| CMD[BacktestCommandService.run]
+  CMD -->|save started| RUNS[("backtest_runs<br/>1 doc / run_id<br/>keyed strategy_code")]
+  CMD -.->|return run_id| ROUTE[route spawns asyncio task]
+  ROUTE --> EXEC[BacktestExecutionService.execute_and_persist]
+  EXEC --> RS[run_single sandbox]
+  RS -->|overwrite same run_id| RUNS
+  RS -->|orders/trades scoped run_id| TR[("backtest_trades / backtest_orders")]
+  POLL["useBacktestRun poll GET /backtest/{run_id}"] --> RUNS
+  POLL -->|finished → GET /{id}/trades| TR
+  classDef new fill:#dfd,stroke:#0a0;
+  class RUNS,TR new;
 ```
 
-Slot là điểm nghẽn: ghi đè ⇒ mất history; doc thiếu `positions` ⇒ detail phải join `backtest_trades`.
+`backtest_runs` đã append-per-run (không cache-slot). Thiếu: scoping symbol+interval (history bảng), deep-link, compare.
 
 ---
 
 ## 3. Requirements
 
-- **Expected output**: 1 deep-link route `/strategies/$subId` mở subscription detail với chart + shell 2 tab; Backtest tab hiển thị bảng N run (date range/params/total_return/CAGR/Sharpe/Sortino/max_drawdown/win_rate/profit_factor/#trades), chọn 1 run xem metrics + positions overlay + equity, chọn 2 run xem cạnh nhau.
-- **Acceptance criteria**: từ sidebar click sub → URL đổi sang `/strategies/{id}` (reload giữ state, back/forward chạy); chạy backtest 2 lần với date-range khác nhau → history table hiển thị 2 dòng phân biệt; mở 1 run cũ render đúng metrics + positions + equity của chính run đó; chọn 2 run → 2 cột metric so sánh.
-- **Scope boundary**: chỉ Backtest tab + history store + deep-link shell. Forward tab = shell trống/placeholder (slice 3+). KHÔNG đụng ad-hoc run form (slice 2), orders detail (slice 4), explain-trade (slice 5).
-- **Non-negotiable constraints**: giữ 7 import-linter contracts (`pyproject.toml:78-137`) — repo mới/sửa chỉ ở `core.infra.persistence.repositories`, service ở `engine`/`backtest`, route ở `app`, fastapi chỉ ở `app`; PK uuid7 (`generate_id`), không bson/ObjectId; single uvicorn worker (không thêm process/scheduler mới).
-- **Touchpoints**: BE `backtest_repository.py`, `backtest_query_service.py`, `backtest_dispatch.py`, route `backtest.py`/`strategy.py`; FE route mới `strategies.$subId`, shell 2-tab, history/run-detail/compare components, `backtest-api.ts` + hooks.
+- **Expected output**: 1 history view liệt kê N backtest run cho 1 phạm vi (subscription HOẶC strategy_code+symbol+interval, tuỳ quyết định §4) với date-range/params/8 metric (total_return/CAGR/Sharpe/Sortino/max_drawdown/win_rate/profit_factor/#trades); chọn 1 run → detail (metrics + positions overlay trên chart + equity); chọn 2 run → compare cạnh nhau; deep-link URL tới history/run.
+- **Acceptance criteria**: chạy backtest 2 lần (date-range/params khác) → history table hiện 2 dòng phân biệt; mở 1 run cũ render đúng metrics/positions/equity của chính run đó; chọn 2 run → 2 cột metric + delta; URL deep-link reload giữ state + back/forward chạy + copy link mở đúng.
+- **Scope boundary**: chỉ history + compare + deep-link foundation. KHÔNG đụng ad-hoc run form logic (đã có, slice 2 mở rộng), orders detail (slice 4), explain-trade (slice 5). Forward tab/view ngoài scope nếu chọn tách (xem §4).
+- **Non-negotiable constraints**: giữ 7 import-linter contracts (`pyproject.toml:79,89,95,105,114,120,133`) — repo chỉ ở `core.infra.persistence.repositories`, service ở `engine`/`backtest`, route ở `app`, fastapi chỉ ở `app`; PK uuid7 (`generate_id_str`), không bson/ObjectId; single uvicorn worker (không thêm process/scheduler — ad-hoc run dùng `asyncio.create_task` in-process hiện có).
+- **Touchpoints**: BE `backtest_repository.py`, `backtest_query_service.py`, route `backtest.py`; FE route mới (per-run hoặc per-sub), history table + compare components, `backtest-api.ts` + `use-backtest-run.ts`.
 
 ---
 
 ## 4. Approaches Evaluated
 
-### 4.1 Storage — A1 / A2 / A3
+> Vì cache-slot + subscription-scoped backtest đã bị gỡ, nhóm A (storage) và C (navigation) được re-frame so với bản brainstorm đầu.
 
-Vấn đề cốt lõi: sidebar enrich (`get_subscription_statuses`, `list_symbols:98`) phụ thuộc **đúng 1 doc/sub** keyed `subscription_id`. Mọi phương án phải giữ invariant này hoặc thay nguồn status.
+### 4.0 Coupling — B1 / B2 (quyết định nền, ảnh hưởng A & C)
+
+| | History/compare gắn vào | Pros | Cons |
+|---|---|---|---|
+| **B1** | `/backtest` page (giữ AS-IS đã decoupled) | Khớp kiến trúc hiện tại (backtest standalone); không tái-couple; ít refactor `/strategies`; backtest cross-symbol/strategy tự nhiên | Lệch premise dùng chung "subscription detail 2-tab"; slice 3/4/5 (forward) vẫn ở `/strategies` → 2 nơi xem |
+| **B2** | Subscription detail 2-tab (tái-couple theo premise) | Khớp premise 5-slice; 1 nơi xem cả backtest+forward 1 sub | **Đi ngược refactor vừa làm** (vừa decouple xong); cần re-add `subscription_id` vào run doc + endpoint scoped sub; nhiều rework, rủi ro tái lập đúng thứ vừa gỡ |
+
+**Recommend: cần user chốt.** AS-IS nghiêng B1 (tôn trọng refactor mới). Nếu giữ premise 5-slice thì B2 — nhưng phải xác nhận user muốn đảo chiều refactor decouple. Phần A/C dưới giả định **B1** (mặc định AS-IS); nếu B2, xem note cuối mỗi mục.
+
+### 4.1 Storage — A1 / A2 / A3 (re-framed)
+
+Cache-slot đã không còn → "phá `get_subscription_statuses`" (rủi ro của A1 bản cũ) **không còn áp dụng** (hàm đó đã bị xoá). Vấn đề mới: **scoping history theo (strategy_code, symbol, interval)** để bảng không trộn run của symbol khác.
 
 | | Cơ chế | Pros | Cons |
 |---|---|---|---|
-| **A1** | Bỏ unique index, mỗi run 1 doc có `subscription_id` | Đơn giản nhất về ghi; mọi run cùng 1 collection | **Phá `get_subscription_statuses`**: `$in` trả nhiều doc/sub → `out[doc["subscription_id"]]` ghi đè ngẫu nhiên (`:230-235`) ⇒ sidebar hiện status sai. Phá luôn `find_doc_by_subscription` (trả tuỳ ý). Phải viết lại 2 read path = rủi ro cao. `upsert_status` mất nơi neo (không còn slot duy nhất). |
-| **A2** | Giữ cache-slot 'latest' cho sidebar status (như cũ) **+** historical runs scoped `sub_id` tách bằng `kind` field (vd `kind:"history"`) hoặc collection riêng; index unique chỉ áp doc slot | Rủi ro thấp nhất — read path status & latest **không đổi**; tách rõ "scheduled-latest slot" vs "manual/historical runs"; index partial dễ giới hạn unique cho slot | Hai khái niệm doc trong cùng collection (nếu dùng `kind`) → query cần filter `kind`; cần đổi unique index từ `sparse` sang `partialFilterExpression` để chỉ slot vào index |
-| **A3** | Collection mới `backtest_history` — **mọi** run append (full doc, có `subscription_id`); cache-slot `backtest_runs` chỉ trỏ run mới nhất (giữ nguyên) | Tách sạch concern: slot = status/latest cho sidebar (zero đổi read path cũ), history = nguồn cho table/detail/compare; append-only đơn giản, không unique-index gymnastics; index `(subscription_id, started_at desc)` cho list nhanh | Thêm 1 collection + repo; worker ghi 2 nơi (slot + history) trong cùng `run_subscription`; cần backfill nhận thức "run cũ trước slice này không có history" (chấp nhận: history bắt đầu từ slice 1) |
+| **A1** | Dùng nguyên `backtest_runs` hiện tại, thêm query `list_by_scope(strategy_code, symbol, interval)` đọc `config_snapshot.symbol`/`.interval` | Không đổi schema; data đã có (`config_snapshot` chứa symbol/interval, `command_service.py:50-60`); chỉ thêm 1 repo method + index | Query trên field lồng `config_snapshot.*` cần index riêng; doc cũ trước refactor có thể thiếu field (tolerate) |
+| **A2** | Promote `symbol`+`interval` thành **top-level field** của run doc (denormalize khỏi `config_snapshot`) + index `(strategy_code, symbol, interval, started_at desc)` | Query/sort/index sạch, nhanh; bảng history filter chuẩn | Đổi `to_mongo`/`from_mongo` + backfill nhận thức (run cũ thiếu field → tolerate hoặc migrate) |
+| **A3** | Collection `backtest_history` riêng append-only (như bản cũ) | Tách concern | **Thừa**: `backtest_runs` đã append-per-run, không còn overwrite ⇒ không cần collection thứ 2; tăng chi phí ghi 2 nơi vô ích |
 
-**Recommend: A3** (fallback A2 nếu muốn 1 collection). A3 giữ `backtest_runs` slot **bất biến** → `get_subscription_statuses`/`find_doc_by_subscription`/sidebar không đổi 1 dòng (giảm regression). History là collection append-only thuần đọc cho table/detail/compare. A2 đạt cùng mục tiêu nhưng trộn 2 loại doc trong 1 collection + đổi index spec, nhiều bề mặt lỗi hơn. A1 loại — phá đúng read path đang chạy.
+**Recommend: A2** (promote symbol+interval top-level + composite index). Đơn giản, query/sort sạch, không cần collection mới. A1 chấp nhận nếu muốn zero schema-change (đọc `config_snapshot.*`). A3 loại — append-per-run đã có sẵn, thêm collection là thừa (vi phạm YAGNI). *Nếu B2:* thêm `subscription_id` top-level thay/để cùng symbol+interval, index theo `subscription_id`.
 
-### 4.2 Navigation — C1 / C2 / C3
+### 4.2 Navigation — C1 / C2 / C3 (re-framed)
 
 | | Cơ chế | Pros | Cons |
 |---|---|---|---|
-| **C1** | Deep-link route `/strategies/$subId` (TanStack file route), detail page = chart + shell 2-tab; sidebar `Link` thay `onSelect` | URL shareable, back/forward, reload giữ state; detail có không gian rộng cho history table + compare; foundation tái dùng cho slice 3/4/5 | Refactor `StrategiesPageLayout`: bỏ `selectedSub` useState, chuyển sang route param + `Outlet`; phải xử lý layout list+detail (master-detail qua nested route) |
-| **C2** | Giữ 3-pane, đổi `DashboardColumn` thành 2 tab Backtest/Forward | Refactor ít nhất; không đụng routing | Cột 360px quá chật cho history table + compare 2 run; vẫn không deep-link/shareable; slice sau (orders/explain) càng chật ⇒ nợ kỹ thuật dồn |
-| **C3** | Lai: giữ sidebar, main area rộng chứa shell 2-tab (không param route, chọn bằng state) | Rộng hơn C2; refactor vừa | Vẫn không URL-driven (mất shareable/back-forward — yêu cầu chính của "deep-link"); nửa vời, slice sau vẫn phải lên C1 |
+| **C1** | Deep-link route per-run trên `/backtest`: `/backtest/$runId` (history list = `/backtest`, detail = param route); compare qua search param `?compare=runA,runB` | URL shareable, back/forward, reload giữ run; khớp B1; tận dụng `/backtest` đã có | Refactor `backtest.tsx` từ `activeRunId` local sang route param + master-detail (list+detail) |
+| **C2** | Giữ `/backtest` single-page, thêm history table + compare bằng local state (không route param) | Refactor ít nhất | Không deep-link/shareable (mất yêu cầu chính "deep-link"); không back/forward |
+| **C3** | (chỉ khi B2) `/strategies/$subId` 2-tab Backtest|Forward | Khớp premise | Phụ thuộc B2; refactor `/strategies` master-detail lớn |
 
-**Recommend: C1**. Đây là "UI foundation" mà 4 slice sau dựa vào; chỉ C1 cho URL-driven shareable + đủ không gian. C2/C3 tiết kiệm trước-mắt nhưng dồn nợ.
+**Recommend: C1** (giả định B1). URL-driven foundation cho slice sau. C2 loại — không đạt deep-link. C3 chỉ hợp lệ nếu user chọn B2.
 
 ---
 
 ## 5. Recommended Solution
 
-**Storage A3 + Navigation C1.**
+**Coupling B1 (giữ decoupled, chờ user xác nhận) + Storage A2 + Navigation C1.**
 
-- **A3**: thêm collection `backtest_history` (append-only, full BacktestResult doc + `subscription_id` + `run_kind` để phân biệt scheduled vs manual về sau). Worker `run_subscription` sau khi `save_for_subscription` (slot, giữ nguyên) thì **append 1 history doc**. `backtest_runs` slot không đổi ⇒ sidebar/status path zero-regression. List/detail/compare đọc từ `backtest_history`.
-- **C1**: route `/strategies/$subId` master-detail; sidebar dùng `Link` deep-link; detail = `StrategyChart` (locked symbol+interval) + shell 2-tab (`Backtest` active, `Forward` placeholder). Backtest tab = history table → chọn run → run-detail (tái dùng `BacktestPanel`) / chọn 2 → compare.
+- **B1**: history + compare sống trên `/backtest`, tôn trọng refactor decouple vừa làm. (Nếu user muốn premise 5-slice → B2 + C3, cần xác nhận đảo chiều.)
+- **A2**: promote `symbol`+`interval` lên top-level field của `backtest_runs` doc + composite index `(strategy_code, symbol, interval, started_at desc)`; thêm `list_by_scope`. Không thêm collection.
+- **C1**: route `/backtest` = history list; `/backtest/$runId` = run detail (tái dùng `BacktestResultView`); compare qua search param. Scope picker chọn (strategy_code, symbol, interval).
 
 **Invariant giữ nguyên**:
-- import-linter: history collection repo nằm `core.infra.persistence.repositories` (cùng `backtest_repository.py` hoặc file mới `backtest_history_repository.py`); query service ở `backtest`/`engine`; route ở `app`; không import fastapi ngoài app.
-- uuid7 PK: history doc `_id` = `generate_id_str()` (`core.common.uuid`), không bson/ObjectId.
-- single uvicorn worker: append history chạy trong worker `run_subscription` hiện có, không thêm process/scheduler/connection mới.
+- import-linter: repo ở `core.infra.persistence.repositories`; query/command service ở `backtest`; route ở `app`; không import fastapi ngoài app (`backtest_execution_service.py` đã ở `backtest`, không fastapi — đúng).
+- uuid7 PK: run_id = `generate_id_str()` (`command_service.py:49`), không bson/ObjectId.
+- single uvicorn worker: ad-hoc run giữ `asyncio.create_task` in-process (`backtest.py:51`), không thêm process/scheduler.
 
 ---
 
@@ -123,65 +150,62 @@ Vấn đề cốt lõi: sidebar enrich (`get_subscription_statuses`, `list_symbo
 
 | Layer | File | Change |
 |---|---|---|
-| constants | `core/common/constants.py` | thêm `COLLECTION_BACKTEST_HISTORY = "backtest_history"` |
-| repo | `core/infra/.../backtest_history_repository.py` (mới) hoặc method trong `backtest_repository.py` | `append_run(sub_id, result)` (uuid7 `_id`, set `subscription_id`, `run_kind`, copy metrics/equity_curve/open_positions/config_snapshot/started_at/completed_at); `list_by_subscription(sub_id, limit)`; `get_run(run_id)`; `ensure_indexes` → index `[(subscription_id,1),(started_at,-1)]` |
-| worker | `backtest/workers/backtest_dispatch.py` | sau `save_for_subscription` (`:219`) gọi `history_repo.append_run(sub_id, result)` (chỉ khi `status=="completed"`/`"failed"` theo policy); inject `history_repo` vào `BacktestDispatchDeps` |
-| query svc | `backtest/backtest_query_service.py` | `list_subscription_runs(ListSubRunsQuery)`; `get_subscription_run(GetSubRunQuery)` build `positions[]` từ `backtest_trades.list_by_run(run_id)` + `open_positions` (port logic `_assemble_single_response:121-167`, tách thành helper dùng chung để DRY); `compare_runs(CompareRunsQuery: run_id_a, run_id_b)` |
-| route | `app/routes/backtest.py` | thêm dưới `subscription_router` (strategy.py) hoặc `backtest_router`: `GET /subscriptions/{sub_id}/backtest/runs`, `GET /subscriptions/{sub_id}/backtest/runs/{run_id}`, `GET /subscriptions/{sub_id}/backtest/compare?a=&b=`; dùng `FromDishka[BacktestQueryService]`, `DishkaRoute` |
-| DI | provider của BacktestDispatchDeps + worker | wire `BacktestHistoryRepository` |
+| domain | `core/domain/backtest/entities.py` | thêm `symbol`/`interval` top-level vào `BacktestResult` + `to_mongo`/`from_mongo`/`started` (lấy từ `config_snapshot`) — A2 |
+| repo | `backtest_repository.py` | `list_by_scope(strategy_code, symbol, interval, limit, include_failed)`; `get` đã có; `ensure_indexes` thêm `(strategy_code, symbol, interval, started_at desc)` |
+| query svc | `backtest_query_service.py` | `ListScopedRunsQuery`; `list_scoped_runs`; `compare_runs(run_id_a, run_id_b)` (đọc 2 doc + assemble metrics rows); reuse `list_trades` cho detail |
+| route | `app/routes/backtest.py` | `GET /backtest/runs?strategy_code=&symbol=&interval=&limit=` (history); `GET /backtest/compare?a=&b=`; giữ `GET /backtest/{run_id}` + `/{run_id}/trades` + `/{run_id}/equity` cho detail; dùng `FromDishka[BacktestQueryService]`, `DishkaRoute` |
 
 **DTO shapes (BE)**:
-- History row: `{ run_id, run_kind, started_at, completed_at, status, date_range:{start,end}, parameters, metrics: BacktestMetrics.to_dict() }` (date_range lấy từ `config_snapshot`).
-- Run detail: tái dùng shape `SubscriptionBacktest` hiện có — `{ run_id, status, metrics, positions[], equity_curve[], config_snapshot, started_at, completed_at }` (FE component tái dùng ngay).
-- Compare: `{ a: <row+metrics>, b: <row+metrics> }` (FE diff 2 cột; equity overlay tuỳ chọn).
+- History row: `{ run_id, status, started_at, completed_at, symbol, interval, date_range:{start,end}, parameters, metrics: BacktestMetrics.to_mongo() }` (date_range từ `config_snapshot.start_date/end_date`).
+- Run detail: dùng nguyên doc `GET /backtest/{run_id}` + `/{run_id}/trades` (FE `fetchBacktestRun` đã assemble `positions[]`).
+- Compare: `{ a: <row+metrics>, b: <row+metrics> }`.
 
-**Import-linter compliance**: tất cả repo ở `core.infra`; service ở `backtest`; route ở `app`; helper assemble-positions đặt ở `backtest` (đang import `core.domain` + repos — hợp lệ). Không thêm import fastapi vào core/engine/backtest.
+**Import-linter compliance**: tất cả repo ở `core.infra`; service ở `backtest`; route ở `app`. Không thêm import fastapi vào core/engine/backtest. (Note: `dishka.integrations.fastapi` chỉ ở route — đúng pattern, contract "fastapi only in app" grep-based ở test, không kẹt route.)
 
 ### 6.2 Frontend
 
 | Item | File | Change |
 |---|---|---|
-| route | `web/src/routes/strategies.$subId.tsx` (mới) | file route param `$subId`; loader/`useParams`; render detail; `strategies.tsx` thành layout có `Outlet` (master-detail) hoặc index = empty-state |
-| sidebar | `strategy-list-sidebar.tsx` | `onSelect` → `<Link to="/strategies/$subId" params>`; highlight theo route param thay `selectedSubId` prop |
-| shell | `components/strategy/subscription-detail/index.tsx` (mới) | chart locked symbol+interval + tab bar `Backtest`/`Forward` (Forward = placeholder); Backtest tab mount history view |
-| history table | `.../backtest-history-table.tsx` (mới) | cột date-range/params/8 metric; row click → select run; multiselect ≤2 → compare |
-| run detail | tái dùng `backtest-panel/index.tsx` `BacktestPanel` | feed run-detail DTO (đã đúng `SubscriptionBacktest` shape) |
-| compare | `.../backtest-compare-view.tsx` (mới) | 2 cột metric cạnh nhau + delta |
-| api | `backtest-api.ts` | `listSubscriptionRuns(subId)`, `getSubscriptionRun(subId, runId)`, `compareRuns(subId, a, b)` + types `BacktestRunRow`, reuse `SubscriptionBacktest`, `BacktestCompare` |
-| hooks | `hooks/use-backtest-history.ts` (mới) | `useSubscriptionRuns(subId)`, `useSubscriptionRun(subId, runId)`, `useCompareRuns(...)`; query keys `['sub-runs',subId]`, `['sub-run',subId,runId]` |
+| route list | `web/src/routes/backtest.tsx` | refactor: top = scope picker + `BacktestForm`; dưới = history table; bỏ `activeRunId` local → route nav |
+| route detail | `web/src/routes/backtest.$runId.tsx` (mới) | param `$runId`; `useBacktestRun(runId)` → `BacktestResultView`; compare qua `?compare=` search |
+| history table | `components/backtest/backtest-history-table.tsx` (mới) | cột symbol/interval/date-range/params/8 metric; row click → nav `/backtest/$runId`; multiselect ≤2 → compare |
+| compare | `components/backtest/backtest-compare-view.tsx` (mới) | 2 cột metric + delta |
+| result view | `backtest-result-view.tsx` (tái dùng) | feed `BacktestRunResult` (đã đúng shape) |
+| api | `backtest-api.ts` | `listBacktestRuns({strategy_code,symbol,interval})`, `compareRuns(a,b)` + types `BacktestRunRow`, `BacktestCompare` |
+| hooks | `use-backtest-run.ts` (mở rộng) | `useBacktestRuns(scope)`, `useCompareRuns(a,b)`; query keys `['backtest-runs',scope]`, `['backtest-compare',a,b]` |
+
+*(Nếu B2: route `/strategies/$subId` + shell 2-tab; sidebar đổi `onSelect`→`Link`; re-add subscription-scoped endpoints.)*
 
 ### 6.3 API Contract
 
 ```
-GET /api/v1/subscriptions/{sub_id}/backtest/runs?limit=50
-→ 200 [ { run_id, run_kind, status, started_at, completed_at,
+GET /api/v1/backtest/runs?strategy_code={c}&symbol={s}&interval={i}&limit=50
+→ 200 [ { run_id, status, started_at, completed_at, symbol, interval,
           date_range:{start,end}, parameters, metrics:{...8+ fields} } ]   // [] nếu chưa run
 
-GET /api/v1/subscriptions/{sub_id}/backtest/runs/{run_id}
-→ 200 { run_id, status, metrics, positions:[{entry_price,entry_time,exit_price,
-        exit_time,quantity,sl_price,tp_price,pnl,commission}],
-        equity_curve:[{timestamp,equity,drawdown}], config_snapshot,
-        started_at, completed_at }
-→ 404 nếu run_id không thuộc sub
+GET /api/v1/backtest/{run_id}            (đã có)
+→ 200 slim run doc { _id, strategy_code, status, metrics, equity_curve, open_positions, config_snapshot, ... }
+GET /api/v1/backtest/{run_id}/trades     (đã có)
+→ 200 { run_id, trades:[{direction,entry_price,entry_time,exit_price,exit_time,quantity,sl_price,tp_price,pnl,commission,duration_seconds}] }
 
-GET /api/v1/subscriptions/{sub_id}/backtest/compare?a={run_id}&b={run_id}
-→ 200 { a:{...run row+metrics}, b:{...run row+metrics} }
-→ 404 nếu a hoặc b không thuộc sub
+GET /api/v1/backtest/compare?a={run_id}&b={run_id}
+→ 200 { a:{...row+metrics}, b:{...row+metrics} }
+→ 404 nếu a hoặc b không tồn tại
 ```
+
+FE assemble `positions[]` client-side qua `fetchBacktestRun` (`backtest-api.ts:117-166`) — giữ nguyên.
 
 ---
 
 ## 7. Decomposition into Sub-tasks (ordered, mỗi task shippable)
 
-1. **BE storage**: thêm `COLLECTION_BACKTEST_HISTORY`, `BacktestHistoryRepository` (`append_run`/`list_by_subscription`/`get_run`/`ensure_indexes`), DI wire. Test: append + list trả đúng N run.
-2. **BE worker append**: `run_subscription` append history sau slot save; inject vào deps. Test: chạy 2 lần → history có 2 doc, slot vẫn 1.
-3. **BE assemble helper + query svc**: tách positions-assembly thành helper dùng chung (`_assemble_single_response` + run-detail); `list_subscription_runs`/`get_subscription_run`/`compare_runs`. Test: run-detail build positions từ `backtest_trades`.
-4. **BE routes**: 3 endpoints mới + response_model. Test: 404 path, list shape, compare shape.
-5. **FE deep-link route**: `strategies.$subId.tsx` + sidebar `Link` + master-detail layout. Ship: URL đổi, back/forward chạy, reload giữ sub.
-6. **FE shell 2-tab**: subscription-detail chart + Backtest/Forward (Forward placeholder).
-7. **FE history table + api/hooks**: list runs, render 8 metric/dòng.
-8. **FE run-detail**: chọn run → `BacktestPanel` render run đó.
-9. **FE compare**: chọn 2 run → compare view.
+1. **BE schema A2**: promote `symbol`+`interval` top-level vào `BacktestResult` + `to/from_mongo` + `started`. Test: round-trip giữ field; doc thiếu field tolerate.
+2. **BE repo + index**: `list_by_scope` + composite index. Test: 2 run cùng scope vs khác symbol → filter đúng.
+3. **BE query svc + route**: `list_scoped_runs`, `compare_runs`, `GET /backtest/runs`, `GET /backtest/compare`. Test: shape list/compare, 404 compare.
+4. **FE deep-link**: `backtest.$runId.tsx` + refactor `backtest.tsx` bỏ `activeRunId` local → route nav. Ship: URL đổi, back/forward, reload giữ run.
+5. **FE history table + api/hooks**: scope picker + `listBacktestRuns` + table 8 metric/dòng.
+6. **FE run-detail**: route detail render `BacktestResultView` cho run param.
+7. **FE compare**: multiselect 2 run → compare view + delta.
 
 ---
 
@@ -189,37 +213,46 @@ GET /api/v1/subscriptions/{sub_id}/backtest/compare?a={run_id}&b={run_id}
 
 | Risk | Mitigation |
 |---|---|
-| **A1 phá `get_subscription_statuses`** (nếu lỡ chọn A1): `$in` nhiều doc/sub → status sidebar sai (`:230-235`) | Chọn A3 — slot `backtest_runs` bất biến; history tách collection riêng |
-| Refactor routing C1 vỡ state cũ (selectedSub) | Master-detail nested route + `Outlet`; index route giữ empty-state; sidebar highlight theo `useParams` |
-| Run-detail thiếu `positions` (cache-slot doc không có field này, `entities.py:42-55`) | get_subscription_run build positions từ `backtest_trades(run_id)` + `open_positions` (helper dùng chung, KHÔNG đọc doc.positions) |
-| Worker ghi 2 nơi (slot + history) → partial write nếu crash giữa chừng | Append history sau slot save; history là phụ trợ — slot vẫn nhất quán; append idempotent theo run uuid (skip nếu `_id` đã tồn tại) |
-| History phình to (mỗi run full equity_curve) | `list_by_subscription` projection bỏ `equity_curve`/`positions` (chỉ metrics + meta); detail mới load đầy đủ; index `(subscription_id, started_at desc)` + `limit` |
-| Run cũ trước slice 1 không có history | Chấp nhận: history bắt đầu từ slice 1 (table trống cho sub chưa chạy lại); không backfill |
-| `list_by_strategy_code` (`/backtest/strategy/{code}`) vẫn không filter symbol+interval | Ngoài scope slice 1 (history theo sub_id thay thế); để nguyên, không đụng |
+| **Premise vs AS-IS lệch** (subscription 2-tab vs `/backtest` decoupled) | Đưa quyết định B1/B2 cho user chốt TRƯỚC khi plan; mặc định B1 tôn trọng refactor mới |
+| Doc cũ trước refactor thiếu `symbol`/`interval` top-level (A2) | `from_mongo` tolerate (fallback đọc `config_snapshot`); không hard-fail; history bắt đầu data sạch từ slice 1 |
+| `config_snapshot.symbol`/`interval` key drift giữa command vs engine config | Verify `_config_from_dict` (`backtest_dispatch.py:43-54`) đọc `payload["symbol"]/["interval"]` — khớp `command_service.py:51-52`; A2 denormalize 1 lần lúc `started` |
+| Refactor `backtest.tsx` (C1) vỡ poll-while-started | Giữ `useBacktestRun` refetchInterval logic (`use-backtest-run.ts:29`); detail route poll cùng hook |
+| FE assemble positions chỉ khi `finished` (`backtest-api.ts:120`) | Đúng AS-IS — compare/detail chỉ hiển thị positions cho run terminal; run `started` chỉ metrics rỗng |
+| `GET /backtest/strategy/{code}` cũ vẫn không scope symbol+interval | Bổ sung `GET /backtest/runs` (scoped) thay thế cho history; route cũ giữ nguyên (back-compat, không đụng) |
+| B2 đảo chiều refactor decouple | Chỉ làm B2 nếu user xác nhận; cảnh báo rework lớn (re-add subscription_id + endpoints vừa gỡ) |
 
 ---
 
 ## 9. Success Metrics & Validation
 
-- BE: `just test` (unit repo + query svc + worker append), `just lint`, `just types` (mypy), import-linter pass 7 contracts.
+- BE: `just test` (repo `list_by_scope` + query svc compare + entities round-trip), `just lint`, `just types` (mypy), import-linter pass 7 contracts.
 - FE: `cd web && npm run lint && npm run build`.
-- Chức năng: 2 run khác date-range → 2 dòng history phân biệt; mở run cũ → metrics/positions/equity của chính run đó; compare 2 run → 2 cột metric + delta; sidebar status (latest) không đổi hành vi (regression check trên `list_symbols`).
-- Deep-link: `/strategies/{id}` reload giữ state; back/forward chạy; copy URL mở đúng sub.
+- Chức năng: 2 run khác date-range cùng scope → 2 dòng history; run symbol khác KHÔNG lẫn vào bảng; mở run cũ → đúng metrics/positions/equity; compare 2 run → 2 cột + delta.
+- Deep-link: `/backtest/{run_id}` reload giữ; back/forward chạy; copy URL mở đúng run.
 
 ---
 
 ## 10. Dependencies & Open Questions
 
 **Cross-ref reports sibling** (cùng `plans/reports/`):
-- `slice-2-*-adhoc-run-*-report.md` — ad-hoc run form ghi vào history store (A3) của slice này; dùng lại shell 2-tab.
-- `slice-3-*-live-equity-kpi-*-report.md`, `slice-4-*-orders-*-report.md`, `slice-5-*-explain-trade-*-report.md` — đều dùng deep-link 2-tab shell (C1) của slice này; Forward tab placeholder mở rộng từ slice 3.
+- `slice-2-*-adhoc-run-*-report.md` — ad-hoc run form đã tồn tại (`backtest.tsx` + `BacktestForm`); slice 2 mở rộng (params nâng cao, ghi vào history scope A2 của slice này).
+- `slice-3-*-live-equity-kpi-*-report.md`, `slice-4-*-orders-*-report.md`, `slice-5-*-explain-trade-*-report.md` — forward/live hiện ở `/strategies` `DashboardColumn` (forward-only). Nếu B1, các slice này tách khỏi backtest navigation của slice 1; nếu B2 thì dùng chung shell 2-tab.
 
 **Quyết định cần user chốt ở plan phase**:
-- **A?** — Storage: A3 (collection `backtest_history` riêng, recommend) vs A2 (1 collection + `kind` field + partial unique index). Cả hai giữ slot bất biến; A3 tách sạch hơn, A2 ít collection hơn.
-- **C?** — Navigation: C1 (deep-link `/strategies/$subId`, recommend) đã coi như chốt vì là foundation; xác nhận chấp nhận refactor `StrategiesPageLayout` sang master-detail.
-- `run_kind` policy: history có lưu run `failed` không, hay chỉ `completed`? (đề xuất: lưu cả hai, table filter mặc định `completed`).
-- Compare view: chỉ diff metrics (đề xuất slice 1) hay overlay 2 equity curve trên 1 chart (có thể hoãn)?
+- **B?** (MỚI, quan trọng nhất) — Coupling: B1 (history/compare trên `/backtest`, giữ AS-IS decoupled, recommend) vs B2 (tái-couple vào subscription detail 2-tab theo premise 5-slice). B2 đảo chiều refactor vừa làm → cần xác nhận rõ.
+- **A?** — Storage: A2 (promote symbol+interval top-level + index, recommend) vs A1 (query `config_snapshot.*`, zero schema-change). A3 (collection riêng) đã loại vì `backtest_runs` đã append-per-run.
+- **C?** — Navigation: C1 (`/backtest/$runId` deep-link, recommend với B1) vs C3 (`/strategies/$subId` 2-tab, chỉ hợp lệ nếu B2). C2 (no route param) loại.
+- Compare scope: cho phép compare 2 run **khác scope** (cross-symbol/strategy) hay chỉ trong cùng scope? (đề xuất: cùng scope ở slice 1).
+- `GET /backtest/strategy/{code}` cũ: deprecate hay giữ song song với `GET /backtest/runs`? (đề xuất: giữ, không đụng).
 
 ---
 
-Status: DONE
+## Unresolved Questions
+
+1. B1 vs B2 — user có muốn giữ backtest decoupled (vừa refactor) hay tái-couple vào subscription theo premise 5-slice? (block toàn bộ hướng slice 1).
+2. Premise gốc của 5-slice (subscription detail 2-tab) còn hiệu lực không, hay đã bị thay bằng kiến trúc `/backtest` standalone + `/strategies` forward-only?
+3. Các report sibling (slice 2-5) đã được re-scout theo kiến trúc mới chưa, hay vẫn dựa premise cũ?
+
+---
+
+Status: DONE_WITH_CONCERNS
