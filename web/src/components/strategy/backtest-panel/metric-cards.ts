@@ -59,6 +59,31 @@ function toneProfitFactor(n: number): Tone {
   return 'neutral'
 }
 
+export interface MetricGroup {
+  title: string
+  cards: MetricCardModel[]
+}
+
+// Group → metric keys (validation Q1). Returns/Risk/Trade Stats; keys map to the
+// `key` field of buildMetricCards so formatting/tone stays single-sourced.
+const METRIC_GROUPS: { title: string; keys: string[] }[] = [
+  { title: 'Returns', keys: ['total_return', 'cagr', 'avg_win', 'avg_loss'] },
+  { title: 'Risk', keys: ['sharpe', 'sortino', 'max_dd', 'profit_factor'] },
+  {
+    title: 'Trade Stats',
+    keys: ['total_trades', 'winning', 'losing', 'win_rate', 'avg_duration', 'total_commission'],
+  },
+]
+
+/** The same 14 cards as buildMetricCards, partitioned into the 3 dashboard groups. */
+export function buildMetricGroups(m: BacktestMetrics): MetricGroup[] {
+  const byKey = new Map(buildMetricCards(m).map((c) => [c.key, c]))
+  return METRIC_GROUPS.map((g) => ({
+    title: g.title,
+    cards: g.keys.map((k) => byKey.get(k)).filter((c): c is MetricCardModel => c != null),
+  }))
+}
+
 export function buildMetricCards(m: BacktestMetrics): MetricCardModel[] {
   return [
     {

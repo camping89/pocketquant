@@ -9,6 +9,7 @@ import pytest
 
 from pocketquant.core.domain.backtest import (
     BacktestMetrics,
+    BacktestResult,
     EquityPoint,
     Fill,
     OpenLot,
@@ -232,3 +233,51 @@ def test_metrics_empty_factory() -> None:
     m = BacktestMetrics.empty()
     assert m.total_trades == 0
     assert m.avg_trade_duration is None
+
+
+_RUN_CONFIG = {"strategy_code": "s1", "symbol": "BTCUSDT:BINANCE", "interval": "1m"}
+
+
+def test_backtest_result_started_denormalizes_symbol_interval() -> None:
+    run = BacktestResult.started("0192f000-0000-7000-8000-000000000001", _RUN_CONFIG)
+    assert run.symbol == "BTCUSDT:BINANCE"
+    assert run.interval == "1m"
+
+
+def test_backtest_result_roundtrip_preserves_symbol_interval() -> None:
+    run = BacktestResult.started("0192f000-0000-7000-8000-000000000002", _RUN_CONFIG)
+    restored = BacktestResult.from_mongo(run.to_mongo())
+    assert restored.symbol == "BTCUSDT:BINANCE"
+    assert restored.interval == "1m"
+
+
+def test_backtest_result_from_mongo_falls_back_to_config_snapshot() -> None:
+    """Pre-denormalization docs lack top-level symbol/interval — fall back to snapshot."""
+    run = BacktestResult.started("0192f000-0000-7000-8000-000000000003", _RUN_CONFIG)
+    doc = run.to_mongo()
+    del doc["symbol"]
+    del doc["interval"]
+    restored = BacktestResult.from_mongo(doc)
+    assert restored.symbol == "BTCUSDT:BINANCE"
+    assert restored.interval == "1m"
+
+
+def test_backtest_result_started_uppercases_symbol() -> None:
+    """Lowercase composite in config → uppercased so the scope filter matches."""
+    run = BacktestResult.started(
+        "0192f000-0000-7000-8000-000000000005",
+        {"strategy_code": "s1", "symbol": "btcusdt:binance", "interval": "1m"},
+    )
+    assert run.symbol == "BTCUSDT:BINANCE"
+
+
+def test_backtest_result_from_mongo_empty_when_snapshot_also_missing() -> None:
+    """Very old docs with neither top-level nor snapshot fields → empty string, no raise."""
+    run = BacktestResult.started("0192f000-0000-7000-8000-000000000004", _RUN_CONFIG)
+    doc = run.to_mongo()
+    del doc["symbol"]
+    del doc["interval"]
+    doc["config_snapshot"] = {"strategy_code": "s1"}
+    restored = BacktestResult.from_mongo(doc)
+    assert restored.symbol == ""
+    assert restored.interval == ""

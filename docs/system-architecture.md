@@ -531,7 +531,9 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 
 1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
 2. The engine runs in a per-run `BacktestSandbox` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
-3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity` and `GET /backtest/{run_id}/trades` serve the result detail.
+3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
+
+**History scope:** `GET /backtest/strategy/{id}` lists a strategy's runs, optionally narrowed by `?symbol=&interval=`. `symbol` is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`) — a bare code never matches. `BacktestResult` denormalizes `symbol`/`interval` top-level (from `config_snapshot`, uppercased) so the scope filter hits an index; pre-denormalization docs fall back to the snapshot in `from_mongo`.
 
 **Run-id invariant:** the route-allocated `run_id` is the run doc `_id` and every `backtest_orders.run_id` / `backtest_trades.run_id`.
 

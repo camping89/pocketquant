@@ -175,6 +175,14 @@ input, select {
   white-space: nowrap;
 }
 
+/* In the backtest form the symbol picker spans the field width like the other inputs */
+.backtest-symbol-field .symbol-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  font-weight: 400;
+}
+
 /* Interval selector */
 .interval-group {
   display: flex;

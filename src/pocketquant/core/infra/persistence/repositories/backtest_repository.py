@@ -29,13 +29,23 @@ class BacktestRepository(BaseRepository):
         return BacktestResult.from_mongo(doc)
 
     async def list_by_strategy_code(
-        self, strategy_code: str, limit: int = 20, include_failed: bool = False
+        self,
+        strategy_code: str,
+        limit: int = 20,
+        include_failed: bool = False,
+        symbol: str | None = None,
+        interval: str | None = None,
     ) -> list[BacktestResult]:
         collection = self._collection()
 
         query: dict[str, Any] = {"strategy_code": strategy_code}
         if not include_failed:
             query["status"] = "finished"
+        # symbol is composite CODE:EXCHANGE — normalize to match stored casing.
+        if symbol:
+            query["symbol"] = symbol.upper()
+        if interval:
+            query["interval"] = interval
 
         cursor = collection.find(query).sort("started_at", -1).limit(limit)
 
@@ -127,6 +137,10 @@ class BacktestRepository(BaseRepository):
         await collection.create_index(
             [("strategy_code", 1), ("started_at", -1)],
             name="ix_backtests_strategy_code_started",
+        )
+        await collection.create_index(
+            [("strategy_code", 1), ("symbol", 1), ("interval", 1), ("started_at", -1)],
+            name="ix_backtests_strategy_symbol_interval_started",
         )
         await collection.create_index(
             [("strategy_code", 1), ("metrics.sharpe_ratio", -1)],

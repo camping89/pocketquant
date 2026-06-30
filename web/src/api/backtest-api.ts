@@ -1,4 +1,4 @@
-import { apiFetch, apiPost } from './api-client'
+import { apiFetch, apiPost, apiPatch } from './api-client'
 
 export interface BacktestPosition {
   direction: 'LONG' | 'SHORT'
@@ -49,8 +49,8 @@ export interface BacktestRunResult {
   positions: BacktestPosition[]
   equity_curve: EquityPoint[]
   config_snapshot?: Record<string, unknown>
+  verdict?: string | null
   error_message?: string | null
-  error_msg?: string | null
   started_at?: string
   completed_at?: string
   parameters?: Record<string, unknown>
@@ -85,6 +85,7 @@ interface BacktestRunDoc {
     symbol?: string
   }>
   config_snapshot?: Record<string, unknown>
+  verdict?: string | null
   error_message?: string | null
   started_at?: string
   completed_at?: string
@@ -158,9 +159,89 @@ export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult
     positions,
     equity_curve: doc.equity_curve ?? [],
     config_snapshot: doc.config_snapshot,
+    verdict: doc.verdict,
     error_message: doc.error_message,
     started_at: doc.started_at,
     completed_at: doc.completed_at,
     parameters: doc.parameters,
   }
+}
+
+// --- History rail -----------------------------------------------------------
+
+export interface BacktestRunRow {
+  id: string
+  strategy_code: string
+  symbol: string
+  interval: string
+  status: BacktestStatus | string
+  metrics: BacktestMetrics | null
+  date_range: { start: string | null; end: string | null }
+  verdict: string | null
+  started_at: string
+  completed_at: string
+}
+
+export interface BacktestRunScope {
+  strategy: string
+  /** Composite CODE:EXCHANGE (e.g. BTCUSDT:BINANCE), or undefined for strategy-wide. */
+  symbol?: string
+  interval?: string
+}
+
+/** History for a strategy, scoped by composite symbol + interval when provided.
+ *  ``symbol`` MUST be composite — a bare code never matches a stored run. */
+export async function listBacktestRuns(scope: BacktestRunScope): Promise<BacktestRunRow[]> {
+  const params: Record<string, string> = { limit: '50' }
+  if (scope.symbol) params.symbol = scope.symbol
+  if (scope.interval) params.interval = scope.interval
+  return apiFetch<BacktestRunRow[]>(`/api/v1/backtest/strategy/${scope.strategy}`, params)
+}
+
+// --- Orders -----------------------------------------------------------------
+
+export interface OrderFill {
+  fill_id: string
+  side: string
+  quantity: number
+  price: number
+  commission: number
+  slippage: number
+  timestamp: string
+}
+
+export interface OrderEvent {
+  timestamp: string
+  from_status: string | null
+  to_status: string
+  reason: string | null
+}
+
+export interface BacktestOrder {
+  order_id: string
+  side: string
+  order_type: string
+  quantity: number
+  price: number | null
+  sl_price: number | null
+  tp_price: number | null
+  status: string
+  submitted_at: string
+  last_updated_at: string
+  resulting_trade_id: string | null
+  fills: OrderFill[]
+  events: OrderEvent[]
+}
+
+export async function fetchBacktestOrders(runId: string): Promise<BacktestOrder[]> {
+  const { orders } = await apiFetch<{ orders: BacktestOrder[] }>(
+    `/api/v1/backtest/${runId}/orders`,
+  )
+  return orders
+}
+
+// --- Verdict ----------------------------------------------------------------
+
+export async function setVerdict(runId: string, verdict: string | null): Promise<void> {
+  await apiPatch(`/api/v1/backtest/${runId}/verdict`, { verdict })
 }

@@ -107,26 +107,52 @@ async def get_backtest_trades(
     return {"run_id": run_id, "trades": trades}
 
 
+@backtest_router.get("/{run_id}/orders")
+async def get_backtest_orders(
+    run_id: str,
+    query_svc: FromDishka[BacktestQueryService],
+) -> dict:
+    """Orders for a run with embedded fills + lifecycle events (DTO key ``order_id``)."""
+    orders = await query_svc.list_orders(run_id)
+    return {"run_id": run_id, "orders": orders}
+
+
 @backtest_router.get("/strategy/{strategy_id}")
 async def list_backtests(
     strategy_id: str,
     query_svc: FromDishka[BacktestQueryService],
     limit: int = 20,
     include_failed: bool = False,
+    symbol: str | None = None,
+    interval: str | None = None,
 ) -> list[dict[str, Any]]:
+    """History for a strategy, optionally scoped to a composite symbol + interval.
+
+    ``symbol`` is composite ``CODE:EXCHANGE`` (e.g. ``BTCUSDT:BINANCE``) — passing
+    a bare code never matches a stored run.
+    """
     results = await query_svc.list_results(
         ListBacktestsQuery(
             strategy_id=strategy_id,
             limit=limit,
             include_failed=include_failed,
+            symbol=symbol,
+            interval=interval,
         )
     )
     return [
         {
             "id": str(r.id),
             "strategy_code": r.strategy_code,
+            "symbol": r.symbol,
+            "interval": r.interval,
             "status": r.status,
             "metrics": r.metrics.to_dict(),
+            "date_range": {
+                "start": r.config_snapshot.get("start_date"),
+                "end": r.config_snapshot.get("end_date"),
+            },
+            "verdict": r.verdict,
             "started_at": r.started_at.isoformat(),
             "completed_at": r.completed_at.isoformat(),
             "parameters": r.parameters,

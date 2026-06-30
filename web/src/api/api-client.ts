@@ -42,6 +42,16 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return res.json()
 }
 
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(new URL(path, window.location.origin), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw await toApiError(res)
+  return res.json()
+}
+
 export async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(path, window.location.origin)
   if (params) {
