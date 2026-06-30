@@ -1,16 +1,14 @@
 # PocketQuant TODO
-
-- read all docs, and clean up
-- read strategy lifecycle and refactor
-- submit binance orders
-
-
-- unsubscribe_order_updates clear tất cả callback → phải đảm bảo thứ tự subscribe collector-trước-bridge và cả 2 active suốt replay (Phase 2 risk).
-- Mark-to-market 1m × 2 năm = ~1M điểm → nguy cơ vượt Mongo 16MB → downsample khi persist (Phase 3 risk).
-
-3 câu hỏi mở (ở phase-04)
-
-1. Prod re-smoke có được duyệt không? (lúc audit bạn chọn "không ghi prod" — verify end-to-end cần ghi 1 doc).
-2. Live OKX fill path có cùng cơ chế callback PaperBroker không? (live chưa chạy → follow-up, không chặn).
-3. Ngưỡng downsample equity_curve khi persist — chốt số cụ thể lúc implement.
-4. 
+- uxui - change to claude AI theme, both dark and light
+- on charts page, remove the dot line for indicators (e.g. EMA)
+- in the strategies page, show the same indicator list as the charts page - reuse the code, do not write duplicated code
+- in backtest page, default start date and end date values are 1 year from now back to the past. Start date and end date should allow minutes as well
+- on the top right, next to the dropdown of timezone, show current clock
+- refactor to use latest next js version due to AI docs and features
+- makesure code for datetime conversion is working (FE use local then convert to
+- UTC on server
+  Trạng thái cuối — 2 plan sẵn sàng                                                                                 
+                                                                                                                    
+  - 260630-0031-backtest-research-workbench/ (4 phase) — qua brainstorm + red-team + validate. Active. Failed: 0, đủ
+  điều kiện implement.                                                                                              
+  - 260630-0031-backtest-mae-mfe-excursion/ (3 phase) — blockedBy workbench, redesign timing broker-path.
