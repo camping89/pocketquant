@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useStrategyList, useBacktestRuns } from '../../hooks/use-backtest-run'
+import { useStrategyList, useBacktestRuns, useAllBacktestRuns } from '../../hooks/use-backtest-run'
 import { SymbolSelector } from '../controls/symbol-selector'
 import { BacktestHistoryTable } from './backtest-history-table'
 
@@ -16,21 +16,21 @@ const inputStyle: CSSProperties = {
   fontSize: 13,
 }
 
-/** History rail: pick a strategy (validation Q5 — empty until then), optionally
- *  narrow by composite symbol + interval, then browse / select runs to compare. */
+/** History rail: defaults to "All" strategies; narrow by strategy / composite
+ *  symbol / interval via the pickers, then browse or select runs to compare. */
 export function RunHistoryRail() {
   const navigate = useNavigate()
   const { data: strategies = [] } = useStrategyList()
 
-  const [strategy, setStrategy] = useState('')
+  const [strategy, setStrategy] = useState('') // '' = All
   const [symbol, setSymbol] = useState('') // composite CODE:EXCHANGE when set
   const [interval, setInterval] = useState('')
   const [selected, setSelected] = useState<string[]>([])
 
-  const scope = strategy
-    ? { strategy, symbol: symbol || undefined, interval: interval || undefined }
-    : null
-  const { data: rows = [], isLoading } = useBacktestRuns(scope)
+  const narrowing = { symbol: symbol || undefined, interval: interval || undefined }
+  const allRuns = useAllBacktestRuns(narrowing, strategy === '')
+  const scopedRuns = useBacktestRuns(strategy ? { strategy, ...narrowing } : null)
+  const { data: rows = [], isLoading } = strategy === '' ? allRuns : scopedRuns
 
   function toggleSelect(runId: string) {
     setSelected((prev) =>
@@ -57,7 +57,7 @@ export function RunHistoryRail() {
         <div>
           <label style={labelStyle}>Strategy</label>
           <select style={inputStyle} value={strategy} onChange={(e) => { setStrategy(e.target.value); setSelected([]) }}>
-            <option value="">Select strategy…</option>
+            <option value="">All strategies</option>
             {strategies.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -73,9 +73,7 @@ export function RunHistoryRail() {
         </div>
       </div>
 
-      {!strategy ? (
-        <div className="empty-state" style={{ padding: 16 }}>Select a strategy to view its run history.</div>
-      ) : isLoading ? (
+      {isLoading ? (
         <div className="empty-state" style={{ padding: 16 }}>Loading runs…</div>
       ) : (
         <BacktestHistoryTable

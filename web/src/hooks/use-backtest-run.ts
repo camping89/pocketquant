@@ -5,6 +5,7 @@ import {
   fetchBacktestRun,
   runBacktest,
   listBacktestRuns,
+  listAllBacktestRuns,
   fetchBacktestOrders,
   setVerdict,
   type RunBacktestBody,
@@ -40,13 +41,23 @@ export function useBacktestRun(runId: string | null) {
   })
 }
 
-/** History runs for a scope. Disabled until a strategy is chosen (validation Q5:
- *  the rail is empty until then). */
+/** History runs for one strategy scope. */
 export function useBacktestRuns(scope: BacktestRunScope | null) {
   return useQuery({
     queryKey: ['backtest-runs', scope],
     queryFn: () => listBacktestRuns(scope!),
     enabled: !!scope?.strategy,
+  })
+}
+
+/** History runs across ALL strategies (the default "All" view), optionally
+ *  narrowed by symbol/interval. Fans out over the strategy registry FE-side —
+ *  there is no list-all endpoint by design. */
+export function useAllBacktestRuns(scope: Omit<BacktestRunScope, 'strategy'>, enabled = true) {
+  return useQuery({
+    queryKey: ['backtest-runs', 'all', scope],
+    queryFn: () => listAllBacktestRuns(scope),
+    enabled,
   })
 }
 

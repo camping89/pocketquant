@@ -57,6 +57,7 @@ export function BacktestHistoryTable({ rows, selected, onToggleSelect, onRowClic
         <tr>
           <th style={{ ...th, textAlign: 'center', cursor: 'default' }}></th>
           <th style={{ ...th, textAlign: 'left' }} onClick={() => sortBy('started_at')}>Started{arrow('started_at')}</th>
+          <th style={{ ...th, textAlign: 'left', cursor: 'default' }}>Strategy</th>
           <th style={{ ...th, textAlign: 'left', cursor: 'default' }}>Symbol</th>
           <th style={th} onClick={() => sortBy('total_return')}>Return{arrow('total_return')}</th>
           <th style={th} onClick={() => sortBy('sharpe_ratio')}>Sharpe{arrow('sharpe_ratio')}</th>
@@ -84,6 +85,7 @@ export function BacktestHistoryTable({ rows, selected, onToggleSelect, onRowClic
               <td style={{ ...td, textAlign: 'left', cursor: 'pointer' }} onClick={() => onRowClick(r.id)}>
                 {r.started_at.replace('T', ' ').slice(0, 16)}
               </td>
+              <td style={{ ...td, textAlign: 'left' }}>{r.strategy_code}</td>
               <td style={{ ...td, textAlign: 'left' }}>{r.symbol} · {r.interval}</td>
               <td style={{ ...td, color: (r.metrics?.total_return ?? 0) >= 0 ? 'var(--up-color)' : 'var(--down-color)' }}>{pct(r.metrics?.total_return)}</td>
               <td style={td}>{r.metrics ? r.metrics.sharpe_ratio.toFixed(2) : '—'}</td>
