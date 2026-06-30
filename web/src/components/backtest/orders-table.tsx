@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { useBacktestOrders } from '../../hooks/use-backtest-run'
 import type { BacktestOrder } from '../../api/backtest-api'
+import { formatQty } from '../../lib/number-format'
 import { OrderDetailDrawer } from './order-detail-drawer'
 
 const th: CSSProperties = {
@@ -45,7 +46,7 @@ export function OrdersTable({ runId, active }: { runId: string; active: boolean 
               <td style={td}>{o.submitted_at.replace('T', ' ').slice(0, 19)}</td>
               <td style={{ ...td, color: o.side === 'BUY' ? 'var(--up-color)' : 'var(--down-color)' }}>{o.side}</td>
               <td style={td}>{o.order_type}</td>
-              <td style={{ ...td, textAlign: 'right' }}>{o.quantity}</td>
+              <td style={{ ...td, textAlign: 'right' }}>{formatQty(o.quantity)}</td>
               <td style={td}>{o.status}</td>
               <td style={{ ...td, textAlign: 'right' }}>{o.fills.length}</td>
             </tr>

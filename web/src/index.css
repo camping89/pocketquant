@@ -1520,6 +1520,98 @@ input, select {
   flex-direction: column;
 }
 
+/* ===== Backtest Workbench (master-detail) ===== */
+
+.backtest-layout {
+  display: none;
+  height: calc(100vh - 41px); /* subtract app-nav height */
+  overflow: hidden;
+}
+
+.backtest-mobile {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 41px);
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .backtest-layout {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  .backtest-mobile {
+    display: none;
+  }
+}
+
+/* Mobile single pane: rail/detail manage their own height inline, so the pane
+ *  itself must scroll (unlike strategies, whose children own their scroll). */
+.backtest-mobile .strategies-mobile__pane {
+  overflow-y: auto;
+}
+
+.backtest-list-pane {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.backtest-detail-pane {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+}
+
+.backtest-run-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--bg-primary);
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.backtest-run-item:hover {
+  background: var(--bg-secondary);
+}
+
+.backtest-run-item--active {
+  border-left-color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.backtest-run-item__line1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.backtest-run-item__line2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.backtest-run-item__verdict {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Status dot pulse animation (used by StatusDot component) */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
