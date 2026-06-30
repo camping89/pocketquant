@@ -198,6 +198,21 @@ export async function listBacktestRuns(scope: BacktestRunScope): Promise<Backtes
   return apiFetch<BacktestRunRow[]>(`/api/v1/backtest/strategy/${scope.strategy}`, params)
 }
 
+/** Runs across ALL strategies, optionally narrowed by symbol/interval. There is
+ *  no list-all endpoint by design (storage stays scoped) — fan out over the
+ *  strategy registry and merge, then sort newest-first. */
+export async function listAllBacktestRuns(
+  scope: Omit<BacktestRunScope, 'strategy'> = {},
+): Promise<BacktestRunRow[]> {
+  const strategies = await fetchStrategies()
+  const perStrategy = await Promise.all(
+    strategies.map((strategy) => listBacktestRuns({ strategy, ...scope })),
+  )
+  return perStrategy
+    .flat()
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+}
+
 // --- Orders -----------------------------------------------------------------
 
 export interface OrderFill {
