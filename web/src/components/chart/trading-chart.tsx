@@ -161,7 +161,7 @@ export function TradingChart({
     const onRangeChange = (logicalRange: { from: number; to: number } | null) => {
       const vr = timeScale.getVisibleRange()
       if (vr) savedRangeRef.current = vr
-      if (logicalRange && logicalRange.from < 10) loadOlderRef.current()
+      if (logicalRange && logicalRange.from < 50) loadOlderRef.current()
     }
     timeScale.subscribeVisibleLogicalRangeChange(onRangeChange)
 

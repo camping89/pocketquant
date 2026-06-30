@@ -10,7 +10,7 @@ import {
 } from '../lib/chart-history'
 import type { ChartData, Interval } from '../types/market-data'
 
-const PAGE_SIZE = 1000
+const PAGE_SIZE = 5000
 
 export interface OhlcvHistory {
   data: ChartData | undefined
