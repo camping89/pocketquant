@@ -38,6 +38,13 @@
     "methods": [
       "GET"
     ],
+    "name": "get_backtest_orders",
+    "path": "/api/v1/backtest/{run_id}/orders"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "get_backtest_trades",
     "path": "/api/v1/backtest/{run_id}/trades"
   },

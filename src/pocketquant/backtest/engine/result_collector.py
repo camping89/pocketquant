@@ -452,6 +452,8 @@ class BacktestResultCollector:
             started_at=started_at,
             completed_at=completed_at,
             status=status,
+            symbol=self._config.symbol.upper(),
+            interval=self._config.interval,
             error_message=error_message,
             parameters=self._config.parameters,
         )

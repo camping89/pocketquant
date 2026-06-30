@@ -31,6 +31,10 @@ class BacktestResult:
     started_at: datetime
     completed_at: datetime
     status: str  # "started", "finished", "failed"
+    # Denormalized from config_snapshot so history can scope by (strategy, symbol,
+    # interval) with an index. symbol is composite CODE:EXCHANGE (e.g. BTCUSDT:BINANCE).
+    symbol: str = ""
+    interval: str = ""
     error_message: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)  # For optimizer
     open_positions: list[OpenLot] = field(default_factory=list)
@@ -55,6 +59,10 @@ class BacktestResult:
             started_at=now,
             completed_at=now,
             status="started",
+            # Composite CODE:EXCHANGE, uppercased so the history scope filter
+            # (which also uppercases) matches without a casing mismatch.
+            symbol=config_snapshot.get("symbol", "").upper(),
+            interval=config_snapshot.get("interval", ""),
             parameters=config_snapshot.get("parameters", {}),
         )
 
@@ -65,6 +73,8 @@ class BacktestResult:
         return {
             "_id": str(self.id),
             "strategy_code": self.strategy_code,
+            "symbol": self.symbol,
+            "interval": self.interval,
             "config_snapshot": self.config_snapshot,
             "metrics": self.metrics.to_mongo(),
             "equity_curve": [p.to_mongo() for p in self.equity_curve],
@@ -80,16 +90,22 @@ class BacktestResult:
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> BacktestResult:
         """Create from MongoDB document. Tolerates pre-migration shape (ignores legacy keys)."""
+        snapshot = data.get("config_snapshot", {})
         return cls(
             id=UUID(data["_id"]),
             strategy_code=data["strategy_code"],
-            config_snapshot=data["config_snapshot"],
+            config_snapshot=snapshot,
             metrics=BacktestMetrics.from_mongo(data["metrics"]),
             equity_curve=[EquityPoint.from_mongo(p) for p in data.get("equity_curve", [])],
             open_positions=[OpenLot.from_mongo(p) for p in data.get("open_positions", [])],
             started_at=data["started_at"],
             completed_at=data["completed_at"],
             status=data["status"],
+            # Pre-denormalization docs lack top-level symbol/interval — fall back
+            # to the config snapshot; empty string if even that is absent. Uppercase
+            # keeps it consistent with the scope filter's normalization.
+            symbol=(data.get("symbol") or snapshot.get("symbol", "")).upper(),
+            interval=data.get("interval") or snapshot.get("interval", ""),
             error_message=data.get("error_message"),
             parameters=data.get("parameters", {}),
             verdict=data.get("verdict"),

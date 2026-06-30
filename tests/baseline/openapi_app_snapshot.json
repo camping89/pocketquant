@@ -618,6 +618,7 @@
     },
     "/api/v1/backtest/strategy/{strategy_id}": {
       "get": {
+        "description": "History for a strategy, optionally scoped to a composite symbol + interval.\n\n``symbol`` is composite ``CODE:EXCHANGE`` (e.g. ``BTCUSDT:BINANCE``) — passing\na bare code never matches a stored run.",
         "operationId": "list_backtests_api_v1_backtest_strategy__strategy_id__get",
         "parameters": [
           {
@@ -647,6 +648,38 @@
               "default": false,
               "title": "Include Failed",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Symbol"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interval",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interval"
             }
           }
         ],
@@ -766,6 +799,51 @@
           }
         },
         "summary": "Get Backtest Equity",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
+    "/api/v1/backtest/{run_id}/orders": {
+      "get": {
+        "description": "Orders for a run with embedded fills + lifecycle events (DTO key ``order_id``).",
+        "operationId": "get_backtest_orders_api_v1_backtest__run_id__orders_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Backtest Orders Api V1 Backtest  Run Id  Orders Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backtest Orders",
         "tags": [
           "backtest"
         ]

@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { useStrategyList } from '../../hooks/use-backtest-run'
 import { useTimezone } from '../../lib/use-timezone'
+import { SymbolSelector } from '../controls/symbol-selector'
 import type { RunBacktestBody } from '../../api/backtest-api'
 
 dayjs.extend(utc) // idempotent — also extended in datetime.ts
@@ -106,16 +107,9 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
         </select>
       </div>
 
-      <div>
+      <div className="backtest-symbol-field">
         <label style={labelStyle}>Symbol</label>
-        <input
-          style={inputStyle}
-          type="text"
-          placeholder="BTCUSDT:BINANCE"
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value)}
-          onBlur={(e) => setSymbol(e.target.value.trim().toUpperCase())}
-        />
+        <SymbolSelector value={symbol} onChange={setSymbol} />
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
