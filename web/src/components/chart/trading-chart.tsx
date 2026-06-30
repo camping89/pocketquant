@@ -7,10 +7,11 @@ import {
   type ISeriesApi,
   type SeriesMarker,
   type Time,
+  type IRange,
   type ISeriesMarkersPluginApi,
 } from 'lightweight-charts'
 import { useChart } from './use-chart'
-import { useOHLCV } from '../../hooks/use-ohlcv'
+import { useOhlcvHistory } from '../../hooks/use-ohlcv-history'
 import { useIndicators } from '../../hooks/use-indicators'
 import {
   addIndicatorSeries,
@@ -52,7 +53,10 @@ export function TradingChart({
   const { mode } = useTimezone()
   const { mode: themeMode } = useTheme()
   const chartRef = useChart(containerRef, undefined, mode, themeMode)
-  const { data, error, isLoading } = useOHLCV(symbol, interval)
+  const { data, error, isLoading, loadOlder, isLoadingOlder, hasMore } = useOhlcvHistory(
+    symbol,
+    interval,
+  )
   const indicatorData = useIndicators(data?.candles, indicators)
 
   // Ref pattern: subscribed crosshair handler reads fresh mode without resubscribing.
@@ -69,6 +73,22 @@ export function TradingChart({
   const indicatorRefs = useRef<IndicatorSeriesRefs | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const boxPrimitiveRef = useRef<PositionBoxPrimitive | null>(null)
+
+  // Pagination view-preservation: fit the 80-bar window only on the first data
+  // load per series; subsequent updates (older-page prepend, realtime rollover)
+  // restore the saved time range so the viewport doesn't yank back to the latest
+  // bar. Time-based (not index-based) range survives bars prepended to the left.
+  const didInitialFitRef = useRef(false)
+  const savedRangeRef = useRef<IRange<Time> | null>(null)
+  const loadOlderRef = useRef(loadOlder)
+  useEffect(() => { loadOlderRef.current = loadOlder }, [loadOlder])
+
+  // Reset the initial-fit latch when the series identity changes so the new
+  // symbol/interval gets its own 80-bar fit.
+  useEffect(() => {
+    didInitialFitRef.current = false
+    savedRangeRef.current = null
+  }, [symbol, interval])
 
   // Notify parent when chart is ready (after useChart effect has run)
   useEffect(() => {
@@ -115,19 +135,35 @@ export function TradingChart({
     volumeSeries.setData(data.volumes)
     volumeRef.current = volumeSeries
 
-    // Show ~80 bars at a usable zoom with the latest bar centered — leaves
-    // empty space on the right so live candles have room to grow into the
-    // viewport (standard trading UX). Users can scroll left for older data.
-    const VISIBLE_BARS = 80
-    const HALF = Math.floor(VISIBLE_BARS / 2)
+    // First load: show ~80 bars with the latest bar centered, leaving empty
+    // space on the right so live candles grow into the viewport (standard
+    // trading UX). Re-running setData (older-page prepend, realtime rollover)
+    // must NOT re-fit — restore the saved time range so the user's scroll
+    // position holds. Time-based range survives left-side prepends.
     const total = data.candles.length
-    if (total > 0) {
+    if (!didInitialFitRef.current && total > 0) {
+      const VISIBLE_BARS = 80
+      const HALF = Math.floor(VISIBLE_BARS / 2)
       const lastIdx = total - 1
       chart.timeScale().setVisibleLogicalRange({
         from: lastIdx - HALF,
         to: lastIdx + HALF,
       })
+      didInitialFitRef.current = true
+    } else if (savedRangeRef.current) {
+      chart.timeScale().setVisibleRange(savedRangeRef.current)
     }
+
+    // Scroll-left pagination: when the left edge nears the oldest loaded bar,
+    // fetch an older page. The handler also parks the current range so the
+    // [data] effect can restore it after the prepend re-renders.
+    const timeScale = chart.timeScale()
+    const onRangeChange = (logicalRange: { from: number; to: number } | null) => {
+      const vr = timeScale.getVisibleRange()
+      if (vr) savedRangeRef.current = vr
+      if (logicalRange && logicalRange.from < 10) loadOlderRef.current()
+    }
+    timeScale.subscribeVisibleLogicalRangeChange(onRangeChange)
 
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.seriesData) {
@@ -149,6 +185,7 @@ export function TradingChart({
     })
 
     return () => {
+      timeScale.unsubscribeVisibleLogicalRangeChange(onRangeChange)
       if (chartRef.current) {
         if (candleRef.current) {
           chart.removeSeries(candleRef.current)
@@ -346,6 +383,8 @@ export function TradingChart({
         </div>
       )}
       {isLoading && <div className="chart-overlay">Loading...</div>}
+      {isLoadingOlder && <div className="chart-history-loading">Loading history…</div>}
+      {!hasMore && <div className="chart-history-end">Start of history</div>}
       {error && <div className="chart-overlay chart-error">Failed to load data</div>}
     </div>
   )
