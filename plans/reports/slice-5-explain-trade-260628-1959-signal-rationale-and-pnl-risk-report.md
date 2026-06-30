@@ -6,7 +6,7 @@
 |---|---|
 | Priority | 5/5 (cuối, đắt & rủi ro nhất — đụng engine cho entry rationale) |
 | Surface | FE + BE |
-| Depends on | Slice 1 (backtest detail/positions), Slice 3 (forward trades), Slice 4 (order link) |
+| Depends on | Slice 3 (backtest detail/positions), Slice 1 (forward trades), Slice 2 (order link) |
 | Unblocks | none (capstone) |
 | Date | 2026-06-28 |
 
@@ -249,16 +249,16 @@ FE type `TradeExplain` mirror; `entry_reason` optional → drawer fallback "rati
 ## 10. Dependencies & Open Questions
 
 **Cross-ref slices**
-- Slice 1 (`positions-tab.tsx`, `backtest-api.ts` `BacktestPosition`): drawer dùng lại shape + `onPositionClick`.
-- Slice 3 (forward, `recent-trades-table.tsx`, `strategy_query_service.get_trades` l.131): forward explain cần `trade_id` ổn định → đã có `p.id`.
-- Slice 4 (order link): `Trade.entry_order_id/exit_order_id` + `Order.resulting_trade_id` (`result_collector.py:287`). Slice 5 exit_reason ĐỌC chính `Order.events` mà Slice 4 surface → phụ thuộc Slice 4 đã expose order/events.
+- Slice 3 (`positions-tab.tsx`, `backtest-api.ts` `BacktestPosition`): drawer dùng lại shape + `onPositionClick`.
+- Slice 1 (forward, `recent-trades-table.tsx`, `strategy_query_service.get_trades` l.131): forward explain cần `trade_id` ổn định → đã có `p.id`.
+- Slice 2 (order link): `Trade.entry_order_id/exit_order_id` + `Order.resulting_trade_id` (`result_collector.py:287`). Slice 5 exit_reason ĐỌC chính `Order.events` mà Slice 2 surface → phụ thuộc Slice 2 đã expose order/events.
 
 **Open Questions**
 1. **Làm 5B trong scope này hay defer?** RECOMMEND ship 5A (gồm exit_reason) + 5B-lite (c, propagate `entry_logic`); structured 5B(a) tách plan riêng do rủi ro `OrderAggregate.create`.
 2. a/b/c: nghiêng (a) dài hạn + (c) MVP — nhưng đây là quyết định người dùng, **chưa được người dùng xác nhận**.
 3. Exit "technical vs cap" (hitnrun2): có cần lưu SL/TP component lúc open để giải thích level nào thắng, hay chấp nhận hiện thô `exit_price` vs `sl_price`/`tp_price`?
 4. Forward "% account risk": equity-at-entry lấy đâu? Backtest có `initial_capital`; forward `PaperBroker.get_balance` là live, không snapshot tại open — cần xác nhận.
-5. Forward exit_reason persistence: backtest có `Order.events` lưu DB; forward path có lưu order events vào DB không (hay chỉ in-memory broker)? Nếu không, forward exit_reason cần nguồn khác — cần xác nhận với Slice 3/4.
+5. Forward exit_reason persistence: backtest có `Order.events` lưu DB; forward path có lưu order events vào DB không (hay chỉ in-memory broker)? Nếu không, forward exit_reason cần nguồn khác — cần xác nhận với Slice 1/2.
 
 ---
 

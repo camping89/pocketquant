@@ -1,12 +1,12 @@
-# Slice 4 — Orders per Subscription — Brainstorm Report
+# Slice 2 — Orders per Subscription — Brainstorm Report
 
 ## Metadata
 
 | | |
 |---|---|
-| Priority | 4/5 |
+| Priority | 2/5 |
 | Scope | FE + BE (slice BE nhỏ nhất trong 5 slices) |
-| Depends on | Slice 3 (Forward tab shell — open-positions + equity/KPI đã dựng) |
+| Depends on | Slice 1 (Forward tab shell — open-positions + equity/KPI đã dựng) |
 | Unblocks | Slice 5 (explain trade — link order → trade khi hover) |
 | Date | 2026-06-28 |
 
@@ -16,7 +16,7 @@
 
 ## 1. Problem Statement
 
-Forward tab (shell do Slice 3 dựng) hiện chỉ có open-positions + equity/KPI. Người dùng chọn 1 subscription `(strategy_code, symbol, interval)` nhưng KHÔNG thấy được **order book** của nó — không biết lệnh nào pending/submitted/filled/cancelled, type gì (market/limit/SL/TP), price/qty/filled bao nhiêu, đặt lúc nào.
+Forward tab (shell do Slice 1 dựng) hiện chỉ có open-positions + equity/KPI. Người dùng chọn 1 subscription `(strategy_code, symbol, interval)` nhưng KHÔNG thấy được **order book** của nó — không biết lệnh nào pending/submitted/filled/cancelled, type gì (market/limit/SL/TP), price/qty/filled bao nhiêu, đặt lúc nào.
 
 Order book là mảnh dữ liệu còn thiếu giữa "positions" (kết quả) và "trades" (đã đóng). Nó cho thấy **ý định thực thi** (order) tách khỏi **kết quả thực thi** (fill → position). Slice này thêm Orders panel vào Forward tab, scoped theo subscription đang chọn, đọc từ orders **đã persist** (sống sót qua restart), đúng pattern command/query service hiện hữu.
 
@@ -67,7 +67,7 @@ Order book là mảnh dữ liệu còn thiếu giữa "positions" (kết quả) 
   │ GET /trading/orders                          ▼                        │
   │ (KHÔNG sub-scope, KHÔNG bền)         GET /subscriptions/{id}/orders    │
   │  DTO 10 field, thiếu SL/TP/ts          DTO đầy đủ từ OrderAggregate   │
-  │        ✗ loại                          ✓ Slice 4 dùng cái này         │
+  │        ✗ loại                          ✓ Slice 2 dùng cái này         │
   └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -80,7 +80,7 @@ Order book là mảnh dữ liệu còn thiếu giữa "positions" (kết quả) 
 - **Scope boundary IN**: 1 endpoint persisted sub-scoped, 1 method trong `StrategyQueryService`, 1 DTO mapping từ `OrderAggregate`, FE api client + hook + Orders table cắm vào Forward shell.
 - **Scope boundary OUT**: KHÔNG sửa `/trading/orders` in-RAM (giữ nguyên), KHÔNG ghi/cancel order từ UI (read-only), KHÔNG hover-link order↔trade (để Slice 5), KHÔNG WebSocket realtime (poll `refetchInterval` như positions/trades).
 - **Constraints**: import-linter 7 contracts phải pass (route ở app, query service ở engine import repo từ core); PK uuid7 (id order đã là uuid7, chỉ serialize `str(id)`); single uvicorn worker (read từ Mongo, không in-RAM singleton nên an toàn); không trộn tiếng Việt-Anh trong code/comment.
-- **Touchpoints**: BE `strategy_query_service.py` + `strategy.py` (route); FE `strategy-api.ts` (hoặc file mới `orders-api.ts`) + hook mới + table mới + Forward shell (Slice 3).
+- **Touchpoints**: BE `strategy_query_service.py` + `strategy.py` (route); FE `strategy-api.ts` (hoặc file mới `orders-api.ts`) + hook mới + table mới + Forward shell (Slice 1).
 
 ---
 
@@ -128,7 +128,7 @@ Order book là mảnh dữ liệu còn thiếu giữa "positions" (kết quả) 
 
 ### Order ↔ position/trade linking (note, không bắt buộc slice này)
 
-`OrderAggregate` KHÔNG có `position_id` field (verified `entities.py:33-48`) — link order→trade hiện chỉ gián tiếp qua `subscription_id` + `symbol` + timeline. Slice 5 (explain) sẽ cần thiết kế cách correlate (vd theo thời gian fill vs entry/exit của closed position). Slice 4 chỉ trả flat order list; FE table giữ `id` để Slice 5 hook hover-highlight sau. Không chặn slice này.
+`OrderAggregate` KHÔNG có `position_id` field (verified `entities.py:33-48`) — link order→trade hiện chỉ gián tiếp qua `subscription_id` + `symbol` + timeline. Slice 5 (explain) sẽ cần thiết kế cách correlate (vd theo thời gian fill vs entry/exit của closed position). Slice 2 chỉ trả flat order list; FE table giữ `id` để Slice 5 hook hover-highlight sau. Không chặn slice này.
 
 ---
 
@@ -151,7 +151,7 @@ Order book là mảnh dữ liệu còn thiếu giữa "positions" (kết quả) 
 1. API client: thêm `getSubscriptionOrders(subId, limit?)` vào `strategy-api.ts`, interface `SubscriptionOrder`. Dùng `apiFetch` từ `api-client.ts` (lưu ý: `apiFetch`/`apiPost` giờ throw `ApiError` có `status`+`code`, `api-client.ts:35-55`).
 2. Hook `use-subscription-orders.ts`: copy khuôn `use-strategy-trades.ts` — `useQuery`, `queryKey: ['subscription-orders', subId]`, `enabled: !!subId`, `refetchInterval: 15_000`, `staleTime: 10_000`.
 3. Component `orders-table.tsx`: khuôn `recent-trades-table.tsx` — `thStyle`/`tdStyle` (`:28-48`), `useFmt()` (`:51`), empty-state `<div className="empty-state">…</div>` (`:60-63`); cột Status / Type / Side / Price / Qty / Filled / Time; badge status (active vs terminal màu khác).
-4. Cắm vào Forward shell (Slice 3): **lưu ý drift** — `DashboardColumn` hiện tại (`dashboard-column.tsx:17-58`) đã bỏ tab switcher, chỉ còn `PnlBadge` + `RecentTradesTable` phẳng. Slice 3 dựng lại Forward shell với tab/section; Slice 4 thêm Orders như 1 tab/panel vào shell đó. Nếu Slice 3 chưa cung cấp tab container, FE chờ shell (BE ship trước).
+4. Cắm vào Forward shell (Slice 1): **lưu ý drift** — `DashboardColumn` hiện tại (`dashboard-column.tsx:17-58`) đã bỏ tab switcher, chỉ còn `PnlBadge` + `RecentTradesTable` phẳng. Slice 1 dựng lại Forward shell với tab/section; Slice 2 thêm Orders như 1 tab/panel vào shell đó. Nếu Slice 1 chưa cung cấp tab container, FE chờ shell (BE ship trước).
 
 ### 6.3 API Contract — order DTO shape
 
@@ -190,7 +190,7 @@ FE interface tương ứng (`status`/`side`/`order_type` literal unions). Map `.
 2. **BE**: thêm route `GET /subscriptions/{sub_id}/orders` vào `strategy.py`. Smoke với 1 sub đã chạy live (hoặc seed orders) → verify shape + empty list khi chưa có.
 3. **FE**: api client `getSubscriptionOrders` + interface `SubscriptionOrder`.
 4. **FE**: hook `use-subscription-orders.ts`.
-5. **FE**: `orders-table.tsx` + cắm tab/panel "Orders" vào Forward shell (Slice 3).
+5. **FE**: `orders-table.tsx` + cắm tab/panel "Orders" vào Forward shell (Slice 1).
 6. **Verify**: import-linter pass; `cd web && npm run lint && npm run build`.
 
 (Slice nhỏ → 1–2 task BE + 3 task FE, ship được từng bước; BE ship trước, FE consume sau.)
@@ -205,7 +205,7 @@ FE interface tương ứng (`status`/`side`/`order_type` literal unions). Map `.
 | `OrderStatus` 7 trạng thái — FE map thiếu (vd `expired`, `rejected`) | DTO trả raw `.value`; FE dùng literal union đủ 7 + badge mặc định cho status lạ. Group màu: active (`submitted`/`partially_filled`) vs terminal (`filled`/`cancelled`/`rejected`/`expired`) vs `pending`. |
 | Empty state khi sub chưa chạy live (orders chỉ sinh từ reconcile loop + broker) | Endpoint trả `[]` (không 404); FE empty-state "No orders yet." Không lỗi. |
 | `find_by_subscription` không đảm bảo sort order (cursor `.limit` không order — `order_repository.py:28`) | Service sort `created_at` desc (newest-first) trước khi trả, hoặc note FE sort; limit mặc định 200 đủ cho UI panel. |
-| Order không có `position_id` (verified) → Slice 5 link khó | Note ở §5; Slice 4 không phụ thuộc. Giữ `id` + `symbol` + timestamps trong DTO để Slice 5 correlate. |
+| Order không có `position_id` (verified) → Slice 5 link khó | Note ở §5; Slice 2 không phụ thuộc. Giữ `id` + `symbol` + timestamps trong DTO để Slice 5 correlate. |
 | Backtest cũng sinh orders (`BacktestOrderRepository` riêng — `persistence.py:66`) lẫn vào? | KHÔNG: forward orders ở collection `orders` (COLLECTION_ORDERS), backtest orders ở repo/collection tách biệt. `find_by_subscription` chỉ chạm orders forward. |
 | FE `apiFetch` đổi error type (`ApiError` thay `Error`, `api-client.ts:35-55`) | Hook orders dùng `fetch` trực tiếp như `use-strategy-trades.ts` HOẶC `apiFetch` — nếu dùng `apiFetch`, catch `ApiError` cho empty-state vs lỗi thật. |
 
@@ -223,7 +223,7 @@ FE interface tương ứng (`status`/`side`/`order_type` literal unions). Map `.
 ## 10. Dependencies & Open Questions
 
 **Dependencies:**
-- **Slice 3** (`slice-3-*-forward-shell-report.md` / Forward tab shell): cung cấp tab container + open-positions + equity/KPI. Slice 4 chèn Orders như 1 tab/panel mới vào shell này. **Drift cảnh báo**: `DashboardColumn` AS-IS đã bị trim còn `PnlBadge` + `RecentTradesTable` (`dashboard-column.tsx:17-58`), backtest dời sang page `/backtest`. Slice 3 phải dựng lại tab container; nếu chưa có, BE ship trước, FE chờ shell.
+- **Slice 1** (`slice-1-*-forward-shell-report.md` / Forward tab shell): cung cấp tab container + open-positions + equity/KPI. Slice 2 chèn Orders như 1 tab/panel mới vào shell này. **Drift cảnh báo**: `DashboardColumn` AS-IS đã bị trim còn `PnlBadge` + `RecentTradesTable` (`dashboard-column.tsx:17-58`), backtest dời sang page `/backtest`. Slice 1 phải dựng lại tab container; nếu chưa có, BE ship trước, FE chờ shell.
 
 **Unblocks:**
 - **Slice 5** (`slice-5-*-explain-trade-report.md` / explain trade): dùng order list (id, symbol, timestamps) để hover-highlight order liên quan 1 trade. Slice 5 sẽ quyết định cách correlate order↔position vì `OrderAggregate` thiếu `position_id` (verified).
@@ -231,7 +231,7 @@ FE interface tương ứng (`status`/`side`/`order_type` literal unions). Map `.
 **Open Questions:**
 1. Order ↔ position correlation: thêm `position_id` vào `OrderAggregate` (cần migration + sửa nơi tạo order) hay correlate runtime theo time/symbol? — đẩy sang Slice 5, KHÔNG quyết ở đây.
 2. Sort + limit: newest-first 200 có đủ cho panel, hay cần phân trang? (giả định panel forward đủ với 200, như `.../trades` cap 500).
-3. Forward shell (Slice 3) đặt Orders là tab riêng hay sub-section trong 1 tab? — phụ thuộc layout cuối của Slice 3 (đang phải dựng lại do `DashboardColumn` đã trim).
+3. Forward shell (Slice 1) đặt Orders là tab riêng hay sub-section trong 1 tab? — phụ thuộc layout cuối của Slice 1 (đang phải dựng lại do `DashboardColumn` đã trim).
 4. Có hiển thị order `expired`/`rejected`/`cancelled` mặc định hay filter chỉ active+filled? (đề xuất: hiện hết, badge phân biệt — order book đầy đủ giá trị hơn cho debug).
 
 ---
@@ -248,4 +248,4 @@ Changes:
 - FE `strategy-api.ts`: refactor — thêm `desired_state`/`actual_state`, bỏ `backtest`/`SubscriptionBacktest`/`getSubscriptionBacktest`/`runAllBacktests`.
 - FE `api-client.ts`: `apiFetch`/`apiPost` giờ throw `ApiError`(status+code) (`:35-55`) thay `Error` — thêm risk row §8.
 - Verified KHÔNG đổi: `OrderRepository.find_by_subscription :24-29`, index `:40`, `OrderAggregate` fields `:33-48` (CONFIRMED không có `position_id`), enums, import-linter contracts `:78-136`.
-Concerns: Slice 3 dependency rủi ro hơn dự kiến — `DashboardColumn` đã bị trim còn flat layout (không tab), nên Slice 3 phải dựng lại tab container trước khi Slice 4 FE cắm Orders panel; BE Slice 4 vẫn ship độc lập được. `OrderAggregate` thiếu `position_id` → Slice 5 link order↔trade cần thiết kế correlation riêng.
+Concerns: Slice 1 dependency rủi ro hơn dự kiến — `DashboardColumn` đã bị trim còn flat layout (không tab), nên Slice 1 phải dựng lại tab container trước khi Slice 2 FE cắm Orders panel; BE Slice 2 vẫn ship độc lập được. `OrderAggregate` thiếu `position_id` → Slice 5 link order↔trade cần thiết kế correlation riêng.

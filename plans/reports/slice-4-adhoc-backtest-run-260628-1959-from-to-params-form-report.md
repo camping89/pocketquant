@@ -1,4 +1,4 @@
-# Slice 2 — Ad-hoc Backtest Run — Brainstorm Report
+# Slice 4 — Ad-hoc Backtest Run — Brainstorm Report
 
 > **Re-scout 2026-06-29**: codebase đã đổi căn bản kể từ bản report đầu. Toàn bộ citations đã được verify lại bằng Read/Grep. Các thay đổi lớn (architecture, premise) được note tại §0 và rải trong từng section.
 
@@ -6,9 +6,9 @@
 
 | Field | Value |
 |---|---|
-| Priority | 2/5 |
+| Priority | 4/5 |
 | Scope | FE + BE |
-| Depends on | **Slice 1** (premise: history store + Backtest tab shell + deep-link) — **xem §0: premise này KHÔNG còn khớp code AS-IS** |
+| Depends on | **Slice 3** (premise: history store + Backtest tab shell + deep-link) — **xem §0: premise này KHÔNG còn khớp code AS-IS** |
 | Unblocks | Hoàn thiện trải nghiệm ad-hoc backtest |
 | Date | 2026-06-29 |
 | Constraints | import-linter (`fastapi` only in `app`; `core ◁ engine ◁ backtest ◁ app`), PK uuid7 only, single uvicorn worker |
@@ -26,7 +26,7 @@
 | C5 | FE "chưa có form ad-hoc run nào" | FE **đã có**: `backtest-form.tsx`, `use-backtest-run.ts` (`useRunBacktest`+`useBacktestRun`), `backtest-result-view.tsx`, route `/backtest`. runBacktest + poll đã hoạt động |
 | C6 | Status `pending/running/done/failed` | Status `started / finished / failed` (`entities.py:33`, FE `BacktestStatus` `backtest-api.ts:40`) |
 
-⇒ **Slice 2 phần lớn đã được implement** dưới dạng standalone page. Gap còn lại nhỏ hơn nhiều, và **mâu thuẫn premise** (decoupled vs "vào history của sub") là quyết định cần chốt lại — xem §10.
+⇒ **Slice 4 phần lớn đã được implement** dưới dạng standalone page. Gap còn lại nhỏ hơn nhiều, và **mâu thuẫn premise** (decoupled vs "vào history của sub") là quyết định cần chốt lại — xem §10.
 
 ---
 
@@ -101,7 +101,7 @@
 ### 2.6 Frontend — KHÔNG có backtest history table
 
 - Mỗi lần chỉ giữ 1 `activeRunId` (`backtest.tsx:14`). Không list run cũ.
-- `web/src/types/job-history.ts` là **data-sync scheduler job history** (`JobRun`/`JobRunDetail`/`JobStats`), KHÔNG phải backtest run history — không liên quan Slice 1 premise.
+- `web/src/types/job-history.ts` là **data-sync scheduler job history** (`JobRun`/`JobRunDetail`/`JobStats`), KHÔNG phải backtest run history — không liên quan Slice 3 premise.
 - `useSubscriptionBacktest`/`useRunAllBacktests` đã **bị gỡ** khỏi `use-subscriptions.ts` (verified: chỉ còn `useSubscriptions`/`useAddSymbol`/`useRemoveSymbol`/`useDeleteStrategy`).
 
 ### 2.7 Diagram — luồng run→task→poll (AS-IS, no queue)
@@ -136,7 +136,7 @@ FE /backtest page         BE app (single uvicorn)          asyncio task (in-proc
 | R5 | Disable submit khi data chưa sync đủ (dùng `/sync-status`) | **Chưa** (hook có sẵn, form chưa wire) |
 | R6 | Client validate start≤end, capital≥100, bps≥0 | Một phần: start≤end + JSON parse; thiếu capital/bps (chưa expose field) |
 | R7 | Hiển thị progress khi `started` | **Đạt** (`backtest.tsx:49-54`) |
-| **Scope boundary** | KHÔNG làm: live equity/KPI (S3), orders (S4), explain trade (S5), grid optimization (đã gỡ khỏi BE — không có route optimize nữa) |
+| **Scope boundary** | KHÔNG làm: live equity/KPI (S1), orders (S2), explain trade (S5), grid optimization (đã gỡ khỏi BE — không có route optimize nữa) |
 | **Constraint** | Giữ import-linter (run logic ở `backtest`, route ở `app`), uuid7 (`generate_id_str`), single worker (task in-process, không thêm process) |
 | **Touchpoints** | BE (optional): param-schema endpoint. FE: `backtest-form.tsx` (presets/capital/bps/sync gate/schema), `backtest.tsx` (history list), (nếu re-link sub) BE `RunBacktestCommand`+repo |
 
@@ -148,7 +148,7 @@ FE /backtest page         BE app (single uvicorn)          asyncio task (in-proc
 
 | Approach | Pros | Cons |
 |---|---|---|
-| **A. Giữ decoupled (AS-IS)** — backtest là page riêng, không gắn sub_id | Khớp hướng refactor đang có; zero BE đổi; KISS | Trader không xem được "lịch sử backtest của sub đang chọn" như premise Slice 1 |
+| **A. Giữ decoupled (AS-IS)** — backtest là page riêng, không gắn sub_id | Khớp hướng refactor đang có; zero BE đổi; KISS | Trader không xem được "lịch sử backtest của sub đang chọn" như premise Slice 3 |
 | B. Re-link: thêm `sub_id` optional vào `RunBacktestCommand` + `BacktestResult` + `list_by_sub` query | Đúng premise gốc | Đảo ngược refactor vừa làm; phải dựng lại endpoint/store đã gỡ; rủi ro cao, cần user chốt |
 | C. FE-only link: list run theo `strategy_code` (đã có `GET /backtest/strategy/{id}`) + filter symbol/interval client-side để xấp xỉ "của sub" | Không đụng BE schema; tái dùng route sẵn có | Lọc client thô; nhiều sub cùng strategy_code+symbol+interval sẽ lẫn |
 
@@ -225,7 +225,7 @@ FE /backtest page         BE app (single uvicorn)          asyncio task (in-proc
 | Data chưa sync đủ → run rỗng/lỗi warmup (hitnrun2 cần `sl_lookback_bars`=480 bars, `hitnrun2.py:34,90` context) | Gate submit qua `useSyncStatus` `bar_count`; "all" preset clamp theo `last_bar_at` |
 | Param JSON sai key/range (vd `direction` phải long\|short\|both, `hitnrun2.py:53`) | (a) emit min/max/enum cho client validate; BE engine return `failed` (không raise, `backtest_execution_service.py:35-42`) → FE show `error_message` |
 | FE `BacktestRunResult.error_msg` field thừa | `error_msg` không tồn tại trong BE doc (`to_mongo` chỉ có `error_message`); FE fallback `error_message ?? error_msg` (`backtest.tsx:19`) — vô hại, có thể dọn |
-| Concurrent runs starve live Mongo pool (no cap, `backtest.py:44-47` ghi rõ accepted) | Trade-off đã chấp nhận; không guard ở Slice 2 |
+| Concurrent runs starve live Mongo pool (no cap, `backtest.py:44-47` ghi rõ accepted) | Trade-off đã chấp nhận; không guard ở Slice 4 |
 | Premise mismatch (decoupled vs sub-history) gây hiểu nhầm scope | Chốt OQ-1 trước khi làm bất kỳ BE re-link |
 
 ---
@@ -240,7 +240,7 @@ FE /backtest page         BE app (single uvicorn)          asyncio task (in-proc
 
 ## 10. Dependencies & Open Questions
 
-**Cross-ref**: Slice 1 report (history store + Backtest tab shell + deep-link) — `slice-1-*-report.md` cùng `plans/reports/`. **Lưu ý premise Slice 1 (sub → 2 tab Backtest|Forward) không còn khớp code AS-IS** (backtest đã tách page riêng) — Slice 1 cần re-scout tương tự.
+**Cross-ref**: Slice 3 report (history store + Backtest tab shell + deep-link) — `slice-3-*-report.md` cùng `plans/reports/`. **Lưu ý premise Slice 3 (sub → 2 tab Backtest|Forward) không còn khớp code AS-IS** (backtest đã tách page riêng) — Slice 3 cần re-scout tương tự.
 
 **Quyết định cần chốt:**
 
@@ -252,10 +252,10 @@ FE /backtest page         BE app (single uvicorn)          asyncio task (in-proc
 ---
 
 Status: DONE_WITH_CONCERNS
-Summary: Re-scout phát hiện codebase đã đổi căn bản — backtest đã decoupled khỏi subscription, bỏ queue/worker (dùng asyncio.create_task in-process), và FE đã implement phần lớn Slice 2 (form+poll+result ở route /backtest). Report viết lại toàn bộ theo AS-IS; gap còn lại: presets, capital/bps inputs, sync gate, dynamic param schema, history list.
+Summary: Re-scout phát hiện codebase đã đổi căn bản — backtest đã decoupled khỏi subscription, bỏ queue/worker (dùng asyncio.create_task in-process), và FE đã implement phần lớn Slice 4 (form+poll+result ở route /backtest). Report viết lại toàn bộ theo AS-IS; gap còn lại: presets, capital/bps inputs, sync gate, dynamic param schema, history list.
 Changes:
 - Citations sửa: POST /backtest/run giờ spawn asyncio task (backtest.py:35-54, KHÔNG còn enqueue); poll = GET /backtest/{run_id} (KHÔNG còn /backtest/requests/{id}); RunBacktestCommand KHÔNG có sub_id (backtest_command_service.py:21-35, run() trả tuple, save started doc); status started/finished/failed (entities.py:33).
 - File mới phát hiện: backtest_execution_service.py, web/src/routes/backtest.tsx, web/src/components/backtest/backtest-form.tsx + backtest-result-view.tsx, web/src/hooks/use-backtest-run.ts, web/src/hooks/use-sync-status.ts.
 - File đã GỠ (sửa citation cũ): backtest_request_worker.py, BacktestRequest domain (request.py), run_subscription trong dispatch, GET /subscriptions/{id}/backtest, getSubscriptionBacktest/runAllBacktests/useSubscriptionBacktest/useRunAllBacktests (FE), RunOptimizationCommand/RunAllBacktestsCommand.
 - Premise mismatch ghi rõ tại §0 (C1: backtest decoupled khỏi sub) và OQ-1.
-Concerns: Premise gốc (run gắn vào subscription, vào history của sub) MÂU THUẪN với code AS-IS (đã decoupled). OQ-1 là user-decision blocking — không tự ý re-link. Slice 1 premise cũng cần re-scout vì cùng giả định sub→2-tab không còn khớp.
+Concerns: Premise gốc (run gắn vào subscription, vào history của sub) MÂU THUẪN với code AS-IS (đã decoupled). OQ-1 là user-decision blocking — không tự ý re-link. Slice 3 premise cũng cần re-scout vì cùng giả định sub→2-tab không còn khớp.

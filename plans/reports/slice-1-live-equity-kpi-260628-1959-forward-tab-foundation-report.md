@@ -1,13 +1,13 @@
-# Slice 3 — Live Equity + KPI + Forward Tab Foundation — Brainstorm Report
+# Slice 1 — Live Equity + KPI + Forward Tab Foundation — Brainstorm Report
 
 ## Metadata
 
-- **Priority:** 3/5 · **Stack:** FE + (optional minimal) BE
-- **Depends on:** Slice 1 (deep-link 2-tab `Backtest|Forward` shell — *chưa tồn tại trong code hiện tại*, xem §10)
-- **Unblocks:** Slice 4 (orders panel cắm vào Forward shell), Slice 5 (explain trade dùng forward trades)
+- **Priority:** 1/5 · **Stack:** FE + (optional minimal) BE
+- **Depends on:** none — slice này tự dựng Forward tab shell (backtest đã decoupled, không còn 2-tab `Backtest|Forward` chung; xem §10)
+- **Unblocks:** Slice 2 (orders panel cắm vào Forward shell), Slice 5 (explain trade dùng forward trades)
 - **Date:** 2026-06-28
 
-> **Re-scout note (verified AS-IS):** codebase đã đổi nền tảng so với draft đầu — **backtest đã decoupled khỏi subscription**, dời sang trang riêng `/backtest` (`web/src/routes/backtest.tsx`). Endpoint `GET /subscriptions/{id}/backtest` và interface FE `SubscriptionBacktest` **đã bị xóa**. `DashboardColumn` đã rewrite thành "forward-testing only". Điều này **củng cố** premise Slice 3 (forward cần equity+KPI riêng, không còn "mượn" từ backtest) và làm **B1 hợp lý hơn**. Mọi citation dưới đây đã re-verify.
+> **Re-scout note (verified AS-IS):** codebase đã đổi nền tảng so với draft đầu — **backtest đã decoupled khỏi subscription**, dời sang trang riêng `/backtest` (`web/src/routes/backtest.tsx`). Endpoint `GET /subscriptions/{id}/backtest` và interface FE `SubscriptionBacktest` **đã bị xóa**. `DashboardColumn` đã rewrite thành "forward-testing only". Điều này **củng cố** premise Slice 1 (forward cần equity+KPI riêng, không còn "mượn" từ backtest) và làm **B1 hợp lý hơn**. Mọi citation dưới đây đã re-verify.
 
 ---
 
@@ -16,7 +16,7 @@
 - 1 Subscription `(strategy_code, symbol, interval)` phục vụ cả **backtest** lẫn **forward** (live từ `start`: reconcile loop + PaperBroker/OKXBroker sinh positions/orders/trades thật).
 - Backtest giờ là **ad-hoc run trên trang `/backtest`** (`routes/backtest.tsx`), **không** gắn với subscription. Subscription detail giờ thuần **forward**.
 - Forward view (`DashboardColumn`, `web/src/components/strategies/dashboard-column.tsx`) hiện **chỉ có** `PnlBadge` (unrealized) + `RecentTradesTable` (live closed trades). **Thiếu**: live equity curve, KPI strip, open-positions panel đầy đủ (side/entry/qty/leverage/liq_price/unrealized/SL/TP).
-- Slice này dựng **Forward tab shell** (S4/S5 cắm vào sau) + 3 panel: open positions, live equity, KPI strip.
+- Slice này dựng **Forward tab shell** (S2/S5 cắm vào sau) + 3 panel: open positions, live equity, KPI strip.
 
 ---
 
@@ -48,7 +48,7 @@
 - `MetricsTab` (`backtest-panel/metrics-tab.tsx:10`): giờ nhận `BacktestRunResult` (`:2`, **không còn `SubscriptionBacktest`**); render `buildMetricCards(backtest.metrics)`.
 - `buildMetricCards` (`backtest-panel/metric-cards.ts:62`): map `BacktestMetrics` → 14 cards (total_return, cagr, sharpe, sortino, max_dd, win_rate, profit_factor, total/winning/losing trades, avg_win/loss, avg_duration, total_commission). **Chỉ ăn shape backtest.**
 - `backtest-api.ts`: `SubscriptionBacktest` **đã bị xóa** → thay bằng `BacktestRunResult` (`:44`, ad-hoc run); `BacktestStatus = 'started'|'finished'|'failed'` (`:40`, đổi từ `pending|running|completed|failed`); `fetchBacktestRun` join trades client-side (`:117`).
-- `strategies-page-layout.tsx:25`: 3-pane grid (sidebar | chart+config | `DashboardColumn`). **KHÔNG có** `Backtest|Forward` tab switch, **KHÔNG có** `tab` search-param. `validateSearch` chỉ ở `routes/index.tsx:17` + `routes/monitor_.jobs.$jobId.tsx:18` — **không** ở `routes/strategies.tsx`. → **Slice 1 shell chưa tồn tại.**
+- `strategies-page-layout.tsx:25`: 3-pane grid (sidebar | chart+config | `DashboardColumn`). **KHÔNG có** `Backtest|Forward` tab switch, **KHÔNG có** `tab` search-param. `validateSearch` chỉ ở `routes/index.tsx:17` + `routes/monitor_.jobs.$jobId.tsx:18` — **không** ở `routes/strategies.tsx`. → **Slice 3 shell chưa tồn tại.**
 - `forward-status-badge.tsx`: "Forward" hiện chỉ là **run-state badge** (`live|starting|stopping|stopped` từ `desired/actual_state`), **không phải tab**.
 
 ### 2.3 Diagram — live data flow vs backtest equity (AS-IS, re-verified)
@@ -76,7 +76,7 @@ flowchart LR
   class BT sep
 ```
 
-→ **GAP đỏ:** Forward (`DashboardColumn`) thiếu equity curve + KPI strip + open-positions panel. Backtest (xanh) đã **tách hẳn** sang `/backtest` — không còn nguồn equity để "mượn". Slice 3 phải tự dựng equity+KPI từ live trades.
+→ **GAP đỏ:** Forward (`DashboardColumn`) thiếu equity curve + KPI strip + open-positions panel. Backtest (xanh) đã **tách hẳn** sang `/backtest` — không còn nguồn equity để "mượn". Slice 1 phải tự dựng equity+KPI từ live trades.
 
 ---
 
@@ -84,7 +84,7 @@ flowchart LR
 
 - **Expected output:** Forward tab trong subscription detail hiển thị open-positions panel, live equity curve, KPI strip — tất cả derive từ live data (không phải backtest).
 - **Acceptance:** chọn sub đang forward `running` → Forward tab show ≥1 open position (nếu có), 1 equity curve dựng từ closed trades, 1 KPI strip ≥5 chỉ số; sub chưa có trade → empty-state rõ ràng, không crash.
-- **Scope boundary:** chỉ panel **open positions + equity + KPI**; orders (S4) và explain-trade (S5) chỉ để chỗ cắm (placeholder), không implement.
+- **Scope boundary:** chỉ panel **open positions + equity + KPI**; orders (S2) và explain-trade (S5) chỉ để chỗ cắm (placeholder), không implement.
 - **Constraints:** giữ import-linter (`fastapi` chỉ trong `app`), uuid7 PK, single uvicorn worker; nếu chọn B2 không được thêm `await` trong atomic block của reconcile/broker loop.
 - **Touchpoints (FE):** `dashboard-column.tsx`, `strategies-page-layout.tsx`/`routes/strategies.tsx` (Forward tab shell + `tab` search-param), reuse `equity-sparkline.tsx`/`pnl-badge.tsx`/`recent-trades-table.tsx`/`metric-card.tsx`, hooks `use-open-position.ts`/`use-strategy-trades.ts`, types `strategy.ts`/`backtest-api.ts`.
 - **Touchpoints (BE, optional):** `app/routes/strategy.py` + `engine/strategy_query_service.py` nếu thêm `live-metrics` endpoint hoặc bổ sung `leverage/liq_price` vào positions DTO.
@@ -127,7 +127,7 @@ flowchart LR
 - **KPI → FE compute** (port công thức từ `performance_calculator.py`: `win_rate` `:200`, `profit_factor` `:211`, `max_drawdown` `:162`, `total/winning/losing`, `avg_win/avg_loss` `:226`). **Bỏ Sharpe/Sortino** ở live KPI strip (không có per-bar returns; nhồi vào sẽ misleading).
 - **Realtime → poll** (reuse `refetchInterval` hiện hành). Note WS là upgrade.
 - **B2 là upgrade path** (note trong plan, không làm slice này). ⚠️ Nếu sau làm B2: equity snapshot phải ghi **ngoài** atomic block của reconcile/broker loop (mọi `await` save là preemption point — wire publish-before-subscribe, không `await` giữa read-modify-write của position state); collection scoped `sub_id` + index `(subscription_id, ts)`; giữ uuid7 cho `_id`; vẫn single worker (không nhân bản tick hook).
-- **`leverage/liq_price`:** FE đã optional (`use-open-position.ts:19-21`); BE chưa trả & **không tồn tại trên `PositionAggregate`**. Slice 3 render graceful (`—`). Bổ sung field là optional minimal BE (xem §6.1) — KHÔNG bắt buộc để ship slice.
+- **`leverage/liq_price`:** FE đã optional (`use-open-position.ts:19-21`); BE chưa trả & **không tồn tại trên `PositionAggregate`**. Slice 1 render graceful (`—`). Bổ sung field là optional minimal BE (xem §6.1) — KHÔNG bắt buộc để ship slice.
 
 ---
 
@@ -141,8 +141,8 @@ flowchart LR
 
 ### 6.2 Frontend
 
-- **`ForwardTab` component (mới):** shell nhận `sub`, layout dọc: `OpenPositionsPanel` → `LiveEquityCurve` → `LiveKpiStrip` → placeholder slots Orders (S4) / Explain (S5).
-- **`Backtest|Forward` tab switch (Slice 1 hoặc Slice 3 tự dựng):** vì backtest đã sang `/backtest` riêng, "Backtest tab" trong subscription detail có thể chỉ là **link/CTA sang `/backtest` prefill** (symbol+interval) hoặc embed read-only — chốt ở plan. Forward tab = `ForwardTab` mới. Đồng bộ qua `tab` search-param trên `routes/strategies.tsx` (thêm `validateSearch` như `routes/index.tsx:17`).
+- **`ForwardTab` component (mới):** shell nhận `sub`, layout dọc: `OpenPositionsPanel` → `LiveEquityCurve` → `LiveKpiStrip` → placeholder slots Orders (S2) / Explain (S5).
+- **`Backtest|Forward` tab switch (Slice 3 hoặc Slice 1 tự dựng):** vì backtest đã sang `/backtest` riêng, "Backtest tab" trong subscription detail có thể chỉ là **link/CTA sang `/backtest` prefill** (symbol+interval) hoặc embed read-only — chốt ở plan. Forward tab = `ForwardTab` mới. Đồng bộ qua `tab` search-param trên `routes/strategies.tsx` (thêm `validateSearch` như `routes/index.tsx:17`).
 - **`OpenPositionsPanel`:** reuse `useOpenPosition`; render side/entry/qty/leverage(`—`)/liq_price(`—`)/unrealized(`PnlBadge`)/SL/TP. **Bổ sung `sl_price/tp_price` vào FE `OpenPosition` interface** (`use-open-position.ts:12` chưa khai báo dù BE trả `strategy_query_service.py:111-112`).
 - **`LiveEquityCurve`:** hook `useLiveEquity(subId)` derive `EquityPoint[]` từ `useStrategyTrades`; feed vào `EquitySparkline` (hoặc full chart). Curve = cumulative sum `pnl` theo `exit_time` tăng dần.
 - **`LiveKpiStrip`:** util `computeLiveMetrics(trades)` → object KPI; render bằng `metric-card.tsx`. Reuse subset của `buildMetricCards` shape (**bỏ Sharpe/Sortino/CAGR** — không có timeframe basis tin cậy; giữ realized PnL, win_rate, #trades, max_drawdown, profit_factor, avg_win/loss).
@@ -169,7 +169,7 @@ max_drawdown      = min( (eq - cummax(eq)) / cummax(eq) ) over realized_curve.eq
 
 ## 7. Decomposition into Sub-tasks (ordered, shippable)
 
-1. **[blocker check]** Xác nhận/dựng Slice 1 `Backtest|Forward` tab shell + `tab` search-param trên `routes/strategies.tsx`. Lưu ý backtest đã decouple → "Backtest tab" có thể chỉ là link sang `/backtest`. Nếu Slice 1 chưa ship → Slice 3 tự dựng 2-tab switch tối thiểu trong `dashboard-column.tsx`.
+1. **[blocker check]** Xác nhận/dựng Slice 3 `Backtest|Forward` tab shell + `tab` search-param trên `routes/strategies.tsx`. Lưu ý backtest đã decouple → "Backtest tab" có thể chỉ là link sang `/backtest`. Nếu Slice 3 chưa ship → Slice 1 tự dựng 2-tab switch tối thiểu trong `dashboard-column.tsx`.
 2. FE: `useLiveEquity(subId)` — derive `EquityPoint[]` từ `useStrategyTrades` (sort + cumulative). Unit-test thuần.
 3. FE: `computeLiveMetrics(trades)` — port formula §6.3. Unit-test với fixture trades.
 4. FE: bổ sung `sl_price/tp_price` vào `OpenPosition` interface (`use-open-position.ts:12`); `OpenPositionsPanel` render full fields, `—` cho leverage/liq_price.
@@ -190,7 +190,7 @@ max_drawdown      = min( (eq - cummax(eq)) / cummax(eq) ) over realized_curve.eq
 | **Timezone**: `entry_time/exit_time` naive ISO (`opened_at`/`closed_at.isoformat()`); sort sai nếu lẫn tz | curve lệch thứ tự | reuse `parseIso`/`useFmt` (`lib/datetime`, `lib/use-timezone`) như `equity-sparkline.tsx:62`; treat naive = UTC nhất quán |
 | **Poll load**: positions 5s + trades 15s + compute mỗi poll | CPU nhẹ FE | compute trong `useMemo`; giữ `refetchInterval` hiện hành; chỉ enable khi tab Forward active |
 | `find_closed_by_subscription` limit 100/≤500 (`strategy.py:142`) → equity curve **cụt** với sub nhiều trade | curve thiếu lịch sử | note: forward dài hạn cần pagination/aggregate (B2 hoặc BE endpoint); slice này chấp nhận limit 500 |
-| Slice 1 shell **chưa tồn tại** (đã verify) | block Forward tab | sub-task #1 dựng tối thiểu nếu Slice 1 chưa ship |
+| Slice 3 shell **chưa tồn tại** (đã verify) | block Forward tab | sub-task #1 dựng tối thiểu nếu Slice 3 chưa ship |
 
 ---
 
@@ -206,13 +206,13 @@ max_drawdown      = min( (eq - cummax(eq)) / cummax(eq) ) over realized_curve.eq
 ## 10. Dependencies & Open Questions
 
 **Cross-ref filenames:**
-- Slice 1 (shell): `web/src/components/strategies/strategies-page-layout.tsx`, `web/src/components/strategies/dashboard-column.tsx`, `web/src/routes/strategies.tsx` (cần `validateSearch` cho `tab` như `routes/index.tsx:17`). Lưu ý backtest đã sang `web/src/routes/backtest.tsx`.
-- Slice 4 (orders): cắm vào `ForwardTab` placeholder slot; dùng `GET /trading/orders` (`trading_orders_positions.py:22`).
+- Slice 3 (shell): `web/src/components/strategies/strategies-page-layout.tsx`, `web/src/components/strategies/dashboard-column.tsx`, `web/src/routes/strategies.tsx` (cần `validateSearch` cho `tab` như `routes/index.tsx:17`). Lưu ý backtest đã sang `web/src/routes/backtest.tsx`.
+- Slice 2 (orders): cắm vào `ForwardTab` placeholder slot; dùng `GET /trading/orders` (`trading_orders_positions.py:22`).
 - Slice 5 (explain): dùng forward closed trades từ `useStrategyTrades` + `ForwardTab` explain slot.
 
 **Open Questions (chốt ở plan):**
 1. **B1 vs B2** — confirm B1 cho slice này, B2 thành ticket riêng? (report recommend B1).
-2. **Slice 1 shell đã ship chưa?** Đã verify: `strategies-page-layout.tsx`/`routes/strategies.tsx` **không có** `Backtest|Forward` tab hay `tab` search-param. Backtest đã decouple sang `/backtest` → "Backtest tab" trong subscription detail nghĩa là gì: link sang `/backtest`, embed read-only, hay bỏ hẳn (chỉ còn Forward)?
+2. **Slice 3 shell đã ship chưa?** Đã verify: `strategies-page-layout.tsx`/`routes/strategies.tsx` **không có** `Backtest|Forward` tab hay `tab` search-param. Backtest đã decouple sang `/backtest` → "Backtest tab" trong subscription detail nghĩa là gì: link sang `/backtest`, embed read-only, hay bỏ hẳn (chỉ còn Forward)?
 3. **`initial` equity** cho realized curve: lấy từ đâu? (config sub? hằng số? backtest run `config_snapshot.initial_capital`?) — ảnh hưởng total_return %. Forward không còn backtest gắn liền nên cần nguồn riêng.
 4. **`leverage/liq_price`**: PaperBroker/OKXBroker hiện có khái niệm leverage không? `PositionAggregate` hiện **không có** field này → nếu broker không set → FE render `—` vĩnh viễn, bỏ Optional A.
 5. **KPI source dài hạn**: FE compute (B1) đủ, hay cần BE `live-metrics` ngay để đồng nhất shape với `BacktestMetrics`?
@@ -220,5 +220,5 @@ max_drawdown      = min( (eq - cummax(eq)) / cummax(eq) ) over realized_curve.eq
 ---
 
 Status: DONE
-Summary: Re-scout phát hiện codebase đã đổi nền tảng — backtest decoupled khỏi subscription (endpoint `/subscriptions/{id}/backtest` + interface `SubscriptionBacktest` đã xóa, sang trang `/backtest`; `DashboardColumn` rewrite "forward-only"). Điều này củng cố premise Slice 3 và recommendation B1 (FE derive equity+KPI từ closed trades) giữ nguyên, còn hợp lý hơn. Mọi citation đã sửa drift.
-Concerns: Slice 1 `Backtest|Forward` 2-tab shell vẫn CHƯA tồn tại (verified) — block Forward tab; "Backtest tab" trong subscription detail giờ mơ hồ vì backtest đã sang trang riêng (cần định nghĩa lại ở plan); `initial` equity basis cho forward + leverage/liq_price availability cần chốt.
+Summary: Re-scout phát hiện codebase đã đổi nền tảng — backtest decoupled khỏi subscription (endpoint `/subscriptions/{id}/backtest` + interface `SubscriptionBacktest` đã xóa, sang trang `/backtest`; `DashboardColumn` rewrite "forward-only"). Điều này củng cố premise Slice 1 và recommendation B1 (FE derive equity+KPI từ closed trades) giữ nguyên, còn hợp lý hơn. Mọi citation đã sửa drift.
+Concerns: Slice 3 `Backtest|Forward` 2-tab shell vẫn CHƯA tồn tại (verified) — block Forward tab; "Backtest tab" trong subscription detail giờ mơ hồ vì backtest đã sang trang riêng (cần định nghĩa lại ở plan); `initial` equity basis cho forward + leverage/liq_price availability cần chốt.
