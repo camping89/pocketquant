@@ -20,10 +20,11 @@ import {
   type ISeriesMarkersPluginApi,
   type SeriesMarker,
   type Time,
+  type IRange,
   type IPriceLine,
 } from 'lightweight-charts'
 import { useChart } from '../chart/use-chart'
-import { useOHLCV } from '../../hooks/use-ohlcv'
+import { useOhlcvHistory } from '../../hooks/use-ohlcv-history'
 import { useIndicators } from '../../hooks/use-indicators'
 import {
   addIndicatorSeries,
@@ -55,7 +56,10 @@ export function StrategyChart({ symbol, interval, trades, openPosition, indicato
   const { mode } = useTimezone()
   const { mode: themeMode } = useTheme()
   const chartRef = useChart(containerRef, undefined, mode, themeMode)
-  const { data, isLoading, error } = useOHLCV(symbol, interval)
+  const { data, isLoading, error, loadOlder, isLoadingOlder, hasMore } = useOhlcvHistory(
+    symbol,
+    interval,
+  )
   const indicatorData = useIndicators(data?.candles, indicators)
 
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -64,6 +68,19 @@ export function StrategyChart({ symbol, interval, trades, openPosition, indicato
   const indicatorRefs = useRef<IndicatorSeriesRefs | null>(null)
   const entryLineRef = useRef<IPriceLine | null>(null)
   const liqLineRef = useRef<IPriceLine | null>(null)
+
+  // Pagination view-preservation — fit 80 bars only on first load per series;
+  // later updates (older-page prepend) restore the saved time range so the
+  // viewport holds. Time-based range survives left-side prepends.
+  const didInitialFitRef = useRef(false)
+  const savedRangeRef = useRef<IRange<Time> | null>(null)
+  const loadOlderRef = useRef(loadOlder)
+  useEffect(() => { loadOlderRef.current = loadOlder }, [loadOlder])
+
+  useEffect(() => {
+    didInitialFitRef.current = false
+    savedRangeRef.current = null
+  }, [symbol, interval])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -101,18 +118,34 @@ export function StrategyChart({ symbol, interval, trades, openPosition, indicato
     volume.setData(data.volumes)
     volumeRef.current = volume
 
-    // Show last 80 bars centered on most recent candle
-    const VISIBLE = 80
+    // First load: 80 bars centered on the latest candle. Re-running setData
+    // (older-page prepend) must NOT re-fit — restore the saved time range so
+    // the scroll position holds.
     const total = data.candles.length
-    if (total > 0) {
+    if (!didInitialFitRef.current && total > 0) {
+      const VISIBLE = 80
       chart.timeScale().setVisibleLogicalRange({
         from: total - 1 - Math.floor(VISIBLE / 2),
         to: total - 1 + Math.floor(VISIBLE / 2),
       })
+      didInitialFitRef.current = true
+    } else if (savedRangeRef.current) {
+      chart.timeScale().setVisibleRange(savedRangeRef.current)
     }
+
+    // Scroll-left pagination: fetch an older page as the left edge nears the
+    // oldest loaded bar; park the range so [data] can restore it after prepend.
+    const timeScale = chart.timeScale()
+    const onRangeChange = (logicalRange: { from: number; to: number } | null) => {
+      const vr = timeScale.getVisibleRange()
+      if (vr) savedRangeRef.current = vr
+      if (logicalRange && logicalRange.from < 50) loadOlderRef.current()
+    }
+    timeScale.subscribeVisibleLogicalRangeChange(onRangeChange)
 
     return () => {
       try {
+        timeScale.unsubscribeVisibleLogicalRangeChange(onRangeChange)
         if (markersRef.current) { markersRef.current.detach(); markersRef.current = null }
         if (chart && candleRef.current) { chart.removeSeries(candleRef.current); candleRef.current = null }
         if (chart && volumeRef.current) { chart.removeSeries(volumeRef.current); volumeRef.current = null }
@@ -244,6 +277,9 @@ export function StrategyChart({ symbol, interval, trades, openPosition, indicato
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {/* Chart canvas — useChart + ResizeObserver fills this container */}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {isLoadingOlder && <div className="chart-history-loading">Loading history…</div>}
+      {!hasMore && <div className="chart-history-end">Start of history</div>}
 
       {isLoading && (
         <div
