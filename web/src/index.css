@@ -293,6 +293,19 @@ input, select {
 .chart-error {
   color: var(--down-color);
 }
+.chart-history-loading,
+.chart-history-end {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--text-secondary);
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 11;
+}
 
 /* ── App Shell (router) ── */
 .app-shell {
