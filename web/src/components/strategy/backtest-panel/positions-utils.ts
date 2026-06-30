@@ -1,6 +1,8 @@
 import type { BacktestPosition } from '../../../api/backtest-api'
 import { formatDateTime, parseIso, type TimezoneMode } from '../../../lib/datetime'
 
+export { formatPrice as fmtPrice } from '../../../lib/number-format'
+
 export type FilterKey = 'all' | 'wins' | 'losses' | 'open'
 
 export type SortKey =
@@ -91,11 +93,6 @@ export function fmtDuration(p: BacktestPosition): string {
 
 export function fmtPnl(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`
-}
-
-export function fmtPrice(n: number | null): string {
-  if (n == null) return '—'
-  return n.toFixed(2)
 }
 
 export function fmtDateTime(s: string, mode: TimezoneMode): string {

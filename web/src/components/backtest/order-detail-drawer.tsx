@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { BacktestOrder } from '../../api/backtest-api'
+import { formatPrice, formatQty } from '../../lib/number-format'
 
 interface OrderDetailDrawerProps {
   order: BacktestOrder | null
@@ -39,8 +40,8 @@ export function OrderDetailDrawer({ order, onClose }: OrderDetailDrawerProps) {
         <dl className="drawer-meta">
           <dt>Order ID</dt><dd style={{ fontFamily: 'monospace', fontSize: 11 }}>{order.order_id}</dd>
           <dt>Status</dt><dd>{order.status}</dd>
-          <dt>Quantity</dt><dd>{order.quantity}</dd>
-          <dt>SL / TP</dt><dd>{order.sl_price ?? '—'} / {order.tp_price ?? '—'}</dd>
+          <dt>Quantity</dt><dd>{formatQty(order.quantity)}</dd>
+          <dt>SL / TP</dt><dd>{formatPrice(order.sl_price)} / {formatPrice(order.tp_price)}</dd>
           <dt>Resulting trade</dt>
           <dd style={{ fontFamily: 'monospace', fontSize: 11 }}>{order.resulting_trade_id ?? '—'}</dd>
         </dl>
@@ -52,7 +53,7 @@ export function OrderDetailDrawer({ order, onClose }: OrderDetailDrawerProps) {
           ) : (
             order.fills.map((f) => (
               <div key={f.fill_id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
-                {fmtTime(f.timestamp)} · {f.quantity} @ {f.price} · fee {f.commission.toFixed(4)}
+                {fmtTime(f.timestamp)} · {formatQty(f.quantity)} @ {formatPrice(f.price)} · fee {f.commission.toFixed(4)}
               </div>
             ))
           )}

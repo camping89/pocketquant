@@ -8,6 +8,7 @@ import {
   type SortKey,
 } from './positions-utils'
 import { useTimezone } from '../../../lib/use-timezone'
+import { formatQty } from '../../../lib/number-format'
 
 interface PositionsTableProps {
   rows: IndexedPosition[]
@@ -89,7 +90,7 @@ export function PositionsTable({
               </td>
               <td className="positions-table__td--num">{fmtPrice(p.entry_price)}</td>
               <td className="positions-table__td--num">{fmtPrice(p.exit_price)}</td>
-              <td className="positions-table__td--num">{p.quantity}</td>
+              <td className="positions-table__td--num">{formatQty(p.quantity)}</td>
               <td className="positions-table__td--num">{fmtDuration(p)}</td>
               <td className={`positions-table__td--num ${p.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
                 {fmtPnl(p.pnl)}

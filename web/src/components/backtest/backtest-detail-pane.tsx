@@ -1,27 +1,35 @@
-/* eslint-disable react-refresh/only-export-components -- TanStack Router requires Route export alongside components */
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { BacktestResultView } from '../components/backtest/backtest-result-view'
-import { BacktestStatusBadge } from '../components/strategy/backtest-status-badge'
-import { useBacktestRun } from '../hooks/use-backtest-run'
+import { BacktestResultView } from './backtest-result-view'
+import { BacktestStatusBadge } from '../strategy/backtest-status-badge'
+import { useBacktestRun } from '../../hooks/use-backtest-run'
 
-export const Route = createFileRoute('/backtest_/$runId')({
-  component: BacktestDetailPage,
-})
-
-function BacktestDetailPage() {
-  const { runId } = Route.useParams()
-  const navigate = useNavigate()
+/** Detail pane of the workbench. Lazy: `useBacktestRun` is gated by `enabled`,
+ *  so nothing is fetched until a run is selected (`runId` non-null). */
+export function BacktestDetailPane({ runId }: { runId: string | null }) {
   const { data: run, isLoading } = useBacktestRun(runId)
+
+  if (!runId) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--text-secondary)',
+          fontSize: 13,
+        }}
+      >
+        Select a run from the list.
+      </div>
+    )
+  }
 
   const status = run?.status
   const errorMsg = run?.error_message ?? null
 
   return (
-    <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button type="button" className="btn-sm" onClick={() => void navigate({ to: '/backtest' })}>
-          ← Backtest
-        </button>
         <BacktestStatusBadge status={status ?? 'started'} errorMsg={errorMsg} />
         <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{runId}</span>
       </div>
