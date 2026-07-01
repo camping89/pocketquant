@@ -27,11 +27,22 @@ export interface OhlcvHistory {
 /** OHLCV with scroll-left pagination. The base query (shared key with useOHLCV,
  * refetched on realtime rollover) supplies the latest page; loadOlder walks
  * backward via ``end_date``. All bars land in a time-keyed accumulator so the
- * sliding base window merges without dropping or duplicating boundary bars. */
-export function useOhlcvHistory(symbol: string, interval: Interval): OhlcvHistory {
+ * sliding base window merges without dropping or duplicating boundary bars.
+ *
+ * ``anchorEndDate`` pins the base window to a past instant (a backtest's window
+ * end) instead of "now". When set, the query key gains a 4th element so an
+ * anchored chart never shares cache with the live chart of the same
+ * symbol/interval, whose realtime invalidation hardcodes the 3-element key. */
+export function useOhlcvHistory(
+  symbol: string,
+  interval: Interval,
+  anchorEndDate?: string,
+): OhlcvHistory {
   const base = useQuery({
-    queryKey: ohlcvQueryKey(symbol, interval),
-    queryFn: () => fetchOHLCVBars(symbol, interval, PAGE_SIZE),
+    queryKey: anchorEndDate
+      ? [...ohlcvQueryKey(symbol, interval), anchorEndDate]
+      : ohlcvQueryKey(symbol, interval),
+    queryFn: () => fetchOHLCVBars(symbol, interval, PAGE_SIZE, anchorEndDate),
     staleTime: 5 * 60 * 1000,
     enabled: !!symbol,
   })
@@ -48,7 +59,7 @@ export function useOhlcvHistory(symbol: string, interval: Interval): OhlcvHistor
     setVersion((v) => v + 1)
     setIsLoadingOlder(false)
     setHasMore(true)
-  }, [symbol, interval])
+  }, [symbol, interval, anchorEndDate])
 
   // Fold each base result (initial load + every rollover refetch) into the
   // accumulator. Overwrite-on-collision refreshes the latest bar's final close.

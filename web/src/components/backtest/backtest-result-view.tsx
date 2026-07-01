@@ -1,8 +1,10 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import type { BacktestRunResult } from '../../api/backtest-api'
+import type { IndicatorConfig, Interval } from '../../types/market-data'
 import { MetricCard } from '../strategy/backtest-panel/metric-card'
 import { buildMetricCards, buildMetricGroups } from '../strategy/backtest-panel/metric-cards'
 import { PositionsTab } from '../strategy/backtest-panel/positions-tab'
+import { TradingChart } from '../chart/trading-chart'
 import { EquityDrawdownChart } from './equity-drawdown-chart'
 import { PnlHistogram } from './pnl-histogram'
 import { DurationHistogram } from './duration-histogram'
@@ -12,6 +14,17 @@ import { OrdersTable } from './orders-table'
 import { VerdictPanel } from './verdict-panel'
 
 type ResultTab = 'overview' | 'trades' | 'risk' | 'orders'
+
+// Backtest chart shows raw price + trade markers/boxes only — live overlays
+// (EMA, engulfing) belong to the realtime chart, not the post-mortem view.
+const NO_INDICATORS: IndicatorConfig = {
+  sma: false,
+  ema: false,
+  rsi: false,
+  macd: false,
+  bollinger: false,
+  engulfing: false,
+}
 
 const TABS: { key: ResultTab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
@@ -33,7 +46,19 @@ const sectionTitle: CSSProperties = {
 
 export function BacktestResultView({ run, runId }: { run: BacktestRunResult; runId: string }) {
   const [tab, setTab] = useState<ResultTab>('overview')
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const metrics = run.metrics
+
+  // Drop chart/table selection when switching to another run — a stale index
+  // would highlight the wrong trade against the new run's positions. Adjust
+  // during render (not an effect) so selection clears before the chart paints.
+  const [prevRunId, setPrevRunId] = useState(runId)
+  if (runId !== prevRunId) {
+    setPrevRunId(runId)
+    setHighlightedIndex(null)
+    setHoveredIndex(null)
+  }
 
   const kpiCards = useMemo(
     () => (metrics ? buildMetricCards(metrics).filter((c) => KPI_KEYS.includes(c.key)) : []),
@@ -89,6 +114,21 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
 
       {tab === 'trades' && (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {run.symbol && run.interval ? (
+            <div className="backtest-trades-chart">
+              <TradingChart
+                symbol={run.symbol}
+                interval={run.interval as Interval}
+                indicators={NO_INDICATORS}
+                positions={run.positions}
+                highlightedPositionIndex={highlightedIndex}
+                hoveredPositionIndex={hoveredIndex}
+                anchorEndDate={run.end_date}
+              />
+            </div>
+          ) : (
+            <div className="empty-state">Symbol/interval không khả dụng cho run này.</div>
+          )}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, padding: '8px 0' }}>
             <span>Max win streak: <strong style={{ color: 'var(--up-color)' }}>{streaks.maxWinStreak}</strong></span>
             <span>Max loss streak: <strong style={{ color: 'var(--down-color)' }}>{streaks.maxLossStreak}</strong></span>
@@ -101,7 +141,12 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
           <div style={sectionTitle}>Duration distribution (hours)</div>
           <DurationHistogram positions={run.positions} />
           <div style={sectionTitle}>Trades</div>
-          <PositionsTab backtest={run} highlightedIndex={null} />
+          <PositionsTab
+            backtest={run}
+            highlightedIndex={highlightedIndex}
+            onPositionClick={(index) => setHighlightedIndex(index)}
+            onPositionHover={(index) => setHoveredIndex(index)}
+          />
         </div>
       )}
 

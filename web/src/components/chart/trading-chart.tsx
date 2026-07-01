@@ -37,6 +37,9 @@ interface TradingChartProps {
   positions?: BacktestPosition[]
   highlightedPositionIndex?: number | null
   hoveredPositionIndex?: number | null
+  /** Anchor OHLCV to a past window end (backtest mode). When set, the chart loads
+   *  history ending at this instant and runs no realtime stream. */
+  anchorEndDate?: string
   onChartReady?: (chart: IChartApi) => void
 }
 
@@ -47,6 +50,7 @@ export function TradingChart({
   positions,
   highlightedPositionIndex = null,
   hoveredPositionIndex = null,
+  anchorEndDate,
   onChartReady,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -56,6 +60,7 @@ export function TradingChart({
   const { data, error, isLoading, loadOlder, isLoadingOlder, hasMore } = useOhlcvHistory(
     symbol,
     interval,
+    anchorEndDate,
   )
   const indicatorData = useIndicators(data?.candles, indicators)
 
@@ -199,7 +204,7 @@ export function TradingChart({
     }
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useRealtimeBar(symbol, interval, candleRef, volumeRef)
+  useRealtimeBar(symbol, interval, candleRef, volumeRef, anchorEndDate == null)
 
   // Reformat parked legend timestamp on mode toggle (crosshair handler only
   // fires on movement — without this, a stationary crosshair stays in old tz).
@@ -328,10 +333,19 @@ export function TradingChart({
 
     if (!positions || positions.length === 0) return
 
+    // Box is detail-on-demand: draw it only for the clicked (highlight) and
+    // hovered trades. Markers still mark every trade; default selection draws no
+    // box, keeping the chart readable when a run has hundreds of positions.
+    const selected = new Set<number>()
+    if (highlightedPositionIndex != null) selected.add(highlightedPositionIndex)
+    if (hoveredPositionIndex != null) selected.add(hoveredPositionIndex)
+    if (selected.size === 0) return
+
     const lastCandleTime = data?.candles.at(-1)?.time ?? null
 
     const posData: PositionData[] = positions
       .map((p, idx): PositionData | null => {
+        if (!selected.has(idx)) return null
         const x2 = p.exit_time != null
           ? toUTCTimestamp(p.exit_time) as Time
           : lastCandleTime as Time
@@ -365,6 +379,36 @@ export function TradingChart({
       }
     }
   }, [positions, data, highlightedPositionIndex, hoveredPositionIndex])
+
+  // Scroll the clicked trade into view. Driven by highlight only — hover must not
+  // move the viewport, or scanning the table with the mouse would jerk the chart.
+  useEffect(() => {
+    const chart = chartRef.current
+    const candles = data?.candles
+    if (!chart || !candles || candles.length === 0) return
+    if (highlightedPositionIndex == null) return
+    const p = positions?.[highlightedPositionIndex]
+    if (!p) return
+
+    const firstT = candles[0].time as number
+    const lastT = candles.at(-1)!.time as number
+    const barDur = candles.length > 1
+      ? (candles[1].time as number) - (candles[0].time as number)
+      : 60
+    const pad = barDur * 50
+
+    const entryT = toUTCTimestamp(p.entry_time)
+    const exitT = p.exit_time != null ? toUTCTimestamp(p.exit_time) : lastT
+    const clamp = (t: number) => Math.max(firstT, Math.min(lastT, t))
+    const from = clamp(entryT - pad)
+    const to = clamp(exitT + pad)
+
+    try {
+      chart.timeScale().setVisibleRange({ from: from as Time, to: to as Time })
+    } catch {
+      // range can be rejected before the series has data — ignore
+    }
+  }, [highlightedPositionIndex, data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>

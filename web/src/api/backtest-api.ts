@@ -49,6 +49,11 @@ export interface BacktestRunResult {
   positions: BacktestPosition[]
   equity_curve: EquityPoint[]
   config_snapshot?: Record<string, unknown>
+  /** Composite symbol / interval / window end — lifted from config_snapshot so a
+   *  chart can anchor OHLCV to the exact backtest window without re-reading it. */
+  symbol?: string
+  interval?: string
+  end_date?: string
   verdict?: string | null
   error_message?: string | null
   started_at?: string
@@ -151,6 +156,7 @@ export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult
       })
     }
   }
+  const cfg = doc.config_snapshot ?? {}
   return {
     id: doc._id,
     strategy_code: doc.strategy_code,
@@ -159,6 +165,9 @@ export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult
     positions,
     equity_curve: doc.equity_curve ?? [],
     config_snapshot: doc.config_snapshot,
+    symbol: (cfg.symbol as string | undefined)?.toUpperCase(),
+    interval: cfg.interval as string | undefined,
+    end_date: cfg.end_date as string | undefined,
     verdict: doc.verdict,
     error_message: doc.error_message,
     started_at: doc.started_at,
