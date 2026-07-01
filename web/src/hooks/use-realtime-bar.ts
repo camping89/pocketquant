@@ -24,6 +24,7 @@ export function useRealtimeBar(
   interval: Interval,
   candleRef: RefObject<ISeriesApi<'Candlestick'> | null>,
   volumeRef: RefObject<ISeriesApi<'Histogram'> | null>,
+  enabled = true,
 ): RealtimeBarState {
   const [lastUpdateTs, setLastUpdateTs] = useState<number | null>(null)
   const [isStale, setIsStale] = useState(false)
@@ -35,6 +36,10 @@ export function useRealtimeBar(
   const lastUpdateTsRef = useRef<number | null>(null)
 
   useEffect(() => {
+    // A chart anchored to a past window must not open a live stream — SSE would
+    // push the current bar into a historical series and reopen a needless feed.
+    if (!enabled) return
+
     // Reset per-session tracking inside the effect (not during render)
     lastBarStartRef.current = null
     lastUpdateTsRef.current = null
@@ -120,7 +125,7 @@ export function useRealtimeBar(
       clearInterval(staleTimer)
       for (const t of refetchTimers) clearTimeout(t)
     }
-  }, [symbol, interval]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [symbol, interval, enabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { lastUpdateTs, isStale, isInProgress }
 }
