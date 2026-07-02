@@ -49,6 +49,18 @@ const COLUMNS: Col[] = [
 const ROW_HEIGHT = 30
 const OVERSCAN = 8
 
+// Nearest scrollable ancestor — the single-scrollbar layout scrolls an outer
+// pane, not this container, so the tail sentinel must intersect against it.
+function getScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null
+  while (node) {
+    const oy = getComputedStyle(node).overflowY
+    if (oy === 'auto' || oy === 'scroll') return node
+    node = node.parentElement
+  }
+  return null
+}
+
 export function PositionsTable({
   rows,
   sortKey,
@@ -63,6 +75,7 @@ export function PositionsTable({
 }: PositionsTableProps) {
   const { mode } = useTimezone()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -73,11 +86,21 @@ export function PositionsTable({
 
   const virtualRows = virtualizer.getVirtualItems()
 
-  // Prefetch the next page when the last rendered row nears the loaded tail.
+  // Prefetch the next page only when the tail sentinel actually scrolls into
+  // view. A render-window check fires immediately when the viewport is
+  // unbounded (single-scrollbar layout), chain-loading every page on open.
   useEffect(() => {
-    const last = virtualRows.at(-1)
-    if (last && last.index >= rows.length - 1 - OVERSCAN) onReachEnd?.()
-  }, [virtualRows, rows.length, onReachEnd])
+    const sentinel = sentinelRef.current
+    if (!sentinel || !onReachEnd) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) onReachEnd()
+      },
+      { root: getScrollParent(scrollRef.current), rootMargin: '0px 0px 300px 0px' },
+    )
+    io.observe(sentinel)
+    return () => io.disconnect()
+  }, [onReachEnd])
 
   const totalSize = virtualizer.getTotalSize()
   const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0
@@ -155,6 +178,7 @@ export function PositionsTable({
           )}
         </tbody>
       </table>
+      <div ref={sentinelRef} aria-hidden className="positions-table__sentinel" />
       {isFetchingNextPage && <div className="positions-table__loading">Loading more…</div>}
     </div>
   )
