@@ -13,29 +13,8 @@ import type {
   Time,
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
-
-/** Format quantity: strip scientific notation, max 8 significant digits */
-function fmtQty(n: number): string {
-  if (n === 0) return '0'
-  if (!isFinite(n)) return String(n)
-  // Use toPrecision to get significant digits, then strip trailing zeros
-  return parseFloat(n.toPrecision(8)).toString()
-}
-
-/** Format price with 2 decimals */
-function fmtPrice(n: number): string {
-  return n.toFixed(2)
-}
-
-/** Format PnL with sign and 2 decimals */
-function fmtPnl(n: number): string {
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`
-}
-
-/** Format fee — 4 sig digits, no trailing zeros */
-function fmtFee(n: number): string {
-  return parseFloat(n.toPrecision(4)).toString()
-}
+import { fmtPrice } from './position-format'
+import { drawPositionInfoCard } from './position-box-info-card'
 
 export interface PositionData {
   x1: Time
@@ -54,7 +33,6 @@ export interface PositionData {
 }
 
 const FONT_SIZE = 9   // CSS px
-const LINE_HEIGHT = 13 // CSS px
 const PAD = 3         // CSS px
 
 function dashedLine(
@@ -170,39 +148,49 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           ctx.restore()
         }
 
-        const boxTopY = ySL != null && yTP != null
+      }
+    })
+  }
+}
+
+/**
+ * Info cards draw in a separate top-layer pane view so they sit ABOVE the
+ * candles — a card at the box's zOrder would be sliced by every candle drawn
+ * over the trade region. Box left + top are recomputed here per frame.
+ */
+class CardRenderer implements IPrimitivePaneRenderer {
+  private readonly positions: PositionData[]
+  private readonly chart: IChartApiBase<Time>
+  private readonly series: ISeriesApi<'Candlestick', Time>
+
+  constructor(
+    positions: PositionData[],
+    chart: IChartApiBase<Time>,
+    series: ISeriesApi<'Candlestick', Time>,
+  ) {
+    this.positions = positions
+    this.chart = chart
+    this.series = series
+  }
+
+  draw(target: CanvasRenderingTarget2D): void {
+    target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hR, verticalPixelRatio: vR, bitmapSize }) => {
+      const timeScale = this.chart.timeScale()
+
+      for (const pos of this.positions) {
+        const cx1 = timeScale.timeToCoordinate(pos.x1)
+        const cx2 = timeScale.timeToCoordinate(pos.x2)
+        if (cx1 == null || cx2 == null) continue
+
+        const ySL = pos.sl_price != null ? this.series.priceToCoordinate(pos.sl_price) : null
+        const yTP = pos.tp_price != null ? this.series.priceToCoordinate(pos.tp_price) : null
+        const yEntry = this.series.priceToCoordinate(pos.entry_price)
+        const top = ySL != null && yTP != null
           ? Math.min(ySL, yTP) * vR
           : (yEntry != null ? yEntry * vR : null)
+        if (top == null) continue
 
-        if (boxTopY != null) {
-          const dir = pos.direction ?? 'LONG'
-          const dirColor = dir === 'LONG' ? '#26a69a' : '#ef5350'
-          const lines: { text: string; color: string }[] = [
-            { text: `[${dir}]`, color: dirColor },
-            { text: `Entry ${fmtPrice(pos.entry_price)}`, color: '#90CAF9' },
-          ]
-          if (pos.exit_price != null) {
-            lines.push({ text: `Exit  ${fmtPrice(pos.exit_price)}`, color: '#FFB74D' })
-          }
-          lines.push({ text: `Qty   ${fmtQty(pos.quantity)}`, color: '#B0BEC5' })
-          lines.push({
-            text: `PnL   ${fmtPnl(pos.pnl)}`,
-            color: pos.pnl >= 0 ? '#26a69a' : '#ef5350',
-          })
-          lines.push({ text: `Fee   ${fmtFee(pos.commission)}`, color: '#90A4AE' })
-
-          ctx.save()
-          ctx.font = `${FONT_SIZE * vR}px monospace`
-          let ty = boxTopY + (PAD + LINE_HEIGHT) * vR
-          for (const line of lines) {
-            ctx.fillStyle = line.color
-            ctx.textAlign = 'left'
-            ctx.textBaseline = 'top'
-            ctx.fillText(line.text, lx + PAD * hR, ty)
-            ty += LINE_HEIGHT * vR
-          }
-          ctx.restore()
-        }
+        drawPositionInfoCard(ctx, hR, vR, bitmapSize, { left: Math.min(cx1, cx2) * hR, top }, pos)
       }
     })
   }
@@ -228,23 +216,43 @@ class BoxPaneView implements IPrimitivePaneView {
   }
 }
 
+class CardPaneView implements IPrimitivePaneView {
+  private _renderer: CardRenderer
+
+  constructor(
+    positions: PositionData[],
+    chart: IChartApiBase<Time>,
+    series: ISeriesApi<'Candlestick', Time>,
+  ) {
+    this._renderer = new CardRenderer(positions, chart, series)
+  }
+
+  zOrder() {
+    return 'top' as const
+  }
+
+  renderer() {
+    return this._renderer
+  }
+}
+
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   private _positions: PositionData[]
-  private _view: BoxPaneView | null = null
+  private _views: IPrimitivePaneView[] = []
 
   constructor(positions: PositionData[]) {
     this._positions = positions
   }
 
   attached(param: SeriesAttachedParameter<Time, 'Candlestick'>): void {
-    this._view = new BoxPaneView(
-      this._positions,
-      param.chart as IChartApiBase<Time>,
-      param.series,
-    )
+    const chart = param.chart as IChartApiBase<Time>
+    this._views = [
+      new BoxPaneView(this._positions, chart, param.series),
+      new CardPaneView(this._positions, chart, param.series),
+    ]
   }
 
   paneViews(): readonly IPrimitivePaneView[] {
-    return this._view ? [this._view] : []
+    return this._views
   }
 }
