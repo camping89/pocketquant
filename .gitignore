@@ -108,3 +108,5 @@ repomix-output.xml
 
 .import_linter_cache/
 .grimp_cache/
+
+web/.claude/

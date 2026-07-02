@@ -1,190 +1,99 @@
 # PocketQuant
 
-PocketQuant is an algorithmic trading monorepo with:
+Algorithmic trading platform: Binance market-data sync (REST/WS, no auth), live quote ingestion + bar aggregation, single-run backtesting, strategy/broker orchestration, and a React chart UI.
 
-- historical market-data sync from Binance public REST/WS (no auth required)
-- live quote ingestion via Binance @aggTrade and bar aggregation
-- single-run backtesting API (direct async task)
-- strategy orchestration and broker abstractions
-- a React/Vite chart UI for inspecting synced data and backtest overlays
+One Python package (`pocketquant`) with import-linter-enforced subpackage boundaries + a separate Vite SPA.
 
-## Repo Layout
-
-One Python package (`pocketquant`) with subpackage boundaries enforced by import-linter. The frontend is a separate npm app.
+## Architecture
 
 ```text
 src/pocketquant/
-├── core/       # Domain, concepts, common utilities, config, ports + DTOs, persisted entities, AND concrete adapters: Database, Cache, repositories, PaperBroker, OKXBroker, binance, scheduler, http client
-├── engine/     # Shared strategy/order/position/risk engine + strategy/orders-positions feature services
-├── backtest/   # Backtest engine + single-run orchestration (sandbox, replay, result collector)
-└── app/        # FastAPI single backend: all API routes, SPA serving, scheduler, WS feed, strategy lifecycle, reconcile loop, backtest tasks
+├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, scheduler, http)
+├── engine/     # strategy/order/position/risk engine + feature services
+├── backtest/   # backtest engine + single-run orchestration (sandbox, replay, collector)
+└── app/        # FastAPI backend: routes, SPA serving, scheduler, WS feed, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI
 ```
 
-Dependency direction (import-linter contracts):
+Dependency contracts (import-linter): `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only).
 
-```text
-core ◁ engine ◁ backtest ◁ app
-web → app (HTTP only)
-```
+Backend is a **single process** (`pocketquant.app.main`, `:41921`) — one DI container wires the entire runtime and every route.
 
-Note: the backend is a single process (`pocketquant.app.main`) listening on `:41921`. One DI container wires the full runtime and every API route.
+> **Single worker only.** Scheduler, WS feed, and broker are in-process singletons. `--workers N` duplicates the reconcile loop and live broker connection.
 
 ## Prerequisites
 
-- Python 3.14+
-- `uv`
-- Docker + Docker Compose
-- Node.js 22+ and npm
-- `just` is optional but recommended
+Python 3.14+ · `uv` · Docker Compose · Node 22+ · `just` (optional). Cross-platform; `just` auto-selects the venv Python per-OS.
 
-Works on macOS, Linux, and Windows. The `just` recipes are cross-platform (they pick `.venv/bin/python` on macOS/Linux
-and `.venv\Scripts\python.exe` on Windows automatically). On Windows, run `just` from PowerShell.
-
-> **Windows + `curl`:** the smoke-test snippets below use real `curl`. PowerShell aliases `curl` to `Invoke-WebRequest`,
-> which has different syntax and does not accept the `\` line continuations. Either call `curl.exe` explicitly (bundled
-> with Windows 10+) and put the command on one line, or run the snippets from Git Bash / WSL.
-
-## Backend Quick Start
+## Run
 
 ```bash
 cp ../pocketquant-config/local/all-local.env .env
-just install
-just up
-just be      # backend (full runtime + API + SPA) on :41921
+just install                 # uv sync
+just up                      # mongo + redis
+just be                      # backend + API + SPA → :41921
+just fe                      # vite dev UI → :5173 (proxies /api → :41921)
 ```
 
-Backend URLs:
+- API docs: `:41921/api/v1/docs` · OpenAPI: `/api/v1/openapi.json` · Health: `/health`
+- `.env` sanity: `MONGODB_URL`/`REDIS_URL` hosts+ports must match `MONGO_PORT`/`REDIS_PORT`.
+- Fast route iteration: `ENABLE_JOBS=false just be` skips the trading runtime so `--reload` stays light.
 
-- API docs: `http://localhost:41921/api/v1/docs`
-- OpenAPI JSON: `http://localhost:41921/api/v1/openapi.json`
-- Health check: `http://localhost:41921/health`
+### Against the prod VPS DB
 
-If services fail to start, verify that `.env` is internally consistent:
-
-- `MONGODB_URL` must point to the same host/port exposed by `MONGO_PORT`
-- `REDIS_URL` must point to the same host/port exposed by `REDIS_PORT`
-
-## Frontend Quick Start
-
-Run the API first, then start the Vite app in a second terminal:
+`remote-db.env` ships with `ENABLE_JOBS=false` (scheduler + reconcile off; API/SPA/backtest only).
 
 ```bash
-cd web
-npm ci
-npm run dev
+cp .env .env.local.bak && cp ../pocketquant-config/local/remote-db.env .env
+just be                      # no `just up` — DB/Redis are remote
+cp .env.local.bak .env       # restore when done
 ```
 
-Frontend URL:
+> **Backtests persist to prod** (`backtest_runs`, `backtest_orders`, `backtest_trades`). Never run `pytest` on this `.env` — `conftest.py` refuses when `MONGODB_URL`/`REDIS_URL` point at the prod host.
 
-- Vite dev UI: `http://localhost:5173` by default
-
-Vite proxies `/api/*` to `http://localhost:41921` (the backend), so the browser app talks to the API automatically. If port `5173` is already in use, Vite will choose the next free port.
-
-## Serve The Built UI Through Docker
-
-Build the frontend:
+### Docker (built UI)
 
 ```bash
-cd web
-npm run build
+cd web && npm run build      # → web/dist
+just up                      # nginx serves dist, proxies /api → app, SPA fallback → index.html
 ```
 
-Run the full Docker stack:
+Open `http://localhost/`.
+
+## Smoke Test
+
+The UI needs at least one synced symbol/interval.
 
 ```bash
-just up  # starts mongo + redis (local infra; backend runs via `just be`)
-```
-
-Open: `http://localhost/`
-
-In production the web container's nginx serves `web/dist` and proxies `/api/*` to the app container. Refreshing a client-side route returns `index.html` (SPA fallback).
-
-## Market Data
-
-**Crypto market data:** Binance public REST/WS (@aggTrade). No authentication required.
-
-## Sync Smoke Test
-
-The UI only becomes useful after at least one symbol/interval has been synced.
-
-```bash
-curl -X POST http://localhost:41921/api/v1/market-data/sync \
-  -H "Content-Type: application/json" \
+curl -X POST :41921/api/v1/market-data/sync -H 'Content-Type: application/json' \
   -d '{"symbol":"BTCUSDT","exchange":"BINANCE","interval":"1d","n_bars":200}'
-
-curl "http://localhost:41921/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE?interval=1d"
-
-curl "http://localhost:41921/api/v1/market-data/ohlcv/BTCUSDT%3ABINANCE/1d?limit=20"
+curl ':41921/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE?interval=1d'   # → bar_count > 0
+curl ':41921/api/v1/market-data/ohlcv/BTCUSDT%3ABINANCE/1d?limit=20'        # → non-empty data
 ```
 
-What to expect:
+Then open `:5173`, load `BINANCE:BTCUSDT`, run a backtest strategy, confirm markers/overlays render.
 
-- the sync response returns `status: "completed"`
-- sync status shows `bar_count > 0`
-- OHLCV returns non-empty `data`
+Strategies exposed by the API:
 
-## UI Smoke Test
+- `hitnrun2` — 1m breakdown/breakup, capped technical SL/TP (entry 4h, SL 8h @ 1% account cap, TP 1h @ 2% account min)
+- `engulfing` — full-candle engulfing (body+range over prior) with rejection-wick filter; SL at pattern extreme, TP = max(RR, key level)
 
-After syncing `BINANCE:BTCUSDT`:
-
-1. Open `http://localhost:5173`
-2. Confirm the chart loads candles instead of the error overlay
-3. Open the symbol picker and verify synced symbols are listed
-4. Verify interval buttons appear for synced intervals only
-5. Switch intervals and confirm the chart reloads
-6. Toggle indicators and confirm overlays redraw
-7. Pick the `hitnrun2` strategy and confirm a backtest request runs
-8. Confirm backtest markers / position overlays appear on the chart
-
-If the UI is empty:
-
-- check browser devtools for failed `/api/*` calls
-- confirm the backend is still running
-- confirm sync status exists for the selected symbol and interval
-
-Current backtest strategy IDs exposed by the API:
-
-- `hitnrun2` — 1m breakdown/breakup with capped technical SL/TP (entry 4h window, SL 8h technical with 1% account cap, TP 1h technical with 2% account minimum)
-- `engulfing` — full-candle engulfing entries (body-over-body AND range-over-range) with a directional rejection-wick quality filter; SL at the pattern extreme, TP at max(risk-reward, key level)
-
-## Test Commands
-
-Backend:
+## Tests & Gates
 
 ```bash
-just test
-just test-pkg core
-just lint
-just types
+just test                    # pytest
+uv run ruff check .          # lint
+uv run pyright               # types
+uv run lint-imports          # 7 import-linter contracts
 ```
 
-Frontend:
+Manual API: Bruno [`tests/http`](./tests/http) · curl [`tests/manual/api-test.http`](./tests/manual/api-test.http).
 
-```bash
-cd web
-npm run lint
-npm run build
-```
-
-Manual API testing:
-
-- Bruno collection: [`tests/http`](./tests/http)
-- Curl walkthrough: [`tests/manual/api-test.http`](./tests/manual/api-test.http)
-
-## Shutdown
-
-Stop the Vite and API servers with `Ctrl+C`, then stop local infrastructure:
-
-```bash
-just down
-```
+Shutdown: `Ctrl+C` the servers, then `just down` (`just reset` also drops volumes).
 
 ## Docs
 
-- [Docs Index](./docs/README.md)
-- [System Architecture](./docs/system-architecture.md)
-- [Deployment](./docs/deployment.md)
+[Index](./docs/README.md) · [Architecture](./docs/system-architecture.md) · [Deployment](./docs/deployment.md)
 
 ## License
 
