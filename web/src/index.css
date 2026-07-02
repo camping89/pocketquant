@@ -1272,7 +1272,7 @@ input, select {
 
 .positions-tab__table-wrap {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
 }
 
@@ -1367,10 +1367,11 @@ input, select {
   color: var(--text-secondary);
 }
 
-/* Bounded scroll viewport the row virtualizer measures against. Sticky header
-   stays put while virtual rows scroll under it. */
+/* Bounded scroll viewport the row virtualizer measures against — fills the
+   panel so paging shows a single scrollbar. Sticky header stays put while
+   virtual rows scroll under it. */
 .positions-table__scroll {
-  max-height: 520px;
+  height: 100%;
   overflow-y: auto;
   position: relative;
 }
@@ -1562,7 +1563,7 @@ input, select {
   }
 
   .backtest-trades-chart {
-    height: 420px;
+    height: 620px;
   }
 }
 
@@ -1592,7 +1593,7 @@ input, select {
 .backtest-trades-chart {
   position: relative;
   width: 100%;
-  height: 280px;
+  height: 400px;
   min-height: 0;
 }
 
