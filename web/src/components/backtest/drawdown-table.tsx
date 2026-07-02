@@ -1,17 +1,15 @@
-import { useMemo, type CSSProperties } from 'react'
-import type { EquityPoint } from '../../api/backtest-api'
+import { type CSSProperties } from 'react'
+import type { DrawdownPeriod } from '../../api/backtest-api'
 import { fmtDuration } from '../strategy/backtest-panel/metric-cards'
-import { topDrawdowns } from './stats-utils'
 
 function fmtDate(iso: string): string {
   // Compact YYYY-MM-DD HH:mm; the curve carries naive-UTC ISO strings.
   return iso.replace('T', ' ').slice(0, 16)
 }
 
-/** Top-5 worst drawdown periods: depth, peak→trough window, recovery, duration. */
-export function DrawdownTable({ equityCurve }: { equityCurve: EquityPoint[] }) {
-  const periods = useMemo(() => topDrawdowns(equityCurve, 5), [equityCurve])
-
+/** Top-5 worst drawdown periods (computed server-side): depth, peak→trough
+ *  window, recovery, duration. */
+export function DrawdownTable({ periods }: { periods: DrawdownPeriod[] }) {
   if (periods.length === 0) {
     return <div className="empty-state" style={{ padding: 16 }}>No drawdown periods — equity never dipped below its peak.</div>
   }
@@ -42,10 +40,10 @@ export function DrawdownTable({ equityCurve }: { equityCurve: EquityPoint[] }) {
             <td style={{ ...td, textAlign: 'right', color: 'var(--down-color)', fontWeight: 600 }}>
               {(p.depth * 100).toFixed(2)}%
             </td>
-            <td style={td}>{fmtDate(p.startTime)}</td>
-            <td style={td}>{fmtDate(p.troughTime)}</td>
-            <td style={td}>{p.recoveryTime ? fmtDate(p.recoveryTime) : <span style={{ color: 'var(--text-secondary)' }}>under water</span>}</td>
-            <td style={{ ...td, textAlign: 'right' }}>{fmtDuration(p.durationSeconds)}</td>
+            <td style={td}>{fmtDate(p.start_time)}</td>
+            <td style={td}>{fmtDate(p.trough_time)}</td>
+            <td style={td}>{p.recovery_time ? fmtDate(p.recovery_time) : <span style={{ color: 'var(--text-secondary)' }}>under water</span>}</td>
+            <td style={{ ...td, textAlign: 'right' }}>{fmtDuration(p.duration_seconds)}</td>
           </tr>
         ))}
       </tbody>

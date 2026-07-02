@@ -48,8 +48,9 @@ export interface PositionData {
   pnl: number
   commission: number
   direction?: 'LONG' | 'SHORT'
-  /** Original index in the backtest positions array — used for highlight match. */
-  index?: number
+  /** Which selection drew this box — solid outline for a click, dashed for a
+   *  hover. Decoupled from any array index so paging can't misalign the outline. */
+  highlightKind?: 'click' | 'hover'
 }
 
 const FONT_SIZE = 9   // CSS px
@@ -76,21 +77,15 @@ class BoxRenderer implements IPrimitivePaneRenderer {
   private readonly positions: PositionData[]
   private readonly chart: IChartApiBase<Time>
   private readonly series: ISeriesApi<'Candlestick', Time>
-  private readonly highlightIndex: number | null
-  private readonly hoverIndex: number | null
 
   constructor(
     positions: PositionData[],
     chart: IChartApiBase<Time>,
     series: ISeriesApi<'Candlestick', Time>,
-    highlightIndex: number | null,
-    hoverIndex: number | null,
   ) {
     this.positions = positions
     this.chart = chart
     this.series = series
-    this.highlightIndex = highlightIndex
-    this.hoverIndex = hoverIndex
   }
 
   draw(target: CanvasRenderingTarget2D): void {
@@ -128,13 +123,11 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           ctx.fillRect(lx, boxTop, boxW, boxH)
 
           // Highlight outline (solid for click selection, dashed for hover)
-          const isHighlight = pos.index != null && pos.index === this.highlightIndex
-          const isHover = pos.index != null && pos.index === this.hoverIndex
-          if (isHighlight || isHover) {
+          if (pos.highlightKind) {
             ctx.save()
             ctx.strokeStyle = '#FFD600'
             ctx.lineWidth = 2 * vR
-            if (isHover && !isHighlight) ctx.setLineDash([5 * hR, 4 * hR])
+            if (pos.highlightKind === 'hover') ctx.setLineDash([5 * hR, 4 * hR])
             ctx.strokeRect(lx, boxTop, boxW, boxH)
             ctx.restore()
           }
@@ -222,10 +215,8 @@ class BoxPaneView implements IPrimitivePaneView {
     positions: PositionData[],
     chart: IChartApiBase<Time>,
     series: ISeriesApi<'Candlestick', Time>,
-    highlightIndex: number | null,
-    hoverIndex: number | null,
   ) {
-    this._renderer = new BoxRenderer(positions, chart, series, highlightIndex, hoverIndex)
+    this._renderer = new BoxRenderer(positions, chart, series)
   }
 
   zOrder() {
@@ -240,17 +231,9 @@ class BoxPaneView implements IPrimitivePaneView {
 export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   private _positions: PositionData[]
   private _view: BoxPaneView | null = null
-  private _highlightIndex: number | null
-  private _hoverIndex: number | null
 
-  constructor(
-    positions: PositionData[],
-    highlightIndex: number | null = null,
-    hoverIndex: number | null = null,
-  ) {
+  constructor(positions: PositionData[]) {
     this._positions = positions
-    this._highlightIndex = highlightIndex
-    this._hoverIndex = hoverIndex
   }
 
   attached(param: SeriesAttachedParameter<Time, 'Candlestick'>): void {
@@ -258,8 +241,6 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
       this._positions,
       param.chart as IChartApiBase<Time>,
       param.series,
-      this._highlightIndex,
-      this._hoverIndex,
     )
   }
 

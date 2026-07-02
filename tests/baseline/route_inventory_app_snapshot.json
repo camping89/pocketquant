@@ -45,6 +45,20 @@
     "methods": [
       "GET"
     ],
+    "name": "get_backtest_stats",
+    "path": "/api/v1/backtest/{run_id}/stats"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
+    "name": "get_backtest_trade_markers",
+    "path": "/api/v1/backtest/{run_id}/trade-markers"
+  },
+  {
+    "methods": [
+      "GET"
+    ],
     "name": "get_backtest_trades",
     "path": "/api/v1/backtest/{run_id}/trades"
   },

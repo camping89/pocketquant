@@ -22,7 +22,7 @@ import { useRealtimeBar } from '../../hooks/use-realtime-bar'
 import { engulfingMarkers } from '../../lib/indicators/engulfing'
 import { toUTCTimestamp } from '../../api/market-data-api'
 import type { Interval, IndicatorConfig } from '../../types/market-data'
-import type { BacktestPosition } from '../../api/backtest-api'
+import type { TradeMarker, TradeRow } from '../../api/backtest-api'
 import { PositionBoxPrimitive, type PositionData } from './position-box-primitive'
 import { useTimezone } from '../../lib/use-timezone'
 import { useTheme } from '../../lib/use-theme'
@@ -34,9 +34,12 @@ interface TradingChartProps {
   symbol: string
   interval: Interval
   indicators: IndicatorConfig
-  positions?: BacktestPosition[]
-  highlightedPositionIndex?: number | null
-  hoveredPositionIndex?: number | null
+  /** Lite per-trade rows driving BUY/SELL arrows for every trade in the run. */
+  markers?: TradeMarker[]
+  /** The clicked / hovered trade objects — draw the detail box for these only.
+   *  Passing the object (not an index) keeps the box correct across paging. */
+  highlightedTrade?: TradeRow | null
+  hoveredTrade?: TradeRow | null
   /** Anchor OHLCV to a past window end (backtest mode). When set, the chart loads
    *  history ending at this instant and runs no realtime stream. */
   anchorEndDate?: string
@@ -47,9 +50,9 @@ export function TradingChart({
   symbol,
   interval,
   indicators,
-  positions,
-  highlightedPositionIndex = null,
-  hoveredPositionIndex = null,
+  markers: tradeMarkers,
+  highlightedTrade = null,
+  hoveredTrade = null,
   anchorEndDate,
   onChartReady,
 }: TradingChartProps) {
@@ -249,16 +252,16 @@ export function TradingChart({
   // Strategy backtest markers — deduplicated by candle timestamp to avoid stacking
   // when chart interval differs from backtest interval (e.g. 1H backtest on 4H chart)
   const markers = useMemo<SeriesMarker<Time>[]>(() => {
-    if (!positions || positions.length === 0) return []
+    if (!tradeMarkers || tradeMarkers.length === 0) return []
 
     // Count occurrences per (time, side) to aggregate duplicates
     const buyCount = new Map<number, number>()
     const sellCount = new Map<number, number>()
 
-    for (const p of positions) {
+    for (const p of tradeMarkers) {
       const t = toUTCTimestamp(p.entry_time)
       buyCount.set(t, (buyCount.get(t) ?? 0) + 1)
-      if (p.exit_time != null && p.exit_price != null) {
+      if (p.exit_time != null) {
         const t2 = toUTCTimestamp(p.exit_time)
         sellCount.set(t2, (sellCount.get(t2) ?? 0) + 1)
       }
@@ -284,7 +287,7 @@ export function TradingChart({
       })
     }
     return result.sort((a, b) => (a.time as number) - (b.time as number))
-  }, [positions])
+  }, [tradeMarkers])
 
   // Pattern markers from the engulfing toggle — independent of backtest positions.
   const engulfMarkers = useMemo<SeriesMarker<Time>[]>(() => {
@@ -331,44 +334,43 @@ export function TradingChart({
       boxPrimitiveRef.current = null
     }
 
-    if (!positions || positions.length === 0) return
-
-    // Box is detail-on-demand: draw it only for the clicked (highlight) and
-    // hovered trades. Markers still mark every trade; default selection draws no
-    // box, keeping the chart readable when a run has hundreds of positions.
-    const selected = new Set<number>()
-    if (highlightedPositionIndex != null) selected.add(highlightedPositionIndex)
-    if (hoveredPositionIndex != null) selected.add(hoveredPositionIndex)
-    if (selected.size === 0) return
-
     const lastCandleTime = data?.candles.at(-1)?.time ?? null
 
-    const posData: PositionData[] = positions
-      .map((p, idx): PositionData | null => {
-        if (!selected.has(idx)) return null
-        const x2 = p.exit_time != null
-          ? toUTCTimestamp(p.exit_time) as Time
-          : lastCandleTime as Time
-        if (!x2) return null
-        return {
-          x1: toUTCTimestamp(p.entry_time) as Time,
-          x2,
-          entry_price: p.entry_price,
-          exit_price: p.exit_price,
-          sl_price: p.sl_price,
-          tp_price: p.tp_price,
-          quantity: p.quantity,
-          pnl: p.pnl,
-          commission: p.commission,
-          direction: p.direction ?? 'LONG',
-          index: idx,
-        }
-      })
-      .filter((p): p is PositionData => p !== null)
+    // Box is detail-on-demand: draw it only for the clicked (highlight) and
+    // hovered trades. Markers still mark every trade; no selection draws no box,
+    // keeping the chart readable when a run has hundreds of trades. A hovered
+    // trade that is also the highlight collapses to a single (click) box.
+    const boxes: PositionData[] = []
+    const toBox = (t: TradeRow, kind: 'click' | 'hover'): PositionData | null => {
+      const x2 = t.exit_time != null ? (toUTCTimestamp(t.exit_time) as Time) : (lastCandleTime as Time)
+      if (!x2) return null
+      return {
+        x1: toUTCTimestamp(t.entry_time) as Time,
+        x2,
+        entry_price: t.entry_price,
+        exit_price: t.exit_price,
+        sl_price: t.sl_price,
+        tp_price: t.tp_price,
+        quantity: t.quantity,
+        pnl: t.pnl,
+        commission: t.commission,
+        direction: t.direction,
+        highlightKind: kind,
+      }
+    }
 
-    if (posData.length === 0) return
+    if (highlightedTrade) {
+      const b = toBox(highlightedTrade, 'click')
+      if (b) boxes.push(b)
+    }
+    if (hoveredTrade && hoveredTrade.trade_id !== highlightedTrade?.trade_id) {
+      const b = toBox(hoveredTrade, 'hover')
+      if (b) boxes.push(b)
+    }
 
-    const primitive = new PositionBoxPrimitive(posData, highlightedPositionIndex, hoveredPositionIndex)
+    if (boxes.length === 0) return
+
+    const primitive = new PositionBoxPrimitive(boxes)
     candle.attachPrimitive(primitive)
     boxPrimitiveRef.current = primitive
 
@@ -378,7 +380,7 @@ export function TradingChart({
         boxPrimitiveRef.current = null
       }
     }
-  }, [positions, data, highlightedPositionIndex, hoveredPositionIndex])
+  }, [data, highlightedTrade, hoveredTrade])
 
   // Scroll the clicked trade into view. Driven by highlight only — hover must not
   // move the viewport, or scanning the table with the mouse would jerk the chart.
@@ -386,9 +388,8 @@ export function TradingChart({
     const chart = chartRef.current
     const candles = data?.candles
     if (!chart || !candles || candles.length === 0) return
-    if (highlightedPositionIndex == null) return
-    const p = positions?.[highlightedPositionIndex]
-    if (!p) return
+    if (!highlightedTrade) return
+    const p = highlightedTrade
 
     const firstT = candles[0].time as number
     const lastT = candles.at(-1)!.time as number
@@ -408,7 +409,7 @@ export function TradingChart({
     } catch {
       // range can be rejected before the series has data — ignore
     }
-  }, [highlightedPositionIndex, data]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [highlightedTrade, data]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>

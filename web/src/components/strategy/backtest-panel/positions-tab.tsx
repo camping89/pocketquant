@@ -1,54 +1,34 @@
 import { useMemo, useState } from 'react'
-import type { BacktestPosition, BacktestRunResult } from '../../../api/backtest-api'
+import type { TradeRow } from '../../../api/backtest-api'
+import { useBacktestTrades } from '../../../hooks/use-backtest-run'
 import { PositionsFilter } from './positions-filter'
 import { PositionsTable } from './positions-table'
-import {
-  aggregatePnl,
-  applyFilter,
-  fmtPnl,
-  sortPositions,
-  type FilterKey,
-  type IndexedPosition,
-  type SortDir,
-  type SortKey,
-} from './positions-utils'
+import { fmtPnl, type FilterKey, type SortDir, type SortKey } from './positions-utils'
 
 interface PositionsTabProps {
-  backtest: BacktestRunResult
-  highlightedIndex: number | null
-  onPositionClick?: (index: number, position: BacktestPosition) => void
-  onPositionHover?: (index: number | null, position: BacktestPosition | null) => void
+  runId: string
+  enabled: boolean
+  highlightedTradeId: string | null
+  onTradeClick?: (trade: TradeRow) => void
+  onTradeHover?: (trade: TradeRow | null) => void
 }
 
 export function PositionsTab({
-  backtest,
-  highlightedIndex,
-  onPositionClick,
-  onPositionHover,
+  runId,
+  enabled,
+  highlightedTradeId,
+  onTradeClick,
+  onTradeHover,
 }: PositionsTabProps) {
   const [filter, setFilter] = useState<FilterKey>('all')
   const [sortKey, setSortKey] = useState<SortKey>('entry_time')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const indexed = useMemo<IndexedPosition[]>(
-    () => backtest.positions.map((position, index) => ({ index, position })),
-    [backtest.positions],
-  )
-
-  const counts = useMemo(
-    () => ({
-      all: indexed.length,
-      wins: applyFilter(indexed, 'wins').length,
-      losses: applyFilter(indexed, 'losses').length,
-      open: applyFilter(indexed, 'open').length,
-    }),
-    [indexed],
-  )
-
-  const filtered = useMemo(() => applyFilter(indexed, filter), [indexed, filter])
-  const sorted = useMemo(() => sortPositions(filtered, sortKey, sortDir), [filtered, sortKey, sortDir])
-
-  const totalPnl = useMemo(() => aggregatePnl(filtered), [filtered])
+  const query = useBacktestTrades(runId, { sortKey, sortDir, filter }, enabled)
+  const pages = query.data?.pages
+  const rows = useMemo<TradeRow[]>(() => pages?.flatMap((p) => p.items) ?? [], [pages])
+  const total = pages?.[0]?.total ?? 0
+  const totalPnl = pages?.[0]?.total_pnl ?? 0
 
   const onSortChange = (key: SortKey) => {
     if (key === sortKey) {
@@ -59,10 +39,18 @@ export function PositionsTab({
     }
   }
 
-  if (indexed.length === 0) {
+  if (query.isLoading) {
     return (
       <div className="backtest-panel__tab-content">
-        <div className="empty-state">No positions in this backtest.</div>
+        <div className="empty-state">Loading trades…</div>
+      </div>
+    )
+  }
+
+  if (total === 0 && filter === 'all') {
+    return (
+      <div className="backtest-panel__tab-content">
+        <div className="empty-state">No closed trades in this backtest.</div>
       </div>
     )
   }
@@ -70,9 +58,9 @@ export function PositionsTab({
   return (
     <div className="backtest-panel__tab-content positions-tab">
       <div className="positions-tab__toolbar">
-        <PositionsFilter filter={filter} onChange={setFilter} counts={counts} />
+        <PositionsFilter filter={filter} onChange={setFilter} activeCount={total} />
         <div className="positions-tab__footer">
-          <span>{filtered.length} positions</span>
+          <span>{total} trades</span>
           <span>·</span>
           <span className={totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
             Total PnL {fmtPnl(totalPnl)}
@@ -81,16 +69,18 @@ export function PositionsTab({
       </div>
       <div className="positions-tab__table-wrap">
         <PositionsTable
-          rows={sorted}
+          rows={rows}
           sortKey={sortKey}
           sortDir={sortDir}
-          highlightedIndex={highlightedIndex}
+          highlightedTradeId={highlightedTradeId}
           onSortChange={onSortChange}
-          onRowClick={(item) => onPositionClick?.(item.index, item.position)}
-          onRowMouseEnter={
-            onPositionHover ? (item) => onPositionHover(item.index, item.position) : undefined
-          }
-          onRowMouseLeave={onPositionHover ? () => onPositionHover(null, null) : undefined}
+          onRowClick={(t) => onTradeClick?.(t)}
+          onRowMouseEnter={onTradeHover ? (t) => onTradeHover(t) : undefined}
+          onRowMouseLeave={onTradeHover ? () => onTradeHover(null) : undefined}
+          onReachEnd={() => {
+            if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage()
+          }}
+          isFetchingNextPage={query.isFetchingNextPage}
         />
       </div>
     </div>

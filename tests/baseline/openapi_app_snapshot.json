@@ -507,6 +507,38 @@
         "title": "SyncSymbolCommand",
         "type": "object"
       },
+      "TradeFilter": {
+        "enum": [
+          "all",
+          "wins",
+          "losses"
+        ],
+        "title": "TradeFilter",
+        "type": "string"
+      },
+      "TradeSortDir": {
+        "enum": [
+          "asc",
+          "desc"
+        ],
+        "title": "TradeSortDir",
+        "type": "string"
+      },
+      "TradeSortKey": {
+        "enum": [
+          "entry_time",
+          "pnl",
+          "quantity",
+          "duration_seconds",
+          "entry_price",
+          "exit_price",
+          "commission",
+          "direction",
+          "status"
+        ],
+        "title": "TradeSortKey",
+        "type": "string"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -849,9 +881,99 @@
         ]
       }
     },
+    "/api/v1/backtest/{run_id}/stats": {
+      "get": {
+        "description": "Distribution + streak + profit-factor + drawdown analytics for a run.",
+        "operationId": "get_backtest_stats_api_v1_backtest__run_id__stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Backtest Stats Api V1 Backtest  Run Id  Stats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backtest Stats",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
+    "/api/v1/backtest/{run_id}/trade-markers": {
+      "get": {
+        "description": "Lite per-trade entry/exit/direction rows for the chart's BUY/SELL arrows.",
+        "operationId": "get_backtest_trade_markers_api_v1_backtest__run_id__trade_markers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Backtest Trade Markers Api V1 Backtest  Run Id  Trade Markers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backtest Trade Markers",
+        "tags": [
+          "backtest"
+        ]
+      }
+    },
     "/api/v1/backtest/{run_id}/trades": {
       "get": {
-        "description": "Closed round-trip trades for a run (joined from ``backtest_trades``).",
+        "description": "Keyset page of closed trades for a run, server-side filtered + sorted.\n\n``cursor`` is the opaque token from the previous page's ``next_cursor``;\nomit it for the first page.",
         "operationId": "get_backtest_trades_api_v1_backtest__run_id__trades_get",
         "parameters": [
           {
@@ -861,6 +983,59 @@
             "schema": {
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_key",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TradeSortKey",
+              "default": "entry_time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_dir",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TradeSortDir",
+              "default": "desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TradeFilter",
+              "default": "all"
             }
           }
         ],

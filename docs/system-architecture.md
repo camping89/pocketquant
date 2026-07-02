@@ -191,8 +191,10 @@ src/pocketquant/backtest/              # Backtest orchestration
 ├── backtest_command_service.py        # BacktestCommandService (allocate run_id + save started doc)
 ├── backtest_execution_service.py      # BacktestExecutionService (asyncio task body: run + persist)
 ├── backtest_query_service.py          # BacktestQueryService (fetch run + trades)
+├── backtest_stats_service.py          # BacktestStatsService (keyset paged trades, markers, analytics)
 ├── models/backtest_config.py          # BacktestConfig
 ├── engine/                            # BacktestAppService + sandbox + replay + result collector
+├── domain/services/trade_stats_calculator.py  # Pure histograms, streaks, profit factor, drawdowns
 └── workers/backtest_dispatch.py       # run_single (engine setup + sandbox)
 
 src/pocketquant/core/domain/services/  # Pure domain services
@@ -472,6 +474,7 @@ src/
 | Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
 | Backtest trigger (save started doc) | `backtest/backtest_command_service.py` |
 | Backtest task body (run + persist) | `backtest/backtest_execution_service.py` |
+| Backtest stats + paged trades + markers | `backtest/backtest_stats_service.py` (orchest) + `backtest/domain/services/trade_stats_calculator.py` (domain) |
 | Backtest engine setup + replay | `backtest/workers/backtest_dispatch.py`, `backtest/engine/backtest_app_service.py` |
 | Strategy runtime dispatch | `engine/strategy_command_service.py`, `engine/strategy_query_service.py` |
 | Order state machine | `engine/order_command_service.py` |
@@ -531,9 +534,15 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 
 1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
 2. The engine runs in a per-run `BacktestSandbox` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
-3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
+3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades` (keyset paged), `GET /backtest/{run_id}/trade-markers`, `GET /backtest/{run_id}/stats`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
 
-**History scope:** `GET /backtest/strategy/{id}` lists a strategy's runs, optionally narrowed by `?symbol=&interval=`. `symbol` is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`) — a bare code never matches. `BacktestResult` denormalizes `symbol`/`interval` top-level (from `config_snapshot`, uppercased) so the scope filter hits an index; pre-denormalization docs fall back to the snapshot in `from_mongo`.
+**Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` returns paginated trades via keyset cursor, server-side filtered (all/wins/losses) and sorted. Query params: `limit` (default 50), `cursor` (opaque base64 token), `sort_key` (9 keys: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` and `total_pnl` computed once per run (first page, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
+
+**Markers endpoint (lite chart arrows):** `GET /backtest/{run_id}/trade-markers` returns list of `{trade_id, entry_time, exit_time, direction}` for the chart's BUY/SELL arrows (1 per trade, no paging).
+
+**Stats endpoint (analytics):** `GET /backtest/{run_id}/stats` returns `{pnl_histogram, duration_histogram, streaks (max_win_streak, max_loss_streak), profit_factor_by_direction, drawdowns (top 5), profit_factor_all}` — all computed from trades via domain calculator, cached in app memory during route lifetime.
+
+**History scope:** `GET /backtest/strategy/{strategy_id}` lists a strategy's runs, optionally narrowed by `?symbol=&interval=`. `symbol` is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`) — a bare code never matches. `BacktestResult` denormalizes `symbol`/`interval` top-level (from `config_snapshot`, uppercased) so the scope filter hits an index; pre-denormalization docs fall back to the snapshot in `from_mongo`.
 
 **Run-id invariant:** the route-allocated `run_id` is the run doc `_id` and every `backtest_orders.run_id` / `backtest_trades.run_id`.
 

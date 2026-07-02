@@ -103,7 +103,7 @@ async def test_delete_by_run_only_matches(database: Database) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ensure_indexes_creates_all_five(database: Database) -> None:
+async def test_ensure_indexes_creates_expected(database: Database) -> None:
     repo = BacktestTradeRepository(database)
     await repo.ensure_indexes()
     coll = database.get_collection("backtest_trades")
@@ -114,5 +114,105 @@ async def test_ensure_indexes_creates_all_five(database: Database) -> None:
         "ix_bttrades_entry_time",
         "ix_bttrades_pnl",
         "ix_bttrades_run_entry",
+        "ix_bttrades_run_pnl",
     }
     assert expected.issubset(set(indexes))
+
+
+@pytest.mark.asyncio
+async def test_paged_walks_all_trades_without_gaps(database: Database) -> None:
+    repo = BacktestTradeRepository(database)
+    trades = [_trade(trade_id=f"t{i}", run_id="r1", pnl=float(i)) for i in range(5)]
+    for i, t in enumerate(trades):
+        t.entry_time = T0 + timedelta(hours=i)
+    await repo.save_many(trades)
+
+    seen: list[str] = []
+    cursor_value: object | None = None
+    cursor_id: str | None = None
+    for _ in range(10):  # generous bound; loop breaks on has_more == False
+        page, has_more = await repo.list_by_run_paged(
+            "r1",
+            limit=2,
+            sort_key="entry_time",
+            sort_dir="asc",
+            cursor_value=cursor_value,
+            cursor_id=cursor_id,
+        )
+        seen.extend(str(t.trade_id) for t in page)
+        if not has_more or not page:
+            break
+        cursor_value = page[-1].entry_time
+        cursor_id = str(page[-1].trade_id)
+
+    expected = [str(t.trade_id) for t in trades]  # entry_time asc == insertion order
+    assert seen == expected
+    assert len(seen) == len(set(seen))  # no duplicates across pages
+
+
+@pytest.mark.asyncio
+async def test_paged_keyset_stable_on_equal_sort_value(database: Database) -> None:
+    # All trades share entry_time; only the _id tie-break keeps ordering total.
+    repo = BacktestTradeRepository(database)
+    trades = [_trade(trade_id=f"t{i}", run_id="r1", pnl=1.0) for i in range(4)]
+    await repo.save_many(trades)
+
+    first, has_more = await repo.list_by_run_paged(
+        "r1", limit=2, sort_key="entry_time", sort_dir="asc"
+    )
+    assert has_more
+    second, _ = await repo.list_by_run_paged(
+        "r1",
+        limit=2,
+        sort_key="entry_time",
+        sort_dir="asc",
+        cursor_value=first[-1].entry_time,
+        cursor_id=str(first[-1].trade_id),
+    )
+    ids = [str(t.trade_id) for t in first + second]
+    assert len(ids) == 4
+    assert len(set(ids)) == 4  # no row seen twice, none skipped
+
+
+@pytest.mark.asyncio
+async def test_paged_wins_filter(database: Database) -> None:
+    repo = BacktestTradeRepository(database)
+    await repo.save_many(
+        [
+            _trade(trade_id="t1", run_id="r1", pnl=5.0),
+            _trade(trade_id="t2", run_id="r1", pnl=-3.0),
+            _trade(trade_id="t3", run_id="r1", pnl=8.0),
+        ]
+    )
+    wins, _ = await repo.list_by_run_paged("r1", limit=10, pnl_filter="wins")
+    assert {str(t.trade_id) for t in wins} == {_tid("t1"), _tid("t3")}
+    assert await repo.count_by_run("r1", "wins") == 2
+    assert await repo.count_by_run("r1", "losses") == 1
+    assert await repo.count_by_run("r1") == 3
+
+
+@pytest.mark.asyncio
+async def test_sum_pnl_by_run(database: Database) -> None:
+    repo = BacktestTradeRepository(database)
+    await repo.save_many(
+        [
+            _trade(trade_id="t1", run_id="r1", pnl=5.0),
+            _trade(trade_id="t2", run_id="r1", pnl=-3.0),
+            _trade(trade_id="t3", run_id="r2", pnl=99.0),
+        ]
+    )
+    assert await repo.sum_pnl_by_run("r1") == 2.0
+    assert await repo.sum_pnl_by_run("r1", "wins") == 5.0
+    assert await repo.sum_pnl_by_run("missing") == 0.0
+
+
+@pytest.mark.asyncio
+async def test_markers_projection_chronological(database: Database) -> None:
+    repo = BacktestTradeRepository(database)
+    older = _trade(trade_id="t1", run_id="r1")
+    newer = _trade(trade_id="t2", run_id="r1")
+    newer.entry_time = T0 + timedelta(hours=2)
+    await repo.save_many([newer, older])
+    markers = await repo.list_markers_by_run("r1")
+    assert [m["_id"] for m in markers] == [_tid("t1"), _tid("t2")]
+    assert set(markers[0].keys()) == {"_id", "entry_time", "exit_time", "direction"}

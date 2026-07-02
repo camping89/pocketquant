@@ -13,6 +13,7 @@ from dishka import Provider, Scope, provide
 
 from pocketquant.backtest.backtest_command_service import BacktestCommandService
 from pocketquant.backtest.backtest_query_service import BacktestQueryService
+from pocketquant.backtest.backtest_stats_service import BacktestStatsService
 from pocketquant.engine.market_data.ohlcv_service import OhlcvService
 from pocketquant.engine.market_data.quotes_service import QuoteQueryService
 from pocketquant.engine.market_data.symbols_service import SymbolQueryService
@@ -30,3 +31,4 @@ class ServicesProvider(Provider):
     symbol_query_service = provide(SymbolQueryService, scope=Scope.APP)
     backtest_command_service = provide(BacktestCommandService, scope=Scope.APP)
     backtest_query_service = provide(BacktestQueryService, scope=Scope.APP)
+    backtest_stats_service = provide(BacktestStatsService, scope=Scope.APP)

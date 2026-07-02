@@ -24,6 +24,13 @@ from pocketquant.backtest.backtest_query_service import (
     GetBacktestQuery,
     ListBacktestsQuery,
 )
+from pocketquant.backtest.backtest_stats_service import (
+    BacktestStatsService,
+    ListTradesQuery,
+    TradeFilter,
+    TradeSortDir,
+    TradeSortKey,
+)
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 
 backtest_router = APIRouter(prefix="/backtest", tags=["backtest"], route_class=DishkaRoute)
@@ -100,11 +107,49 @@ async def get_backtest_equity(
 @backtest_router.get("/{run_id}/trades")
 async def get_backtest_trades(
     run_id: str,
-    query_svc: FromDishka[BacktestQueryService],
+    stats_svc: FromDishka[BacktestStatsService],
+    limit: int = 50,
+    cursor: str | None = None,
+    sort_key: TradeSortKey = TradeSortKey.entry_time,
+    sort_dir: TradeSortDir = TradeSortDir.desc,
+    filter: TradeFilter = TradeFilter.all,
 ) -> dict:
-    """Closed round-trip trades for a run (joined from ``backtest_trades``)."""
-    trades = await query_svc.list_trades(run_id)
-    return {"run_id": run_id, "trades": trades}
+    """Keyset page of closed trades for a run, server-side filtered + sorted.
+
+    ``cursor`` is the opaque token from the previous page's ``next_cursor``;
+    omit it for the first page.
+    """
+    page = await stats_svc.list_trades_paged(
+        ListTradesQuery(
+            run_id=run_id,
+            limit=limit,
+            cursor=cursor,
+            sort_key=sort_key,
+            sort_dir=sort_dir,
+            filter=filter,
+        )
+    )
+    return page.model_dump()
+
+
+@backtest_router.get("/{run_id}/trade-markers")
+async def get_backtest_trade_markers(
+    run_id: str,
+    stats_svc: FromDishka[BacktestStatsService],
+) -> dict:
+    """Lite per-trade entry/exit/direction rows for the chart's BUY/SELL arrows."""
+    markers = await stats_svc.list_markers(run_id)
+    return {"run_id": run_id, "markers": [m.model_dump() for m in markers]}
+
+
+@backtest_router.get("/{run_id}/stats")
+async def get_backtest_stats(
+    run_id: str,
+    stats_svc: FromDishka[BacktestStatsService],
+) -> dict:
+    """Distribution + streak + profit-factor + drawdown analytics for a run."""
+    stats = await stats_svc.get_stats(run_id)
+    return stats.model_dump()
 
 
 @backtest_router.get("/{run_id}/orders")

@@ -8,7 +8,7 @@ import {
 } from 'lightweight-charts'
 import { readChartColors } from '../../lib/theme-colors'
 import { useTheme } from '../../lib/use-theme'
-import type { HistogramBin } from './stats-utils'
+import type { HistogramBin } from '../../api/backtest-api'
 
 interface HistogramChartProps {
   bins: HistogramBin[]
