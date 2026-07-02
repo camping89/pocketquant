@@ -1367,6 +1367,21 @@ input, select {
   color: var(--text-secondary);
 }
 
+/* Bounded scroll viewport the row virtualizer measures against. Sticky header
+   stays put while virtual rows scroll under it. */
+.positions-table__scroll {
+  max-height: 520px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.positions-table__loading {
+  padding: 8px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .direction-badge {
   display: inline-block;
   padding: 1px 6px;

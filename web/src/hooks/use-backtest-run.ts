@@ -1,4 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   fetchStrategies,
@@ -7,10 +12,16 @@ import {
   listBacktestRuns,
   listAllBacktestRuns,
   fetchBacktestOrders,
+  fetchBacktestTradesPage,
+  fetchBacktestMarkers,
+  fetchBacktestStats,
   setVerdict,
   type RunBacktestBody,
   type BacktestRunScope,
   type BacktestRunResult,
+  type TradeSortKey,
+  type TradeSortDir,
+  type TradeFilterKey,
 } from '../api/backtest-api'
 
 export function useStrategyList() {
@@ -59,6 +70,48 @@ export function useAllBacktestRuns(scope: Omit<BacktestRunScope, 'strategy'>, en
     queryKey: ['backtest-runs', 'all', scope],
     queryFn: () => listAllBacktestRuns(scope),
     enabled,
+  })
+}
+
+export interface TradesQueryOpts {
+  sortKey: TradeSortKey
+  sortDir: TradeSortDir
+  filter: TradeFilterKey
+}
+
+/** Cursor-paged closed trades — keyed by sort/filter so changing either starts a
+ *  fresh keyset walk. Lazy: only runs once ``enabled`` (Trades tab open + run
+ *  terminal). Scroll-to-end drives ``fetchNextPage`` in the table. */
+export function useBacktestTrades(
+  runId: string,
+  { sortKey, sortDir, filter }: TradesQueryOpts,
+  enabled: boolean,
+) {
+  return useInfiniteQuery({
+    queryKey: ['backtest-trades', runId, sortKey, sortDir, filter],
+    queryFn: ({ pageParam }) =>
+      fetchBacktestTradesPage(runId, { cursor: pageParam, sortKey, sortDir, filter }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.has_more ? last.next_cursor : undefined),
+    enabled: enabled && !!runId,
+  })
+}
+
+/** All trades' entry/exit/direction for the chart's BUY/SELL arrows — lazy. */
+export function useBacktestMarkers(runId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['backtest-markers', runId],
+    queryFn: () => fetchBacktestMarkers(runId),
+    enabled: enabled && !!runId,
+  })
+}
+
+/** Distribution + streak + profit-factor + drawdown analytics for a run — lazy. */
+export function useBacktestStats(runId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['backtest-stats', runId],
+    queryFn: () => fetchBacktestStats(runId),
+    enabled: enabled && !!runId,
   })
 }
 

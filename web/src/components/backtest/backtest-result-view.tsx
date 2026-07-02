@@ -1,19 +1,20 @@
 import { useMemo, useState, type CSSProperties } from 'react'
-import type { BacktestRunResult } from '../../api/backtest-api'
+import type { BacktestRunResult, TradeRow } from '../../api/backtest-api'
 import type { IndicatorConfig, Interval } from '../../types/market-data'
+import { useBacktestMarkers, useBacktestStats } from '../../hooks/use-backtest-run'
 import { MetricCard } from '../strategy/backtest-panel/metric-card'
 import { buildMetricCards, buildMetricGroups } from '../strategy/backtest-panel/metric-cards'
 import { PositionsTab } from '../strategy/backtest-panel/positions-tab'
+import { OpenPositionsTab } from '../strategy/backtest-panel/open-positions-tab'
 import { TradingChart } from '../chart/trading-chart'
 import { EquityDrawdownChart } from './equity-drawdown-chart'
 import { PnlHistogram } from './pnl-histogram'
 import { DurationHistogram } from './duration-histogram'
 import { DrawdownTable } from './drawdown-table'
-import { computeStreaks, profitFactorByDirection } from './stats-utils'
 import { OrdersTable } from './orders-table'
 import { VerdictPanel } from './verdict-panel'
 
-type ResultTab = 'overview' | 'trades' | 'risk' | 'orders'
+type ResultTab = 'overview' | 'trades' | 'open' | 'risk' | 'orders'
 
 // Backtest chart shows raw price + trade markers/boxes only — live overlays
 // (EMA, engulfing) belong to the realtime chart, not the post-mortem view.
@@ -29,6 +30,7 @@ const NO_INDICATORS: IndicatorConfig = {
 const TABS: { key: ResultTab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'trades', label: 'Trades' },
+  { key: 'open', label: 'Open Positions' },
   { key: 'risk', label: 'Risk & Time' },
   { key: 'orders', label: 'Orders' },
 ]
@@ -46,18 +48,28 @@ const sectionTitle: CSSProperties = {
 
 export function BacktestResultView({ run, runId }: { run: BacktestRunResult; runId: string }) {
   const [tab, setTab] = useState<ResultTab>('overview')
-  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  // Selection is by trade object (stable trade_id), so it survives paging +
+  // server-side re-sorts. The clicked/hovered TradeRow feeds the chart's box.
+  const [highlightedTrade, setHighlightedTrade] = useState<TradeRow | null>(null)
+  const [hoveredTrade, setHoveredTrade] = useState<TradeRow | null>(null)
   const metrics = run.metrics
+  const isFinished = run.status === 'finished'
+  const tradesActive = tab === 'trades' && isFinished
+  // Stats feed the Trades tab (histograms, streaks, PF) AND the Risk tab
+  // (drawdown periods), so fetch for either.
+  const statsActive = (tab === 'trades' || tab === 'risk') && isFinished
 
-  // Drop chart/table selection when switching to another run — a stale index
-  // would highlight the wrong trade against the new run's positions. Adjust
-  // during render (not an effect) so selection clears before the chart paints.
+  const markersQuery = useBacktestMarkers(runId, tradesActive)
+  const statsQuery = useBacktestStats(runId, statsActive)
+
+  // Drop chart/table selection when switching to another run — a stale trade
+  // would highlight against the new run's data. Adjust during render (not an
+  // effect) so selection clears before the chart paints.
   const [prevRunId, setPrevRunId] = useState(runId)
   if (runId !== prevRunId) {
     setPrevRunId(runId)
-    setHighlightedIndex(null)
-    setHoveredIndex(null)
+    setHighlightedTrade(null)
+    setHoveredTrade(null)
   }
 
   const kpiCards = useMemo(
@@ -65,8 +77,9 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
     [metrics],
   )
   const groups = useMemo(() => (metrics ? buildMetricGroups(metrics) : []), [metrics])
-  const streaks = useMemo(() => computeStreaks(run.positions), [run.positions])
-  const pfSplit = useMemo(() => profitFactorByDirection(run.positions), [run.positions])
+  const stats = statsQuery.data
+  const pfLong = stats?.profit_factor_by_direction.long
+  const pfShort = stats?.profit_factor_by_direction.short
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -120,9 +133,9 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
                 symbol={run.symbol}
                 interval={run.interval as Interval}
                 indicators={NO_INDICATORS}
-                positions={run.positions}
-                highlightedPositionIndex={highlightedIndex}
-                hoveredPositionIndex={hoveredIndex}
+                markers={markersQuery.data}
+                highlightedTrade={highlightedTrade}
+                hoveredTrade={hoveredTrade}
                 anchorEndDate={run.end_date}
               />
             </div>
@@ -130,30 +143,33 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
             <div className="empty-state">Symbol/interval không khả dụng cho run này.</div>
           )}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, padding: '8px 0' }}>
-            <span>Max win streak: <strong style={{ color: 'var(--up-color)' }}>{streaks.maxWinStreak}</strong></span>
-            <span>Max loss streak: <strong style={{ color: 'var(--down-color)' }}>{streaks.maxLossStreak}</strong></span>
-            <span>PF (Long): <strong>{pfSplit.long == null ? '∞' : pfSplit.long.toFixed(2)}</strong></span>
-            <span>PF (Short): <strong>{pfSplit.short == null ? '∞' : pfSplit.short.toFixed(2)}</strong></span>
-            {metrics && <span>PF (All): <strong>{isFinite(metrics.profit_factor) ? metrics.profit_factor.toFixed(2) : '∞'}</strong></span>}
+            <span>Max win streak: <strong style={{ color: 'var(--up-color)' }}>{stats?.streaks.max_win_streak ?? '—'}</strong></span>
+            <span>Max loss streak: <strong style={{ color: 'var(--down-color)' }}>{stats?.streaks.max_loss_streak ?? '—'}</strong></span>
+            <span>PF (Long): <strong>{pfLong == null ? '∞' : pfLong.toFixed(2)}</strong></span>
+            <span>PF (Short): <strong>{pfShort == null ? '∞' : pfShort.toFixed(2)}</strong></span>
+            {stats && <span>PF (All): <strong>{isFinite(stats.profit_factor_all) ? stats.profit_factor_all.toFixed(2) : '∞'}</strong></span>}
           </div>
           <div style={sectionTitle}>PnL distribution</div>
-          <PnlHistogram positions={run.positions} />
+          <PnlHistogram bins={stats?.pnl_histogram ?? []} />
           <div style={sectionTitle}>Duration distribution (hours)</div>
-          <DurationHistogram positions={run.positions} />
+          <DurationHistogram bins={stats?.duration_histogram ?? []} />
           <div style={sectionTitle}>Trades</div>
           <PositionsTab
-            backtest={run}
-            highlightedIndex={highlightedIndex}
-            onPositionClick={(index) => setHighlightedIndex(index)}
-            onPositionHover={(index) => setHoveredIndex(index)}
+            runId={runId}
+            enabled={isFinished}
+            highlightedTradeId={highlightedTrade?.trade_id ?? null}
+            onTradeClick={setHighlightedTrade}
+            onTradeHover={setHoveredTrade}
           />
         </div>
       )}
 
+      {tab === 'open' && <OpenPositionsTab positions={run.open_positions} />}
+
       {tab === 'risk' && (
         <div style={{ padding: '8px 0' }}>
           <div style={sectionTitle}>Worst drawdowns</div>
-          <DrawdownTable equityCurve={run.equity_curve} />
+          <DrawdownTable periods={stats?.drawdowns ?? []} />
         </div>
       )}
 

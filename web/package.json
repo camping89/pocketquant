@@ -14,6 +14,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.95.2",
     "@tanstack/react-router": "^1.168.18",
+    "@tanstack/react-virtual": "^3.14.5",
     "@tanstack/router-plugin": "^1.167.18",
     "dayjs": "^1.11.20",
     "echarts": "^6.0.0",

@@ -39,14 +39,15 @@ export interface EquityPoint {
 
 export type BacktestStatus = 'started' | 'finished' | 'failed'
 
-/** A single ad-hoc backtest run. ``positions`` is assembled client-side from the
- *  trades endpoint + the run doc's open lots — the run doc itself is slim. */
+/** A single ad-hoc backtest run. Closed trades are NO LONGER inlined here — the
+ *  Trades tab pages them from ``/trades``. ``open_positions`` carries only the
+ *  still-open lots from the run doc (rendered in their own tab). */
 export interface BacktestRunResult {
   id?: string
   strategy_code?: string
   status: BacktestStatus | string
   metrics: BacktestMetrics | null
-  positions: BacktestPosition[]
+  open_positions: BacktestPosition[]
   equity_curve: EquityPoint[]
   config_snapshot?: Record<string, unknown>
   /** Composite symbol / interval / window end — lifted from config_snapshot so a
@@ -59,6 +60,111 @@ export interface BacktestRunResult {
   started_at?: string
   completed_at?: string
   parameters?: Record<string, unknown>
+}
+
+// --- Paged trades + markers + stats (server-driven) -------------------------
+
+export type TradeSortKey =
+  | 'entry_time'
+  | 'pnl'
+  | 'quantity'
+  | 'duration_seconds'
+  | 'entry_price'
+  | 'exit_price'
+  | 'commission'
+  | 'direction'
+  | 'status'
+
+export type TradeSortDir = 'asc' | 'desc'
+export type TradeFilterKey = 'all' | 'wins' | 'losses'
+
+/** One closed trade as returned by the paged endpoint (carries its stable id). */
+export interface TradeRow {
+  trade_id: string
+  direction: 'LONG' | 'SHORT'
+  entry_price: number
+  entry_time: string
+  exit_price: number
+  exit_time: string | null
+  quantity: number
+  sl_price: number | null
+  tp_price: number | null
+  pnl: number
+  commission: number
+  duration_seconds: number
+}
+
+export interface PagedTrades {
+  items: TradeRow[]
+  next_cursor: string | null
+  has_more: boolean
+  /** Count of the full filtered set (not just loaded pages) — table footer. */
+  total: number
+  /** Summed PnL of the full filtered set — table footer. */
+  total_pnl: number
+}
+
+export interface TradeMarker {
+  trade_id: string
+  entry_time: string
+  exit_time: string | null
+  direction: 'LONG' | 'SHORT'
+}
+
+export interface HistogramBin {
+  lo: number
+  hi: number
+  count: number
+}
+
+export interface DrawdownPeriod {
+  depth: number
+  start_time: string
+  trough_time: string
+  recovery_time: string | null
+  duration_seconds: number
+}
+
+export interface BacktestStats {
+  pnl_histogram: HistogramBin[]
+  duration_histogram: HistogramBin[]
+  streaks: { max_win_streak: number; max_loss_streak: number }
+  profit_factor_by_direction: { long: number | null; short: number | null }
+  drawdowns: DrawdownPeriod[]
+  profit_factor_all: number
+}
+
+export interface TradesPageParams {
+  cursor?: string | null
+  limit?: number
+  sortKey?: TradeSortKey
+  sortDir?: TradeSortDir
+  filter?: TradeFilterKey
+}
+
+export async function fetchBacktestTradesPage(
+  runId: string,
+  { cursor, limit = 50, sortKey = 'entry_time', sortDir = 'desc', filter = 'all' }: TradesPageParams,
+): Promise<PagedTrades> {
+  const params: Record<string, string> = {
+    limit: String(limit),
+    sort_key: sortKey,
+    sort_dir: sortDir,
+    filter,
+  }
+  if (cursor) params.cursor = cursor
+  return apiFetch<PagedTrades>(`/api/v1/backtest/${runId}/trades`, params)
+}
+
+export async function fetchBacktestMarkers(runId: string): Promise<TradeMarker[]> {
+  const { markers } = await apiFetch<{ markers: TradeMarker[] }>(
+    `/api/v1/backtest/${runId}/trade-markers`,
+  )
+  return markers
+}
+
+export async function fetchBacktestStats(runId: string): Promise<BacktestStats> {
+  return apiFetch<BacktestStats>(`/api/v1/backtest/${runId}/stats`)
 }
 
 export interface RunBacktestBody {
@@ -97,19 +203,6 @@ interface BacktestRunDoc {
   parameters?: Record<string, unknown>
 }
 
-interface BacktestTrade {
-  direction: 'LONG' | 'SHORT'
-  entry_price: number
-  entry_time: string
-  exit_price: number
-  exit_time: string | null
-  quantity: number
-  sl_price: number | null
-  tp_price: number | null
-  pnl: number
-  commission: number
-}
-
 export async function fetchStrategies(): Promise<string[]> {
   return apiFetch<string[]>('/api/v1/backtest/strategies')
 }
@@ -118,51 +211,29 @@ export async function runBacktest(body: RunBacktestBody): Promise<{ request_id: 
   return apiPost<{ request_id: string }>('/api/v1/backtest/run', body)
 }
 
-/** Fetch a run + join its closed trades into the unified ``positions`` list.
- *  Trades are only queried once the run is terminal (no point while ``started``). */
+/** Fetch a run's slim doc. Closed trades are paged separately via
+ *  ``fetchBacktestTradesPage`` — only the still-open lots come inline here. */
 export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult> {
   const doc = await apiFetch<BacktestRunDoc>(`/api/v1/backtest/${runId}`)
-  const positions: BacktestPosition[] = []
-  if (doc.status === 'finished') {
-    const { trades } = await apiFetch<{ trades: BacktestTrade[] }>(
-      `/api/v1/backtest/${runId}/trades`,
-    )
-    for (const t of trades) {
-      positions.push({
-        direction: t.direction,
-        entry_price: t.entry_price,
-        entry_time: t.entry_time,
-        exit_price: t.exit_price,
-        exit_time: t.exit_time,
-        quantity: t.quantity,
-        sl_price: t.sl_price,
-        tp_price: t.tp_price,
-        pnl: t.pnl,
-        commission: t.commission,
-      })
-    }
-    for (const ol of doc.open_positions ?? []) {
-      positions.push({
-        direction: ol.direction,
-        entry_price: ol.entry_price,
-        entry_time: ol.entry_time,
-        exit_price: null,
-        exit_time: null,
-        quantity: ol.quantity,
-        sl_price: ol.sl_price,
-        tp_price: ol.tp_price,
-        pnl: 0,
-        commission: ol.entry_commission_portion ?? 0,
-      })
-    }
-  }
+  const open_positions: BacktestPosition[] = (doc.open_positions ?? []).map((ol) => ({
+    direction: ol.direction,
+    entry_price: ol.entry_price,
+    entry_time: ol.entry_time,
+    exit_price: null,
+    exit_time: null,
+    quantity: ol.quantity,
+    sl_price: ol.sl_price,
+    tp_price: ol.tp_price,
+    pnl: 0,
+    commission: ol.entry_commission_portion ?? 0,
+  }))
   const cfg = doc.config_snapshot ?? {}
   return {
     id: doc._id,
     strategy_code: doc.strategy_code,
     status: doc.status,
     metrics: doc.metrics,
-    positions,
+    open_positions,
     equity_curve: doc.equity_curve ?? [],
     config_snapshot: doc.config_snapshot,
     symbol: (cfg.symbol as string | undefined)?.toUpperCase(),
