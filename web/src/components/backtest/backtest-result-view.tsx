@@ -55,9 +55,9 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
   const metrics = run.metrics
   const isFinished = run.status === 'finished'
   const tradesActive = tab === 'trades' && isFinished
-  // Stats feed the Trades tab (histograms, streaks, PF) AND the Risk tab
-  // (drawdown periods), so fetch for either.
-  const statsActive = (tab === 'trades' || tab === 'risk') && isFinished
+  // Stats feed the Overview tab (histograms), the Trades tab (streaks, PF) AND
+  // the Risk tab (drawdown periods), so fetch for any of them.
+  const statsActive = (tab === 'overview' || tab === 'trades' || tab === 'risk') && isFinished
 
   const markersQuery = useBacktestMarkers(runId, tradesActive)
   const statsQuery = useBacktestStats(runId, statsActive)
@@ -122,6 +122,10 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
           ))}
           <div style={sectionTitle}>Equity & Drawdown</div>
           <EquityDrawdownChart equityCurve={run.equity_curve} />
+          <div style={sectionTitle}>PnL distribution</div>
+          <PnlHistogram bins={stats?.pnl_histogram ?? []} />
+          <div style={sectionTitle}>Duration distribution (hours)</div>
+          <DurationHistogram bins={stats?.duration_histogram ?? []} />
         </div>
       )}
 
@@ -149,10 +153,6 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
             <span>PF (Short): <strong>{pfShort == null ? '∞' : pfShort.toFixed(2)}</strong></span>
             {stats && <span>PF (All): <strong>{isFinite(stats.profit_factor_all) ? stats.profit_factor_all.toFixed(2) : '∞'}</strong></span>}
           </div>
-          <div style={sectionTitle}>PnL distribution</div>
-          <PnlHistogram bins={stats?.pnl_histogram ?? []} />
-          <div style={sectionTitle}>Duration distribution (hours)</div>
-          <DurationHistogram bins={stats?.duration_histogram ?? []} />
           <div style={sectionTitle}>Trades</div>
           <PositionsTab
             runId={runId}
