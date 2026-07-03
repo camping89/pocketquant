@@ -928,7 +928,7 @@
     },
     "/api/v1/backtest/{run_id}/trade-markers": {
       "get": {
-        "description": "Lite per-trade entry/exit/direction rows for the chart's BUY/SELL arrows.",
+        "description": "Lite per-trade entry/exit/direction rows for the chart's entry/exit arrows.",
         "operationId": "get_backtest_trade_markers_api_v1_backtest__run_id__trade_markers_get",
         "parameters": [
           {
