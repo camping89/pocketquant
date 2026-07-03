@@ -36,7 +36,7 @@ interface TradingChartProps {
   symbol: string
   interval: Interval
   indicators: IndicatorConfig
-  /** Lite per-trade rows driving BUY/SELL arrows for every trade in the run. */
+  /** Lite per-trade rows driving entry/exit arrows for every trade in the run. */
   markers?: TradeMarker[]
   /** The clicked / hovered trade objects — draw the detail box for these only.
    *  Passing the object (not an index) keeps the box correct across paging. */
@@ -281,45 +281,63 @@ export function TradingChart({
     }
   }, [indicatorData, indicators]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Strategy backtest markers — deduplicated by candle timestamp to avoid stacking
-  // when chart interval differs from backtest interval (e.g. 1H backtest on 4H chart)
+  // Strategy backtest markers — direction-aware entry/exit arrows. A LONG entry
+  // points up below the bar (buy to open); a SHORT entry points down above it
+  // (sell to open); each exit reverses that arrow and is colored by trade PnL.
+  // Markers sharing an identical visual signature on the same candle aggregate
+  // into one ×N marker (chart interval may differ from the backtest interval).
   const markers = useMemo<SeriesMarker<Time>[]>(() => {
     if (!tradeMarkers || tradeMarkers.length === 0) return []
+    const c = readChartColors()
 
-    // Count occurrences per (time, side) to aggregate duplicates
-    const buyCount = new Map<number, number>()
-    const sellCount = new Map<number, number>()
+    type Bucket = {
+      time: number
+      position: 'aboveBar' | 'belowBar'
+      shape: 'arrowUp' | 'arrowDown'
+      color: string
+      label: string
+      count: number
+    }
+    const buckets = new Map<string, Bucket>()
+    const bump = (b: Omit<Bucket, 'count'>) => {
+      const key = `${b.time}|${b.position}|${b.shape}|${b.color}|${b.label}`
+      const cur = buckets.get(key)
+      if (cur) cur.count += 1
+      else buckets.set(key, { ...b, count: 1 })
+    }
 
     for (const p of tradeMarkers) {
-      const t = toUTCTimestamp(p.entry_time)
-      buyCount.set(t, (buyCount.get(t) ?? 0) + 1)
+      const isLong = p.direction === 'LONG'
+      bump({
+        time: toUTCTimestamp(p.entry_time),
+        position: isLong ? 'belowBar' : 'aboveBar',
+        shape: isLong ? 'arrowUp' : 'arrowDown',
+        color: isLong ? c.up : c.down,
+        label: isLong ? 'Entry L' : 'Entry S',
+      })
       if (p.exit_time != null) {
-        const t2 = toUTCTimestamp(p.exit_time)
-        sellCount.set(t2, (sellCount.get(t2) ?? 0) + 1)
+        bump({
+          time: toUTCTimestamp(p.exit_time),
+          position: isLong ? 'aboveBar' : 'belowBar',
+          shape: isLong ? 'arrowDown' : 'arrowUp',
+          color: p.pnl >= 0 ? c.up : c.down,
+          label: 'Exit',
+        })
       }
     }
 
-    const result: SeriesMarker<Time>[] = []
-    for (const [t, n] of buyCount) {
-      result.push({
-        time: t as Time,
-        position: 'belowBar',
-        color: '#2196F3',
-        shape: 'arrowUp',
-        text: n > 1 ? `BUY ×${n}` : 'BUY',
-      })
-    }
-    for (const [t, n] of sellCount) {
-      result.push({
-        time: t as Time,
-        position: 'aboveBar',
-        color: '#FF9800',
-        shape: 'arrowDown',
-        text: n > 1 ? `SELL ×${n}` : 'SELL',
-      })
-    }
-    return result.sort((a, b) => (a.time as number) - (b.time as number))
-  }, [tradeMarkers])
+    return [...buckets.values()]
+      .map((b) => ({
+        time: b.time as Time,
+        position: b.position,
+        color: b.color,
+        shape: b.shape,
+        text: b.count > 1 ? `${b.label} ×${b.count}` : b.label,
+      }))
+      .sort((a, b) => (a.time as number) - (b.time as number))
+    // themeMode drives recolor: readChartColors() reads CSS vars eslint can't trace
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeMarkers, themeMode])
 
   // Pattern markers from the engulfing toggle — independent of backtest positions.
   const engulfMarkers = useMemo<SeriesMarker<Time>[]>(() => {

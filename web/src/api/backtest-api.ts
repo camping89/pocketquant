@@ -104,7 +104,7 @@ export interface PagedTrades {
   total_pnl: number
 }
 
-/** All-trades list for the chart: BUY/SELL arrows + click-to-select hit-testing.
+/** All-trades list for the chart: entry/exit arrows + click-to-select hit-testing.
  *  Carries the box fields so a chart click can draw a trade's detail box without
  *  paging the trades table. */
 export interface TradeMarker {
