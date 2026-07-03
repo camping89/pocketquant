@@ -137,7 +137,7 @@ async def get_backtest_trade_markers(
     run_id: str,
     stats_svc: FromDishka[BacktestStatsService],
 ) -> dict:
-    """Lite per-trade entry/exit/direction rows for the chart's BUY/SELL arrows."""
+    """Lite per-trade entry/exit/direction rows for the chart's entry/exit arrows."""
     markers = await stats_svc.list_markers(run_id)
     return {"run_id": run_id, "markers": [m.model_dump() for m in markers]}
 

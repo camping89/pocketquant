@@ -97,7 +97,7 @@ export function useBacktestTrades(
   })
 }
 
-/** All trades' entry/exit/direction for the chart's BUY/SELL arrows — lazy. */
+/** All trades' entry/exit/direction for the chart's entry/exit arrows — lazy. */
 export function useBacktestMarkers(runId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['backtest-markers', runId],

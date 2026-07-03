@@ -5,7 +5,7 @@ instead of computing them over the full trade list:
 
 - ``list_trades_paged`` — keyset (cursor) page of closed trades, server-side
   filtered (all/wins/losses) and sorted. Replaces the old load-everything read.
-- ``list_markers`` — one lite row per trade for the chart's BUY/SELL arrows.
+- ``list_markers`` — one lite row per trade for the chart's entry/exit arrows.
 - ``get_stats`` — PnL / duration histograms, win-loss streaks, profit factor by
   direction, and worst-drawdown periods (ported verbatim from the FE).
 
