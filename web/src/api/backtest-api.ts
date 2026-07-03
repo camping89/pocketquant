@@ -104,11 +104,21 @@ export interface PagedTrades {
   total_pnl: number
 }
 
+/** All-trades list for the chart: BUY/SELL arrows + click-to-select hit-testing.
+ *  Carries the box fields so a chart click can draw a trade's detail box without
+ *  paging the trades table. */
 export interface TradeMarker {
   trade_id: string
   entry_time: string
   exit_time: string | null
   direction: 'LONG' | 'SHORT'
+  entry_price: number
+  exit_price: number
+  sl_price: number | null
+  tp_price: number | null
+  quantity: number
+  pnl: number
+  commission: number
 }
 
 export interface HistogramBin {

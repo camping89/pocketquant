@@ -104,6 +104,13 @@ class TradeMarkerDto(BaseModel):
     entry_time: str
     exit_time: str | None
     direction: str
+    entry_price: float
+    exit_price: float
+    sl_price: float | None
+    tp_price: float | None
+    quantity: float
+    pnl: float
+    commission: float
 
 
 class HistogramBinDto(BaseModel):
@@ -238,6 +245,13 @@ class BacktestStatsService:
                 entry_time=r["entry_time"].isoformat(),
                 exit_time=r["exit_time"].isoformat() if r.get("exit_time") else None,
                 direction=r.get("direction", "LONG"),
+                entry_price=r["entry_price"],
+                exit_price=r["exit_price"],
+                sl_price=r.get("sl_price"),
+                tp_price=r.get("tp_price"),
+                quantity=r["quantity"],
+                pnl=r["pnl"],
+                commission=r.get("commission", 0.0),
             )
             for r in rows
         ]

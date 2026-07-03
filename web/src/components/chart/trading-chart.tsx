@@ -9,6 +9,7 @@ import {
   type Time,
   type IRange,
   type ISeriesMarkersPluginApi,
+  type MouseEventParams,
 } from 'lightweight-charts'
 import { useChart } from './use-chart'
 import { useOhlcvHistory } from '../../hooks/use-ohlcv-history'
@@ -24,6 +25,7 @@ import { toUTCTimestamp } from '../../api/market-data-api'
 import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { TradeMarker, TradeRow } from '../../api/backtest-api'
 import { PositionBoxPrimitive, type PositionData } from './position-box-primitive'
+import { pickTradeAtTime, tradeMarkerToRow } from './trade-hit-test'
 import { useTimezone } from '../../lib/use-timezone'
 import { useTheme } from '../../lib/use-theme'
 import { readChartColors } from '../../lib/theme-colors'
@@ -40,6 +42,9 @@ interface TradingChartProps {
    *  Passing the object (not an index) keeps the box correct across paging. */
   highlightedTrade?: TradeRow | null
   hoveredTrade?: TradeRow | null
+  /** Click a trade's on-chart zone to select it (draws its box, highlights its
+   *  table row). Clicking outside every trade span deselects (null). */
+  onSelectTrade?: (trade: TradeRow | null) => void
   /** Anchor OHLCV to a past window end (backtest mode). When set, the chart loads
    *  history ending at this instant and runs no realtime stream. */
   anchorEndDate?: string
@@ -53,6 +58,7 @@ export function TradingChart({
   markers: tradeMarkers,
   highlightedTrade = null,
   hoveredTrade = null,
+  onSelectTrade,
   anchorEndDate,
   onChartReady,
 }: TradingChartProps) {
@@ -70,6 +76,13 @@ export function TradingChart({
   // Ref pattern: subscribed crosshair handler reads fresh mode without resubscribing.
   const modeRef = useRef<TimezoneMode>(mode)
   useEffect(() => { modeRef.current = mode }, [mode])
+
+  // Same pattern for the click handler: it hit-tests against the current markers
+  // and calls the current onSelectTrade, without resubscribing per prop change.
+  const tradeMarkersRef = useRef(tradeMarkers)
+  useEffect(() => { tradeMarkersRef.current = tradeMarkers }, [tradeMarkers])
+  const onSelectTradeRef = useRef(onSelectTrade)
+  useEffect(() => { onSelectTradeRef.current = onSelectTrade }, [onSelectTrade])
 
   // Live-update legend timestamp when mode flips (ohlcv state may already hold a
   // formatted string from previous mode — reformat from the current hovered time).
@@ -192,7 +205,26 @@ export function TradingChart({
       }
     })
 
+    // Click a trade's zone to select it: hit-test the click time against every
+    // trade's [entry, exit] span (markers carry the box fields). A hit draws the
+    // box + highlights the table row via the parent; a miss deselects.
+    const onClick = (param: MouseEventParams<Time>) => {
+      const select = onSelectTradeRef.current
+      const markerRows = tradeMarkersRef.current
+      if (!select || !markerRows) return
+      if (param.time == null || !param.point) {
+        select(null)
+        return
+      }
+      const price = candleSeries.coordinateToPrice(param.point.y)
+      const lastT = (data.candles.at(-1)?.time as number | undefined) ?? null
+      const hit = pickTradeAtTime(markerRows, param.time as number, price, lastT)
+      select(hit ? tradeMarkerToRow(hit) : null)
+    }
+    chart.subscribeClick(onClick)
+
     return () => {
+      chart.unsubscribeClick(onClick)
       timeScale.unsubscribeVisibleLogicalRangeChange(onRangeChange)
       if (chartRef.current) {
         if (candleRef.current) {
