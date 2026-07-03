@@ -35,6 +35,14 @@ const TABS: { key: ResultTab; label: string }[] = [
   { key: 'orders', label: 'Orders' },
 ]
 
+const TAB_KEYS = TABS.map((t) => t.key)
+
+/** The path segment is free-form, so an unknown/absent tab falls back to the
+ *  default view rather than rendering a blank pane. */
+function coerceTab(raw: string | undefined): ResultTab {
+  return TAB_KEYS.includes(raw as ResultTab) ? (raw as ResultTab) : 'overview'
+}
+
 const KPI_KEYS = ['total_return', 'cagr', 'sharpe', 'max_dd', 'win_rate']
 
 const sectionTitle: CSSProperties = {
@@ -46,8 +54,18 @@ const sectionTitle: CSSProperties = {
   margin: '12px 0 6px',
 }
 
-export function BacktestResultView({ run, runId }: { run: BacktestRunResult; runId: string }) {
-  const [tab, setTab] = useState<ResultTab>('overview')
+export function BacktestResultView({
+  run,
+  runId,
+  activeTab,
+  onTabChange,
+}: {
+  run: BacktestRunResult
+  runId: string
+  activeTab?: string
+  onTabChange: (tab: string) => void
+}) {
+  const tab = coerceTab(activeTab)
   // Selection is by trade object (stable trade_id), so it survives paging +
   // server-side re-sorts. The clicked/hovered TradeRow feeds the chart's box.
   const [highlightedTrade, setHighlightedTrade] = useState<TradeRow | null>(null)
@@ -90,7 +108,7 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
           <button
             key={key}
             className={`backtest-panel__tab${tab === key ? ' backtest-panel__tab--active' : ''}`}
-            onClick={() => setTab(key)}
+            onClick={() => onTabChange(key)}
           >
             {label}
           </button>
