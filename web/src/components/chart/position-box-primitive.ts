@@ -75,35 +75,50 @@ class BoxRenderer implements IPrimitivePaneRenderer {
   }
 
   drawBackground(target: CanvasRenderingTarget2D): void {
-    target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hR, verticalPixelRatio: vR }) => {
+    target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hR, verticalPixelRatio: vR, bitmapSize }) => {
       const timeScale = this.chart.timeScale()
+      const width = bitmapSize.width
+
+      // A full-history run can hold tens of thousands of trades. Projecting and
+      // filling every one each frame — on every pan / zoom / crosshair move — melts
+      // the chart. Cull to the visible time window first with a plain numeric
+      // compare (~free); only boxes overlapping the viewport pay for coordinate
+      // projection + fill.
+      const vr = timeScale.getVisibleRange()
+      const vFrom = typeof vr?.from === 'number' ? vr.from : null
+      const vTo = typeof vr?.to === 'number' ? vr.to : null
 
       for (const pos of this.positions) {
+        if (vFrom != null && vTo != null && typeof pos.x1 === 'number' && typeof pos.x2 === 'number') {
+          if (Math.max(pos.x1, pos.x2) < vFrom || Math.min(pos.x1, pos.x2) > vTo) continue
+        }
+
         const cx1 = timeScale.timeToCoordinate(pos.x1)
         const cx2 = timeScale.timeToCoordinate(pos.x2)
         if (cx1 == null || cx2 == null) continue
 
-        const lx = Math.min(cx1, cx2) * hR
-        const rx = Math.max(cx1, cx2) * hR
+        // Clamp the drawn span to the canvas — a long-duration trade projects to a
+        // box thousands of px wide, and filling (worse, blurring) a rect that size
+        // is what tanks the frame. Off-screen boxes collapse to zero width and skip.
+        const lx = Math.max(Math.min(cx1, cx2) * hR, 0)
+        const rx = Math.min(Math.max(cx1, cx2) * hR, width)
         const boxW = rx - lx
+        if (boxW <= 0) continue
 
         const ySL = pos.sl_price != null ? this.series.priceToCoordinate(pos.sl_price) : null
         const yTP = pos.tp_price != null ? this.series.priceToCoordinate(pos.tp_price) : null
         const yEntry = this.series.priceToCoordinate(pos.entry_price)
 
-        // Ambient preview: soft blurred zone fill + faint entry line only. Colored
-        // by realized PnL so winners/losers read at a glance across the whole run.
+        // Ambient preview: soft flat zone fill + faint entry line only. Colored by
+        // realized PnL so winners/losers read at a glance across the whole run. No
+        // shadow blur here — it is per-box, per-frame, and murderous at scale.
         if (pos.ambient) {
           const win = pos.pnl >= 0
           if (ySL != null && yTP != null) {
             const boxTop = Math.min(ySL, yTP) * vR
             const boxH = Math.abs(ySL - yTP) * vR
-            ctx.save()
-            ctx.shadowColor = win ? 'rgba(38,166,154,0.22)' : 'rgba(239,83,80,0.22)'
-            ctx.shadowBlur = 6 * vR
-            ctx.fillStyle = win ? 'rgba(38,166,154,0.05)' : 'rgba(239,83,80,0.05)'
+            ctx.fillStyle = win ? 'rgba(38,166,154,0.07)' : 'rgba(239,83,80,0.07)'
             ctx.fillRect(lx, boxTop, boxW, boxH)
-            ctx.restore()
           }
           if (yEntry != null) {
             const y = yEntry * vR

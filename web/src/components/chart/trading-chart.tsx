@@ -385,6 +385,34 @@ export function TradingChart({
     }
   }, [])
 
+  // Ambient boxes (one soft zone per trade) depend only on the trade set and the
+  // last candle (open-trade right edge) — NOT on hover/highlight. Memoizing here
+  // stops a table-row hover from rebuilding tens of thousands of box objects each
+  // time; the renderer culls to the visible window so only on-screen boxes draw.
+  const ambientBoxes = useMemo<PositionData[]>(() => {
+    if (!tradeMarkers || tradeMarkers.length === 0) return []
+    const lastCandleTime = data?.candles.at(-1)?.time ?? null
+    const out: PositionData[] = []
+    for (const m of tradeMarkers) {
+      const x2 = m.exit_time != null ? (toUTCTimestamp(m.exit_time) as Time) : (lastCandleTime as Time)
+      if (!x2) continue
+      out.push({
+        x1: toUTCTimestamp(m.entry_time) as Time,
+        x2,
+        entry_price: m.entry_price,
+        exit_price: m.exit_price,
+        sl_price: m.sl_price,
+        tp_price: m.tp_price,
+        quantity: m.quantity,
+        pnl: m.pnl,
+        commission: m.commission,
+        direction: m.direction,
+        ambient: true,
+      })
+    }
+    return out
+  }, [tradeMarkers, data])
+
   useEffect(() => {
     const candle = candleRef.current
     if (!candle) return
@@ -396,33 +424,11 @@ export function TradingChart({
 
     const lastCandleTime = data?.candles.at(-1)?.time ?? null
 
-    // Two layers: an ambient blur box for EVERY trade (soft fill + faint entry
-    // line, no SL/TP/card) so each trade's zone is visible without clicking, plus
-    // a detail box for the clicked (highlight) and hovered trades drawn over it.
-    // The highlighted/hovered trade skips its ambient copy to avoid double-draw.
-    const boxes: PositionData[] = []
-
-    if (tradeMarkers) {
-      for (const m of tradeMarkers) {
-        if (m.trade_id === highlightedTrade?.trade_id) continue
-        if (m.trade_id === hoveredTrade?.trade_id) continue
-        const x2 = m.exit_time != null ? (toUTCTimestamp(m.exit_time) as Time) : (lastCandleTime as Time)
-        if (!x2) continue
-        boxes.push({
-          x1: toUTCTimestamp(m.entry_time) as Time,
-          x2,
-          entry_price: m.entry_price,
-          exit_price: m.exit_price,
-          sl_price: m.sl_price,
-          tp_price: m.tp_price,
-          quantity: m.quantity,
-          pnl: m.pnl,
-          commission: m.commission,
-          direction: m.direction,
-          ambient: true,
-        })
-      }
-    }
+    // Two layers: a memoized ambient box for EVERY trade (soft fill + faint entry
+    // line, no SL/TP/card) so each trade's zone is visible without clicking, plus a
+    // detail box for the clicked (highlight) and hovered trades drawn over it. The
+    // detail box overdraws its ambient copy — a touch more prominent, intentionally.
+    const boxes: PositionData[] = ambientBoxes.length > 0 ? [...ambientBoxes] : []
 
     const toBox = (t: TradeRow, kind: 'click' | 'hover'): PositionData | null => {
       const x2 = t.exit_time != null ? (toUTCTimestamp(t.exit_time) as Time) : (lastCandleTime as Time)
@@ -463,7 +469,7 @@ export function TradingChart({
         boxPrimitiveRef.current = null
       }
     }
-  }, [data, highlightedTrade, hoveredTrade, tradeMarkers])
+  }, [data, highlightedTrade, hoveredTrade, ambientBoxes])
 
   // Scroll the clicked trade into view. Driven by highlight only — hover must not
   // move the viewport, or scanning the table with the mouse would jerk the chart.
