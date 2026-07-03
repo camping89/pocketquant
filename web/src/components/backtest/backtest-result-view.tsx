@@ -140,6 +140,7 @@ export function BacktestResultView({ run, runId }: { run: BacktestRunResult; run
                 markers={markersQuery.data}
                 highlightedTrade={highlightedTrade}
                 hoveredTrade={hoveredTrade}
+                onSelectTrade={setHighlightedTrade}
                 anchorEndDate={run.end_date}
               />
             </div>

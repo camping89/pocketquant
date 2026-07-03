@@ -132,15 +132,30 @@ class BacktestTradeRepository(BaseRepository):
         return 0.0
 
     async def list_markers_by_run(self, run_id: str) -> list[dict]:
-        """Lite projection for chart arrows — one row per trade, chronological.
+        """Projection for chart arrows + click-to-select — one row per trade, chronological.
 
-        Avoids loading full trade docs just to place BUY/SELL markers.
+        Carries the box fields (prices/sl/tp/pnl/qty) alongside the timing so the
+        chart can hit-test a click against a trade's time-span and draw its detail
+        box without paging the full trades table. Still a projection, not the full
+        doc (order refs, fills, commission breakdowns stay out).
         """
         collection = self._collection()
         cursor = (
             collection.find(
                 {"run_id": run_id},
-                {"_id": 1, "entry_time": 1, "exit_time": 1, "direction": 1},
+                {
+                    "_id": 1,
+                    "entry_time": 1,
+                    "exit_time": 1,
+                    "direction": 1,
+                    "entry_price": 1,
+                    "exit_price": 1,
+                    "sl_price": 1,
+                    "tp_price": 1,
+                    "quantity": 1,
+                    "pnl": 1,
+                    "commission": 1,
+                },
             ).sort("entry_time", 1)
         )
         return [doc async for doc in cursor]
