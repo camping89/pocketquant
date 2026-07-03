@@ -84,6 +84,12 @@ export function TradingChart({
   const onSelectTradeRef = useRef(onSelectTrade)
   useEffect(() => { onSelectTradeRef.current = onSelectTrade }, [onSelectTrade])
 
+  // Selecting a trade by clicking its on-chart zone must NOT recenter the
+  // viewport (the user is already looking at it). Only a table-row click scrolls
+  // the trade into view. This latch, set by the chart click handler, tells the
+  // scroll-into-view effect to skip the next highlight change.
+  const skipScrollOnSelectRef = useRef(false)
+
   // Live-update legend timestamp when mode flips (ohlcv state may already hold a
   // formatted string from previous mode — reformat from the current hovered time).
   const hoveredTimeRef = useRef<number | null>(null)
@@ -219,6 +225,9 @@ export function TradingChart({
       const price = candleSeries.coordinateToPrice(param.point.y)
       const lastT = (data.candles.at(-1)?.time as number | undefined) ?? null
       const hit = pickTradeAtTime(markerRows, param.time as number, price, lastT)
+      // Only latch on an actual hit — a deselect (null) never scrolls, so leaving
+      // the latch set there would wrongly suppress the next table-click scroll.
+      if (hit) skipScrollOnSelectRef.current = true
       select(hit ? tradeMarkerToRow(hit) : null)
     }
     chart.subscribeClick(onClick)
@@ -332,6 +341,7 @@ export function TradingChart({
         position: b.position,
         color: b.color,
         shape: b.shape,
+        size: 0.5,
         text: b.count > 1 ? `${b.label} ×${b.count}` : b.label,
       }))
       .sort((a, b) => (a.time as number) - (b.time as number))
@@ -386,11 +396,34 @@ export function TradingChart({
 
     const lastCandleTime = data?.candles.at(-1)?.time ?? null
 
-    // Box is detail-on-demand: draw it only for the clicked (highlight) and
-    // hovered trades. Markers still mark every trade; no selection draws no box,
-    // keeping the chart readable when a run has hundreds of trades. A hovered
-    // trade that is also the highlight collapses to a single (click) box.
+    // Two layers: an ambient blur box for EVERY trade (soft fill + faint entry
+    // line, no SL/TP/card) so each trade's zone is visible without clicking, plus
+    // a detail box for the clicked (highlight) and hovered trades drawn over it.
+    // The highlighted/hovered trade skips its ambient copy to avoid double-draw.
     const boxes: PositionData[] = []
+
+    if (tradeMarkers) {
+      for (const m of tradeMarkers) {
+        if (m.trade_id === highlightedTrade?.trade_id) continue
+        if (m.trade_id === hoveredTrade?.trade_id) continue
+        const x2 = m.exit_time != null ? (toUTCTimestamp(m.exit_time) as Time) : (lastCandleTime as Time)
+        if (!x2) continue
+        boxes.push({
+          x1: toUTCTimestamp(m.entry_time) as Time,
+          x2,
+          entry_price: m.entry_price,
+          exit_price: m.exit_price,
+          sl_price: m.sl_price,
+          tp_price: m.tp_price,
+          quantity: m.quantity,
+          pnl: m.pnl,
+          commission: m.commission,
+          direction: m.direction,
+          ambient: true,
+        })
+      }
+    }
+
     const toBox = (t: TradeRow, kind: 'click' | 'hover'): PositionData | null => {
       const x2 = t.exit_time != null ? (toUTCTimestamp(t.exit_time) as Time) : (lastCandleTime as Time)
       if (!x2) return null
@@ -430,7 +463,7 @@ export function TradingChart({
         boxPrimitiveRef.current = null
       }
     }
-  }, [data, highlightedTrade, hoveredTrade])
+  }, [data, highlightedTrade, hoveredTrade, tradeMarkers])
 
   // Scroll the clicked trade into view. Driven by highlight only — hover must not
   // move the viewport, or scanning the table with the mouse would jerk the chart.
@@ -439,6 +472,11 @@ export function TradingChart({
     const candles = data?.candles
     if (!chart || !candles || candles.length === 0) return
     if (!highlightedTrade) return
+    // Chart-zone click already has the trade on screen — don't yank the viewport.
+    if (skipScrollOnSelectRef.current) {
+      skipScrollOnSelectRef.current = false
+      return
+    }
     const p = highlightedTrade
 
     const firstT = candles[0].time as number

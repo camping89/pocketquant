@@ -30,6 +30,10 @@ export interface PositionData {
   /** Which selection drew this box — solid outline for a click, dashed for a
    *  hover. Decoupled from any array index so paging can't misalign the outline. */
   highlightKind?: 'click' | 'hover'
+  /** Ambient (always-on) preview drawn for every trade so its zone is visible
+   *  without clicking: a soft blurred fill + faint entry line, no SL/TP lines,
+   *  no outline, no info card. Detail boxes (click/hover) draw over it. */
+  ambient?: boolean
 }
 
 const FONT_SIZE = 9   // CSS px
@@ -86,6 +90,34 @@ class BoxRenderer implements IPrimitivePaneRenderer {
         const ySL = pos.sl_price != null ? this.series.priceToCoordinate(pos.sl_price) : null
         const yTP = pos.tp_price != null ? this.series.priceToCoordinate(pos.tp_price) : null
         const yEntry = this.series.priceToCoordinate(pos.entry_price)
+
+        // Ambient preview: soft blurred zone fill + faint entry line only. Colored
+        // by realized PnL so winners/losers read at a glance across the whole run.
+        if (pos.ambient) {
+          const win = pos.pnl >= 0
+          if (ySL != null && yTP != null) {
+            const boxTop = Math.min(ySL, yTP) * vR
+            const boxH = Math.abs(ySL - yTP) * vR
+            ctx.save()
+            ctx.shadowColor = win ? 'rgba(38,166,154,0.22)' : 'rgba(239,83,80,0.22)'
+            ctx.shadowBlur = 6 * vR
+            ctx.fillStyle = win ? 'rgba(38,166,154,0.05)' : 'rgba(239,83,80,0.05)'
+            ctx.fillRect(lx, boxTop, boxW, boxH)
+            ctx.restore()
+          }
+          if (yEntry != null) {
+            const y = yEntry * vR
+            ctx.save()
+            ctx.strokeStyle = win ? 'rgba(38,166,154,0.35)' : 'rgba(239,83,80,0.35)'
+            ctx.lineWidth = vR
+            ctx.beginPath()
+            ctx.moveTo(lx, y)
+            ctx.lineTo(rx, y)
+            ctx.stroke()
+            ctx.restore()
+          }
+          continue
+        }
 
         if (ySL != null && yTP != null) {
           const boxTop = Math.min(ySL, yTP) * vR
@@ -178,6 +210,7 @@ class CardRenderer implements IPrimitivePaneRenderer {
       const timeScale = this.chart.timeScale()
 
       for (const pos of this.positions) {
+        if (pos.ambient) continue
         const cx1 = timeScale.timeToCoordinate(pos.x1)
         const cx2 = timeScale.timeToCoordinate(pos.x2)
         if (cx1 == null || cx2 == null) continue
