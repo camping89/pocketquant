@@ -69,8 +69,20 @@ export function HistogramChart({ bins, colorFor, height = 200, emptyLabel = 'No 
     chartRef.current?.timeScale().fitContent()
   }, [bins, colorFor, mode])
 
-  if (bins.length === 0) {
-    return <div className="empty-state" style={{ padding: 16 }}>{emptyLabel}</div>
-  }
-  return <div ref={containerRef} style={{ width: '100%' }} />
+  // Container must stay mounted even when empty: the create-chart effect runs
+  // once and attaches to containerRef, so hiding the div on the first (data-less)
+  // render would leave the effect nothing to bind to when bins arrive later.
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <div ref={containerRef} style={{ width: '100%' }} />
+      {bins.length === 0 && (
+        <div
+          className="empty-state"
+          style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {emptyLabel}
+        </div>
+      )}
+    </div>
+  )
 }
