@@ -10,10 +10,16 @@ const MOBILE_TABS: { key: MobileTab; label: string }[] = [
   { key: 'detail', label: 'Detail' },
 ]
 
-/** Master-detail workbench. The selected run lives in the `?run=` search param
- *  (reload/back/forward safe); selecting a run navigates and, on mobile, flips
- *  to the Detail tab. */
-export function BacktestWorkbench({ selectedRun }: { selectedRun: string | null }) {
+/** Master-detail workbench. The selected run + active tab live in the path
+ *  (`/backtest/<runId>/<tab>`, reload/back/forward safe); selecting a run
+ *  navigates and, on mobile, flips to the Detail tab. */
+export function BacktestWorkbench({
+  selectedRun,
+  activeTab,
+}: {
+  selectedRun: string | null
+  activeTab?: string
+}) {
   const navigate = useNavigate()
   const [mobileTab, setMobileTab] = useState<MobileTab>(selectedRun ? 'detail' : 'list')
 
@@ -27,7 +33,13 @@ export function BacktestWorkbench({ selectedRun }: { selectedRun: string | null 
   }
 
   function handleSelect(runId: string) {
-    void navigate({ to: '/backtest', search: { run: runId } })
+    void navigate({ to: '/backtest/{-$runId}/{-$tab}', params: { runId, tab: undefined } })
+  }
+
+  function handleTab(tab: string) {
+    if (selectedRun) {
+      void navigate({ to: '/backtest/{-$runId}/{-$tab}', params: { runId: selectedRun, tab } })
+    }
   }
 
   return (
@@ -37,7 +49,7 @@ export function BacktestWorkbench({ selectedRun }: { selectedRun: string | null 
           <RunHistoryRail selectedRun={selectedRun} onSelect={handleSelect} />
         </div>
         <div className="backtest-detail-pane">
-          <BacktestDetailPane runId={selectedRun} />
+          <BacktestDetailPane runId={selectedRun} activeTab={activeTab} onTabChange={handleTab} />
         </div>
       </div>
 
@@ -55,7 +67,9 @@ export function BacktestWorkbench({ selectedRun }: { selectedRun: string | null 
         </div>
         <div className="strategies-mobile__pane">
           {mobileTab === 'list' && <RunHistoryRail selectedRun={selectedRun} onSelect={handleSelect} />}
-          {mobileTab === 'detail' && <BacktestDetailPane runId={selectedRun} />}
+          {mobileTab === 'detail' && (
+            <BacktestDetailPane runId={selectedRun} activeTab={activeTab} onTabChange={handleTab} />
+          )}
         </div>
       </div>
     </>

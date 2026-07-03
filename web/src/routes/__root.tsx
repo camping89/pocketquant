@@ -23,7 +23,11 @@ function RootLayout() {
         <Link to="/strategies" activeProps={{ className: 'active' }}>
           Strategies
         </Link>
-        <Link to="/backtest" activeProps={{ className: 'active' }}>
+        <Link
+          to="/backtest/{-$runId}/{-$tab}"
+          params={{ runId: undefined, tab: undefined }}
+          activeProps={{ className: 'active' }}
+        >
           Backtest
         </Link>
         <Link to="/monitor" activeProps={{ className: 'active' }}>

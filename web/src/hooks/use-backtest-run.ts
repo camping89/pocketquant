@@ -32,14 +32,14 @@ export function useStrategyList() {
   })
 }
 
-/** Start a run, then deep-link via the `?run=` search param so the workbench
- *  selects it and reload/back/forward work. */
+/** Start a run, then deep-link via the run path segment so the workbench selects
+ *  it and reload/back/forward work. */
 export function useRunBacktest() {
   const navigate = useNavigate()
   return useMutation({
     mutationFn: (body: RunBacktestBody) => runBacktest(body),
     onSuccess: ({ request_id }) =>
-      void navigate({ to: '/backtest', search: { run: request_id } }),
+      void navigate({ to: '/backtest/{-$runId}/{-$tab}', params: { runId: request_id, tab: undefined } }),
   })
 }
 

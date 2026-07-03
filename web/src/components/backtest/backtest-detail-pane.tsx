@@ -4,7 +4,15 @@ import { useBacktestRun } from '../../hooks/use-backtest-run'
 
 /** Detail pane of the workbench. Lazy: `useBacktestRun` is gated by `enabled`,
  *  so nothing is fetched until a run is selected (`runId` non-null). */
-export function BacktestDetailPane({ runId }: { runId: string | null }) {
+export function BacktestDetailPane({
+  runId,
+  activeTab,
+  onTabChange,
+}: {
+  runId: string | null
+  activeTab?: string
+  onTabChange: (tab: string) => void
+}) {
   const { data: run, isLoading } = useBacktestRun(runId)
 
   if (!runId) {
@@ -48,7 +56,9 @@ export function BacktestDetailPane({ runId }: { runId: string | null }) {
         </div>
       )}
 
-      {status === 'finished' && run && <BacktestResultView run={run} runId={runId} />}
+      {status === 'finished' && run && (
+        <BacktestResultView run={run} runId={runId} activeTab={activeTab} onTabChange={onTabChange} />
+      )}
     </div>
   )
 }

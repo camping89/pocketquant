@@ -29,7 +29,7 @@ function BacktestComparePage() {
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button type="button" className="btn-sm" onClick={() => void navigate({ to: '/backtest' })}>
+        <button type="button" className="btn-sm" onClick={() => void navigate({ to: '/backtest/{-$runId}/{-$tab}', params: { runId: undefined, tab: undefined } })}>
           ← Backtest
         </button>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Compare</span>
