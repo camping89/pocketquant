@@ -215,4 +215,20 @@ async def test_markers_projection_chronological(database: Database) -> None:
     await repo.save_many([newer, older])
     markers = await repo.list_markers_by_run("r1")
     assert [m["_id"] for m in markers] == [_tid("t1"), _tid("t2")]
-    assert set(markers[0].keys()) == {"_id", "entry_time", "exit_time", "direction"}
+    # Projection carries the box fields (chart click-to-select needs them) on top
+    # of the timing/direction used for BUY/SELL arrows.
+    assert set(markers[0].keys()) == {
+        "_id",
+        "entry_time",
+        "exit_time",
+        "direction",
+        "entry_price",
+        "exit_price",
+        "sl_price",
+        "tp_price",
+        "quantity",
+        "pnl",
+        "commission",
+    }
+    assert markers[0]["entry_price"] == 100.0
+    assert markers[0]["pnl"] == 10.0
