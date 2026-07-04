@@ -6,48 +6,79 @@ interface VerdictPanelProps {
   verdict: string | null | undefined
 }
 
-/** Edit a run's conclusion. Save is optimistic (useSetVerdict); on failure the
- *  cached run reverts but the textarea text is KEPT here so the user can retry. */
+/** A run's conclusion, shown as read-mode prose that flips to an editor on
+ *  demand. Save is optimistic (useSetVerdict); on failure the cached run reverts
+ *  but the editor stays open with the text KEPT so the user can retry. */
 export function VerdictPanel({ runId, verdict }: VerdictPanelProps) {
   const canonical = verdict ?? ''
   const [text, setText] = useState(canonical)
-  // Reset the textarea only when the route switches to a DIFFERENT run — not when
-  // this run's verdict changes (optimistic write + revert both flow through the
-  // `verdict` prop; resetting on those would clobber the user's text on a failed
-  // save, the exact case validation Q6 says must keep the text). Track runId via
-  // the "store info from previous render" pattern instead of an effect.
+  const [editing, setEditing] = useState(false)
+  // Reset when the route switches to a DIFFERENT run — not when this run's
+  // verdict changes (optimistic write + revert both flow through the `verdict`
+  // prop; resetting on those would clobber the user's text on a failed save).
+  // Track runId via the "store info from previous render" pattern, not an effect.
   const [seenRunId, setSeenRunId] = useState(runId)
   if (seenRunId !== runId) {
     setSeenRunId(runId)
     setText(canonical)
+    setEditing(false)
   }
 
   const mutation = useSetVerdict(runId)
   const dirty = text !== canonical
 
   function save() {
-    mutation.mutate(text.trim() === '' ? null : text)
+    mutation.mutate(text.trim() === '' ? null : text, { onSuccess: () => setEditing(false) })
+  }
+
+  function cancel() {
+    setText(canonical)
+    setEditing(false)
+    mutation.reset()
   }
 
   return (
-    <section style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          Verdict
-        </span>
-        <button type="button" className="btn-sm" onClick={save} disabled={!dirty || mutation.isPending}>
-          {mutation.isPending ? 'Saving…' : 'Save'}
-        </button>
+    <section className="verdict-card">
+      <div className="verdict-card__head">
+        <span className="verdict-card__label">Verdict</span>
+        <div className="verdict-card__actions">
+          {editing ? (
+            <>
+              <button type="button" className="btn-sm" onClick={cancel} disabled={mutation.isPending}>
+                Cancel
+              </button>
+              <button type="button" className="btn-sm" onClick={save} disabled={!dirty || mutation.isPending}>
+                {mutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn-sm" onClick={() => setEditing(true)}>
+              {canonical ? 'Edit' : 'Add verdict'}
+            </button>
+          )}
+        </div>
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Conclusion for this run — what worked, what killed it…"
-        rows={2}
-        style={{ width: '100%', resize: 'vertical', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: 4, padding: '6px 8px', fontSize: 13, fontFamily: 'inherit' }}
-      />
+
+      {editing ? (
+        <>
+          <textarea
+            className="verdict-card__textarea"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Conclusion for this run — what worked, what killed it…"
+            rows={4}
+            autoFocus
+          />
+          <div className="verdict-card__helper">Leave empty to clear the verdict.</div>
+        </>
+      ) : canonical ? (
+        <p className="verdict-card__body">{canonical}</p>
+      ) : (
+        <p className="verdict-card__empty">No verdict recorded for this run yet.</p>
+      )}
+
       {mutation.isError && (
-        <div style={{ fontSize: 12, color: 'var(--down-color)' }}>
+        <div className="verdict-card__error">
           Save failed — {(mutation.error as Error)?.message ?? 'unknown error'}. Text kept; press Save to retry.
         </div>
       )}
