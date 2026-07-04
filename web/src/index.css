@@ -1361,6 +1361,11 @@ input, select {
   text-align: right;
 }
 
+.positions-table__td--mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-secondary);
+}
+
 .positions-table__empty {
   text-align: center;
   padding: 24px;

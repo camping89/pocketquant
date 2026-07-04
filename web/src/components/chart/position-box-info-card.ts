@@ -7,8 +7,8 @@
 import type { PositionData } from './position-box-primitive'
 import { fmtFee, fmtPnl, fmtPrice, fmtQty } from './position-format'
 
-const FONT_SIZE = 9    // CSS px
-const LINE_HEIGHT = 14 // CSS px
+const FONT_SIZE = 12   // CSS px
+const LINE_HEIGHT = 18 // CSS px
 const PAD_X = 6        // CSS px
 const PAD_Y = 5        // CSS px
 const COL_GAP = 12     // CSS px between label and value columns
