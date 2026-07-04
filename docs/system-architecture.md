@@ -666,6 +666,7 @@ graph LR
 - Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest tasks, all API routes
 - Lifespan runs `ensure_all_indexes()` + recovery/seeding steps before yielding
 - Single-worker-only constraint: scheduler/WS/broker are in-process singletons; `--workers N` duplicates reconcile loop and live broker connection
+- `ENABLE_JOBS` gates `start_background_jobs` (scheduler + `sync_1m`/cascade) and `start_reconcile_loop` only. `start_quote_feed` is **ungated** — the WS feed runs even when jobs are off, writing ephemeral `quote:latest` / `bar:current` to Redis + publishing in-process `BarCompletedEvent`. It never upserts `bars`; the gated `sync_1m` + cascade cron is the sole Mongo `bars` writer (`bar_app_service.py` keeps no `upsert_bar`). Remote-DB dev (`ENABLE_JOBS=false`) therefore streams the live chart without persisting any bar to prod.
 - Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921`
 
 **Dependency Graph (top tier only):**

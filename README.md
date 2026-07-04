@@ -41,15 +41,29 @@ just fe                      # vite dev UI → :5173 (proxies /api → :41921)
 
 ### Against the prod VPS DB
 
-`remote-db.env` ships with `ENABLE_JOBS=false` (scheduler + reconcile off; API/SPA/backtest only).
+`remote-db.env` ships with `ENABLE_JOBS=false` — **scheduler + reconcile loop off**. The live WS feed still runs (it powers the realtime chart) but writes only ephemeral quote / in-progress-bar keys to Redis; the sole Mongo `bars` writer is the gated `sync_1m` + cascade cron, so **local never persists bars to prod Mongo**. Closed candles on the chart are read from prod Mongo, kept fresh by prod's own cron.
 
 ```bash
 cp .env .env.local.bak && cp ../pocketquant-config/local/remote-db.env .env
-just be                      # no `just up` — DB/Redis are remote
+just be                      # backend :41921 — no `just up`, DB/Redis are remote
+just fe                      # vite :5173 — realtime chart streams from the local feed
 cp .env.local.bak .env       # restore when done
 ```
 
 > **Backtests persist to prod** (`backtest_runs`, `backtest_orders`, `backtest_trades`). Never run `pytest` on this `.env` — `conftest.py` refuses when `MONGODB_URL`/`REDIS_URL` point at the prod host.
+
+The local feed writes the same `quote:latest` / `bar:current` keys prod writes, so it shares prod's ephemeral Redis state and opens a second Binance WS. Two variants avoid that:
+
+- **Isolated live state** — keep `MONGODB_URL` → prod (history + closed bars), point `REDIS_URL` at a local Redis so the local feed's in-progress bar/quote stay separate:
+  ```bash
+  # in .env: keep MONGODB_URL → prod, set REDIS_URL=redis://localhost:53679/0
+  docker run -d -p 53679:6379 redis        # or `just up` and ignore the local mongo
+  ```
+- **Test bar-building on a local DB** — run fully local with jobs on, so `sync_1m` + cascade write bars to your own Mongo:
+  ```bash
+  cp ../pocketquant-config/local/all-local.env .env   # then set ENABLE_JOBS=true
+  just up && just be                                   # sync_1m + cascade → local Mongo
+  ```
 
 ### Docker (built UI)
 
