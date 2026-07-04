@@ -18,6 +18,11 @@ install:
 up:
     docker compose -f deploy/compose.local.yml --env-file .env up -d
 
+# Start ONLY local Redis (for remote-db-local-redis.env: prod Mongo + local Redis).
+# Redis is a hard startup dependency — bring it up before `just be` or the app crashes on boot.
+redis:
+    docker compose -f deploy/compose.local.yml --env-file .env up -d redis
+
 # Stop infrastructure
 down:
     docker compose -f deploy/compose.local.yml --env-file .env down

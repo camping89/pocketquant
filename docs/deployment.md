@@ -176,7 +176,7 @@ just fe   # Vite on :5173
 - Local writes hit the **production** DB — treat destructive scripts with VPS-level care.
 - Keep `ENABLE_JOBS=false` (default in `remote-db.env`). The scheduler runs on PROD only; enabling it locally double-runs jobs against shared prod state. Multiple processes coordinate via the shared `apscheduler_jobs` collection — see `system-architecture.md`.
 - `ENABLE_JOBS=false` does **not** stop the WS quote feed — `start_quote_feed` is ungated, so the realtime chart still streams locally. The feed writes only ephemeral `quote:latest` / `bar:current` keys to Redis; the gated `sync_1m` + cascade cron is the sole Mongo `bars` writer, so local persists **no bars** to prod Mongo.
-- To keep the local feed's in-progress bar/quote off prod's shared Redis, point `REDIS_URL` at a local Redis while `MONGODB_URL` stays on prod (history + closed bars read-only).
+- To keep the local feed's in-progress bar/quote off prod's shared Redis, use `remote-db-local-redis.env` (`REDIS_URL` → local, `MONGODB_URL` → prod for history + closed bars). Start the local cache with `just redis` (only the redis service, not `just up`) **before** `just be` — Redis is a hard startup dependency, so the app crashes on boot if it is down.
 - To exercise the bar-building writer itself, go fully local (`all-local.env` + `just up`) with `ENABLE_JOBS=true` so `sync_1m` + cascade write bars to your own Mongo.
 - The `remote-db.env` Redis URL carries the `--requirepass` password; without it every Redis command is rejected (NOAUTH).
 - Tests never touch prod: `tests/core_test/conftest.py` raises if `MONGODB_URL`/`REDIS_URL` contains the prod IP, and uses ephemeral testcontainers.

@@ -54,10 +54,11 @@ cp .env.local.bak .env       # restore when done
 
 The local feed writes the same `quote:latest` / `bar:current` keys prod writes, so it shares prod's ephemeral Redis state and opens a second Binance WS. Two variants avoid that:
 
-- **Isolated live state** — keep `MONGODB_URL` → prod (history + closed bars), point `REDIS_URL` at a local Redis so the local feed's in-progress bar/quote stay separate:
+- **Isolated live state** — use `remote-db-local-redis.env` (`MONGODB_URL` → prod for history + closed bars, `REDIS_URL` → local so the feed's in-progress bar/quote stay separate). Redis is a hard startup dependency, so bring it up **before** `just be` or the app crashes on boot:
   ```bash
-  # in .env: keep MONGODB_URL → prod, set REDIS_URL=redis://localhost:53679/0
-  docker run -d -p 53679:6379 redis        # or `just up` and ignore the local mongo
+  cp ../pocketquant-config/local/remote-db-local-redis.env .env
+  just redis     # ONLY local Redis — not `just up` (that also starts an unused local mongo)
+  just be
   ```
 - **Test bar-building on a local DB** — run fully local with jobs on, so `sync_1m` + cascade write bars to your own Mongo:
   ```bash
