@@ -112,7 +112,7 @@ export function PositionsTable({
       <table className="positions-table">
         <thead>
           <tr>
-            <th className="positions-table__th positions-table__th--num">#</th>
+            <th className="positions-table__th">Trade Id</th>
             {COLUMNS.map((col) => (
               <th
                 key={col.key}
@@ -147,7 +147,7 @@ export function PositionsTable({
                 onMouseEnter={onRowMouseEnter ? () => onRowMouseEnter(t) : undefined}
                 onMouseLeave={onRowMouseLeave}
               >
-                <td className="positions-table__td--num">{vr.index + 1}</td>
+                <td className="positions-table__td--mono">{t.trade_id.slice(-5)}</td>
                 <td>{fmtDateTime(t.entry_time, mode)}</td>
                 <td>
                   <span className={`direction-badge direction-badge--${dir.toLowerCase()}`}>{dir}</span>
