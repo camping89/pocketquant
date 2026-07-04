@@ -1,4 +1,4 @@
-"""Unit tests for PaperBroker SL/TP auto-fill on BarCompletedEvent."""
+"""Unit tests for PaperBroker MARKET/LIMIT entry fills and SL/TP auto-fill on BarCompletedEvent."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pocketquant.core.domain.order import (
     OrderStatus,
     OrderType,
 )
+from pocketquant.core.domain.position import PositionSide
 from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -23,6 +24,7 @@ _SYM = "BTCUSDT:BINANCE"
 
 def _order(
     side: OrderSide,
+    order_type: OrderType = OrderType.MARKET,
     *,
     qty: float = 1.0,
     price: float = 100.0,
@@ -33,7 +35,7 @@ def _order(
         subscription_id="t",
         symbol=_SYM,
         side=side,
-        order_type=OrderType.MARKET,
+        order_type=order_type,
         quantity=qty,
         price=price,
         sl_price=sl,
@@ -254,3 +256,100 @@ async def test_short_reentry_after_close_opens_fresh_position() -> None:
     positions = await b.get_positions()
     assert len(positions) == 1
     assert positions[0].quantity == pytest.approx(1.0)
+
+
+async def test_market_buy_fills_immediately_and_opens_long() -> None:
+    b, _ = await _broker()
+    callbacks: list = []
+    await b.subscribe_order_updates(lambda r: callbacks.append(r))
+
+    result = await b.submit_order(_order(OrderSide.BUY, OrderType.MARKET, price=100.0))
+
+    assert result.status == OrderStatus.FILLED
+    assert result.filled_price == pytest.approx(100.0)
+    positions = await b.get_positions()
+    assert len(positions) == 1
+    assert positions[0].side == PositionSide.LONG
+    assert len(callbacks) == 1
+
+
+async def test_market_buy_opens_position_without_debiting_cash() -> None:
+    b, bus = await _broker(slippage=0.001)
+    assert bus is not None
+
+    result = await b.submit_order(_order(OrderSide.BUY, OrderType.MARKET, qty=2.0, price=100.0))
+
+    expected_fill = 100.0 * (1 + 0.001)
+    assert result.filled_price == pytest.approx(expected_fill)
+
+    # futures: opening does not debit cash; available == total_equity (upl 0 at
+    # entry, no price has moved yet).
+    balance = await b.get_balance()
+    assert balance.available_balance == pytest.approx(1_000_000.0)
+    assert balance.total_equity == pytest.approx(1_000_000.0)
+
+    # a completed bar marks the open position to its close → total_equity tracks
+    # unrealized; available stays = _balance (price propagation lives in
+    # _on_bar_completed, not get_balance).
+    moved_price = expected_fill * 1.10
+    await bus.publish(_bar_event(high=moved_price, low=expected_fill, close=moved_price))
+    moved = await b.get_balance()
+    assert moved.total_equity > 1_000_000.0
+    assert moved.available_balance == pytest.approx(1_000_000.0)
+
+
+async def test_market_sell_opens_short_when_no_position() -> None:
+    b, _ = await _broker()
+
+    result = await b.submit_order(_order(OrderSide.SELL, OrderType.MARKET, price=100.0))
+
+    assert result.status == OrderStatus.FILLED
+    positions = await b.get_positions()
+    assert len(positions) == 1
+    assert positions[0].side == PositionSide.SHORT
+
+
+async def test_limit_buy_pends_then_fills_on_crossing_bar() -> None:
+    b, bus = await _broker()
+    assert bus is not None
+    callbacks: list = []
+    await b.subscribe_order_updates(lambda r: callbacks.append(r))
+
+    # BUY LIMIT at 90 — no current price, so it queues pending (no immediate fill).
+    result = await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
+    assert result.status == OrderStatus.SUBMITTED
+    assert await b.get_positions() == []
+
+    # Bar whose low dips to/below 90 crosses the BUY LIMIT → fill.
+    await bus.publish(_bar_event(high=95.0, low=89.0, close=92.0))
+
+    positions = await b.get_positions()
+    assert len(positions) == 1
+    assert positions[0].side == PositionSide.LONG
+    fills = [c for c in callbacks if c.status == OrderStatus.FILLED]
+    assert len(fills) == 1
+    assert fills[0].filled_price == pytest.approx(90.0)
+
+
+async def test_limit_buy_stays_pending_when_bar_does_not_cross() -> None:
+    b, bus = await _broker()
+    assert bus is not None
+
+    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
+    # Bar stays above the limit — no cross, order remains pending.
+    await bus.publish(_bar_event(high=99.0, low=95.0, close=97.0))
+
+    assert await b.get_positions() == []
+
+
+async def test_pending_limit_expires_on_expire_call() -> None:
+    b, bus = await _broker()
+    assert bus is not None
+    callbacks: list = []
+    await b.subscribe_order_updates(lambda r: callbacks.append(r))
+
+    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
+    expired = await b.expire_pending_orders()
+
+    assert expired == 1
+    assert any(c.status == OrderStatus.EXPIRED for c in callbacks)

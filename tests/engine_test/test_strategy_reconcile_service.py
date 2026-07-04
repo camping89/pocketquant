@@ -4,11 +4,10 @@ The reconcile loop owns instance lifecycle (load missing, unload orphan) AND
 converges run-state: it diffs desired_state (Mongo) vs actual run-state (RAM),
 calls start/stop, then mirrors observed actual back on drift. Tests pin: the
 four-combo decision table, idempotency (no churn writes), per-sub error
-isolation, cancel-safety, and the load-bearing invariant that injected backtest
-strategies (synthetic id, no sub row) are never unloaded.
-
-Instance-lifecycle specifics (load missing / unload orphan / anti-clobber) are
-covered in test_reconcile_instance_lifecycle.py.
+isolation, cancel-safety, instance-lifecycle specifics (load missing / unload
+orphan / anti-clobber against synthetic backtest ids and legacy 16-hex keys),
+and the load-bearing invariant that injected backtest strategies (synthetic
+id, no sub row) are never unloaded.
 """
 
 from __future__ import annotations
@@ -27,14 +26,22 @@ from pocketquant.engine.app_services.strategy_reconcile_service import (
 )
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
+_STRATEGY = "hitnrun2"  # must be in STRATEGY_REGISTRY
 
 
-def _sub(desired: RunState, actual: RunState) -> Subscription:
+def _sub(
+    *,
+    symbol: str = "BTCUSDT:BINANCE",
+    interval: Interval = Interval.MINUTE_5,
+    strategy_code: str = _STRATEGY,
+    desired: RunState = "stopped",
+    actual: RunState = "stopped",
+) -> Subscription:
     return Subscription(
         id=generate_id(),
-        strategy_code="hitnrun2",
-        symbol="BTCUSDT:BINANCE",
-        interval=Interval.MINUTE_5,
+        strategy_code=strategy_code,
+        symbol=symbol,
+        interval=interval,
         created_at=NOW,
         desired_state=desired,
         actual_state=actual,
@@ -262,3 +269,118 @@ async def test_injected_backtest_strategy_without_sub_row_is_untouched() -> None
     strategy = svc.get_strategy("backtest-synthetic-id")
     assert strategy is not None
     assert strategy.is_running is True
+
+
+@pytest.mark.asyncio
+async def test_loads_instance_for_sub_without_one() -> None:
+    svc = _FakeStrategyService()  # no instances
+    sub = _sub(desired="stopped")
+    recon, _sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.load_calls == [str(sub.id)]
+    assert svc.get_strategy(str(sub.id)) is not None
+
+
+@pytest.mark.asyncio
+async def test_unknown_template_not_loaded() -> None:
+    svc = _FakeStrategyService()
+    sub = _sub(strategy_code="does-not-exist", desired="running")
+    recon, _sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.load_calls == []
+    assert svc.get_strategy(str(sub.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_instance_with_live_sub_doc_not_unloaded() -> None:
+    """A RAM instance whose subscription doc still exists is never an orphan."""
+    sub = _sub()
+    svc = _FakeStrategyService()
+    svc.load(str(sub.id), running=False)
+    recon, _sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.unload_calls == []
+    assert svc.get_strategy(str(sub.id)) is not None
+
+
+@pytest.mark.asyncio
+async def test_unloads_orphan_instance_when_sub_deleted() -> None:
+    """A RAM instance keyed by a uuid7 sub id, but with no sub doc, is unloaded.
+
+    Locks the shape-guard against silent no-op: if the guard regex still
+    matched only the legacy 16-hex shape, this unload would never fire and
+    every removed subscription would leak a running instance forever.
+    """
+    sub = _sub()
+    svc = _FakeStrategyService()
+    svc.load(str(sub.id), running=True)  # instance present...
+    recon, _sub_repo = _service([], svc)  # ...but NO subscription rows
+
+    await recon._reconcile()
+
+    assert svc.unload_calls == [str(sub.id)]
+    assert svc.get_strategy(str(sub.id)) is None
+
+
+@pytest.mark.asyncio
+async def test_synthetic_backtest_instance_never_unloaded() -> None:
+    """Anti-clobber: a synthetic backtest id (``{code}::bt::{sub_id}``) is not a
+    subscription-id shape, so orphan-unload skips it even with zero sub rows."""
+    sub = _sub()
+    synthetic_id = f"{_STRATEGY}::bt::{sub.id}"
+    svc = _FakeStrategyService()
+    svc.load(synthetic_id, running=True)
+    recon, _sub_repo = _service([], svc)  # no sub rows → orphan pass runs
+
+    await recon._reconcile()
+
+    assert svc.unload_calls == []
+    inst = svc.get_strategy(synthetic_id)
+    assert inst is not None and inst.is_running is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_16hex_key_skipped_not_unloaded() -> None:
+    """A leftover legacy 16-hex RAM key no longer matches the uuid7 shape, so
+    orphan-unload ignores it (no unload, no crash). A restart clears such keys;
+    until then they are simply not the reconcile loop's to manage."""
+    svc = _FakeStrategyService()
+    svc.load("eef73dffbd77a20b", running=True)  # old deterministic-id shape
+    recon, _sub_repo = _service([], svc)
+
+    await recon._reconcile()
+
+    assert svc.unload_calls == []
+    assert svc.get_strategy("eef73dffbd77a20b") is not None
+
+
+@pytest.mark.asyncio
+async def test_load_then_converge_running_in_one_tick() -> None:
+    """A desired=running sub with no instance is loaded AND started in one tick."""
+    svc = _FakeStrategyService()
+    sub = _sub(desired="running", actual="stopped")
+    recon, _sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    inst = svc.get_strategy(str(sub.id))
+    assert inst is not None
+    assert inst.is_running is True
+
+
+@pytest.mark.asyncio
+async def test_existing_instance_not_reloaded() -> None:
+    svc = _FakeStrategyService()
+    sub = _sub(desired="stopped")
+    svc.load(str(sub.id), running=False)
+    recon, _sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.load_calls == []  # already present — not reloaded

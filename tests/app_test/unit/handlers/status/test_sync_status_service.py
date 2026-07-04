@@ -1,8 +1,4 @@
-"""Tests for SyncStatusQueryService.get_sync_status — bar-derived freshness composition.
-
-Covers: cascade-fresh fix (stale sync_status + fresh bars → not stuck), all-stuck,
-no-bars-yet, count override, per-row exception isolation.
-"""
+"""Tests for SyncStatusQueryService — bar-derived freshness composition (list + single-symbol)."""
 
 from __future__ import annotations
 
@@ -11,10 +7,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
 from pocketquant.engine.market_data.sync_status_service import (
+    GetSymbolSyncStatusQuery,
     GetSyncStatusQuery,
     SyncStatusQueryService,
 )
@@ -62,6 +60,9 @@ def bar_repo() -> AsyncMock:
 @pytest.fixture
 def handler(sync_status_repo, bar_repo) -> SyncStatusQueryService:
     return SyncStatusQueryService(sync_status_repo, bar_repo)
+
+
+# get_sync_status — list of all tracked symbols/intervals
 
 
 @pytest.mark.asyncio
@@ -180,3 +181,90 @@ async def test_last_sync_at_still_from_sync_status(handler, sync_status_repo, ba
     result = await handler.get_sync_status(GetSyncStatusQuery())
 
     assert result[0].last_sync_at == sync_dt.isoformat().replace("+00:00", "Z")
+
+
+# get_symbol_sync_status — single symbol/interval lookup
+
+
+@pytest.mark.asyncio
+async def test_returns_is_stuck_field_populated(handler, sync_status_repo, bar_repo) -> None:
+    """Previously the handler did not populate is_stuck (defaulted False).
+    Now should reflect actual bar freshness."""
+    sync_status_repo.find_one.return_value = _status("5m", last_bar_age_seconds=3600)
+    bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=2000), Interval.MINUTE_5)
+    bar_repo.count.return_value = 100
+
+    result = await handler.get_symbol_sync_status(
+        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+    )
+
+    # 5m cadence 300s × 3 = 900s; bar age 2000s > 900s → stuck
+    assert result.is_stuck is True
+
+
+@pytest.mark.asyncio
+async def test_uses_bars_for_count_and_last_bar(handler, sync_status_repo, bar_repo) -> None:
+    """bar_count and last_bar_at come from bars, not sync_status."""
+    fresh_dt = NOW - timedelta(seconds=60)
+    sync_status_repo.find_one.return_value = _status("1h", last_bar_age_seconds=7200, bar_count=999)
+    bar_repo.get_latest.return_value = _bar(fresh_dt, Interval.HOUR_1)
+    bar_repo.count.return_value = 5907
+
+    result = await handler.get_symbol_sync_status(
+        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="1h"),
+    )
+
+    assert result.bar_count == 5907  # ← bars
+    assert result.last_bar_at == fresh_dt.isoformat().replace("+00:00", "Z")
+    assert result.is_stuck is False
+
+
+@pytest.mark.asyncio
+async def test_not_found_raises(handler, sync_status_repo, bar_repo) -> None:
+    """If sync_status row missing, NotFoundError as before."""
+    sync_status_repo.find_one.return_value = None
+
+    with pytest.raises(NotFoundError):
+        await handler.get_symbol_sync_status(
+            GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+        )
+
+    bar_repo.get_latest.assert_not_called()
+    bar_repo.count.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_no_bars_yet_returns_not_stuck_single_symbol(
+    handler,
+    sync_status_repo,
+    bar_repo,
+) -> None:
+    sync_status_repo.find_one.return_value = _status("5m", last_bar_age_seconds=60)
+    bar_repo.get_latest.return_value = None
+    bar_repo.count.return_value = 0
+
+    result = await handler.get_symbol_sync_status(
+        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+    )
+
+    assert result.is_stuck is False
+    assert result.bar_count == 0
+    assert result.last_bar_at is None
+
+
+@pytest.mark.asyncio
+async def test_status_and_error_from_sync_status(handler, sync_status_repo, bar_repo) -> None:
+    """status/error_message are command-log fields; come from sync_status."""
+    s = _status("5m", last_bar_age_seconds=60)
+    s.status = "error"
+    s.error_message = "TV REST timeout"
+    sync_status_repo.find_one.return_value = s
+    bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_5)
+    bar_repo.count.return_value = 100
+
+    result = await handler.get_symbol_sync_status(
+        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+    )
+
+    assert result.status == "error"
+    assert result.error_message == "TV REST timeout"

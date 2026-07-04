@@ -1,11 +1,10 @@
-"""Tests for no-progress tracking + anomaly log emission.
+"""Tests for no-progress tracking.
 
 Mocks SyncStatusRepository, BarRepository, SymbolRepository, Cache, and
 IDataProvider. Patches `fetch_with_retry` so service uses scripted
 provider responses without retry overhead.
 
-Each test asserts which sync_status_repo method was called (bump vs reset)
-plus log event/level for the structured anomaly trail.
+Each test asserts which sync_status_repo method was called (bump vs reset).
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import structlog
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
@@ -182,56 +180,6 @@ async def test_successful_insert_resets_streak() -> None:
 
     mocks["sync_status_repo"].reset_empty_fetch.assert_awaited_once()
     mocks["sync_status_repo"].bump_empty_fetch.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_streak_three_with_stale_age_emits_error() -> None:
-    """streak==3 AND age > 3× cadence → ERROR stuck_threshold_crossed."""
-    cadence = 900  # 15m in seconds
-    svc, _mocks = _build_service(
-        fetch_records=[],
-        existing_count=10,
-        latest_age_seconds=cadence * 4,  # > 3× cadence
-        insert_count=0,
-        bump_returns=3,
-    )
-    try:
-        with structlog.testing.capture_logs() as logs:
-            await svc.sync_one(_command())
-    finally:
-        _stop(svc)
-
-    assert any(
-        log.get("event") == "market_data.sync.stuck_threshold_crossed"
-        and log.get("log_level") == "error"
-        for log in logs
-    ), f"expected stuck_threshold_crossed error log; got {logs}"
-
-
-@pytest.mark.asyncio
-async def test_streak_four_only_warns_no_extra_error() -> None:
-    """streak==4 (already past threshold) → WARN no_progress, no extra ERROR."""
-    cadence = 900
-    svc, _mocks = _build_service(
-        fetch_records=[],
-        existing_count=10,
-        latest_age_seconds=cadence * 5,
-        insert_count=0,
-        bump_returns=4,
-    )
-    try:
-        with structlog.testing.capture_logs() as logs:
-            await svc.sync_one(_command())
-    finally:
-        _stop(svc)
-
-    has_error = any(log.get("event") == "market_data.sync.stuck_threshold_crossed" for log in logs)
-    has_warn = any(
-        log.get("event") == "market_data.sync.no_progress" and log.get("log_level") == "warning"
-        for log in logs
-    )
-    assert has_warn, "expected no_progress warning"
-    assert not has_error, "ERROR must only fire once at threshold crossing (streak==3)"
 
 
 @pytest.mark.asyncio

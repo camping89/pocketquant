@@ -17,11 +17,17 @@ from pocketquant.backtest.backtest_command_service import (
     RunBacktestCommand,
 )
 from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
-from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps
+from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps, run_single
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.domain.order import OrderAggregate
+from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -33,6 +39,10 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.engine.app_services.order_app_service import OrderAppService
+from pocketquant.engine.app_services.position_app_service import PositionAppService
+from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
 
 _SYM = "BTCUSDT:BINANCE"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -159,9 +169,7 @@ async def test_engine_failure_marks_failed_via_inspect_not_exception(
     # Unknown strategy → engine path raises inside run_single BEFORE the engine's
     # own try/except, surfacing through execute_and_persist's outer guard.
     assert "definitely-not-a-strategy" not in STRATEGY_REGISTRY
-    run_id, config = await _cmd_svc(database).run(
-        _command(strategy_id="definitely-not-a-strategy")
-    )
+    run_id, config = await _cmd_svc(database).run(_command(strategy_id="definitely-not-a-strategy"))
     await BacktestExecutionService(_deps(database), backtest_repo).execute_and_persist(
         run_id, config
     )
@@ -185,3 +193,121 @@ async def test_orphan_started_swept_to_failed_on_boot(database: Database) -> Non
     assert swept is not None
     assert swept.status == "failed"
     assert swept.error_message == "interrupted_by_restart"
+
+
+class _InMemoryOrderRepo:
+    def __init__(self) -> None:
+        self._items: dict[str, OrderAggregate] = {}
+
+    async def save(self, order: OrderAggregate) -> None:
+        self._items[str(order.id)] = order
+
+    async def get(self, order_id: str) -> OrderAggregate | None:
+        return self._items.get(order_id)
+
+    async def find_by_subscription(
+        self, subscription_id: str, limit: int = 1000
+    ) -> list[OrderAggregate]:
+        return [o for o in self._items.values() if o.subscription_id == subscription_id][:limit]
+
+    async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
+        return []
+
+
+class _InMemoryPositionRepo:
+    def __init__(self) -> None:
+        self._items: dict[str, PositionAggregate] = {}
+
+    async def save(self, position: PositionAggregate) -> None:
+        self._items[str(position.id)] = position
+
+    async def get(self, position_id: str) -> PositionAggregate | None:
+        return self._items.get(position_id)
+
+    async def get_by_subscription(self, subscription_id: str) -> PositionAggregate | None:
+        for p in self._items.values():
+            if p.subscription_id == subscription_id and not p.is_closed:
+                return p
+        return None
+
+    async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
+        return [p for p in self._items.values() if not p.is_closed][:limit]
+
+
+class _StubBrokerFactory:
+    def __init__(self, broker: IBroker) -> None:
+        self._broker = broker
+
+    def create(self, broker_type: str, config: dict) -> IBroker:
+        return self._broker
+
+
+async def _build_live_engine() -> tuple[
+    StrategyAppService, PaperBroker, _InMemoryOrderRepo, _InMemoryPositionRepo
+]:
+    """A live engine on its own bus with an engulfing strategy listening.
+
+    If a backtest leaked replayed bars onto a shared bus, this engine's injected
+    strategy would emit orders — an empty live order book after the run is the
+    isolation proof.
+    """
+    bus = EventBus()
+    order_repo = _InMemoryOrderRepo()
+    position_repo = _InMemoryPositionRepo()
+    order_svc = OrderAppService(bus, order_repo)  # pyright: ignore[reportArgumentType]
+    position_svc = PositionAppService(bus, position_repo)  # pyright: ignore[reportArgumentType]
+    await position_svc.start()
+
+    broker = PaperBroker(
+        initial_balance=10_000.0, slippage_percent=0.0, fill_delay_ms=0, event_bus=bus
+    )
+    engine = StrategyAppService(
+        event_bus=bus,
+        broker_factory=_StubBrokerFactory(broker),  # pyright: ignore[reportArgumentType]
+        order_app_service=order_svc,
+        position_app_service=position_svc,
+        risk_check_handler=RiskCheckHandler(),
+    )
+    await engine.start()
+
+    live_cfg = StrategyConfig(
+        id="engulfing-live",
+        name="engulfing",
+        symbol=_SYM,
+        interval="1m",
+        trigger="bar",
+        broker="paper",
+        parameters={"direction": "long", "key_level_lookback_bars": 5},
+    )
+    live_strategy = STRATEGY_REGISTRY["engulfing"](live_cfg)
+    await engine.inject_prepared_strategy(live_strategy.id, live_strategy, broker, live_cfg)
+    return engine, broker, order_repo, position_repo
+
+
+@pytest.mark.asyncio
+async def test_backtest_sandbox_does_not_leak_to_live_engine(database: Database) -> None:
+    """Replaying historical bars in a backtest must never drive a live engine
+    subscribed to the same bar/fill events — run_single builds its own bus."""
+    await _seed_bars(database, _engulfing_bars(cycles=3))
+    _engine, live_broker, live_orders, live_positions = await _build_live_engine()
+
+    result = await run_single(
+        _deps(database),
+        {
+            "strategy_code": "engulfing",
+            "symbol": _SYM,
+            "interval": "1m",
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-31",
+            "initial_capital": 10_000.0,
+            "slippage_bps": 0.0,
+            "commission_bps": 0.0,
+            "parameters": {"direction": "long", "key_level_lookback_bars": 5},
+        },
+    )
+
+    assert result.status == "finished", result.error_message
+    assert result.metrics.total_trades >= 1
+    assert live_orders._items == {}
+    assert (await live_positions.find_open()) == []
+    assert (await live_broker.get_positions()) == []
