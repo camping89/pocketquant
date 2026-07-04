@@ -97,6 +97,43 @@ EOF
 systemctl enable fail2ban
 systemctl restart fail2ban
 
+echo "=== Disk-growth guards (log rotation + retention) ==="
+# Docker global default: cap json-file logs for any container created after this.
+cat > /etc/docker/daemon.json << 'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "50m", "max-file": "3" },
+  "live-restore": true
+}
+EOF
+systemctl restart docker
+
+# Safety net for containers created before daemon.json / without a compose logging
+# cap (e.g. stateful mongodb/redis never recreated by a deploy). copytruncate so
+# docker keeps the same fd — no container restart needed.
+cat > /etc/logrotate.d/docker-container-logs << 'EOF'
+/var/lib/docker/containers/*/*.log {
+    su root root
+    rotate 5
+    daily
+    maxsize 100M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}
+EOF
+
+# journald was unbounded (default = 10% of disk); cap it.
+sed -i 's/^#\?SystemMaxUse=.*/SystemMaxUse=500M/' /etc/systemd/journald.conf
+systemctl restart systemd-journald
+
+# Daily docker prune (dangling images, stopped containers, old build cache).
+cat > /etc/cron.d/pocketquant-docker-cleanup << 'EOF'
+17 4 * * * root /opt/pocketquant/deploy/vps/90-cleanup.sh >/dev/null 2>&1
+EOF
+
 echo "=== Creating app directory ==="
 mkdir -p /opt/pocketquant/deploy/vps/one-time
 chown -R deploy:deploy /opt/pocketquant

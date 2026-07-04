@@ -76,6 +76,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Chatty on stdout (per-connection accepted/ended từ healthcheck mongosh mỗi
+    # 10s). Không cap thì json.log phình vô hạn — stateful nên deploy không recreate.
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   redis:
     image: redis:7.2-alpine
@@ -91,6 +98,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -101,6 +113,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - portainer_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
 volumes:
   mongodb_data:
