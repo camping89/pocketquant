@@ -1,8 +1,8 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useStrategyList, useBacktestRuns, useAllBacktestRuns, useRunBacktest } from '../../hooks/use-backtest-run'
+import { useSymbols } from '../../hooks/use-symbols'
 import type { BacktestRunRow } from '../../api/backtest-api'
-import { SymbolSelector } from '../controls/symbol-selector'
 import { RunListItem } from './run-list-item'
 import { BacktestForm } from './backtest-form'
 
@@ -45,7 +45,10 @@ interface RunHistoryRailProps {
 export function RunHistoryRail({ selectedRun, onSelect }: RunHistoryRailProps) {
   const navigate = useNavigate()
   const { data: strategies = [] } = useStrategyList()
+  const { data: symbols = [] } = useSymbols()
   const runBacktest = useRunBacktest()
+
+  const activeSymbols = useMemo(() => symbols.filter((s) => s.is_active), [symbols])
 
   const [strategy, setStrategy] = useState('') // '' = All
   const [symbol, setSymbol] = useState('') // composite CODE:EXCHANGE when set
@@ -99,7 +102,10 @@ export function RunHistoryRail({ selectedRun, onSelect }: RunHistoryRailProps) {
         </div>
         <div>
           <label style={labelStyle}>Symbol (optional)</label>
-          <SymbolSelector value={symbol} onChange={setSymbol} />
+          <select style={inputStyle} value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+            <option value="">All symbols</option>
+            {activeSymbols.map((s) => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}
+          </select>
         </div>
         <div>
           <label style={labelStyle}>Interval (optional)</label>
