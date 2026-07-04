@@ -6,9 +6,11 @@ interface SymbolSelectorProps {
   /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   value: string
   onChange: (v: string) => void
+  /** Shown when value is empty — avoids a blank button before a symbol is picked. */
+  placeholder?: string
 }
 
-export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
+export function SymbolSelector({ value, onChange, placeholder = 'Select symbol…' }: SymbolSelectorProps) {
   const { data: symbols } = useSymbols()
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
@@ -39,9 +41,13 @@ export function SymbolSelector({ value, onChange }: SymbolSelectorProps) {
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button onClick={() => setOpen(!open)} className="symbol-btn">
-        <span className="symbol-code">{selectedCode}</span>
-        {selectedExchange && (
-          <span className="exchange-badge">{selectedExchange}</span>
+        {selectedCode ? (
+          <>
+            <span className="symbol-code">{selectedCode}</span>
+            {selectedExchange && <span className="exchange-badge">{selectedExchange}</span>}
+          </>
+        ) : (
+          <span className="symbol-placeholder">{placeholder}</span>
         )}
       </button>
       {open && (

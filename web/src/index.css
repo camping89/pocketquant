@@ -100,6 +100,10 @@ input, select {
 .symbol-btn:hover {
   border-color: var(--accent);
 }
+.symbol-placeholder {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
 
 /* Exchange badge — small chip next to the bare code */
 .exchange-badge {
