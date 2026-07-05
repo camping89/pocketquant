@@ -341,42 +341,71 @@ Concurrency test: `tests/core_test/infra/persistence/test_subscription_repositor
 
 ### File Naming
 
-Use kebab-case with descriptive names that indicate purpose:
+Use kebab-case với tên mô tả mục đích (suffix trong tên file mã hóa layer):
 
 ```
-quote_routes.py                # FastAPI routes for quotes
-quote_app_service.py           # QuoteAppService business logic
-bar_builder.py                 # BarBuilder domain service
-bar_repository.py              # BarRepository data access
-binance_client.py              # BinanceClient (IDataProvider) for REST API
-binance_websocket_client.py    # BinanceWebSocketClient for @aggTrade WebSocket
+quote_routes.py                      # QuoteRoute functions (API HTTP handlers)
+quote_app_service.py                 # QuoteAppService (application orchestrator)
+bar_builder_domain_service.py        # BarBuilderDomainService (domain logic)
+engulfing_strategy_service.py        # EngulfingStrategyService (strategy impl)
+strategy_service_interface.py        # IStrategyService (strategy interface)
+bar_repository.py                    # BarRepository (data access)
+data_provider_port.py                # IDataProviderPort (infra boundary)
+binance_adapter.py                   # BinanceAdapter (infra impl)
+okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separate adapter)
+lot_tracking_helper.py               # LotTrackingHelper (utility)
 ```
 
 ### Class Naming by Layer
 
-Suffixes encode architectural role. Domain concepts (entities, VOs, enums, domain services) get NO suffix — they ARE the domain language. Routes and services are organized by subpackage.
+Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain concepts (entities, VOs, enums) không có suffix — chúng là ngôn ngữ miền.
 
-| Layer | Pattern | Suffix | Examples |
-|-------|---------|--------|----------|
-| Entities | `{Name}` or `{Name}Aggregate` | None / `Aggregate` (complex only) | `Bar`, `Symbol`, `OrderAggregate` |
-| Events | `{Entity}{PastTense}Event` | `Event` | `OrderFilledEvent`, `BarCompletedEvent` |
-| Enums | `{Concept}` | None | `Interval`, `OrderType`, `OrderSide` |
-| Value Objects | `{Concept}` | None | `PnL`, `OHLCV`, `BarRange` |
-| Domain Services | `{DescriptiveName}` | None | `BarBuilder`, `PerformanceCalculator` |
-| Repositories | `{Entity}Repository` | `Repository` | `BarRepository`, `OrderRepository` |
-| Infra Interfaces | `I{Concept}` | `I` prefix | `IBroker`, `IDataProvider`, `IBrokerFactory` |
-| Infra Impls | `{Source}{Type}` | None (source-prefixed) | `OKXBroker`, `BinanceClient`, `PaperBroker` |
-| App Services | `{Entity}AppService` | `AppService` | `BarAppService`, `StrategyAppService` |
-| Query Models | `{Get\|List}{Entity}Query` | `Query` | `GetOHLCVQuery`, `ListOrdersQuery` |
-| Command Models | `{Action}{Entity}Command` | `Command` | `SyncSymbolCommand`, `StartStrategyCommand` |
-| Services | `{Domain}{Command\|Query}Service` | `Service` | `StrategyCommandService`, `BacktestQueryService` |
-| DTOs | `{Name}Response` | `Response` | `SyncResponse`, `QuoteResponse` |
-| Routes | (functions) | — | `async def sync_symbol(...)` |
-| Middleware | `{Name}Middleware` | `Middleware` | `RateLimitMiddleware`, `IdempotencyMiddleware` |
-| Errors | `{Name}Error` | `Error` | `AppError`, `NotFoundError`, `DomainError` |
-| DI Providers | `{Domain}Provider` | `Provider` | `CoreProvider`, `ExecutionProvider` |
-| Configs | `{Name}Config` | `Config` | `BacktestConfig`, `RiskConfig` |
-| Background Jobs | (functions) | — | `sync_1m()`, `sync_integrity()` |
+| Layer | Pattern | Class Suffix | File Suffix | Ví dụ |
+|-------|---------|--------|--------|--------|
+| Entities | `{Name}` hoặc `{Name}Aggregate` | None / `Aggregate` | `.py` | `Bar`, `Symbol`, `OrderAggregate` |
+| Events | `{Entity}{PastTense}Event` | `Event` | `.py` | `OrderFilledEvent`, `BarCompletedEvent` |
+| Enums | `{Concept}` | None | `.py` | `Interval`, `OrderType`, `OrderSide` |
+| Value Objects | `{Concept}` | None | `.py` | `PnL`, `OHLCV`, `BarRange` |
+| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionSizerDomainService`, `BarBuilderDomainService` |
+| **Domain Strategy (Impl)** | `{Name}StrategyService` | `StrategyService` | `*_strategy_service.py` | `EngulfingStrategyService`, `HitNRun2StrategyService` |
+| **Domain Strategy (Interface)** | `IStrategyService` | `IStrategyService` | `strategy_service_interface.py` | `IStrategyService` |
+| Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
+| **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IDataProviderPort` |
+| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter` |
+| **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | `LotTrackingHelper` |
+| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService` |
+| Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListOrdersQuery` |
+| Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `StartStrategyCommand` |
+| CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |
+| DTOs | `{Name}Response` | `Response` | `.py` | `SyncResponse`, `QuoteResponse` |
+| Routes | (functions) | — | `*_routes.py` | `async def sync_symbol(...)` |
+| Middleware | `{Name}Middleware` | `Middleware` | `*_middleware.py` | `RateLimitMiddleware` |
+| Errors | `{Name}Error` | `Error` | `.py` | `AppError`, `NotFoundError`, `DomainError` |
+| DI Providers | `{Domain}Provider` | `Provider` | `*_provider.py` | `CoreProvider`, `ExecutionProvider` |
+| Configs | `{Name}Config` | `Config` | `*_config.py` | `BacktestConfig`, `RiskConfig` |
+| Background Jobs | (functions) | — | `*_jobs.py` | `sync_1m()`, `sync_integrity()` |
+
+### Naming Principles & Exemptions
+
+**Ba nguyên tắc cốt lõi:**
+
+1. **Tên class + file tự mã hóa layer/role.** Đọc `PositionSizerDomainService` hoặc `binance_adapter.py` biết ngay layer không cần xem folder.
+
+2. **Không stack 2 doer-suffix generic (`-er`/`-or`) trong 1 tên.** Nếu bị dính (vd `LotTracker` + `Helper` → `LotTrackerHelper`), dùng gerund: `LotTrackingHelper`. **Ngoại lệ:** danh từ nghiệp vụ kết `-er` (vd `Broker`) không tính là doer-suffix → `BrokerAdapter` hợp lệ.
+
+3. **Data class + role đã có suffix chuẩn → giữ nguyên.** Exempt list bên dưới.
+
+**Exempt list** (giữ suffix hiện tại, KHÔNG ép convention):
+
+| Nhóm | Ví dụ |
+|---|---|
+| CQRS | `*CommandService`, `*QueryService` (app layer, request-scoped ≠ orchestrator) |
+| Persistence | `*Repository` |
+| DI / cross-cutting | `*Provider`, `*Middleware` |
+| App handler | `RiskCheckHandler`, `event_handler` (decorator) |
+| Infra factory/scheduler | `BrokerFactory`, `JobScheduler` |
+| Infra sub-component (OKX) | `OkxMessageParser`, `OkxOrderMapper`, `OkxPositionMapper`, `OkxReconnectionHandler`, `OkxStateReconciler` |
+| Data class | Entity, VO, enum, event, `*Command`/`*Query`/`*Response` |
 
 ### Module Size
 
