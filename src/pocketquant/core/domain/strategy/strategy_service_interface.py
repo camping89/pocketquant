@@ -18,7 +18,7 @@ class FilledOrder(Protocol):
     def side(self) -> OrderSide: ...
 
 
-class IStrategy(ABC):
+class IStrategyService(ABC):
     """Abstract base class for trading strategies.
 
     Strategies implement trading logic and generate signals based on

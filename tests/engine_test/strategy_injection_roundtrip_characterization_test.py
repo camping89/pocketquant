@@ -23,7 +23,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.strategy.interfaces import IStrategy
+from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 
@@ -51,7 +51,7 @@ class _FakeBroker:
         self._connected = False
 
 
-class _CountingStrategy(IStrategy):
+class _CountingStrategy(IStrategyService):
     """Strategy recording on_start() invocations."""
 
     def __init__(self, config: StrategyConfig) -> None:

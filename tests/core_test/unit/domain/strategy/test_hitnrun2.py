@@ -1,4 +1,4 @@
-"""Unit tests for HitNRun2Strategy.
+"""Unit tests for HitNRun2StrategyService.
 
 Synthetic OHLCV is crafted so each test exercises a single rule branch.
 Direct ``on_bar_completed`` calls — no EventBus / broker plumbing needed.
@@ -13,7 +13,9 @@ import pytest
 
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.strategy.enums import Direction
-from pocketquant.core.domain.strategy.services.hitnrun2 import HitNRun2Strategy
+from pocketquant.core.domain.strategy.services.hitnrun2_strategy_service import (
+    HitNRun2StrategyService,
+)
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -46,7 +48,7 @@ async def _strategy(
     tp: int = 3,
     max_loss: float = 0.01,
     min_profit: float = 0.02,
-) -> HitNRun2Strategy:
+) -> HitNRun2StrategyService:
     cfg = StrategyConfig(
         id="hitnrun2-test",
         name="Test",
@@ -61,7 +63,7 @@ async def _strategy(
             "direction": direction,
         },
     )
-    s = HitNRun2Strategy(cfg)
+    s = HitNRun2StrategyService(cfg)
     await s.on_start()
     return s
 
@@ -233,4 +235,4 @@ async def test_invalid_direction_raises() -> None:
         parameters={"direction": "weird"},
     )
     with pytest.raises(ValueError, match="direction"):
-        HitNRun2Strategy(cfg)
+        HitNRun2StrategyService(cfg)

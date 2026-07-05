@@ -1,6 +1,6 @@
 """Full-candle engulfing detection shared by the Python strategy and the TS chart.
 
-One definition, two consumers: ``EngulfingStrategy`` enters only strong patterns;
+One definition, two consumers: ``EngulfingStrategyService`` enters only strong patterns;
 the chart toggle colors every engulfing strong/weak. Locked across both runtimes
 by the golden fixture in ``tests/core_test/.../engulfing_golden_fixture.json``.
 

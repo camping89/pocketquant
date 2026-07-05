@@ -25,7 +25,10 @@ from typing import Any
 
 from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.strategy.enums import Direction
-from pocketquant.core.domain.strategy.interfaces import FilledOrder, IStrategy
+from pocketquant.core.domain.strategy.strategy_service_interface import (
+    FilledOrder,
+    IStrategyService,
+)
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 
 _DEFAULTS = {
@@ -38,7 +41,7 @@ _DEFAULTS = {
 }
 
 
-class HitNRun2Strategy(IStrategy):
+class HitNRun2StrategyService(IStrategyService):
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         p = config.parameters or {}

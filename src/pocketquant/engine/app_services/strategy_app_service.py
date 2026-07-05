@@ -19,7 +19,7 @@ from pocketquant.core.domain.order import (
 )
 from pocketquant.core.domain.quote.events import QuoteReceivedEvent
 from pocketquant.core.domain.risk import PositionSizerDomainService
-from pocketquant.core.domain.strategy.interfaces import IStrategy
+from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ class StrategyAppService:
         self._risk_check_handler = risk_check_handler
         self._default_broker_config = default_broker_config or {}
 
-        self._strategies: dict[str, IStrategy] = {}
+        self._strategies: dict[str, IStrategyService] = {}
         self._brokers: dict[str, IBroker] = {}
         self._configs: dict[str, StrategyConfig] = {}
         self._running = False
@@ -96,7 +96,7 @@ class StrategyAppService:
     async def load_strategy(
         self,
         config: StrategyConfig,
-        strategy_class: type[IStrategy] | None = None,
+        strategy_class: type[IStrategyService] | None = None,
     ) -> str:
         """Load a strategy from configuration.
 
@@ -172,7 +172,7 @@ class StrategyAppService:
     async def inject_prepared_strategy(
         self,
         sid: str,
-        strategy: IStrategy,
+        strategy: IStrategyService,
         broker: IBroker,
         config: StrategyConfig,
     ) -> None:
@@ -215,7 +215,7 @@ class StrategyAppService:
             for s in self._strategies.values()
         ]
 
-    def get_strategy(self, strategy_id: str) -> IStrategy | None:
+    def get_strategy(self, strategy_id: str) -> IStrategyService | None:
         return self._strategies.get(strategy_id)
 
     def loaded_strategy_ids(self) -> list[str]:
@@ -310,7 +310,7 @@ class StrategyAppService:
         symbol: str,
         interval: str | None = None,
         trigger: str = "bar",
-    ) -> list[IStrategy]:
+    ) -> list[IStrategyService]:
         """Find strategies matching composite symbol/interval/trigger."""
         matches = []
         for strategy in self._strategies.values():
@@ -326,7 +326,7 @@ class StrategyAppService:
         return matches
 
     async def _process_signal(
-        self, strategy: IStrategy, signal: Signal, current_price: float
+        self, strategy: IStrategyService, signal: Signal, current_price: float
     ) -> None:
         broker = self._brokers.get(strategy.id)
         if not broker:
@@ -382,7 +382,7 @@ class StrategyAppService:
 
     def _create_order(
         self,
-        strategy: IStrategy,
+        strategy: IStrategyService,
         signal: Signal,
         size: float,
         current_price: float,
@@ -416,7 +416,7 @@ class StrategyAppService:
         return broker
 
 
-class _DefaultStrategy(IStrategy):
+class _DefaultStrategy(IStrategyService):
     """Default pass-through strategy that never generates signals."""
 
     async def on_bar_completed(self, bar: dict) -> Signal | None:

@@ -1,4 +1,4 @@
-"""Unit tests for EngulfingStrategy.
+"""Unit tests for EngulfingStrategyService.
 
 Synthetic OHLCV crafted per branch; direct ``on_bar_completed`` calls (no bus).
 ``on_order_filled`` is exercised directly to model the fill-driven open-direction
@@ -19,7 +19,9 @@ from pocketquant.core.domain.risk.services.position_sizer_domain_service import 
     PositionSizerDomainService,
 )
 from pocketquant.core.domain.strategy.enums import Direction
-from pocketquant.core.domain.strategy.services.engulfing import EngulfingStrategy
+from pocketquant.core.domain.strategy.services.engulfing_strategy_service import (
+    EngulfingStrategyService,
+)
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -44,7 +46,7 @@ async def _strategy(
     lookback: int = 3,
     buf: float = 0.001,
     wick: float = 0.30,
-) -> EngulfingStrategy:
+) -> EngulfingStrategyService:
     cfg = StrategyConfig(
         id="engulfing-test",
         name="Test",
@@ -57,7 +59,7 @@ async def _strategy(
             "max_rejection_wick_pct": wick,
         },
     )
-    s = EngulfingStrategy(cfg)
+    s = EngulfingStrategyService(cfg)
     await s.on_start()
     return s
 
@@ -84,7 +86,7 @@ _CURR_RED_STRONG = (101.0, 101.2, 96.8, 97.0)  # rejection ~0.045
 
 
 async def _warm_to_pattern_long(
-    s: EngulfingStrategy, *, filler_high: float = 100.0, filler_low: float = 99.0
+    s: EngulfingStrategyService, *, filler_high: float = 100.0, filler_low: float = 99.0
 ) -> Any:
     """Feed 2 fillers + prev-red, then the strong-green pattern bar (idx 3)."""
     await s.on_bar_completed(_bar(0, 100.0, filler_high, filler_low, 100.0))
@@ -251,4 +253,4 @@ def test_invalid_params_raise_value_error(params: dict) -> None:
         id="bad", name="bad", symbol=_SYM, interval="1m", parameters=params
     )
     with pytest.raises(ValueError):
-        EngulfingStrategy(cfg)
+        EngulfingStrategyService(cfg)

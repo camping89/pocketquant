@@ -13,12 +13,12 @@ import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
-from pocketquant.core.domain.strategy.interfaces import IStrategy
+from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 
 
-class _RecordingStrategy(IStrategy):
+class _RecordingStrategy(IStrategyService):
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         self.fills: list[tuple[OrderSide, float]] = []

@@ -23,8 +23,11 @@ from typing import Any
 
 from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.strategy.enums import Direction
-from pocketquant.core.domain.strategy.interfaces import FilledOrder, IStrategy
 from pocketquant.core.domain.strategy.patterns import detect_engulfing
+from pocketquant.core.domain.strategy.strategy_service_interface import (
+    FilledOrder,
+    IStrategyService,
+)
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 
 _DEFAULTS = {
@@ -35,7 +38,7 @@ _DEFAULTS = {
 }
 
 
-class EngulfingStrategy(IStrategy):
+class EngulfingStrategyService(IStrategyService):
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         p = config.parameters or {}

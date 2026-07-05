@@ -1,9 +1,13 @@
-from pocketquant.core.domain.strategy.services.engulfing import EngulfingStrategy
-from pocketquant.core.domain.strategy.services.hitnrun2 import HitNRun2Strategy
+from pocketquant.core.domain.strategy.services.engulfing_strategy_service import (
+    EngulfingStrategyService,
+)
+from pocketquant.core.domain.strategy.services.hitnrun2_strategy_service import (
+    HitNRun2StrategyService,
+)
 
 STRATEGY_REGISTRY: dict[str, type] = {
-    "hitnrun2": HitNRun2Strategy,
-    "engulfing": EngulfingStrategy,
+    "hitnrun2": HitNRun2StrategyService,
+    "engulfing": EngulfingStrategyService,
 }
 
-__all__ = ["EngulfingStrategy", "HitNRun2Strategy", "STRATEGY_REGISTRY"]
+__all__ = ["EngulfingStrategyService", "HitNRun2StrategyService", "STRATEGY_REGISTRY"]
