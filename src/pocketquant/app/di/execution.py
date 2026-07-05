@@ -21,8 +21,8 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.app_services.strategy_reconcile_service import (
-    StrategyReconcileService,
+from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+    StrategyReconcileAppService,
 )
 from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
 
@@ -81,8 +81,8 @@ class ExecutionProvider(Provider):
         subscription_repository: SubscriptionRepository,
         strategy_app_service: StrategyAppService,
         settings: Settings,
-    ) -> StrategyReconcileService:
-        return StrategyReconcileService(
+    ) -> StrategyReconcileAppService:
+        return StrategyReconcileAppService(
             subscription_repository,
             strategy_app_service,
             interval_s=settings.reconcile_interval_seconds,

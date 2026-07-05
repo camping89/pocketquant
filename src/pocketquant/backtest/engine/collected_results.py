@@ -1,4 +1,4 @@
-"""CollectedResults — output of BacktestResultCollector.finalize().
+"""CollectedResults — output of BacktestResultAppService.finalize().
 
 Holds the slimmed ``BacktestResult`` plus the standalone ``Order`` and ``Trade``
 lists that will be persisted to their dedicated MongoDB collections.

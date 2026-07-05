@@ -1,4 +1,4 @@
-"""Integration tests — BacktestResultCollector with FIFO lot tracking.
+"""Integration tests — BacktestResultAppService with FIFO lot tracking.
 
 Covers: long-only round-trip, short-only round-trip, scale-in/out, partial fills,
 flip LONG↔SHORT, open positions at end.
@@ -15,7 +15,7 @@ from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
-from pocketquant.backtest.engine.result_collector import BacktestResultCollector
+from pocketquant.backtest.engine.backtest_result_app_service import BacktestResultAppService
 from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
@@ -39,8 +39,8 @@ def config() -> BacktestConfig:
 
 
 @pytest.fixture
-def collector(config: BacktestConfig) -> BacktestResultCollector:
-    return BacktestResultCollector(config, initial_capital=config.initial_capital, run_id=RUN_ID)
+def collector(config: BacktestConfig) -> BacktestResultAppService:
+    return BacktestResultAppService(config, initial_capital=config.initial_capital, run_id=RUN_ID)
 
 
 @pytest.fixture(autouse=True)
@@ -76,13 +76,13 @@ def _fill(
     )
 
 
-async def _feed(collector: BacktestResultCollector, fill: OrderResult, at: datetime) -> None:
+async def _feed(collector: BacktestResultAppService, fill: OrderResult, at: datetime) -> None:
     set_simulation_time(at)
     await collector.on_fill(fill)
 
 
 @pytest.mark.asyncio
-async def test_long_round_trip(collector: BacktestResultCollector) -> None:
+async def test_long_round_trip(collector: BacktestResultAppService) -> None:
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 100.0, "o1", sl=90, tp=120), t0)
     await _feed(collector, _fill(OrderSide.SELL, 1.0, 110.0, "o2"), t0 + timedelta(hours=1))
@@ -108,7 +108,7 @@ async def test_long_round_trip(collector: BacktestResultCollector) -> None:
 
 
 @pytest.mark.asyncio
-async def test_short_round_trip(collector: BacktestResultCollector) -> None:
+async def test_short_round_trip(collector: BacktestResultAppService) -> None:
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.SELL, 1.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 90.0, "o2"), t0 + timedelta(hours=1))
@@ -123,7 +123,7 @@ async def test_short_round_trip(collector: BacktestResultCollector) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fifo_two_buys_one_sell(collector: BacktestResultCollector) -> None:
+async def test_fifo_two_buys_one_sell(collector: BacktestResultAppService) -> None:
     """2 BUYs different prices → 1 SELL closes both, PnL FIFO-based."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 1.0, 100.0, "o1"), t0)
@@ -140,7 +140,7 @@ async def test_fifo_two_buys_one_sell(collector: BacktestResultCollector) -> Non
 
 
 @pytest.mark.asyncio
-async def test_partial_close_then_full(collector: BacktestResultCollector) -> None:
+async def test_partial_close_then_full(collector: BacktestResultAppService) -> None:
     """1 BUY qty=10 → 2 SELLs (4+6)."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 10.0, 100.0, "o1"), t0)
@@ -156,7 +156,7 @@ async def test_partial_close_then_full(collector: BacktestResultCollector) -> No
 
 
 @pytest.mark.asyncio
-async def test_flip_long_to_short(collector: BacktestResultCollector) -> None:
+async def test_flip_long_to_short(collector: BacktestResultAppService) -> None:
     """LONG 10 → SELL 15 → close LONG + open SHORT 5."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 10.0, 100.0, "o1"), t0)
@@ -175,7 +175,7 @@ async def test_flip_long_to_short(collector: BacktestResultCollector) -> None:
 
 
 @pytest.mark.asyncio
-async def test_flip_short_to_long(collector: BacktestResultCollector) -> None:
+async def test_flip_short_to_long(collector: BacktestResultAppService) -> None:
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.SELL, 5.0, 100.0, "o1"), t0)
     await _feed(collector, _fill(OrderSide.BUY, 8.0, 90.0, "o2"), t0 + timedelta(hours=1))
@@ -191,7 +191,7 @@ async def test_flip_short_to_long(collector: BacktestResultCollector) -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_position_at_end(collector: BacktestResultCollector) -> None:
+async def test_open_position_at_end(collector: BacktestResultAppService) -> None:
     """1 BUY with no matching SELL → 1 OpenLot in run.open_positions, 0 trades."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
     await _feed(collector, _fill(OrderSide.BUY, 2.0, 100.0, "o1", sl=90, tp=120), t0)
@@ -208,7 +208,7 @@ async def test_open_position_at_end(collector: BacktestResultCollector) -> None:
 
 @pytest.mark.asyncio
 async def test_legacy_fill_without_side_long_only_fallback(
-    collector: BacktestResultCollector,
+    collector: BacktestResultAppService,
 ) -> None:
     """OrderResult.side=None → fallback to long-only inference (legacy compat)."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
@@ -239,7 +239,7 @@ async def test_legacy_fill_without_side_long_only_fallback(
 
 @pytest.mark.asyncio
 async def test_total_return_no_regression_for_long_only(
-    collector: BacktestResultCollector,
+    collector: BacktestResultAppService,
 ) -> None:
     """Verify long-only flow PnL matches the legacy sequential pairing within rounding."""
     t0 = datetime(2024, 1, 5, 10, tzinfo=UTC)

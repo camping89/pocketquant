@@ -1,4 +1,4 @@
-"""Unit tests for StrategyReconcileService — pure fakes, no DB/containers.
+"""Unit tests for StrategyReconcileAppService — pure fakes, no DB/containers.
 
 The reconcile loop owns instance lifecycle (load missing, unload orphan) AND
 converges run-state: it diffs desired_state (Mongo) vs actual run-state (RAM),
@@ -21,8 +21,8 @@ import pytest
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import RunState, Subscription
-from pocketquant.engine.app_services.strategy_reconcile_service import (
-    StrategyReconcileService,
+from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+    StrategyReconcileAppService,
 )
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
@@ -115,9 +115,9 @@ class _FakeSubRepo:
         return 1
 
 
-def _service(subs, svc) -> tuple[StrategyReconcileService, _FakeSubRepo]:
+def _service(subs, svc) -> tuple[StrategyReconcileAppService, _FakeSubRepo]:
     repo = _FakeSubRepo(subs)
-    recon = StrategyReconcileService(repo, svc, interval_s=0.01)  # pyright: ignore[reportArgumentType]
+    recon = StrategyReconcileAppService(repo, svc, interval_s=0.01)  # pyright: ignore[reportArgumentType]
     return recon, repo
 
 

@@ -39,8 +39,8 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
 )
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.app_services.strategy_reconcile_service import (
-    StrategyReconcileService,
+from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+    StrategyReconcileAppService,
 )
 
 from .app_factory import TestCoreProvider
@@ -71,12 +71,12 @@ async def test_app_container_resolves_full_runtime(app_container) -> None:
     all resolve from the app container with no external process."""
     scheduler = await app_container.get(JobScheduler)
     engine = await app_container.get(StrategyAppService)
-    reconcile = await app_container.get(StrategyReconcileService)
+    reconcile = await app_container.get(StrategyReconcileAppService)
     execution = await app_container.get(BacktestExecutionService)
 
     assert isinstance(scheduler, JobScheduler)
     assert isinstance(engine, StrategyAppService)
-    assert isinstance(reconcile, StrategyReconcileService)
+    assert isinstance(reconcile, StrategyReconcileAppService)
     assert isinstance(execution, BacktestExecutionService)
 
 
@@ -117,7 +117,7 @@ async def test_app_reconcile_runs_desired_running_without_http(
     )
     assert engine.get_strategy(str(sub.id)).is_running is False
 
-    reconcile = await app_container.get(StrategyReconcileService)
+    reconcile = await app_container.get(StrategyReconcileAppService)
     await reconcile._reconcile()
 
     assert engine.get_strategy(str(sub.id)).is_running is True

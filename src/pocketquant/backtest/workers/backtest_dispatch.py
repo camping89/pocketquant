@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.engine.backtest_engine_sandbox import build_backtest_sandbox
+from pocketquant.backtest.engine.backtest_sandbox_app_service import build_backtest_sandbox
 from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestResult

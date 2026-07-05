@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from pocketquant.backtest.engine.backtest_engine_sandbox import BacktestSandbox
+from pocketquant.backtest.engine.backtest_sandbox_app_service import BacktestSandboxAppService
 from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.enums import Interval
@@ -63,7 +63,7 @@ def build_backtest_config(
 
 
 async def inject_strategy_into_sandbox(
-    sandbox: BacktestSandbox,
+    sandbox: BacktestSandboxAppService,
     base_config: StrategyConfig,
     strategy_id: str,
     sub_id: str,

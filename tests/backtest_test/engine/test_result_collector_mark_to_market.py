@@ -1,4 +1,4 @@
-"""BacktestResultCollector mark-to-market — read-only equity + persist downsampling.
+"""BacktestResultAppService mark-to-market — read-only equity + persist downsampling.
 
 Pins the invariants Bug #2's fix must preserve:
 - ``mark_to_market`` never mutates realized accounting → total_return / cagr /
@@ -14,9 +14,9 @@ from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
-from pocketquant.backtest.engine.result_collector import (
+from pocketquant.backtest.engine.backtest_result_app_service import (
     _MAX_PERSISTED_EQUITY_POINTS,
-    BacktestResultCollector,
+    BacktestResultAppService,
 )
 from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
@@ -59,8 +59,8 @@ def _reset_sim_time():
     clear_simulation_time()
 
 
-async def _round_trip(with_mtm: bool) -> BacktestResultCollector:
-    c = BacktestResultCollector(_config(), initial_capital=10_000.0, run_id=_oid("run"))
+async def _round_trip(with_mtm: bool) -> BacktestResultAppService:
+    c = BacktestResultAppService(_config(), initial_capital=10_000.0, run_id=_oid("run"))
     set_simulation_time(_T0)
     await c.on_fill(_fill(OrderSide.BUY, 1.0, 100.0, "o1"))
     if with_mtm:
@@ -107,7 +107,7 @@ async def test_sharpe_uses_mtm_curve_when_present() -> None:
 
 
 async def test_persisted_equity_curve_capped() -> None:
-    c = BacktestResultCollector(_config(), initial_capital=10_000.0, run_id=_oid("run"))
+    c = BacktestResultAppService(_config(), initial_capital=10_000.0, run_id=_oid("run"))
     base = 10_000.0
     # 20k MTM points — well over the 5000 cap.
     for i in range(20_000):
@@ -118,7 +118,7 @@ async def test_persisted_equity_curve_capped() -> None:
 
 async def test_persisted_curve_hard_capped_even_with_many_trade_points() -> None:
     """Cap is a hard guarantee: even >5000 trade-carrying points get strided down."""
-    c = BacktestResultCollector(_config(), initial_capital=10_000.0, run_id=_oid("run"))
+    c = BacktestResultAppService(_config(), initial_capital=10_000.0, run_id=_oid("run"))
     set_simulation_time(_T0)
     # 8000 round-trips → ~16000 trade-carrying equity points (over the cap).
     for i in range(8000):

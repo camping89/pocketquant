@@ -17,7 +17,9 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
-from pocketquant.app.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
+from pocketquant.app.market_data.app_services.ws_subscription_app_service import (
+    WsSubscriptionAppService,
+)
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
@@ -56,8 +58,8 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
-from pocketquant.engine.app_services.strategy_reconcile_service import (
-    StrategyReconcileService,
+from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+    StrategyReconcileAppService,
 )
 
 logger = get_logger(__name__)
@@ -189,10 +191,10 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 
     Stores task handles on app.state for lifespan cleanup:
       app.state.ws_task          — IRealtimeQuoteProvider.run_forever()
-      app.state.subscription_task — WsSubscriptionManager.run()
+      app.state.subscription_task — WsSubscriptionAppService.run()
     """
     quote_svc = await container.get(QuoteAppService)
-    sub_mgr = await container.get(WsSubscriptionManager)
+    sub_mgr = await container.get(WsSubscriptionAppService)
 
     await quote_svc.start()
     app.state.ws_task = quote_svc.ws_task  # task created inside start()
@@ -229,7 +231,7 @@ async def start_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
         logger.info("reconcile_loop_disabled")
         return
 
-    svc = await container.get(StrategyReconcileService)
+    svc = await container.get(StrategyReconcileAppService)
     app.state.reconcile_task = asyncio.create_task(svc.run())
     logger.info("reconcile_loop.started")
 

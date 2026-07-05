@@ -1,4 +1,4 @@
-"""StrategyReconcileService — owns instance lifecycle + converges run-state.
+"""StrategyReconcileAppService — owns instance lifecycle + converges run-state.
 
 A Kubernetes-style controller loop: every ``interval_s`` it reads each
 subscription from Mongo and drives RAM toward it in three steps per tick:
@@ -43,7 +43,7 @@ logger = get_logger(__name__)
 _SUB_ID_SHAPE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
-class StrategyReconcileService:
+class StrategyReconcileAppService:
     """Poll loop reconciling subscription desired_state vs live engine state.
 
     Args:

@@ -13,7 +13,7 @@ process-global registry across runs). Order/position trackers are throwaway
 in-memory instances; the position tracker is deliberately **not started**, so it
 registers no handlers — the PaperBroker is the position source of truth during a
 backtest, and the strategy's own one-position cap governs re-entry. Trades are
-built by the ``BacktestResultCollector`` from broker fill callbacks, independent
+built by the ``BacktestResultAppService`` from broker fill callbacks, independent
 of this bus.
 """
 
@@ -94,7 +94,7 @@ class _SingleBrokerFactory:
 
 
 @dataclass
-class BacktestSandbox:
+class BacktestSandboxAppService:
     """An isolated engine stack for one backtest run.
 
     ``event_bus`` and ``strategy_app_service`` are private to this run. Build a
@@ -137,7 +137,7 @@ class BacktestSandbox:
 
 async def build_backtest_sandbox(
     default_broker_config: dict[str, Any] | None = None,
-) -> BacktestSandbox:
+) -> BacktestSandboxAppService:
     """Create an isolated engine stack bound to a fresh per-run EventBus.
 
     The StrategyAppService is started against a local EventRegistry so its
@@ -154,4 +154,4 @@ async def build_backtest_sandbox(
         default_broker_config=default_broker_config,
     )
     await engine.start(registry=EventRegistry())
-    return BacktestSandbox(event_bus=bus, strategy_app_service=engine)
+    return BacktestSandboxAppService(event_bus=bus, strategy_app_service=engine)

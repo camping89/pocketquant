@@ -1,7 +1,9 @@
 from dishka import Provider, Scope, provide
 
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
-from pocketquant.app.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
+from pocketquant.app.market_data.app_services.ws_subscription_app_service import (
+    WsSubscriptionAppService,
+)
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
@@ -49,8 +51,8 @@ class MarketDataProvider(Provider):
         provider: IRealtimeQuoteProvider,
         tracked_symbol_repo: TrackedSymbolRepository,
         quote_app_service: QuoteAppService,
-    ) -> WsSubscriptionManager:
-        return WsSubscriptionManager(
+    ) -> WsSubscriptionAppService:
+        return WsSubscriptionAppService(
             provider=provider,
             tracked_symbol_repo=tracked_symbol_repo,
             quote_app_service=quote_app_service,

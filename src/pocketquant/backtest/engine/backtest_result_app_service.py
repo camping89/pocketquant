@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 _MAX_PERSISTED_EQUITY_POINTS = 5000
 
 
-class BacktestResultCollector:
+class BacktestResultAppService:
     """Collects Orders + Trades + equity snapshots during backtest, then computes metrics.
 
     Equity is recorded on close (realized PnL) and on pure opens (for drawdown

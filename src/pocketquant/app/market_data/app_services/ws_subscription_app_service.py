@@ -1,4 +1,4 @@
-"""WsSubscriptionManager — reconciles WS subscriptions against tracked_symbols every 5s.
+"""WsSubscriptionAppService — reconciles WS subscriptions against tracked_symbols every 5s.
 
 Runs as a background task (asyncio.Task) spawned in lifespan.
 Idempotent: subscribe/unsubscribe only diffs (desired vs current).
@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 _SUBSCRIBE_DELAY_S = 0.02
 
 
-class WsSubscriptionManager:
+class WsSubscriptionAppService:
     """Reconciles live WS subscriptions against the tracked_symbols collection.
 
     Args:

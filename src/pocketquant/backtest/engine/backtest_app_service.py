@@ -1,10 +1,10 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+from pocketquant.backtest.engine.backtest_result_app_service import BacktestResultAppService
 from pocketquant.backtest.engine.historical_replay_app_service import (
     HistoricalReplayAppService,
 )
-from pocketquant.backtest.engine.result_collector import BacktestResultCollector
 from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
@@ -85,7 +85,7 @@ class BacktestAppService:
             end_date=config.end_date.isoformat(),
         )
 
-        collector = BacktestResultCollector(config, config.initial_capital, run_id=run_id)
+        collector = BacktestResultAppService(config, config.initial_capital, run_id=run_id)
 
         # Mark-to-market per bar for an evenly-sampled equity curve (Sharpe
         # input). Registered AFTER the broker's BarCompletedEvent handler

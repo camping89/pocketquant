@@ -4,7 +4,7 @@ The success metric of SP1: a subscription with desired_state="running" auto-runs
 without any manual start call, and stays running across a process restart. We
 prove it by composing the real pieces (real SubscriptionRepository on an
 ephemeral Mongo, real StrategyAppService with a PaperBroker, real
-StrategyReconcileService) and driving _reconcile() directly for determinism — no
+StrategyReconcileAppService) and driving _reconcile() directly for determinism — no
 live loop, no sleeps.
 
 Restart is simulated by discarding engine A and building a fresh engine B, then
@@ -36,8 +36,8 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.app_services.strategy_reconcile_service import (
-    StrategyReconcileService,
+from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+    StrategyReconcileAppService,
 )
 from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
 
@@ -117,7 +117,7 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     await _rehydrate(engine_a, sub)
     assert _strategy(engine_a, str(sub.id)).is_running is False
 
-    recon_a = StrategyReconcileService(repo, engine_a, interval_s=0.01)
+    recon_a = StrategyReconcileAppService(repo, engine_a, interval_s=0.01)
     await recon_a._reconcile()
 
     assert _strategy(engine_a, str(sub.id)).is_running is True
@@ -131,7 +131,7 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     await _rehydrate(engine_b, sub)
     assert _strategy(engine_b, str(sub.id)).is_running is False
 
-    recon_b = StrategyReconcileService(repo, engine_b, interval_s=0.01)
+    recon_b = StrategyReconcileAppService(repo, engine_b, interval_s=0.01)
     await recon_b._reconcile()
 
     # Auto-resumed with zero manual start_strategy calls in this test.
@@ -159,7 +159,7 @@ async def test_stop_convergence_stops_running_strategy(db: Database) -> None:
 
     engine = await _build_engine(db)
     await _rehydrate(engine, sub)
-    recon = StrategyReconcileService(repo, engine, interval_s=0.01)
+    recon = StrategyReconcileAppService(repo, engine, interval_s=0.01)
     await recon._reconcile()
     assert _strategy(engine, str(sub.id)).is_running is True
 
