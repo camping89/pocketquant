@@ -4,6 +4,7 @@ from pocketquant.core.domain.position.events import (
     PositionClosedEvent,
     PositionOpenedEvent,
     PositionUpdatedEvent,
+    TradeClosedEvent,
 )
 from pocketquant.core.domain.position.value_objects import PnL
 
@@ -14,4 +15,5 @@ __all__ = [
     "PositionOpenedEvent",
     "PositionSide",
     "PositionUpdatedEvent",
+    "TradeClosedEvent",
 ]
