@@ -48,6 +48,12 @@ class OkxOrderMapper:
         filled_quantity = float(acc_fill_sz) if acc_fill_sz else 0.0
         filled_price = float(avg_px) if avg_px else None
 
+        # OKX ``fee`` is negative for charges / positive for maker rebates, and
+        # accumulated (matches accFillSz/avgPx). abs() yields a positive cost;
+        # feeCcy assumed == quote (USDT-margined perp) — FX gap unhandled in R3.
+        fee_raw = data.get("fee", "")
+        commission = abs(float(fee_raw)) if fee_raw else 0.0
+
         order_id = data.get("clOrdId", "")  # Our client order ID
         broker_order_id = data.get("ordId", "")  # OKX order ID
 
@@ -61,6 +67,7 @@ class OkxOrderMapper:
             filled_quantity=filled_quantity,
             filled_price=filled_price,
             error_message=error_msg,
+            commission=commission,
         )
 
     @staticmethod

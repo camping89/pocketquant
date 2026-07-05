@@ -36,7 +36,3 @@ class BacktestConfig:
     @property
     def slippage_percent(self) -> float:
         return self.slippage_bps / 10_000
-
-    @property
-    def commission_percent(self) -> float:
-        return self.commission_bps / 10_000

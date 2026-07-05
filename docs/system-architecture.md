@@ -212,6 +212,7 @@ src/pocketquant/engine/                     # SHARED engine (used by backtest + 
 
 src/pocketquant/core/domain/trading/        # Trading contracts (universal, source-agnostic)
 ├── value_objects.py                        # Trade, Fill, EquityPoint, PerformanceMetrics
+├── commission_model.py                     # CommissionModel (Protocol) + PercentageCommissionModel(bps)
 ├── performance_calculator_domain_service.py  # PerformanceCalculatorDomainService (NumPy metrics)
 └── trade_stats.py                          # Pure functions: histogram, streaks, profit_factor, drawdowns
 

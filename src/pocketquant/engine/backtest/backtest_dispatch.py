@@ -91,6 +91,7 @@ async def run_single(
         broker = sandbox.create_broker(
             initial_balance=config.initial_capital,
             slippage_percent=config.slippage_percent,
+            commission_bps=config.commission_bps,
         )
         strategy_instance = strategy_class(strategy_cfg)
         await sandbox.strategy_app_service.inject_prepared_strategy(

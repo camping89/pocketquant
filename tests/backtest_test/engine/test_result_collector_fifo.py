@@ -20,9 +20,14 @@ from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
+from pocketquant.core.domain.trading import PercentageCommissionModel
 from pocketquant.engine.backtest.backtest_result_app_service import BacktestResultAppService
 
 RUN_ID = generate_id_str()
+
+# Collector now reads commission from OrderResult (broker single-source), so the
+# synthetic fills carry the same 10 bps the config declares.
+_COMMISSION = PercentageCommissionModel(bps=10.0)
 
 
 @pytest.fixture
@@ -73,6 +78,7 @@ def _fill(
         side=side,
         sl_price=sl,
         tp_price=tp,
+        commission=_COMMISSION.compute(price, qty),
     )
 
 

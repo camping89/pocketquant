@@ -1,5 +1,6 @@
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
+from pocketquant.core.domain.trading import PercentageCommissionModel
 from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
@@ -29,12 +30,15 @@ class BrokerFactory:
             ValueError: If broker type is unknown
         """
         if broker_type == "paper":
+            # Settings carries a fraction (0.0004); the model wants bps (4).
+            commission_bps = config.get("commission_percent", 0.0) * 10_000
             return PaperBrokerAdapter(
                 initial_balance=config.get("initial_balance", 100_000.0),
                 slippage_percent=config.get("slippage_percent", 0.001),
                 fill_delay_ms=config.get("fill_delay_ms", 50),
                 currency=config.get("currency", "USDT"),
                 event_bus=self._event_bus,
+                commission_model=PercentageCommissionModel(bps=commission_bps),
             )
 
         elif broker_type == "okx":

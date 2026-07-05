@@ -18,12 +18,16 @@ from pocketquant.core.common.time.simulation import clear_simulation_time, set_s
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
+from pocketquant.core.domain.trading import PercentageCommissionModel
 from pocketquant.engine.backtest.backtest_result_app_service import (
     _MAX_PERSISTED_EQUITY_POINTS,
     BacktestResultAppService,
 )
 
 _T0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
+
+# Collector reads commission from OrderResult (broker single-source).
+_COMMISSION = PercentageCommissionModel(bps=10.0)
 
 
 def _oid(name: str) -> str:
@@ -50,6 +54,7 @@ def _fill(side: OrderSide, qty: float, price: float, oid: str) -> OrderResult:
         filled_quantity=qty,
         filled_price=price,
         side=side,
+        commission=_COMMISSION.compute(price, qty),
     )
 
 

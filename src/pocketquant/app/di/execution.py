@@ -65,6 +65,7 @@ class ExecutionProvider(Provider):
             default_broker_config={
                 "initial_balance": settings.paper_initial_balance,
                 "slippage_percent": settings.paper_slippage_percent,
+                "commission_percent": settings.paper_commission_percent,
                 "api_key": settings.okx_api_key,
                 "api_secret": settings.okx_api_secret,
                 "passphrase": settings.okx_passphrase,

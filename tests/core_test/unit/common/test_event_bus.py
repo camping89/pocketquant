@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 import pytest
+
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.shared.events import DomainEvent
 

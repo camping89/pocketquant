@@ -51,8 +51,8 @@ class BacktestResultAppService:
     """Collects Orders + Trades + equity snapshots during backtest, then computes metrics.
 
     Equity is recorded on close (realized PnL) and on pure opens (for drawdown
-    granularity). Commission uses ``BacktestConfig.commission_percent`` and is
-    debited from equity at every fill.
+    granularity). Commission is read from ``OrderResult.commission`` (broker
+    single-source) and debited from equity at every fill.
     """
 
     def __init__(
@@ -100,7 +100,8 @@ class BacktestResultAppService:
             return
 
         timestamp = get_current_time()
-        commission = fill_price * fill_qty * self._config.commission_percent
+        # Broker single-source (was: fill_price*fill_qty*config.commission_percent).
+        commission = result.commission
         self._total_commission += commission
         self._current_equity -= commission
 

@@ -52,6 +52,7 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
+from pocketquant.core.domain.trading import CommissionModel, PercentageCommissionModel
 
 # STOP_LIMIT / STOP_MARKET share the LIMIT pending path until real STOP
 # semantics (price-rises-through trigger) are implemented.
@@ -97,6 +98,7 @@ class PaperBrokerAdapter(IBrokerPort):
         fill_delay_ms: int = 50,
         currency: str = "USDT",
         event_bus: EventBus | None = None,
+        commission_model: CommissionModel | None = None,
     ) -> None:
         self._initial_balance = initial_balance
         self._balance = initial_balance
@@ -104,6 +106,9 @@ class PaperBrokerAdapter(IBrokerPort):
         self._fill_delay = fill_delay_ms
         self._currency = currency
         self._event_bus = event_bus
+        # Default bps=0 keeps pre-R3 balances when no model is injected; real bps
+        # (backtest commission_bps / live paper_commission_percent) wired via factory.
+        self._commission_model = commission_model or PercentageCommissionModel(bps=0.0)
 
         self._positions: dict[str, PositionAggregate] = {}
         # _orders holds every OrderAggregate observed by submit_order, including
@@ -217,7 +222,7 @@ class PaperBrokerAdapter(IBrokerPort):
                     ],
                 )
 
-            self._execute_fill(order, fill_price)
+            commission = self._execute_fill_with_commission(order, fill_price)
             result = OrderResult(
                 order_id=str(order.id),
                 broker_order_id=broker_order_id,
@@ -228,6 +233,7 @@ class PaperBrokerAdapter(IBrokerPort):
                 sl_price=order.sl_price,
                 tp_price=order.tp_price,
                 side=order.side,
+                commission=commission,
             )
             return (result, [(OrderStatus.SUBMITTED, OrderStatus.FILLED, REASON_MARKET_FILL, now)])
 
@@ -278,7 +284,7 @@ class PaperBrokerAdapter(IBrokerPort):
                             )
                         ],
                     )
-                self._execute_fill(order, fill_price)
+                commission = self._execute_fill_with_commission(order, fill_price)
                 result = OrderResult(
                     order_id=str(order.id),
                     broker_order_id=broker_order_id,
@@ -289,6 +295,7 @@ class PaperBrokerAdapter(IBrokerPort):
                     sl_price=order.sl_price,
                     tp_price=order.tp_price,
                     side=order.side,
+                    commission=commission,
                 )
                 return (
                     result,
@@ -438,17 +445,23 @@ class PaperBrokerAdapter(IBrokerPort):
             return price * (1 + self._slippage)
         return price * (1 - self._slippage)
 
+    def _commission(self, fill_price: float, quantity: float) -> float:
+        return self._commission_model.compute(fill_price, quantity)
+
     def _can_afford(self, order: OrderAggregate, fill_price: float) -> bool:
         if order.side != OrderSide.BUY:
             return True
         # A BUY that reduces/covers an existing short consumes no margin under the
         # futures model, so it must never be gated by notional vs cash — otherwise
-        # a losing short whose cover notional exceeds balance gets stuck open.
+        # a losing short whose cover notional exceeds balance gets stuck open. Such
+        # a cover still debits commission on fill (below), so balance can dip
+        # slightly negative in the pathological cover-with-empty-cash case — accepted.
         position_key = f"{order.subscription_id}:{order.symbol}"
         existing = self._positions.get(position_key)
         if existing is not None and not existing.is_closed and existing.side == PositionSide.SHORT:
             return True
-        return fill_price * order.quantity <= self._balance
+        commission = self._commission(fill_price, order.quantity)
+        return fill_price * order.quantity + commission <= self._balance
 
     @staticmethod
     def _limit_crosses(side: OrderSide, limit_price: float, market_price: float) -> bool:
@@ -511,6 +524,17 @@ class PaperBrokerAdapter(IBrokerPort):
                     sl_price=order.sl_price,
                     tp_price=order.tp_price,
                 )
+
+    def _execute_fill_with_commission(self, order: OrderAggregate, fill_price: float) -> float:
+        """Apply a fill then debit its commission. MUST be called under lock.
+
+        Single debit point for all four fill paths so no path can silently skip
+        commission. Returns the commission so callers can stamp OrderResult.
+        """
+        self._execute_fill(order, fill_price)
+        commission = self._commission(fill_price, order.quantity)
+        self._balance -= commission
+        return commission
 
     def _reduce_and_credit(
         self, position: PositionAggregate, quantity: float, fill_price: float
@@ -631,7 +655,7 @@ class PaperBrokerAdapter(IBrokerPort):
                         side=pending.order.side,
                     )
                 else:
-                    self._execute_fill(pending.order, fill_price)
+                    commission = self._execute_fill_with_commission(pending.order, fill_price)
                     event_args = (
                         OrderStatus.SUBMITTED,
                         OrderStatus.FILLED,
@@ -647,6 +671,7 @@ class PaperBrokerAdapter(IBrokerPort):
                         sl_price=pending.order.sl_price,
                         tp_price=pending.order.tp_price,
                         side=pending.order.side,
+                        commission=commission,
                     )
             await self._emit_event(str(pending.order.id), *event_args, when=when)
             await self._notify_callbacks(result)
@@ -687,7 +712,7 @@ class PaperBrokerAdapter(IBrokerPort):
         broker_order_id = generate_id_str()
         now = get_current_time()
         async with self._lock:
-            self._execute_fill(exit_order, fill_price)
+            commission = self._execute_fill_with_commission(exit_order, fill_price)
             self._orders[str(exit_order.id)] = exit_order
             result = OrderResult(
                 order_id=str(exit_order.id),
@@ -699,6 +724,7 @@ class PaperBrokerAdapter(IBrokerPort):
                 sl_price=None,
                 tp_price=None,
                 side=exit_side,
+                commission=commission,
             )
         await self._emit_event(
             str(exit_order.id), None, OrderStatus.SUBMITTED, REASON_SUBMIT, when=now
