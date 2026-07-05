@@ -205,7 +205,6 @@ src/pocketquant/engine/                     # SHARED engine (used by backtest + 
 │   ├── backtest_result_app_service.py      # Result collection
 │   ├── historical_replay_app_service.py    # Historical replay
 │   ├── collected_results.py                # Result aggregation
-│   ├── lot_tracking_helper.py              # Lot tracking
 │   └── backtest_dispatch.py                # Worker dispatch
 └── live/                                    # Live trading driver
     └── strategy_reconcile_app_service.py  # Reconcile loop (5s poll)
@@ -520,7 +519,6 @@ src/
 | WsSubscriptionAppService | WebSocket subscription mgmt | `app/market_data/app_services/ws_subscription_app_service.py` |
 | PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/trading/performance_calculator_domain_service.py` |
 | SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
-| LotTrackingHelper | Lot tracking utility | `engine/backtest/lot_tracking_helper.py` |
 | BacktestResultAppService | Backtest result collection | `engine/backtest/backtest_result_app_service.py` |
 | EngulfingStrategyService | Engulfing strategy impl | `core/domain/concepts/strategy/services/engulfing_strategy_service.py` |
 
@@ -564,8 +562,28 @@ src/
 Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest. `start_date` and `end_date` are `datetime` with minute precision (format: ISO 8601, e.g. `2024-01-15T09:30:00`); date-only strings are accepted and parsed as 00:00:00 UTC for backward compatibility.
 
 1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
-2. The engine runs in a per-run `BacktestSandboxAppService` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
+2. The engine runs in a per-run `BacktestSandboxAppService` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry). Trades are collected via broker-emitted `TradeClosedEvent` (published after each `PositionAggregate.reduce()` or `close()`), persisted orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
 3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades` (keyset paged), `GET /backtest/{run_id}/trade-markers`, `GET /backtest/{run_id}/stats`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
+
+**Trade emission flow:**
+```
+PositionAggregate.reduce_quantity/close()
+  ↓ emits
+TradeClosedEvent (avg-cost, quantity, direction)
+  ↓ forwarded via
+IBrokerPort.subscribe_trades(callback)
+  ├─ PaperBrokerAdapter: fires the trade callback AFTER the fill OrderResult
+  └─ OKXBrokerAdapter: no-op (defers live-trade collection to R8)
+  ↓
+BacktestResultAppService.on_trade(event)
+  ├─ Build Trade (stamp run_id, strategy_code) + credit pnl
+  └─ Back-link exit OrderRecord.resulting_trade_id
+```
+
+Dispatch order (fill `OrderResult` before `TradeClosedEvent`) lets `on_trade` back-link the
+exit order. Commission: per-fill debit in `on_fill`; `on_trade` credits pnl only (no
+double-count). `entry_time` = first open; each reduce = 1 Trade record (partial closes =
+round-trip chunk).
 
 **Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` returns paginated trades via keyset cursor, server-side filtered (all/wins/losses) and sorted. Query params: `limit` (default 50), `cursor` (opaque base64 token), `sort_key` (9 keys: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` and `total_pnl` computed once per run (first page, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
 
@@ -591,7 +609,9 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 - **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit if `bar_start` changed or volume/price increased. Fields: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Frontend stale threshold: 30s.
 - **Quotes:** `GET /api/v1/quotes/stream/{symbol}`. Poll Redis 0.5s, emit if `last_price` or `volume` changed. Fields: `symbol, last_price, bid, ask, volume, change, change_percent, ts`. TTL ~60s. Frontend stale threshold: 10s, fallback to REST.
 
-**Known issues:** (1) OKX heartbeat races with message iterator, non-pong frames dropped under load; (2) OKX position updates logged only, no EventBus; (3) Binance unsubscribe defers reconnect (new URL built only on next drop); (4) SSE poll latency 0.5–1.2s vs WebSocket trade-off (acceptable for bar intervals ≥1m).
+**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forwards a `TradeClosedEvent` for each position reduce/close (average-cost). `PaperBrokerAdapter` fires the trade callback right after the fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` is a no-op (defers live-trade collection to R8).
+
+**Known issues:** (1) OKX heartbeat races with message iterator, non-pong frames dropped under load; (2) OKX position updates logged only, no EventBus; (3) OKX live trade emission no-op (defer R8); (4) Binance unsubscribe defers reconnect (new URL built only on next drop); (5) SSE poll latency 0.5–1.2s vs WebSocket trade-off (acceptable for bar intervals ≥1m).
 
 ## In-Memory Runtime State
 

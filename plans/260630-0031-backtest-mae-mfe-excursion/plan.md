@@ -5,7 +5,7 @@ status: pending
 priority: P3
 branch: "develop"
 tags: [backtest, engine, statistics, tdd]
-blockedBy: []
+blockedBy: [trading-calulation-fix/r2-engine-restructure, 260705-2119-r3-commission-abstraction, 260705-2216-r4-broker-trade-emission-remove-fifo]  # R2/R3/R4 đều DONE → hết hard blocker. NHƯNG approach cũ dựa `_lot_tracker.lots` + `_consumed_pnl` đã bị R4 xoá; excursion phải REDESIGN track excursion trên `PositionAggregate` (broker SL/TP path `_fire_synthetic_exit`/`_check_sl_tp`) + đọc từ `TradeClosedEvent`, KHÔNG còn lot_tracker. Soft: R5 gut collector→report-service (rebase nhẹ nếu chạy sau R5).
 blocks: []
 created: "2026-06-30T01:56:28.266Z"
 createdBy: "ck:plan"

@@ -1,7 +1,7 @@
 ---
 title: "R4 — Broker Trade Emission (avg-cost) + Remove FIFO"
 description: "PositionAggregate emit TradeClosedEvent lúc reduce/close (average-cost); paper broker forward qua IBrokerPort.subscribe_trades; collector minimal-swap subscribe thay FIFO; xoá LotTrackingHelper + _consumed_pnl. OKX position→Trade defer R8. Kế thừa Model E."
-status: pending
+status: done
 priority: P2
 branch: develop
 tags: [trading-calc, paper-broker, position-aggregate, engine, core-domain, fifo-removal]
@@ -35,7 +35,7 @@ Gộp 2 hệ kế toán position (paper broker `PositionAggregate` + collector `
 | 01 | [Domain — TradeClosedEvent + PositionAggregate emit](phase-01-domain-trade-closed-event.md) | done | — |
 | 02 | [Port + broker transport (paper emit, OKX no-op, mapper side)](phase-02-port-broker-transport.md) | done | 01 |
 | 03 | [Collector minimal swap + wiring + delete FIFO](phase-03-collector-swap-remove-fifo.md) | done | 02 |
-| 04 | [Regression parity + docs + roadmap status + validation](phase-04-regression-docs-validation.md) | pending | 03 |
+| 04 | [Regression parity + docs + roadmap status + validation](phase-04-regression-docs-validation.md) | done | 03 |
 
 ## Invariants (mọi phase giữ)
 

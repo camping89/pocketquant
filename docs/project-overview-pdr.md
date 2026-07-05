@@ -319,7 +319,6 @@ src/pocketquant/
 │   │   ├── backtest_result_app_service.py
 │   │   ├── historical_replay_app_service.py
 │   │   ├── collected_results.py
-│   │   ├── lot_tracking_helper.py
 │   │   ├── backtest_dispatch.py
 │   │   └── backtest_strategy_loader.py
 │   └── live/             Live trading driver

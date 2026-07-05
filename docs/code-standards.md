@@ -353,7 +353,6 @@ bar_repository.py                    # BarRepository (data access)
 data_provider_port.py                # IDataProviderPort (infra boundary)
 binance_adapter.py                   # BinanceAdapter (infra impl)
 okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separate adapter)
-lot_tracking_helper.py               # LotTrackingHelper (utility)
 ```
 
 ### Class Naming by Layer
@@ -372,7 +371,7 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 | Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
 | **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IBrokerFactoryPort`, `IDataProviderPort`, `IRealtimeQuoteProviderPort` |
 | **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter`, `OKXWebSocketAdapter` |
-| **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | `LotTrackingHelper` |
+| **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (utility pattern; follow naming rule when used) |
 | **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestResultAppService` |
 | Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListOrdersQuery` |
 | Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `StartStrategyCommand` |
@@ -391,7 +390,7 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 
 1. **Tên class + file tự mã hóa layer/role.** Đọc `PositionSizerDomainService` hoặc `binance_adapter.py` biết ngay layer không cần xem folder.
 
-2. **Không stack 2 doer-suffix generic (`-er`/`-or`) trong 1 tên.** Nếu bị dính (vd `LotTracker` + `Helper` → `LotTrackerHelper`), dùng gerund: `LotTrackingHelper`. **Ngoại lệ:** danh từ nghiệp vụ kết `-er` (vd `Broker`) không tính là doer-suffix → `BrokerAdapter` hợp lệ.
+2. **Không stack 2 doer-suffix generic (`-er`/`-or`) trong 1 tên.** Nếu bị dính (vd một class vừa mang `-Tracker` vừa `-Helper` → `*TrackerHelper`), dùng gerund: `*TrackingHelper`. **Ngoại lệ:** danh từ nghiệp vụ kết `-er` (vd `Broker`) không tính là doer-suffix → `BrokerAdapter` hợp lệ.
 
 3. **Data class + role đã có suffix chuẩn → giữ nguyên.** Exempt list bên dưới.
 
