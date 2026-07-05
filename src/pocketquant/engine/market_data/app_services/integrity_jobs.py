@@ -6,7 +6,10 @@ All functions accept composite ``symbol`` (``{code}:{exchange}``) — no separat
 from datetime import UTC, datetime, timedelta
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.domain.bar.services.bar_builder import get_bar_start, is_bar_aligned
+from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+    get_bar_start,
+    is_bar_aligned,
+)
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository

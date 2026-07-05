@@ -13,7 +13,7 @@ Two concerns:
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import coerce_utc
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.bar.services.bar_builder import filter_aligned_bars
+from pocketquant.core.domain.bar.services.bar_builder_domain_service import filter_aligned_bars
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 

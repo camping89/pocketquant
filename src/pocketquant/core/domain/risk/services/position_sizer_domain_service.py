@@ -1,7 +1,7 @@
 from pocketquant.core.domain.risk.value_objects import RiskConfig, RiskModel
 
 
-class PositionSizer:
+class PositionSizerDomainService:
     @staticmethod
     def calculate_size(
         account_balance: float,
@@ -26,13 +26,13 @@ class PositionSizer:
             return 0.0
 
         if risk_config.model == RiskModel.PERCENT_RISK:
-            return PositionSizer._percent_risk_size(
+            return PositionSizerDomainService._percent_risk_size(
                 account_balance, entry_price, stop_loss_price, risk_config
             )
         elif risk_config.model == RiskModel.KELLY:
-            return PositionSizer._kelly_size(account_balance, entry_price, risk_config)
+            return PositionSizerDomainService._kelly_size(account_balance, entry_price, risk_config)
         elif risk_config.model == RiskModel.FIXED:
-            return PositionSizer._fixed_size(account_balance, entry_price, risk_config)
+            return PositionSizerDomainService._fixed_size(account_balance, entry_price, risk_config)
         else:
             return 0.0
 

@@ -1,6 +1,6 @@
-"""Unit tests for BarBuilder — delta-semantics volume aggregation.
+"""Unit tests for BarBuilderDomainService — delta-semantics volume aggregation.
 
-All tests exercise BarBuilder.add_tick() with per-tick DELTA volume
+All tests exercise BarBuilderDomainService.add_tick() with per-tick DELTA volume
 as per the documented contract. No I/O, no clock dependency.
 """
 
@@ -8,8 +8,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from pocketquant.core.domain.bar.services.bar_builder import (
-    BarBuilder,
+from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+    BarBuilderDomainService,
     get_bar_start,
     is_bar_aligned,
 )
@@ -20,9 +20,9 @@ BAR_END = BAR_START + timedelta(seconds=60)  # 1m bar
 
 
 @pytest.fixture
-def builder() -> BarBuilder:
-    """Fresh 1-minute BarBuilder aligned to BAR_START."""
-    return BarBuilder(
+def builder() -> BarBuilderDomainService:
+    """Fresh 1-minute BarBuilderDomainService aligned to BAR_START."""
+    return BarBuilderDomainService(
         symbol="BTC:BINANCE",
         interval=Interval.MINUTE_1,
         bar_start=BAR_START,
@@ -35,16 +35,16 @@ def _tick_ts(offset_s: int = 1) -> datetime:
 
 
 class TestDeltaSemantics:
-    """BarBuilder.add_tick sums per-tick delta volumes correctly."""
+    """BarBuilderDomainService.add_tick sums per-tick delta volumes correctly."""
 
-    def test_single_delta_tick(self, builder: BarBuilder) -> None:
+    def test_single_delta_tick(self, builder: BarBuilderDomainService) -> None:
         """Single tick with delta=0.5 → bar.volume == 0.5."""
         result = builder.add_tick(100.0, 0.5, _tick_ts(1))
 
         assert result is True
         assert builder.volume == pytest.approx(0.5)
 
-    def test_sum_of_deltas(self, builder: BarBuilder) -> None:
+    def test_sum_of_deltas(self, builder: BarBuilderDomainService) -> None:
         """Three delta ticks 0.5 + 0.3 + 0.2 → bar.volume == 1.0."""
         builder.add_tick(100.0, 0.5, _tick_ts(1))
         builder.add_tick(101.0, 0.3, _tick_ts(2))
@@ -52,7 +52,7 @@ class TestDeltaSemantics:
 
         assert builder.volume == pytest.approx(1.0)
 
-    def test_zero_delta_tick_updates_ohlc(self, builder: BarBuilder) -> None:
+    def test_zero_delta_tick_updates_ohlc(self, builder: BarBuilderDomainService) -> None:
         """Zero-volume tick is accepted; OHLC updates, volume stays 0.0."""
         result = builder.add_tick(100.0, 0.0, _tick_ts(1))
 
@@ -65,7 +65,7 @@ class TestDeltaSemantics:
         assert builder.close == 100.0
         assert builder.tick_count == 1
 
-    def test_none_volume_does_not_accumulate(self, builder: BarBuilder) -> None:
+    def test_none_volume_does_not_accumulate(self, builder: BarBuilderDomainService) -> None:
         """Two None-volume ticks → volume stays 0.0, OHLC still updates."""
         builder.add_tick(100.0, None, _tick_ts(1))
         builder.add_tick(101.0, None, _tick_ts(2))
@@ -75,14 +75,14 @@ class TestDeltaSemantics:
         assert builder.close == 101.0
         assert builder.tick_count == 2
 
-    def test_mix_none_then_delta(self, builder: BarBuilder) -> None:
+    def test_mix_none_then_delta(self, builder: BarBuilderDomainService) -> None:
         """None tick followed by delta tick → volume == delta only."""
         builder.add_tick(100.0, None, _tick_ts(1))
         builder.add_tick(101.0, 0.5, _tick_ts(2))
 
         assert builder.volume == pytest.approx(0.5)
 
-    def test_out_of_bar_tick_rejected(self, builder: BarBuilder) -> None:
+    def test_out_of_bar_tick_rejected(self, builder: BarBuilderDomainService) -> None:
         """Tick timestamped after bar_end is rejected; state unchanged."""
         # Record state before
         before_volume = builder.volume

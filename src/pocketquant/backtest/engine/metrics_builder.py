@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from pocketquant.backtest.domain.services.performance_calculator import PerformanceCalculator
+from pocketquant.backtest.domain.services.performance_calculator_domain_service import (
+    PerformanceCalculatorDomainService,
+)
 from pocketquant.core.domain.backtest import BacktestMetrics, EquityPoint, Trade
 
 
@@ -37,27 +39,31 @@ def build_metrics(
         sharpe = 0.0
         sortino = 0.0
     else:
-        sharpe = PerformanceCalculator.sharpe_ratio(
+        sharpe = PerformanceCalculatorDomainService.sharpe_ratio(
             returns_values, periods_per_year=periods_per_year
         )
-        sortino = PerformanceCalculator.sortino_ratio(
+        sortino = PerformanceCalculatorDomainService.sortino_ratio(
             returns_values, periods_per_year=periods_per_year
         )
 
     pnl_list = [t.pnl for t in closed_trades]
-    avg_win, avg_loss, winning, losing = PerformanceCalculator.average_win_loss(pnl_list)
+    avg_win, avg_loss, winning, losing = PerformanceCalculatorDomainService.average_win_loss(
+        pnl_list
+    )
     gross_profit = sum(p for p in pnl_list if p > 0)
     gross_loss = abs(sum(p for p in pnl_list if p < 0))
     avg_duration = _avg_trade_duration(closed_trades)
 
     return BacktestMetrics(
-        total_return=PerformanceCalculator.total_return(initial_capital, current_equity),
-        cagr=PerformanceCalculator.cagr(initial_capital, current_equity, days),
+        total_return=PerformanceCalculatorDomainService.total_return(
+            initial_capital, current_equity
+        ),
+        cagr=PerformanceCalculatorDomainService.cagr(initial_capital, current_equity, days),
         sharpe_ratio=sharpe,
         sortino_ratio=sortino,
-        max_drawdown=PerformanceCalculator.max_drawdown(equity_values),
-        win_rate=PerformanceCalculator.win_rate(winning, len(closed_trades)),
-        profit_factor=PerformanceCalculator.profit_factor(gross_profit, gross_loss),
+        max_drawdown=PerformanceCalculatorDomainService.max_drawdown(equity_values),
+        win_rate=PerformanceCalculatorDomainService.win_rate(winning, len(closed_trades)),
+        profit_factor=PerformanceCalculatorDomainService.profit_factor(gross_profit, gross_loss),
         total_trades=len(closed_trades),
         winning_trades=winning,
         losing_trades=losing,

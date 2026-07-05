@@ -1,6 +1,6 @@
-from pocketquant.core.domain.sync_status.services.sync_progress_tracker import (
+from pocketquant.core.domain.sync_status.services.sync_progress_tracker_domain_service import (
     SyncProgressDecision,
-    SyncProgressTracker,
+    SyncProgressTrackerDomainService,
 )
 
-__all__ = ["SyncProgressDecision", "SyncProgressTracker"]
+__all__ = ["SyncProgressDecision", "SyncProgressTrackerDomainService"]

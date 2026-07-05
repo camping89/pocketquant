@@ -19,7 +19,12 @@ from typing import Any
 from uuid import UUID
 
 from pocketquant.backtest.engine.collected_results import CollectedResults
-from pocketquant.backtest.engine.lot_tracker import ConsumedLot, Direction, FillOutcome, LotTracker
+from pocketquant.backtest.engine.lot_tracking_helper import (
+    ConsumedLot,
+    Direction,
+    FillOutcome,
+    LotTrackingHelper,
+)
 from pocketquant.backtest.engine.metrics_builder import build_metrics
 from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import get_current_time
@@ -75,7 +80,7 @@ class BacktestResultCollector:
         self._trades: list[Trade] = []
         self._total_commission = 0.0
 
-        self._lot_tracker = LotTracker()
+        self._lot_tracker = LotTrackingHelper()
 
         self._equity_curve.append(
             EquityPoint(

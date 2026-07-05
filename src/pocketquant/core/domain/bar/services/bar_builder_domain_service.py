@@ -43,7 +43,7 @@ def filter_aligned_bars(bars: list[Bar], interval: Interval) -> tuple[list[Bar],
 
 
 @dataclass
-class BarBuilder:
+class BarBuilderDomainService:
     """Builds OHLCV bars from incoming ticks. Pure domain logic, no I/O.
 
     ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
@@ -115,7 +115,9 @@ class BarBuilder:
         }
 
     @classmethod
-    def create_for_tick(cls, symbol: str, interval: Interval, timestamp: datetime) -> BarBuilder:
+    def create_for_tick(
+        cls, symbol: str, interval: Interval, timestamp: datetime
+    ) -> BarBuilderDomainService:
         """Factory to create a bar builder aligned to the tick timestamp.
 
         ``symbol`` is composite ``{code}:{exchange}``.

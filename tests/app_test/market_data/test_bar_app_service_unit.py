@@ -134,9 +134,11 @@ class TestThrottle:
     @pytest.mark.asyncio
     async def test_force_flush_bypasses_throttle(self, bar_service, mock_cache):
         """force=True bypasses throttle (used on bar roll)."""
-        from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
+        from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+            BarBuilderDomainService,
+        )
 
-        builder = BarBuilder(
+        builder = BarBuilderDomainService(
             symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
@@ -155,9 +157,11 @@ class TestNoMongoWrite:
     @pytest.mark.asyncio
     async def test_bar_completion_no_mongo_write(self, bar_service, mock_bar_repo):
         """On bar completion, upsert_bar is NOT called."""
-        from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
+        from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+            BarBuilderDomainService,
+        )
 
-        bar = BarBuilder(
+        bar = BarBuilderDomainService(
             symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
@@ -173,9 +177,11 @@ class TestNoMongoWrite:
     @pytest.mark.asyncio
     async def test_event_bus_publishes_on_bar_completion(self, bar_service, mock_event_bus):
         """BarCompletedEvent IS published on bar completion."""
-        from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
+        from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+            BarBuilderDomainService,
+        )
 
-        bar = BarBuilder(
+        bar = BarBuilderDomainService(
             symbol="BINANCE:BTC",
             interval=Interval.MINUTE_5,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
@@ -274,9 +280,11 @@ class TestCacheKeyInjection:
     @pytest.mark.asyncio
     async def test_cache_includes_last_update(self, bar_service, mock_cache):
         """Redis cache dict includes last_update (Unix seconds)."""
-        from pocketquant.core.domain.bar.services.bar_builder import BarBuilder
+        from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+            BarBuilderDomainService,
+        )
 
-        builder = BarBuilder(
+        builder = BarBuilderDomainService(
             symbol="BINANCE:BTC",
             interval=Interval.MINUTE_1,
             bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),

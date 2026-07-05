@@ -4,7 +4,10 @@ from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC, Bar
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.core.domain.shared.enums import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
-from pocketquant.core.domain.sync_status.services import SyncProgressDecision, SyncProgressTracker
+from pocketquant.core.domain.sync_status.services import (
+    SyncProgressDecision,
+    SyncProgressTrackerDomainService,
+)
 from pocketquant.core.infra.persistence import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
@@ -86,7 +89,7 @@ class SyncService:
             await self._mark_completed(symbol, interval, total_bars, latest_bar)
             await self._invalidate_cache(symbol, interval)
 
-            decision = SyncProgressTracker.decide(inserted_count)
+            decision = SyncProgressTrackerDomainService.decide(inserted_count)
             if decision is SyncProgressDecision.RESET:
                 await self._sync_status_repo.reset_empty_fetch(symbol, interval)
                 logger.info(

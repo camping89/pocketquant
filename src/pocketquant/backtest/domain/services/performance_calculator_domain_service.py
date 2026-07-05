@@ -6,7 +6,7 @@ TRADING_DAYS_PER_YEAR = 365
 RISK_FREE_RATE = 0.0
 
 
-class PerformanceCalculator:
+class PerformanceCalculatorDomainService:
     """Static methods for calculating backtest performance metrics.
 
     All methods handle edge cases gracefully (empty data, division by zero).

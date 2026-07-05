@@ -16,7 +16,7 @@ class SyncProgressDecision(Enum):
     BUMP = "bump"
 
 
-class SyncProgressTracker:
+class SyncProgressTrackerDomainService:
     @staticmethod
     def decide(inserted_count: int) -> SyncProgressDecision:
         """Reset when new bars were persisted, else bump the empty-fetch streak.

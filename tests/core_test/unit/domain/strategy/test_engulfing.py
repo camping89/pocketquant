@@ -15,7 +15,9 @@ import pytest
 
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.risk import RiskConfig
-from pocketquant.core.domain.risk.services.position_sizer import PositionSizer
+from pocketquant.core.domain.risk.services.position_sizer_domain_service import (
+    PositionSizerDomainService,
+)
 from pocketquant.core.domain.strategy.enums import Direction
 from pocketquant.core.domain.strategy.services.engulfing import EngulfingStrategy
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
@@ -225,7 +227,7 @@ async def test_position_size_positive_for_shallow_pattern() -> None:
     s = await _strategy(direction="long", buf=0.001)
     sig = await _warm_to_pattern_long(s)
     assert sig is not None
-    size = PositionSizer.calculate_size(
+    size = PositionSizerDomainService.calculate_size(
         account_balance=10_000.0,
         entry_price=sig.entry_price,  # type: ignore[arg-type]
         stop_loss_price=sig.stop_loss_price,

@@ -1,11 +1,12 @@
-"""Unit tests for FIFO LotTracker."""
+"""Unit tests for FIFO LotTrackingHelper."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pocketquant.backtest.engine.lot_tracker import LotTracker
+
+from pocketquant.backtest.engine.lot_tracking_helper import LotTrackingHelper
 
 
 @pytest.fixture
@@ -14,7 +15,7 @@ def base_time() -> datetime:
 
 
 def _feed(
-    tracker: LotTracker,
+    tracker: LotTrackingHelper,
     side: str,
     qty: float,
     price: float,
@@ -36,7 +37,7 @@ def _feed(
 
 
 def test_open_single_long_lot(base_time: datetime) -> None:
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     outcome = _feed(tracker, "LONG", 1.0, 100.0, base_time, commission=0.1)
     assert outcome.opened is not None
     assert outcome.opened.direction == "LONG"
@@ -49,7 +50,7 @@ def test_open_single_long_lot(base_time: datetime) -> None:
 
 
 def test_open_single_short_lot(base_time: datetime) -> None:
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     outcome = _feed(tracker, "SHORT", 2.0, 50.0, base_time)
     assert outcome.opened is not None
     assert outcome.opened.direction == "SHORT"
@@ -58,7 +59,7 @@ def test_open_single_short_lot(base_time: datetime) -> None:
 
 
 def test_zero_qty_is_noop(base_time: datetime) -> None:
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     outcome = _feed(tracker, "LONG", 0.0, 100.0, base_time)
     assert outcome.opened is None
     assert outcome.consumed == []
@@ -66,7 +67,7 @@ def test_zero_qty_is_noop(base_time: datetime) -> None:
 
 
 def test_close_full_long_round_trip(base_time: datetime) -> None:
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "LONG", 1.0, 100.0, base_time, commission=0.1)
     outcome = _feed(tracker, "SHORT", 1.0, 110.0, base_time + timedelta(hours=1), commission=0.11)
     assert outcome.opened is None
@@ -80,7 +81,7 @@ def test_close_full_long_round_trip(base_time: datetime) -> None:
 
 
 def test_close_full_short_round_trip(base_time: datetime) -> None:
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "SHORT", 1.0, 100.0, base_time)
     outcome = _feed(tracker, "LONG", 1.0, 90.0, base_time + timedelta(hours=1))
     assert outcome.opened is None
@@ -91,7 +92,7 @@ def test_close_full_short_round_trip(base_time: datetime) -> None:
 
 def test_fifo_two_lots_one_close(base_time: datetime) -> None:
     """Two BUYs at different prices, one SELL takes both — FIFO order."""
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "LONG", 1.0, 100.0, base_time)
     _feed(tracker, "LONG", 1.0, 110.0, base_time + timedelta(minutes=1))
     outcome = _feed(tracker, "SHORT", 2.0, 120.0, base_time + timedelta(hours=1))
@@ -104,7 +105,7 @@ def test_fifo_two_lots_one_close(base_time: datetime) -> None:
 
 def test_partial_close_keeps_remaining(base_time: datetime) -> None:
     """1 BUY qty=10 → 1 SELL qty=4 → lot left with qty=6."""
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "LONG", 10.0, 100.0, base_time, commission=1.0)
     outcome = _feed(tracker, "SHORT", 4.0, 110.0, base_time + timedelta(hours=1), commission=0.44)
     assert len(outcome.consumed) == 1
@@ -123,7 +124,7 @@ def test_partial_close_keeps_remaining(base_time: datetime) -> None:
 
 def test_flip_long_to_short(base_time: datetime) -> None:
     """LONG 10 → SELL 15 closes all LONG and opens SHORT 5."""
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "LONG", 10.0, 100.0, base_time, commission=1.0)
     outcome = _feed(tracker, "SHORT", 15.0, 90.0, base_time + timedelta(hours=1), commission=1.35)
     assert len(outcome.consumed) == 1
@@ -138,7 +139,7 @@ def test_flip_long_to_short(base_time: datetime) -> None:
 
 
 def test_flip_short_to_long(base_time: datetime) -> None:
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "SHORT", 5.0, 100.0, base_time)
     outcome = _feed(tracker, "LONG", 8.0, 90.0, base_time + timedelta(hours=1))
     assert len(outcome.consumed) == 1
@@ -150,7 +151,7 @@ def test_flip_short_to_long(base_time: datetime) -> None:
 
 def test_flip_consumes_multiple_lots(base_time: datetime) -> None:
     """LONG 3 + LONG 4 → SELL 10 → 2 closes + open SHORT 3."""
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "LONG", 3.0, 100.0, base_time)
     _feed(tracker, "LONG", 4.0, 105.0, base_time + timedelta(minutes=1))
     outcome = _feed(tracker, "SHORT", 10.0, 95.0, base_time + timedelta(hours=1))
@@ -164,7 +165,7 @@ def test_flip_consumes_multiple_lots(base_time: datetime) -> None:
 
 def test_scale_out_two_partial_sells(base_time: datetime) -> None:
     """1 BUY qty=10 → 2 SELL (4+6) → fully closes lot, no SHORT opened."""
-    tracker = LotTracker()
+    tracker = LotTrackingHelper()
     _feed(tracker, "LONG", 10.0, 100.0, base_time, commission=1.0)
     out1 = _feed(tracker, "SHORT", 4.0, 110.0, base_time + timedelta(hours=1))
     out2 = _feed(tracker, "SHORT", 6.0, 120.0, base_time + timedelta(hours=2))

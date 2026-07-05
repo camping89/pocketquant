@@ -43,7 +43,7 @@ class FillOutcome:
     opened: OpenLot | None = None  # new lot opened (if any qty remained after closing)
 
 
-class LotTracker:
+class LotTrackingHelper:
     """FIFO open-lots queue.
 
     BUY fill: consumes SHORT lots first, opens LONG lot with any excess.

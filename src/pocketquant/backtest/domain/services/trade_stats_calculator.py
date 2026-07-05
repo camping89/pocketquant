@@ -3,7 +3,7 @@
 Distribution + streak + profit-factor + drawdown-period analytics that the FE
 used to compute over the full trade list. Centralized here so the browser loads
 numbers instead of raw trades. Static/free functions, no I/O — mirrors the
-``PerformanceCalculator`` convention.
+``PerformanceCalculatorDomainService`` convention.
 
 Semantics match the former FE implementation exactly (same edge cases) so the
 result view is visually identical after the move.

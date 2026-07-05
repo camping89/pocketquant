@@ -7,7 +7,10 @@ from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
-from pocketquant.core.domain.bar.services.bar_builder import BarBuilder, get_bar_start
+from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
+    BarBuilderDomainService,
+    get_bar_start,
+)
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.persistence.redis import Cache
@@ -43,7 +46,7 @@ def _ttl_for_interval(tf: Interval) -> int:
 class BarAppService:
     """Aggregates real-time ticks into bars at multiple intervals.
 
-    In-memory state: _bars[symbol_key][interval] = BarBuilder (running OHLCV).
+    In-memory state: _bars[symbol_key][interval] = BarBuilderDomainService (running OHLCV).
     symbol_key is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
     Cron sync_1m + cascade is the sole MongoDB writer — no upsert_bar here.
     On bar close: publish BarCompletedEvent (at-least-once) + force-flush Redis.
@@ -62,7 +65,7 @@ class BarAppService:
         self._event_bus = event_bus
         self._intervals = intervals or _DEFAULT_INTERVALS
 
-        self._bars: dict[str, dict[Interval, BarBuilder]] = defaultdict(dict)
+        self._bars: dict[str, dict[Interval, BarBuilderDomainService]] = defaultdict(dict)
         self._last_flush_ts: dict[tuple[str, Interval], float] = {}
 
         self._lock = asyncio.Lock()
@@ -85,7 +88,7 @@ class BarAppService:
         bar_start = get_bar_start(tick.timestamp, interval)
 
         if current_bar is None:
-            current_bar = BarBuilder(
+            current_bar = BarBuilderDomainService(
                 symbol=symbol_key,
                 interval=interval,
                 bar_start=bar_start,
@@ -101,7 +104,7 @@ class BarAppService:
             completed = current_bar
             await self._save_completed_bar(completed)
 
-            current_bar = BarBuilder(
+            current_bar = BarBuilderDomainService(
                 symbol=symbol_key,
                 interval=interval,
                 bar_start=bar_start,
@@ -114,7 +117,7 @@ class BarAppService:
         current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
         await self._cache_current_bar(symbol_key, interval, current_bar)
 
-    async def _save_completed_bar(self, bar: BarBuilder) -> None:
+    async def _save_completed_bar(self, bar: BarBuilderDomainService) -> None:
         """Emit BarCompletedEvent and clean up Redis for the closed bar.
 
         NOTE: No MongoDB write here — cron sync_1m + cascade aggregator
@@ -157,11 +160,11 @@ class BarAppService:
             tick_count=bar.tick_count,
         )
 
-    async def _seed_builder_from_mongo(self, bar: BarBuilder) -> None:
+    async def _seed_builder_from_mongo(self, bar: BarBuilderDomainService) -> None:
         """Hydrate ``bar`` from Mongo if an aggregated bar exists at ``bar.bar_start``.
 
         Recovers the true bucket-open after a mid-bucket app restart where the
-        BarBuilder would otherwise pick the first incoming tick price as the
+        BarBuilderDomainService would otherwise pick the first incoming tick price as the
         open. The Mongo source-of-truth is populated by the cascade aggregator.
         """
         try:
@@ -191,7 +194,7 @@ class BarAppService:
         self,
         symbol_key: str,
         interval: Interval,
-        bar: BarBuilder,
+        bar: BarBuilderDomainService,
         force: bool = False,
     ) -> None:
         """Write bar:current Redis key, throttled per (symbol_key, interval).
