@@ -1,4 +1,4 @@
-"""Binance REST data provider — implements IDataProvider via /api/v3/klines.
+"""Binance REST data provider — implements IDataProviderPort via /api/v3/klines.
 
 Rate limits: 2 weight/call, 1200 weight/min budget.
 Inter-call sleep: 100ms. On HTTP 429: log + raise (caller handles backoff).
@@ -15,7 +15,7 @@ import httpx
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.binance.binance_mappers import (
     INTERVAL_TO_BINANCE,
@@ -30,11 +30,11 @@ _MAX_BARS_PER_CALL = 1000
 _INTER_CALL_SLEEP_S = 0.1  # 100ms
 
 
-class BinanceClient(IDataProvider):
+class BinanceAdapter(IDataProviderPort):
     """Async REST client for Binance public klines API.
 
     Usage:
-        client = BinanceClient(settings)
+        client = BinanceAdapter(settings)
         bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, 500)
         client.close()
     """

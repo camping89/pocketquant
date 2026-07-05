@@ -27,7 +27,9 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
+    IRealtimeQuoteProviderPort,
+)
 from pocketquant.core.infra.persistence.health_checks import check_database, check_redis
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -190,7 +192,7 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     """Start WS feed + subscription reconcile loop as background tasks.
 
     Stores task handles on app.state for lifespan cleanup:
-      app.state.ws_task          — IRealtimeQuoteProvider.run_forever()
+      app.state.ws_task          — IRealtimeQuoteProviderPort.run_forever()
       app.state.subscription_task — WsSubscriptionAppService.run()
     """
     quote_svc = await container.get(QuoteAppService)
@@ -213,7 +215,7 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
             except (TimeoutError, asyncio.CancelledError):
                 pass
 
-    provider = await container.get(IRealtimeQuoteProvider)
+    provider = await container.get(IRealtimeQuoteProviderPort)
     await provider.disconnect()
     logger.info("quote_feed.stopped")
 

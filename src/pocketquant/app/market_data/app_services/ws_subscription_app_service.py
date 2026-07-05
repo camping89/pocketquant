@@ -9,7 +9,9 @@ Cancel-safe: CancelledError propagates cleanly so lifespan teardown works.
 import asyncio
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
+    IRealtimeQuoteProviderPort,
+)
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
@@ -32,7 +34,7 @@ class WsSubscriptionAppService:
 
     def __init__(
         self,
-        provider: IRealtimeQuoteProvider,
+        provider: IRealtimeQuoteProviderPort,
         tracked_symbol_repo: TrackedSymbolRepository,
         quote_app_service: QuoteAppService,  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
         interval_s: float = 5.0,

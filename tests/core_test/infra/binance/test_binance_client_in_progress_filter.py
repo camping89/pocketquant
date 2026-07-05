@@ -1,4 +1,4 @@
-"""Tests guarding BinanceClient.fetch_ohlcv against in-progress bar capture.
+"""Tests guarding BinanceAdapter.fetch_ohlcv against in-progress bar capture.
 
 Regression: cron `sync_1m` previously persisted Binance's in-progress kline
 (only ~2s of trades) which then locked partial OHLCV in Mongo via
@@ -18,7 +18,7 @@ import httpx
 import pytest
 
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.binance.binance_client import BinanceClient
+from pocketquant.core.infra.binance.binance_adapter import BinanceAdapter
 
 
 def _make_kline(open_time_ms: int, *, close: float = 50_000.0) -> list:
@@ -58,13 +58,13 @@ def _capture_get(klines: list[list]) -> tuple[AsyncMock, dict]:
 
 
 def _patch_now(now_ms: int):
-    """Patch the datetime.now(UTC) call inside binance_client to a fixed ms."""
+    """Patch the datetime.now(UTC) call inside binance_adapter to a fixed ms."""
     fake_now = datetime.fromtimestamp(now_ms / 1000, tz=UTC)
     fake_dt = MagicMock(wraps=datetime)
     fake_dt.now = MagicMock(return_value=fake_now)
     fake_dt.fromtimestamp = datetime.fromtimestamp
     return patch(
-        "pocketquant.core.infra.binance.binance_client.datetime",
+        "pocketquant.core.infra.binance.binance_adapter.datetime",
         fake_dt,
     )
 
@@ -85,7 +85,7 @@ class TestEndTimeCap:
         klines = [_make_kline(prev_open)]
         get_mock, captured = _capture_get(klines)
 
-        client = BinanceClient(_settings())
+        client = BinanceAdapter(_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with _patch_now(now_ms):
@@ -104,7 +104,7 @@ class TestEndTimeCap:
         klines = [_make_kline(prev_open)]
         get_mock, captured = _capture_get(klines)
 
-        client = BinanceClient(_settings())
+        client = BinanceAdapter(_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with _patch_now(now_ms):
@@ -130,7 +130,7 @@ class TestDefenseInDepthFilter:
         klines = [_make_kline(prev_open), _make_kline(bar_open, close=49_000.0)]
         get_mock, _ = _capture_get(klines)
 
-        client = BinanceClient(_settings())
+        client = BinanceAdapter(_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with _patch_now(now_ms):
@@ -173,7 +173,7 @@ class TestPaginationConsistency:
             mock_resp.raise_for_status.return_value = None
             return mock_resp
 
-        client = BinanceClient(_settings())
+        client = BinanceAdapter(_settings())
         client._http.get = _side_effect  # type: ignore[method-assign]
 
         cutoff_dt = datetime.fromtimestamp(bar_open / 1000, tz=UTC)

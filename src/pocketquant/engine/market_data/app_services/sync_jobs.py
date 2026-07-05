@@ -26,7 +26,7 @@ from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_REPAIR,
     SOURCE_REST_SYNC_1M,
 )
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
@@ -454,7 +454,7 @@ async def sync_1m() -> None:
 async def _verify_one_symbol(
     symbol: str,
     *,
-    provider: IDataProvider,
+    provider: IDataProviderPort,
     bar_repo: BarRepository,
 ) -> dict:
     """Compare REST 5m bars against cascade-stored 5m bars for composite ``symbol``.
@@ -519,7 +519,7 @@ async def sync_verify_cascade() -> None:
     history_repo = await container.get(JobHistoryRepository)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
-    provider = await container.get(IDataProvider)
+    provider = await container.get(IDataProviderPort)
 
     name = "sync_verify_cascade"
     started = datetime.now(UTC)

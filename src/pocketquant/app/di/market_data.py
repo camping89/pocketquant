@@ -6,7 +6,9 @@ from pocketquant.app.market_data.app_services.ws_subscription_app_service import
 )
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
+from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
+    IRealtimeQuoteProviderPort,
+)
 from pocketquant.core.infra.binance.binance_websocket_client import (
     BinanceWebSocketClient,
 )
@@ -30,7 +32,7 @@ class MarketDataProvider(Provider):
         return BarAppService(cache=cache, bar_repository=bar_repository, event_bus=event_bus)
 
     @provide(scope=Scope.APP)
-    def get_realtime_quote_provider(self) -> IRealtimeQuoteProvider:
+    def get_realtime_quote_provider(self) -> IRealtimeQuoteProviderPort:
         return BinanceWebSocketClient()  # type: ignore[return-value]  # Protocol satisfied structurally
 
     @provide(scope=Scope.APP)
@@ -39,7 +41,7 @@ class MarketDataProvider(Provider):
         settings: Settings,
         cache: Cache,
         bar_manager: BarAppService,
-        provider: IRealtimeQuoteProvider,
+        provider: IRealtimeQuoteProviderPort,
     ) -> QuoteAppService:
         return QuoteAppService(
             settings=settings, cache=cache, bar_manager=bar_manager, provider=provider
@@ -48,7 +50,7 @@ class MarketDataProvider(Provider):
     @provide(scope=Scope.APP)
     def get_ws_subscription_manager(
         self,
-        provider: IRealtimeQuoteProvider,
+        provider: IRealtimeQuoteProviderPort,
         tracked_symbol_repo: TrackedSymbolRepository,
         quote_app_service: QuoteAppService,
     ) -> WsSubscriptionAppService:

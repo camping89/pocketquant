@@ -1,7 +1,7 @@
 """Tests for no-progress tracking.
 
 Mocks SyncStatusRepository, BarRepository, SymbolRepository, Cache, and
-IDataProvider. Patches `fetch_with_retry` so service uses scripted
+IDataProviderPort. Patches `fetch_with_retry` so service uses scripted
 provider responses without retry overhead.
 
 Each test asserts which sync_status_repo method was called (bump vs reset).

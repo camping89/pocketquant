@@ -1,7 +1,7 @@
 from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC, Bar
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval as DomainInterval
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.sync_status.services import (
@@ -36,7 +36,7 @@ __all__ = ["SyncService", "SyncSymbolCommand", "BulkSyncCommand", "SyncResponse"
 class SyncService:
     def __init__(
         self,
-        provider: IDataProvider,
+        provider: IDataProviderPort,
         cache: Cache,
         bar_repository: BarRepository,
         symbol_repository: SymbolRepository,

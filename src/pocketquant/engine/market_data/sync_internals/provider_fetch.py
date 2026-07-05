@@ -1,4 +1,4 @@
-"""Bounded retry around IDataProvider.fetch_ohlcv.
+"""Bounded retry around IDataProviderPort.fetch_ohlcv.
 
 Provider may return [] or in-progress (misaligned) bar at exact bar-close
 moment. Brief retry recovers without breaking cron alignment.
@@ -12,7 +12,7 @@ import time
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.sync_internals.bar_alignment import has_aligned_bar
 
@@ -29,7 +29,7 @@ _TIME_BUDGET_SECONDS = 15
 
 
 async def fetch_with_retry(
-    provider: IDataProvider,
+    provider: IDataProviderPort,
     symbol: str,
     interval: Interval,
     n_bars: int,

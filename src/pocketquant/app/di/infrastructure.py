@@ -5,8 +5,8 @@ from dishka import Provider, Scope, provide
 from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
-from pocketquant.core.infra.binance.binance_client import BinanceClient
+from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
+from pocketquant.core.infra.binance.binance_adapter import BinanceAdapter
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
@@ -27,8 +27,8 @@ class InfrastructureProvider(Provider):
             scheduler.shutdown(wait=True)
 
     @provide(scope=Scope.APP)
-    def get_data_provider(self, settings: Settings) -> IDataProvider:
-        return BinanceClient(settings=settings)
+    def get_data_provider(self, settings: Settings) -> IDataProviderPort:
+        return BinanceAdapter(settings=settings)
 
     broker_factory = provide(BrokerFactory, scope=Scope.APP)
 

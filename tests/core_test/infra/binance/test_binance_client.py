@@ -1,4 +1,4 @@
-"""Unit tests for BinanceClient REST data provider.
+"""Unit tests for BinanceAdapter REST data provider.
 
 Uses unittest.mock to patch httpx.AsyncClient — no real network calls, no respx dep.
 Covers: interval mapping, kline→Bar fields, pagination cursor, HTTP 429, close().
@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.binance.binance_client import BinanceClient
+from pocketquant.core.infra.binance.binance_adapter import BinanceAdapter
 
 
 def _make_kline(
@@ -84,7 +84,7 @@ class TestKlineToBarMapping:
         """fetch_ohlcv passes the correct Binance interval string in params."""
         kline = _make_kline()
         get_mock = _mock_http_response([kline])
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         await client.fetch_ohlcv("BTCUSDT:BINANCE", interval, n_bars=1)
@@ -108,7 +108,7 @@ class TestKlineToBarMapping:
             tick_count=300,
         )
         get_mock = _mock_http_response([kline])
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=1)
@@ -131,7 +131,7 @@ class TestKlineToBarMapping:
         """All returned bars satisfy high >= low and volume > 0."""
         klines = [_make_kline(open_time_ms=1_700_000_000_000 + i * 60_000) for i in range(5)]
         get_mock = _mock_http_response(klines)
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=5)
@@ -148,7 +148,7 @@ class TestPagination:
         """n_bars ≤ 1000 results in exactly one HTTP GET call."""
         klines = [_make_kline(open_time_ms=1_700_000_000_000 + i * 60_000) for i in range(10)]
         get_mock = _mock_http_response(klines)
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=10)
@@ -175,7 +175,7 @@ class TestPagination:
             mock_resp.raise_for_status.return_value = None
             return mock_resp
 
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = _side_effect  # type: ignore[method-assign]
 
         with patch("asyncio.sleep"):
@@ -205,7 +205,7 @@ class TestPagination:
             mock_resp.raise_for_status.return_value = None
             return mock_resp
 
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = _side_effect  # type: ignore[method-assign]
 
         with patch("asyncio.sleep"):
@@ -222,7 +222,7 @@ class TestErrorHandling:
     async def test_http_429_raises_http_status_error(self) -> None:
         """HTTP 429 must propagate as httpx.HTTPStatusError (not swallowed)."""
         get_mock = _mock_http_response([], status_code=429)
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with pytest.raises(httpx.HTTPStatusError):
@@ -232,7 +232,7 @@ class TestErrorHandling:
     async def test_invalid_symbol_raises_value_error(self) -> None:
         """Invalid symbol format raises ValueError before any HTTP call."""
         get_mock = _mock_http_response([])
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         with pytest.raises(ValueError, match="Invalid Binance symbol"):
@@ -244,7 +244,7 @@ class TestErrorHandling:
     async def test_empty_response_returns_empty_list(self) -> None:
         """Empty klines array returns empty bar list without error."""
         get_mock = _mock_http_response([])
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         client._http.get = get_mock  # type: ignore[method-assign]
 
         bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, n_bars=100)
@@ -258,7 +258,7 @@ class TestClose:
     @pytest.mark.asyncio
     async def test_close_calls_aclose_on_httpx_client(self) -> None:
         """await close() calls aclose on the underlying httpx.AsyncClient."""
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         mock_aclose = AsyncMock()
         client._http.aclose = mock_aclose  # type: ignore[method-assign]
 
@@ -269,6 +269,6 @@ class TestClose:
     @pytest.mark.asyncio
     async def test_search_symbols_stub_returns_empty_list(self) -> None:
         """search_symbols stub always returns []."""
-        client = BinanceClient(_make_settings())
+        client = BinanceAdapter(_make_settings())
         result = await client.search_symbols("BTC")
         assert result == []

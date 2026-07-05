@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_TRACKED_SYMBOL_BACKFILL
-from pocketquant.core.domain.market_data.interfaces import IDataProvider
+from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.symbol.entities import COMPOSITE_SYMBOL_PATTERN
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -85,7 +85,7 @@ class TrackedSymbolBackfillService:
 
     def __init__(
         self,
-        provider: IDataProvider,
+        provider: IDataProviderPort,
         bar_repository: BarRepository,
     ) -> None:
         self._provider = provider
