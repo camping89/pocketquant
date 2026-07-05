@@ -3,7 +3,7 @@
 from typing import Any
 
 from pocketquant.core.domain.brokers.value_objects import OrderResult
-from pocketquant.core.domain.order import OrderStatus
+from pocketquant.core.domain.order import OrderSide, OrderStatus
 
 # OKX order state to domain OrderStatus mapping
 OKX_STATE_MAP: dict[str, OrderStatus] = {
@@ -60,6 +60,16 @@ class OkxOrderMapper:
         # Error message if any
         error_msg = data.get("msg") if data.get("sCode") != "0" else None
 
+        # OKX side is lowercase "buy"/"sell"; unknown/absent → None (never crash).
+        side_raw = data.get("side", "")
+        side = (
+            OrderSide.BUY
+            if side_raw == "buy"
+            else OrderSide.SELL
+            if side_raw == "sell"
+            else None
+        )
+
         return OrderResult(
             order_id=order_id,
             broker_order_id=broker_order_id,
@@ -67,6 +77,7 @@ class OkxOrderMapper:
             filled_quantity=filled_quantity,
             filled_price=filled_price,
             error_message=error_msg,
+            side=side,
             commission=commission,
         )
 

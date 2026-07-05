@@ -6,7 +6,11 @@ from typing import Any
 
 import structlog
 
-from pocketquant.core.domain.brokers.broker_port import IBrokerPort, OrderCallback
+from pocketquant.core.domain.brokers.broker_port import (
+    IBrokerPort,
+    OrderCallback,
+    TradeCallback,
+)
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderStatus
 from pocketquant.core.domain.position import PositionAggregate
@@ -52,6 +56,8 @@ class OKXBrokerAdapter(IBrokerPort):
         self._ws_client: OKXWebSocketAdapter | None = None
 
         self._order_callbacks: list[OrderCallback] = []
+        # Stored but unused: OKX position→Trade emission deferred to R8.
+        self._trade_callback: TradeCallback | None = None
         self._connected = False
         self._ws_task: asyncio.Task | None = None
 
@@ -277,6 +283,14 @@ class OKXBrokerAdapter(IBrokerPort):
         if self._ws_task:
             self._ws_task.cancel()
             self._ws_task = None
+
+    async def subscribe_trades(self, callback: TradeCallback) -> None:
+        # No-op: OKX position→Trade emission wired at R8 (needs a demo payload to
+        # settle the source of truth across orders/positions/history channels).
+        self._trade_callback = callback
+
+    async def unsubscribe_trades(self) -> None:
+        self._trade_callback = None
 
     async def _ws_listener(self) -> None:
         """WebSocket listener for order and position updates.

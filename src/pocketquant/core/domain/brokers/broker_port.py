@@ -3,10 +3,11 @@ from collections.abc import Awaitable, Callable
 
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate
-from pocketquant.core.domain.position import PositionAggregate
+from pocketquant.core.domain.position import PositionAggregate, TradeClosedEvent
 
 # Callback can be sync or async
 OrderCallback = Callable[[OrderResult], None | Awaitable[None]]
+TradeCallback = Callable[[TradeClosedEvent], None | Awaitable[None]]
 
 
 class IBrokerPort(ABC):
@@ -85,4 +86,21 @@ class IBrokerPort(ABC):
     @abstractmethod
     async def unsubscribe_order_updates(self) -> None:
         """Unsubscribe from order updates."""
+        ...
+
+    @abstractmethod
+    async def subscribe_trades(self, callback: TradeCallback) -> None:
+        """Subscribe to round-trip trade closures (average-cost).
+
+        Fires a ``TradeClosedEvent`` for each position reduce/close, dispatched
+        AFTER the corresponding fill ``OrderResult`` so back-links resolve.
+
+        Args:
+            callback: Function to call on trade closures (sync or async)
+        """
+        ...
+
+    @abstractmethod
+    async def unsubscribe_trades(self) -> None:
+        """Unsubscribe from trade closures."""
         ...
