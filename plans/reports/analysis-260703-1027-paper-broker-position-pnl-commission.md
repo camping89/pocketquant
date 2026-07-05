@@ -6,7 +6,7 @@
 
 Numbers in the backtest UI come from the **ResultCollector**, NOT the broker. The broker never knows about commission.
 
-| | PaperBroker (`_balance`) | ResultCollector / LotTracker (what UI shows) |
+| | PaperBrokerAdapter (`_balance`) | ResultCollector / LotTrackingHelper (what UI shows) |
 |---|---|---|
 | Model | Futures/margin, cash-based | Trade & equity bookkeeping |
 | Slippage | baked into fill price | inherited (prices already slipped) |
@@ -16,7 +16,7 @@ Numbers in the backtest UI come from the **ResultCollector**, NOT the broker. Th
 ## Pipeline for one trade
 
 ```
-EngulfingStrategy         PositionSizer            PaperBroker              ResultCollector
+EngulfingStrategyService         PositionSizerDomainService            PaperBrokerAdapter              ResultCollector
   emits Signal      →     computes qty       →     fills order        →     records Trade + equity
   (entry/SL/TP)          (risk vs exposure)       (+slippage, no comm)      (+commission, gross pnl)
 ```
@@ -26,7 +26,7 @@ Decides prices only, no size.
 - LONG: `entry = close`, `SL = pattern_low*(1 - sl_buffer_pct)` (buffer default 0.001), `TP = max(entry+risk, key_high)`
 - SHORT mirror.
 
-### 2. Position sizing — `src/pocketquant/core/domain/risk/services/position_sizer.py`
+### 2. Position sizing — `src/pocketquant/core/domain/risk/services/position_sizer_domain_service.py`
 Model `PERCENT_RISK`, defaults `risk_per_trade=0.02`, `max_exposure_percent=0.10` (`risk/value_objects.py`).
 ```
 risk_amount = balance * 0.02
@@ -38,16 +38,16 @@ Called at `engine/app_services/strategy_app_service.py:360` with `balance.availa
 
 **KEY:** engulfing SLs are tight (~1–3%), so `size_risk` is huge and the **10% exposure cap binds nearly every trade**. Position ≈ **10% of cash equity in notional**, NOT 2%-risk-based. First surprise.
 
-### 3. PaperBroker fill — `src/pocketquant/core/infra/brokers/paper/paper_broker.py`
+### 3. PaperBrokerAdapter fill — `src/pocketquant/core/infra/brokers/paper/paper_broker_adapter.py`
 - Slippage `_apply_slippage` (default 0.1%): BUY fills higher, SELL fills lower.
 - **No commission.**
 - Futures model: opening position moves no cash; balance changes only by realized-PnL delta on close (`_reduce_and_credit`, `:515`).
 
-### 4. ResultCollector — `src/pocketquant/backtest/engine/result_collector.py`
+### 4. ResultCollector — `src/pocketquant/backtest/engine/backtest_result_app_service.py`
 Source of UI numbers:
 - `commission = fill_price * fill_qty * 0.001` on **every fill** (entry AND exit → 2 charges/round trip), `:101`. `commission_percent = commission_bps/10000`, default `commission_bps=10`.
 - `Trade.pnl` = **gross** price PnL only: `(exit − entry) * qty`, `:364`. Slippage inside prices; **commission NOT subtracted**.
-- `Trade.commission` = entry portion + exit portion, separate column, `:261` (portions from `LotTracker`, `backtest/engine/lot_tracker.py`).
+- `Trade.commission` = entry portion + exit portion, separate column, `:261` (portions from `LotTrackingHelper`, `backtest/engine/lot_tracking_helper.py`).
 - Equity curve IS net: `-= commission` per fill, `+= gross pnl` on close.
 
 ## Worked example (defaults: cap=10%, comm=0.1%, slip=0.1%, equity $10k)
@@ -72,7 +72,7 @@ A row showing `pnl=37.96, commission=2.04` actually made **$35.92**. UI does not
 ## Three gotchas (explain the confusion)
 
 1. **Trade P&L is gross.** Net = `pnl − commission`. Win rate / profit factor / avg_win computed on **gross** `t.pnl` (`metrics_builder.py:47-50`) — a trade `pnl=+0.5, commission=2.04` counts as a WIN despite net loss.
-2. **Slippage is invisible.** Folded into fill prices; `Fill.slippage` hardcoded `0.0` (`result_collector.py:246`). Can't see its cost; just makes fills worse.
+2. **Slippage is invisible.** Folded into fill prices; `Fill.slippage` hardcoded `0.0` (`backtest_result_app_service.py:246`). Can't see its cost; just makes fills worse.
 3. **Commission missing from Sharpe/Sortino.** They annualize off broker MTM curve (`broker.get_balance().total_equity`, no commission) while `total_return`/final equity include it. Risk-adjusted ratios slightly optimistic.
 
 ## Unresolved questions / decisions for next session
@@ -85,11 +85,11 @@ A row showing `pnl=37.96, commission=2.04` actually made **$35.92**. UI does not
 ## Key files (resume map)
 
 - `src/pocketquant/core/domain/strategy/services/engulfing.py` — entry/SL/TP
-- `src/pocketquant/core/domain/risk/services/position_sizer.py` — sizing (+ `risk/value_objects.py` defaults)
+- `src/pocketquant/core/domain/risk/services/position_sizer_domain_service.py` — sizing (+ `risk/value_objects.py` defaults)
 - `src/pocketquant/engine/app_services/strategy_app_service.py:336-373` — sizing call + order create
-- `src/pocketquant/core/infra/brokers/paper/paper_broker.py` — fills, slippage, futures balance
-- `src/pocketquant/backtest/engine/result_collector.py` — commission, trades, equity
-- `src/pocketquant/backtest/engine/lot_tracker.py` — FIFO lots, commission portions
+- `src/pocketquant/core/infra/brokers/paper/paper_broker_adapter.py` — fills, slippage, futures balance
+- `src/pocketquant/backtest/engine/backtest_result_app_service.py` — commission, trades, equity
+- `src/pocketquant/backtest/engine/lot_tracking_helper.py` — FIFO lots, commission portions
 - `src/pocketquant/backtest/engine/metrics_builder.py` — gross-based metrics
 - `src/pocketquant/backtest/models/backtest_config.py` — bps→percent conversion
 - `src/pocketquant/core/domain/position/entities.py` — PositionAggregate realized PnL

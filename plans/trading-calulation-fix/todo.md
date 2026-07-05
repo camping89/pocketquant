@@ -1,0 +1,12 @@
+- PaperBrokerAdapter
+  - Set slippage to 0, but do not remove, use const because this is required for other broker. We need to implement an abstraction and config for IBrokerService
+  - Commission should be moved to IBrokerService as well. Also check again why commission is so high, maybe unreasonable config and commission amt/pct
+  - GrossPnL also need to move to the IBrokerService
+  - Make sure this is moved to abstraction so other broker in future will have the same layer of calculation
+  - Then what is the purpose of result collector? Debate me and suggest how to move some logics of calcualating PNL to the ResultCollector
+  - Also rename result collector to sth different to ResultCollector, because Result is a common term, mistaken with Result pattern
+- PositionSizerDomainService, rename this into PositionCalculatorService
+  - Move all configuration to const and move to the top of the class, no need to put in config or env
+  - Add 1 sentence explanation for each const
+- Give me worked example with USD in the currency
+- Update the default test acocunt for all broker including paper broker to USD 10000
