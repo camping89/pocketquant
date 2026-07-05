@@ -33,7 +33,7 @@ from pocketquant.core.domain.subscription import RunState, Subscription
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 

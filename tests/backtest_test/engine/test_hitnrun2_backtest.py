@@ -13,7 +13,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
@@ -26,10 +25,11 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
-from pocketquant.engine.app_services.order_app_service import OrderAppService
-from pocketquant.engine.app_services.position_app_service import PositionAppService
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
+from pocketquant.engine.backtest.backtest_app_service import BacktestAppService
+from pocketquant.engine.execution.order_app_service import OrderAppService
+from pocketquant.engine.execution.position_app_service import PositionAppService
+from pocketquant.engine.execution.risk_check import RiskCheckHandler
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 _SYM = "BTCUSDT:BINANCE"
 

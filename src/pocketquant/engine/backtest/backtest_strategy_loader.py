@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from pocketquant.backtest.engine.backtest_sandbox_app_service import BacktestSandboxAppService
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.shared.enums import Interval
@@ -10,6 +9,7 @@ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.engine.backtest.backtest_sandbox_app_service import BacktestSandboxAppService
 
 logger = get_logger(__name__)
 

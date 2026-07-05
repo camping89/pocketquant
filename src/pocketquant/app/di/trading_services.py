@@ -6,9 +6,9 @@ OrderPositionQueryService requires OrderAppService / PositionAppService
 
 from dishka import Provider, Scope, provide
 
-from pocketquant.engine.orders_positions_service import OrderPositionQueryService
-from pocketquant.engine.strategy_command_service import StrategyCommandService
-from pocketquant.engine.strategy_query_service import StrategyQueryService
+from pocketquant.engine.execution.orders_positions_service import OrderPositionQueryService
+from pocketquant.engine.strategy.strategy_command_service import StrategyCommandService
+from pocketquant.engine.strategy.strategy_query_service import StrategyQueryService
 
 
 class AppTradingServiceProvider(Provider):

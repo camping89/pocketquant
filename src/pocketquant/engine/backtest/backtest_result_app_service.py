@@ -18,13 +18,6 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pocketquant.backtest.engine.collected_results import CollectedResults
-from pocketquant.backtest.engine.lot_tracking_helper import (
-    ConsumedLot,
-    Direction,
-    FillOutcome,
-    LotTrackingHelper,
-)
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult, OpenLot
@@ -37,6 +30,13 @@ from pocketquant.core.domain.trading import (
     PerformanceCalculatorDomainService,
     PerformanceMetrics,
     Trade,
+)
+from pocketquant.engine.backtest.collected_results import CollectedResults
+from pocketquant.engine.backtest.lot_tracking_helper import (
+    ConsumedLot,
+    Direction,
+    FillOutcome,
+    LotTrackingHelper,
 )
 
 logger = logging.getLogger(__name__)

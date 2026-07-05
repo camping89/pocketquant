@@ -14,14 +14,14 @@ from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
-from pocketquant.backtest.engine.backtest_result_app_service import (
-    _MAX_PERSISTED_EQUITY_POINTS,
-    BacktestResultAppService,
-)
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
+from pocketquant.engine.backtest.backtest_result_app_service import (
+    _MAX_PERSISTED_EQUITY_POINTS,
+    BacktestResultAppService,
+)
 
 _T0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
 

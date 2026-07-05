@@ -6,7 +6,7 @@ One Python package `src/pocketquant/` (subpackages: core, engine, backtest, app)
 
 - **All repositories in core** (`core.infra.persistence.repositories`) — zero repos in backtest/app.
 - **Routes** use `FromDishka[…CommandService/…QueryService]` + `DishkaRoute`, never `Depends()`. Service methods take Pydantic command/query models, return DTOs.
-- **fastapi only in app** — core/engine/backtest never import it (import-linter enforced, 7 contracts).
+- **fastapi only in app** — core/engine never import it (import-linter enforced, 8 contracts).
 - **Single uvicorn worker only** — scheduler/WS feed/broker are in-process singletons; `--workers N` duplicates the reconcile loop + live broker connection.
 - **Primary keys: UUIDv7 only** — never hash / natural key / ObjectId.
 - **Every `await` is a preemption point** — wire deps before consumers (publish-before-subscribe), no `await` inside atomic blocks.

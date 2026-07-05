@@ -26,13 +26,12 @@ One Python package (`pocketquant`) tại repo-root `src/`; subpackage boundaries
 ```text
 src/pocketquant/
 ├── core/       # 0 deps — domain, common, config, ports/DTOs, persisted entities + infra adapters
-├── engine/     # → core — shared strategy/order/position/risk engine
-├── backtest/   # → core + engine — backtest engine + single-run orchestration
-└── app/        # → core + engine + backtest — FastAPI routes, scheduler, WS feed, strategy lifecycle, reconcile, backtest tasks, SPA serve
+├── engine/     # → core — shared engine with 5 feature areas (strategy, execution, market_data, backtest, live)
+└── app/        # → core + engine — FastAPI routes, scheduler, WS feed, strategy lifecycle, reconcile, backtest tasks, SPA serve
 web/        # React 19 + Vite SPA (separate npm app)
 ```
 
-Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only). `fastapi` chỉ được import bởi `app`.
+Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. `fastapi` chỉ được import bởi `app`.
 
 Single process: app (FastAPI port 41921, serve toàn bộ `/api/*` routes + SPA fallback). Scheduler, WS feed, broker, strategy engine chạy chung process; ràng buộc single-worker (`--workers 1`).
 

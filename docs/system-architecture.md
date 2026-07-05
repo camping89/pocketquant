@@ -1,6 +1,6 @@
 # System Architecture
 
-DDD + Clean Architecture + Dishka. Single Python package `src/pocketquant/` (core, engine, backtest, app) + Node SPA `web/`. Dependency: `core ◁ engine ◁ backtest ◁ app`, `web → app`. Binance public REST/WS (@aggTrade), OKX live trading, single FastAPI process on :41921 with scheduler, WS feed, strategy lifecycle, reconcile loop.
+DDD + Clean Architecture + Dishka. Single Python package `src/pocketquant/` (core, engine, app) + Node SPA `web/`. Dependency: `core ◁ engine ◁ app`, `web → app`. Backtest and live are two drivers on one shared engine. Binance public REST/WS (@aggTrade), OKX live trading, single FastAPI process on :41921 with scheduler, WS feed, strategy lifecycle, reconcile loop.
 
 For local run/test steps and canonical routes, use [README](../README.md).
 
@@ -177,37 +177,49 @@ Exchange encapsulation replaces standalone `exchange` field across domain entiti
 **Example - Domain Service (Pure Logic):**
 BarBuilderDomainService and PositionSizerDomainService are pure domain services with zero I/O, implementing domain business rules.
 
-### Layer 2: Application (Orchestrators) — `engine`, `backtest`, `app` packages
+### Layer 2: Application (Orchestrators) — `engine` and `app` packages
 
-**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. The **shared** strategy/order/position engine lives in `engine` subpackage.
+**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. Backtest and live are two **drivers** on one shared engine in `engine` subpackage.
 
 **Structure:**
 ```
-src/pocketquant/engine/                # SHARED engine (used by backtest + app)
-├── strategy_command_service.py        # StrategyCommandService (dispatch, signal handling)
-├── strategy_query_service.py          # StrategyQueryService (read strategies, subscriptions)
-├── order_command_service.py           # OrderCommandService (order state, recovery)
-├── orders_positions_service.py        # OrdersPositionsService (combined query service)
-└── ... (other orchestrators)
+src/pocketquant/engine/                     # SHARED engine (used by backtest + live)
+├── strategy/                                # Strategy feature area
+│   ├── strategy_app_service.py
+│   ├── strategy_command_service.py         # StrategyCommandService (dispatch, signal handling)
+│   └── strategy_query_service.py           # StrategyQueryService (read strategies, subscriptions)
+├── execution/                               # Order/Position feature area
+│   ├── order_app_service.py
+│   ├── position_app_service.py
+│   ├── orders_positions_service.py         # OrdersPositionsService (combined query service)
+│   └── risk_check.py                       # RiskCheckHandler (validation)
+├── market_data/                             # Market data services (unchanged)
+│   └── ...
+├── backtest/                                # Backtest driver (isolated per run)
+│   ├── backtest_app_service.py
+│   ├── backtest_sandbox_app_service.py
+│   ├── backtest_execution_service.py       # AsyncTask body: run + persist
+│   ├── backtest_command_service.py         # BacktestCommandService
+│   ├── backtest_query_service.py           # BacktestQueryService
+│   ├── backtest_stats_service.py           # Stats + keyset pagination
+│   ├── backtest_result_app_service.py      # Result collection
+│   ├── historical_replay_app_service.py    # Historical replay
+│   ├── collected_results.py                # Result aggregation
+│   ├── lot_tracking_helper.py              # Lot tracking
+│   └── backtest_dispatch.py                # Worker dispatch
+└── live/                                    # Live trading driver
+    └── strategy_reconcile_app_service.py  # Reconcile loop (5s poll)
 
-src/pocketquant/backtest/              # Backtest orchestration
-├── backtest_command_service.py        # BacktestCommandService (allocate run_id + save started doc)
-├── backtest_execution_service.py      # BacktestExecutionService (asyncio task body: run + persist)
-├── backtest_query_service.py          # BacktestQueryService (fetch run + trades)
-├── backtest_stats_service.py          # BacktestStatsService (keyset paged trades, markers, analytics)
-├── engine/                            # BacktestAppService + sandbox + replay + result collector
-└── workers/backtest_dispatch.py       # run_single (engine setup + sandbox)
-
-src/pocketquant/core/domain/trading/   # Trading contracts (universal, source-agnostic)
-├── value_objects.py                   # Trade, Fill, EquityPoint, PerformanceMetrics
+src/pocketquant/core/domain/trading/        # Trading contracts (universal, source-agnostic)
+├── value_objects.py                        # Trade, Fill, EquityPoint, PerformanceMetrics
 ├── performance_calculator_domain_service.py  # PerformanceCalculatorDomainService (NumPy metrics)
-└── trade_stats.py                     # Pure functions: histogram, streaks, profit_factor, drawdowns
+└── trade_stats.py                          # Pure functions: histogram, streaks, profit_factor, drawdowns
 
-src/pocketquant/core/domain/bar/services/     # Domain service layer (top-level)
-├── bar_builder_domain_service.py              # BarBuilderDomainService (OHLCV aggregation)
+src/pocketquant/core/domain/bar/services/    # Domain service layer (top-level)
+├── bar_builder_domain_service.py           # BarBuilderDomainService (OHLCV aggregation)
 
 src/pocketquant/core/domain/concepts/risk/services/  # Domain service layer
-├── position_sizer_domain_service.py                   # PositionSizerDomainService (risk calculations)
+├── position_sizer_domain_service.py        # PositionSizerDomainService (risk calculations)
 ```
 
 **Example - Application Service:**
@@ -482,13 +494,13 @@ src/
 | Dishka DI container (6 providers) | `app/di/` |
 | FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
 | Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
-| Backtest trigger (save started doc) | `backtest/backtest_command_service.py` |
-| Backtest task body (run + persist) | `backtest/backtest_execution_service.py` |
-| Backtest stats + paged trades + markers | `backtest/backtest_stats_service.py` (orchest) + `core/domain/trading/trade_stats.py` (domain) |
-| Backtest engine setup + replay | `backtest/workers/backtest_dispatch.py`, `backtest/engine/backtest_app_service.py` |
-| Strategy runtime dispatch | `engine/strategy_command_service.py`, `engine/strategy_query_service.py` |
-| Order state machine | `engine/order_command_service.py` |
-| Position tracking + P&L | `engine/orders_positions_service.py` |
+| Backtest trigger (save started doc) | `engine/backtest/backtest_command_service.py` |
+| Backtest task body (run + persist) | `engine/backtest/backtest_execution_service.py` |
+| Backtest stats + paged trades + markers | `engine/backtest/backtest_stats_service.py` (orchest) + `core/domain/trading/trade_stats.py` (domain) |
+| Backtest engine setup + replay | `engine/backtest/backtest_dispatch.py`, `engine/backtest/backtest_app_service.py` |
+| Strategy runtime dispatch | `engine/strategy/strategy_command_service.py`, `engine/strategy/strategy_query_service.py` |
+| Order state machine | `engine/execution/order_app_service.py` |
+| Position tracking + P&L | `engine/execution/orders_positions_service.py` |
 | HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2_strategy_service.py` |
 | Background sync job registration | `app/main_extensions.py` → `register_sync_jobs()` |
 | UUID7 generation | `core/common/uuid.py` |
@@ -502,13 +514,13 @@ src/
 | Theme CSS tokens + data-theme attribute | `web/src/index.css` (`:root[data-theme="dark|light"]` with token definitions) |
 | Backtest form (datetime-local + timezone) | `web/src/components/backtest/backtest-form.tsx` |
 | Domain purity test (AST check) | `tests/core_test/unit/domain/test_domain_purity.py` |
-| BacktestSandboxAppService | Backtest engine isolated instance | `backtest/engine/backtest_sandbox_app_service.py` |
-| StrategyReconcileAppService | Reconciliation loop | `engine/strategy_reconcile_app_service.py` |
+| BacktestSandboxAppService | Backtest engine isolated instance | `engine/backtest/backtest_sandbox_app_service.py` |
+| StrategyReconcileAppService | Reconciliation loop | `engine/live/strategy_reconcile_app_service.py` |
 | WsSubscriptionAppService | WebSocket subscription mgmt | `app/market_data/app_services/ws_subscription_app_service.py` |
 | PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/trading/performance_calculator_domain_service.py` |
 | SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
-| LotTrackingHelper | Lot tracking utility | `backtest/engine/lot_tracking_helper.py` |
-| BacktestResultAppService | Backtest result collection | `backtest/engine/backtest_result_app_service.py` |
+| LotTrackingHelper | Lot tracking utility | `engine/backtest/lot_tracking_helper.py` |
+| BacktestResultAppService | Backtest result collection | `engine/backtest/backtest_result_app_service.py` |
 | EngulfingStrategyService | Engulfing strategy impl | `core/domain/concepts/strategy/services/engulfing_strategy_service.py` |
 
 ## Request Flow
@@ -690,9 +702,13 @@ graph LR
 **Dependency Graph (top tier only):**
 
 ```
-core ◁ engine ◁ backtest ◁ app
-       └─ app imports core + engine + backtest only (verified by import-linter contracts)
+core ◁ engine ◁ app
+ └─ app imports core + engine only (verified by import-linter contracts)
 ```
+
+**Engine Internal Independence (enforced):**
+- `engine.backtest` ⟂ `engine.live` (two drivers, no cross-imports)
+- `engine.{strategy,execution,market_data}` cannot import `engine.{backtest,live}` (shared machinery stays independent)
 
 **Local Dev Ports:**
 - app: `http://localhost:41921/api/v1/docs` (Swagger)

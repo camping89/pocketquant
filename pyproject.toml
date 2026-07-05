@@ -80,7 +80,6 @@ name = "Layered architecture — app top tier"
 type = "layers"
 layers = [
     "pocketquant.app",
-    "pocketquant.backtest",
     "pocketquant.engine",
     "pocketquant.core",
 ]
@@ -97,24 +96,35 @@ type = "forbidden"
 source_modules = ["pocketquant.core"]
 forbidden_modules = [
     "pocketquant.engine",
-    "pocketquant.backtest",
     "pocketquant.app",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Engine imports no sibling/upper package"
+name = "Engine imports no upper package"
 type = "forbidden"
 source_modules = ["pocketquant.engine"]
-forbidden_modules = [
-    "pocketquant.backtest",
-    "pocketquant.app",
+forbidden_modules = ["pocketquant.app"]
+
+[[tool.importlinter.contracts]]
+name = "Engine backtest and live drivers stay independent"
+type = "independence"
+modules = [
+    "pocketquant.engine.backtest",
+    "pocketquant.engine.live",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Backtest imports no upper package"
+name = "Shared engine machinery must not import drivers"
 type = "forbidden"
-source_modules = ["pocketquant.backtest"]
-forbidden_modules = ["pocketquant.app"]
+source_modules = [
+    "pocketquant.engine.strategy",
+    "pocketquant.engine.execution",
+    "pocketquant.engine.market_data",
+]
+forbidden_modules = [
+    "pocketquant.engine.backtest",
+    "pocketquant.engine.live",
+]
 
 [[tool.importlinter.contracts]]
 name = "fastapi only in app"
@@ -122,7 +132,6 @@ type = "forbidden"
 source_modules = [
     "pocketquant.core",
     "pocketquant.engine",
-    "pocketquant.backtest",
 ]
 # import-linter rejects external subpackages, so dishka.integrations.fastapi
 # can't be listed here; tests/baseline/test_package_layout_contract.py greps

@@ -33,13 +33,13 @@ from pocketquant.core.infra.persistence.repositories.position_repository import 
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
-from pocketquant.engine.app_services.order_app_service import OrderAppService
-from pocketquant.engine.app_services.position_app_service import PositionAppService
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+from pocketquant.engine.execution.order_app_service import OrderAppService
+from pocketquant.engine.execution.position_app_service import PositionAppService
+from pocketquant.engine.execution.risk_check import RiskCheckHandler
+from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
-from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 pytestmark = pytest.mark.integration
 

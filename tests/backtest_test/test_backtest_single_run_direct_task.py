@@ -12,12 +12,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from pocketquant.backtest.backtest_command_service import (
-    BacktestCommandService,
-    RunBacktestCommand,
-)
-from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
-from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps, run_single
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
@@ -39,10 +33,16 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.engine.app_services.order_app_service import OrderAppService
-from pocketquant.engine.app_services.position_app_service import PositionAppService
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
+from pocketquant.engine.backtest.backtest_command_service import (
+    BacktestCommandService,
+    RunBacktestCommand,
+)
+from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps, run_single
+from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
+from pocketquant.engine.execution.order_app_service import OrderAppService
+from pocketquant.engine.execution.position_app_service import PositionAppService
+from pocketquant.engine.execution.risk_check import RiskCheckHandler
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 _SYM = "BTCUSDT:BINANCE"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)

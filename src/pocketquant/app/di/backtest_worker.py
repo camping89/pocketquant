@@ -6,8 +6,6 @@ spawns ``BacktestExecutionService.execute_and_persist`` as an asyncio task.
 
 from dishka import Provider, Scope, provide
 
-from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
-from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
@@ -18,6 +16,8 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps
+from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 
 
 class BacktestWorkerProvider(Provider):

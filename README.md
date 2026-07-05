@@ -9,13 +9,12 @@ One Python package (`pocketquant`) with import-linter-enforced subpackage bounda
 ```text
 src/pocketquant/
 ├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, scheduler, http)
-├── engine/     # strategy/order/position/risk engine + feature services
-├── backtest/   # backtest engine + single-run orchestration (sandbox, replay, collector)
+├── engine/     # framework-free orchestration, 5 feature areas: strategy/ execution/ market_data/ backtest/ live/
 └── app/        # FastAPI backend: routes, SPA serving, scheduler, WS feed, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI
 ```
 
-Dependency contracts (import-linter): `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only).
+Dependency contracts (import-linter): `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine.
 
 Backend is a **single process** (`pocketquant.app.main`, `:41921`) — one DI container wires the entire runtime and every route.
 

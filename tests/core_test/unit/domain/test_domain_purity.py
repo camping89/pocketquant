@@ -11,7 +11,6 @@ FORBIDDEN_IMPORTS = [
     "fastapi",
     "pocketquant.core.infra",
     "pocketquant.engine",
-    "pocketquant.backtest",
     "pocketquant.app",
 ]
 

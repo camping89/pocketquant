@@ -551,8 +551,8 @@ We use **Pyright** (via Pylance in VSCode), not mypy:
 - **Pydantic v2 native support** (no plugin needed)
 
 ```bash
-pyright                            # Type check (scopes from pyrightconfig.json)
-pyright src/pocketquant/backtest/  # Check specific module
+pyright                                 # Type check (scopes from pyrightconfig.json)
+pyright src/pocketquant/engine/backtest/  # Check specific module
 ```
 
 ## Performance Considerations

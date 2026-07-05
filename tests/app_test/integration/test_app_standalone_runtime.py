@@ -24,7 +24,6 @@ from pocketquant.app.di import (
     MarketDataProvider,
     PersistenceProvider,
 )
-from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.backtest import BacktestResult
@@ -38,10 +37,11 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
     SubscriptionRepository,
 )
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
-from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
+from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 from .app_factory import TestCoreProvider
 

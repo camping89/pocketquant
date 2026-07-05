@@ -60,7 +60,7 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
-from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
 
@@ -130,7 +130,7 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
     """
     from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
     from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-    from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+    from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
     sub_repo = await container.get(SubscriptionRepository)
     strategy_service = await container.get(StrategyAppService)

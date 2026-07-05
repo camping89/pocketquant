@@ -24,9 +24,9 @@ from pocketquant.core.domain.strategy.strategy_service_interface import IStrateg
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 
 if TYPE_CHECKING:
-    from pocketquant.engine.app_services.order_app_service import OrderAppService
-    from pocketquant.engine.app_services.position_app_service import PositionAppService
-    from pocketquant.engine.handlers.risk.check_risk.handler import RiskCheckHandler
+    from pocketquant.engine.execution.order_app_service import OrderAppService
+    from pocketquant.engine.execution.position_app_service import PositionAppService
+    from pocketquant.engine.execution.risk_check import RiskCheckHandler
 
 logger = structlog.get_logger(__name__)
 

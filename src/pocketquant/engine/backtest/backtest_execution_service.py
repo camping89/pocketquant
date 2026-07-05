@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps, run_single
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
+from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps, run_single
 
 logger = get_logger(__name__)
 

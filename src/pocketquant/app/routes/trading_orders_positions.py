@@ -8,7 +8,7 @@ only work in the process that runs the execution engine.
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 
-from pocketquant.engine.orders_positions_service import (
+from pocketquant.engine.execution.orders_positions_service import (
     GetOrderQuery,
     GetPositionQuery,
     ListOrdersQuery,

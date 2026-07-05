@@ -18,7 +18,7 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
-from pocketquant.engine.app_services.order_app_service import OrderAppService
+from pocketquant.engine.execution.order_app_service import OrderAppService
 
 _SYM = "BTCUSDT:BINANCE"
 

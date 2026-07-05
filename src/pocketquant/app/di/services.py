@@ -11,9 +11,9 @@ exactly one provider.
 
 from dishka import Provider, Scope, provide
 
-from pocketquant.backtest.backtest_command_service import BacktestCommandService
-from pocketquant.backtest.backtest_query_service import BacktestQueryService
-from pocketquant.backtest.backtest_stats_service import BacktestStatsService
+from pocketquant.engine.backtest.backtest_command_service import BacktestCommandService
+from pocketquant.engine.backtest.backtest_query_service import BacktestQueryService
+from pocketquant.engine.backtest.backtest_stats_service import BacktestStatsService
 from pocketquant.engine.market_data.ohlcv_service import OhlcvService
 from pocketquant.engine.market_data.quotes_service import QuoteQueryService
 from pocketquant.engine.market_data.symbols_service import SymbolQueryService

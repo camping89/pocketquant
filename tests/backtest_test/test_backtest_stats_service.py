@@ -7,13 +7,6 @@ from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
 
-from pocketquant.backtest.backtest_stats_service import (
-    BacktestStatsService,
-    ListTradesQuery,
-    TradeFilter,
-    TradeSortDir,
-    TradeSortKey,
-)
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.trading import EquityPoint, Trade
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -22,6 +15,13 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 )
 from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
+)
+from pocketquant.engine.backtest.backtest_stats_service import (
+    BacktestStatsService,
+    ListTradesQuery,
+    TradeFilter,
+    TradeSortDir,
+    TradeSortKey,
 )
 
 T0 = datetime(2026, 1, 5, 10, 0, 0)

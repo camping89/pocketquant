@@ -12,26 +12,26 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from pocketquant.backtest.backtest_command_service import (
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+from pocketquant.engine.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
     SetVerdictCommand,
 )
-from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
-from pocketquant.backtest.backtest_query_service import (
+from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
+from pocketquant.engine.backtest.backtest_query_service import (
     BacktestQueryService,
     EnqueueBacktestResponse,
     GetBacktestQuery,
     ListBacktestsQuery,
 )
-from pocketquant.backtest.backtest_stats_service import (
+from pocketquant.engine.backtest.backtest_stats_service import (
     BacktestStatsService,
     ListTradesQuery,
     TradeFilter,
     TradeSortDir,
     TradeSortKey,
 )
-from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 
 backtest_router = APIRouter(prefix="/backtest", tags=["backtest"], route_class=DishkaRoute)
 

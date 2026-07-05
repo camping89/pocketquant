@@ -15,12 +15,12 @@ from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
-from pocketquant.backtest.engine.backtest_result_app_service import BacktestResultAppService
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
+from pocketquant.engine.backtest.backtest_result_app_service import BacktestResultAppService
 
 RUN_ID = generate_id_str()
 

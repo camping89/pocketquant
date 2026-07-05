@@ -21,7 +21,7 @@ import pytest
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import RunState, Subscription
-from pocketquant.engine.app_services.strategy_reconcile_app_service import (
+from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
 

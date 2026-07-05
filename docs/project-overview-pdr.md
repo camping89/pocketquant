@@ -285,7 +285,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ## Architecture & Module Breakdown (Single Python package + web)
 
-Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTTP only). Enforced by import-linter contracts in `pyproject.toml`.
+Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. Enforced by import-linter contracts in `pyproject.toml` (8 contracts).
 
 ```
 src/pocketquant/
@@ -300,31 +300,32 @@ src/pocketquant/
 │   ├── infra/
 │   │   └── persistence/  Database (MongoDB), Cache (Redis), all 12 repositories
 │   ├── brokers/paper/    PaperBrokerAdapter (shared by backtest + paper trading)
+│   ├── brokers/okx/      OKXBrokerAdapter + WebSocket support (auth, mappers, reconnection)
 │   ├── market_data/binance/  BinanceAdapter (REST) + BinanceWebSocketAdapter (@aggTrade)
 │   ├── scheduling/       JobScheduler (APScheduler)
 │   └── http_client/      ResilientHttpClient (retry/backoff)
 │
-├── engine/               # → core — shared market data services
-│   └── market_data/      SyncService, OHLCVService, QuotesService, SyncStatusService,
-│                         TrackedSymbolsService, SymbolsService
+├── engine/               # → core — shared engine with 5 feature areas
+│   ├── strategy/         strategy_app_service, strategy_command_service, strategy_query_service
+│   ├── execution/        order_app_service, position_app_service, orders_positions_service, risk_check
+│   ├── market_data/      sync service, ohlcv service, quotes service, status service
+│   ├── backtest/         backtest driver (isolated per run)
+│   │   ├── backtest_app_service.py
+│   │   ├── backtest_sandbox_app_service.py
+│   │   ├── backtest_command_service.py
+│   │   ├── backtest_query_service.py
+│   │   ├── backtest_stats_service.py
+│   │   ├── backtest_execution_service.py
+│   │   ├── backtest_result_app_service.py
+│   │   ├── historical_replay_app_service.py
+│   │   ├── collected_results.py
+│   │   ├── lot_tracking_helper.py
+│   │   ├── backtest_dispatch.py
+│   │   └── backtest_strategy_loader.py
+│   └── live/             Live trading driver
+│       └── strategy_reconcile_app_service.py  (Reconcile loop, 5s poll)
 │
-├── backtest/             # → core + engine — backtesting engine
-│   ├── engine/           BacktestSandboxAppService, BacktestResultAppService, HistoricalReplayAppService, sandbox
-│   ├── workers/          backtest_dispatch.run_single (engine setup)
-│   ├── backtest_execution_service.py  Async task body (run + persist)
-│   ├── {feature}_command_service.py  Command service
-│   └── {feature}_query_service.py    Query service
-│
-├── trading/              # → core + engine — strategy & trading logic
-│   ├── brokers/okx/      OKXBrokerAdapter + WebSocket support (auth, mappers, reconnection)
-│   ├── domain/           Subscription aggregate (uuid7 ID, triple dedup via unique index)
-│   ├── strategy_command_service.py   Write: add_symbol, start, stop, delete
-│   ├── strategy_query_service.py     Read: list, get, positions, trades
-│   ├── orders_positions_service.py   Live trading queries
-│   └── app_services/     StrategyAppService, OrderAppService, PositionAppService,
-│                         RiskCheckHandler (shared by backtest + trading)
-│
-└── app/                  # → core, engine, backtest — FastAPI runtime + all API routes + SPA
+└── app/                  # → core, engine — FastAPI runtime + all API routes + SPA
     ├── routes/           Feature modules: strategy.py, backtest.py, market_data_sync.py, etc.
     ├── market_data/      Sync/quotes/ohlcv/status app-services
     ├── middleware/       Admin auth, symbol validation, etc.

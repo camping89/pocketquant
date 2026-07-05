@@ -23,7 +23,7 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.uuid import UUID
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
-from pocketquant.engine.strategy_command_service import (
+from pocketquant.engine.strategy.strategy_command_service import (
     AddSymbolCommand,
     DeleteStrategyCommand,
     RemoveSymbolCommand,
@@ -31,7 +31,7 @@ from pocketquant.engine.strategy_command_service import (
     StopStrategyCommand,
     StrategyCommandService,
 )
-from pocketquant.engine.strategy_query_service import (
+from pocketquant.engine.strategy.strategy_query_service import (
     GetStrategiesQuery,
     GetStrategyPositionsQuery,
     GetStrategyQuery,

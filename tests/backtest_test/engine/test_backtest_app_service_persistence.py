@@ -12,7 +12,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestConfig
@@ -31,6 +30,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,
 )
+from pocketquant.engine.backtest.backtest_app_service import BacktestAppService
 
 _SYM = "BTCUSDT:BINANCE"
 

@@ -15,7 +15,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
-from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 
 class _RecordingStrategy(IStrategyService):
