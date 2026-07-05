@@ -1,6 +1,6 @@
 # Swing pivot & key-level cho take-profit
 
-`EngulfingStrategy` (và `hitnrun2`) đặt take-profit không chỉ theo risk-reward thuần, mà còn tham chiếu **key-level** lấy từ swing high/low gần nhất. Doc này giải thích swing pivot là gì, cách engine xấp xỉ nó, và vì sao dùng làm TP.
+`EngulfingStrategyService` (và `HitNRun2StrategyService`) đặt take-profit không chỉ theo risk-reward thuần, mà còn tham chiếu **key-level** lấy từ swing high/low gần nhất. Doc này giải thích swing pivot là gì, cách engine xấp xỉ nó, và vì sao dùng làm TP.
 
 ## Swing high / swing low là gì
 
@@ -11,7 +11,7 @@ Swing pivot là nơi thị trường "đã từng phản ứng". Lệnh chờ v�
 
 ## Cách engine xấp xỉ (proxy, KHÔNG phải pivot detection thật)
 
-Engine **không** detect swing pivot theo nghĩa hình học (so sánh đỉnh/đáy với các bar lân cận hai phía). Thay vào đó nó dùng một proxy đơn giản — **max/min của cửa sổ N bar gần nhất**:
+Engine **không** detect swing pivot theo nghĩa hình học (so sánh đỉnh/đáy với các bar lân cận hai phía). Thay vào đó nó dùng một proxy đơn giản được tính bằng `BarBuilderDomainService` — **max/min của cửa sổ N bar gần nhất**:
 
 ```
 LONG  key_level = max(highs[-N:])   # đỉnh cao nhất trong N bar trước
@@ -24,7 +24,7 @@ với `N = key_level_lookback_bars` (default 20). Cửa sổ này được snaps
 
 ## TP = max(RR 1:1, key-level)
 
-`EngulfingStrategy` lấy TP là mức **xa hơn** giữa risk-reward 1:1 và key-level:
+`EngulfingStrategyService` lấy TP là mức **xa hơn** giữa risk-reward 1:1 và key-level:
 
 ```
 LONG:  risk = entry - SL;  tp_rr = entry + risk;  TP = max(tp_rr, key_level)
@@ -61,7 +61,7 @@ key-level (102) < tp_rr (105.2) → `TP = max(105.2, 102) = 105.2`. TP luôn ≥
 
 ## Chart "show all patterns" ≠ tập tín hiệu strategy
 
-Nút toggle **Engulfing** trên chart vẽ **mọi** full-candle engulfing pattern (body bao body **và** range bao range — high/low của nến hiện tại phải phủ trọn high/low nến trước). Strategy chỉ entry một **subset**:
+Nút toggle **Engulfing** trên chart vẽ **mọi** full-candle engulfing pattern (body bao body **và** range bao range — high/low của nến hiện tại phải phủ trọn high/low nến trước). `EngulfingStrategyService` chỉ entry một **subset**:
 
 - **Warmup**: pattern xuất hiện trong `key_level_lookback_bars` bar đầu (chưa đủ cửa sổ key-level) → có marker trên chart nhưng **không** có trade.
 - **Position cap**: tối đa một vị thế cùng lúc — pattern xuất hiện khi đang có lệnh mở → có marker nhưng **không** entry.

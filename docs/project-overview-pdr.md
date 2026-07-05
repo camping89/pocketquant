@@ -51,7 +51,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 **Sub-requirements:**
 - Maintain persistent WebSocket connection (singleton, app-wide), auto-started by the FastAPI lifespan
 - Auto-reconnect with exponential backoff (1s to 60s)
-- Subscribe/unsubscribe to specific symbols; `WsSubscriptionManager` reconciles vs `tracked_symbols` every 5s
+- Subscribe/unsubscribe to specific symbols; `WsSubscriptionAppService` reconciles vs `tracked_symbols` every 5s
 - Cache latest quotes in Redis (~60s TTL)
 - Re-subscribe after reconnection
 
@@ -132,7 +132,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 **Sub-requirements:**
 - Load strategy templates from the in-code `STRATEGY_REGISTRY` (e.g. `hitnrun2`)
-- Support multiple strategy implementations via the `IStrategy` interface
+- Support multiple strategy implementations via the `IStrategyService` interface
 - Route market data events to strategy handlers (`on_bar_completed`, `on_quote_received`, `on_order_filled`)
 - Broker abstraction: paper trading + live trading support
 - Position/order tracking from execution fills
@@ -292,13 +292,13 @@ src/pocketquant/
 ├── core/                 # 0 deps — domain + adapters
 │   ├── domain/           TOP-LEVEL entities (bar, order, position, symbol, sync_status,
 │   │                     backtest, subscription) + ports/DTOs (brokers, market_data)
-│   ├── concepts/         non-persisted logic (quote, risk, strategy: IStrategy + hitnrun2)
+│   ├── concepts/         non-persisted logic (quote, risk, strategy: IStrategyService + hitnrun2)
 │   ├── common/           AppError, EventBus, middleware, UUID7, health, structlog
 │   ├── config/           Settings
 │   ├── infra/
 │   │   └── persistence/  Database (MongoDB), Cache (Redis), all 12 repositories
-│   ├── brokers/paper/    PaperBroker (shared by backtest + paper trading)
-│   ├── market_data/binance/  BinanceClient (REST) + BinanceWebSocketClient (@aggTrade)
+│   ├── brokers/paper/    PaperBrokerAdapter (shared by backtest + paper trading)
+│   ├── market_data/binance/  BinanceAdapter (REST) + BinanceWebSocketClient (@aggTrade)
 │   ├── scheduling/       JobScheduler (APScheduler)
 │   └── http_client/      ResilientHttpClient (retry/backoff)
 │
@@ -307,16 +307,16 @@ src/pocketquant/
 │                         TrackedSymbolsService, SymbolsService
 │
 ├── backtest/             # → core + engine — backtesting engine
-│   ├── engine/           BacktestAppService, ResultCollector, HistoricalReplayAppService, sandbox
+│   ├── engine/           BacktestSandboxAppService, BacktestResultAppService, HistoricalReplayAppService, sandbox
 │   ├── models/           BacktestConfig
 │   ├── workers/          backtest_dispatch.run_single (engine setup)
 │   ├── backtest_execution_service.py  Async task body (run + persist)
 │   ├── {feature}_command_service.py  Command service
 │   ├── {feature}_query_service.py    Query service
-│   └── domain/services/  PerformanceCalculator (NumPy metrics)
+│   └── domain/services/  PerformanceCalculatorDomainService (NumPy metrics)
 │
 ├── trading/              # → core + engine — strategy & trading logic
-│   ├── brokers/okx/      OKXBroker + WebSocket support (auth, mappers, reconnection)
+│   ├── brokers/okx/      OKXBrokerAdapter + WebSocket support (auth, mappers, reconnection)
 │   ├── domain/           Subscription aggregate (uuid7 ID, triple dedup via unique index)
 │   ├── strategy_command_service.py   Write: add_symbol, start, stop, delete
 │   ├── strategy_query_service.py     Read: list, get, positions, trades
@@ -352,7 +352,7 @@ web/                                 # React 19 + Vite SPA (separate npm app)
 - [x] Background job scheduling
 
 **Extended Features (F7-F10):**
-- [x] Strategy Engine with YAML loader and IStrategy interface
+- [x] Strategy Engine with YAML loader and IStrategyService interface
 - [x] Backtesting Engine with historical replay (single-run direct-task)
 - [x] Order & Position Management with MongoDB persistence
 - [x] Live Trading via OKX WebSocket (HMAC-SHA256, reconnection, circuit breaker)

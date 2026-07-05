@@ -73,7 +73,7 @@ core/domain/{entity}/                  # Pure logic (no I/O)
 core/persistence/repositories/         # Data access
 ```
 
-**Example:** Route → BacktestCommandService → BarRepository + PerformanceCalculator (domain, pure).
+**Example:** Route → BacktestCommandService → BarRepository + PerformanceCalculatorDomainService (domain, pure).
 
 **Key Rules:**
 1. Routes: parse, inject service, delegate, respond (no business logic)
@@ -104,7 +104,7 @@ All dependencies via constructor (managed by DI). Stateful services initialized 
 
 ### 6. Provider Pattern (External Integrations)
 
-Concrete adapter (e.g., `BinanceClient`) behind a core interface (e.g., `IDataProvider`). Isolates external I/O, clean error handling, testable.
+Concrete adapter (e.g., `BinanceAdapter`) behind a core interface (e.g., `IDataProviderPort`). Isolates external I/O, clean error handling, testable.
 
 ### 7. Event Handler Auto-Discovery Pattern
 
@@ -216,7 +216,7 @@ Eliminate redundant empty Create subclasses. Use base classes directly for repos
 
 ### 11. Strategy Implementation Pattern
 
-Implement `IStrategy` interface. Implement `on_bar_completed(bar)` (mandatory), optionally `on_quote_received(tick)`, `on_order_filled(order, fill_price)`. Return `Signal | None`. Keep pure logic, no broker/database (StrategyAppService manages execution). Lifecycle: `on_start()` → `on_bar_completed()` / `on_quote_received()` / `on_order_filled()` → `on_stop()`.
+Implement `IStrategyService` interface. Implement `on_bar_completed(bar)` (mandatory), optionally `on_quote_received(tick)`, `on_order_filled(order, fill_price)`. Return `Signal | None`. Keep pure logic, no broker/database (StrategyAppService manages execution). Lifecycle: `on_start()` → `on_bar_completed()` / `on_quote_received()` / `on_order_filled()` → `on_stop()`.
 
 ### 12. Domain Layer Patterns (Pydantic BaseModel + MongoDB Persistence)
 
@@ -366,14 +366,14 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 | Events | `{Entity}{PastTense}Event` | `Event` | `.py` | `OrderFilledEvent`, `BarCompletedEvent` |
 | Enums | `{Concept}` | None | `.py` | `Interval`, `OrderType`, `OrderSide` |
 | Value Objects | `{Concept}` | None | `.py` | `PnL`, `OHLCV`, `BarRange` |
-| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionSizerDomainService`, `BarBuilderDomainService` |
+| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionSizerDomainService`, `BarBuilderDomainService`, `PerformanceCalculatorDomainService` |
 | **Domain Strategy (Impl)** | `{Name}StrategyService` | `StrategyService` | `*_strategy_service.py` | `EngulfingStrategyService`, `HitNRun2StrategyService` |
 | **Domain Strategy (Interface)** | `IStrategyService` | `IStrategyService` | `strategy_service_interface.py` | `IStrategyService` |
 | Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
-| **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IDataProviderPort` |
-| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter` |
+| **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IBrokerFactoryPort`, `IDataProviderPort`, `IRealtimeQuoteProviderPort` |
+| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter`, `OKXWebSocketAdapter` |
 | **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | `LotTrackingHelper` |
-| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService` |
+| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestResultAppService` |
 | Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListOrdersQuery` |
 | Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `StartStrategyCommand` |
 | CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |
@@ -404,7 +404,7 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 | DI / cross-cutting | `*Provider`, `*Middleware` |
 | App handler | `RiskCheckHandler`, `event_handler` (decorator) |
 | Infra factory/scheduler | `BrokerFactory`, `JobScheduler` |
-| Infra sub-component (OKX) | `OkxMessageParser`, `OkxOrderMapper`, `OkxPositionMapper`, `OkxReconnectionHandler`, `OkxStateReconciler` |
+| Infra sub-component (OKX) | `OkxMessageParser`, `OkxOrderMapper`, `OkxPositionMapper`, `OkxReconnectionHandler`, `OkxStateReconciler`, `BrokerFactory`, `JobScheduler` |
 | Data class | Entity, VO, enum, event, `*Command`/`*Query`/`*Response` |
 
 ### Module Size
@@ -530,7 +530,7 @@ ruff check . --fix        # Auto-fix issues
 ```
 
 **Rules enforced:**
-- Unused imports
+- Unused imports (no imports of old class names like `BinanceAdapter`, `IStrategyService`, `PaperBrokerAdapter`)
 - Undefined names
 - Syntax errors
 - Duplicate code
@@ -562,7 +562,7 @@ pyright src/pocketquant/backtest/  # Check specific module
 Run blocking operations in thread pool to avoid blocking event loop:
 
 ```python
-# Good: native async I/O (Binance via aiohttp)
+# Good: native async I/O (Binance via BinanceAdapter/aiohttp)
 bars = await self.provider.fetch_ohlcv(symbol, interval, n_bars)
 
 # Bad: blocking call on the event loop

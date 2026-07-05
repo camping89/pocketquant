@@ -89,7 +89,7 @@ Control plane (desired state)           Data plane (live engine)
 
 **Handlers are declarative:** `StartStrategyCommand` and `StopStrategyCommand` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
 
-**Reconcile loop:** `StrategyReconcileService` (in `engine` subpackage) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
+**Reconcile loop:** `StrategyReconcileAppService` (in `engine` subpackage) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
 1. Iterates `sub_repo.list_all()` (reads from Mongo)
 2. For each subscription, compares `desired_state` to live `StrategyAppService` instance's run-state
 3. Calls `start_strategy()` or `stop_strategy()` to converge
@@ -119,12 +119,12 @@ Control plane (desired state)           Data plane (live engine)
 ```
 domain/
 ├── backtest/               # Backtesting domain
-│   └── services/performance_calculator.py
+│   └── services/performance_calculator_domain_service.py
 ├── bar/                    # TOP-LEVEL: Market bars (renamed from ohlcv/)
 │   ├── entities.py         # Bar entity with to_mongo/from_mongo
 │   ├── events.py           # BarCompletedEvent, HistoricalDataSyncedEvent
 │   ├── value_objects.py    # OHLCV, BarRange
-│   └── services/bar_builder.py  # BarBuilder service
+│   └── services/bar_builder_domain_service.py  # BarBuilderDomainService service
 ├── order/                  # TOP-LEVEL: Order lifecycle
 │   ├── entities.py         # OrderAggregate with to_mongo/from_mongo
 │   ├── enums.py            # OrderType, OrderSide, OrderStatus
@@ -149,13 +149,13 @@ domain/
 │   ├── risk/
 │   │   ├── enums.py        # RiskModel enum
 │   │   ├── value_objects.py  # RiskConfig
-│   │   └── services/position_sizer.py  # PositionSizer (pure calc)
+│   │   └── services/position_sizer_domain_service.py  # PositionSizerDomainService (pure calc)
 │   └── strategy/
 │       ├── enums.py        # Direction enum
 │       ├── events.py       # SignalGeneratedEvent
-│       ├── interfaces.py   # IStrategy ABC
+│       ├── strategy_service_interface.py   # IStrategyService ABC
 │       ├── value_objects.py  # Signal, StrategyConfig, OrderConfig, StopLossConfig, TakeProfitConfig
-│       └── services/hitnrun2.py  # HitNRun2Strategy — 1m breakdown/breakup with capped SL/TP
+│       └── services/hitnrun2_strategy_service.py  # HitNRun2StrategyService — 1m breakdown/breakup with capped SL/TP
 └── shared/                 # Cross-cutting
     ├── enums.py            # Interval enum
     ├── events.py           # DomainEvent base (was domain_event.py)
@@ -172,7 +172,7 @@ Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`
 Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
 
 **Example - Domain Service (Pure Logic):**
-BarBuilder and PositionSizer are pure domain services with zero I/O, implementing domain business rules.
+BarBuilderDomainService and PositionSizerDomainService are pure domain services with zero I/O, implementing domain business rules.
 
 ### Layer 2: Application (Orchestrators) — `engine`, `backtest`, `app` packages
 
@@ -198,19 +198,19 @@ src/pocketquant/backtest/              # Backtest orchestration
 └── workers/backtest_dispatch.py       # run_single (engine setup + sandbox)
 
 src/pocketquant/core/domain/services/  # Pure domain services
-├── performance_calculator.py          # PerformanceCalculator (NumPy metrics)
-├── bar_builder.py                     # BarBuilder (OHLCV aggregation)
-└── position_sizer.py                  # PositionSizer (risk calculations)
+├── performance_calculator_domain_service.py          # PerformanceCalculatorDomainService (NumPy metrics)
+├── bar_builder_domain_service.py                     # BarBuilderDomainService (OHLCV aggregation)
+└── position_sizer_domain_service.py                  # PositionSizerDomainService (risk calculations)
 ```
 
 **Example - Application Service:**
 ```python
 # StrategyAppService - orchestrates domain + adapter I/O
 class StrategyAppService:
-    def __init__(self, broker: IBroker, event_bus: EventBus):
+    def __init__(self, broker: IBrokerPort, event_bus: EventBus):
         self.broker = broker
         self.event_bus = event_bus
-        self.strategy: Optional[IStrategy] = None
+        self.strategy: Optional[IStrategyService] = None
 
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Called when bar completes."""
@@ -277,11 +277,11 @@ core/
 │       ├── sync_status_repository.py
 │       └── job_history_repository.py
 ├── brokers/
-│   └── paper/               # PaperBroker (in-memory simulation)
-│       └── paper_broker.py
+│   └── paper/               # PaperBrokerAdapter (in-memory simulation)
+│       └── paper_broker_adapter.py
 ├── market_data/
 │   └── binance/             # Binance REST + WS integration
-│       ├── binance_client.py            # BinanceClient (implements core.domain IDataProvider)
+│       ├── binance_adapter.py            # BinanceAdapter (implements core.domain IDataProviderPort)
 │       ├── binance_websocket_client.py  # BinanceWebSocketClient (@aggTrade stream)
 │       └── binance_mappers.py           # Binance-specific mapping
 ├── scheduling/
@@ -289,13 +289,13 @@ core/
 ├── http_client/
 │   └── client.py            # ResilientHttpClient (retry/backoff)
 └── domain/                           # Domain (pure business logic, zero I/O)
-    ├── brokers/            # Ports: IBroker, IBrokerFactory + DTOs
-    └── market_data/        # Ports: IDataProvider, IRealtimeQuoteProvider + DTOs
+    ├── brokers/            # Ports: IBrokerPort, IBrokerFactoryPort + DTOs
+    └── market_data/        # Ports: IDataProviderPort, IRealtimeQuoteProviderPort + DTOs
 ```
 
 **Notes:**
-- OKX live broker (OKXBroker + websocket) lives in `src/pocketquant/core/infra/brokers/okx/` (next to `paper/`).
-- Ports + DTOs (IBroker, IBrokerFactory, OrderResult, AccountBalance, OrderEvent, IDataProvider, IRealtimeQuoteProvider) live in `core.domain.{brokers,market_data}`.
+- OKX live broker (OKXBrokerAdapter + websocket) lives in `src/pocketquant/core/infra/brokers/okx/` (next to `paper/`).
+- Ports + DTOs (IBrokerPort, IBrokerFactoryPort, OrderResult, AccountBalance, OrderEvent, IDataProviderPort, IRealtimeQuoteProviderPort) live in `core.domain.{brokers,market_data}`.
 - No schemas/ — persistence lives in domain entities via `to_mongo()`/`from_mongo()` methods.
 
 **Key Services:**
@@ -304,10 +304,10 @@ core/
 |---------|---------|
 | **MongoDBConnection** | Async collection access, pooling (5-50 connections) |
 | **RedisConnection** | JSON serialization, pattern deletion, TTL support |
-| **PaperBroker** | In-memory simulation, configurable slippage/delay |
-| **OKXBroker** | Live trading, HMAC auth, exponential backoff reconnection |
-| **BinanceClient** | Implements IDataProvider; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilder). Rate limit: 1200 weight/min. |
-| **BinanceWebSocketClient** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProvider. |
+| **PaperBrokerAdapter** | In-memory simulation, configurable slippage/delay |
+| **OKXBrokerAdapter** | Live trading, HMAC auth, exponential backoff reconnection |
+| **BinanceAdapter** | Implements IDataProviderPort; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilderDomainService). Rate limit: 1200 weight/min. |
+| **BinanceWebSocketClient** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
 | **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
@@ -467,7 +467,7 @@ src/
 | All repositories | `core/persistence/repositories/` |
 | Binance REST + WS clients | `core/infra/market_data/binance/` |
 | OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
-| PaperBroker (simulation) | `core/infra/brokers/paper/` |
+| PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
 | APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
 | Dishka DI container (6 providers) | `app/di/` |
 | FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
@@ -479,7 +479,7 @@ src/
 | Strategy runtime dispatch | `engine/strategy_command_service.py`, `engine/strategy_query_service.py` |
 | Order state machine | `engine/order_command_service.py` |
 | Position tracking + P&L | `engine/orders_positions_service.py` |
-| HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2.py` |
+| HitNRun2 strategy (hitnrun2) | `core/domain/concepts/strategy/services/hitnrun2_strategy_service.py` |
 | Background sync job registration | `app/main_extensions.py` → `register_sync_jobs()` |
 | UUID7 generation | `core/common/uuid.py` |
 | Cache keys, TTLs, constants | `core/common/constants.py` |
@@ -492,6 +492,14 @@ src/
 | Theme CSS tokens + data-theme attribute | `web/src/index.css` (`:root[data-theme="dark|light"]` with token definitions) |
 | Backtest form (datetime-local + timezone) | `web/src/components/backtest/backtest-form.tsx` |
 | Domain purity test (AST check) | `tests/core_test/unit/domain/test_domain_purity.py` |
+| BacktestSandboxAppService | Backtest engine isolated instance | `backtest/engine/backtest_sandbox_app_service.py` |
+| StrategyReconcileAppService | Reconciliation loop | `engine/strategy_reconcile_app_service.py` |
+| WsSubscriptionAppService | WebSocket subscription mgmt | `app/market_data/app_services/ws_subscription_app_service.py` |
+| PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/backtest/services/performance_calculator_domain_service.py` |
+| SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
+| LotTrackingHelper | Lot tracking utility | `backtest/engine/lot_tracking_helper.py` |
+| BacktestResultAppService | Backtest result collection | `backtest/engine/backtest_result_app_service.py` |
+| EngulfingStrategyService | Engulfing strategy impl | `core/domain/concepts/strategy/services/engulfing_strategy_service.py` |
 
 ## Request Flow
 
@@ -520,11 +528,11 @@ src/
 
 ### Strategy Lifecycle (User POV)
 
-**Create subscription:** `POST /api/v1/strategies/{strategy_code}/subscriptions` with `{symbol, interval}`. Validates symbol is tracked, looks up strategy in `STRATEGY_REGISTRY`, computes deterministic `sub_id = sha256(strategy_code|symbol|interval)[:16]`, instantiates `IStrategy` via `StrategyAppService.load_strategy()`, persists `Subscription` to MongoDB with `desired_state="stopped"` (opt-in to trading, no auto-start). Returns `{id, strategy_code, symbol, interval, created_at, is_running}`.
+**Create subscription:** `POST /api/v1/strategies/{strategy_code}/subscriptions` with `{symbol, interval}`. Validates symbol is tracked, looks up strategy in `STRATEGY_REGISTRY`, computes deterministic `sub_id = sha256(strategy_code|symbol|interval)[:16]`, instantiates `IStrategyService` via `StrategyAppService.load_strategy()`, persists `Subscription` to MongoDB with `desired_state="stopped"` (opt-in to trading, no auto-start). Returns `{id, strategy_code, symbol, interval, created_at, is_running}`.
 
 **Start/Stop:** `POST /subscriptions/{sub_id}/start`, `POST /subscriptions/{sub_id}/stop` write `desired_state` to Mongo. Reconcile loop (5s poll) converges engine state within one interval.
 
-**Reconcile loop:** `StrategyReconcileService` (background task, started at boot) every 5s: (1) fetch all subscriptions from Mongo, (2) compare `desired_state` vs live `is_running` (RAM), (3) call `start_strategy()` or `stop_strategy()` on drift, (4) mirror `actual_state` back to Mongo (idempotent, no churn unless drift).
+**Reconcile loop:** `StrategyReconcileAppService` (background task, started at boot) every 5s: (1) fetch all subscriptions from Mongo, (2) compare `desired_state` vs live `is_running` (RAM), (3) call `start_strategy()` or `stop_strategy()` on drift, (4) mirror `actual_state` back to Mongo (idempotent, no churn unless drift).
 
 **Delete:** `DELETE /subscriptions/{sub_id}` deletes the subscription; the reconcile orphan-unload tears down the in-memory instance out of band. Subscriptions hold no backtest state — forward-testing only.
 
@@ -533,7 +541,7 @@ src/
 Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest. `start_date` and `end_date` are `datetime` with minute precision (format: ISO 8601, e.g. `2024-01-15T09:30:00`); date-only strings are accepted and parsed as 00:00:00 UTC for backward compatibility.
 
 1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
-2. The engine runs in a per-run `BacktestSandbox` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
+2. The engine runs in a per-run `BacktestSandboxAppService` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry), persists orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
 3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades` (keyset paged), `GET /backtest/{run_id}/trade-markers`, `GET /backtest/{run_id}/stats`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
 
 **Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` returns paginated trades via keyset cursor, server-side filtered (all/wins/losses) and sorted. Query params: `limit` (default 50), `cursor` (opaque base64 token), `sort_key` (9 keys: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` and `total_pnl` computed once per run (first page, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
@@ -553,8 +561,8 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 ## Real-Time Streaming
 
 **Inbound (WebSocket):**
-1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketClient` (reconnect 1s→60s backoff). `WsSubscriptionManager` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
-2. **OKX private channels** — per-broker instance. `OkxWebSocketClient` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
+1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketClient` (reconnect 1s→60s backoff). `WsSubscriptionAppService` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
+2. **OKX private channels** — per-broker instance. `OKXWebSocketAdapter` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
 
 **Outbound (SSE):**
 - **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit if `bar_start` changed or volume/price increased. Fields: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Frontend stale threshold: 30s.
@@ -564,21 +572,21 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 
 ## In-Memory Runtime State
 
-`StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategy`, `_brokers[sub_id] = IBroker`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
+`StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategyService`, `_brokers[sub_id] = IBrokerPort`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
 
-**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionSizer.calculate_size() 5. OrderAggregate creation 6. OrderAppService.submit()).
+**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionSizerDomainService.calculate_size() 5. OrderAggregate creation 6. OrderAppService.submit()).
 
 **Order/Position state:** `OrderRepository.load_pending_orders()` on startup restore in-memory state + broker_order_id mapping. `PositionRepository.find_open()` restore open positions. `OrderFilledEvent` → `PositionAppService._on_order_filled` → position state update. Fills route via `StrategyAppService._on_order_filled` to the owning strategy by `subscription_id` → calls `strategy.on_order_filled(order, fill_price)`.
 
 ## Broker & Middleware
 
-**Brokers:** `PaperBroker` (simulation, slippage/delays), `OKXBroker` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause).
+**Brokers:** `PaperBrokerAdapter` (simulation, slippage/delays), `OKXBrokerAdapter` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause).
 
-### PaperBroker accounting model (futures/margin, 1× leverage)
+### PaperBrokerAdapter accounting model (futures/margin, 1× leverage)
 
-`PaperBroker` dùng **futures/margin accounting**, không phải spot. Domain là OKX perpetual SWAP (`okx_broker.py` instType `SWAP`), nên mở vị thế không tiêu cash — chỉ realized pnl mới chạm `_balance`.
+`PaperBrokerAdapter` dùng **futures/margin accounting**, không phải spot. Domain là OKX perpetual SWAP (`okx_broker_adapter.py` instType `SWAP`), nên mở vị thế không tiêu cash — chỉ realized pnl mới chạm `_balance`.
 
-| | Spot | Futures/margin (PaperBroker) |
+| | Spot | Futures/margin (PaperBrokerAdapter) |
 |---|---|---|
 | Open / add | `cash -= notional` | `_balance` không đổi |
 | Close / reduce | `cash += proceeds` | `_balance += Δrealized` (delta của lần reduce này) |
@@ -589,13 +597,13 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 
 **Delta-realized (không cumulative):** `PositionAggregate.reduce_quantity` cộng dồn vào `position.realized_pnl`. Broker credit phần delta kể từ lần reduce trước (`_reduce_and_credit`), không phải giá trị cumulative — nếu credit cumulative thì partial-close lần hai cộng lại toàn bộ → multi-count. Kết quả: `_balance` cuối = `initial + Σ realized` đúng một lần.
 
-**Price propagation:** mark-to-market chạy ở cuối `_on_bar_completed` (sau SL/TP loop), set `current_price = event.close` cho các vị thế còn mở. `get_balance` thuần đọc (không side-effect trong getter). `BacktestAppService._mtm_on_bar` subscribe `BarCompletedEvent` SAU broker handler nên đọc equity đã mark → equity curve track giá per-bar, không phẳng giữa các fill.
+**Price propagation:** mark-to-market chạy ở cuối `_on_bar_completed` (sau SL/TP loop), set `current_price = event.close` cho các vị thế còn mở. `get_balance` thuần đọc (không side-effect trong getter). `BacktestSandboxAppService._mtm_on_bar` subscribe `BarCompletedEvent` SAU broker handler nên đọc equity đã mark → equity curve track giá per-bar, không phẳng giữa các fill.
 
 **`available_balance = _balance` (known semantics):** field giữ nguyên công thức, không chuyển sang free-margin. Hệ quả: khi đang có vị thế mở, vì futures không trừ notional khỏi `_balance`, `available_balance` cao hơn so với mô hình spot. Strategy round-trip một vị thế (đóng trước khi mở mới — engulfing, hitnrun2) sizing **không đổi**. Pyramiding / multi-symbol (size entry chồng khi đang positioned) sẽ size theo full balance — đúng cho futures (margin không tiêu cash) nhưng là behavior change so với spot; không strategy hiện tại pyramiding nên tác động forward thực tế = 0.
 
 **Affordability gate:** `_can_afford` chỉ gate BUY mở/tăng vị thế (`notional <= _balance`). BUY để cover/reduce một SHORT đang mở không tiêu margin nên không bị gate — nếu không, short thua lỗ có cover notional vượt balance sẽ bị REJECT và kẹt vị thế.
 
-**Live vs paper:** `OKXBroker` lấy balance thẳng từ sàn (`map_okx_balance_to_domain`), KHÔNG qua `_execute_fill`. OKX định nghĩa `availBal`/`eq` riêng cho SWAP account (external) — PaperBroker không claim khớp `availBal`; bảng trên chỉ mô tả model của PaperBroker.
+**Live vs paper:** `OKXBrokerAdapter` lấy balance thẳng từ sàn (`map_okx_balance_to_domain`), KHÔNG qua `_execute_fill`. OKX định nghĩa `availBal`/`eq` riêng cho SWAP account (external) — PaperBrokerAdapter không claim khớp `availBal`; bảng trên chỉ mô tả model của PaperBrokerAdapter.
 
 **Middleware:** CorrelationIdMiddleware (tracing) → RateLimitMiddleware (200 req/10s token bucket per IP) → IdempotencyMiddleware (24h TTL POST cache) → Route.
 
@@ -746,6 +754,6 @@ See [deployment.md](./deployment.md) for CI/CD runbook, `.github/workflows/cicd.
 | **Quote** | Latest tick (price, size, ts), cached in Redis 60s | ephemeral, not persisted |
 | **Subscription** | Strategy binding: `(strategy_code, symbol, interval)` + control plane state | `desired_state` / `actual_state` (reconcile loop) |
 | **Sync** | Update Bar storage from Binance to present | cron jobs: 5m, 15m, hourly, swing, daily, backfill, integrity, repair |
-| **Strategy** | IStrategy plugin, registered by code name (e.g. `hitnrun2`) | instantiated per subscription |
+| **Strategy** | IStrategyService plugin, registered by code name (e.g. `hitnrun2`) | instantiated per subscription |
 | **Aggregate** | Entity with invariants + lifecycle + events | OrderAggregate, PositionAggregate only |
 | **Deterministic ID** | `sha256(strategy_code|symbol|interval)[:16]` for subscription | idempotent dedup |
