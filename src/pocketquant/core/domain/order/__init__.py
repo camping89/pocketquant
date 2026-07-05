@@ -9,6 +9,7 @@ from pocketquant.core.domain.order.events import (
     OrderRejectedEvent,
     OrderSubmittedEvent,
 )
+from pocketquant.core.domain.order.records import OrderRecord
 
 __all__ = [
     "InvalidOrderTransitionError",
@@ -16,6 +17,7 @@ __all__ = [
     "OrderCancelledEvent",
     "OrderFilledEvent",
     "OrderPartiallyFilledEvent",
+    "OrderRecord",
     "OrderRejectedEvent",
     "OrderSide",
     "OrderStatus",

@@ -1,10 +1,10 @@
 """Result collector — builds Orders + Trades + OpenLots during backtest replay.
 
 Subscribes to PaperBrokerAdapter via two channels:
-- ``on_fill(OrderResult)``  → upsert Order, append Fill, feed FIFO lot tracker,
+- ``on_fill(OrderResult)``  → upsert OrderRecord, append Fill, feed FIFO lot tracker,
                               emit one ``Trade`` per consumed lot
-- ``on_event(order_id, OrderEvent)`` → append OrderEvent to the Order, mirror
-                                       Order.status / last_updated_at
+- ``on_event(order_id, OrderEvent)`` → append OrderEvent to the OrderRecord, mirror
+                                       OrderRecord.status / last_updated_at
 
 At ``finalize()`` returns ``CollectedResults(run, orders, trades)`` where
 ``run`` is the slimmed ``BacktestResult`` (metrics + equity_curve + open_positions)
@@ -25,22 +25,19 @@ from pocketquant.backtest.engine.lot_tracking_helper import (
     FillOutcome,
     LotTrackingHelper,
 )
-from pocketquant.backtest.engine.metrics_builder import build_metrics
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id
-from pocketquant.core.domain.backtest import (
-    BacktestMetrics,
-    BacktestResult,
+from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult, OpenLot
+from pocketquant.core.domain.brokers.events import OrderEvent
+from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.trading import (
     EquityPoint,
     Fill,
-    OpenLot,
-    Order,
+    PerformanceCalculatorDomainService,
+    PerformanceMetrics,
     Trade,
 )
-from pocketquant.core.domain.brokers.events import OrderEvent
-from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
-from pocketquant.core.domain.shared.enums import Interval
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +73,7 @@ class BacktestResultAppService:
         # series; ``_equity_curve`` (realized-only, trade-keyed) drives
         # total_return/cagr/max_drawdown unchanged.
         self._mtm_curve: list[EquityPoint] = []
-        self._orders_by_id: dict[str, Order] = {}
+        self._orders_by_id: dict[str, OrderRecord] = {}
         self._trades: list[Trade] = []
         self._total_commission = 0.0
 
@@ -129,10 +126,10 @@ class BacktestResultAppService:
             self._record_equity_point(timestamp)
 
     async def on_event(self, order_id: str, event: OrderEvent) -> None:
-        """PaperBrokerAdapter lifecycle event callback. Mirror status into Order."""
+        """PaperBrokerAdapter lifecycle event callback. Mirror status into OrderRecord."""
         order = self._orders_by_id.get(order_id)
         if order is None:
-            # Order seen first via event before any fill — create a stub from event data.
+            # OrderRecord seen first via event before any fill — create a stub from event data.
             order = self._create_stub_order(order_id, event)
             self._orders_by_id[order_id] = order
         order.events.append(event)
@@ -157,8 +154,8 @@ class BacktestResultAppService:
         fill_qty: float,
         commission: float,
         timestamp: datetime,
-    ) -> Order:
-        """Create or update an Order from a fill result.
+    ) -> OrderRecord:
+        """Create or update an OrderRecord from a fill result.
 
         If a stub already exists (created via on_event before on_fill), backfill
         the authoritative side / quantity / sl_price / tp_price from this fill.
@@ -177,7 +174,7 @@ class BacktestResultAppService:
                 existing.tp_price = result.tp_price
             existing.last_updated_at = timestamp
             return existing
-        order = Order(
+        order = OrderRecord(
             order_id=UUID(result.order_id),
             run_id=self._run_id,
             strategy_code=self._config.strategy_code,
@@ -197,7 +194,7 @@ class BacktestResultAppService:
         return order
 
     def _upsert_order_status(self, result: Any) -> None:
-        """Mirror a non-fill terminal status (CANCELLED / EXPIRED / REJECTED) onto the Order.
+        """Mirror a non-fill terminal status (CANCELLED / EXPIRED / REJECTED) onto the OrderRecord.
 
         Backfills `side` from the result when the existing entry is a stub
         (created via on_event before on_fill).
@@ -211,9 +208,9 @@ class BacktestResultAppService:
         order.status = result.status
         order.last_updated_at = get_current_time()
 
-    def _create_stub_order(self, order_id: str, event: OrderEvent) -> Order:
-        """Create a minimal Order from an early-arriving event (no fill yet)."""
-        return Order(
+    def _create_stub_order(self, order_id: str, event: OrderEvent) -> OrderRecord:
+        """Create a minimal OrderRecord from an early-arriving event (no fill yet)."""
+        return OrderRecord(
             order_id=UUID(order_id),
             run_id=self._run_id,
             strategy_code=self._config.strategy_code,
@@ -231,7 +228,7 @@ class BacktestResultAppService:
 
     def _append_fill(
         self,
-        order: Order,
+        order: OrderRecord,
         result: Any,
         fill_price: float,
         fill_qty: float,
@@ -421,7 +418,7 @@ class BacktestResultAppService:
                 "unknown interval %r — skipping Sharpe/Sortino annualization",
                 self._config.interval,
             )
-        metrics: BacktestMetrics = build_metrics(
+        metrics: PerformanceMetrics = PerformanceCalculatorDomainService.build(
             closed_trades=self._trades,
             equity_curve=self._equity_curve,
             initial_capital=self._initial_capital,

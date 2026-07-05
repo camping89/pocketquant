@@ -18,8 +18,8 @@ from pocketquant.backtest.engine.backtest_result_app_service import (
     _MAX_PERSISTED_EQUITY_POINTS,
     BacktestResultAppService,
 )
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
+from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
 

@@ -12,10 +12,8 @@ import warnings
 import numpy as np
 import pytest
 
-from pocketquant.backtest.domain.services.performance_calculator_domain_service import (
-    PerformanceCalculatorDomainService,
-)
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.trading import PerformanceCalculatorDomainService
 
 
 def test_periods_per_year_is_keyword_only() -> None:

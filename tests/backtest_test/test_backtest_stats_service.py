@@ -14,8 +14,8 @@ from pocketquant.backtest.backtest_stats_service import (
     TradeSortDir,
     TradeSortKey,
 )
-from pocketquant.core.domain.backtest import BacktestResult, Trade
-from pocketquant.core.domain.backtest.value_objects import EquityPoint
+from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.trading import EquityPoint, Trade
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,

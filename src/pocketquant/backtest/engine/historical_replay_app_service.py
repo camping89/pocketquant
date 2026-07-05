@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from time import perf_counter
 
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import set_simulation_time
+from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.bar import BarCompletedEvent
 from pocketquant.core.domain.bar.entities import Bar
 

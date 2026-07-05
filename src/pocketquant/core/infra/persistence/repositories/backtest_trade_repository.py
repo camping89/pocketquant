@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_TRADES
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.domain.backtest.value_objects import Trade
+from pocketquant.core.domain.trading import Trade
 from pocketquant.core.infra.persistence.base_repository import BaseRepository
 
 logger = get_logger(__name__)

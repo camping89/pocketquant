@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from pocketquant.core.domain.backtest.value_objects import EquityPoint
+from pocketquant.core.domain.trading.value_objects import EquityPoint
 
 
 @dataclass

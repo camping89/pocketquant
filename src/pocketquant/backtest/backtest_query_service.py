@@ -66,7 +66,7 @@ class BacktestQueryService:
     async def list_orders(self, run_id: str) -> list[dict[str, Any]]:
         """Orders for a run with embedded fills + lifecycle events.
 
-        Mapped here (not via ``Order.to_mongo()``) so the DTO key is ``order_id``
+        Mapped here (not via ``OrderRecord.to_mongo()``) so the DTO key is ``order_id``
         instead of the Mongo ``_id``. FastAPI encodes the datetimes to isoformat.
         """
         orders = await self._order_repo.list_by_run(run_id)

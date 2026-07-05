@@ -5,11 +5,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from pocketquant.core.domain.backtest.value_objects import (
-    BacktestMetrics,
-    EquityPoint,
-    OpenLot,
-)
+from pocketquant.core.domain.backtest.value_objects import OpenLot
+from pocketquant.core.domain.trading import EquityPoint, PerformanceMetrics
 
 
 @dataclass
@@ -26,7 +23,7 @@ class BacktestResult:
     id: UUID
     strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized BacktestConfig
-    metrics: BacktestMetrics
+    metrics: PerformanceMetrics
     equity_curve: list[EquityPoint]
     started_at: datetime
     completed_at: datetime
@@ -54,7 +51,7 @@ class BacktestResult:
             id=UUID(run_id),
             strategy_code=config_snapshot["strategy_code"],
             config_snapshot=config_snapshot,
-            metrics=BacktestMetrics.empty(),
+            metrics=PerformanceMetrics.empty(),
             equity_curve=[],
             started_at=now,
             completed_at=now,
@@ -95,7 +92,7 @@ class BacktestResult:
             id=UUID(data["_id"]),
             strategy_code=data["strategy_code"],
             config_snapshot=snapshot,
-            metrics=BacktestMetrics.from_mongo(data["metrics"]),
+            metrics=PerformanceMetrics.from_mongo(data["metrics"]),
             equity_curve=[EquityPoint.from_mongo(p) for p in data.get("equity_curve", [])],
             open_positions=[OpenLot.from_mongo(p) for p in data.get("open_positions", [])],
             started_at=data["started_at"],

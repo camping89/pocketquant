@@ -7,7 +7,8 @@ from datetime import datetime
 import pytest
 
 from pocketquant.core.common.uuid import generate_id, generate_id_str
-from pocketquant.core.domain.backtest import BacktestMetrics, BacktestResult, EquityPoint, OpenLot
+from pocketquant.core.domain.backtest import BacktestResult, OpenLot
+from pocketquant.core.domain.trading import EquityPoint, PerformanceMetrics
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
@@ -24,7 +25,7 @@ def _result() -> BacktestResult:
         id=RUN_ID,
         strategy_code="s1",
         config_snapshot={"symbol": "BTC:BIN", "interval": "1m"},
-        metrics=BacktestMetrics.empty(),
+        metrics=PerformanceMetrics.empty(),
         equity_curve=[EquityPoint(timestamp=NOW, equity=10_000.0, drawdown=0.0)],
         open_positions=[
             OpenLot(
@@ -119,7 +120,7 @@ async def test_from_mongo_tolerates_legacy_doc_with_trades_positions(database: D
         "_id": legacy_id,
         "strategy_code": "s1",
         "config_snapshot": {"symbol": "BTC:BIN", "interval": "1m"},
-        "metrics": BacktestMetrics.empty().to_mongo(),
+        "metrics": PerformanceMetrics.empty().to_mongo(),
         "equity_curve": [],
         "started_at": NOW,
         "completed_at": NOW,

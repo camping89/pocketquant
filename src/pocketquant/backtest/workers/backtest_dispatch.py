@@ -13,9 +13,8 @@ from typing import Any
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
 from pocketquant.backtest.engine.backtest_sandbox_app_service import build_backtest_sandbox
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (

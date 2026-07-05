@@ -1,6 +1,6 @@
 """Backtest VO PK representation lock — UUID in RAM, str in Mongo.
 
-Covers Fill.fill_id, Order.order_id, Trade.trade_id, BacktestResult.id. FK
+Covers Fill.fill_id, OrderRecord.order_id, Trade.trade_id, BacktestResult.id. FK
 reference fields (order_id on Fill, run_id, entry/exit_order_id,
 resulting_trade_id) stay str — only document PKs flip.
 """
@@ -11,14 +11,9 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid7
 
 from pocketquant.core.common.uuid import generate_id
-from pocketquant.core.domain.backtest import (
-    BacktestMetrics,
-    BacktestResult,
-    Fill,
-    Order,
-    Trade,
-)
-from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.trading import Fill, PerformanceMetrics, Trade
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
 
@@ -37,8 +32,8 @@ def _fill(fill_id: UUID) -> Fill:
     )
 
 
-def _order(order_id: UUID) -> Order:
-    return Order(
+def _order(order_id: UUID) -> OrderRecord:
+    return OrderRecord(
         order_id=order_id,
         run_id="r1",
         strategy_code="s1",
@@ -103,7 +98,7 @@ def test_fill_from_mongo_reads_legacy_str_uuid_doc() -> None:
     assert Fill.from_mongo(doc).fill_id == UUID(legacy)
 
 
-# --- Order.order_id -------------------------------------------------------
+# --- OrderRecord.order_id -------------------------------------------------------
 
 
 def test_order_to_mongo_writes_str_id() -> None:
@@ -115,7 +110,7 @@ def test_order_to_mongo_writes_str_id() -> None:
 
 def test_order_roundtrip_preserves_uuid_id_and_embedded_fill_fk() -> None:
     o = _order(generate_id())
-    restored = Order.from_mongo(o.to_mongo())
+    restored = OrderRecord.from_mongo(o.to_mongo())
     assert restored.order_id == o.order_id
     assert isinstance(restored.order_id, UUID)
     # Embedded fill gets parent _id back as its str FK.
@@ -127,7 +122,7 @@ def test_order_from_mongo_reads_legacy_str_uuid_doc() -> None:
     legacy = str(uuid7())
     doc = _order(generate_id()).to_mongo()
     doc["_id"] = legacy
-    assert Order.from_mongo(doc).order_id == UUID(legacy)
+    assert OrderRecord.from_mongo(doc).order_id == UUID(legacy)
 
 
 # --- Trade.trade_id -------------------------------------------------------
@@ -162,7 +157,7 @@ def _backtest_result(run_id: UUID) -> BacktestResult:
         id=run_id,
         strategy_code="s1",
         config_snapshot={},
-        metrics=BacktestMetrics.empty(),
+        metrics=PerformanceMetrics.empty(),
         equity_curve=[],
         started_at=NOW,
         completed_at=NOW,

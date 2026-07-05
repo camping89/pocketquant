@@ -7,9 +7,9 @@ from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
 
-from pocketquant.core.domain.backtest import Fill, Order
 from pocketquant.core.domain.brokers.events import OrderEvent
-from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.trading import Fill
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -30,7 +30,7 @@ def _make_order(
     run_id: str,
     strategy_code: str = "s1",
     status: OrderStatus = OrderStatus.FILLED,
-) -> Order:
+) -> OrderRecord:
     fill = Fill(
         fill_id=uuid5(NAMESPACE_OID, f"f-{order_id}"),
         order_id=_oid(order_id),
@@ -53,7 +53,7 @@ def _make_order(
             reason="market_fill" if status == OrderStatus.FILLED else "end_of_run",
         ),
     ]
-    return Order(
+    return OrderRecord(
         order_id=UUID(_oid(order_id)),
         run_id=run_id,
         strategy_code=strategy_code,

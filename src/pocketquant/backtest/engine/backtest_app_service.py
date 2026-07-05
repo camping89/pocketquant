@@ -5,12 +5,11 @@ from pocketquant.backtest.engine.backtest_result_app_service import BacktestResu
 from pocketquant.backtest.engine.historical_replay_app_service import (
     HistoricalReplayAppService,
 )
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
-from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.shared.enums import Interval

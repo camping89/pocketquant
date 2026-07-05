@@ -20,9 +20,10 @@ from httpx import AsyncClient
 
 from pocketquant.core.common.uuid import generate_id, generate_id_str
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.backtest import BacktestResult, Fill, Order
+from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.brokers.events import OrderEvent
-from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.trading import Fill
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -45,9 +46,9 @@ def _finished_run(strategy_code: str, symbol: str, interval: str) -> BacktestRes
     return run
 
 
-def _order_with_fill_and_event(run_id: str, symbol: str) -> Order:
+def _order_with_fill_and_event(run_id: str, symbol: str) -> OrderRecord:
     order_id = generate_id()
-    return Order(
+    return OrderRecord(
         order_id=order_id,
         run_id=run_id,
         strategy_code="hitnrun2",

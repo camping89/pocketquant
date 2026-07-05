@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from pocketquant.backtest.engine.backtest_sandbox_app_service import BacktestSandboxAppService
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from pocketquant.backtest.domain.services.trade_stats_calculator import (
+from pocketquant.core.domain.trading import EquityPoint
+from pocketquant.core.domain.trading.trade_stats import (
     drawdown_periods,
     histogram,
     profit_factor_by_direction,
     win_loss_streaks,
 )
-from pocketquant.core.domain.backtest.value_objects import EquityPoint
 
 T0 = datetime(2026, 1, 1, 0, 0, 0)
 

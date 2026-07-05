@@ -14,10 +14,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from pocketquant.backtest.engine.backtest_app_service import BacktestAppService
-from pocketquant.backtest.models.backtest_config import BacktestConfig
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
-from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate

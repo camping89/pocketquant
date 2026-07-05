@@ -7,17 +7,10 @@ from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
-from pocketquant.core.domain.backtest import (
-    BacktestMetrics,
-    BacktestResult,
-    EquityPoint,
-    Fill,
-    OpenLot,
-    Order,
-    Trade,
-)
+from pocketquant.core.domain.backtest import BacktestResult, OpenLot
 from pocketquant.core.domain.brokers.events import OrderEvent
-from pocketquant.core.domain.order import OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.trading import EquityPoint, Fill, PerformanceMetrics, Trade
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
 F1 = uuid5(NAMESPACE_OID, "f1")
@@ -113,7 +106,7 @@ def test_order_roundtrip_with_embedded_events_and_fills() -> None:
             reason="market_fill",
         ),
     ]
-    o = Order(
+    o = OrderRecord(
         order_id=O1,
         run_id="r1",
         strategy_code="s1",
@@ -131,7 +124,7 @@ def test_order_roundtrip_with_embedded_events_and_fills() -> None:
         fills=[fill],
         resulting_trade_id=str(T1),
     )
-    assert Order.from_mongo(o.to_mongo()) == o
+    assert OrderRecord.from_mongo(o.to_mongo()) == o
 
 
 def test_trade_roundtrip_flat_entry_exit_prefix() -> None:
@@ -202,7 +195,7 @@ def test_equity_point_roundtrip() -> None:
 
 
 def test_metrics_roundtrip_with_duration() -> None:
-    m = BacktestMetrics(
+    m = PerformanceMetrics(
         total_return=0.15,
         cagr=0.12,
         sharpe_ratio=1.4,
@@ -218,19 +211,19 @@ def test_metrics_roundtrip_with_duration() -> None:
         avg_trade_duration=timedelta(seconds=3600),
         total_commission=245.6,
     )
-    assert BacktestMetrics.from_mongo(m.to_mongo()) == m
+    assert PerformanceMetrics.from_mongo(m.to_mongo()) == m
 
 
 def test_metrics_zero_second_duration_round_trips_not_none() -> None:
     """Boundary case: 0.0 seconds must NOT round-trip to None (S5 fix)."""
-    m = BacktestMetrics.empty()
+    m = PerformanceMetrics.empty()
     doc = {**m.to_mongo(), "avg_trade_duration_seconds": 0.0}
-    out = BacktestMetrics.from_mongo(doc)
+    out = PerformanceMetrics.from_mongo(doc)
     assert out.avg_trade_duration == timedelta(seconds=0)
 
 
 def test_metrics_empty_factory() -> None:
-    m = BacktestMetrics.empty()
+    m = PerformanceMetrics.empty()
     assert m.total_trades == 0
     assert m.avg_trade_duration is None
 

@@ -1,14 +1,16 @@
 """CollectedResults — output of BacktestResultAppService.finalize().
 
-Holds the slimmed ``BacktestResult`` plus the standalone ``Order`` and ``Trade``
-lists that will be persisted to their dedicated MongoDB collections.
+Holds the slimmed ``BacktestResult`` plus the standalone ``OrderRecord`` and
+``Trade`` lists that will be persisted to their dedicated MongoDB collections.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pocketquant.core.domain.backtest import BacktestResult, Order, Trade
+from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.order import OrderRecord
+from pocketquant.core.domain.trading import Trade
 
 
 @dataclass
@@ -16,7 +18,7 @@ class CollectedResults:
     """Bundle returned by ResultCollector.finalize().
 
     - ``run``    : slim BacktestResult (metrics + equity_curve + open_positions)
-    - ``orders`` : every Order observed, with embedded events[]+fills[]
+    - ``orders`` : every OrderRecord observed, with embedded events[]+fills[]
     - ``trades`` : closed round-trip trades
 
     BacktestAppService persists these to 3 collections in order
@@ -24,5 +26,5 @@ class CollectedResults:
     """
 
     run: BacktestResult
-    orders: list[Order] = field(default_factory=list)
+    orders: list[OrderRecord] = field(default_factory=list)
     trades: list[Trade] = field(default_factory=list)

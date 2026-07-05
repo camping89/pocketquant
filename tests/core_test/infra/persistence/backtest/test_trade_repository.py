@@ -7,7 +7,7 @@ from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
 
-from pocketquant.core.domain.backtest import Trade
+from pocketquant.core.domain.trading import Trade
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
     BacktestTradeRepository,

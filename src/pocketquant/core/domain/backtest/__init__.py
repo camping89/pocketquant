@@ -1,21 +1,11 @@
-"""Backtest domain — persisted results, metrics, and order/trade value objects."""
+"""Backtest domain — persisted backtest-run VO: BacktestResult, OpenLot, BacktestConfig."""
 
+from pocketquant.core.domain.backtest.config import BacktestConfig
 from pocketquant.core.domain.backtest.entities import BacktestResult
-from pocketquant.core.domain.backtest.value_objects import (
-    BacktestMetrics,
-    EquityPoint,
-    Fill,
-    OpenLot,
-    Order,
-    Trade,
-)
+from pocketquant.core.domain.backtest.value_objects import OpenLot
 
 __all__ = [
-    "BacktestMetrics",
+    "BacktestConfig",
     "BacktestResult",
-    "EquityPoint",
-    "Fill",
     "OpenLot",
-    "Order",
-    "Trade",
 ]
