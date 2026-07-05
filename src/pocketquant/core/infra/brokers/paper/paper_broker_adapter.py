@@ -107,10 +107,10 @@ class PaperBrokerAdapter(IBrokerPort):
 
     def __init__(
         self,
-        initial_balance: float = 100_000.0,
+        initial_balance: float = 10_000.0,
         slippage_percent: float = 0.001,  # 0.1% default
         fill_delay_ms: int = 50,
-        currency: str = "USDT",
+        currency: str = "USD",
         event_bus: EventBus | None = None,
         commission_model: CommissionModel | None = None,
     ) -> None:

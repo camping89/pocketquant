@@ -33,10 +33,10 @@ class BrokerFactory:
             # Settings carries a fraction (0.0004); the model wants bps (4).
             commission_bps = config.get("commission_percent", 0.0) * 10_000
             return PaperBrokerAdapter(
-                initial_balance=config.get("initial_balance", 100_000.0),
+                initial_balance=config.get("initial_balance", 10_000.0),
                 slippage_percent=config.get("slippage_percent", 0.001),
                 fill_delay_ms=config.get("fill_delay_ms", 50),
-                currency=config.get("currency", "USDT"),
+                currency=config.get("currency", "USD"),
                 event_bus=self._event_bus,
                 commission_model=PercentageCommissionModel(bps=commission_bps),
             )

@@ -113,7 +113,7 @@ class BacktestSandboxAppService:
         initial_balance: float,
         slippage_percent: float = 0.0,
         fill_delay_ms: int = 0,
-        currency: str = "USDT",
+        currency: str = "USD",
         commission_bps: float = 0.0,
     ) -> PaperBrokerAdapter:
         broker = PaperBrokerAdapter(
