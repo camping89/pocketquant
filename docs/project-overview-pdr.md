@@ -291,7 +291,9 @@ Dependency direction: `core ◁ engine ◁ backtest ◁ app`, `web → app` (HTT
 src/pocketquant/
 ├── core/                 # 0 deps — domain + adapters
 │   ├── domain/           TOP-LEVEL entities (bar, order, position, symbol, sync_status,
-│   │                     backtest, subscription) + ports/DTOs (brokers, market_data)
+│   │                     backtest, subscription, trading) + ports/DTOs (brokers, market_data)
+│   ├── domain/trading    Value objects (Trade, Fill, EquityPoint, PerformanceMetrics) +
+│   │                     PerformanceCalculatorDomainService + trade_stats functions
 │   ├── concepts/         non-persisted logic (quote, risk, strategy: IStrategyService + hitnrun2)
 │   ├── common/           AppError, EventBus, middleware, UUID7, health, structlog
 │   ├── config/           Settings
@@ -308,12 +310,10 @@ src/pocketquant/
 │
 ├── backtest/             # → core + engine — backtesting engine
 │   ├── engine/           BacktestSandboxAppService, BacktestResultAppService, HistoricalReplayAppService, sandbox
-│   ├── models/           BacktestConfig
 │   ├── workers/          backtest_dispatch.run_single (engine setup)
 │   ├── backtest_execution_service.py  Async task body (run + persist)
 │   ├── {feature}_command_service.py  Command service
-│   ├── {feature}_query_service.py    Query service
-│   └── domain/services/  PerformanceCalculatorDomainService (NumPy metrics)
+│   └── {feature}_query_service.py    Query service
 │
 ├── trading/              # → core + engine — strategy & trading logic
 │   ├── brokers/okx/      OKXBrokerAdapter + WebSocket support (auth, mappers, reconnection)

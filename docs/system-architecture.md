@@ -119,7 +119,9 @@ Control plane (desired state)           Data plane (live engine)
 ```
 domain/
 ├── backtest/               # Backtesting domain
-│   └── services/performance_calculator_domain_service.py
+│   ├── entities.py         # BacktestResult
+│   ├── value_objects.py    # OpenLot
+│   └── config.py           # BacktestConfig
 ├── bar/                    # TOP-LEVEL: Market bars (renamed from ohlcv/)
 │   ├── entities.py         # Bar entity with to_mongo/from_mongo
 │   ├── events.py           # BarCompletedEvent, HistoricalDataSyncedEvent
@@ -128,7 +130,8 @@ domain/
 ├── order/                  # TOP-LEVEL: Order lifecycle
 │   ├── entities.py         # OrderAggregate with to_mongo/from_mongo
 │   ├── enums.py            # OrderType, OrderSide, OrderStatus
-│   └── events.py           # Order events
+│   ├── events.py           # Order events
+│   └── records.py          # OrderRecord (audit trail, separate from live aggregate)
 ├── position/               # TOP-LEVEL: Position tracking
 │   ├── entities.py         # PositionAggregate with to_mongo/from_mongo
 │   ├── enums.py            # PositionSide
@@ -138,10 +141,10 @@ domain/
 │   └── entities.py         # Symbol (flattened from SymbolAggregate)
 ├── sync_status/            # TOP-LEVEL: Sync tracking
 │   └── entities.py         # SyncStatus
-├── backtest/               # TOP-LEVEL: Backtest results
-│   ├── entities.py         # BacktestResult
-│   ├── value_objects.py    # TradeRecord, EquityPoint, BacktestMetrics
-│   └── services/performance_calculator.py  # NumPy metrics
+├── trading/                # Universal trading contracts (source-agnostic)
+│   ├── value_objects.py    # Trade, Fill, EquityPoint, PerformanceMetrics
+│   ├── performance_calculator_domain_service.py  # PerformanceCalculatorDomainService with static .build()
+│   └── trade_stats.py      # trade_stats functions (histogram, streaks, profit_factor, drawdowns)
 ├── concepts/               # NON-PERSISTED logic
 │   ├── quote/
 │   │   ├── events.py       # QuoteReceivedEvent, QuoteUpdatedEvent
@@ -192,15 +195,19 @@ src/pocketquant/backtest/              # Backtest orchestration
 ├── backtest_execution_service.py      # BacktestExecutionService (asyncio task body: run + persist)
 ├── backtest_query_service.py          # BacktestQueryService (fetch run + trades)
 ├── backtest_stats_service.py          # BacktestStatsService (keyset paged trades, markers, analytics)
-├── models/backtest_config.py          # BacktestConfig
 ├── engine/                            # BacktestAppService + sandbox + replay + result collector
-├── domain/services/trade_stats_calculator.py  # Pure histograms, streaks, profit factor, drawdowns
 └── workers/backtest_dispatch.py       # run_single (engine setup + sandbox)
 
-src/pocketquant/core/domain/services/  # Pure domain services
-├── performance_calculator_domain_service.py          # PerformanceCalculatorDomainService (NumPy metrics)
-├── bar_builder_domain_service.py                     # BarBuilderDomainService (OHLCV aggregation)
-└── position_sizer_domain_service.py                  # PositionSizerDomainService (risk calculations)
+src/pocketquant/core/domain/trading/   # Trading contracts (universal, source-agnostic)
+├── value_objects.py                   # Trade, Fill, EquityPoint, PerformanceMetrics
+├── performance_calculator_domain_service.py  # PerformanceCalculatorDomainService (NumPy metrics)
+└── trade_stats.py                     # Pure functions: histogram, streaks, profit_factor, drawdowns
+
+src/pocketquant/core/domain/bar/services/     # Domain service layer (top-level)
+├── bar_builder_domain_service.py              # BarBuilderDomainService (OHLCV aggregation)
+
+src/pocketquant/core/domain/concepts/risk/services/  # Domain service layer
+├── position_sizer_domain_service.py                   # PositionSizerDomainService (risk calculations)
 ```
 
 **Example - Application Service:**
@@ -458,6 +465,9 @@ src/
 |-------|----------|
 | Domain entities (Bar, Order, Position, Symbol) | `core/domain/{bar,order,position,symbol}/entities.py` |
 | Value objects (OHLCV, Signal, PnL, QuoteTick) | `core/domain/{bar,concepts}/value_objects.py` |
+| Trading value objects (Trade, Fill, EquityPoint, PerformanceMetrics) | `core/domain/trading/value_objects.py` |
+| OrderRecord (audit trail) | `core/domain/order/records.py` |
+| BacktestConfig | `core/domain/backtest/config.py` |
 | Domain events (11 events) | `core/domain/{bar,order,position,concepts}/events.py` |
 | Enums (OrderStatus, Interval, Direction, etc.) | `core/domain/{bar,order,position,shared}/enums.py` |
 | Event bus + @event_handler decorator | `core/common/messaging/` |
@@ -474,7 +484,7 @@ src/
 | Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
 | Backtest trigger (save started doc) | `backtest/backtest_command_service.py` |
 | Backtest task body (run + persist) | `backtest/backtest_execution_service.py` |
-| Backtest stats + paged trades + markers | `backtest/backtest_stats_service.py` (orchest) + `backtest/domain/services/trade_stats_calculator.py` (domain) |
+| Backtest stats + paged trades + markers | `backtest/backtest_stats_service.py` (orchest) + `core/domain/trading/trade_stats.py` (domain) |
 | Backtest engine setup + replay | `backtest/workers/backtest_dispatch.py`, `backtest/engine/backtest_app_service.py` |
 | Strategy runtime dispatch | `engine/strategy_command_service.py`, `engine/strategy_query_service.py` |
 | Order state machine | `engine/order_command_service.py` |
@@ -495,7 +505,7 @@ src/
 | BacktestSandboxAppService | Backtest engine isolated instance | `backtest/engine/backtest_sandbox_app_service.py` |
 | StrategyReconcileAppService | Reconciliation loop | `engine/strategy_reconcile_app_service.py` |
 | WsSubscriptionAppService | WebSocket subscription mgmt | `app/market_data/app_services/ws_subscription_app_service.py` |
-| PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/backtest/services/performance_calculator_domain_service.py` |
+| PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/trading/performance_calculator_domain_service.py` |
 | SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
 | LotTrackingHelper | Lot tracking utility | `backtest/engine/lot_tracking_helper.py` |
 | BacktestResultAppService | Backtest result collection | `backtest/engine/backtest_result_app_service.py` |
