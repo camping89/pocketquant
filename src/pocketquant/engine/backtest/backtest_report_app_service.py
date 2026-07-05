@@ -1,15 +1,19 @@
-"""Result collector — builds Orders + Trades + OpenLots during backtest replay.
+"""Report collector — records Orders + Trades + equity during backtest replay.
 
 Subscribes to PaperBrokerAdapter via three channels:
-- ``on_fill(OrderResult)``  → upsert OrderRecord, append Fill, debit commission
+- ``on_fill(OrderResult)``  → upsert OrderRecord, append Fill (commission stamped
+                              on the Fill doc; balance debit owned by the broker)
 - ``on_event(order_id, OrderEvent)`` → append OrderEvent to the OrderRecord, mirror
                                        OrderRecord.status / last_updated_at
 - ``on_trade(TradeClosedEvent)`` → build one ``Trade`` per round-trip closure
-                                    (average-cost, broker-emitted), credit its pnl
+                                    (average-cost, broker-emitted), record the
+                                    realized equity point from ``broker.get_balance()``
 
-At ``finalize()`` returns ``CollectedResults(run, orders, trades)`` where
-``run`` is the slimmed ``BacktestResult`` (metrics + equity_curve + open_positions)
-and ``orders``/``trades`` are persisted to dedicated collections by the caller.
+Equity is sourced from ``IBrokerPort.get_balance()`` (single source of truth) —
+the collector keeps no shadow ledger of its own. At ``finalize()`` it returns
+``CollectedResults(run, orders, trades)`` where ``run`` is the slimmed
+``BacktestResult`` (metrics + equity_curve + open_positions) and ``orders``/
+``trades`` are persisted to dedicated collections by the caller.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from uuid import UUID
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult, OpenLot
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.position import PositionAggregate, TradeClosedEvent
@@ -43,24 +48,25 @@ logger = logging.getLogger(__name__)
 _MAX_PERSISTED_EQUITY_POINTS = 5000
 
 
-class BacktestResultAppService:
-    """Collects Orders + Trades + equity snapshots during backtest, then computes metrics.
+class BacktestReportAppService:
+    """Records Orders + Trades + equity snapshots during backtest, then computes metrics.
 
-    Realized equity is recorded on each trade closure (``on_trade``), after its
-    pnl credit. Commission is read from ``OrderResult.commission`` (broker
-    single-source) and debited from equity at every fill.
+    Realized equity is recorded on each trade closure (``on_trade``) by reading
+    ``broker.get_balance().available_balance`` — the broker's post-close ledger is
+    the single source of truth. Commission is read from ``OrderResult.commission``
+    and stamped on the Fill doc; the broker owns the balance debit.
     """
 
     def __init__(
         self,
         config: BacktestConfig,
         initial_capital: float,
+        broker: IBrokerPort,
         run_id: str | None = None,
     ) -> None:
         self._config = config
         self._initial_capital = initial_capital
-        self._current_equity = initial_capital
-        self._peak_equity = initial_capital
+        self._broker = broker
         self._run_id = run_id or ""
 
         self._equity_curve: list[EquityPoint] = []
@@ -71,7 +77,6 @@ class BacktestResultAppService:
         self._mtm_curve: list[EquityPoint] = []
         self._orders_by_id: dict[str, OrderRecord] = {}
         self._trades: list[Trade] = []
-        self._total_commission = 0.0
 
         self._equity_curve.append(
             EquityPoint(
@@ -94,22 +99,21 @@ class BacktestResultAppService:
             return
 
         timestamp = get_current_time()
-        # Broker single-source (was: fill_price*fill_qty*config.commission_percent).
+        # Stamped on the Fill doc; the broker owns the balance debit.
         commission = result.commission
-        self._total_commission += commission
-        self._current_equity -= commission
 
         order = self._upsert_order(result, fill_price, fill_qty, commission, timestamp)
         self._append_fill(order, result, fill_price, fill_qty, commission, timestamp)
 
     async def on_trade(self, event: TradeClosedEvent) -> None:
-        """PaperBrokerAdapter trade-closure callback — build a Trade + credit pnl.
+        """PaperBrokerAdapter trade-closure callback — build a Trade + record equity.
 
         Fires after the exit fill's ``on_fill`` (broker dispatch order), so the
         exit OrderRecord already exists for the ``resulting_trade_id`` back-link.
-        Realized equity moves by the chunk pnl here; the equity point is recorded
-        at ``exit_time``. Commission was already debited per-fill in ``on_fill``,
-        so it is NOT re-applied — ``event.commission`` only stamps the Trade doc.
+        The broker updated ``_balance`` (realized pnl + commission) under its lock
+        BEFORE dispatching this event (dispatch is outside the lock), so
+        ``get_balance().available_balance`` is the post-close truth — recorded as
+        the realized equity point at ``exit_time``.
         """
         exit_time = event.exit_time or get_current_time()
         trade = Trade(
@@ -132,8 +136,8 @@ class BacktestResultAppService:
             duration_seconds=event.duration_seconds,
         )
         self._trades.append(trade)
-        self._current_equity += event.pnl
-        self._record_equity_point(exit_time)
+        balance = await self._broker.get_balance()
+        self._record_equity_point(exit_time, balance.available_balance)
 
         if event.exit_order_id is not None:
             exit_order = self._orders_by_id.get(event.exit_order_id)
@@ -252,14 +256,11 @@ class BacktestResultAppService:
             )
         )
 
-    def _record_equity_point(self, timestamp: datetime) -> None:
-        if self._current_equity > self._peak_equity:
-            self._peak_equity = self._current_equity
-        drawdown = 0.0
-        if self._peak_equity > 0:
-            drawdown = (self._current_equity - self._peak_equity) / self._peak_equity
+    def _record_equity_point(self, timestamp: datetime, equity: float) -> None:
+        # Drawdown is recomputed against a running peak at persist time
+        # (``_with_drawdown``); the realized point only carries the equity value.
         self._equity_curve.append(
-            EquityPoint(timestamp=timestamp, equity=self._current_equity, drawdown=drawdown)
+            EquityPoint(timestamp=timestamp, equity=equity, drawdown=0.0)
         )
 
     def mark_to_market(self, timestamp: datetime, total_equity: float) -> None:
@@ -267,11 +268,11 @@ class BacktestResultAppService:
 
         ``total_equity`` is ``broker.get_balance().total_equity`` (realized
         balance + unrealized PnL), the broker's single source of truth. This
-        feeds the per-bar return series Sharpe/Sortino annualize. It MUST NOT
-        touch ``self._current_equity`` — that stays realized-only so
-        ``total_return``/``cagr`` are unaffected. Drawdown here is marked against
-        a separate MTM peak so the persisted curve's drawdown reflects unrealized
-        swings without polluting realized accounting.
+        feeds the per-bar return series Sharpe/Sortino annualize. It flows only
+        into ``_mtm_curve`` — the realized curve (``_equity_curve``, trade-keyed
+        from ``on_trade`` broker reads) is untouched, so ``total_return``/``cagr``
+        stay realized-only. Drawdown is recomputed against a running peak at
+        persist time (``_with_drawdown``).
 
         Points carrying a trade (fill/exit, recorded via ``_record_equity_point``)
         are preserved at persist time; MTM points fill the gaps for even
@@ -342,7 +343,7 @@ class BacktestResultAppService:
             entry_commission_portion=pos.entry_commission,
         )
 
-    def finalize(
+    async def finalize(
         self,
         run_id: str,
         started_at: datetime,
@@ -370,12 +371,17 @@ class BacktestResultAppService:
                 "unknown interval %r — skipping Sharpe/Sortino annualization",
                 self._config.interval,
             )
+        balance = await self._broker.get_balance()
+        current_equity = balance.available_balance
+        total_commission = sum(
+            f.commission for o in self._orders_by_id.values() for f in o.fills
+        )
         metrics: PerformanceMetrics = PerformanceCalculatorDomainService.build(
             closed_trades=self._trades,
             equity_curve=self._equity_curve,
             initial_capital=self._initial_capital,
-            current_equity=self._current_equity,
-            total_commission=self._total_commission,
+            current_equity=current_equity,
+            total_commission=total_commission,
             start_date=self._config.start_date,
             end_date=self._config.end_date,
             periods_per_year=periods_per_year,

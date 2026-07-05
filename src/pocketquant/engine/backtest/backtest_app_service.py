@@ -20,7 +20,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.engine.backtest.backtest_result_app_service import BacktestResultAppService
+from pocketquant.engine.backtest.backtest_report_app_service import BacktestReportAppService
 from pocketquant.engine.backtest.historical_replay_app_service import (
     HistoricalReplayAppService,
 )
@@ -84,7 +84,9 @@ class BacktestAppService:
             end_date=config.end_date.isoformat(),
         )
 
-        collector = BacktestResultAppService(config, config.initial_capital, run_id=run_id)
+        collector = BacktestReportAppService(
+            config, config.initial_capital, broker=self._broker, run_id=run_id
+        )
 
         # Mark-to-market per bar for an evenly-sampled equity curve (Sharpe
         # input). Registered AFTER the broker's BarCompletedEvent handler
@@ -120,7 +122,7 @@ class BacktestAppService:
             completed_at = datetime.now(UTC)
 
             positions = await self._broker.get_positions()
-            collected = collector.finalize(
+            collected = await collector.finalize(
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
@@ -153,7 +155,7 @@ class BacktestAppService:
             logger.error("backtest_failed", run_id=run_id, error=str(e))
 
             positions = await self._broker.get_positions()
-            collected = collector.finalize(
+            collected = await collector.finalize(
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,

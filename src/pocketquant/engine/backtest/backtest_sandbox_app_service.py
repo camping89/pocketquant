@@ -13,7 +13,7 @@ process-global registry across runs). Order/position trackers are throwaway
 in-memory instances; the position tracker is deliberately **not started**, so it
 registers no handlers — the PaperBrokerAdapter is the position source of truth during a
 backtest, and the strategy's own one-position cap governs re-entry. Trades are
-built by the ``BacktestResultAppService`` from broker fill callbacks, independent
+built by the ``BacktestReportAppService`` from broker fill callbacks, independent
 of this bus.
 """
 

@@ -316,7 +316,7 @@ src/pocketquant/
 │   │   ├── backtest_query_service.py
 │   │   ├── backtest_stats_service.py
 │   │   ├── backtest_execution_service.py
-│   │   ├── backtest_result_app_service.py
+│   │   ├── backtest_report_app_service.py
 │   │   ├── historical_replay_app_service.py
 │   │   ├── collected_results.py
 │   │   ├── backtest_dispatch.py

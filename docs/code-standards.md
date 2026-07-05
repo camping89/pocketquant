@@ -372,7 +372,7 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 | **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IBrokerFactoryPort`, `IDataProviderPort`, `IRealtimeQuoteProviderPort` |
 | **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter`, `OKXWebSocketAdapter` |
 | **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (utility pattern; follow naming rule when used) |
-| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestResultAppService` |
+| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestReportAppService` |
 | Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListOrdersQuery` |
 | Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `StartStrategyCommand` |
 | CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |

@@ -202,7 +202,7 @@ src/pocketquant/engine/                     # SHARED engine (used by backtest + 
 │   ├── backtest_command_service.py         # BacktestCommandService
 │   ├── backtest_query_service.py           # BacktestQueryService
 │   ├── backtest_stats_service.py           # Stats + keyset pagination
-│   ├── backtest_result_app_service.py      # Result collection
+│   ├── backtest_report_app_service.py      # Report collection (Trade+equity → metrics)
 │   ├── historical_replay_app_service.py    # Historical replay
 │   ├── collected_results.py                # Result aggregation
 │   └── backtest_dispatch.py                # Worker dispatch
@@ -519,7 +519,7 @@ src/
 | WsSubscriptionAppService | WebSocket subscription mgmt | `app/market_data/app_services/ws_subscription_app_service.py` |
 | PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/trading/performance_calculator_domain_service.py` |
 | SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
-| BacktestResultAppService | Backtest result collection | `engine/backtest/backtest_result_app_service.py` |
+| BacktestReportAppService | Backtest report: collect Trade+equity, build metrics | `engine/backtest/backtest_report_app_service.py` |
 | EngulfingStrategyService | Engulfing strategy impl | `core/domain/concepts/strategy/services/engulfing_strategy_service.py` |
 
 ## Request Flow
@@ -575,7 +575,7 @@ IBrokerPort.subscribe_trades(callback)
   ├─ PaperBrokerAdapter: fires the trade callback AFTER the fill OrderResult
   └─ OKXBrokerAdapter: no-op (defers live-trade collection to R8)
   ↓
-BacktestResultAppService.on_trade(event)
+BacktestReportAppService.on_trade(event)
   ├─ Build Trade (stamp run_id, strategy_code) + credit pnl
   └─ Back-link exit OrderRecord.resulting_trade_id
 ```
@@ -584,6 +584,8 @@ Dispatch order (fill `OrderResult` before `TradeClosedEvent`) lets `on_trade` ba
 exit order. Commission: per-fill debit in `on_fill`; `on_trade` credits pnl only (no
 double-count). `entry_time` = first open; each reduce = 1 Trade record (partial closes =
 round-trip chunk).
+
+**Equity-curve granularity:** realized-equity points come only from `on_trade` (one per close, open fills add none), while the persisted curve is the per-bar `_mtm_curve` (broker `total_equity`), so `total_return`/`cagr` depend on closing equity and are independent of intra-bar fill timing.
 
 **Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` returns paginated trades via keyset cursor, server-side filtered (all/wins/losses) and sorted. Query params: `limit` (default 50), `cursor` (opaque base64 token), `sort_key` (9 keys: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` and `total_pnl` computed once per run (first page, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
 
