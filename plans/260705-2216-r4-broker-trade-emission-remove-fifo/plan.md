@@ -34,7 +34,7 @@ Gộp 2 hệ kế toán position (paper broker `PositionAggregate` + collector `
 |---|---|---|---|
 | 01 | [Domain — TradeClosedEvent + PositionAggregate emit](phase-01-domain-trade-closed-event.md) | done | — |
 | 02 | [Port + broker transport (paper emit, OKX no-op, mapper side)](phase-02-port-broker-transport.md) | done | 01 |
-| 03 | [Collector minimal swap + wiring + delete FIFO](phase-03-collector-swap-remove-fifo.md) | pending | 02 |
+| 03 | [Collector minimal swap + wiring + delete FIFO](phase-03-collector-swap-remove-fifo.md) | done | 02 |
 | 04 | [Regression parity + docs + roadmap status + validation](phase-04-regression-docs-validation.md) | pending | 03 |
 
 ## Invariants (mọi phase giữ)

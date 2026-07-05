@@ -18,6 +18,7 @@ from pocketquant.core.common.time.simulation import clear_simulation_time, set_s
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderSide, OrderStatus
+from pocketquant.core.domain.position import TradeClosedEvent
 from pocketquant.core.domain.trading import PercentageCommissionModel
 from pocketquant.engine.backtest.backtest_result_app_service import (
     _MAX_PERSISTED_EQUITY_POINTS,
@@ -58,6 +59,32 @@ def _fill(side: OrderSide, qty: float, price: float, oid: str) -> OrderResult:
     )
 
 
+def _long_trade(
+    entry_oid: str,
+    exit_oid: str,
+    *,
+    entry_price: float,
+    exit_price: float,
+    qty: float,
+    entry_time: datetime,
+    exit_time: datetime,
+) -> TradeClosedEvent:
+    """A LONG round-trip closure as the broker would emit it (avg-cost)."""
+    return TradeClosedEvent(
+        symbol="BTCUSDT:OKX",
+        direction="LONG",
+        entry_order_id=_oid(entry_oid),
+        entry_price=entry_price,
+        entry_time=entry_time,
+        quantity=qty,
+        exit_order_id=_oid(exit_oid),
+        exit_price=exit_price,
+        exit_time=exit_time,
+        pnl=(exit_price - entry_price) * qty,
+        commission=_COMMISSION.compute(entry_price, qty) + _COMMISSION.compute(exit_price, qty),
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_sim_time():
     yield
@@ -74,6 +101,17 @@ async def _round_trip(with_mtm: bool) -> BacktestResultAppService:
         c.mark_to_market(_T0 + timedelta(minutes=1), 9_800.0)
     set_simulation_time(_T0 + timedelta(hours=1))
     await c.on_fill(_fill(OrderSide.SELL, 1.0, 110.0, "o2"))
+    await c.on_trade(
+        _long_trade(
+            "o1",
+            "o2",
+            entry_price=100.0,
+            exit_price=110.0,
+            qty=1.0,
+            entry_time=_T0,
+            exit_time=_T0 + timedelta(hours=1),
+        )
+    )
     if with_mtm:
         c.mark_to_market(_T0 + timedelta(hours=1), 10_009.79)
     return c
@@ -125,11 +163,24 @@ async def test_persisted_curve_hard_capped_even_with_many_trade_points() -> None
     """Cap is a hard guarantee: even >5000 trade-carrying points get strided down."""
     c = BacktestResultAppService(_config(), initial_capital=10_000.0, run_id=_oid("run"))
     set_simulation_time(_T0)
-    # 8000 round-trips → ~16000 trade-carrying equity points (over the cap).
+    # 8000 round-trips → 8000 trade-carrying equity points (over the cap).
     for i in range(8000):
-        set_simulation_time(_T0 + timedelta(minutes=2 * i))
+        entry_time = _T0 + timedelta(minutes=2 * i)
+        exit_time = _T0 + timedelta(minutes=2 * i + 1)
+        set_simulation_time(entry_time)
         await c.on_fill(_fill(OrderSide.BUY, 1.0, 100.0, f"b{i}"))
-        set_simulation_time(_T0 + timedelta(minutes=2 * i + 1))
+        set_simulation_time(exit_time)
         await c.on_fill(_fill(OrderSide.SELL, 1.0, 101.0, f"s{i}"))
+        await c.on_trade(
+            _long_trade(
+                f"b{i}",
+                f"s{i}",
+                entry_price=100.0,
+                exit_price=101.0,
+                qty=1.0,
+                entry_time=entry_time,
+                exit_time=exit_time,
+            )
+        )
     run = c.finalize(_oid("run"), _T0, _T0 + timedelta(days=30)).run
     assert len(run.equity_curve) <= _MAX_PERSISTED_EQUITY_POINTS

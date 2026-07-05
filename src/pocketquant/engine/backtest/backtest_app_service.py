@@ -100,9 +100,11 @@ class BacktestAppService:
             self._broker.reset()
             self._broker.slippage = config.slippage_percent
 
-            # Subscribe to BOTH channels — fills for trade-building, events for audit log.
+            # Three channels: fills (OrderRecord + commission), events (audit log),
+            # trades (round-trip closures for Trade-building + realized pnl).
             await self._broker.subscribe_order_updates(collector.on_fill)
             await self._broker.subscribe_order_event(collector.on_event)
+            await self._broker.subscribe_trades(collector.on_trade)
             self._event_bus.subscribe(BarCompletedEvent, _mtm_on_bar)
 
             bars = self._load_bars(config)
@@ -117,11 +119,13 @@ class BacktestAppService:
 
             completed_at = datetime.now(UTC)
 
+            positions = await self._broker.get_positions()
             collected = collector.finalize(
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
                 status="finished",
+                positions=positions,
             )
 
             logger.info(
@@ -148,12 +152,14 @@ class BacktestAppService:
             completed_at = datetime.now(UTC)
             logger.error("backtest_failed", run_id=run_id, error=str(e))
 
+            positions = await self._broker.get_positions()
             collected = collector.finalize(
                 run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
                 status="failed",
                 error_message=str(e),
+                positions=positions,
             )
 
             if self._persist_results:
@@ -172,6 +178,7 @@ class BacktestAppService:
         finally:
             await self._broker.unsubscribe_order_updates()
             await self._broker.unsubscribe_order_event()
+            await self._broker.unsubscribe_trades()
             self._event_bus.unsubscribe(BarCompletedEvent, _mtm_on_bar)
             clear_simulation_time()
 

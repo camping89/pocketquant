@@ -1,10 +1,11 @@
 """Result collector — builds Orders + Trades + OpenLots during backtest replay.
 
-Subscribes to PaperBrokerAdapter via two channels:
-- ``on_fill(OrderResult)``  → upsert OrderRecord, append Fill, feed FIFO lot tracker,
-                              emit one ``Trade`` per consumed lot
+Subscribes to PaperBrokerAdapter via three channels:
+- ``on_fill(OrderResult)``  → upsert OrderRecord, append Fill, debit commission
 - ``on_event(order_id, OrderEvent)`` → append OrderEvent to the OrderRecord, mirror
                                        OrderRecord.status / last_updated_at
+- ``on_trade(TradeClosedEvent)`` → build one ``Trade`` per round-trip closure
+                                    (average-cost, broker-emitted), credit its pnl
 
 At ``finalize()`` returns ``CollectedResults(run, orders, trades)`` where
 ``run`` is the slimmed ``BacktestResult`` (metrics + equity_curve + open_positions)
@@ -23,6 +24,7 @@ from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult, OpenLot
 from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
+from pocketquant.core.domain.position import PositionAggregate, TradeClosedEvent
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.trading import (
     EquityPoint,
@@ -32,12 +34,6 @@ from pocketquant.core.domain.trading import (
     Trade,
 )
 from pocketquant.engine.backtest.collected_results import CollectedResults
-from pocketquant.engine.backtest.lot_tracking_helper import (
-    ConsumedLot,
-    Direction,
-    FillOutcome,
-    LotTrackingHelper,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +46,8 @@ _MAX_PERSISTED_EQUITY_POINTS = 5000
 class BacktestResultAppService:
     """Collects Orders + Trades + equity snapshots during backtest, then computes metrics.
 
-    Equity is recorded on close (realized PnL) and on pure opens (for drawdown
-    granularity). Commission is read from ``OrderResult.commission`` (broker
+    Realized equity is recorded on each trade closure (``on_trade``), after its
+    pnl credit. Commission is read from ``OrderResult.commission`` (broker
     single-source) and debited from equity at every fill.
     """
 
@@ -76,8 +72,6 @@ class BacktestResultAppService:
         self._orders_by_id: dict[str, OrderRecord] = {}
         self._trades: list[Trade] = []
         self._total_commission = 0.0
-
-        self._lot_tracker = LotTrackingHelper()
 
         self._equity_curve.append(
             EquityPoint(
@@ -105,26 +99,46 @@ class BacktestResultAppService:
         self._total_commission += commission
         self._current_equity -= commission
 
-        side_dir = self._resolve_side(result)
-        outcome = self._lot_tracker.feed(
-            side=side_dir,
-            qty=fill_qty,
-            price=fill_price,
-            time=timestamp,
-            order_id=result.order_id,
-            commission=commission,
-            sl_price=result.sl_price,
-            tp_price=result.tp_price,
-        )
-
         order = self._upsert_order(result, fill_price, fill_qty, commission, timestamp)
         self._append_fill(order, result, fill_price, fill_qty, commission, timestamp)
 
-        self._emit_trades(
-            outcome, exit_order_id=result.order_id, exit_price=fill_price, exit_time=timestamp
+    async def on_trade(self, event: TradeClosedEvent) -> None:
+        """PaperBrokerAdapter trade-closure callback — build a Trade + credit pnl.
+
+        Fires after the exit fill's ``on_fill`` (broker dispatch order), so the
+        exit OrderRecord already exists for the ``resulting_trade_id`` back-link.
+        Realized equity moves by the chunk pnl here; the equity point is recorded
+        at ``exit_time``. Commission was already debited per-fill in ``on_fill``,
+        so it is NOT re-applied — ``event.commission`` only stamps the Trade doc.
+        """
+        exit_time = event.exit_time or get_current_time()
+        trade = Trade(
+            trade_id=generate_id(),
+            run_id=self._run_id,
+            strategy_code=self._config.strategy_code,
+            symbol=event.symbol,
+            direction=event.direction,
+            entry_order_id=event.entry_order_id,
+            entry_price=event.entry_price,
+            entry_time=event.entry_time or exit_time,
+            quantity=event.quantity,
+            exit_order_id=event.exit_order_id,
+            exit_price=event.exit_price,
+            exit_time=exit_time,
+            sl_price=event.sl_price,
+            tp_price=event.tp_price,
+            pnl=event.pnl,
+            commission=event.commission,
+            duration_seconds=event.duration_seconds,
         )
-        if not outcome.consumed:
-            self._record_equity_point(timestamp)
+        self._trades.append(trade)
+        self._current_equity += event.pnl
+        self._record_equity_point(exit_time)
+
+        if event.exit_order_id is not None:
+            exit_order = self._orders_by_id.get(event.exit_order_id)
+            if exit_order is not None and exit_order.resulting_trade_id is None:
+                exit_order.resulting_trade_id = str(trade.trade_id)
 
     async def on_event(self, order_id: str, event: OrderEvent) -> None:
         """PaperBrokerAdapter lifecycle event callback. Mirror status into OrderRecord."""
@@ -136,17 +150,6 @@ class BacktestResultAppService:
         order.events.append(event)
         order.status = event.to_status
         order.last_updated_at = event.timestamp
-
-    def _resolve_side(self, result: Any) -> Direction:
-        if result.side == OrderSide.BUY:
-            return "LONG"
-        if result.side == OrderSide.SELL:
-            return "SHORT"
-        logger.warning(
-            "OrderResult.side missing on fill %s; falling back to long-only inference",
-            result.order_id,
-        )
-        return "SHORT" if self._lot_tracker.has_long_lot() else "LONG"
 
     def _upsert_order(
         self,
@@ -162,9 +165,7 @@ class BacktestResultAppService:
         the authoritative side / quantity / sl_price / tp_price from this fill.
         Stubs are detected by their placeholder ``quantity == 0.0``.
         """
-        side = result.side or (
-            OrderSide.BUY if self._lot_tracker.has_long_lot() else OrderSide.SELL
-        )
+        side = result.side or OrderSide.BUY  # broker sets side on every fill
         existing = self._orders_by_id.get(result.order_id)
         if existing is not None:
             # Backfill stub fields the on_event handler couldn't know.
@@ -251,44 +252,6 @@ class BacktestResultAppService:
             )
         )
 
-    def _emit_trades(
-        self,
-        outcome: FillOutcome,
-        exit_order_id: str,
-        exit_price: float,
-        exit_time: datetime,
-    ) -> None:
-        for consumed in outcome.consumed:
-            pnl = self._consumed_pnl(consumed, exit_price)
-            self._current_equity += pnl
-            commission = consumed.entry_commission_portion + consumed.exit_commission_portion
-            duration = (exit_time - consumed.lot.entry_time).total_seconds()
-            trade = Trade(
-                trade_id=generate_id(),
-                run_id=self._run_id,
-                strategy_code=self._config.strategy_code,
-                symbol=self._config.symbol,
-                direction=consumed.lot.direction,
-                entry_order_id=consumed.lot.entry_order_id,
-                entry_price=consumed.lot.entry_price,
-                entry_time=consumed.lot.entry_time,
-                quantity=consumed.qty_closed,
-                exit_order_id=exit_order_id,
-                exit_price=exit_price,
-                exit_time=exit_time,
-                sl_price=consumed.lot.sl_price,
-                tp_price=consumed.lot.tp_price,
-                pnl=pnl,
-                commission=commission,
-                duration_seconds=duration,
-            )
-            self._trades.append(trade)
-            self._record_equity_point(exit_time)
-            # Back-link the exit order to its resulting trade.
-            exit_order = self._orders_by_id.get(exit_order_id)
-            if exit_order is not None and exit_order.resulting_trade_id is None:
-                exit_order.resulting_trade_id = str(trade.trade_id)
-
     def _record_equity_point(self, timestamp: datetime) -> None:
         if self._current_equity > self._peak_equity:
             self._peak_equity = self._current_equity
@@ -364,35 +327,20 @@ class BacktestResultAppService:
         return out
 
     @staticmethod
-    def _consumed_pnl(consumed: ConsumedLot, exit_price: float) -> float:
-        if consumed.lot.direction == "LONG":
-            return (exit_price - consumed.lot.entry_price) * consumed.qty_closed
-        return (consumed.lot.entry_price - exit_price) * consumed.qty_closed
-
-    def _build_open_positions(self) -> list[OpenLot]:
-        out: list[OpenLot] = []
-        for lot in self._lot_tracker.lots:
-            if lot.qty_remaining <= 1e-12:
-                continue
-            entry_comm_portion = (
-                lot.entry_commission * (lot.qty_remaining / lot.qty_original)
-                if lot.qty_original > 0
-                else 0.0
-            )
-            out.append(
-                OpenLot(
-                    symbol=self._config.symbol,
-                    direction=lot.direction,
-                    entry_price=lot.entry_price,
-                    entry_time=lot.entry_time,
-                    quantity=lot.qty_remaining,
-                    sl_price=lot.sl_price,
-                    tp_price=lot.tp_price,
-                    entry_order_id=lot.entry_order_id,
-                    entry_commission_portion=entry_comm_portion,
-                )
-            )
-        return out
+    def _position_to_open_lot(pos: PositionAggregate) -> OpenLot:
+        # ``entry_commission`` is already the proportional remainder after any
+        # partial reduce (drained in PositionAggregate.reduce_quantity).
+        return OpenLot(
+            symbol=pos.symbol,
+            direction=pos.side.name,
+            entry_price=pos.entry_price,
+            entry_time=pos.opened_at,
+            quantity=pos.quantity,
+            sl_price=pos.sl_price,
+            tp_price=pos.tp_price,
+            entry_order_id=pos.entry_order_id,
+            entry_commission_portion=pos.entry_commission,
+        )
 
     def finalize(
         self,
@@ -401,6 +349,7 @@ class BacktestResultAppService:
         completed_at: datetime,
         status: str = "finished",
         error_message: str | None = None,
+        positions: list[PositionAggregate] | None = None,
     ) -> CollectedResults:
         # Late-bind run_id onto stubs created before set_run_id was known.
         if not self._run_id:
@@ -412,7 +361,9 @@ class BacktestResultAppService:
                 if not trade.run_id:
                     trade.run_id = run_id
 
-        open_positions = self._build_open_positions()
+        open_positions = [
+            self._position_to_open_lot(p) for p in (positions or []) if not p.is_closed
+        ]
         periods_per_year = Interval.periods_per_year_for(self._config.interval)
         if periods_per_year is None:
             logger.warning(
