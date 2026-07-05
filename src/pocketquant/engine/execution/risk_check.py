@@ -2,7 +2,7 @@ import structlog
 
 from pocketquant.core.domain.brokers.value_objects import AccountBalance
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.core.domain.risk import RiskConfig
+from pocketquant.core.domain.risk import PositionCalculatorDomainService, RiskConfig
 from pocketquant.core.domain.strategy import Direction, Signal
 
 logger = structlog.get_logger(__name__)
@@ -22,7 +22,7 @@ class RiskCheckHandler:
         signal: Signal,
         account: AccountBalance,
         position: PositionAggregate | None,
-        config: RiskConfig,
+        config: RiskConfig | None = None,
     ) -> tuple[bool, str]:
         """Validate signal against risk rules.
 
@@ -30,7 +30,7 @@ class RiskCheckHandler:
             signal: Trading signal to validate
             account: Current account balance
             position: Existing position for this strategy (if any)
-            config: Risk configuration
+            config: Risk configuration (None falls back to default consts)
 
         Returns:
             Tuple of (is_valid, rejection_reason)
@@ -64,17 +64,20 @@ class RiskCheckHandler:
         self,
         account: AccountBalance,
         position: PositionAggregate | None,
-        config: RiskConfig,
+        config: RiskConfig | None = None,
     ) -> tuple[bool, str]:
         if position is None or position.is_closed:
             return True, ""
 
+        max_exposure = (
+            config.max_exposure_percent
+            if config
+            else PositionCalculatorDomainService.MAX_EXPOSURE_PERCENT
+        )
         current_exposure = position.market_value / account.total_equity
 
-        if current_exposure >= config.max_exposure_percent:
-            return False, (
-                f"Max exposure reached: {current_exposure:.1%} >= {config.max_exposure_percent:.1%}"
-            )
+        if current_exposure >= max_exposure:
+            return False, (f"Max exposure reached: {current_exposure:.1%} >= {max_exposure:.1%}")
 
         return True, ""
 
@@ -82,14 +85,14 @@ class RiskCheckHandler:
         self,
         account: AccountBalance,
         entry_price: float,
-        config: RiskConfig,
+        config: RiskConfig | None = None,
     ) -> float:
         """Calculate maximum position size allowed.
 
         Args:
             account: Account balance
             entry_price: Expected entry price
-            config: Risk configuration
+            config: Risk configuration (None falls back to default consts)
 
         Returns:
             Maximum position size in base units
@@ -97,25 +100,40 @@ class RiskCheckHandler:
         if entry_price <= 0:
             return 0.0
 
-        max_value = account.available_balance * config.max_exposure_percent
+        max_exposure = (
+            config.max_exposure_percent
+            if config
+            else PositionCalculatorDomainService.MAX_EXPOSURE_PERCENT
+        )
+        max_value = account.available_balance * max_exposure
         return max_value / entry_price
 
     def get_risk_summary(
         self,
         account: AccountBalance,
         positions: list[PositionAggregate],
-        config: RiskConfig,
+        config: RiskConfig | None = None,
     ) -> dict:
         """Get summary of current risk state.
 
         Args:
             account: Account balance
             positions: All open positions
-            config: Risk configuration
+            config: Risk configuration (None falls back to default consts)
 
         Returns:
             Risk summary dictionary
         """
+        max_exposure = (
+            config.max_exposure_percent
+            if config
+            else PositionCalculatorDomainService.MAX_EXPOSURE_PERCENT
+        )
+        risk_per_trade = (
+            config.risk_per_trade if config else PositionCalculatorDomainService.RISK_PER_TRADE
+        )
+        max_positions = config.max_positions if config else 3
+
         total_exposure = sum(p.market_value for p in positions if not p.is_closed)
         exposure_percent = total_exposure / account.total_equity if account.total_equity > 0 else 0
 
@@ -124,12 +142,11 @@ class RiskCheckHandler:
             "available_balance": account.available_balance,
             "total_exposure": total_exposure,
             "exposure_percent": exposure_percent,
-            "max_exposure_percent": config.max_exposure_percent,
+            "max_exposure_percent": max_exposure,
             "position_count": len([p for p in positions if not p.is_closed]),
-            "max_positions": config.max_positions,
-            "risk_per_trade": config.risk_per_trade,
+            "max_positions": max_positions,
+            "risk_per_trade": risk_per_trade,
             "is_within_limits": (
-                exposure_percent <= config.max_exposure_percent
-                and len(positions) <= config.max_positions
+                exposure_percent <= max_exposure and len(positions) <= max_positions
             ),
         }

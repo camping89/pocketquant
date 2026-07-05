@@ -365,7 +365,7 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 | Events | `{Entity}{PastTense}Event` | `Event` | `.py` | `OrderFilledEvent`, `BarCompletedEvent` |
 | Enums | `{Concept}` | None | `.py` | `Interval`, `OrderType`, `OrderSide` |
 | Value Objects | `{Concept}` | None | `.py` | `PnL`, `OHLCV`, `BarRange` |
-| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionSizerDomainService`, `BarBuilderDomainService`, `PerformanceCalculatorDomainService` |
+| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionCalculatorDomainService`, `BarBuilderDomainService`, `PerformanceCalculatorDomainService` |
 | **Domain Strategy (Impl)** | `{Name}StrategyService` | `StrategyService` | `*_strategy_service.py` | `EngulfingStrategyService`, `HitNRun2StrategyService` |
 | **Domain Strategy (Interface)** | `IStrategyService` | `IStrategyService` | `strategy_service_interface.py` | `IStrategyService` |
 | Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
@@ -388,7 +388,7 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 
 **Ba nguyên tắc cốt lõi:**
 
-1. **Tên class + file tự mã hóa layer/role.** Đọc `PositionSizerDomainService` hoặc `binance_adapter.py` biết ngay layer không cần xem folder.
+1. **Tên class + file tự mã hóa layer/role.** Đọc `PositionCalculatorDomainService` hoặc `binance_adapter.py` biết ngay layer không cần xem folder.
 
 2. **Không stack 2 doer-suffix generic (`-er`/`-or`) trong 1 tên.** Nếu bị dính (vd một class vừa mang `-Tracker` vừa `-Helper` → `*TrackerHelper`), dùng gerund: `*TrackingHelper`. **Ngoại lệ:** danh từ nghiệp vụ kết `-er` (vd `Broker`) không tính là doer-suffix → `BrokerAdapter` hợp lệ.
 

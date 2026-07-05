@@ -1,5 +1,5 @@
-from pocketquant.core.domain.risk.services.position_sizer_domain_service import (
-    PositionSizerDomainService,
+from pocketquant.core.domain.risk.services.position_calculator_domain_service import (
+    PositionCalculatorDomainService,
 )
 
-__all__ = ["PositionSizerDomainService"]
+__all__ = ["PositionCalculatorDomainService"]

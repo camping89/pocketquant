@@ -19,7 +19,7 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.domain.quote.events import QuoteReceivedEvent
-from pocketquant.core.domain.risk import PositionSizerDomainService
+from pocketquant.core.domain.risk import PositionCalculatorDomainService
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 
@@ -358,12 +358,13 @@ class StrategyAppService:
             else current_price * (1 + strategy.config.orders.stop_loss.distance_percent)
         )
 
-        size = PositionSizerDomainService.calculate_size(
+        calc = PositionCalculatorDomainService.calculate(
             balance.available_balance,
             current_price,
             stop_loss,
             strategy.config.risk,
         )
+        size = calc.size
 
         if size <= 0:
             logger.info("zero_position_size", strategy_id=strategy.id)

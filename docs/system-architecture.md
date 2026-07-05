@@ -152,7 +152,7 @@ domain/
 │   ├── risk/
 │   │   ├── enums.py        # RiskModel enum
 │   │   ├── value_objects.py  # RiskConfig
-│   │   └── services/position_sizer_domain_service.py  # PositionSizerDomainService (pure calc)
+│   │   └── services/position_calculator_domain_service.py  # PositionCalculatorDomainService (pure calc)
 │   └── strategy/
 │       ├── enums.py        # Direction enum
 │       ├── events.py       # SignalGeneratedEvent
@@ -175,7 +175,7 @@ Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`
 Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
 
 **Example - Domain Service (Pure Logic):**
-BarBuilderDomainService and PositionSizerDomainService are pure domain services with zero I/O, implementing domain business rules.
+BarBuilderDomainService and PositionCalculatorDomainService are pure domain services with zero I/O, implementing domain business rules.
 
 ### Layer 2: Application (Orchestrators) — `engine` and `app` packages
 
@@ -219,7 +219,7 @@ src/pocketquant/core/domain/bar/services/    # Domain service layer (top-level)
 ├── bar_builder_domain_service.py           # BarBuilderDomainService (OHLCV aggregation)
 
 src/pocketquant/core/domain/concepts/risk/services/  # Domain service layer
-├── position_sizer_domain_service.py        # PositionSizerDomainService (risk calculations)
+├── position_calculator_domain_service.py   # PositionCalculatorDomainService (risk calculations)
 ```
 
 **Example - Application Service:**
@@ -619,7 +619,7 @@ round-trip chunk).
 
 `StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategyService`, `_brokers[sub_id] = IBrokerPort`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
 
-**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionSizerDomainService.calculate_size() 5. OrderAggregate creation 6. OrderAppService.submit()).
+**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionCalculatorDomainService.calculate() 5. OrderAggregate creation 6. OrderAppService.submit()).
 
 **Order/Position state:** `OrderRepository.load_pending_orders()` on startup restore in-memory state + broker_order_id mapping. `PositionRepository.find_open()` restore open positions. `OrderFilledEvent` → `PositionAppService._on_order_filled` → position state update. Fills route via `StrategyAppService._on_order_filled` to the owning strategy by `subscription_id` → calls `strategy.on_order_filled(order, fill_price)`.
 
