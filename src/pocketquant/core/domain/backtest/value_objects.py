@@ -10,7 +10,7 @@ Consolidated single-file module (was a per-file ``value_objects/`` package):
 - ``BacktestMetrics``         — performance summary
 
 ``OrderEvent`` (the lifecycle audit record embedded in ``Order.events[]``) is
-defined alongside the broker port DTOs so the emitter (PaperBroker) and the
+defined alongside the broker port DTOs so the emitter (PaperBrokerAdapter) and the
 consumer (backtest collector) share one definition. It is imported here for the
 ``Order`` typing but is NOT re-exported as a backtest alias — consumers import
 ``OrderEvent`` from its own module directly.

@@ -6,7 +6,7 @@ from typing import Any
 
 import structlog
 
-from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort, OrderCallback
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderStatus
 from pocketquant.core.domain.position import PositionAggregate
@@ -20,13 +20,13 @@ from pocketquant.core.infra.brokers.okx.websocket import (
     OkxOrderMapper,
     OkxPositionMapper,
     OkxReconnectionHandler,
-    OkxWebSocketClient,
+    OKXWebSocketAdapter,
 )
 
 logger = structlog.get_logger(__name__)
 
 
-class OKXBroker(IBroker):
+class OKXBrokerAdapter(IBrokerPort):
     """Live trading broker via OKX exchange API.
 
     Uses python-okx SDK for REST and WebSocket communication.
@@ -49,7 +49,7 @@ class OKXBroker(IBroker):
 
         self._trade_api: Any = None
         self._account_api: Any = None
-        self._ws_client: OkxWebSocketClient | None = None
+        self._ws_client: OKXWebSocketAdapter | None = None
 
         self._order_callbacks: list[OrderCallback] = []
         self._connected = False
@@ -288,7 +288,7 @@ class OKXBroker(IBroker):
         logger.info("okx_ws_listener_starting")
 
         try:
-            self._ws_client = OkxWebSocketClient(
+            self._ws_client = OKXWebSocketAdapter(
                 api_key=self._api_key,
                 api_secret=self._api_secret,
                 passphrase=self._passphrase,

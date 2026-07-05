@@ -1,4 +1,6 @@
-"""Unit tests for PaperBroker MARKET/LIMIT entry fills and SL/TP auto-fill on BarCompletedEvent."""
+"""Unit tests for PaperBrokerAdapter MARKET/LIMIT entry fills and SL/TP auto-fill on
+BarCompletedEvent.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.domain.position import PositionSide
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _SYM = "BTCUSDT:BINANCE"
@@ -65,9 +67,9 @@ def _bar_event(
 async def _broker(
     slippage: float = 0.0,
     with_bus: bool = True,
-) -> tuple[PaperBroker, EventBus | None]:
+) -> tuple[PaperBrokerAdapter, EventBus | None]:
     bus = EventBus() if with_bus else None
-    b = PaperBroker(
+    b = PaperBrokerAdapter(
         initial_balance=1_000_000.0,
         slippage_percent=slippage,
         fill_delay_ms=0,
@@ -78,7 +80,7 @@ async def _broker(
 
 
 async def test_no_event_bus_no_auto_fill() -> None:
-    """PaperBroker(event_bus=None) skips bar subscription; positions never auto-close."""
+    """PaperBrokerAdapter(event_bus=None) skips bar subscription; positions never auto-close."""
     b, _ = await _broker(with_bus=False)
     await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
     # Direct handler call — should still close because logic is independent of subscription.

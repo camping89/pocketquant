@@ -3,7 +3,7 @@
 `OrderEvent` is a value object recording a single order status transition,
 delivered alongside ``OrderResult`` via a dedicated callback channel.
 
-Lives in core so both ``PaperBroker`` (emitter) and the backtest result
+Lives in core so both ``PaperBrokerAdapter`` (emitter) and the backtest result
 collector (consumer) can import it without crossing a dependency boundary.
 """
 

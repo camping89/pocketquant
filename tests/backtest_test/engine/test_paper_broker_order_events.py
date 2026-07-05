@@ -1,4 +1,4 @@
-"""Tests for PaperBroker OrderEvent emission (Phase 2 contract)."""
+"""Tests for PaperBrokerAdapter OrderEvent emission (Phase 2 contract)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pocketquant.core.common.time.simulation import (
 )
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 
 @pytest.fixture(autouse=True)
@@ -25,16 +25,18 @@ def reset_sim() -> Generator[None]:
 
 
 @pytest.fixture
-async def broker() -> PaperBroker:
+async def broker() -> PaperBrokerAdapter:
     bus = EventBus()
-    b = PaperBroker(initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus)
+    b = PaperBrokerAdapter(
+        initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
+    )
     await b.connect()
     b.set_current_price("BTC:BIN", 65000)
     return b
 
 
 @pytest.mark.asyncio
-async def test_market_fill_emits_submitted_then_filled(broker: PaperBroker) -> None:
+async def test_market_fill_emits_submitted_then_filled(broker: PaperBrokerAdapter) -> None:
     events: list = []
     await broker.subscribe_order_event(lambda oid, ev: events.append((oid, ev)))
     o = OrderAggregate.create(
@@ -54,7 +56,7 @@ async def test_market_fill_emits_submitted_then_filled(broker: PaperBroker) -> N
 
 @pytest.mark.asyncio
 async def test_reject_insufficient_balance_emits_submitted_then_rejected(
-    broker: PaperBroker,
+    broker: PaperBrokerAdapter,
 ) -> None:
     huge = OrderAggregate.create(
         subscription_id="s",
@@ -71,7 +73,7 @@ async def test_reject_insufficient_balance_emits_submitted_then_rejected(
 
 
 @pytest.mark.asyncio
-async def test_event_timestamps_use_simulation_time(broker: PaperBroker) -> None:
+async def test_event_timestamps_use_simulation_time(broker: PaperBrokerAdapter) -> None:
     sim_t = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     set_simulation_time(sim_t)
     o = OrderAggregate.create(
@@ -89,7 +91,7 @@ async def test_event_timestamps_use_simulation_time(broker: PaperBroker) -> None
 @pytest.mark.asyncio
 async def test_sl_autofill_synthetic_order_carries_auto_sl_reason() -> None:
     bus = EventBus()
-    broker = PaperBroker(
+    broker = PaperBrokerAdapter(
         initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
     )
     await broker.connect()
@@ -124,7 +126,7 @@ async def test_sl_autofill_synthetic_order_carries_auto_sl_reason() -> None:
 
 
 @pytest.mark.asyncio
-async def test_subscribe_callback_receives_every_event_in_order(broker: PaperBroker) -> None:
+async def test_subscribe_callback_receives_every_event_in_order(broker: PaperBrokerAdapter) -> None:
     received: list = []
     await broker.subscribe_order_event(lambda oid, ev: received.append(ev.to_status))
     o = OrderAggregate.create(

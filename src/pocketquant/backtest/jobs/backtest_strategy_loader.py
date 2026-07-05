@@ -8,7 +8,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
@@ -70,7 +70,7 @@ async def inject_strategy_into_sandbox(
     symbol: str,
     interval: str,
     initial_capital: float = 10_000.0,
-) -> PaperBroker:
+) -> PaperBrokerAdapter:
     """Resolve strategy class, build its broker, inject into the sandbox engine.
 
     ``symbol`` is composite ``{code}:{exchange}``.
@@ -79,7 +79,7 @@ async def inject_strategy_into_sandbox(
     strategy entry is untouched. The sandbox owns its EventBus, so the broker and
     strategy are isolated from the live engine and from other concurrent runs.
 
-    Returns the run's PaperBroker (wired to the sandbox bus). Cleanup happens via
+    Returns the run's PaperBrokerAdapter (wired to the sandbox bus). Cleanup happens via
     ``sandbox.aclose()``.
 
     Raises ValueError if strategy_id is not in STRATEGY_REGISTRY.

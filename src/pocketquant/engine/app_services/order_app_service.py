@@ -5,7 +5,7 @@ import asyncio
 import structlog
 
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderFilledEvent, OrderStatus
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
@@ -31,7 +31,7 @@ class OrderAppService:
         self._broker_map: dict[str, str] = {}  # order_id -> broker_order_id
         self._lock = asyncio.Lock()
 
-    async def submit(self, order: OrderAggregate, broker: IBroker) -> OrderResult:
+    async def submit(self, order: OrderAggregate, broker: IBrokerPort) -> OrderResult:
         """Submit order to broker and track status.
 
         Args:
@@ -123,7 +123,7 @@ class OrderAppService:
                 error_message=str(e),
             )
 
-    async def cancel(self, order_id: str, broker: IBroker) -> bool:
+    async def cancel(self, order_id: str, broker: IBrokerPort) -> bool:
         """Cancel an order.
 
         Args:

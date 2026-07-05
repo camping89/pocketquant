@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from pocketquant.core.infra.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
+from pocketquant.core.infra.brokers.okx.websocket.okx_websocket_adapter import OKXWebSocketAdapter
 
 if TYPE_CHECKING:
-    from pocketquant.core.infra.brokers.okx.okx_broker import OKXBroker
+    from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
 
 logger = structlog.get_logger(__name__)
 
@@ -36,8 +36,8 @@ class OkxReconnectionHandler:
 
     def __init__(
         self,
-        ws_client: OkxWebSocketClient,
-        broker: OKXBroker,
+        ws_client: OKXWebSocketAdapter,
+        broker: OKXBrokerAdapter,
         initial_delay: float = DEFAULT_INITIAL_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         multiplier: float = DEFAULT_MULTIPLIER,
@@ -173,7 +173,7 @@ class OkxReconnectionHandler:
 class OkxStateReconciler:
     """Reconciles local state with OKX REST after reconnect to detect missed fills."""
 
-    def __init__(self, broker: OKXBroker) -> None:
+    def __init__(self, broker: OKXBrokerAdapter) -> None:
         self._broker = broker
 
     async def sync(self) -> dict[str, Any]:

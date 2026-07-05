@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Protocol
 
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate
@@ -10,12 +9,12 @@ from pocketquant.core.domain.position import PositionAggregate
 OrderCallback = Callable[[OrderResult], None | Awaitable[None]]
 
 
-class IBroker(ABC):
+class IBrokerPort(ABC):
     """Abstract broker interface for order execution.
 
     Implementations:
-    - PaperBroker: Simulated fills for backtesting/paper trading
-    - OKXBroker: Live trading via OKX exchange API
+    - PaperBrokerAdapter: Simulated fills for backtesting/paper trading
+    - OKXBrokerAdapter: Live trading via OKX exchange API
     """
 
     @property
@@ -87,7 +86,3 @@ class IBroker(ABC):
     async def unsubscribe_order_updates(self) -> None:
         """Unsubscribe from order updates."""
         ...
-
-
-class IBrokerFactory(Protocol):
-    def create(self, broker_type: str, config: dict) -> IBroker: ...

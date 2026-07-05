@@ -1,6 +1,6 @@
 """Integration tests for engulfing over BacktestAppService with in-memory repos.
 
-Drives the real BacktestAppService + HistoricalReplayAppService + PaperBroker +
+Drives the real BacktestAppService + HistoricalReplayAppService + PaperBrokerAdapter +
 StrategyAppService wiring (only persistence is faked). Confirms the fill-driven
 ``_open_direction`` lifecycle round-trips: repeated engulfing entries hit TP,
 reset, and re-enter → many trades.
@@ -19,14 +19,14 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
@@ -110,10 +110,10 @@ class _FakeBarRepo:
 
 
 class _StubBrokerFactory:
-    def __init__(self, broker: IBroker) -> None:
+    def __init__(self, broker: IBrokerPort) -> None:
         self._broker = broker
 
-    def create(self, broker_type: str, config: dict) -> IBroker:
+    def create(self, broker_type: str, config: dict) -> IBrokerPort:
         return self._broker
 
 
@@ -165,7 +165,7 @@ async def _run_backtest(
     direction: str = "long",
     lookback: int = 5,
     max_exposure_percent: float = 1.0,
-) -> tuple[BacktestResult, PaperBroker]:
+) -> tuple[BacktestResult, PaperBrokerAdapter]:
     bus = EventBus()
     order_repo = _InMemoryOrderRepo()
     position_repo = _InMemoryPositionRepo()
@@ -175,7 +175,7 @@ async def _run_backtest(
     position_svc = PositionAppService(bus, position_repo)  # pyright: ignore[reportArgumentType]
     await position_svc.start()
 
-    broker = PaperBroker(
+    broker = PaperBrokerAdapter(
         initial_balance=10_000.0,
         slippage_percent=0.0,
         fill_delay_ms=0,

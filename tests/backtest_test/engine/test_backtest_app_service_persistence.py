@@ -20,7 +20,7 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -76,7 +76,7 @@ def _bar(
 async def test_end_to_end_persists_three_collections(database: Database) -> None:
     """Round-trip: 1 entry + 1 exit → 1 trade, 2 orders, slim run in Mongo."""
     bus = EventBus()
-    broker = PaperBroker(
+    broker = PaperBrokerAdapter(
         initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
     )
     await broker.connect()
@@ -183,7 +183,7 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     and on_fill saw an existing entry and skipped the side backfill.
     """
     bus = EventBus()
-    broker = PaperBroker(
+    broker = PaperBrokerAdapter(
         initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
     )
     await broker.connect()

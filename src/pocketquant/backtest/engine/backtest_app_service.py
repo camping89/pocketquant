@@ -14,7 +14,7 @@ from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
@@ -46,7 +46,7 @@ class BacktestAppService:
     def __init__(
         self,
         event_bus: EventBus,
-        broker: PaperBroker,
+        broker: PaperBrokerAdapter,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         order_repository: BacktestOrderRepository | None = None,

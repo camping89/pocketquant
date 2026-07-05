@@ -35,7 +35,7 @@ class PositionAggregate(BaseModel):
     is_closed: bool = False
     opened_at: datetime = Field(default_factory=utc_now)
     closed_at: datetime | None = None
-    # Risk levels captured on open; consumed by PaperBroker auto-fill loop.
+    # Risk levels captured on open; consumed by PaperBrokerAdapter auto-fill loop.
     sl_price: float | None = None
     tp_price: float | None = None
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)

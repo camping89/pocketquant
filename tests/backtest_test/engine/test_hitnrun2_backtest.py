@@ -1,6 +1,6 @@
 """Integration tests for hitnrun2 over BacktestAppService with in-memory repos.
 
-Drives the real BacktestAppService + HistoricalReplayAppService + PaperBroker +
+Drives the real BacktestAppService + HistoricalReplayAppService + PaperBrokerAdapter +
 StrategyAppService wiring. Substitutes only persistence with in-memory fakes.
 
 No MongoDB / Redis required.
@@ -19,14 +19,14 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
@@ -111,10 +111,10 @@ class _FakeBarRepo:
 class _StubBrokerFactory:
     """Returns whatever broker the test has already wired; StrategyAppService never asks again."""
 
-    def __init__(self, broker: IBroker) -> None:
+    def __init__(self, broker: IBrokerPort) -> None:
         self._broker = broker
 
-    def create(self, broker_type: str, config: dict) -> IBroker:
+    def create(self, broker_type: str, config: dict) -> IBrokerPort:
         return self._broker
 
 
@@ -219,7 +219,7 @@ async def _run_backtest(
     max_loss_pct: float = 0.01,
     min_profit_pct: float = 0.005,
     max_exposure_percent: float | None = None,
-) -> tuple[BacktestResult, PaperBroker, StrategyAppService]:
+) -> tuple[BacktestResult, PaperBrokerAdapter, StrategyAppService]:
     """Wire pipeline and return result + handles for assertion."""
     bus = EventBus()
     order_repo = _InMemoryOrderRepo()
@@ -230,7 +230,7 @@ async def _run_backtest(
     position_svc = PositionAppService(bus, position_repo)  # pyright: ignore[reportArgumentType]
     await position_svc.start()
 
-    broker = PaperBroker(
+    broker = PaperBrokerAdapter(
         initial_balance=10_000.0,
         slippage_percent=0.0,
         fill_delay_ms=0,

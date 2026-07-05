@@ -1,4 +1,4 @@
-"""Tests pinning PaperBroker futures/margin accounting (the correct model).
+"""Tests pinning PaperBrokerAdapter futures/margin accounting (the correct model).
 
 These tests assert the post-fix futures behavior and are written tests-first:
 each one FAILS on the current spot-style code with a known arithmetic cause
@@ -24,7 +24,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.position import PositionSide
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _SYM = "BTCUSDT:BINANCE"
@@ -64,9 +64,9 @@ def _bar(*, high: float, low: float, close: float) -> BarCompletedEvent:
     )
 
 
-async def _broker(initial: float = _INITIAL) -> tuple[PaperBroker, EventBus]:
+async def _broker(initial: float = _INITIAL) -> tuple[PaperBrokerAdapter, EventBus]:
     bus = EventBus()
-    b = PaperBroker(
+    b = PaperBrokerAdapter(
         initial_balance=initial,
         slippage_percent=0.0,
         fill_delay_ms=0,

@@ -1,6 +1,6 @@
 """Backtest dispatch — single ad-hoc run setup-and-execute.
 
-Centralizes the sandbox isolation + PaperBroker wiring so the route's spawned
+Centralizes the sandbox isolation + PaperBrokerAdapter wiring so the route's spawned
 task has one place that owns engine setup. Backtests run in their own sandbox,
 never on the live execution engine.
 """

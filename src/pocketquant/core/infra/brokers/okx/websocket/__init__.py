@@ -15,10 +15,10 @@ from pocketquant.core.infra.brokers.okx.websocket.okx_reconnection_handler impor
     OkxReconnectionHandler,
     OkxStateReconciler,
 )
-from pocketquant.core.infra.brokers.okx.websocket.okx_websocket_client import OkxWebSocketClient
+from pocketquant.core.infra.brokers.okx.websocket.okx_websocket_adapter import OKXWebSocketAdapter
 
 __all__ = [
-    "OkxWebSocketClient",
+    "OKXWebSocketAdapter",
     "generate_ws_signature",
     "build_login_message",
     "get_private_ws_url",

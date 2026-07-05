@@ -13,7 +13,7 @@ SL/TP per side are the **looser** of the technical level and the account cap:
     SHORT TP = MIN( min(prev_lows[-tp_lookback:]),  entry * (1 - min_profit_pct) )
 
 At most one open position. State is reset by ``on_order_filled`` when an
-opposite-side fill closes the open direction; the PaperBroker SL/TP auto-fill
+opposite-side fill closes the open direction; the PaperBrokerAdapter SL/TP auto-fill
 drives this.
 """
 

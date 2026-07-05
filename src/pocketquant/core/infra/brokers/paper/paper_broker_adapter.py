@@ -27,6 +27,7 @@ from pocketquant.core.common.messaging import EventBus, event_handler
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort, OrderCallback
 from pocketquant.core.domain.brokers.events import (
     REASON_AUTO_SL,
     REASON_AUTO_TP,
@@ -42,7 +43,6 @@ from pocketquant.core.domain.brokers.events import (
     OrderEvent,
     OrderEventCallback,
 )
-from pocketquant.core.domain.brokers.interfaces import IBroker, OrderCallback
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import (
     OrderAggregate,
@@ -69,7 +69,7 @@ class _PendingOrder:
     limit_price: float
 
 
-class PaperBroker(IBroker):
+class PaperBrokerAdapter(IBrokerPort):
     """Simulated broker for paper trading and backtesting.
 
     Features:

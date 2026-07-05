@@ -21,13 +21,13 @@ from pocketquant.backtest.workers.backtest_dispatch import BacktestDispatchDeps,
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -235,15 +235,15 @@ class _InMemoryPositionRepo:
 
 
 class _StubBrokerFactory:
-    def __init__(self, broker: IBroker) -> None:
+    def __init__(self, broker: IBrokerPort) -> None:
         self._broker = broker
 
-    def create(self, broker_type: str, config: dict) -> IBroker:
+    def create(self, broker_type: str, config: dict) -> IBrokerPort:
         return self._broker
 
 
 async def _build_live_engine() -> tuple[
-    StrategyAppService, PaperBroker, _InMemoryOrderRepo, _InMemoryPositionRepo
+    StrategyAppService, PaperBrokerAdapter, _InMemoryOrderRepo, _InMemoryPositionRepo
 ]:
     """A live engine on its own bus with an engulfing strategy listening.
 
@@ -258,7 +258,7 @@ async def _build_live_engine() -> tuple[
     position_svc = PositionAppService(bus, position_repo)  # pyright: ignore[reportArgumentType]
     await position_svc.start()
 
-    broker = PaperBroker(
+    broker = PaperBrokerAdapter(
         initial_balance=10_000.0, slippage_percent=0.0, fill_delay_ms=0, event_bus=bus
     )
     engine = StrategyAppService(

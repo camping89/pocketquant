@@ -1,3 +1,3 @@
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
-__all__ = ["PaperBroker"]
+__all__ = ["PaperBrokerAdapter"]

@@ -10,7 +10,8 @@ from pocketquant.core.common.messaging import (
     get_event_registry,
 )
 from pocketquant.core.domain.bar.events import BarCompletedEvent
-from pocketquant.core.domain.brokers.interfaces import IBroker, IBrokerFactory
+from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPort
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import (
     OrderAggregate,
     OrderFilledEvent,
@@ -40,7 +41,7 @@ class StrategyAppService:
     def __init__(
         self,
         event_bus: EventBus,
-        broker_factory: IBrokerFactory,
+        broker_factory: IBrokerFactoryPort,
         order_app_service: OrderAppService,
         position_app_service: PositionAppService,
         risk_check_handler: RiskCheckHandler,
@@ -54,7 +55,7 @@ class StrategyAppService:
         self._default_broker_config = default_broker_config or {}
 
         self._strategies: dict[str, IStrategyService] = {}
-        self._brokers: dict[str, IBroker] = {}
+        self._brokers: dict[str, IBrokerPort] = {}
         self._configs: dict[str, StrategyConfig] = {}
         self._running = False
         self._lock = asyncio.Lock()
@@ -173,12 +174,12 @@ class StrategyAppService:
         self,
         sid: str,
         strategy: IStrategyService,
-        broker: IBroker,
+        broker: IBrokerPort,
         config: StrategyConfig,
     ) -> None:
         """Register an externally-prepared strategy+broker pair under ``sid``.
 
-        Backtest callers build their own PaperBroker and strategy instance (to
+        Backtest callers build their own PaperBrokerAdapter and strategy instance (to
         bypass the broker-factory lookup) and inject them directly. Registration,
         broker connection, and ``on_start()`` MUST all happen inside the same
         critical section: ``start_strategy`` also takes ``_lock``, so a lock-split
@@ -406,7 +407,7 @@ class StrategyAppService:
             tp_price=signal.take_profit_price,
         )
 
-    async def _get_or_create_broker(self, broker_type: str) -> IBroker:
+    async def _get_or_create_broker(self, broker_type: str) -> IBrokerPort:
         for broker in self._brokers.values():
             if broker.name == broker_type or broker.name == f"{broker_type}-demo":
                 return broker

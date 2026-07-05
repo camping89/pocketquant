@@ -24,7 +24,7 @@ PING_INTERVAL = 25  # Send ping before 30s OKX timeout
 PONG_TIMEOUT = 5.0
 
 
-class OkxWebSocketClient:
+class OKXWebSocketAdapter:
     """WebSocket client for OKX private channels.
 
     Features:
@@ -35,7 +35,7 @@ class OkxWebSocketClient:
     - Disconnect callback for reconnection handling
 
     Usage:
-        client = OkxWebSocketClient(api_key, api_secret, passphrase)
+        client = OKXWebSocketAdapter(api_key, api_secret, passphrase)
         await client.connect()
         await client.subscribe([
             {"channel": "orders", "instType": "SWAP"},

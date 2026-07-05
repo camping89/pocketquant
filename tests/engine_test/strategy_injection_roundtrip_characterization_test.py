@@ -29,7 +29,7 @@ from pocketquant.engine.app_services.strategy_app_service import StrategyAppServ
 
 
 class _FakeBroker:
-    """Minimal IBroker stand-in tracking connect() invocations."""
+    """Minimal IBrokerPort stand-in tracking connect() invocations."""
 
     def __init__(self) -> None:
         self._connected = False

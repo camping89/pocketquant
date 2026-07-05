@@ -1,6 +1,6 @@
 """Result collector — builds Orders + Trades + OpenLots during backtest replay.
 
-Subscribes to PaperBroker via two channels:
+Subscribes to PaperBrokerAdapter via two channels:
 - ``on_fill(OrderResult)``  → upsert Order, append Fill, feed FIFO lot tracker,
                               emit one ``Trade`` per consumed lot
 - ``on_event(order_id, OrderEvent)`` → append OrderEvent to the Order, mirror
@@ -129,7 +129,7 @@ class BacktestResultAppService:
             self._record_equity_point(timestamp)
 
     async def on_event(self, order_id: str, event: OrderEvent) -> None:
-        """PaperBroker lifecycle event callback. Mirror status into Order."""
+        """PaperBrokerAdapter lifecycle event callback. Mirror status into Order."""
         order = self._orders_by_id.get(order_id)
         if order is None:
             # Order seen first via event before any fill — create a stub from event data.
@@ -248,7 +248,7 @@ class BacktestResultAppService:
                 quantity=fill_qty,
                 price=fill_price,
                 commission=commission,
-                slippage=0.0,  # PaperBroker bakes slippage into fill_price already
+                slippage=0.0,  # PaperBrokerAdapter bakes slippage into fill_price already
                 timestamp=timestamp,
             )
         )

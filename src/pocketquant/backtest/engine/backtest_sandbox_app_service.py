@@ -11,7 +11,7 @@ Each sandbox builds a fresh ``EventBus`` and a ``StrategyAppService`` bound to i
 via a **local** ``EventRegistry`` (so handler bindings don't accumulate in the
 process-global registry across runs). Order/position trackers are throwaway
 in-memory instances; the position tracker is deliberately **not started**, so it
-registers no handlers — the PaperBroker is the position source of truth during a
+registers no handlers — the PaperBrokerAdapter is the position source of truth during a
 backtest, and the strategy's own one-position cap governs re-entry. Trades are
 built by the ``BacktestResultAppService`` from broker fill callbacks, independent
 of this bus.
@@ -24,10 +24,10 @@ from typing import Any
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus, EventRegistry
-from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 from pocketquant.engine.app_services.position_app_service import PositionAppService
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
@@ -82,10 +82,10 @@ class _SingleBrokerFactory:
     path). Backtests inject a prepared broker, so this is a safety stand-in.
     """
 
-    def __init__(self, broker: IBroker) -> None:
+    def __init__(self, broker: IBrokerPort) -> None:
         self._broker = broker
 
-    def create(self, broker_type: str, config: dict) -> IBroker:
+    def create(self, broker_type: str, config: dict) -> IBrokerPort:
         return self._broker
 
     @staticmethod
@@ -105,7 +105,7 @@ class BacktestSandboxAppService:
 
     event_bus: EventBus
     strategy_app_service: StrategyAppService
-    _broker: PaperBroker | None = None
+    _broker: PaperBrokerAdapter | None = None
 
     def create_broker(
         self,
@@ -113,8 +113,8 @@ class BacktestSandboxAppService:
         slippage_percent: float = 0.0,
         fill_delay_ms: int = 0,
         currency: str = "USDT",
-    ) -> PaperBroker:
-        broker = PaperBroker(
+    ) -> PaperBrokerAdapter:
+        broker = PaperBrokerAdapter(
             initial_balance=initial_balance,
             slippage_percent=slippage_percent,
             fill_delay_ms=fill_delay_ms,
@@ -144,7 +144,7 @@ async def build_backtest_sandbox(
     handler bindings live and die with this run's bus.
     """
     bus = EventBus()
-    placeholder_broker = PaperBroker(event_bus=bus)
+    placeholder_broker = PaperBrokerAdapter(event_bus=bus)
     engine = StrategyAppService(
         event_bus=bus,
         broker_factory=_SingleBrokerFactory(placeholder_broker),  # type: ignore[arg-type]

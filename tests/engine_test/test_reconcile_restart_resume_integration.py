@@ -3,7 +3,7 @@
 The success metric of SP1: a subscription with desired_state="running" auto-runs
 without any manual start call, and stays running across a process restart. We
 prove it by composing the real pieces (real SubscriptionRepository on an
-ephemeral Mongo, real StrategyAppService with a PaperBroker, real
+ephemeral Mongo, real StrategyAppService with a PaperBrokerAdapter, real
 StrategyReconcileAppService) and driving _reconcile() directly for determinism — no
 live loop, no sleeps.
 

@@ -1,7 +1,7 @@
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.brokers.interfaces import IBroker
-from pocketquant.core.infra.brokers.okx.okx_broker import OKXBroker
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.domain.brokers.broker_port import IBrokerPort
+from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 
 class BrokerFactory:
@@ -15,7 +15,7 @@ class BrokerFactory:
     def __init__(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus
 
-    def create(self, broker_type: str, config: dict) -> IBroker:
+    def create(self, broker_type: str, config: dict) -> IBrokerPort:
         """Create broker instance from type and config.
 
         Args:
@@ -23,13 +23,13 @@ class BrokerFactory:
             config: Broker-specific configuration
 
         Returns:
-            IBroker instance
+            IBrokerPort instance
 
         Raises:
             ValueError: If broker type is unknown
         """
         if broker_type == "paper":
-            return PaperBroker(
+            return PaperBrokerAdapter(
                 initial_balance=config.get("initial_balance", 100_000.0),
                 slippage_percent=config.get("slippage_percent", 0.001),
                 fill_delay_ms=config.get("fill_delay_ms", 50),
@@ -46,7 +46,7 @@ class BrokerFactory:
             if not api_key or not api_secret or not passphrase:
                 raise ValueError("OKX broker requires api_key, api_secret, passphrase")
 
-            return OKXBroker(
+            return OKXBrokerAdapter(
                 api_key=str(api_key),
                 api_secret=str(api_secret),
                 passphrase=str(passphrase),

@@ -1,4 +1,4 @@
-"""Tests for PaperBroker LIMIT pending queue + expire_pending_orders (Phase 2)."""
+"""Tests for PaperBrokerAdapter LIMIT pending queue + expire_pending_orders (Phase 2)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 
 @pytest.fixture(autouse=True)
@@ -22,9 +22,11 @@ def reset_sim() -> Generator[None]:
 
 
 @pytest.fixture
-async def setup() -> tuple[PaperBroker, EventBus]:
+async def setup() -> tuple[PaperBrokerAdapter, EventBus]:
     bus = EventBus()
-    b = PaperBroker(initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus)
+    b = PaperBrokerAdapter(
+        initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
+    )
     await b.connect()
     b.set_current_price("BTC:BIN", 65000)
     return b, bus
@@ -32,7 +34,7 @@ async def setup() -> tuple[PaperBroker, EventBus]:
 
 @pytest.mark.asyncio
 async def test_unreachable_limit_remains_submitted_then_expires_at_end_of_run(
-    setup: tuple[PaperBroker, EventBus],
+    setup: tuple[PaperBrokerAdapter, EventBus],
 ) -> None:
     broker, _ = setup
     # BUY LIMIT below current price → would be reachable. Use unreachable: below current.
@@ -58,7 +60,9 @@ async def test_unreachable_limit_remains_submitted_then_expires_at_end_of_run(
 
 
 @pytest.mark.asyncio
-async def test_reachable_limit_fills_immediately(setup: tuple[PaperBroker, EventBus]) -> None:
+async def test_reachable_limit_fills_immediately(
+    setup: tuple[PaperBrokerAdapter, EventBus],
+) -> None:
     broker, _ = setup
     # BUY LIMIT at 70000 when current is 65000: 65000 <= 70000, fills immediately.
     o = OrderAggregate.create(
@@ -76,7 +80,7 @@ async def test_reachable_limit_fills_immediately(setup: tuple[PaperBroker, Event
 
 @pytest.mark.asyncio
 async def test_pending_limit_fills_on_later_bar_with_limit_cross_reason(
-    setup: tuple[PaperBroker, EventBus],
+    setup: tuple[PaperBrokerAdapter, EventBus],
 ) -> None:
     broker, bus = setup
     # BUY LIMIT @ 60000 (below current 65000) → pending.
@@ -107,7 +111,7 @@ async def test_pending_limit_fills_on_later_bar_with_limit_cross_reason(
 
 
 @pytest.mark.asyncio
-async def test_cancel_pending_limit(setup: tuple[PaperBroker, EventBus]) -> None:
+async def test_cancel_pending_limit(setup: tuple[PaperBrokerAdapter, EventBus]) -> None:
     broker, _ = setup
     o = OrderAggregate.create(
         subscription_id="s",
@@ -126,7 +130,9 @@ async def test_cancel_pending_limit(setup: tuple[PaperBroker, EventBus]) -> None
 
 
 @pytest.mark.asyncio
-async def test_cancel_unknown_broker_id_is_idempotent(setup: tuple[PaperBroker, EventBus]) -> None:
+async def test_cancel_unknown_broker_id_is_idempotent(
+    setup: tuple[PaperBrokerAdapter, EventBus],
+) -> None:
     broker, _ = setup
     # cancel_order on never-seen id should return True (idempotent, no state change)
     assert await broker.cancel_order("nonexistent") is True
@@ -134,7 +140,7 @@ async def test_cancel_unknown_broker_id_is_idempotent(setup: tuple[PaperBroker, 
 
 @pytest.mark.asyncio
 async def test_pending_limit_doesnt_cross_in_neutral_bar(
-    setup: tuple[PaperBroker, EventBus],
+    setup: tuple[PaperBrokerAdapter, EventBus],
 ) -> None:
     broker, bus = setup
     o = OrderAggregate.create(
@@ -164,7 +170,9 @@ async def test_pending_limit_doesnt_cross_in_neutral_bar(
 
 
 @pytest.mark.asyncio
-async def test_sell_limit_fills_on_high_crossing(setup: tuple[PaperBroker, EventBus]) -> None:
+async def test_sell_limit_fills_on_high_crossing(
+    setup: tuple[PaperBrokerAdapter, EventBus],
+) -> None:
     broker, bus = setup
     # SELL LIMIT @ 70000, current 65000 (pending: not crossed yet)
     o = OrderAggregate.create(

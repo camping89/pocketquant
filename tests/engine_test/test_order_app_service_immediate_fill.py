@@ -17,7 +17,7 @@ from pocketquant.core.domain.order import (
     OrderStatus,
     OrderType,
 )
-from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.app_services.order_app_service import OrderAppService
 
 _SYM = "BTCUSDT:BINANCE"
@@ -37,12 +37,12 @@ class _InMemoryOrderRepo:
         return []
 
 
-async def _wired() -> tuple[OrderAppService, PaperBroker, list[OrderFilledEvent]]:
+async def _wired() -> tuple[OrderAppService, PaperBrokerAdapter, list[OrderFilledEvent]]:
     bus = EventBus()
     events: list[OrderFilledEvent] = []
     bus.subscribe(OrderFilledEvent, lambda e: events.append(e))
     svc = OrderAppService(bus, _InMemoryOrderRepo())  # pyright: ignore[reportArgumentType]
-    broker = PaperBroker(initial_balance=100_000.0, slippage_percent=0.0, fill_delay_ms=0)
+    broker = PaperBrokerAdapter(initial_balance=100_000.0, slippage_percent=0.0, fill_delay_ms=0)
     await broker.connect()
     broker.set_current_price(_SYM, 100.0)
     return svc, broker, events
