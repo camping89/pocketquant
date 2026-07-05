@@ -298,7 +298,7 @@ src/pocketquant/
 │   ├── infra/
 │   │   └── persistence/  Database (MongoDB), Cache (Redis), all 12 repositories
 │   ├── brokers/paper/    PaperBrokerAdapter (shared by backtest + paper trading)
-│   ├── market_data/binance/  BinanceAdapter (REST) + BinanceWebSocketClient (@aggTrade)
+│   ├── market_data/binance/  BinanceAdapter (REST) + BinanceWebSocketAdapter (@aggTrade)
 │   ├── scheduling/       JobScheduler (APScheduler)
 │   └── http_client/      ResilientHttpClient (retry/backoff)
 │

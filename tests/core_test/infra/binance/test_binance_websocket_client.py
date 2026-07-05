@@ -1,4 +1,4 @@
-"""Unit tests for BinanceWebSocketClient @aggTrade stream.
+"""Unit tests for BinanceWebSocketAdapter @aggTrade stream.
 
 Feeds canned aggTrade frames directly into _handle_frame — no real WS connection.
 Covers: callback dispatch, volume delta semantics, reconnect backoff, sub/unsub counts.
@@ -12,13 +12,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pocketquant.core.infra.binance.binance_websocket_client import (
+from pocketquant.core.infra.binance.binance_websocket_adapter import (
     _RECONNECT_DELAY_INITIAL,
     _RECONNECT_DELAY_MAX,
-    BinanceWebSocketClient,
+    BinanceWebSocketAdapter,
 )
 
-_WS_MODULE = "pocketquant.core.infra.binance.binance_websocket_client"
+_WS_MODULE = "pocketquant.core.infra.binance.binance_websocket_adapter"
 
 
 def _aggtrade_frame(
@@ -75,7 +75,7 @@ class TestAggTradeFrameParsing:
     @pytest.mark.asyncio
     async def test_single_aggtrade_callback_field(self, frame_kwargs, field, expected):
         """A single aggTrade frame maps each field onto the callback payload."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
         await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
@@ -87,7 +87,7 @@ class TestAggTradeFrameParsing:
     @pytest.mark.asyncio
     async def test_two_consecutive_frames_produce_delta_not_cumulative(self):
         """Two frames q=0.5 then q=0.3 → callbacks get 0.5 then 0.3 (NOT 0.5, 0.8)."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         volumes: list[float] = []
 
         await client.subscribe("BTCUSDT:BINANCE", lambda d: volumes.append(d["volume"]))
@@ -101,7 +101,7 @@ class TestAggTradeFrameParsing:
     @pytest.mark.asyncio
     async def test_combined_stream_frame_dispatched_correctly(self):
         """Combined-stream envelope (data key) is unwrapped before dispatch."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
         await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
@@ -114,7 +114,7 @@ class TestAggTradeFrameParsing:
     @pytest.mark.asyncio
     async def test_non_aggtrade_event_ignored(self):
         """Frames with e != 'aggTrade' do not trigger callbacks."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
         await client.subscribe("BTCUSDT:BINANCE", lambda d: received.append(d))
@@ -126,7 +126,7 @@ class TestAggTradeFrameParsing:
     @pytest.mark.asyncio
     async def test_async_callback_awaited(self):
         """Async callbacks are awaited, not fire-and-forget."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
         async def async_cb(d: dict) -> None:
@@ -140,7 +140,7 @@ class TestAggTradeFrameParsing:
     @pytest.mark.asyncio
     async def test_last_tick_at_updated_on_aggtrade(self):
         """last_tick_at is set to a datetime on first aggTrade received."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         assert client.last_tick_at is None
 
         await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
@@ -155,7 +155,7 @@ class TestSubscriptionManagement:
 
     @pytest.mark.asyncio
     async def test_subscribe_increments_count(self):
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         assert client.subscription_count == 0
 
         await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
@@ -166,7 +166,7 @@ class TestSubscriptionManagement:
 
     @pytest.mark.asyncio
     async def test_unsubscribe_decrements_count(self):
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
         await client.subscribe("ETHUSDT:BINANCE", lambda _: None)
         assert client.subscription_count == 2
@@ -176,14 +176,14 @@ class TestSubscriptionManagement:
 
     @pytest.mark.asyncio
     async def test_unsubscribe_nonexistent_no_error(self):
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         # Should not raise
         await client.unsubscribe("BTCUSDT:BINANCE")
         assert client.subscription_count == 0
 
     @pytest.mark.asyncio
     async def test_subscribe_returns_symbol_key(self):
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         key = await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
         assert key == "BTCUSDT:BINANCE"
 
@@ -194,7 +194,7 @@ class TestReconnectBackoff:
     @pytest.mark.asyncio
     async def test_backoff_doubles_each_failure(self):
         """_backoff_sleep doubles _reconnect_delay on each call."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         assert client._reconnect_delay == _RECONNECT_DELAY_INITIAL  # 1.0
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -210,7 +210,7 @@ class TestReconnectBackoff:
     @pytest.mark.asyncio
     async def test_backoff_capped_at_max(self):
         """Backoff delay is capped at _RECONNECT_DELAY_MAX (60s)."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         client._reconnect_delay = 32.0  # near cap
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -220,7 +220,7 @@ class TestReconnectBackoff:
     @pytest.mark.asyncio
     async def test_backoff_never_exceeds_max(self):
         """Multiple backoff calls never push delay above max."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         with patch("asyncio.sleep", new_callable=AsyncMock):
             for _ in range(20):
                 await client._backoff_sleep()
@@ -229,7 +229,7 @@ class TestReconnectBackoff:
     @pytest.mark.asyncio
     async def test_connect_resets_backoff(self):
         """Successful connect() resets _reconnect_delay to initial value."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         client._reconnect_delay = 32.0
 
         mock_ws = MagicMock()
@@ -238,7 +238,7 @@ class TestReconnectBackoff:
         async def _fake_connect(*args, **kwargs):
             return mock_ws
 
-        ws_module = "pocketquant.core.infra.binance.binance_websocket_client"
+        ws_module = "pocketquant.core.infra.binance.binance_websocket_adapter"
         with patch(f"{ws_module}.websockets.connect", side_effect=_fake_connect):
             await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
             await client.connect()
@@ -250,7 +250,7 @@ class TestReconnectBackoff:
         """run_forever sleeps after ConnectionClosed then reconnects."""
         import websockets as _ws
 
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
 
         connect_count = 0
@@ -304,7 +304,7 @@ class TestSilentExitAndWatchdog:
     @pytest.mark.asyncio
     async def test_silent_iterator_exit_triggers_reconnect(self):
         """When `async for` exits silently (close 1000/1001), run_forever reconnects."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
 
         connect_count = 0
@@ -332,7 +332,7 @@ class TestSilentExitAndWatchdog:
 
         with (
             patch(f"{_WS_MODULE}.websockets.connect", side_effect=_mock_connect),
-            patch.object(BinanceWebSocketClient, "_backoff_sleep", _mock_backoff),
+            patch.object(BinanceWebSocketAdapter, "_backoff_sleep", _mock_backoff),
         ):
             await client.run_forever()
 
@@ -344,7 +344,7 @@ class TestSilentExitAndWatchdog:
     @pytest.mark.asyncio
     async def test_watchdog_force_closes_stale_socket(self):
         """Watchdog calls _close_ws when last_tick_at lags beyond timeout."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         client._ws = MagicMock()
         client._ws.close = AsyncMock()
         # Force lag > threshold by backdating last_tick_at
@@ -360,7 +360,7 @@ class TestSilentExitAndWatchdog:
     @pytest.mark.asyncio
     async def test_watchdog_skips_when_last_tick_is_none(self):
         """Watchdog must not trip before any tick arrives — avoids killing fresh connection."""
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         client._ws = MagicMock()
         client._ws.close = AsyncMock()
         client.last_tick_at = None

@@ -282,7 +282,7 @@ core/
 ├── market_data/
 │   └── binance/             # Binance REST + WS integration
 │       ├── binance_adapter.py            # BinanceAdapter (implements core.domain IDataProviderPort)
-│       ├── binance_websocket_client.py  # BinanceWebSocketClient (@aggTrade stream)
+│       ├── binance_websocket_adapter.py  # BinanceWebSocketAdapter (@aggTrade stream)
 │       └── binance_mappers.py           # Binance-specific mapping
 ├── scheduling/
 │   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
@@ -307,7 +307,7 @@ core/
 | **PaperBrokerAdapter** | In-memory simulation, configurable slippage/delay |
 | **OKXBrokerAdapter** | Live trading, HMAC auth, exponential backoff reconnection |
 | **BinanceAdapter** | Implements IDataProviderPort; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilderDomainService). Rate limit: 1200 weight/min. |
-| **BinanceWebSocketClient** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
+| **BinanceWebSocketAdapter** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
 | **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
@@ -561,7 +561,7 @@ Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (fre
 ## Real-Time Streaming
 
 **Inbound (WebSocket):**
-1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketClient` (reconnect 1s→60s backoff). `WsSubscriptionAppService` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
+1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketAdapter` (reconnect 1s→60s backoff). `WsSubscriptionAppService` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
 2. **OKX private channels** — per-broker instance. `OKXWebSocketAdapter` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
 
 **Outbound (SSE):**

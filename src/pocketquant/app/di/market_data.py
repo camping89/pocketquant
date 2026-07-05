@@ -9,8 +9,8 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
-from pocketquant.core.infra.binance.binance_websocket_client import (
-    BinanceWebSocketClient,
+from pocketquant.core.infra.binance.binance_websocket_adapter import (
+    BinanceWebSocketAdapter,
 )
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -33,7 +33,7 @@ class MarketDataProvider(Provider):
 
     @provide(scope=Scope.APP)
     def get_realtime_quote_provider(self) -> IRealtimeQuoteProviderPort:
-        return BinanceWebSocketClient()  # type: ignore[return-value]  # Protocol satisfied structurally
+        return BinanceWebSocketAdapter()  # type: ignore[return-value]  # Protocol satisfied structurally
 
     @provide(scope=Scope.APP)
     def get_quote_service(

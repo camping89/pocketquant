@@ -37,11 +37,11 @@ _STALE_TICK_TIMEOUT_S = 30.0
 _WATCHDOG_INTERVAL_S = 5.0
 
 
-class BinanceWebSocketClient:
+class BinanceWebSocketAdapter:
     """Realtime @aggTrade stream client for Binance public WebSocket API.
 
     Usage:
-        client = BinanceWebSocketClient()
+        client = BinanceWebSocketAdapter()
         await client.subscribe("BTCUSDT:BINANCE", my_callback)
         await client.run_forever()   # blocks; reconnects on drop
     """
