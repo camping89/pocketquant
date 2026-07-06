@@ -20,3 +20,29 @@ export function formatQty(n: number | null | undefined): string {
   if (n === 0) return '0'
   return String(Number(n.toPrecision(8)))
 }
+
+/** USD amount: `$` + 2 decimals + thousands separator, sign only when negative.
+ *  For unsigned money (notional, fee): `$103.75`, `-$1.20`. */
+export function formatUsd(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return PLACEHOLDER
+  return `${n < 0 ? '-' : ''}$${priceFmt.format(Math.abs(n))}`
+}
+
+/** USD amount with explicit sign — for PnL / net where direction matters:
+ *  `+$0.08`, `-$0.13`. */
+export function formatUsdSigned(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return PLACEHOLDER
+  return `${n < 0 ? '-' : '+'}$${priceFmt.format(Math.abs(n))}`
+}
+
+const feeFmt = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+})
+
+/** USD fee: keeps up to 4 decimals for small per-trade fees where 2 dp rounds
+ *  away meaningful precision. `0.2076` → `$0.2076`, `0.21` → `$0.21`. */
+export function formatUsdPrecise(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return PLACEHOLDER
+  return `${n < 0 ? '-' : ''}$${feeFmt.format(Math.abs(n))}`
+}

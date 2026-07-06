@@ -131,6 +131,19 @@ class BacktestTradeRepository(BaseRepository):
             return float(row["total"])
         return 0.0
 
+    async def sum_commission_by_run(self, run_id: str, pnl_filter: str | None = None) -> float:
+        """Total commission over the full (filtered) set — footer's net-PnL uses
+        this to subtract fees from the gross ``sum_pnl_by_run`` total."""
+        collection = self._collection()
+        pipeline = [
+            {"$match": {"run_id": run_id, **self._pnl_filter_clause(pnl_filter)}},
+            {"$group": {"_id": None, "total": {"$sum": "$commission"}}},
+        ]
+        cursor = await collection.aggregate(pipeline)
+        async for row in cursor:
+            return float(row["total"])
+        return 0.0
+
     async def list_markers_by_run(self, run_id: str) -> list[dict]:
         """Projection for chart arrows + click-to-select — one row per trade, chronological.
 

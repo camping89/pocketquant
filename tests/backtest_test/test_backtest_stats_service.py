@@ -112,6 +112,7 @@ async def test_list_trades_paged_wins_filter_and_total_pnl(database: Database) -
     )
     assert wins.total == 2
     assert wins.total_pnl == 13.0
+    assert wins.total_commission == pytest.approx(0.42)  # 2 wins × 0.21
     assert all(i.pnl > 0 for i in wins.items)
 
 

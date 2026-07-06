@@ -3,7 +3,8 @@ import type { TradeRow } from '../../../api/backtest-api'
 import { useBacktestTrades } from '../../../hooks/use-backtest-run'
 import { PositionsFilter } from './positions-filter'
 import { PositionsTable } from './positions-table'
-import { fmtPnl, type FilterKey, type SortDir, type SortKey } from './positions-utils'
+import { type FilterKey, type SortDir, type SortKey } from './positions-utils'
+import { formatUsdSigned } from '../../../lib/number-format'
 
 interface PositionsTabProps {
   runId: string
@@ -29,6 +30,8 @@ export function PositionsTab({
   const rows = useMemo<TradeRow[]>(() => pages?.flatMap((p) => p.items) ?? [], [pages])
   const total = pages?.[0]?.total ?? 0
   const totalPnl = pages?.[0]?.total_pnl ?? 0
+  const totalCommission = pages?.[0]?.total_commission ?? 0
+  const totalNet = totalPnl - totalCommission
 
   const onSortChange = (key: SortKey) => {
     if (key === sortKey) {
@@ -63,7 +66,11 @@ export function PositionsTab({
           <span>{total} trades</span>
           <span>·</span>
           <span className={totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-            Total PnL {fmtPnl(totalPnl)}
+            Total PnL {formatUsdSigned(totalPnl)}
+          </span>
+          <span>·</span>
+          <span className={totalNet >= 0 ? 'pnl-positive' : 'pnl-negative'}>
+            Net {formatUsdSigned(totalNet)}
           </span>
         </div>
       </div>

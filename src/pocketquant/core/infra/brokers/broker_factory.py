@@ -30,11 +30,13 @@ class BrokerFactory:
             ValueError: If broker type is unknown
         """
         if broker_type == "paper":
-            # Settings carries a fraction (0.0004); the model wants bps (4).
-            commission_bps = config.get("commission_percent", 0.0) * 10_000
+            # Config surfaces slippage + commission as bps; the adapter takes
+            # slippage as a fraction, so convert here at the boundary.
+            commission_bps = config.get("commission_bps", 0.0)
+            slippage_bps = config.get("slippage_bps", 0.0)
             return PaperBrokerAdapter(
                 initial_balance=config.get("initial_balance", 10_000.0),
-                slippage_percent=config.get("slippage_percent", 0.001),
+                slippage_percent=slippage_bps / 10_000,
                 fill_delay_ms=config.get("fill_delay_ms", 50),
                 currency=config.get("currency", "USD"),
                 event_bus=self._event_bus,

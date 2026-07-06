@@ -3,14 +3,13 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   fmtDateTime,
   fmtDuration,
-  fmtPnl,
   fmtPrice,
   type SortDir,
   type SortKey,
 } from './positions-utils'
 import type { TradeRow } from '../../../api/backtest-api'
 import { useTimezone } from '../../../lib/use-timezone'
-import { formatQty } from '../../../lib/number-format'
+import { formatQty, formatUsd, formatUsdPrecise, formatUsdSigned } from '../../../lib/number-format'
 
 interface PositionsTableProps {
   rows: TradeRow[]
@@ -27,21 +26,24 @@ interface PositionsTableProps {
 }
 
 interface Col {
-  key: SortKey
+  // Sortable columns carry a server sort key; derived columns (notional, net)
+  // omit it and render as display-only headers (keyset paging can't sort them).
+  key?: SortKey
   label: string
   numeric?: boolean
 }
 
-// Server-sortable columns. The leading '#' is a display ordinal (not a stable
-// key), so it is not sortable anymore.
 const COLUMNS: Col[] = [
   { key: 'entry_time', label: 'Entry Time' },
   { key: 'direction', label: 'Dir' },
   { key: 'entry_price', label: 'Entry', numeric: true },
   { key: 'exit_price', label: 'Exit', numeric: true },
   { key: 'quantity', label: 'Qty', numeric: true },
+  { label: 'Entry $', numeric: true },
+  { label: 'Exit $', numeric: true },
   { key: 'duration_seconds', label: 'Duration', numeric: true },
   { key: 'pnl', label: 'PnL', numeric: true },
+  { label: 'Net', numeric: true },
   { key: 'commission', label: 'Fee', numeric: true },
   { key: 'status', label: 'Status' },
 ]
@@ -115,12 +117,12 @@ export function PositionsTable({
             <th className="positions-table__th">Trade Id</th>
             {COLUMNS.map((col) => (
               <th
-                key={col.key}
+                key={col.label}
                 className={`positions-table__th${col.numeric ? ' positions-table__th--num' : ''}`}
-                onClick={() => onSortChange(col.key)}
+                onClick={col.key ? () => onSortChange(col.key!) : undefined}
               >
                 {col.label}
-                {sortKey === col.key && (
+                {col.key && sortKey === col.key && (
                   <span className="positions-table__sort-arrow">{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>
                 )}
               </th>
@@ -155,11 +157,16 @@ export function PositionsTable({
                 <td className="positions-table__td--num">{fmtPrice(t.entry_price)}</td>
                 <td className="positions-table__td--num">{fmtPrice(t.exit_price)}</td>
                 <td className="positions-table__td--num">{formatQty(t.quantity)}</td>
+                <td className="positions-table__td--num">{formatUsd(t.quantity * t.entry_price)}</td>
+                <td className="positions-table__td--num">{formatUsd(t.quantity * t.exit_price)}</td>
                 <td className="positions-table__td--num">{fmtDuration(t)}</td>
                 <td className={`positions-table__td--num ${t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
-                  {fmtPnl(t.pnl)}
+                  {formatUsdSigned(t.pnl)}
                 </td>
-                <td className="positions-table__td--num">{t.commission.toFixed(4)}</td>
+                <td className={`positions-table__td--num ${t.pnl - t.commission >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
+                  {formatUsdSigned(t.pnl - t.commission)}
+                </td>
+                <td className="positions-table__td--num">{formatUsdPrecise(t.commission)}</td>
                 <td>{status}</td>
               </tr>
             )

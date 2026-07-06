@@ -28,10 +28,6 @@ export function fmtDuration(t: TradeRow): string {
   return fmtDurationSeconds(t.duration_seconds)
 }
 
-export function fmtPnl(n: number): string {
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`
-}
-
 export function fmtDateTime(s: string, mode: TimezoneMode): string {
   return formatDateTime(s, mode, 'YYYY-MM-DD HH:mm')
 }

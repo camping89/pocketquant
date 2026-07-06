@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPrice, formatQty } from './number-format'
+import { formatPrice, formatQty, formatUsd, formatUsdPrecise, formatUsdSigned } from './number-format'
 
 describe('formatQty', () => {
   it('keeps magnitude for tiny crypto sizes without float noise', () => {
@@ -48,5 +48,52 @@ describe('formatPrice', () => {
     expect(formatPrice(null)).toBe('—')
     expect(formatPrice(undefined)).toBe('—')
     expect(formatPrice(NaN)).toBe('—')
+  })
+})
+
+describe('formatUsd', () => {
+  it('prefixes $ with 2 decimals + thousands separator', () => {
+    expect(formatUsd(103.752)).toBe('$103.75')
+    expect(formatUsd(1998.7)).toBe('$1,998.70')
+  })
+
+  it('puts the minus sign before the $ for negatives', () => {
+    expect(formatUsd(-1.2)).toBe('-$1.20')
+  })
+
+  it('returns placeholder for null/undefined/NaN', () => {
+    expect(formatUsd(null)).toBe('—')
+    expect(formatUsd(NaN)).toBe('—')
+  })
+})
+
+describe('formatUsdPrecise', () => {
+  it('keeps up to 4 decimals for small fees', () => {
+    expect(formatUsdPrecise(0.2076)).toBe('$0.2076')
+  })
+
+  it('trims to min 2 decimals when no extra precision', () => {
+    expect(formatUsdPrecise(0.21)).toBe('$0.21')
+  })
+
+  it('puts the minus sign before the $', () => {
+    expect(formatUsdPrecise(-0.2076)).toBe('-$0.2076')
+  })
+
+  it('returns placeholder for null/undefined/NaN', () => {
+    expect(formatUsdPrecise(null)).toBe('—')
+    expect(formatUsdPrecise(NaN)).toBe('—')
+  })
+})
+
+describe('formatUsdSigned', () => {
+  it('always shows an explicit sign', () => {
+    expect(formatUsdSigned(0.08)).toBe('+$0.08')
+    expect(formatUsdSigned(-0.13)).toBe('-$0.13')
+  })
+
+  it('returns placeholder for null/undefined/NaN', () => {
+    expect(formatUsdSigned(null)).toBe('—')
+    expect(formatUsdSigned(NaN)).toBe('—')
   })
 })

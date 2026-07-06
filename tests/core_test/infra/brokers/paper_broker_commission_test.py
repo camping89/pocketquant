@@ -172,19 +172,19 @@ async def test_default_model_bps_zero_keeps_pre_r3_balance() -> None:
     assert (await b.get_balance()).available_balance == pytest.approx(_INITIAL)
 
 
-# --- Factory wiring: Settings fraction → model bps (no ×10000 unit bug) --------
+# --- Factory wiring: config bps → model bps (single unit, no conversion) -------
 
 
-async def test_broker_factory_percent_to_bps() -> None:
+async def test_broker_factory_bps_wiring() -> None:
     from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 
     factory = BrokerFactory(EventBus())
     broker = factory.create(
         "paper",
-        {"initial_balance": _INITIAL, "slippage_percent": 0.0, "commission_percent": 0.0004},
+        {"initial_balance": _INITIAL, "slippage_bps": 0.0, "commission_bps": 5.0},
     )
     assert isinstance(broker, PaperBrokerAdapter)
     await broker.connect()
     result = await broker.submit_order(_order(OrderSide.BUY, qty=10, price=100.0))
-    # 0.0004 fraction → 4 bps → 100*10*0.0004 = 0.4.
-    assert result.commission == pytest.approx(0.4)
+    # 5 bps → 100*10*5/10000 = 0.5.
+    assert result.commission == pytest.approx(0.5)

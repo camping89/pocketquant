@@ -97,6 +97,7 @@ class PagedTradesResponse(BaseModel):
     has_more: bool
     total: int
     total_pnl: float
+    total_commission: float
 
 
 class TradeMarkerDto(BaseModel):
@@ -226,15 +227,20 @@ class BacktestStatsService:
         is_first_page = query.cursor is None
         total = 0
         total_pnl = 0.0
+        total_commission = 0.0
         if is_first_page:
             total = await self._trade_repo.count_by_run(query.run_id, pnl_filter)
             total_pnl = await self._trade_repo.sum_pnl_by_run(query.run_id, pnl_filter)
+            total_commission = await self._trade_repo.sum_commission_by_run(
+                query.run_id, pnl_filter
+            )
         return PagedTradesResponse(
             items=items,
             next_cursor=next_cursor,
             has_more=has_more,
             total=total,
             total_pnl=total_pnl,
+            total_commission=total_commission,
         )
 
     async def list_markers(self, run_id: str) -> list[TradeMarkerDto]:

@@ -102,6 +102,8 @@ export interface PagedTrades {
   total: number
   /** Summed PnL of the full filtered set — table footer. */
   total_pnl: number
+  /** Summed commission of the full filtered set — footer's net = total_pnl − this. */
+  total_commission: number
 }
 
 /** All-trades list for the chart: entry/exit arrows + click-to-select hit-testing.

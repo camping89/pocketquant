@@ -121,7 +121,7 @@ class PaperBrokerAdapter(IBrokerPort):
         self._currency = currency
         self._event_bus = event_bus
         # Default bps=0 keeps pre-R3 balances when no model is injected; real bps
-        # (backtest commission_bps / live paper_commission_percent) wired via factory.
+        # (backtest commission_bps / live paper_commission_bps) wired via factory.
         self._commission_model = commission_model or PercentageCommissionModel(bps=0.0)
 
         self._positions: dict[str, PositionAggregate] = {}
