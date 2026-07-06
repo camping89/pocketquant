@@ -1,9 +1,14 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { Fragment, useMemo, useState, type CSSProperties } from 'react'
 import type { BacktestRunResult, TradeRow } from '../../api/backtest-api'
 import type { IndicatorConfig, Interval } from '../../types/market-data'
 import { useBacktestMarkers, useBacktestStats } from '../../hooks/use-backtest-run'
 import { MetricCard } from '../strategy/backtest-panel/metric-card'
-import { buildMetricCards, buildMetricGroups } from '../strategy/backtest-panel/metric-cards'
+import {
+  buildCostCards,
+  buildMetricCards,
+  buildMetricGroups,
+  type MetricCardModel,
+} from '../strategy/backtest-panel/metric-cards'
 import { PositionsTab } from '../strategy/backtest-panel/positions-tab'
 import { OpenPositionsTab } from '../strategy/backtest-panel/open-positions-tab'
 import { TradingChart } from '../chart/trading-chart'
@@ -54,6 +59,21 @@ const sectionTitle: CSSProperties = {
   margin: '12px 0 6px',
 }
 
+function CardSection({ title, cards }: { title: string; cards: MetricCardModel[] }) {
+  return (
+    <div>
+      <div style={sectionTitle}>{title}</div>
+      <div className="metrics-tab">
+        <div className="metrics-grid">
+          {cards.map((c) => (
+            <MetricCard key={c.key} card={c} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function BacktestResultView({
   run,
   runId,
@@ -95,6 +115,10 @@ export function BacktestResultView({
     [metrics],
   )
   const groups = useMemo(() => (metrics ? buildMetricGroups(metrics) : []), [metrics])
+  const costCards = useMemo(
+    () => (metrics ? buildCostCards(run.config_snapshot ?? {}, metrics) : []),
+    [metrics, run.config_snapshot],
+  )
   const stats = statsQuery.data
   const pfLong = stats?.profit_factor_by_direction.long
   const pfShort = stats?.profit_factor_by_direction.short
@@ -127,16 +151,12 @@ export function BacktestResultView({
             </div>
           )}
           {groups.map((g) => (
-            <div key={g.title}>
-              <div style={sectionTitle}>{g.title}</div>
-              <div className="metrics-tab">
-                <div className="metrics-grid">
-                  {g.cards.map((c) => (
-                    <MetricCard key={c.key} card={c} />
-                  ))}
-                </div>
-              </div>
-            </div>
+            <Fragment key={g.title}>
+              {g.title === 'Trade Stats' && costCards.length > 0 && (
+                <CardSection title="Costs" cards={costCards} />
+              )}
+              <CardSection title={g.title} cards={g.cards} />
+            </Fragment>
           ))}
           <div style={sectionTitle}>Equity & Drawdown</div>
           <EquityDrawdownChart equityCurve={run.equity_curve} />

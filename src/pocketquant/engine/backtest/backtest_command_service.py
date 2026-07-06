@@ -31,7 +31,7 @@ class RunBacktestCommand(BaseModel):
     start_date: datetime = Field(..., description="Backtest start datetime (minute precision)")
     end_date: datetime = Field(..., description="Backtest end datetime (minute precision)")
     initial_capital: float = Field(default=10_000.0, ge=100, description="Starting capital")
-    slippage_bps: float = Field(default=5.0, ge=0, description="Slippage in basis points")
+    slippage_bps: float = Field(default=1.0, ge=0, description="Slippage in basis points")
     commission_bps: float = Field(default=5.0, ge=0, description="Commission in basis points")
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")
 

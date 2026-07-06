@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # Strategy Engine
     default_broker: Literal["paper", "okx"] = "paper"
     paper_initial_balance: float = 10_000.0
-    paper_slippage_bps: float = 5.0  # 0.05%
+    paper_slippage_bps: float = 1.0  # 1 bp = 0.01%
     paper_commission_bps: float = 5.0  # 5 bps
     reconcile_interval_seconds: float = 5.0
 

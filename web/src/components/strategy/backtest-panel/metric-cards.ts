@@ -71,17 +71,61 @@ const METRIC_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Risk', keys: ['sharpe', 'sortino', 'max_dd', 'profit_factor'] },
   {
     title: 'Trade Stats',
-    keys: ['total_trades', 'winning', 'losing', 'win_rate', 'avg_duration', 'total_commission'],
+    keys: ['total_trades', 'winning', 'losing', 'win_rate', 'avg_duration'],
   },
 ]
 
-/** The same 14 cards as buildMetricCards, partitioned into the 3 dashboard groups. */
+/** buildMetricCards partitioned into the 3 dashboard groups. total_commission is
+ *  surfaced separately via buildCostCards (the Overview "Costs" section), so it
+ *  is intentionally absent here. */
 export function buildMetricGroups(m: BacktestMetrics): MetricGroup[] {
   const byKey = new Map(buildMetricCards(m).map((c) => [c.key, c]))
   return METRIC_GROUPS.map((g) => ({
     title: g.title,
     cards: g.keys.map((k) => byKey.get(k)).filter((c): c is MetricCardModel => c != null),
   }))
+}
+
+/** Coerce a config_snapshot value (typed `unknown`) to a finite number, else null. */
+function num(v: unknown): number | null {
+  return typeof v === 'number' && isFinite(v) ? v : null
+}
+
+/** A per-fill rate in bps rendered with its percent equivalent (1 bp = 0.01%).
+ *  Old runs may lack the field → em dash. */
+function fmtBpsRate(bps: number | null): string {
+  if (bps == null) return '—'
+  return `${bps} bps (${(bps / 100).toFixed(2)}%)`
+}
+
+/** Every cost the user is charged, for the Overview "Costs" section: the per-fill
+ *  commission + slippage RATES (from the run's config snapshot, so each run shows
+ *  the exact settings it ran with) and the total commission actually paid (USD).
+ *  Slippage has no USD line — it is baked into fill prices, so it already lives
+ *  inside every trade's PnL. */
+export function buildCostCards(
+  cfg: Record<string, unknown>,
+  m: BacktestMetrics,
+): MetricCardModel[] {
+  const feesCard = buildMetricCards(m).find((c) => c.key === 'total_commission')
+  const cards: MetricCardModel[] = [
+    {
+      key: 'commission_bps',
+      label: 'Commission',
+      value: fmtBpsRate(num(cfg.commission_bps)),
+      tone: 'neutral',
+      tooltip: 'Rate charged on every fill — debited from cash balance',
+    },
+    {
+      key: 'slippage_bps',
+      label: 'Slippage',
+      value: fmtBpsRate(num(cfg.slippage_bps)),
+      tone: 'neutral',
+      tooltip: 'Rate applied on every fill — baked into entry/exit prices, so already in PnL',
+    },
+  ]
+  if (feesCard) cards.push(feesCard)
+  return cards
 }
 
 export function buildMetricCards(m: BacktestMetrics): MetricCardModel[] {
@@ -179,10 +223,10 @@ export function buildMetricCards(m: BacktestMetrics): MetricCardModel[] {
     },
     {
       key: 'total_commission',
-      label: 'Total Fees',
-      value: m.total_commission.toFixed(2),
+      label: 'Total Commission',
+      value: `$${m.total_commission.toFixed(2)}`,
       tone: 'neutral',
-      tooltip: 'Sum of all commissions paid',
+      tooltip: 'Sum of all commissions paid (USD)',
     },
   ]
 }
