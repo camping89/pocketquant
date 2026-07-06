@@ -40,6 +40,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
   const { data: strategies = [], isLoading: stratLoading } = useStrategyList()
   const { mode, suffix } = useTimezone()
   const [strategyId, setStrategyId] = useState('')
+  const [name, setName] = useState('')
   const [symbol, setSymbol] = useState('BTCUSDT:BINANCE')
   const [interval, setInterval] = useState('1m')
   // Inputs are wall-clock in the active tz mode; default end=now, start=now−1y.
@@ -84,6 +85,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
 
     onSubmit({
       strategy_id: effectiveStrategy,
+      name: name.trim() || undefined,
       symbol: sym,
       interval,
       start_date: toUtcSubmit(startDate),
@@ -94,6 +96,18 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <label style={labelStyle}>Name (optional)</label>
+        <input
+          style={inputStyle}
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ghi chú ngắn cho run này…"
+          maxLength={200}
+        />
+      </div>
+
       <div>
         <label style={labelStyle}>Strategy</label>
         <select

@@ -399,6 +399,7 @@ class BacktestReportAppService:
             "slippage_bps": self._config.slippage_bps,
             "commission_bps": self._config.commission_bps,
             "parameters": self._config.parameters,
+            "name": self._config.name,
         }
 
         run = BacktestResult(
@@ -416,6 +417,7 @@ class BacktestReportAppService:
             interval=self._config.interval,
             error_message=error_message,
             parameters=self._config.parameters,
+            name=self._config.name,
         )
         return CollectedResults(
             run=run, orders=list(self._orders_by_id.values()), trades=list(self._trades)

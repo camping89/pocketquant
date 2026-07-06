@@ -45,6 +45,7 @@ export type BacktestStatus = 'started' | 'finished' | 'failed'
 export interface BacktestRunResult {
   id?: string
   strategy_code?: string
+  name?: string | null
   status: BacktestStatus | string
   metrics: BacktestMetrics | null
   open_positions: BacktestPosition[]
@@ -181,6 +182,7 @@ export async function fetchBacktestStats(runId: string): Promise<BacktestStats> 
 
 export interface RunBacktestBody {
   strategy_id: string
+  name?: string
   symbol: string
   interval: string
   start_date: string
@@ -195,6 +197,7 @@ interface BacktestRunDoc {
   _id?: string
   status: BacktestStatus | string
   strategy_code?: string
+  name?: string | null
   metrics: BacktestMetrics | null
   equity_curve?: EquityPoint[]
   open_positions?: Array<{
@@ -243,6 +246,7 @@ export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult
   return {
     id: doc._id,
     strategy_code: doc.strategy_code,
+    name: doc.name,
     status: doc.status,
     metrics: doc.metrics,
     open_positions,
@@ -264,6 +268,7 @@ export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult
 export interface BacktestRunRow {
   id: string
   strategy_code: string
+  name: string | null
   symbol: string
   interval: string
   status: BacktestStatus | string
@@ -351,4 +356,10 @@ export async function fetchBacktestOrders(runId: string): Promise<BacktestOrder[
 
 export async function setVerdict(runId: string, verdict: string | null): Promise<void> {
   await apiPatch(`/api/v1/backtest/${runId}/verdict`, { verdict })
+}
+
+// --- Name -------------------------------------------------------------------
+
+export async function setBacktestName(runId: string, name: string | null): Promise<void> {
+  await apiPatch(`/api/v1/backtest/${runId}/name`, { name })
 }

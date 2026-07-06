@@ -44,6 +44,7 @@ export function BacktestDetailPane({
           status={status ?? 'started'}
           errorMsg={errorMsg}
           strategyCode={run.strategy_code}
+          name={run.name}
           symbol={run.symbol}
           interval={run.interval}
           metrics={run.metrics}

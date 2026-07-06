@@ -16,6 +16,7 @@ import {
   fetchBacktestMarkers,
   fetchBacktestStats,
   setVerdict,
+  setBacktestName,
   type RunBacktestBody,
   type BacktestRunScope,
   type BacktestRunResult,
@@ -141,5 +142,29 @@ export function useSetVerdict(runId: string) {
       if (ctx?.previous) qc.setQueryData(key, ctx.previous)
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: key }),
+  })
+}
+
+/** Set/clear a run's label with an optimistic cache update; revert on failure.
+ *  Also invalidates the history-list queries so the renamed run shows in the
+ *  rail (list rows come from a separate query key). */
+export function useSetBacktestName(runId: string) {
+  const qc = useQueryClient()
+  const key = ['backtest-run', runId]
+  return useMutation({
+    mutationFn: (name: string | null) => setBacktestName(runId, name),
+    onMutate: async (name) => {
+      await qc.cancelQueries({ queryKey: key })
+      const previous = qc.getQueryData<BacktestRunResult>(key)
+      if (previous) qc.setQueryData<BacktestRunResult>(key, { ...previous, name })
+      return { previous }
+    },
+    onError: (_err, _name, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous)
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key })
+      void qc.invalidateQueries({ queryKey: ['backtest-runs'] })
+    },
   })
 }

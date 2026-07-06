@@ -130,6 +130,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
         initial_capital=100_000.0,
         slippage_bps=0.0,
         commission_bps=10.0,
+        name="E2E label",
     )
 
     runner = BacktestAppService(
@@ -150,6 +151,9 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     assert "trades" not in doc
     assert "positions" not in doc
     assert doc["status"] == "finished"
+    # Name set at config time survives the engine's finished-doc write.
+    assert doc["name"] == "E2E label"
+    assert result.name == "E2E label"
 
     # Orders: 2 (entry + exit), each FILLED with ≥2 events + ≥1 fill.
     orders = await order_repo.list_by_run(str(result.id))

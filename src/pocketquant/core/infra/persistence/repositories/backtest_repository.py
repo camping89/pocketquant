@@ -97,6 +97,17 @@ class BacktestRepository(BaseRepository):
         )
         return result.matched_count > 0
 
+    async def set_name(self, run_id: str, name: str | None) -> bool:
+        """Set the human-readable label on a run without touching metrics.
+
+        Returns False if no run matches ``run_id`` so the caller can 404.
+        """
+        collection = self._collection()
+        result = await collection.update_one(
+            {"_id": run_id}, {"$set": {"name": name}}
+        )
+        return result.matched_count > 0
+
     async def mark_orphaned_started_as_failed(self) -> int:
         """Flip every run still ``started`` to ``failed`` — call once at boot.
 

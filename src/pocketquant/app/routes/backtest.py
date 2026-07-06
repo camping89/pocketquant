@@ -16,6 +16,7 @@ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.engine.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
+    SetNameCommand,
     SetVerdictCommand,
 )
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
@@ -39,6 +40,12 @@ backtest_router = APIRouter(prefix="/backtest", tags=["backtest"], route_class=D
 class SetVerdictBody(BaseModel):
     verdict: str | None = Field(
         default=None, max_length=2000, description="Conclusion text; null clears it"
+    )
+
+
+class SetNameBody(BaseModel):
+    name: str | None = Field(
+        default=None, max_length=200, description="Run label; null clears it"
     )
 
 
@@ -87,6 +94,17 @@ async def set_backtest_verdict(
     """Set (or clear) the human-readable verdict on a run. 404 if run unknown."""
     await cmd_svc.set_verdict(SetVerdictCommand(run_id=run_id, verdict=body.verdict))
     return {"run_id": run_id, "verdict": body.verdict}
+
+
+@backtest_router.patch("/{run_id}/name")
+async def set_backtest_name(
+    run_id: str,
+    body: SetNameBody,
+    cmd_svc: FromDishka[BacktestCommandService],
+) -> dict:
+    """Set (or clear) the human-readable label on a run. 404 if run unknown."""
+    await cmd_svc.set_name(SetNameCommand(run_id=run_id, name=body.name))
+    return {"run_id": run_id, "name": body.name}
 
 
 @backtest_router.get("/{run_id}/equity")
@@ -189,6 +207,7 @@ async def list_backtests(
         {
             "id": str(r.id),
             "strategy_code": r.strategy_code,
+            "name": r.name,
             "symbol": r.symbol,
             "interval": r.interval,
             "status": r.status,

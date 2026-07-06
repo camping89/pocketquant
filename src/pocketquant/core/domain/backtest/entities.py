@@ -36,6 +36,7 @@ class BacktestResult:
     parameters: dict[str, Any] = field(default_factory=dict)  # For optimizer
     open_positions: list[OpenLot] = field(default_factory=list)
     verdict: str | None = None  # Human-readable conclusion (set post-run via PATCH)
+    name: str | None = None  # Optional run label (set at creation, editable via PATCH)
 
     @classmethod
     def started(cls, run_id: str, config_snapshot: dict[str, Any]) -> BacktestResult:
@@ -61,6 +62,7 @@ class BacktestResult:
             symbol=config_snapshot.get("symbol", "").upper(),
             interval=config_snapshot.get("interval", ""),
             parameters=config_snapshot.get("parameters", {}),
+            name=config_snapshot.get("name"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -82,6 +84,7 @@ class BacktestResult:
             "error_message": self.error_message,
             "parameters": self.parameters,
             "verdict": self.verdict,
+            "name": self.name,
         }
 
     @classmethod
@@ -106,4 +109,5 @@ class BacktestResult:
             error_message=data.get("error_message"),
             parameters=data.get("parameters", {}),
             verdict=data.get("verdict"),
+            name=data.get("name"),
         )

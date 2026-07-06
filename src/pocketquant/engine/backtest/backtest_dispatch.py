@@ -50,6 +50,7 @@ def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
         slippage_bps=payload.get("slippage_bps", 1.0),
         commission_bps=payload.get("commission_bps", 3.0),
         parameters=payload.get("parameters") or {},
+        name=payload.get("name"),
     )
 
 

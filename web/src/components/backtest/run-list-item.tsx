@@ -31,7 +31,8 @@ export function RunListItem({ row, active, selected, disableSelect, onSelect, on
           onChange={() => onToggleSelect(row.id)}
           aria-label={`Select run ${row.id}`}
         />
-        <span style={{ fontWeight: 600 }}>{row.strategy_code}</span>
+        <span style={{ fontWeight: 600 }}>{row.name || row.strategy_code}</span>
+        {row.name && <span style={{ color: 'var(--text-secondary)' }}>{row.strategy_code}</span>}
         <span style={{ color: 'var(--text-secondary)' }}>{row.symbol} · {row.interval}</span>
       </div>
       <div className="backtest-run-item__line2">

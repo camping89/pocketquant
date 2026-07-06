@@ -34,6 +34,7 @@ class RunBacktestCommand(BaseModel):
     slippage_bps: float = Field(default=1.0, ge=0, description="Slippage in basis points")
     commission_bps: float = Field(default=3.0, ge=0, description="Commission in basis points")
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")
+    name: str | None = Field(default=None, max_length=200, description="Optional run label")
 
 
 class SetVerdictCommand(BaseModel):
@@ -42,6 +43,15 @@ class SetVerdictCommand(BaseModel):
     run_id: str = Field(..., description="Backtest run id")
     verdict: str | None = Field(
         default=None, max_length=2000, description="Conclusion text; null clears it"
+    )
+
+
+class SetNameCommand(BaseModel):
+    """Command to set (or clear) the human-readable label on a run."""
+
+    run_id: str = Field(..., description="Backtest run id")
+    name: str | None = Field(
+        default=None, max_length=200, description="Run label; null clears it"
     )
 
 
@@ -67,6 +77,7 @@ class BacktestCommandService:
             "slippage_bps": cmd.slippage_bps,
             "commission_bps": cmd.commission_bps,
             "parameters": cmd.parameters or {},
+            "name": cmd.name,
         }
         await self._backtest_repo.save(BacktestResult.started(run_id, config))
         return run_id, config
@@ -74,5 +85,11 @@ class BacktestCommandService:
     async def set_verdict(self, cmd: SetVerdictCommand) -> None:
         """Set the run's verdict; raise NotFoundError if the run does not exist."""
         matched = await self._backtest_repo.set_verdict(cmd.run_id, cmd.verdict)
+        if not matched:
+            raise NotFoundError(f"Backtest not found: {cmd.run_id}")
+
+    async def set_name(self, cmd: SetNameCommand) -> None:
+        """Set the run's label; raise NotFoundError if the run does not exist."""
+        matched = await self._backtest_repo.set_name(cmd.run_id, cmd.name)
         if not matched:
             raise NotFoundError(f"Backtest not found: {cmd.run_id}")

@@ -20,6 +20,7 @@ class BacktestConfig:
         commission_bps: Commission in basis points (3 = 0.03%).
         replay_speed: Replay speed multiplier (0 = max speed).
         parameters: Strategy-specific parameters for optimization.
+        name: Optional human-readable label for the run.
     """
 
     strategy_code: str
@@ -32,6 +33,7 @@ class BacktestConfig:
     commission_bps: float = 3.0  # 3 bps default
     replay_speed: float = 0.0  # 0 = max speed, 1 = real-time, 10 = 10x
     parameters: dict[str, Any] = field(default_factory=dict)
+    name: str | None = None
 
     @property
     def slippage_percent(self) -> float:
