@@ -6,7 +6,7 @@ Tài liệu canonical cho code layout và workflow hiện tại. Docs là **AS-I
 
 | # | Doc                                                 | Description                                                                                                                                                                                                                                                              |
 |---|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0 | [Root README](../README.md)                         | Entry point + local workflow: cài deps, chạy Mongo/Redis, chạy API, sync data, chạy UI, smoke-test. **Đọc trước tiên.**                                                                                                                                                  |
+| 0 | [Root README](../../README.md)                      | Entry point + local workflow: cài deps, chạy Mongo/Redis, chạy API, sync data, chạy UI, smoke-test. **Đọc trước tiên.**                                                                                                                                                  |
 | 1 | [Project Overview / PDR](./project-overview-pdr.md) | Product vision, scope, functional requirements (F1…F10), non-functional (NF1…NF6). Phần "why" và "what".                                                                                                                                                                 |
 | 2 | [System Architecture](./system-architecture.md)     | Design reference duy nhất: layers (Clean Architecture + DDD + CQRS), request flows, "Where Does X Live?", MongoDB ERD, real-time streaming (WS/SSE), strategy lifecycle, DI graph, ops context (CI/CD, config flow), bounded contexts, ubiquitous language, limitations. |
 | 3 | [Code Standards](./code-standards.md)               | Naming, file-size rules, dependency direction, route/service/repository conventions, exception handling, async-suspension patterns, testing, worked example end-to-end.                                                                                                  |
@@ -21,7 +21,7 @@ Tài liệu canonical cho code layout và workflow hiện tại. Docs là **AS-I
 
 ## Current Repo Shape
 
-One Python package (`pocketquant`) tại repo-root `src/`; subpackage boundaries enforced bởi import-linter contracts trong `pyproject.toml` (layout chuẩn xem [Root README](../README.md)).
+One Python package (`pocketquant`) tại repo-root `src/`; subpackage boundaries enforced bởi import-linter contracts trong `pyproject.toml` (layout chuẩn xem [Root README](../../README.md)).
 
 ```text
 src/pocketquant/
@@ -31,7 +31,7 @@ src/pocketquant/
 web/        # React 19 + Vite SPA (separate npm app)
 ```
 
-Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. `fastapi` chỉ được import bởi `app`.
+Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest và live là hai driver trên một engine dùng chung. `fastapi` chỉ được import bởi `app`.
 
 Single process: app (FastAPI port 41921, serve toàn bộ `/api/*` routes + SPA fallback). Scheduler, WS feed, broker, strategy engine chạy chung process; ràng buộc single-worker (`--workers 1`).
 

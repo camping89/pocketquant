@@ -1,35 +1,35 @@
 # PocketQuant: Project Overview & Product Development Requirements
 
-Architecture: DDD + CQRS + Clean Architecture + Dishka. Structure: single Python package `src/pocketquant/` + `web/` as a separate npm app.
+Kiến trúc: DDD + CQRS + Clean Architecture + Dishka. Cấu trúc: một Python package `src/pocketquant/` + `web/` là một npm app riêng biệt.
 
-Discover architecture, code patterns, and conventions in `./docs/` — see [system-architecture.md](./system-architecture.md), [code-standards.md](./code-standards.md), [README.md](../README.md).
+Khám phá kiến trúc, code pattern và quy ước trong `./docs/` — xem [system-architecture.md](./system-architecture.md), [code-standards.md](./code-standards.md), [README.md](../../README.md).
 
 ## Project Vision
 
-PocketQuant is an algorithmic trading platform providing real-time market data synchronization, automated bar aggregation, and structured data storage for backtesting and forward testing workflows. The platform bridges Binance public market data with MongoDB persistence, enabling traders and quants to build strategies on reliable, comprehensive market data.
+PocketQuant là một nền tảng algorithmic trading cung cấp đồng bộ dữ liệu thị trường real-time, tự động aggregate bar và lưu trữ dữ liệu có cấu trúc cho các workflow backtesting và forward testing. Nền tảng bắc cầu giữa dữ liệu thị trường công khai của Binance và persistence trên MongoDB, cho phép trader và quant xây dựng chiến lược trên dữ liệu thị trường đáng tin cậy, toàn diện.
 
 ## Product Goals
 
-1. **Data Reliability:** Efficient historical bar sync from Binance with MongoDB persistence
-2. **Real-time Processing:** Live quote streaming with automatic aggregation into multiple timeframe bars
-3. **Developer Experience:** Clean REST API with OpenAPI documentation, minimal setup friction
-4. **Production Ready:** Structured logging, error handling, graceful degradation
-5. **Extensibility:** DDD + CQRS architecture with vertical slice features and clean separation of concerns
+1. **Data Reliability:** Đồng bộ bar lịch sử hiệu quả từ Binance với persistence trên MongoDB
+2. **Real-time Processing:** Live quote streaming với tự động aggregate thành bar ở nhiều timeframe
+3. **Developer Experience:** REST API sạch với tài liệu OpenAPI, tối thiểu ma sát khi setup
+4. **Production Ready:** Structured logging, xử lý lỗi, graceful degradation
+5. **Extensibility:** Kiến trúc DDD + CQRS với vertical slice feature và tách bạch mối quan tâm rõ ràng
 
 ## Functional Requirements
 
 ### F1: Historical Data Synchronization
 
-**Requirement:** Fetch bar data from Binance public REST and persist to MongoDB.
+**Requirement:** Fetch dữ liệu bar từ Binance public REST và persist vào MongoDB.
 
 **Sub-requirements:**
-- Sync single symbol with configurable interval and bar count
-- Bulk sync multiple symbols in single operation
-- Background/async sync without blocking client
-- Track sync progress and status
-- Prevent duplicate data via upsert operations
-- Support 7 standard intervals (1m, 5m, 15m, 1h, 4h, 1d, 1w)
-- Auto-paginate when `n_bars > 1000` (Binance returns max 1000 bars/call, 1200 weight/min budget)
+- Sync một symbol với interval và số lượng bar tùy chỉnh
+- Bulk sync nhiều symbol trong một thao tác duy nhất
+- Sync background/async không block client
+- Theo dõi tiến trình và trạng thái sync
+- Ngăn dữ liệu trùng lặp qua thao tác upsert
+- Hỗ trợ 7 interval chuẩn (1m, 5m, 15m, 1h, 4h, 1d, 1w)
+- Tự động phân trang khi `n_bars > 1000` (Binance trả về tối đa 1000 bar/call, budget 1200 weight/min)
 
 **API Endpoints:**
 - POST `/api/v1/market-data/sync` - Single symbol
@@ -39,21 +39,21 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 - GET `/api/v1/market-data/sync-status/{symbol}` - Per-symbol (composite, e.g. `BTCUSDT:BINANCE`)
 
 **Status Tracking:**
-- Pending (request received, awaiting processing)
-- Syncing (fetch in progress)
-- Completed (success with bar count)
-- Error (with error message)
+- Pending (đã nhận request, chờ xử lý)
+- Syncing (đang fetch)
+- Completed (thành công với số lượng bar)
+- Error (kèm thông báo lỗi)
 
 ### F2: Real-time Quote Streaming
 
-**Requirement:** Consume live price updates from Binance `@aggTrade` WebSocket and distribute to subscribers.
+**Requirement:** Tiêu thụ live price update từ Binance `@aggTrade` WebSocket và phân phối tới các subscriber.
 
 **Sub-requirements:**
-- Maintain persistent WebSocket connection (singleton, app-wide), auto-started by the FastAPI lifespan
-- Auto-reconnect with exponential backoff (1s to 60s)
-- Subscribe/unsubscribe to specific symbols; `WsSubscriptionAppService` reconciles vs `tracked_symbols` every 5s
-- Cache latest quotes in Redis (~60s TTL)
-- Re-subscribe after reconnection
+- Duy trì kết nối WebSocket persistent (singleton, app-wide), tự động khởi động bởi FastAPI lifespan
+- Auto-reconnect với exponential backoff (1s tới 60s)
+- Subscribe/unsubscribe tới symbol cụ thể; `WsSubscriptionAppService` reconcile so với `tracked_symbols` mỗi 5s
+- Cache quote mới nhất trong Redis (~60s TTL)
+- Re-subscribe sau khi reconnect
 
 **API Endpoints:**
 - POST `/api/v1/quotes/subscribe` - Register symbol
@@ -65,60 +65,60 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F3: Multi-interval Bar Aggregation
 
-**Requirement:** Aggregate real-time ticks into OHLCV bars at multiple timeframes simultaneously.
+**Requirement:** Aggregate tick real-time thành bar OHLCV ở nhiều timeframe đồng thời.
 
 **Sub-requirements:**
 
-- Build bars for all 7 intervals (1m, 5m, 15m, 1h, 4h, 1d, 1w) from single tick stream
-- Atomic OHLC/V updates (no data corruption)
-- Proper time alignment (midnight UTC for daily, epoch-aligned for intraday)
-- Detect bar completion and auto-save to MongoDB
-- Maintain in-progress bars in Redis (300s TTL)
-- Flush incomplete bars on shutdown (no data loss)
-- Concurrent tick processing with lock protection
+- Build bar cho cả 7 interval (1m, 5m, 15m, 1h, 4h, 1d, 1w) từ một tick stream duy nhất
+- Cập nhật OHLC/V atomic (không hỏng dữ liệu)
+- Căn thời gian chính xác (midnight UTC cho daily, epoch-aligned cho intraday)
+- Phát hiện bar hoàn thành và tự động save vào MongoDB
+- Duy trì bar in-progress trong Redis (300s TTL)
+- Flush bar chưa hoàn thành khi shutdown (không mất dữ liệu)
+- Xử lý tick đồng thời với lock protection
 
 **Data Flow:**
 - Binance `@aggTrade` tick → QuoteAppService → BarAppService (bar aggregation) → MongoDB + Redis
 
 ### F4: Data Retrieval
 
-**Requirement:** Query historical bar data with filtering and caching.
+**Requirement:** Query dữ liệu bar lịch sử với filtering và caching.
 
 **Sub-requirements:**
-- Retrieve bars by symbol, exchange, interval
-- Support pagination (limit, offset)
-- Sort by timestamp (descending)
-- Cache queries (300s TTL)
-- Invalidate cache after sync
-- Support flexible time ranges
+- Truy xuất bar theo symbol, exchange, interval
+- Hỗ trợ phân trang (limit, offset)
+- Sort theo timestamp (giảm dần)
+- Cache query (300s TTL)
+- Invalidate cache sau khi sync
+- Hỗ trợ time range linh hoạt
 
 **API Endpoints:**
 - GET `/api/v1/market-data/ohlcv/{symbol}/{interval}` - Bars with query params (composite symbol: `BTCUSDT:BINANCE`, URL-encoded `%3A`)
 
 ### F5: Symbol Registry
 
-**Requirement:** Maintain list of tracked symbols.
+**Requirement:** Duy trì danh sách các symbol được theo dõi.
 
 **Sub-requirements:**
-- Create, read, update, delete symbols
-- Store metadata (exchange, name, description)
-- List all tracked symbols
-- Optional: Search implementation
+- Create, read, update, delete symbol
+- Lưu metadata (exchange, name, description)
+- List tất cả symbol được theo dõi
+- Optional: Triển khai Search
 
 **API Endpoints:**
 - GET `/api/v1/market-data/symbols` - List symbols
 
 ### F6: Background Job Scheduling
 
-**Requirement:** Automatically sync data on schedule with integrity verification.
+**Requirement:** Tự động sync dữ liệu theo lịch với kiểm tra tính toàn vẹn.
 
 **Sub-requirements:**
-- Tiered sync by interval (5m, 15m, 1h, 4h, daily)
-- Full backfill sync (5000 bars across all intervals)
-- Daily integrity checks (bar alignment + gaps)
-- Scheduled gap-fill repairs every 12h with verification
-- Per-symbol error handling (don't break loop)
-- Job execution history tracking (7-day TTL)
+- Sync phân tầng theo interval (5m, 15m, 1h, 4h, daily)
+- Full backfill sync (5000 bar trên tất cả interval)
+- Kiểm tra tính toàn vẹn hàng ngày (bar alignment + gap)
+- Sửa chữa gap-fill theo lịch mỗi 12h kèm verification
+- Xử lý lỗi per-symbol (không phá vỡ loop)
+- Theo dõi lịch sử thực thi job (7-day TTL)
 
 **Jobs (8 total):**
 - sync_5m, sync_15m, sync_hourly, sync_swing, sync_daily — Per-interval syncs (varying bar counts: 30, 30, 10, 6, 7)
@@ -128,15 +128,15 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F7: Strategy Engine
 
-**Requirement:** Load and execute trading strategies with flexible broker abstraction.
+**Requirement:** Load và thực thi chiến lược trading với broker abstraction linh hoạt.
 
 **Sub-requirements:**
-- Load strategy templates from the in-code `STRATEGY_REGISTRY` (e.g. `hitnrun2`)
-- Support multiple strategy implementations via the `IStrategyService` interface
-- Route market data events to strategy handlers (`on_bar_completed`, `on_quote_received`, `on_order_filled`)
-- Broker abstraction: paper trading + live trading support
-- Position/order tracking from execution fills
-- Risk checks before order submission
+- Load strategy template từ `STRATEGY_REGISTRY` in-code (e.g. `hitnrun2`)
+- Hỗ trợ nhiều triển khai chiến lược qua interface `IStrategyService`
+- Route event dữ liệu thị trường tới các strategy handler (`on_bar_completed`, `on_quote_received`, `on_order_filled`)
+- Broker abstraction: hỗ trợ paper trading + live trading
+- Theo dõi position/order từ execution fill
+- Risk check trước khi submit order
 
 **API Endpoints:**
 - GET `/api/v1/strategies` - List registered strategy templates
@@ -146,13 +146,13 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F8: Backtesting Engine
 
-**Requirement:** Run ad-hoc single backtests with historical bar replay.
+**Requirement:** Chạy backtest đơn ad-hoc với replay bar lịch sử.
 
 **Sub-requirements:**
-- Single-run backtest via in-process async task (no queue): save `started` doc → spawn engine → persist `finished`/`failed`
-- Per-run sandbox isolation from the live engine
+- Backtest single-run qua in-process async task (không queue): save doc `started` → spawn engine → persist `finished`/`failed`
+- Cô lập sandbox per-run khỏi live engine
 - Performance metrics (Sharpe, Sortino, max drawdown, win rate)
-- Results storage in MongoDB (runs + orders + trades, sharing one run_id)
+- Lưu kết quả trong MongoDB (runs + orders + trades, chia sẻ chung một run_id)
 
 **API Endpoints:**
 - POST `/api/v1/backtest/run` - Start a backtest (202, returns run_id)
@@ -162,14 +162,14 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F9: Order & Position Management
 
-**Requirement:** Track orders and positions with MongoDB persistence.
+**Requirement:** Theo dõi order và position với persistence trên MongoDB.
 
 **Sub-requirements:**
 - Order lifecycle: pending → filled → closed
-- Position tracking with entry/exit prices
-- Profit/loss calculations
-- P&L updates on fills
-- MongoDB persistence for historical records
+- Position tracking với giá entry/exit
+- Tính toán profit/loss
+- Cập nhật P&L khi fill
+- Persistence trên MongoDB cho bản ghi lịch sử
 
 **API Endpoints:**
 - GET `/api/v1/trading/orders` - List all orders
@@ -179,14 +179,14 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 
 ### F10: Live Trading (OKX)
 
-**Requirement:** Execute live trades via OKX exchange.
+**Requirement:** Thực thi live trade qua sàn OKX.
 
 **Sub-requirements:**
-- OKX WebSocket connection with HMAC-SHA256 authentication
-- Exponential backoff reconnection (1s → 30s max)
-- Circuit breaker on failures (5-min pause after 10 failures)
-- State reconciliation on reconnect
-- Order submission and fill handling
+- Kết nối OKX WebSocket với authentication HMAC-SHA256
+- Reconnection với exponential backoff (1s → 30s max)
+- Circuit breaker khi lỗi (pause 5 phút sau 10 lần lỗi)
+- Reconcile state khi reconnect
+- Submit order và xử lý fill
 
 **Configuration:**
 - OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE environment variables
@@ -196,72 +196,72 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 ### NF1: Performance
 
 **Response Time:**
-- Historical sync: <5s for 5000 bars
+- Historical sync: <5s cho 5000 bar
 - Quote cache lookup: <5ms
-- Bar aggregation: <1ms per tick
+- Bar aggregation: <1ms mỗi tick
 
 **Throughput:**
-- Concurrent syncs: 4 (thread pool limited)
-- Quote subscriptions: 1000+ ticks/sec
-- Database: 1000+ bars/sec upsert
+- Concurrent syncs: 4 (giới hạn bởi thread pool)
+- Quote subscriptions: 1000+ tick/sec
+- Database: 1000+ bar/sec upsert
 
 **Memory:**
-- MongoDB pool: ~10-20MB per connection
+- MongoDB pool: ~10-20MB mỗi connection
 - Redis pool: <1MB
-- Aggregator state: ~10MB per 10k subscriptions
+- Aggregator state: ~10MB mỗi 10k subscription
 
 ### NF2: Reliability
 
 **Availability:**
-- 99.5% uptime target
+- Mục tiêu uptime 99.5%
 - Auto-reconnect WebSocket
 - Graceful error handling
 
 **Data Integrity:**
-- No duplicate OHLCV records (unique key constraint)
-- Atomic bar building (asyncio.Lock)
-- No data loss on shutdown (flush_all_bars)
+- Không có bản ghi OHLCV trùng lặp (unique key constraint)
+- Bar building atomic (asyncio.Lock)
+- Không mất dữ liệu khi shutdown (flush_all_bars)
 
 **Error Recovery:**
-- Transient errors: Exponential backoff retry
-- Permanent errors: Update status, log, notify
-- Job failures: Per-symbol isolation (don't break loop)
+- Lỗi transient: Exponential backoff retry
+- Lỗi permanent: Cập nhật status, log, notify
+- Job failures: Cô lập per-symbol (không phá vỡ loop)
 
 ### NF3: Logging & Observability
 
 **Logging:**
-- All events logged as JSON (production-ready)
-- Structured logging with context variables
-- Compatible with: Datadog, Splunk, ELK, CloudWatch, Google Cloud, Loki
+- Tất cả event log dưới dạng JSON (production-ready)
+- Structured logging với context variables
+- Tương thích với: Datadog, Splunk, ELK, CloudWatch, Google Cloud, Loki
 - Log levels: DEBUG, INFO, WARNING, ERROR
 
 **Metrics (Monitored):**
-- Sync success/failure rates
+- Tỉ lệ sync success/failure
 - WebSocket connection uptime
-- Cache hit rates
+- Cache hit rate
 - Database query latency
 - Job execution time
 
 ### NF4: Security
 
 **Configuration Management:**
-- All secrets in environment variables (not committed)
-- .env.example with dummy values
-- No credentials in code or logs
+- Tất cả secret trong environment variables (không commit)
+- .env.example với giá trị dummy
+- Không credential trong code hoặc log
 
 **Data Protection:**
-- Binance public market data needs no auth; OKX live trading uses API key/secret/passphrase (optional)
-- MongoDB/Redis authentication via DSN
-- CORS configuration available
+- Dữ liệu thị trường công khai của Binance không cần auth; live trading OKX dùng API key/secret/passphrase (optional)
+- Authentication MongoDB/Redis qua DSN
+- Có sẵn cấu hình CORS
 
 ### NF5: Maintainability
 
 **Code Quality:**
-- Max 200 LOC per file (exceptions documented)
-- Type hints on all public APIs
+- Tối đa 200 LOC mỗi file (ngoại lệ được ghi tài liệu)
+- Type hint trên tất cả public API
 - 80%+ test coverage
-- Structured comments (WHY, not WHAT)
-- Self-documenting code via naming
+- Structured comment (WHY, không phải WHAT)
+- Code tự tài liệu hóa qua naming
 
 **Documentation:**
 - API docs (OpenAPI/Swagger)
@@ -272,20 +272,20 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 ### NF6: Scalability
 
 **Horizontal Scaling:**
-- Multiple workers supported
+- Hỗ trợ nhiều worker
 - Shared MongoDB/Redis
-- Each worker independent singletons
+- Mỗi worker có singleton độc lập
 - Future: Distributed job scheduling
 
 **Vertical Scaling:**
-- Tunable connection pools
-- Thread pool worker configuration
-- Redis batch operations
-- Bulk database upserts
+- Connection pool có thể điều chỉnh
+- Cấu hình worker thread pool
+- Redis batch operation
+- Bulk database upsert
 
 ## Architecture & Module Breakdown (Single Python package + web)
 
-Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. Enforced by import-linter contracts in `pyproject.toml` (8 contracts).
+Hướng phụ thuộc: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest và live là hai driver trên một engine chia sẻ. Được thực thi bởi import-linter contract trong `pyproject.toml` (8 contract).
 
 ```
 src/pocketquant/
@@ -339,7 +339,7 @@ web/                                 # React 19 + Vite SPA (separate npm app)
 └── Tech: React 19, Vite, TypeScript, TanStack Router/Query, Lightweight Charts
 ```
 
-**Service + Route Pattern:** Each route calls a command/query service; service contains logic; exceptions handled globally. See [code-standards.md](./code-standards.md#routes--services) for naming and patterns.
+**Service + Route Pattern:** Mỗi route gọi một command/query service; service chứa logic; exception được xử lý globally. Xem [code-standards.md](./code-standards.md#routes--services) cho naming và pattern.
 
 ## Success Criteria
 
@@ -369,36 +369,36 @@ web/                                 # React 19 + Vite SPA (separate npm app)
 
 ### Validation Methods
 
-- Unit tests (pytest)
-- Integration tests (Docker + live services)
-- Performance tests (load testing)
+- Unit test (pytest)
+- Integration test (Docker + live services)
+- Performance test (load testing)
 - Manual API testing (curl/Postman)
-- Log analysis (structured logging verification)
+- Log analysis (kiểm chứng structured logging)
 
 ## Known Limitations & TODOs
 
 ### Technical Debt
 
-- [ ] Bulk sync parallelization (currently sequential per symbol)
-- [ ] Symbol search/filtering implementation
-- [ ] Configurable aggregator intervals post-initialization
-- [ ] Persistent job storage (currently in-memory only)
-- [ ] Automatic MongoDB/Redis reconnection
-- [ ] Health check endpoint for infrastructure
+- [ ] Bulk sync parallelization (hiện tuần tự per symbol)
+- [ ] Triển khai symbol search/filtering
+- [ ] Aggregator interval có thể cấu hình post-initialization
+- [ ] Persistent job storage (hiện chỉ in-memory)
+- [ ] Tự động reconnect MongoDB/Redis
+- [ ] Health check endpoint cho infrastructure
 
 ### Testing Gaps
 
-- [ ] Singleton mocking utilities for consistent testing
-- [ ] End-to-end integration tests
+- [ ] Singleton mocking utilities cho testing nhất quán
+- [ ] End-to-end integration test
 - [ ] Performance/load testing
-- [ ] Chaos engineering tests (connection failures)
+- [ ] Chaos engineering test (connection failures)
 
 ### Documentation Gaps
 
-- [ ] Algorithm explanation (QuoteAggregator time alignment)
+- [ ] Giải thích thuật toán (QuoteAggregator time alignment)
 - [ ] Troubleshooting guide
 - [ ] Performance tuning guide
-- [ ] Example strategy using the API
+- [ ] Chiến lược ví dụ dùng API
 
 ## Development Practices
 
@@ -421,9 +421,9 @@ Follow conventional commits:
 
 ### Code Review
 
-- All PRs require at least 1 approval
-- Tests must pass before merge
-- Type checking (pyright) required
+- Tất cả PR yêu cầu ít nhất 1 approval
+- Test phải pass trước khi merge
+- Yêu cầu type checking (pyright)
 - Code coverage ≥80%
 
 ### Deployment
@@ -451,9 +451,9 @@ uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921
 
 ## Contact & Support
 
-- **Issues:** Report via GitHub Issues
-- **Questions:** Refer to `./docs/` for detailed guides
-- **Code Review:** Follow conventions in `CLAUDE.md`
+- **Issues:** Report qua GitHub Issues
+- **Questions:** Tham khảo `./docs/` cho hướng dẫn chi tiết
+- **Code Review:** Tuân theo quy ước trong `CLAUDE.md`
 
 ## License
 

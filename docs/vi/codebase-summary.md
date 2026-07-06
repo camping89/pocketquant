@@ -1,19 +1,19 @@
 # PocketQuant Codebase Summary
 
-**Generated:** 2026-07-06 | **Status:** AS-IS (reflects R8 implementation)
+**Generated:** 2026-07-06 | **Status:** AS-IS (phản ánh implementation R8)
 
-## Overview
+## Tổng quan
 
-PocketQuant is a unified trading platform combining **live trading** (OKX/Paper) + **backtesting** in one FastAPI app. Architecture: Clean Architecture + DDD + Dishka DI. Two drivers (live + backtest) on one shared engine (`src/pocketquant/engine/`).
+PocketQuant là một nền tảng giao dịch hợp nhất, kết hợp **live trading** (OKX/Paper) + **backtesting** trong một app FastAPI. Kiến trúc: Clean Architecture + DDD + Dishka DI. Hai driver (live + backtest) trên một engine dùng chung (`src/pocketquant/engine/`).
 
 **Stack:**
 - Backend: Python 3.12, FastAPI, Pydantic, PyMongo, redis-py, APScheduler
 - Frontend: React 19 + Vite + TypeScript
 - Infrastructure: MongoDB, Redis, Binance REST/WS, OKX REST/WS, Docker Compose, Nginx
 
-## Codebase Structure
+## Cấu trúc Codebase
 
-### Python Package Organization
+### Tổ chức Python Package
 
 ```
 src/pocketquant/
@@ -91,7 +91,7 @@ src/pocketquant/
     └── ...
 ```
 
-### Frontend Structure
+### Cấu trúc Frontend
 
 ```
 web/
@@ -108,7 +108,7 @@ web/
 └── ...
 ```
 
-## Key Layers & Responsibilities
+## Các Layer chính & Trách nhiệm
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
@@ -118,11 +118,11 @@ web/
 | **Adapters** | `core/infra/`, `core/common/` | External I/O (DB, brokers, providers) |
 | **Frontend** | `web/` | React SPA (Vite, TypeScript) |
 
-## Core Concepts
+## Khái niệm cốt lõi
 
 ### MongoDB Collections (13 total)
 
-All `_id` are UUIDv7 (except `apscheduler_jobs`). Join keys: `subscription_id` (live), `run_id` (backtest), `symbol` (composite `CODE:EXCHANGE`).
+Tất cả `_id` đều là UUIDv7 (trừ `apscheduler_jobs`). Join keys: `subscription_id` (live), `run_id` (backtest), `symbol` (composite `CODE:EXCHANGE`).
 
 | Collection | Repository | Purpose |
 |-----------|-----------|---------|
@@ -140,40 +140,40 @@ All `_id` are UUIDv7 (except `apscheduler_jobs`). Join keys: `subscription_id` (
 | `job_history` | JobHistoryRepository | APScheduler job execution logs |
 | `apscheduler_jobs` | (APScheduler) | Serialized scheduled jobs |
 
-### Strategy Lifecycle
+### Vòng đời Strategy
 
-1. **Create:** POST `/strategies/{code}/subscriptions` → persists Subscription with `desired_state="stopped"` (opt-in)
-2. **Start:** POST `/subscriptions/{sub_id}/start` → writes `desired_state="running"` to Mongo
-3. **Reconcile:** 5s loop (`StrategyReconcileAppService`) → compares desired vs actual, converges live state
-4. **Stop/Delete:** POST/DELETE → writes state, reconcile loop tears down in-process instance
+1. **Create:** POST `/strategies/{code}/subscriptions` → persist Subscription với `desired_state="stopped"` (opt-in)
+2. **Start:** POST `/subscriptions/{sub_id}/start` → ghi `desired_state="running"` vào Mongo
+3. **Reconcile:** vòng lặp 5s (`StrategyReconcileAppService`) → so sánh desired vs actual, hội tụ live state
+4. **Stop/Delete:** POST/DELETE → ghi state, reconcile loop tear down instance in-process
 
 ### Real-Time Streaming
 
 **Inbound (WebSocket):**
 - **Binance `@aggTrade`:** Singleton per app → `QuoteAppService` → Redis `quote:latest:{symbol}`
-- **OKX private:** Per-broker instance → orders/positions/fills via event callbacks
+- **OKX private:** Per-broker instance → orders/positions/fills qua event callbacks
 
 **Outbound (SSE):**
-- **Bars:** Poll Redis 1s, emit on bar_start change
-- **Quotes:** Poll Redis 0.5s, emit on price/volume change
+- **Bars:** Poll Redis 1s, emit khi bar_start đổi
+- **Quotes:** Poll Redis 0.5s, emit khi price/volume đổi
 
 **Live Trade Pipeline (R8):**
 - `TradeClosedEvent` (position reduce/close) → `StrategyAppService._forward_trade_to_bus` → EventBus
-- `LiveTradeCollector` (subscriber) → stamps `run_id=subscription_id` + `strategy_code` → persists Trade
-- `LiveMetricsQueryService.get_metrics(sub_id)` → calculates M1 (Sharpe, Sortino, win_rate) from trades
+- `LiveTradeCollector` (subscriber) → đóng dấu `run_id=subscription_id` + `strategy_code` → persist Trade
+- `LiveMetricsQueryService.get_metrics(sub_id)` → tính M1 (Sharpe, Sortino, win_rate) từ trades
 - Route: `GET /api/v1/subscriptions/{sub_id}/metrics`
 
 ### Backtest (Ad-hoc Single Run)
 
-1. `POST /backtest/run` → allocates `run_id`, persists `BacktestResult` with `status=started`
-2. Spawns `BacktestExecutionService.execute_and_persist()` as `asyncio.create_task` (no queue)
-3. Runs in isolated `BacktestSandboxAppService` (per-run EventBus + broker)
-4. Trades collected via `BacktestReportAppService` → `trades` persisted with `run_id` + metrics
-5. FE polls `GET /backtest/{run_id}` → returns `status`, optionally fetches `/trades`, `/stats`, `/equity`
+1. `POST /backtest/run` → cấp phát `run_id`, persist `BacktestResult` với `status=started`
+2. Spawn `BacktestExecutionService.execute_and_persist()` dưới dạng `asyncio.create_task` (không queue)
+3. Chạy trong `BacktestSandboxAppService` cô lập (per-run EventBus + broker)
+4. Trades thu thập qua `BacktestReportAppService` → `trades` được persist với `run_id` + metrics
+5. FE poll `GET /backtest/{run_id}` → trả về `status`, tùy chọn fetch `/trades`, `/stats`, `/equity`
 
 ### Dependency Injection (Dishka)
 
-6 providers initialized in order:
+6 provider được khởi tạo theo thứ tự:
 
 ```
 CoreProvider (Settings, EventBus)
@@ -188,9 +188,9 @@ ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService,
                    LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService)
 ```
 
-All services injected into routes via `FromDishka[ServiceType]` (no `Depends()`).
+Tất cả service được inject vào routes qua `FromDishka[ServiceType]` (không `Depends()`).
 
-## Key Services
+## Các Service chính
 
 ### Application Services
 
@@ -215,7 +215,7 @@ All services injected into routes via `FromDishka[ServiceType]` (no `Depends()`)
 | `OKXBrokerAdapter` | Live trading (HMAC auth, 1s→30s backoff) | `core/infra/brokers/okx/okx_broker_adapter.py` |
 | `BrokerFactory` | Concrete broker construction | `core/infra/brokers/broker_factory.py` |
 
-## Configuration & Startup
+## Cấu hình & Startup
 
 ### Environment Variables (`.env`)
 
@@ -236,57 +236,57 @@ ENVIRONMENT=dev|prod
 
 ### Startup Sequence
 
-1. Load settings from `.env`
+1. Load settings từ `.env`
 2. Setup structured logging (structlog)
-3. Create Dishka container with providers
+3. Tạo Dishka container với providers
 4. `ensure_all_indexes()` → MongoDB indexes
-5. `recover_orphan_backtests()` → mark stale runs as failed
-6. `recover_orphan_jobs()` → mark stale scheduler jobs as failed
-7. `seed_tracked_symbols()` → ensure ≥1 symbol
+5. `recover_orphan_backtests()` → đánh dấu stale runs là failed
+6. `recover_orphan_jobs()` → đánh dấu stale scheduler jobs là failed
+7. `seed_tracked_symbols()` → đảm bảo ≥1 symbol
 8. `bootstrap_live_instances()` → load per-subscription instances
 9. (Gated on `ENABLE_JOBS`) `start_background_jobs()` → register sync + reconcile
-10. `setup_dishka(container, app)` → integrate DI with FastAPI
-11. Server ready on `:41921`
+10. `setup_dishka(container, app)` → tích hợp DI với FastAPI
+11. Server sẵn sàng trên `:41921`
 
-## Testing Strategy
+## Chiến lược Testing
 
-- **Domain purity:** AST check (`tests/core_test/unit/domain/test_domain_purity.py`) — forbids I/O imports in `core/domain/`
-- **Unit tests:** ~80% coverage target (services, repositories, domain logic)
+- **Domain purity:** AST check (`tests/core_test/unit/domain/test_domain_purity.py`) — cấm import I/O trong `core/domain/`
+- **Unit tests:** mục tiêu coverage ~80% (services, repositories, domain logic)
 - **Integration tests:** End-to-end backtest + API routes
-- **Test utilities:** Fixtures for mock brokers, trade data, etc.
+- **Test utilities:** Fixtures cho mock brokers, trade data, v.v.
 
 ## Deployment
 
 **Local:** `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921`
 
 **Production:**
-- Docker Compose 4-service stack: web (nginx), app (FastAPI), mongodb, redis
-- Cloudflare proxy → pocketquant.xyz → nginx reverse-proxy `/api/*` to app:41921
-- Config: Git repo `pocketquant-config` (secret boundary) → `.env` synced at deploy
-- Single-worker-only constraint: scheduler + WS feed + broker singletons
+- Docker Compose stack 4 service: web (nginx), app (FastAPI), mongodb, redis
+- Cloudflare proxy → pocketquant.xyz → nginx reverse-proxy `/api/*` tới app:41921
+- Config: Git repo `pocketquant-config` (secret boundary) → `.env` được sync khi deploy
+- Ràng buộc single-worker-only: scheduler + WS feed + broker singletons
 
-## Key Constraints & Conventions
+## Ràng buộc & Quy ước chính
 
-- **Single process only:** `--workers N` duplicates reconcile loop + live broker
+- **Single process only:** `--workers N` nhân đôi reconcile loop + live broker
 - **Dependency direction:** features ← app ← engine ← core (enforced by import-linter)
-- **Domain purity:** zero I/O in `core/domain/` (enforced by AST)
-- **Naming conventions:** Suffix-based encoding (DomainService, AppService, Repository, Adapter, etc.)
-- **UUIDv7 only:** All primary keys (no natural keys, no ObjectId)
-- **Publish-before-subscribe:** Wire EventBus before any subscriber resolves (preemption point safety)
-- **Timezone context:** Frontend uses IANA tzdata, backend UTC timestamps
+- **Domain purity:** zero I/O trong `core/domain/` (enforced by AST)
+- **Naming conventions:** encoding theo suffix (DomainService, AppService, Repository, Adapter, v.v.)
+- **UUIDv7 only:** tất cả primary keys (no natural keys, no ObjectId)
+- **Publish-before-subscribe:** wire EventBus trước khi bất kỳ subscriber nào resolve (an toàn preemption point)
+- **Timezone context:** Frontend dùng IANA tzdata, backend UTC timestamps
 
 ## Recent Changes (R8 — Live Run Extraction)
 
 1. **Relocated services:** `BrokerFactory` → `core/infra/brokers/`; QuoteAppService, WsSubscriptionAppService → `engine/market_data/app_services/`
-2. **StrategyReconcileAppService:** Added `bootstrap()` method for boot instance loading
-3. **TradeRepository:** New collection for live trading (`core/infra/persistence/repositories/trade_repository.py`)
-4. **LiveTradeCollector:** EventBus subscriber → persists trades per TradeClosedEvent
-5. **LiveMetricsQueryService:** On-demand M1 metrics calculation from trades table
-6. **Metrics route:** `GET /api/v1/subscriptions/{sub_id}/metrics` returns performance metrics
+2. **StrategyReconcileAppService:** thêm method `bootstrap()` để load instance khi boot
+3. **TradeRepository:** collection mới cho live trading (`core/infra/persistence/repositories/trade_repository.py`)
+4. **LiveTradeCollector:** EventBus subscriber → persist trades theo mỗi TradeClosedEvent
+5. **LiveMetricsQueryService:** tính M1 metrics on-demand từ bảng trades
+6. **Metrics route:** `GET /api/v1/subscriptions/{sub_id}/metrics` trả về performance metrics
 
 ---
 
-For detailed documentation, see:
+Để xem tài liệu chi tiết, xem:
 - **Architecture & Design:** `docs/system-architecture.md`
 - **Code Standards & Naming:** `docs/code-standards.md`
 - **Deployment & CI/CD:** `docs/deployment.md`

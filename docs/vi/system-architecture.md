@@ -1,12 +1,12 @@
 # System Architecture
 
-DDD + Clean Architecture + Dishka. Single Python package `src/pocketquant/` (core, engine, app) + Node SPA `web/`. Dependency: `core ◁ engine ◁ app`, `web → app`. Backtest and live are two drivers on one shared engine. Binance public REST/WS (@aggTrade), OKX live trading, single FastAPI process on :41921 with scheduler, WS feed, strategy lifecycle, reconcile loop.
+DDD + Clean Architecture + Dishka. Một Python package `src/pocketquant/` (core, engine, app) + Node SPA `web/`. Phụ thuộc: `core ◁ engine ◁ app`, `web → app`. Backtest và live là hai driver trên cùng một shared engine. Binance public REST/WS (@aggTrade), OKX live trading, một tiến trình FastAPI trên :41921 kèm scheduler, WS feed, strategy lifecycle, reconcile loop.
 
-For local run/test steps and canonical routes, use [README](../README.md).
+Với các bước chạy/test cục bộ và các route chuẩn, xem [README](../../README.md).
 
 ## High-Level Architecture
 
-PocketQuant uses **Clean Architecture + DDD** with strict unidirectional dependency flow: Routes → Services → Domain, Adapters → Domain. Command/Query services orchestrate domain logic. A modern React 19 SPA frontend consumes the REST API.
+PocketQuant dùng **Clean Architecture + DDD** với luồng phụ thuộc một chiều nghiêm ngặt: Routes → Services → Domain, Adapters → Domain. Command/Query service điều phối logic domain. Một frontend SPA React 19 hiện đại tiêu thụ REST API.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -63,13 +63,13 @@ PocketQuant uses **Clean Architecture + DDD** with strict unidirectional depende
     └────────┘  └──────────┘  └──────────────┘  └──────────┘
 ```
 
-**Dependency Direction:** Features ← Application ← Domain, Adapters ← Domain (no reverse dependencies)
+**Dependency Direction:** Features ← Application ← Domain, Adapters ← Domain (không có phụ thuộc ngược)
 
-**Real-Time Streaming:** Inbound WebSocket: Binance `@aggTrade` (singleton, market data), OKX private (per-broker, order/position). Outbound SSE: `/api/v1/market-data/bars/stream/{symbol}?interval={interval}` (1s poll, emit on change), `/api/v1/quotes/stream/{symbol}` (0.5s poll). Redis intermediary: WS writes, SSE reads. Frontend EventSource with staleness detection (30s bar, 10s quote); fallback to REST.
+**Real-Time Streaming:** WebSocket inbound: Binance `@aggTrade` (singleton, market data), OKX private (per-broker, order/position). SSE outbound: `/api/v1/market-data/bars/stream/{symbol}?interval={interval}` (poll 1s, emit khi thay đổi), `/api/v1/quotes/stream/{symbol}` (poll 0.5s). Redis trung gian: WS ghi, SSE đọc. Frontend EventSource với staleness detection (30s bar, 10s quote); fallback về REST.
 
 ## Strategy Declarative Control Plane (SP1)
 
-**Architecture:** Kubernetes-style control-plane/data-plane split.
+**Architecture:** Tách control-plane/data-plane kiểu Kubernetes.
 
 ```
 Control plane (desired state)           Data plane (live engine)
@@ -83,37 +83,37 @@ Control plane (desired state)           Data plane (live engine)
              └──────────────────┘
 ```
 
-**Control-plane sources of truth:** `Subscription` entity persists two state fields:
-- `desired_state: "running" | "stopped"` — what a handler (or human) intends → written by HTTP start/stop handlers
-- `actual_state: "running" | "stopped"` — live engine's observed state → written by reconcile loop when it detects drift
+**Nguồn sự thật của control-plane:** entity `Subscription` lưu hai trường trạng thái:
+- `desired_state: "running" | "stopped"` — trạng thái mà một handler (hoặc con người) mong muốn → được ghi bởi handler HTTP start/stop
+- `actual_state: "running" | "stopped"` — trạng thái quan sát được của live engine → được ghi bởi reconcile loop khi phát hiện drift
 
-**Handlers are declarative:** `StartStrategyCommand` and `StopStrategyCommand` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
+**Handler mang tính declarative:** `StartStrategyCommand` và `StopStrategyCommand` chỉ ghi `desired_state` (không gọi engine trực tiếp) và trả về trước khi strategy start/stop; reconcile loop hội tụ trong vòng ≤1 interval.
 
-**Reconcile loop:** `StrategyReconcileAppService` (in `engine` subpackage) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
-1. Iterates `sub_repo.list_all()` (reads from Mongo)
-2. For each subscription, compares `desired_state` to live `StrategyAppService` instance's run-state
-3. Calls `start_strategy()` or `stop_strategy()` to converge
-4. Mirrors observed `actual_state` back to Mongo only on drift (idempotent, no per-tick churn)
-5. Subscription-driven: never enumerates RAM, so injected backtest strategies (synthetic ids) are invisible
+**Reconcile loop:** `StrategyReconcileAppService` (trong subpackage `engine`) poll mỗi `Settings.reconcile_interval_seconds` (mặc định 5.0s):
+1. Duyệt `sub_repo.list_all()` (đọc từ Mongo)
+2. Với mỗi subscription, so sánh `desired_state` với run-state của live `StrategyAppService` instance
+3. Gọi `start_strategy()` hoặc `stop_strategy()` để hội tụ
+4. Phản chiếu `actual_state` quan sát được về lại Mongo chỉ khi có drift (idempotent, không churn mỗi tick)
+5. Điều khiển theo subscription: không bao giờ enumerate RAM, nên các backtest strategy được inject (synthetic id) là vô hình
 
-**Add new subscription:** `StrategyCommandService.add_symbol(AddSymbolCommand)` persists với `desired_state="stopped"` (opt-in to trading; no auto-start on add) và pre-load instance mà không start.
+**Thêm subscription mới:** `StrategyCommandService.add_symbol(AddSymbolCommand)` lưu với `desired_state="stopped"` (opt-in vào trading; không auto-start khi thêm) và pre-load instance mà không start.
 
-**List subscriptions:** `StrategyQueryService.list_symbols(ListSymbolsQuery)` source run-state từ Mongo: trả `desired_state`, `actual_state`, và `is_running` (derived `actual_state == "running"`). No RAM read.
+**List subscriptions:** `StrategyQueryService.list_symbols(ListSymbolsQuery)` lấy run-state từ Mongo: trả `desired_state`, `actual_state`, và `is_running` (dẫn xuất `actual_state == "running"`). Không đọc RAM.
 
-**Defensive read on legacy docs:** Subscriptions lacking `desired_state` or `actual_state` fields (legacy docs pre-control-plane) read both as `"stopped"` via `Subscription.from_mongo()` defensive `.get()` defaults. Reconcile loop then converges `actual_state` to match `desired_state`, so no manual re-migration required across deploys.
+**Đọc phòng thủ trên legacy docs:** các subscription thiếu trường `desired_state` hoặc `actual_state` (legacy docs trước control-plane) đọc cả hai thành `"stopped"` qua các giá trị mặc định `.get()` phòng thủ trong `Subscription.from_mongo()`. Reconcile loop sau đó hội tụ `actual_state` để khớp `desired_state`, nên không cần re-migration thủ công qua các lần deploy.
 
 ## Clean Architecture Layer Breakdown
 
 ### Layer 1: Domain (Pure Business Logic) — src/pocketquant/core/domain/
 
-**Purpose:** Core business rules with ZERO external dependencies. Reusable domain concepts.
+**Purpose:** Các quy tắc nghiệp vụ cốt lõi với ZERO phụ thuộc bên ngoài. Các khái niệm domain tái sử dụng được.
 
 **Rules:**
-- No I/O imports (no pymongo, redis, aiohttp, http)
-- Immutable value objects (frozen dataclasses, enums)
-- Domain events for state changes (HistoricalDataSyncedEvent, OrderFilledEvent, etc.)
-- Validation via __post_init__
-- Enforced via `test_domain_purity.py` (AST check)
+- Không import I/O (không pymongo, redis, aiohttp, http)
+- Immutable value object (frozen dataclass, enum)
+- Domain event cho thay đổi trạng thái (HistoricalDataSyncedEvent, OrderFilledEvent, v.v.)
+- Validation qua __post_init__
+- Được kiểm soát bởi `test_domain_purity.py` (AST check)
 
 **Structure:**
 ```
@@ -167,20 +167,20 @@ domain/
 ```
 
 **Example - Bar Entity with MongoDB Persistence:**
-All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mongo()` for persistence.
+Tất cả domain entity dùng Pydantic BaseModel với `to_mongo()` / `from_mongo()` tích hợp sẵn cho persistence.
 
 **Example - Symbol Entity (Flattened from SymbolAggregate):**
-Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
+Symbol giờ là một entity phẳng đơn giản với các trường `code`, `exchange`, `name`, `asset_type`, `is_active` và các method chuẩn `to_mongo()`/`from_mongo()`.
 
 **Composite Symbol Format:**
-Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
+Exchange encapsulation thay thế trường `exchange` độc lập trên các domain entity (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Định dạng định danh symbol giờ là composite: `{CODE}:{EXCHANGE}` (ví dụ `BTCUSDT:BINANCE`). Một trường bất biến `symbol: str` thay thế các cặp `(code, exchange)`. Business logic không bao giờ tách nhỏ—exchange là postfix opaque.
 
 **Example - Domain Service (Pure Logic):**
-BarBuilderDomainService and PositionCalculatorDomainService are pure domain services with zero I/O, implementing domain business rules.
+BarBuilderDomainService và PositionCalculatorDomainService là các pure domain service với zero I/O, hiện thực các quy tắc nghiệp vụ domain.
 
 ### Layer 2: Application (Orchestrators) — `engine` and `app` packages
 
-**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. Backtest and live are two **drivers** on one shared engine in `engine` subpackage.
+**Purpose:** Điều phối logic domain + adapter I/O để hoàn thành các use case nghiệp vụ. Các service và engine có trạng thái, phối hợp giữa các layer. Backtest và live là hai **driver** trên cùng một shared engine trong subpackage `engine`.
 
 **Structure:**
 ```
@@ -253,12 +253,12 @@ class StrategyAppService:
 
 ### Layer 3: Routes (API Layer) — `app/routes/`
 
-**Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to command/query services, return responses.
+**Purpose:** Layer HTTP routing mỏng. Route nhận request, ủy quyền cho command/query service, trả về response.
 
-**Pattern:** Routes use FastAPI's `APIRouter(route_class=DishkaRoute)` and inject service dependencies via `FromDishka[CommandService]` or `FromDishka[QueryService]`. Each route accepts a Pydantic command/query model and returns a DTO.
+**Pattern:** Route dùng `APIRouter(route_class=DishkaRoute)` của FastAPI và inject các service dependency qua `FromDishka[CommandService]` hoặc `FromDishka[QueryService]`. Mỗi route nhận một Pydantic command/query model và trả về một DTO.
 
 **Structure:**
-Routes are organized by feature (backtest, strategy, market_data) with APIRouter registering endpoints. Example route calls a command service method directly:
+Route được tổ chức theo feature (backtest, strategy, market_data) với APIRouter đăng ký endpoint. Ví dụ route gọi trực tiếp một method của command service:
 
 ```python
 # src/pocketquant/app/routes/strategy.py (example)
@@ -273,11 +273,11 @@ async def add_symbol(
     return await strategy_svc.add_symbol(cmd.symbol, cmd.interval)
 ```
 
-**Service 5-Step Pattern** (in all command/query services): 1. Receive Command/Query (Pydantic) 2. Fetch adapters 3. Execute domain 4. Persist 5. Return DTO
+**Service 5-Step Pattern** (trong tất cả command/query service): 1. Nhận Command/Query (Pydantic) 2. Lấy adapter 3. Thực thi domain 4. Persist 5. Trả về DTO
 
 ### Layer 4: Adapters (External I/O) — src/pocketquant/core/ + other subpackages
 
-**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters live in `core/infra/` and `core/common/`. Abstractions (ports/DTOs) live in `core/domain/{brokers,market_data}` so engine/backtest/trading depend on contracts, not implementations (DIP). Domain purity enforced: `core/domain/` imports zero I/O.
+**Purpose:** Tất cả tích hợp bên ngoài: database, broker, data provider, scheduling, HTTP. Các adapter cụ thể nằm trong `core/infra/` và `core/common/`. Các abstraction (port/DTO) nằm trong `core/domain/{brokers,market_data}` để engine/backtest/trading phụ thuộc vào contract, không phải implementation (DIP). Domain purity được kiểm soát: `core/domain/` không import I/O.
 
 **Structure:**
 ```
@@ -318,25 +318,25 @@ core/
 ```
 
 **Notes:**
-- OKX live broker (OKXBrokerAdapter + websocket) lives in `src/pocketquant/core/infra/brokers/okx/` (next to `paper/`).
-- Ports + DTOs (IBrokerPort, IBrokerFactoryPort, OrderResult, AccountBalance, OrderEvent, IDataProviderPort, IRealtimeQuoteProviderPort) live in `core.domain.{brokers,market_data}`.
-- No schemas/ — persistence lives in domain entities via `to_mongo()`/`from_mongo()` methods.
+- OKX live broker (OKXBrokerAdapter + websocket) nằm trong `src/pocketquant/core/infra/brokers/okx/` (cạnh `paper/`).
+- Port + DTO (IBrokerPort, IBrokerFactoryPort, OrderResult, AccountBalance, OrderEvent, IDataProviderPort, IRealtimeQuoteProviderPort) nằm trong `core.domain.{brokers,market_data}`.
+- Không có schemas/ — persistence nằm trong domain entity qua các method `to_mongo()`/`from_mongo()`.
 
 **Key Services:**
 
 | Service | Purpose |
 |---------|---------|
-| **MongoDBConnection** | Async collection access, pooling (5-50 connections) |
-| **RedisConnection** | JSON serialization, pattern deletion, TTL support |
-| **PaperBrokerAdapter** | In-memory simulation, configurable slippage/delay |
-| **OKXBrokerAdapter** | Live trading, HMAC auth, exponential backoff reconnection |
-| **BinanceAdapter** | Implements IDataProviderPort; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilderDomainService). Rate limit: 1200 weight/min. |
-| **BinanceWebSocketAdapter** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
-| **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
+| **MongoDBConnection** | Truy cập collection bất đồng bộ, pooling (5-50 connection) |
+| **RedisConnection** | JSON serialization, xóa theo pattern, hỗ trợ TTL |
+| **PaperBrokerAdapter** | Mô phỏng in-memory, slippage/delay cấu hình được |
+| **OKXBrokerAdapter** | Live trading, HMAC auth, reconnection với exponential backoff |
+| **BinanceAdapter** | Hiện thực IDataProviderPort; public REST API (không auth). Trả về bar với delta volume mỗi tick (BarBuilderDomainService yêu cầu). Rate limit: 1200 weight/min. |
+| **BinanceWebSocketAdapter** | Stream @aggTrade cho real-time quote ingestion. Hiện thực IRealtimeQuoteProviderPort. |
+| **JobScheduler** | Wrapper APScheduler, chạy job bất đồng bộ, hỗ trợ tham số `second` cho cron offset (né bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
 
-**Purpose:** Shared utilities: event bus, middleware, tracing, health checks, logging, UUID generation.
+**Purpose:** Tiện ích dùng chung: event bus, middleware, tracing, health check, logging, sinh UUID.
 
 **Structure:**
 ```
@@ -370,25 +370,25 @@ common/
 
 | Component | Purpose |
 |-----------|---------|
-| **EventBus** | Publish domain events, subscribe handlers via @event_handler |
-| **CorrelationIdMiddleware** | Inject request ID for distributed tracing |
+| **EventBus** | Publish domain event, subscribe handler qua @event_handler |
+| **CorrelationIdMiddleware** | Inject request ID cho distributed tracing |
 | **RateLimitMiddleware** | Token bucket per IP (200 req/10s) |
-| **IdempotencyMiddleware** | Cache POST responses by idempotency_key header |
+| **IdempotencyMiddleware** | Cache response POST theo header idempotency_key |
 | **Database** | MongoDB async singleton |
 | **Cache** | Redis async singleton |
 | **JobScheduler** | APScheduler async wrapper |
 
 ### Layer 6: Presentation (Web UI) — web (React SPA)
 
-**Purpose:** TradingView-like charting interface for real-time market visualization, indicator analysis, strategy management, and backtesting.
+**Purpose:** Giao diện charting kiểu TradingView cho hiển thị market real-time, phân tích indicator, quản lý strategy, và backtesting.
 
 **Tech Stack:**
-- **Vite 8** - Build tool with HMR
-- **React 19** - UI framework with Hooks
+- **Vite 8** - Build tool với HMR
+- **React 19** - UI framework với Hooks
 - **TypeScript 5.9** - Type safety
-- **TanStack Router** - File-based routing (layout routes via `__root.tsx`)
-- **Lightweight Charts 5.1** - High-performance candlestick rendering
-- **TanStack Query 5.x** - Server state management, real-time polling
+- **TanStack Router** - File-based routing (layout route qua `__root.tsx`)
+- **Lightweight Charts 5.1** - Render candlestick hiệu năng cao
+- **TanStack Query 5.x** - Quản lý server state, real-time polling
 
 **Structure:**
 ```
@@ -442,39 +442,39 @@ src/
 
 **Routes:**
 - `/` — Charts: TradingChart + SymbolSelector + IntervalSelector + StrategySelector + IndicatorToggles + AppHeader
-- `/strategies` — Operator Dashboard: 3-pane layout (list/start/stop strategies, config+chart embed with indicator toggles, positions/metrics)
-- `/backtest` — Ad-hoc Backtest Runner: form with symbol/interval/strategy/date range (datetime-local inputs with timezone dropdown), run job, poll + display results
-- `/monitor` — System Monitoring: HealthBanner + DataHealthTable (sync/integrity, expandable rows, check/repair) + BackgroundJobsList (auto-poll 30s)
+- `/strategies` — Operator Dashboard: layout 3 pane (list/start/stop strategy, config+chart embed với indicator toggle, positions/metrics)
+- `/backtest` — Ad-hoc Backtest Runner: form với symbol/interval/strategy/date range (input datetime-local với dropdown timezone), chạy job, poll + hiển thị kết quả
+- `/monitor` — System Monitoring: HealthBanner + DataHealthTable (sync/integrity, hàng mở rộng được, check/repair) + BackgroundJobsList (auto-poll 30s)
 
 **Key Features:**
-- **Candlestick Chart:** Real-time OHLCV visualization via Lightweight Charts with theme-aware colors
-- **Volume Overlay:** Trading volume as histogram below price
-- **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2) with show/hide toggles (reusable on strategies page)
-- **Symbol/Interval Selectors:** Switch data without page reload
-- **Theme Toggle:** Dark/light mode switcher in top-right; persists to `localStorage:pq.theme.mode`, applies `data-theme` attribute to `<html>`, chart re-reads colors on flip
-- **Timezone Picker:** Select timezone for backtest date inputs; displayed as `datetime-local` UI for minute-precision selection
-- **Live Clock:** Realtime wall-clock in app-nav
-- **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
-- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41921` (app)
+- **Candlestick Chart:** Hiển thị OHLCV real-time qua Lightweight Charts với màu theo theme
+- **Volume Overlay:** Volume giao dịch dạng histogram dưới price
+- **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2) với toggle show/hide (tái sử dụng trên trang strategy)
+- **Symbol/Interval Selectors:** Đổi dữ liệu không reload trang
+- **Theme Toggle:** Switcher dark/light mode ở góc trên phải; persist vào `localStorage:pq.theme.mode`, áp thuộc tính `data-theme` lên `<html>`, chart đọc lại màu khi lật
+- **Timezone Picker:** Chọn timezone cho các input ngày của backtest; hiển thị dạng UI `datetime-local` để chọn với độ chính xác phút
+- **Live Clock:** Đồng hồ wall-clock real-time trong app-nav
+- **Real-time Polling:** TanStack Query refetch dữ liệu bar mỗi 5-10s (cấu hình được)
+- **API Proxy:** Vite dev server proxy `/api/*` tới `http://localhost:41921` (app)
 
 **Custom Hooks:**
 
 | Hook | Purpose | Interval |
 |------|---------|----------|
-| `useOHLCV()` | Fetch historical bars (TanStack Query + cache) | on-demand |
-| `useRunBacktest()` / `useBacktestRun()` | Start a single backtest + poll the run to terminal | poll 1.5s while `started` |
-| `useSymbols()` | List available symbols | on-demand |
-| `useAvailableIntervals()` | Get compatible timeframes from sync status | on-demand |
-| `useRealtimeBar()` / `useRealtimeQuote()` | Poll API for latest bar/quote | 5–10s |
-| `useIndicators()` | Calculate SMA/EMA/RSI/MACD/BB from bars | derived |
+| `useOHLCV()` | Fetch historical bar (TanStack Query + cache) | on-demand |
+| `useRunBacktest()` / `useBacktestRun()` | Start một backtest + poll run tới trạng thái terminal | poll 1.5s trong khi `started` |
+| `useSymbols()` | List symbol khả dụng | on-demand |
+| `useAvailableIntervals()` | Lấy timeframe tương thích từ sync status | on-demand |
+| `useRealtimeBar()` / `useRealtimeQuote()` | Poll API lấy bar/quote mới nhất | 5–10s |
+| `useIndicators()` | Tính SMA/EMA/RSI/MACD/BB từ bar | dẫn xuất |
 | `useSyncStatus()` | Poll sync status | 30s |
-| `useIntegrityRepair()` | Data integrity mutation | manual |
+| `useIntegrityRepair()` | Mutation data integrity | thủ công |
 | `useBackgroundJobs()` / `useJobRuns()` / `useJobStats()` | Poll background job list/runs/stats | 30s |
-| `useSubscriptions()` | Poll strategy subscription list | polling |
+| `useSubscriptions()` | Poll danh sách strategy subscription | polling |
 
-**API Layer:** `apiFetch()` / `apiPost()` wrappers in `src/api/api-client.ts`; modules: `market-data-api.ts`, `backtest-api.ts`, `strategy-api.ts`, `system-jobs-api.ts`, `monitor-api.ts`.
+**API Layer:** wrapper `apiFetch()` / `apiPost()` trong `src/api/api-client.ts`; các module: `market-data-api.ts`, `backtest-api.ts`, `strategy-api.ts`, `system-jobs-api.ts`, `monitor-api.ts`.
 
-**Deployment:** Vite `dist/` served as static assets behind FastAPI (no separate server).
+**Deployment:** Vite `dist/` được serve dạng static asset sau FastAPI (không có server riêng).
 
 ## Where Does X Live?
 
@@ -533,47 +533,47 @@ src/
 
 ## Request Flow
 
-**Command (POST):** Middleware (correlation, rate-limit, idempotency) → Route (parse command) → Service (1. fetch adapter, 2. validate domain, 3. persist, 4. invalidate cache, 5. publish event) → Response DTO.
+**Command (POST):** Middleware (correlation, rate-limit, idempotency) → Route (parse command) → Service (1. lấy adapter, 2. validate domain, 3. persist, 4. invalidate cache, 5. publish event) → Response DTO.
 
 **Query (GET):** Middleware → Route → Service (1. fetch/cache, 2. validate, 3. cache result, 4. return DTO) → Response.
 
 ## MongoDB & Repositories
 
-13 collections. All `_id` are UUIDv7 except `apscheduler_jobs` (job name, APScheduler-managed). Join keys: **`subscription_id`** (uuid7 string) links live trading records to subscription; **`run_id`** links backtest records to run; composite **`symbol`** (`BTCUSDT:BINANCE`) shared across market-data + trading. Unique index on `(strategy_code, symbol, interval)` dedup subscriptions. All repositories in `core/infra/persistence/repositories/`, inherit `BaseRepository`, injected with `Database`, zero direct collection calls outside persistence layer.
+13 collection. Tất cả `_id` là UUIDv7 trừ `apscheduler_jobs` (job name, do APScheduler quản lý). Join key: **`subscription_id`** (chuỗi uuid7) liên kết các bản ghi live trading với subscription; **`run_id`** liên kết các bản ghi backtest với run; composite **`symbol`** (`BTCUSDT:BINANCE`) dùng chung giữa market-data + trading. Unique index trên `(strategy_code, symbol, interval)` dedup subscription. Tất cả repository trong `core/infra/persistence/repositories/`, kế thừa `BaseRepository`, được inject `Database`, zero lời gọi collection trực tiếp bên ngoài persistence layer.
 
 | Collection | `_id` | Repository | Purpose |
 |---|---|---|---|
-| `symbols` | uuid7 | SymbolRepository | Symbol metadata |
+| `symbols` | uuid7 | SymbolRepository | Metadata symbol |
 | `bars` | uuid7 | BarRepository | Historical OHLCV |
-| `sync_status` | uuid7 | SyncStatusRepository | Market-data sync progress |
-| `tracked_symbols` | uuid7 | TrackedSymbolRepository | Symbols to sync |
-| `subscriptions` | uuid7 | SubscriptionRepository | Strategy subscriptions + control plane (desired_state, actual_state) |
-| `orders` | uuid7 | OrderRepository | Live orders, subscription_id FK |
-| `positions` | uuid7 | PositionRepository | Live positions, subscription_id FK |
-| `trades` | uuid7 | TradeRepository | Live trades (avg-cost round-trips), subscription_id FK, run_id=subscription_id for live |
-| `backtest_runs` | uuid7 | BacktestRepository | Single-run backtest results, keyed by run_id |
-| `backtest_orders` | uuid7 | BacktestOrderRepository | Backtest order fills |
-| `backtest_trades` | uuid7 | BacktestTradeRepository | Backtest round-trip trades |
-| `job_history` | uuid7 | JobHistoryRepository | APScheduler job execution history |
-| `apscheduler_jobs` | job name | (APScheduler) | Serialized scheduled jobs |
+| `sync_status` | uuid7 | SyncStatusRepository | Tiến độ sync market-data |
+| `tracked_symbols` | uuid7 | TrackedSymbolRepository | Symbol cần sync |
+| `subscriptions` | uuid7 | SubscriptionRepository | Strategy subscription + control plane (desired_state, actual_state) |
+| `orders` | uuid7 | OrderRepository | Live order, subscription_id FK |
+| `positions` | uuid7 | PositionRepository | Live position, subscription_id FK |
+| `trades` | uuid7 | TradeRepository | Live trade (round-trip avg-cost), subscription_id FK, run_id=subscription_id cho live |
+| `backtest_runs` | uuid7 | BacktestRepository | Kết quả backtest single-run, key theo run_id |
+| `backtest_orders` | uuid7 | BacktestOrderRepository | Backtest order fill |
+| `backtest_trades` | uuid7 | BacktestTradeRepository | Backtest round-trip trade |
+| `job_history` | uuid7 | JobHistoryRepository | Lịch sử thực thi job APScheduler |
+| `apscheduler_jobs` | job name | (APScheduler) | Scheduled job đã serialize |
 
 ### Strategy Lifecycle (User POV)
 
-**Create subscription:** `POST /api/v1/strategies/{strategy_code}/subscriptions` with `{symbol, interval}`. Validates symbol is tracked, looks up strategy in `STRATEGY_REGISTRY`, computes deterministic `sub_id = sha256(strategy_code|symbol|interval)[:16]`, instantiates `IStrategyService` via `StrategyAppService.load_strategy()`, persists `Subscription` to MongoDB with `desired_state="stopped"` (opt-in to trading, no auto-start). Returns `{id, strategy_code, symbol, interval, created_at, is_running}`.
+**Create subscription:** `POST /api/v1/strategies/{strategy_code}/subscriptions` với `{symbol, interval}`. Validate symbol đã được track, tra strategy trong `STRATEGY_REGISTRY`, tính `sub_id = sha256(strategy_code|symbol|interval)[:16]` mang tính deterministic, khởi tạo `IStrategyService` qua `StrategyAppService.load_strategy()`, persist `Subscription` vào MongoDB với `desired_state="stopped"` (opt-in vào trading, không auto-start). Trả về `{id, strategy_code, symbol, interval, created_at, is_running}`.
 
-**Start/Stop:** `POST /subscriptions/{sub_id}/start`, `POST /subscriptions/{sub_id}/stop` write `desired_state` to Mongo. Reconcile loop (5s poll) converges engine state within one interval.
+**Start/Stop:** `POST /subscriptions/{sub_id}/start`, `POST /subscriptions/{sub_id}/stop` ghi `desired_state` vào Mongo. Reconcile loop (poll 5s) hội tụ trạng thái engine trong một interval.
 
-**Reconcile loop:** `StrategyReconcileAppService` (background task, started at boot) every 5s: (1) fetch all subscriptions from Mongo, (2) compare `desired_state` vs live `is_running` (RAM), (3) call `start_strategy()` or `stop_strategy()` on drift, (4) mirror `actual_state` back to Mongo (idempotent, no churn unless drift).
+**Reconcile loop:** `StrategyReconcileAppService` (background task, khởi động lúc boot) mỗi 5s: (1) fetch tất cả subscription từ Mongo, (2) so sánh `desired_state` vs live `is_running` (RAM), (3) gọi `start_strategy()` hoặc `stop_strategy()` khi có drift, (4) phản chiếu `actual_state` về lại Mongo (idempotent, không churn trừ khi có drift).
 
-**Delete:** `DELETE /subscriptions/{sub_id}` deletes the subscription; the reconcile orphan-unload tears down the in-memory instance out of band. Subscriptions hold no backtest state — forward-testing only.
+**Delete:** `DELETE /subscriptions/{sub_id}` xóa subscription; reconcile orphan-unload tháo instance in-memory ngoài luồng. Subscription không giữ backtest state — chỉ forward-testing.
 
 ### Backtest (ad-hoc single run)
 
-Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest. `start_date` and `end_date` are `datetime` with minute precision (format: ISO 8601, e.g. `2024-01-15T09:30:00`); date-only strings are accepted and parsed as 00:00:00 UTC for backward compatibility.
+Backtest hoàn toàn tách rời khỏi subscription. `POST /api/v1/backtest/run` (`{strategy_id, symbol, interval, start_date, end_date, parameters}` tự do) chạy một backtest ad-hoc. `start_date` và `end_date` là `datetime` với độ chính xác phút (định dạng: ISO 8601, ví dụ `2024-01-15T09:30:00`); chuỗi chỉ có ngày được chấp nhận và parse thành 00:00:00 UTC để tương thích ngược.
 
-1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
-2. The engine runs in a per-run `BacktestSandboxAppService` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry). Trades are collected via broker-emitted `TradeClosedEvent` (published after each `PositionAggregate.reduce()` or `close()`), persisted orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
-3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades` (keyset paged), `GET /backtest/{run_id}/trade-markers`, `GET /backtest/{run_id}/stats`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
+1. Route cấp một `run_id`, persist ngay một `BacktestResult` doc trạng thái `started`, rồi spawn `BacktestExecutionService.execute_and_persist` dưới dạng `asyncio.create_task` in-process (không queue) và trả về `202 {request_id: <run_id>}`.
+2. Engine chạy trong một `BacktestSandboxAppService` per-run (EventBus + StrategyAppService cô lập + tracker dùng-một-lần qua một EventRegistry cục bộ). Trade được thu thập qua `TradeClosedEvent` do broker emit (publish sau mỗi `PositionAggregate.reduce()` hoặc `close()`), persist order → trade → run, và lật doc sang `finished` (hoặc `failed` + `error_message`).
+3. FE poll `GET /backtest/{run_id}` tới trạng thái terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades` (keyset paged), `GET /backtest/{run_id}/trade-markers`, `GET /backtest/{run_id}/stats`, và `GET /backtest/{run_id}/orders` (order với `fills[]` nhúng + `events[]` lifecycle, DTO key theo `order_id`) phục vụ chi tiết kết quả.
 
 **Trade emission flow:**
 ```
@@ -590,54 +590,54 @@ BacktestReportAppService.on_trade(event)
   └─ Back-link exit OrderRecord.resulting_trade_id
 ```
 
-Dispatch order (fill `OrderResult` before `TradeClosedEvent`) lets `on_trade` back-link the
-exit order. Commission: per-fill debit in `on_fill`; `on_trade` credits pnl only (no
-double-count). `entry_time` = first open; each reduce = 1 Trade record (partial closes =
-round-trip chunk).
+Thứ tự dispatch (fill `OrderResult` trước `TradeClosedEvent`) cho phép `on_trade` back-link
+exit order. Commission: debit per-fill trong `on_fill`; `on_trade` chỉ credit pnl (không
+double-count). `entry_time` = open đầu tiên; mỗi reduce = 1 bản ghi Trade (partial close =
+chunk round-trip).
 
-**Equity-curve granularity:** realized-equity points come only from `on_trade` (one per close, open fills add none), while the persisted curve is the per-bar `_mtm_curve` (broker `total_equity`), so `total_return`/`cagr` depend on closing equity and are independent of intra-bar fill timing.
+**Equity-curve granularity:** các điểm realized-equity chỉ đến từ `on_trade` (một điểm mỗi lần close, các open fill không thêm điểm), trong khi curve được persist là `_mtm_curve` per-bar (broker `total_equity`), nên `total_return`/`cagr` phụ thuộc vào closing equity và độc lập với thời điểm fill trong bar.
 
-**Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` returns paginated trades via keyset cursor, server-side filtered (all/wins/losses) and sorted. Query params: `limit` (default 50), `cursor` (opaque base64 token), `sort_key` (9 keys: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` and `total_pnl` computed once per run (first page, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
+**Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` trả về các trade phân trang qua keyset cursor, filter server-side (all/wins/losses) và sort. Query param: `limit` (mặc định 50), `cursor` (token base64 opaque), `sort_key` (9 key: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` và `total_pnl` tính một lần mỗi run (trang đầu, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
 
-**Markers endpoint (lite chart arrows):** `GET /backtest/{run_id}/trade-markers` returns list of `{trade_id, entry_time, exit_time, direction}` for the chart's BUY/SELL arrows (1 per trade, no paging).
+**Markers endpoint (lite chart arrows):** `GET /backtest/{run_id}/trade-markers` trả về danh sách `{trade_id, entry_time, exit_time, direction}` cho các mũi tên BUY/SELL của chart (1 mỗi trade, không paging).
 
-**Stats endpoint (analytics):** `GET /backtest/{run_id}/stats` returns `{pnl_histogram, duration_histogram, streaks (max_win_streak, max_loss_streak), profit_factor_by_direction, drawdowns (top 5), profit_factor_all}` — all computed from trades via domain calculator, cached in app memory during route lifetime.
+**Stats endpoint (analytics):** `GET /backtest/{run_id}/stats` trả về `{pnl_histogram, duration_histogram, streaks (max_win_streak, max_loss_streak), profit_factor_by_direction, drawdowns (top 5), profit_factor_all}` — tất cả tính từ trade qua domain calculator, cache trong bộ nhớ app suốt vòng đời route.
 
-**History scope:** `GET /backtest/strategy/{strategy_id}` lists a strategy's runs, optionally narrowed by `?symbol=&interval=`. `symbol` is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`) — a bare code never matches. `BacktestResult` denormalizes `symbol`/`interval` top-level (from `config_snapshot`, uppercased) so the scope filter hits an index; pre-denormalization docs fall back to the snapshot in `from_mongo`.
+**History scope:** `GET /backtest/strategy/{strategy_id}` list các run của một strategy, có thể thu hẹp bằng `?symbol=&interval=`. `symbol` là composite `CODE:EXCHANGE` (ví dụ `BTCUSDT:BINANCE`) — code trần không bao giờ khớp. `BacktestResult` denormalize `symbol`/`interval` ở top-level (từ `config_snapshot`, viết hoa) để filter scope trúng index; các doc trước denormalization fallback về snapshot trong `from_mongo`.
 
-**Run-id invariant:** the route-allocated `run_id` is the run doc `_id` and every `backtest_orders.run_id` / `backtest_trades.run_id`.
+**Run-id invariant:** `run_id` do route cấp là `_id` của run doc và là mọi `backtest_orders.run_id` / `backtest_trades.run_id`.
 
-**Isolation:** the sandbox owns its own bus, so live subscriptions never see replayed bars or synthetic fills, and concurrent runs don't cross-talk. No concurrency cap — runs share the live Mongo pool (`MONGODB_MAX_POOL_SIZE`); the operator owns traffic.
+**Isolation:** sandbox sở hữu bus riêng, nên live subscription không bao giờ thấy bar replay hoặc synthetic fill, và các run đồng thời không cross-talk. Không có cap concurrency — các run dùng chung live Mongo pool (`MONGODB_MAX_POOL_SIZE`); operator tự chịu trách nhiệm về traffic.
 
-**Resilience:** in-flight tasks are held in `app.state.backtest_tasks`, drained (awaited) on shutdown; a boot sweep flips any orphan `started` run (killed mid-run) to `failed`. Status vocabulary is `started`/`finished`/`failed`.
+**Resilience:** các task đang chạy được giữ trong `app.state.backtest_tasks`, được drain (await) khi shutdown; một boot sweep lật bất kỳ run `started` mồ côi (bị kill giữa chừng) sang `failed`. Bộ từ vựng trạng thái là `started`/`finished`/`failed`.
 
 ## Real-Time Streaming
 
 **Inbound (WebSocket):**
-1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketAdapter` (reconnect 1s→60s backoff). `WsSubscriptionAppService` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
-2. **OKX private channels** — per-broker instance. `OKXWebSocketAdapter` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
+1. **Binance `@aggTrade`** — singleton, phạm vi toàn app. `BinanceWebSocketAdapter` (reconnect backoff 1s→60s). `WsSubscriptionAppService` mỗi 5s diff `tracked_symbols` Mongo vs subscription hiện tại, gọi `subscribe()/unsubscribe()` (throttle 20ms, cap 50/s). Frame → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
+2. **OKX private channels** — instance per-broker. `OKXWebSocketAdapter` + HMAC-SHA256 login, heartbeat tùy chỉnh (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min sau 10 lần fail liên tiếp. Reconnect: re-subscribe channel, REST `get_orders_history(limit=100)` refresh dedupe set (ngăn re-process fill trong downtime). Route: **orders** → `OkxOrderMapper.to_order_result` → dedupe trạng thái terminal → notify callback → broker publish `OrderFilledEvent` (route qua `StrategyAppService._on_order_filled` tới strategy); **positions** → chỉ log (TODO: emit PositionUpdatedEvent).
 
 **Outbound (SSE):**
-- **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit if `bar_start` changed or volume/price increased. Fields: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Frontend stale threshold: 30s.
-- **Quotes:** `GET /api/v1/quotes/stream/{symbol}`. Poll Redis 0.5s, emit if `last_price` or `volume` changed. Fields: `symbol, last_price, bid, ask, volume, change, change_percent, ts`. TTL ~60s. Frontend stale threshold: 10s, fallback to REST.
+- **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit nếu `bar_start` đổi hoặc volume/price tăng. Trường: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Ngưỡng stale frontend: 30s.
+- **Quotes:** `GET /api/v1/quotes/stream/{symbol}`. Poll Redis 0.5s, emit nếu `last_price` hoặc `volume` đổi. Trường: `symbol, last_price, bid, ask, volume, change, change_percent, ts`. TTL ~60s. Ngưỡng stale frontend: 10s, fallback về REST.
 
-**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forwards a `TradeClosedEvent` for each position reduce/close (average-cost). `PaperBrokerAdapter` fires the trade callback right after the fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` is a no-op (OKX live trades collected via R8 pipeline).
+**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forward một `TradeClosedEvent` cho mỗi lần position reduce/close (average-cost). `PaperBrokerAdapter` fire trade callback ngay sau fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` là no-op (OKX live trade thu thập qua pipeline R8).
 
-**Live trade pipeline (R8):** On `TradeClosedEvent` (paper or any reduce in engine), `StrategyAppService._forward_trade_to_bus` publishes to EventBus. `LiveTradeCollector` (EventBus subscriber, live-only) receives event → stamps `run_id=subscription_id` + `strategy_code` → persists Trade to `trades` collection (TradeRepository). Backtest bypasses via `inject_prepared_strategy` (synthetic ids, no double-count). Metrics queried live via `LiveMetricsQueryService.get_metrics(sub_id)` — calculates M1 (Sharpe, Sortino, win_rate, etc.) from `trades` table, returns via `GET /api/v1/subscriptions/{sub_id}/metrics`.
+**Live trade pipeline (R8):** Khi có `TradeClosedEvent` (paper hoặc bất kỳ reduce nào trong engine), `StrategyAppService._forward_trade_to_bus` publish lên EventBus. `LiveTradeCollector` (EventBus subscriber, chỉ live) nhận event → stamp `run_id=subscription_id` + `strategy_code` → persist Trade vào collection `trades` (TradeRepository). Backtest bypass qua `inject_prepared_strategy` (synthetic id, không double-count). Metrics được query live qua `LiveMetricsQueryService.get_metrics(sub_id)` — tính M1 (Sharpe, Sortino, win_rate, v.v.) từ bảng `trades`, trả qua `GET /api/v1/subscriptions/{sub_id}/metrics`.
 
-**Known issues:** (1) OKX heartbeat races with message iterator, non-pong frames dropped under load; (2) OKX position updates logged only, no EventBus; (3) Binance unsubscribe defers reconnect (new URL built only on next drop); (4) SSE poll latency 0.5–1.2s vs WebSocket trade-off (acceptable for bar intervals ≥1m).
+**Known issues:** (1) OKX heartbeat race với message iterator, các frame non-pong bị drop dưới tải; (2) OKX position update chỉ log, không EventBus; (3) Binance unsubscribe hoãn reconnect (URL mới chỉ build ở lần drop kế); (4) latency poll SSE 0.5–1.2s vs trade-off WebSocket (chấp nhận được với bar interval ≥1m).
 
 ## In-Memory Runtime State
 
-`StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategyService`, `_brokers[sub_id] = IBrokerPort`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
+`StrategyAppService` (per-process, KHÔNG shared): `_strategies[sub_id] = IStrategyService`, `_brokers[sub_id] = IBrokerPort`, `_configs[sub_id] = StrategyConfig`. Broker reuse: nhiều subscription trên cùng broker dùng chung một connection (khớp tên). Event handler tự đăng ký khi `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
 
-**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionCalculatorDomainService.calculate() 5. OrderAggregate creation 6. OrderAppService.submit()).
+**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionCalculatorDomainService.calculate() 5. tạo OrderAggregate 6. OrderAppService.submit()).
 
-**Order/Position state:** `OrderRepository.load_pending_orders()` on startup restore in-memory state + broker_order_id mapping. `PositionRepository.find_open()` restore open positions. `OrderFilledEvent` → `PositionAppService._on_order_filled` → position state update. Fills route via `StrategyAppService._on_order_filled` to the owning strategy by `subscription_id` → calls `strategy.on_order_filled(order, fill_price)`.
+**Order/Position state:** `OrderRepository.load_pending_orders()` lúc startup restore state in-memory + mapping broker_order_id. `PositionRepository.find_open()` restore position mở. `OrderFilledEvent` → `PositionAppService._on_order_filled` → cập nhật position state. Fill route qua `StrategyAppService._on_order_filled` tới strategy sở hữu theo `subscription_id` → gọi `strategy.on_order_filled(order, fill_price)`.
 
 ## Broker & Middleware
 
-**Brokers:** `PaperBrokerAdapter` (simulation, slippage/delays), `OKXBrokerAdapter` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause).
+**Brokers:** `PaperBrokerAdapter` (mô phỏng, slippage/delay), `OKXBrokerAdapter` (live, HMAC auth, backoff 1s→30s, circuit breaker 10-fail pause 5m).
 
 ### PaperBrokerAdapter accounting model (futures/margin, 1× leverage)
 
@@ -662,50 +662,50 @@ round-trip chunk).
 
 **Live vs paper:** `OKXBrokerAdapter` lấy balance thẳng từ sàn (`map_okx_balance_to_domain`), KHÔNG qua `_execute_fill`. OKX định nghĩa `availBal`/`eq` riêng cho SWAP account (external) — PaperBrokerAdapter không claim khớp `availBal`; bảng trên chỉ mô tả model của PaperBrokerAdapter.
 
-**Middleware:** CorrelationIdMiddleware (tracing) → RateLimitMiddleware (200 req/10s token bucket per IP) → IdempotencyMiddleware (24h TTL POST cache) → Route.
+**Middleware:** CorrelationIdMiddleware (tracing) → RateLimitMiddleware (token bucket 200 req/10s per IP) → IdempotencyMiddleware (cache POST 24h TTL) → Route.
 
-**Event Bus:** In-memory, FIFO, 50-event max history, sync + async handlers, no persistence (lost on crash).
+**Event Bus:** In-memory, FIFO, lịch sử tối đa 50 event, handler sync + async, không persistence (mất khi crash).
 
 ## Dependency Injection (Dishka)
 
-6 providers + auto-resolution via type hints. Files: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py` lifespan.
+6 provider + auto-resolution qua type hint. File: `src/pocketquant/app/di/`, lifespan `src/pocketquant/app/main.py`.
 
 **Providers:** CoreProvider (Settings, EventBus max_history=50) → PersistenceProvider (Database, Cache, 12 repos) → InfrastructureProvider (BrokerFactory, Binance/OKX WS, JobScheduler) → MarketDataProvider (BarAppService, QuoteAppService, 8 sync jobs) → ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService, LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService).
 
-**8 Background Jobs:** `sync_5m/15m/hourly/swing` (every Nm +2s offset, prevent bar-close race), `sync_daily` (cron 00:05 UTC), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC check gaps 7d), `sync_repair` (every 12h delete/resync). Sub-daily bounded retry (0/3/8s, 15s budget); catch-up on startup if > grace window.
+**8 Background Jobs:** `sync_5m/15m/hourly/swing` (mỗi Nm +2s offset, ngăn bar-close race), `sync_daily` (cron 00:05 UTC), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC check gap 7d), `sync_repair` (mỗi 12h delete/resync). Sub-daily retry giới hạn (0/3/8s, budget 15s); catch-up lúc startup nếu > grace window.
 
 ## Resource Lifecycle
 
 ### Startup Sequence
 
 1. FastAPI lifespan async context manager started
-2. Load settings from .env via pydantic-settings
+2. Load settings từ .env qua pydantic-settings
 3. Setup structured logging (structlog)
-4. Create dishka AsyncContainer with providers (initialization order: Core → Persistence → Infrastructure → MarketData → Execution → Services)
-5. Register command/query services with container
-6. `ensure_all_indexes()` creates MongoDB indexes
-7. `register_health_checks()` registers DB/Redis/job health probes
-8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`
-9. `recover_orphan_jobs()` detects and resets scheduler jobs stuck in `running` state (crash recovery)
-10. `seed_tracked_symbols()` ensures at least one symbol in registry
-11. `start_background_jobs()` registers APScheduler sync jobs (with per-job `misfire_grace_time` tuning)
-12. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-13. Server ready: app on port 41921 (serves `/api/*` + SPA) — single process only
+4. Tạo dishka AsyncContainer với các provider (thứ tự khởi tạo: Core → Persistence → Infrastructure → MarketData → Execution → Services)
+5. Đăng ký command/query service với container
+6. `ensure_all_indexes()` tạo MongoDB index
+7. `register_health_checks()` đăng ký health probe DB/Redis/job
+8. `recover_stale_backtests()` đánh dấu các backtest kẹt >10min ở trạng thái `running` thành `failed`
+9. `recover_orphan_jobs()` phát hiện và reset các scheduler job kẹt ở trạng thái `running` (crash recovery)
+10. `seed_tracked_symbols()` đảm bảo có ít nhất một symbol trong registry
+11. `start_background_jobs()` đăng ký các APScheduler sync job (với tinh chỉnh `misfire_grace_time` per-job)
+12. `setup_dishka(container, app)` tích hợp dishka với các FastAPI route
+13. Server sẵn sàng: app trên port 41921 (serve `/api/*` + SPA) — chỉ một process
 
-> ⚠ **Adding new persistent jobs or async workers?** See `code-standards.md` → "Async Suspension Points — Await Is Preemption" before wiring. The rule: wire every dependency (globals, container handles, registrations) BEFORE the call that starts the worker. APScheduler replays `next_run_time` on startup; first tick fires within `misfire_grace_time` seconds of `start()`. Per-job grace time configured in `register_sync_jobs()`; adjust based on job criticality.
+> ⚠ **Thêm persistent job hoặc async worker mới?** Xem `code-standards.md` → "Async Suspension Points — Await Is Preemption" trước khi wire. Quy tắc: wire mọi dependency (global, container handle, registration) TRƯỚC lời gọi khởi động worker. APScheduler replay `next_run_time` lúc startup; tick đầu tiên fire trong vòng `misfire_grace_time` giây kể từ `start()`. Grace time per-job cấu hình trong `register_sync_jobs()`; điều chỉnh theo mức độ quan trọng của job.
 
 ### Graceful Shutdown (container.close() in finally)
 
-1. Stop accepting new requests
-2. `container.close()` runs all provider cleanups in reverse order:
-   - StrategyAppService.stop() — stop strategy engine
-   - JobScheduler.shutdown(wait=True) — stop background jobs
-   - Cache.disconnect() — close Redis
-   - Database.disconnect() — close MongoDB
+1. Ngừng nhận request mới
+2. `container.close()` chạy tất cả provider cleanup theo thứ tự ngược:
+   - StrategyAppService.stop() — dừng strategy engine
+   - JobScheduler.shutdown(wait=True) — dừng background job
+   - Cache.disconnect() — đóng Redis
+   - Database.disconnect() — đóng MongoDB
 
 ## SP3: Single-Process Backend Architecture
 
-**Goal:** Unified backend combining all routes, scheduler, WS feed, and strategy lifecycle in one FastAPI process on port 41921.
+**Goal:** Backend hợp nhất gộp tất cả route, scheduler, WS feed, và strategy lifecycle trong một FastAPI process trên port 41921.
 
 **Single command:**
 
@@ -727,11 +727,11 @@ graph LR
 ```
 
 **app (Single Process):**
-- Container-internal port 41921, serves all `/api/v1/*` routes + SPA fallback
-- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest tasks, all API routes
-- Lifespan runs `ensure_all_indexes()` + recovery/seeding steps before yielding
-- Single-worker-only constraint: scheduler/WS/broker are in-process singletons; `--workers N` duplicates reconcile loop and live broker connection
-- `ENABLE_JOBS` gates `start_background_jobs` (scheduler + `sync_1m`/cascade) and `start_reconcile_loop` only. `start_quote_feed` is **ungated** — the WS feed runs even when jobs are off, writing ephemeral `quote:latest` / `bar:current` to Redis + publishing in-process `BarCompletedEvent`. It never upserts `bars`; the gated `sync_1m` + cascade cron is the sole Mongo `bars` writer (`bar_app_service.py` keeps no `upsert_bar`). Remote-DB dev (`ENABLE_JOBS=false`) therefore streams the live chart without persisting any bar to prod.
+- Port nội bộ container 41921, serve tất cả route `/api/v1/*` + SPA fallback
+- Sở hữu: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest task, tất cả API route
+- Lifespan chạy `ensure_all_indexes()` + các bước recovery/seeding trước khi yield
+- Ràng buộc single-worker-only: scheduler/WS/broker là in-process singleton; `--workers N` nhân đôi reconcile loop và live broker connection
+- `ENABLE_JOBS` gate `start_background_jobs` (scheduler + `sync_1m`/cascade) và `start_reconcile_loop` mà thôi. `start_quote_feed` **không bị gate** — WS feed chạy ngay cả khi job tắt, ghi `quote:latest` / `bar:current` ephemeral vào Redis + publish `BarCompletedEvent` in-process. Nó không bao giờ upsert `bars`; cron `sync_1m` + cascade bị gate là bộ ghi `bars` Mongo duy nhất (`bar_app_service.py` không giữ `upsert_bar`). Do đó dev remote-DB (`ENABLE_JOBS=false`) stream live chart mà không persist bar nào vào prod.
 - Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921`
 
 **Dependency Graph (top tier only):**
@@ -742,8 +742,8 @@ core ◁ engine ◁ app
 ```
 
 **Engine Internal Independence (enforced):**
-- `engine.backtest` ⟂ `engine.live` (two drivers, no cross-imports)
-- `engine.{strategy,execution,market_data}` cannot import `engine.{backtest,live}` (shared machinery stays independent)
+- `engine.backtest` ⟂ `engine.live` (hai driver, không cross-import)
+- `engine.{strategy,execution,market_data}` không thể import `engine.{backtest,live}` (shared machinery giữ độc lập)
 
 **Local Dev Ports:**
 - app: `http://localhost:41921/api/v1/docs` (Swagger)
@@ -751,70 +751,70 @@ core ◁ engine ◁ app
 - Vite proxy: `/api/*` → `http://localhost:41921` (app)
 
 **Container Network (compose.prod.yml):**
-- web + app + mongo + redis + portainer on same bridge network (`pocketquant-prod`)
-- No published port for app — nginx in web container reverse-proxies `/api/*` to app service name (`http://app:41921`)
-- External clients reach the public domain `pocketquant.xyz` via Cloudflare (orange-cloud proxy, terminates browser TLS) → web origin on `WEB_PORT`; nginx (`server_name _`) routes `/api/*` internally to app on :41921. SPA is host-agnostic (calls `window.location.origin + /api/...`)
+- web + app + mongo + redis + portainer trên cùng bridge network (`pocketquant-prod`)
+- Không publish port cho app — nginx trong web container reverse-proxy `/api/*` tới service name app (`http://app:41921`)
+- Client bên ngoài truy cập domain công khai `pocketquant.xyz` qua Cloudflare (orange-cloud proxy, terminate browser TLS) → web origin trên `WEB_PORT`; nginx (`server_name _`) route `/api/*` nội bộ tới app trên :41921. SPA không phụ thuộc host (gọi `window.location.origin + /api/...`)
 
 ## Integration & Performance
 
-**Binance:** REST (no auth, 1200 weight/min limit) + `@aggTrade` WS. Bars must include per-tick delta volume.
+**Binance:** REST (không auth, limit 1200 weight/min) + `@aggTrade` WS. Bar phải kèm delta volume per-tick.
 
-**OKX:** REST + WS with HMAC-SHA256 auth, 1s-30s backoff, 10-fail circuit breaker.
+**OKX:** REST + WS với HMAC-SHA256 auth, backoff 1s-30s, circuit breaker 10-fail.
 
-**Data stores:** PyMongo (5-50 pool), redis-py (60s quotes, 300s bars, 86400s idempotency).
+**Data stores:** PyMongo (pool 5-50), redis-py (quote 60s, bar 300s, idempotency 86400s).
 
-**Transient errors:** Exponential backoff 0/3/8s (15s budget), auto-reconnect. Permanent: log + continue.
+**Transient errors:** Exponential backoff 0/3/8s (budget 15s), auto-reconnect. Permanent: log + tiếp tục.
 
-**Perf:** Sync 1-5s per 5k bars, Quote <100ms, Bar aggregation <1ms/tick, Quote throughput 1000+/sec.
+**Perf:** Sync 1-5s per 5k bar, Quote <100ms, Bar aggregation <1ms/tick, Quote throughput 1000+/sec.
 
-**Security:** Env-var credentials only, Rate 200 req/10s per IP, Idempotency 24h TTL, MongoDB/Redis auth via DSN.
+**Security:** Chỉ credential qua env-var, Rate 200 req/10s per IP, Idempotency TTL 24h, MongoDB/Redis auth qua DSN.
 
 ## Configuration
 
-Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true). See [deployment.md](./deployment.md) for per-env details.
+Env var (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true). Xem [deployment.md](./deployment.md) cho chi tiết per-env.
 
 ## Dependencies
 
-FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pytest, ruff (lint), pyright (type check).
+FastAPI, Pydantic (settings + command/query model), PyMongo (native async, KHÔNG phải Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pytest, ruff (lint), pyright (type check).
 
 ## Known Limitations
 
-- EventBus in-memory: events lost on crash (acceptable for non-critical events)
-- APScheduler in-memory: jobs reschedule on startup; persistent history in `job_history` Mongo collection
-- No outbox pattern: async event delivery not guaranteed after crash
-- Rate limit state lost on Redis restart: acceptable for burst protection
-- Single-process-only strategy execution: reconcile loop + WS feed + broker singletons; `--workers N` duplicates all
-- Domain purity via AST: I/O imports forbidden in `core/domain/`
+- EventBus in-memory: event mất khi crash (chấp nhận được với event không quan trọng)
+- APScheduler in-memory: job reschedule lúc startup; lịch sử persistent trong collection `job_history` Mongo
+- Không có outbox pattern: async event delivery không đảm bảo sau crash
+- Rate limit state mất khi Redis restart: chấp nhận được cho burst protection
+- Strategy execution chỉ single-process: reconcile loop + WS feed + broker singleton; `--workers N` nhân đôi tất cả
+- Domain purity qua AST: cấm import I/O trong `core/domain/`
 
 ## Ops Context
 
-**Two Repositories (secret boundary):** `pocketquant` (code, no secrets) ← `pocketquant-config` (prod .env, creds). CI/CD secret: `POCKETQUANT_CONFIG_DEPLOY_KEY` (read-only git key).
+**Two Repositories (secret boundary):** `pocketquant` (code, không secret) ← `pocketquant-config` (prod .env, cred). CI/CD secret: `POCKETQUANT_CONFIG_DEPLOY_KEY` (git key read-only).
 
 **External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), Docker Hub, GitHub Actions.
 
-**Deployment:** Public entry `pocketquant.xyz` via Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare proxies HTTP/HTTPS only — SSH + published DB ports reach the VPS by IP directly. Config flow: `pocketquant-config/.env` → CI reads at deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler coordinates via `apscheduler_jobs` Mongo collection; first to claim `next_run_time` wins. Remote-DB dev mode must set `ENABLE_JOBS=false` (else double-schedule).
+**Deployment:** Entry công khai `pocketquant.xyz` qua Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare chỉ proxy HTTP/HTTPS — SSH + published DB port truy cập VPS trực tiếp qua IP. Config flow: `pocketquant-config/.env` → CI đọc lúc deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler phối hợp qua collection `apscheduler_jobs` Mongo; ai claim `next_run_time` trước thì thắng. Dev mode remote-DB phải set `ENABLE_JOBS=false` (nếu không sẽ double-schedule).
 
-See [deployment.md](./deployment.md) for CI/CD runbook, `.github/workflows/cicd.yml` for build→ship→run.
+Xem [deployment.md](./deployment.md) cho CI/CD runbook, `.github/workflows/cicd.yml` cho build→ship→run.
 
 ## Bounded Contexts
 
 | Context | Responsibility | Events |
 |---|---|---|
 | **Market Data** | Bar/quote ingestion, storage, real-time streaming | `BarCompletedEvent`, `QuoteReceivedEvent` |
-| **Strategy** | Signal generation, subscription lifecycle | `SignalGeneratedEvent` |
+| **Strategy** | Sinh signal, subscription lifecycle | `SignalGeneratedEvent` |
 | **Trading** | Order execution, position lifecycle | `OrderFilledEvent`, `PositionOpenedEvent` |
-| **Risk** | Position sizing, pre-trade validation | — |
+| **Risk** | Position sizing, validation pre-trade | — |
 | **Backtest** | Historical replay, performance metrics | — |
 
 ## Ubiquitous Language
 
 | Term | Meaning | Notes |
 |---|---|---|
-| **Symbol** | Composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`), immutable | shared key across market-data + trading |
-| **Bar** | Time-bucketed OHLCV record | "candle" only in UI; domain: "bar" |
-| **Quote** | Latest tick (price, size, ts), cached in Redis 60s | ephemeral, not persisted |
-| **Subscription** | Strategy binding: `(strategy_code, symbol, interval)` + control plane state | `desired_state` / `actual_state` (reconcile loop) |
-| **Sync** | Update Bar storage from Binance to present | cron jobs: 5m, 15m, hourly, swing, daily, backfill, integrity, repair |
-| **Strategy** | IStrategyService plugin, registered by code name (e.g. `hitnrun2`) | instantiated per subscription |
-| **Aggregate** | Entity with invariants + lifecycle + events | OrderAggregate, PositionAggregate only |
-| **Deterministic ID** | `sha256(strategy_code|symbol|interval)[:16]` for subscription | idempotent dedup |
+| **Symbol** | Composite `CODE:EXCHANGE` (ví dụ `BTCUSDT:BINANCE`), bất biến | key dùng chung giữa market-data + trading |
+| **Bar** | Bản ghi OHLCV theo bucket thời gian | "candle" chỉ trong UI; domain: "bar" |
+| **Quote** | Tick mới nhất (price, size, ts), cache trong Redis 60s | ephemeral, không persist |
+| **Subscription** | Binding của strategy: `(strategy_code, symbol, interval)` + control plane state | `desired_state` / `actual_state` (reconcile loop) |
+| **Sync** | Cập nhật Bar storage từ Binance tới hiện tại | cron job: 5m, 15m, hourly, swing, daily, backfill, integrity, repair |
+| **Strategy** | Plugin IStrategyService, đăng ký theo code name (ví dụ `hitnrun2`) | khởi tạo per subscription |
+| **Aggregate** | Entity với invariant + lifecycle + event | chỉ OrderAggregate, PositionAggregate |
+| **Deterministic ID** | `sha256(strategy_code|symbol|interval)[:16]` cho subscription | dedup idempotent |

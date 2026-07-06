@@ -70,7 +70,7 @@ routes/{feature}.py                    # HTTP handlers
 {pkg}/{feature}_command_service.py    # Write logic
 {pkg}/{feature}_query_service.py      # Read logic (cached)
 core/domain/{entity}/                  # Pure logic (no I/O)
-core/persistence/repositories/         # Data access
+core/infra/persistence/repositories/   # Data access
 ```
 
 **Example:** Route → BacktestCommandService → BarRepository + PerformanceCalculatorDomainService (domain, pure).
@@ -96,7 +96,7 @@ dishka resolves dependencies by type hint. Routes inject via `FromDishka[Service
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
-All data access via instance methods in `src/pocketquant/core/persistence/repositories/`. All repositories inherit from `BaseRepository`, use `_collection(name)` helper, inject `Database` via constructor. Domain entities serialize via `to_mongo()` / `from_mongo()`. No schemas/ directory. Benefits: testable, pure domain, single source of truth.
+All data access via instance methods in `src/pocketquant/core/infra/persistence/repositories/`. All repositories inherit from `BaseRepository`, use `_collection(name)` helper, inject `Database` via constructor. Domain entities serialize via `to_mongo()` / `from_mongo()`. No schemas/ directory. Benefits: testable, pure domain, single source of truth.
 
 ### 5. Service Pattern (Business Logic)
 
@@ -415,10 +415,9 @@ Keep individual files under 200 LOC for optimal context management:
 - Extract utility functions into separate modules
 - Create dedicated service classes for complex logic
 
-**Current Status:**
-- All modules within limit
-- Largest: `quote_aggregator.py` (368 LOC - exception due to complexity)
-- Most: 150-250 LOC
+**Known exceptions (complexity-justified):**
+- `core/infra/brokers/paper/paper_broker_adapter.py` (~850 LOC — 4 fill paths + futures/margin accounting + SL/TP synthetic exits)
+- `engine/market_data/app_services/sync_jobs.py` (~730 LOC — multi-interval backfill + integrity jobs)
 
 ### Import Organization
 
