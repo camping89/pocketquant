@@ -159,7 +159,7 @@ domain/
 │   ├── strategy_service_interface.py   # IStrategyService ABC
 │   ├── value_objects.py    # Signal, StrategyConfig, OrderConfig, StopLossConfig, TakeProfitConfig
 │   ├── patterns/engulfing_detector.py  # Engulfing pattern detector (pure)
-│   └── services/           # HitNRun2StrategyService, EngulfingStrategyService
+│   └── services/           # HitNRun2StrategyService, EngulfingStrategyService, EngulfingPullback30TouchStrategyService
 └── shared/                 # Cross-cutting
     ├── enums.py            # Interval enum
     ├── events.py           # DomainEvent base (was domain_event.py)
@@ -530,6 +530,7 @@ src/
 | SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
 | BacktestReportAppService | Backtest report: collect Trade+equity, build metrics | `engine/backtest/backtest_report_app_service.py` |
 | EngulfingStrategyService | Engulfing strategy impl | `core/domain/strategy/services/engulfing_strategy_service.py` |
+| EngulfingPullback30TouchStrategyService | Biến thể engulfing (`engulfing_pullback30_touch`): arm tại pattern, vào tại close bar kế tiếp khi pullback 30% intrabar | `core/domain/strategy/services/engulfing_pullback30_touch_strategy_service.py` |
 
 ## Request Flow
 
