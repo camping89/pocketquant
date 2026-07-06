@@ -285,8 +285,11 @@ class OKXBrokerAdapter(IBrokerPort):
             self._ws_task = None
 
     async def subscribe_trades(self, callback: TradeCallback) -> None:
-        # No-op: OKX position→Trade emission wired at R8 (needs a demo payload to
-        # settle the source of truth across orders/positions/history channels).
+        # No-op: OKX position→Trade emission is deferred to a future R. It needs a
+        # demo fill payload to settle the source of truth across the orders/
+        # positions/history channels and to verify snapshot-delta accounting vs
+        # the paper broker's per-fill emission (avoiding double-counted accFillSz).
+        # R8's live Trade pipeline (LiveTradeCollector) covers the paper broker only.
         self._trade_callback = callback
 
     async def unsubscribe_trades(self) -> None:

@@ -2,11 +2,11 @@ from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 
-from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.infra.binance.binance_adapter import BinanceAdapter
+from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )

@@ -1,9 +1,5 @@
 from dishka import Provider, Scope, provide
 
-from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
-from pocketquant.app.market_data.app_services.ws_subscription_app_service import (
-    WsSubscriptionAppService,
-)
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
@@ -18,6 +14,10 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
+from pocketquant.engine.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.engine.market_data.app_services.ws_subscription_app_service import (
+    WsSubscriptionAppService,
+)
 from pocketquant.engine.market_data.sync_service import SyncService
 
 

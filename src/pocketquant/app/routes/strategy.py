@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.engine.live.live_metrics_query_service import LiveMetricsQueryService
 from pocketquant.engine.strategy.strategy_command_service import (
     AddSymbolCommand,
     DeleteStrategyCommand,
@@ -142,6 +143,19 @@ async def get_subscription_trades(
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
     return await query_svc.get_trades(GetStrategyTradesQuery(subscription_id=sub_id, limit=limit))
+
+
+@subscription_router.get("/{sub_id}/metrics")
+async def get_subscription_metrics(
+    sub_id: str,
+    metrics_svc: FromDishka[LiveMetricsQueryService],
+) -> dict:
+    """Trade-derived performance metrics for a subscription (M1 relative model).
+
+    Empty subscription → zeroed metrics, HTTP 200. ``total_return``/``cagr`` are
+    null (live subs share one account — no per-subscription capital baseline).
+    """
+    return await metrics_svc.get_metrics(sub_id)
 
 
 @subscription_router.delete("/{sub_id}", status_code=204)

@@ -62,6 +62,21 @@ class StrategyReconcileAppService:
         self._strategy_service = strategy_service
         self._interval_s = interval_s
 
+    async def bootstrap(self) -> None:
+        """Load one RAM instance per persisted subscription, once at startup.
+
+        Runs unconditionally — even when the reconcile loop is gated off
+        (``enable_jobs=false``) — so instances exist before the first tick and it
+        never logs spurious ``missing_instance`` warnings. Reuses
+        ``_ensure_instances`` (the loop's own load-per-subscription pass) so the
+        boot path and the steady-state path can never drift.
+        """
+        subs = await self._sub_repo.list_all()
+        if not subs:
+            return
+        await self._ensure_instances(subs)
+        logger.info("live_instances_bootstrapped", subscriptions=len(subs))
+
     async def run(self) -> None:
         """Reconcile loop. Runs until cancelled by lifespan shutdown."""
         logger.info("reconcile.started", interval_s=self._interval_s)

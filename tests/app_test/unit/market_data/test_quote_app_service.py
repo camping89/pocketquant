@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.engine.market_data.app_services.quote_app_service import QuoteAppService
 
 
 def _make_quote_data(volume: float | None, price: float = 50000.0) -> dict:
@@ -72,7 +72,7 @@ class TestOnQuoteUpdateVolumeClamping:
     ) -> None:
         """Negative delta is clamped to 0.0; a warning is logged."""
         with patch(
-            "pocketquant.app.market_data.app_services.quote_app_service.logger"
+            "pocketquant.engine.market_data.app_services.quote_app_service.logger"
         ) as mock_logger:
             await service.on_quote_update(_make_quote_data(volume=-0.01))
 

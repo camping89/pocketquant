@@ -18,6 +18,7 @@ from pocketquant.core.domain.order import (
     OrderSide,
     OrderType,
 )
+from pocketquant.core.domain.position import TradeClosedEvent
 from pocketquant.core.domain.quote.events import QuoteReceivedEvent
 from pocketquant.core.domain.risk import PositionCalculatorDomainService
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
@@ -408,6 +409,15 @@ class StrategyAppService:
             tp_price=signal.take_profit_price,
         )
 
+    async def _forward_trade_to_bus(self, event: TradeClosedEvent) -> None:
+        """Republish a broker trade-closure onto the bus for the live collector.
+
+        Backtest bypasses this — it wires the collector directly onto its own
+        broker via ``inject_prepared_strategy`` — so the two trade channels never
+        cross and a backtest trade is never double-counted.
+        """
+        await self._event_bus.publish(event)
+
     async def _get_or_create_broker(self, broker_type: str) -> IBrokerPort:
         for broker in self._brokers.values():
             if broker.name == broker_type or broker.name == f"{broker_type}-demo":
@@ -415,6 +425,10 @@ class StrategyAppService:
 
         config = self._default_broker_config.copy()
         broker = self._broker_factory.create(broker_type, config)
+        # Live path only (reached via load_strategy). Wire once, on creation — the
+        # reuse branch above returns already-wired brokers, so N subscriptions
+        # sharing one broker get exactly one forward, not one per subscription.
+        await broker.subscribe_trades(self._forward_trade_to_bus)
         return broker
 
 

@@ -176,7 +176,7 @@ async def test_default_model_bps_zero_keeps_pre_r3_balance() -> None:
 
 
 async def test_broker_factory_percent_to_bps() -> None:
-    from pocketquant.app.di.broker_factory import BrokerFactory
+    from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 
     factory = BrokerFactory(EventBus())
     broker = factory.create(

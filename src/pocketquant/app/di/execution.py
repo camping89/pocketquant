@@ -8,9 +8,9 @@ from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 
-from pocketquant.app.di.broker_factory import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
+from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
@@ -18,9 +18,12 @@ from pocketquant.core.infra.persistence.repositories.position_repository import 
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
+from pocketquant.engine.live.live_metrics_query_service import LiveMetricsQueryService
+from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
@@ -88,3 +91,20 @@ class ExecutionProvider(Provider):
             strategy_app_service,
             interval_s=settings.reconcile_interval_seconds,
         )
+
+    @provide(scope=Scope.APP)
+    def get_live_trade_collector(
+        self,
+        event_bus: EventBus,
+        trade_repository: TradeRepository,
+        strategy_app_service: StrategyAppService,
+    ) -> LiveTradeCollector:
+        return LiveTradeCollector(event_bus, trade_repository, strategy_app_service)
+
+    @provide(scope=Scope.APP)
+    def get_live_metrics_query_service(
+        self,
+        trade_repository: TradeRepository,
+        settings: Settings,
+    ) -> LiveMetricsQueryService:
+        return LiveMetricsQueryService(trade_repository, baseline=settings.paper_initial_balance)

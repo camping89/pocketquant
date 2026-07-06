@@ -16,10 +16,6 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
-from pocketquant.app.market_data.app_services.ws_subscription_app_service import (
-    WsSubscriptionAppService,
-)
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
@@ -59,9 +55,15 @@ from pocketquant.core.infra.persistence.repositories.sync_status_repository impo
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
+from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
+from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
+)
+from pocketquant.engine.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.engine.market_data.app_services.ws_subscription_app_service import (
+    WsSubscriptionAppService,
 )
 
 logger = get_logger(__name__)
@@ -79,6 +81,7 @@ _REPO_TYPES: list[type] = [
     JobHistoryRepository,
     SubscriptionRepository,
     TrackedSymbolRepository,
+    TradeRepository,
 ]
 
 
@@ -118,53 +121,18 @@ async def recover_orphan_jobs(container: AsyncContainer) -> None:
         logger.info("orphan_jobs_recovered", marked_failed=n)
 
 
-async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> None:
-    """Re-load one strategy instance per persisted subscription on startup.
+async def bootstrap_live_instances(container: AsyncContainer) -> None:
+    """Load one strategy instance per persisted subscription on startup.
 
-    Strategy instances live in-process and disappear on every container
-    restart, but their subscriptions are durable in MongoDB. Each subscription
-    owns its own runtime instance keyed by ``sub.id`` so that subscribing the
-    same template to multiple (symbol, interval) pairs results in independent
-    instances. Subscriptions whose template no longer exists in the registry
-    are skipped with a warning.
+    Strategy instances live in-process and vanish on every container restart,
+    but their subscriptions are durable in MongoDB. Delegates to
+    ``StrategyReconcileAppService.bootstrap`` — the same load-per-subscription
+    pass the reconcile loop runs each tick — so the boot path and the
+    steady-state path can never drift. Runs unconditionally (independent of
+    ``enable_jobs``); only the reconcile loop itself is gated.
     """
-    from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
-    from pocketquant.core.domain.strategy.value_objects import StrategyConfig
-    from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
-
-    sub_repo = await container.get(SubscriptionRepository)
-    strategy_service = await container.get(StrategyAppService)
-
-    subs = await sub_repo.list_all()
-    if not subs:
-        return
-
-    loaded = 0
-    for sub in subs:
-        sub_id = str(sub.id)
-        if strategy_service.get_strategy(sub_id) is not None:
-            continue
-        strategy_class = STRATEGY_REGISTRY.get(sub.strategy_code)
-        if strategy_class is None:
-            logger.warning(
-                "rehydrate_skipped_unknown_template",
-                sub_id=sub_id,
-                strategy_code=sub.strategy_code,
-            )
-            continue
-        await strategy_service.load_strategy(
-            StrategyConfig(
-                id=sub_id,
-                name=sub.strategy_code,
-                symbol=sub.symbol,
-                interval=sub.interval.value,
-            ),
-            strategy_class=strategy_class,
-        )
-        loaded += 1
-
-    if loaded:
-        logger.info("strategies_rehydrated", count=loaded)
+    svc = await container.get(StrategyReconcileAppService)
+    await svc.bootstrap()
 
 
 async def start_background_jobs(container: AsyncContainer) -> None:
@@ -220,13 +188,31 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     logger.info("quote_feed.stopped")
 
 
+async def start_live_collector(container: AsyncContainer) -> None:
+    """Subscribe the live Trade collector to the bus.
+
+    Gated on ``enable_jobs`` — same flag as the reconcile loop — since a
+    collector only has trades to persist once the runtime actually runs
+    strategies. Must register BEFORE ``start_reconcile_loop`` starts strategies
+    so no trade closure is published before the handler exists.
+    """
+    settings = await container.get(Settings)
+    if not settings.enable_jobs:
+        logger.info("live_collector_disabled")
+        return
+
+    collector = await container.get(LiveTradeCollector)
+    await collector.start()
+    logger.info("live_collector.started")
+
+
 async def start_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
     """Start the declarative control-plane reconcile loop as a background task.
 
     Gated on ``enable_jobs`` — same flag as background jobs, so the test/CLI
     profile (``enable_jobs=False``) never spins a live loop. Must start AFTER
-    ``rehydrate_strategies_from_subscriptions`` so instances exist; otherwise the
-    first tick logs N missing_instance warnings before catching up next tick.
+    ``bootstrap_live_instances`` so instances exist; otherwise the first tick
+    logs N missing_instance warnings before catching up next tick.
     """
     settings = await container.get(Settings)
     if not settings.enable_jobs:

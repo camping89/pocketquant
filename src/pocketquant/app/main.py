@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from pocketquant.app.di.container import create_container
 from pocketquant.app.main_extensions import (
+    bootstrap_live_instances,
     configure_middleware,
     drain_backtest_tasks,
     ensure_all_indexes,
@@ -16,8 +17,8 @@ from pocketquant.app.main_extensions import (
     recover_orphan_jobs,
     register_health_checks,
     register_routes,
-    rehydrate_strategies_from_subscriptions,
     start_background_jobs,
+    start_live_collector,
     start_quote_feed,
     start_reconcile_loop,
     stop_quote_feed,
@@ -44,7 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Wire the sync-job module container BEFORE any await. JobScheduler is
     # APP-scoped and may resolve+start inside any subsequent `await
-    # container.get(...)` chain (e.g. via StrategyAppService during rehydrate).
+    # container.get(...)` chain (e.g. via StrategyAppService during bootstrap).
     # Once started, persisted MongoDBJobStore sync jobs whose next_run_time is
     # within misfire_grace_time can dispatch and call sync_jobs._get_container().
     # Synchronous global assignment — no await means no preemption point.
@@ -61,11 +62,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await recover_orphan_backtests(container)
         await recover_orphan_jobs(container)
         await seed_tracked_symbols(container)
-        await rehydrate_strategies_from_subscriptions(container)
+        await bootstrap_live_instances(container)
         await register_health_checks(container, app)
         await start_background_jobs(container)
         await start_quote_feed(container, app)
-        # Start LAST — instances are rehydrated, so the first tick has no spurious
+        # Collector subscribes BEFORE the reconcile loop starts strategies, so no
+        # trade closure is published before its handler exists.
+        await start_live_collector(container)
+        # Start LAST — instances are bootstrapped, so the first tick has no spurious
         # missing_instance warnings.
         await start_reconcile_loop(container, app)
 
