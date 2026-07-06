@@ -48,7 +48,7 @@ def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
         end_date=datetime.fromisoformat(payload["end_date"]),
         initial_capital=payload.get("initial_capital", 10_000.0),
         slippage_bps=payload.get("slippage_bps", 1.0),
-        commission_bps=payload.get("commission_bps", 5.0),
+        commission_bps=payload.get("commission_bps", 3.0),
         parameters=payload.get("parameters") or {},
     )
 

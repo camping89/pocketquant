@@ -17,7 +17,7 @@ class BacktestConfig:
         end_date: End datetime for historical replay (minute precision).
         initial_capital: Starting capital for the backtest.
         slippage_bps: Slippage in basis points (1 = 0.01%).
-        commission_bps: Commission in basis points (5 = 0.05%).
+        commission_bps: Commission in basis points (3 = 0.03%).
         replay_speed: Replay speed multiplier (0 = max speed).
         parameters: Strategy-specific parameters for optimization.
     """
@@ -29,7 +29,7 @@ class BacktestConfig:
     end_date: datetime
     initial_capital: float = 10_000.0
     slippage_bps: float = 1.0  # 1 bp = 0.01% default
-    commission_bps: float = 5.0  # 5 bps default
+    commission_bps: float = 3.0  # 3 bps default
     replay_speed: float = 0.0  # 0 = max speed, 1 = real-time, 10 = 10x
     parameters: dict[str, Any] = field(default_factory=dict)
 
