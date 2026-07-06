@@ -39,8 +39,6 @@ const COLUMNS: Col[] = [
   { key: 'entry_price', label: 'Entry', numeric: true },
   { key: 'exit_price', label: 'Exit', numeric: true },
   { key: 'quantity', label: 'Qty', numeric: true },
-  { label: 'Entry $', numeric: true },
-  { label: 'Exit $', numeric: true },
   { key: 'duration_seconds', label: 'Duration', numeric: true },
   { key: 'pnl', label: 'PnL', numeric: true },
   { label: 'Net', numeric: true },
@@ -154,11 +152,13 @@ export function PositionsTable({
                 <td>
                   <span className={`direction-badge direction-badge--${dir.toLowerCase()}`}>{dir}</span>
                 </td>
-                <td className="positions-table__td--num">{fmtPrice(t.entry_price)}</td>
-                <td className="positions-table__td--num">{fmtPrice(t.exit_price)}</td>
+                <td className="positions-table__td--num">
+                  {fmtPrice(t.entry_price)} ({formatUsd(t.quantity * t.entry_price)})
+                </td>
+                <td className="positions-table__td--num">
+                  {fmtPrice(t.exit_price)} ({formatUsd(t.quantity * t.exit_price)})
+                </td>
                 <td className="positions-table__td--num">{formatQty(t.quantity)}</td>
-                <td className="positions-table__td--num">{formatUsd(t.quantity * t.entry_price)}</td>
-                <td className="positions-table__td--num">{formatUsd(t.quantity * t.exit_price)}</td>
                 <td className="positions-table__td--num">{fmtDuration(t)}</td>
                 <td className={`positions-table__td--num ${t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`}>
                   {formatUsdSigned(t.pnl)}
