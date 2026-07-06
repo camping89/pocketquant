@@ -7,42 +7,42 @@
 
 ## What Happened
 
-Hoàn tất feature refactor tab Trades của trang backtest (`/backtest?run=<id>`). Trước: load toàn bộ trades một lần, tính stats client-side → UI lag + BE overload. Sau: server-side paging (keyset cursor, `.allow_disk_use(True)`), dedicated `BacktestStatsService`, infinite scroll + virtualized table, chart selection ổn định qua paging. Commit `504e276` (code), workflow CI/CD + Playwright automation 5/5 pass trên prod.
+Completed a feature refactor of the Trades tab on the backtest page (`/backtest?run=<id>`). Before: load all trades at once, compute stats client-side → UI lag + BE overload. After: server-side paging (keyset cursor, `.allow_disk_use(True)`), dedicated `BacktestStatsService`, infinite scroll + virtualized table, chart selection stable across paging. Commit `504e276` (code), CI/CD workflow + Playwright automation 5/5 pass on prod.
 
 ## The Brutal Truth
 
-Tab Trades là cái cổ chai: load 10K+ trades → FE parsing + tính histogram/streak/PF/drawdown → DOM render → mỗi re-sort lại recalculate hết. Trên run lớn (3-4K trades), tab này bị freeze 3-4 giây. Chart selection bị break khi người dùng sort/filter lại vì selection tracking bằng array index (khi paging thay đổi thì index mismatch → click trade sai).
+The Trades tab was the bottleneck: load 10K+ trades → FE parsing + compute histogram/streak/PF/drawdown → DOM render → every re-sort recalculates everything. On large runs (3-4K trades), this tab froze for 3-4 seconds. Chart selection broke when the user re-sorted/filtered because selection tracking used the array index (when paging changed, the index mismatched → clicking the wrong trade).
 
-Thêm nữa, bỏ stats tính client-side mà chưa chắc backend hoàn hảo → phải code-review kỹ keyset cursor logic, tie-break, datetime decode (3 điều dễ sai).
+On top of that, dropping client-side stats without being sure the backend was perfect → had to code-review the keyset cursor logic, tie-break, datetime decode carefully (3 things easy to get wrong).
 
 ## Technical Details
 
 **Backend changes (`src/pocketquant/backtest/backtest_stats_service.py`):**
-- New `BacktestStatsService`: gom toàn bộ analytics queries + aggregation (paged + aggregate modes).
-- Domain calculator `trade_stats_calculator.py`: histogram/streaks/profit-factor/max-drawdown (pure functions, testable riêng).
-- Repository mở rộng: `list_by_run_paged(run_id, sort_by, direction, cursor, limit)` keyset cursor, tie-break `_id`; `count_by_run`, `sum_pnl_by_run`, `list_markers_by_run`.
+- New `BacktestStatsService`: gathers all analytics queries + aggregation (paged + aggregate modes).
+- Domain calculator `trade_stats_calculator.py`: histogram/streaks/profit-factor/max-drawdown (pure functions, testable separately).
+- Repository extended: `list_by_run_paged(run_id, sort_by, direction, cursor, limit)` keyset cursor, tie-break `_id`; `count_by_run`, `sum_pnl_by_run`, `list_markers_by_run`.
 - Endpoint changes:
   - `GET /{run_id}/trades`: `{trades: [...]}` → `{items, next_cursor, has_more, total, total_pnl}` (paged contract)
-  - New `GET /{run_id}/trades/markers`: trades dành để vẽ marker trên chart (trade_id, entry_exit signals)
-  - New `GET /{run_id}/stats`: histogram/streaks/profit-factor/drawdown (top-level aggregate, không tính lại mỗi page)
-- Index thêm `ix_bttrades_run_pnl` để tie-break khi sort `pnl`.
-- Bỏ endpoint `BacktestQueryService.list_trades`.
+  - New `GET /{run_id}/trades/markers`: trades used to draw markers on the chart (trade_id, entry_exit signals)
+  - New `GET /{run_id}/stats`: histogram/streaks/profit-factor/drawdown (top-level aggregate, not recomputed per page)
+- Added index `ix_bttrades_run_pnl` to tie-break when sorting by `pnl`.
+- Removed the `BacktestQueryService.list_trades` endpoint.
 
 **Keyset cursor design:**
 ```
 cursor = Base64Encode({v: "1", id: <trade_id>, <sort_field>: <value>})
 ```
 - `v`: version (upgrade-safe)
-- Opaque: client không decode
-- Tie-break `_id`: ordering deterministic khi `pnl` (hay sort field khác) trùng lặp
-- Footer aggregate (total/total_pnl) chỉ tính ở page đầu (`cursor is None`), skip ở page sau (tối ưu hóa).
+- Opaque: client doesn't decode
+- Tie-break `_id`: ordering deterministic when `pnl` (or another sort field) has duplicates
+- Footer aggregate (total/total_pnl) computed only on the first page (`cursor is None`), skipped on later pages (optimization).
 
 **Frontend changes:**
-- Infinite scroll + `@tanstack/react-virtual` (row virtualization, 50-100 rows visible mỗi lần).
-- Filter/sort server-side → `useInfiniteQuery` từ `@tanstack/react-query`.
-- Selection từ array index → **trade_id (UUIDv7)**: click trade → highlight row + vẽ box/info trên chart, bền vững qua page thay đổi.
-- Bỏ `stats-utils.ts` (client-side histogram/streak/PF/drawdown) → consume `GET /stats` endpoint.
-- Tab Open Positions tách riêng (không mix vào Trades tab).
+- Infinite scroll + `@tanstack/react-virtual` (row virtualization, 50-100 rows visible at a time).
+- Filter/sort server-side → `useInfiniteQuery` from `@tanstack/react-query`.
+- Selection from array index → **trade_id (UUIDv7)**: click a trade → highlight the row + draw box/info on the chart, durable across page changes.
+- Removed `stats-utils.ts` (client-side histogram/streak/PF/drawdown) → consume the `GET /stats` endpoint.
+- Open Positions tab separated (not mixed into the Trades tab).
 
 **Verify scope:**
 - Backend: 110 tests pass (trade_stats_calculator, repository keyset, service paging)
@@ -51,60 +51,60 @@ cursor = Base64Encode({v: "1", id: <trade_id>, <sort_field>: <value>})
 - import-linter: 7/7 contracts KEPT
 - OpenAPI + route snapshot regenerated
 - Code-review (code-reviewer): keyset sound, stats parity exact
-- Fix: `git rm -f stats-utils.ts` (zsh `-i` alias prompt bị nuốt trong non-interactive shell)
-- Automation: Playwright 5/5 pass trên prod (contract + UI + virtualization)
+- Fix: `git rm -f stats-utils.ts` (zsh `-i` alias prompt swallowed in a non-interactive shell)
+- Automation: Playwright 5/5 pass on prod (contract + UI + virtualization)
 
 ## What We Tried
 
-1. **Offset pagination**: simple, but cursor-less paging = instability khi user sort mid-scroll (rows added/removed).
+1. **Offset pagination**: simple, but cursor-less paging = instability when the user sorts mid-scroll (rows added/removed).
    - Switched: keyset cursor (deterministic) ✓
 
 2. **Client-side stats (histogram/streaks)**: no extra BE load, intuitive.
-   - Problem: 10K+ items → O(n) recalc mỗi filter/sort; UI freeze 3-4s trên large runs.
-   - Switched: server-side stats, cache trong memory BE ✓
+   - Problem: 10K+ items → O(n) recalc per filter/sort; UI freeze 3-4s on large runs.
+   - Switched: server-side stats, cached in BE memory ✓
 
-3. **Selection bằng array index**: simple, works khi table static.
-   - Problem: paging thay đổi → index mismatch → click trade sai; chart selection lost.
+3. **Selection by array index**: simple, works when the table is static.
+   - Problem: paging changes → index mismatch → clicking the wrong trade; chart selection lost.
    - Switched: stable UUID (trade_id) ✓
 
-4. **MongoDB aggregate pipeline iterate (không `.allow_disk_use`)**: memory-efficient cho small pipelines.
+4. **MongoDB aggregate pipeline iterate (no `.allow_disk_use`)**: memory-efficient for small pipelines.
    - Problem: >32MB pipeline spill → memory OOM risk, abandon
    - Switched: `.allow_disk_use(True)` (MDB 3.2+) ✓
 
-5. **Footer aggregate (total/total_pnl) mỗi page**: consistency, user expects
-   - Problem: redundant calculation mỗi cursor → tốn query time.
-   - Switched: chỉ tính page đầu (user nhìn đó), page sau skip ✓
+5. **Footer aggregate (total/total_pnl) per page**: consistency, user expects it
+   - Problem: redundant calculation per cursor → wastes query time.
+   - Switched: compute only the first page (that's what the user sees), skip on later pages ✓
 
 ## Root Cause Analysis
 
-**Tại sao UI lag:**
-- FE load 10K trades đơn thuần = parse JSON + DOM render (chấp được).
-- Nhưng stats tính client-side (histogram binning, streak detect) = O(n) mỗi lần → bottleneck thực tế.
-- Virtualization mà không paging = memory trong DOM vẫn lớn → React reconciliation slow.
+**Why the UI lagged:**
+- FE loading 10K trades alone = parse JSON + DOM render (acceptable).
+- But client-side stats (histogram binning, streak detect) = O(n) each time → the actual bottleneck.
+- Virtualization without paging = memory in the DOM still large → React reconciliation slow.
 
-**Tại sao selection break:**
-- Table rendering mà không stable key (dùng array index) = React key warningxung quanh; swap/reorder rows → key cũ map item mới → selection stale.
-- Keyset cursor paging = row order thay đổi khi sort/filter → index không còn sense.
+**Why selection broke:**
+- Table rendering without a stable key (using the array index) = React key warnings all around; swap/reorder rows → old key maps to a new item → selection stale.
+- Keyset cursor paging = row order changes when sorting/filtering → the index no longer makes sense.
 
-**Tại sao zsh `rm -i` prompt hidden:**
-- zsh `rm` alias `rm -i` (interactive) để phòng xóa nhầm.
-- Nhưng non-interactive shell (CI, script) có stdin=null → prompt nhận input gì? → prompt mặc nhiên cancel (file không xóa).
-- Test chỉ chạy trên dev (stdin=tty) nên pass, production không test, stats-utils.ts vẫn tồn tại.
-- Fix: dùng `git rm -f` (luôn force xóa tracked file) thay vì `rm`.
+**Why the zsh `rm -i` prompt was hidden:**
+- zsh aliases `rm` to `rm -i` (interactive) to prevent accidental deletion.
+- But a non-interactive shell (CI, script) has stdin=null → what input does the prompt get? → the prompt defaults to cancel (the file isn't deleted).
+- Tests only ran on dev (stdin=tty) so they passed, production wasn't tested, stats-utils.ts still existed.
+- Fix: use `git rm -f` (always force-deletes a tracked file) instead of `rm`.
 
 ## Lessons Learned
 
-1. **Keyset cursor = deterministic paging.** Offset unstable khi data thay đổi mid-scan; keyset tie-break (`_id`) guarantee order + repeatability.
+1. **Keyset cursor = deterministic paging.** Offset is unstable when data changes mid-scan; keyset tie-break (`_id`) guarantees order + repeatability.
 
-2. **Stable selection keys (UUID > index).** Nếu user có thể re-order/filter table, selection phải dùng domain ID, không array position.
+2. **Stable selection keys (UUID > index).** If the user can re-order/filter the table, selection must use a domain ID, not the array position.
 
-3. **Virtualization phải kèm paging.** Row virtual mà không paging = DOM nhỏ nhưng data khổng lồ trong memory. Cải thiên chậm nếu chỉ chốt ở FE.
+3. **Virtualization must go with paging.** Row virtualization without paging = small DOM but huge data in memory. Improvement is slow if only handled on the FE.
 
-4. **Stats centralization (BE > FE).** Khi stat logic phức tạp + recalc mỗi filter, BE chủ động. FE consume endpoint. DDD: encapsulate domain logic (`trade_stats_calculator`) ở domain layer, app-service expose.
+4. **Stats centralization (BE > FE).** When stat logic is complex + recalculated per filter, BE takes charge. FE consumes the endpoint. DDD: encapsulate domain logic (`trade_stats_calculator`) in the domain layer, app-service exposes it.
 
-5. **Non-interactive shell ≠ interactive dev.** `rm -i` prompt works ở terminal (stdin=tty) nhưng CI/script → input silently ignored. Git rm / bash set -e / explicit error check bảo vệ.
+5. **Non-interactive shell ≠ interactive dev.** The `rm -i` prompt works in a terminal (stdin=tty) but CI/script → input silently ignored. Git rm / bash set -e / explicit error check protect against this.
 
-6. **PyMongo async pitfall: coroutine must await trước iterate.** `collection.aggregate(pipeline)` trả coroutine; `async for doc in agg_coro` = error. Phải `await` hoặc dùng `async_command_cursor`.
+6. **PyMongo async pitfall: coroutine must be awaited before iterating.** `collection.aggregate(pipeline)` returns a coroutine; `async for doc in agg_coro` = error. Must `await` or use `async_command_cursor`.
 
 ## Next Steps
 

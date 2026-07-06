@@ -199,7 +199,7 @@ Bar integrity repair: check → delete misaligned → resync gaps → verify.
 
 **Why skip_filter:** `filter_new_bars` queries `bar_repo.find_datetimes` to drop only records whose datetime already exists. Correct for sparse gaps. `skip_filter=True` is still useful for repair flows that want to force re-upsert (e.g., to refresh OHLCV values that may have shifted), bypassing both the existence check AND the wire-noise reduction.
 
-**Usage:** Background job `sync_repair` (every 12h) hoặc endpoint `/api/v1/market-data/integrity/repair`. `repair_integrity()` trả về `dict` gồm deleted count, gaps_resynced, still_missing, still_missing_ranges.
+**Usage:** Background job `sync_repair` (every 12h) or endpoint `/api/v1/market-data/integrity/repair`. `repair_integrity()` returns a `dict` with deleted count, gaps_resynced, still_missing, still_missing_ranges.
 
 ### 10. Schema Consolidation (Use Base Classes)
 
@@ -341,7 +341,7 @@ Concurrency test: `tests/core_test/infra/persistence/test_subscription_repositor
 
 ### File Naming
 
-Use kebab-case với tên mô tả mục đích (suffix trong tên file mã hóa layer):
+Use kebab-case with a purpose-describing name (the suffix in the file name encodes the layer):
 
 ```
 quote_routes.py                      # QuoteRoute functions (API HTTP handlers)
@@ -357,11 +357,11 @@ okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separ
 
 ### Class Naming by Layer
 
-Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain concepts (entities, VOs, enums) không có suffix — chúng là ngôn ngữ miền.
+The class + file name self-encodes layer/role. Suffix per the table below. Domain concepts (entities, VOs, enums) have no suffix — they are the domain language.
 
-| Layer | Pattern | Class Suffix | File Suffix | Ví dụ |
+| Layer | Pattern | Class Suffix | File Suffix | Example |
 |-------|---------|--------|--------|--------|
-| Entities | `{Name}` hoặc `{Name}Aggregate` | None / `Aggregate` | `.py` | `Bar`, `Symbol`, `OrderAggregate` |
+| Entities | `{Name}` or `{Name}Aggregate` | None / `Aggregate` | `.py` | `Bar`, `Symbol`, `OrderAggregate` |
 | Events | `{Entity}{PastTense}Event` | `Event` | `.py` | `OrderFilledEvent`, `BarCompletedEvent` |
 | Enums | `{Concept}` | None | `.py` | `Interval`, `OrderType`, `OrderSide` |
 | Value Objects | `{Concept}` | None | `.py` | `PnL`, `OHLCV`, `BarRange` |
@@ -386,17 +386,17 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 
 ### Naming Principles & Exemptions
 
-**Ba nguyên tắc cốt lõi:**
+**Three core principles:**
 
-1. **Tên class + file tự mã hóa layer/role.** Đọc `PositionCalculatorDomainService` hoặc `binance_adapter.py` biết ngay layer không cần xem folder.
+1. **The class + file name self-encodes layer/role.** Reading `PositionCalculatorDomainService` or `binance_adapter.py` tells you the layer immediately without looking at the folder.
 
-2. **Không stack 2 doer-suffix generic (`-er`/`-or`) trong 1 tên.** Nếu bị dính (vd một class vừa mang `-Tracker` vừa `-Helper` → `*TrackerHelper`), dùng gerund: `*TrackingHelper`. **Ngoại lệ:** danh từ nghiệp vụ kết `-er` (vd `Broker`) không tính là doer-suffix → `BrokerAdapter` hợp lệ.
+2. **Do not stack two generic doer-suffixes (`-er`/`-or`) in one name.** If it happens (e.g. a class carrying both `-Tracker` and `-Helper` → `*TrackerHelper`), use a gerund: `*TrackingHelper`. **Exception:** a business noun ending in `-er` (e.g. `Broker`) does not count as a doer-suffix → `BrokerAdapter` is valid.
 
-3. **Data class + role đã có suffix chuẩn → giữ nguyên.** Exempt list bên dưới.
+3. **Data class + role that already has a standard suffix → keep as is.** Exempt list below.
 
-**Exempt list** (giữ suffix hiện tại, KHÔNG ép convention):
+**Exempt list** (keep the current suffix, do NOT force the convention):
 
-| Nhóm | Ví dụ |
+| Group | Example |
 |---|---|
 | CQRS | `*CommandService`, `*QueryService` (app layer, request-scoped ≠ orchestrator) |
 | Persistence | `*Repository` |

@@ -96,9 +96,9 @@ Control plane (desired state)           Data plane (live engine)
 4. Mirrors observed `actual_state` back to Mongo only on drift (idempotent, no per-tick churn)
 5. Subscription-driven: never enumerates RAM, so injected backtest strategies (synthetic ids) are invisible
 
-**Add new subscription:** `StrategyCommandService.add_symbol(AddSymbolCommand)` persists với `desired_state="stopped"` (opt-in to trading; no auto-start on add) và pre-load instance mà không start.
+**Add new subscription:** `StrategyCommandService.add_symbol(AddSymbolCommand)` persists with `desired_state="stopped"` (opt-in to trading; no auto-start on add) and pre-loads the instance without starting it.
 
-**List subscriptions:** `StrategyQueryService.list_symbols(ListSymbolsQuery)` source run-state từ Mongo: trả `desired_state`, `actual_state`, và `is_running` (derived `actual_state == "running"`). No RAM read.
+**List subscriptions:** `StrategyQueryService.list_symbols(ListSymbolsQuery)` sources run-state from Mongo: returns `desired_state`, `actual_state`, and `is_running` (derived `actual_state == "running"`). No RAM read.
 
 **Defensive read on legacy docs:** Subscriptions lacking `desired_state` or `actual_state` fields (legacy docs pre-control-plane) read both as `"stopped"` via `Subscription.from_mongo()` defensive `.get()` defaults. Reconcile loop then converges `actual_state` to match `desired_state`, so no manual re-migration required across deploys.
 
@@ -642,26 +642,26 @@ round-trip chunk).
 
 ### PaperBrokerAdapter accounting model (futures/margin, 1× leverage)
 
-`PaperBrokerAdapter` dùng **futures/margin accounting**, không phải spot. Domain là OKX perpetual SWAP (`okx_broker_adapter.py` instType `SWAP`), nên mở vị thế không tiêu cash — chỉ realized pnl mới chạm `_balance`.
+`PaperBrokerAdapter` uses **futures/margin accounting**, not spot. The domain is OKX perpetual SWAP (`okx_broker_adapter.py` instType `SWAP`), so opening a position does not consume cash — only realized pnl touches `_balance`.
 
 | | Spot | Futures/margin (PaperBrokerAdapter) |
 |---|---|---|
-| Open / add | `cash -= notional` | `_balance` không đổi |
-| Close / reduce | `cash += proceeds` | `_balance += Δrealized` (delta của lần reduce này) |
+| Open / add | `cash -= notional` | `_balance` unchanged |
+| Close / reduce | `cash += proceeds` | `_balance += Δrealized` (delta of this reduce) |
 | `total_equity` | `cash + Σ market_value` | `_balance + Σ unrealized_pnl` (mark per-bar) |
 | `available_balance` | `cash` | `= _balance` |
 
-**Vì sao futures:** (1) tránh điểm `total_equity ≈ 0` khi mở all-in (notional ≈ balance) — điểm 0 đó từng ép Sharpe/Sortino về 0 và bịa drawdown −100%; (2) `_balance + unrealized` đúng cho cả long lẫn short mà không cần signed market value; (3) khớp domain OKX SWAP. Leverage cố định 1× (không margin call).
+**Why futures:** (1) avoids the `total_equity ≈ 0` point when opening all-in (notional ≈ balance) — that zero point used to force Sharpe/Sortino to 0 and fabricate a −100% drawdown; (2) `_balance + unrealized` is correct for both long and short without needing signed market value; (3) matches the OKX SWAP domain. Fixed 1× leverage (no margin call).
 
-**Delta-realized (không cumulative):** `PositionAggregate.reduce_quantity` cộng dồn vào `position.realized_pnl`. Broker credit phần delta kể từ lần reduce trước (`_reduce_and_credit`), không phải giá trị cumulative — nếu credit cumulative thì partial-close lần hai cộng lại toàn bộ → multi-count. Kết quả: `_balance` cuối = `initial + Σ realized` đúng một lần.
+**Delta-realized (not cumulative):** `PositionAggregate.reduce_quantity` accumulates into `position.realized_pnl`. The broker credits the delta since the previous reduce (`_reduce_and_credit`), not the cumulative value — crediting cumulative would make a second partial-close add back the whole amount → multi-count. Result: final `_balance` = `initial + Σ realized`, counted exactly once.
 
-**Price propagation:** mark-to-market chạy ở cuối `_on_bar_completed` (sau SL/TP loop), set `current_price = event.close` cho các vị thế còn mở. `get_balance` thuần đọc (không side-effect trong getter). `BacktestSandboxAppService._mtm_on_bar` subscribe `BarCompletedEvent` SAU broker handler nên đọc equity đã mark → equity curve track giá per-bar, không phẳng giữa các fill.
+**Price propagation:** mark-to-market runs at the end of `_on_bar_completed` (after the SL/TP loop), setting `current_price = event.close` for open positions. `get_balance` is a pure read (no side-effect in the getter). `BacktestSandboxAppService._mtm_on_bar` subscribes to `BarCompletedEvent` AFTER the broker handler, so it reads already-marked equity → the equity curve tracks price per-bar, not flat between fills.
 
-**`available_balance = _balance` (known semantics):** field giữ nguyên công thức, không chuyển sang free-margin. Hệ quả: khi đang có vị thế mở, vì futures không trừ notional khỏi `_balance`, `available_balance` cao hơn so với mô hình spot. Strategy round-trip một vị thế (đóng trước khi mở mới — engulfing, hitnrun2) sizing **không đổi**. Pyramiding / multi-symbol (size entry chồng khi đang positioned) sẽ size theo full balance — đúng cho futures (margin không tiêu cash) nhưng là behavior change so với spot; không strategy hiện tại pyramiding nên tác động forward thực tế = 0.
+**`available_balance = _balance` (known semantics):** the field keeps its formula, not switched to free-margin. Consequence: while a position is open, since futures does not deduct notional from `_balance`, `available_balance` is higher than in the spot model. For a strategy that round-trips one position (close before opening a new one — engulfing, hitnrun2), sizing is **unchanged**. Pyramiding / multi-symbol (stacking entry size while positioned) will size against the full balance — correct for futures (margin does not consume cash) but a behavior change versus spot; no current strategy pyramids, so the real forward impact = 0.
 
-**Affordability gate:** `_can_afford` chỉ gate BUY mở/tăng vị thế (`notional <= _balance`). BUY để cover/reduce một SHORT đang mở không tiêu margin nên không bị gate — nếu không, short thua lỗ có cover notional vượt balance sẽ bị REJECT và kẹt vị thế.
+**Affordability gate:** `_can_afford` only gates a BUY that opens/increases a position (`notional <= _balance`). A BUY that covers/reduces an open SHORT consumes no margin, so it is not gated — otherwise a losing short whose cover notional exceeds balance would be REJECTED and the position stuck.
 
-**Live vs paper:** `OKXBrokerAdapter` lấy balance thẳng từ sàn (`map_okx_balance_to_domain`), KHÔNG qua `_execute_fill`. OKX định nghĩa `availBal`/`eq` riêng cho SWAP account (external) — PaperBrokerAdapter không claim khớp `availBal`; bảng trên chỉ mô tả model của PaperBrokerAdapter.
+**Live vs paper:** `OKXBrokerAdapter` reads balance directly from the exchange (`map_okx_balance_to_domain`), NOT via `_execute_fill`. OKX defines `availBal`/`eq` specifically for the SWAP account (external) — `PaperBrokerAdapter` makes no claim to match `availBal`; the table above only describes the `PaperBrokerAdapter` model.
 
 **Middleware:** CorrelationIdMiddleware (tracing) → RateLimitMiddleware (200 req/10s token bucket per IP) → IdempotencyMiddleware (24h TTL POST cache) → Route.
 

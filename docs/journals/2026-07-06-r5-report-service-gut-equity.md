@@ -1,39 +1,39 @@
 # R5 — BacktestReportAppService: Rename + Gut Shadow Equity (Broker Single-Source)
 
-**Ngày:** 2026-07-06 · **Branch:** develop · **Commits:** `ac6315b` → `b872ab9` → `d1122811` → `1bd04be7` → R5 refactor
+**Date:** 2026-07-06 · **Branch:** develop · **Commits:** `ac6315b` → `b872ab9` → `d1122811` → `1bd04be7` → R5 refactor
 
-Rename `BacktestResultAppService` → `BacktestReportAppService`; xoá ledger bóng `_current_equity`, `_peak_equity`, `_total_commission`. Collector giờ chỉ là orchestrator pure event-driven; equity từ broker duy nhất.
+Rename `BacktestResultAppService` → `BacktestReportAppService`; remove shadow ledger `_current_equity`, `_peak_equity`, `_total_commission`. The collector is now a pure event-driven orchestrator; equity from the single broker source.
 
-## Vấn đề
+## Problem
 
-R4 unified trade emission qua broker `PositionAggregate` nhưng collector vẫn giữ bộ ledger parallel (`_current_equity`, `_peak_equity`, `_total_commission`) để tracking. Loạn:
-- `on_fill` vừa debit commission VÀO shadow ledger vừa ghi OrderRecord (mục đích?).
-- `_current_equity` copy từ broker nhưng sao chép bất động (khi broker thay đổi balance, shadow "lag").
-- Finalize phải tính `total_commission` từ shadow ledger (có sẵn ở broker order record).
+R4 unified trade emission through the broker `PositionAggregate` but the collector still kept a parallel ledger (`_current_equity`, `_peak_equity`, `_total_commission`) for tracking. Messy:
+- `on_fill` both debits commission INTO the shadow ledger and writes the OrderRecord (purpose?).
+- `_current_equity` copied from the broker but as a static copy (when the broker changes balance, the shadow "lags").
+- Finalize must compute `total_commission` from the shadow ledger (already available in the broker order record).
 
-Thực ra broker đã có single source (PaperBrokerAdapter `_balance`), collector không cần ghi nhận lại.
+In reality the broker already has a single source (PaperBrokerAdapter `_balance`), the collector doesn't need to re-record it.
 
-## Thay đổi
+## Changes
 
-| Layer | Nội dung |
+| Layer | Content |
 |---|---|
 | File rename | `backtest_result_app_service.py` → `backtest_report_app_service.py` (git mv); class `BacktestResultAppService` → `BacktestReportAppService`. |
-| Constructor | Inject `IBrokerPort` (có sẵn). |
-| `on_trade(event)` | Đọc `broker.get_balance().available_balance` lúc call → `equity` (real-time). Không cache. |
-| `on_fill(...)` | Xoá debit commission (`_current_equity -= result.commission`); chỉ ghi OrderRecord + Fill doc. Commission đã debit ở broker `_execute_fill_with_commission`. |
-| `finalize` | Async (was sync). Tổng từ order records: `total_commission = sum(fill.commission for fill in order_fills)`. Đọc broker balance cuối: `finalize_equity = broker.get_balance().available_balance`. |
-| Xoá | `_current_equity`, `_peak_equity`, `_total_commission` shadow fields; methods `_round_trip`, `_emit_trades`, `_build_open_positions`. |
-| MTM & closing equity | Broker `_mtm_curve` per-bar + finalize closing point giữ nguyên. Invariant: `closing_equity = initial − Σ commission + Σ gross_pnl` (proof dưới). |
+| Constructor | Inject `IBrokerPort` (already available). |
+| `on_trade(event)` | Read `broker.get_balance().available_balance` at call time → `equity` (real-time). No caching. |
+| `on_fill(...)` | Remove commission debit (`_current_equity -= result.commission`); only write OrderRecord + Fill doc. Commission is already debited in the broker `_execute_fill_with_commission`. |
+| `finalize` | Async (was sync). Sum from order records: `total_commission = sum(fill.commission for fill in order_fills)`. Read final broker balance: `finalize_equity = broker.get_balance().available_balance`. |
+| Remove | `_current_equity`, `_peak_equity`, `_total_commission` shadow fields; methods `_round_trip`, `_emit_trades`, `_build_open_positions`. |
+| MTM & closing equity | Broker `_mtm_curve` per-bar + finalize closing point unchanged. Invariant: `closing_equity = initial − Σ commission + Σ gross_pnl` (proof below). |
 
-## Quyết định (non-obvious)
+## Decisions (non-obvious)
 
-**Parity proof (economically exact; byte-identical trên tested runs):** PaperBrokerAdapter lock-timing ensures equity consistency.
+**Parity proof (economically exact; byte-identical on tested runs):** PaperBrokerAdapter lock-timing ensures equity consistency.
 - `_execute_fill_with_commission` → debit `_balance` inside `asyncio.Lock`
 - `_notify_trade_callbacks` fires (dispatch `TradeClosedEvent`) OUTSIDE lock
 - When collector `on_trade` calls `broker.get_balance()`, lock released → `available_balance` = `initial − Σcommission + Σrealized_pnl`
 - Old shadow ledger computed exact same formula → every metric unchanged (max_drawdown, total_return, Sharpe, gross PnL, total trades).
-- **Không còn MTM-only collapse** — broker balance IS the truth, not approximate.
-- **Caveat (ULP):** thứ tự cộng đổi — cũ `(E − commission) + pnl` (on_fill rồi on_trade), mới `(E + realized) − commission` (broker fill). IEEE-754 non-associative → có thể lệch ≤1 ULP với float bất kỳ (economically irrelevant, ~1e-16 rel). Engulfing/hitnrun2 characterization runs land byte-identical (số không đổi), nên empirically byte-exact — không claim provable tổng quát.
+- **No more MTM-only collapse** — broker balance IS the truth, not approximate.
+- **Caveat (ULP):** addition order changes — old `(E − commission) + pnl` (on_fill then on_trade), new `(E + realized) − commission` (broker fill). IEEE-754 non-associative → may differ by ≤1 ULP for any float (economically irrelevant, ~1e-16 rel). Engulfing/hitnrun2 characterization runs land byte-identical (numbers unchanged), so empirically byte-exact — not claiming provable in general.
 
 **Scope:** Rename + gut only; File size ~380 lines (exceeds 200 guideline) — accepted minimal churn over splitting. Single orchestrator class.
 
@@ -41,7 +41,7 @@ Thực ra broker đã có single source (PaperBrokerAdapter `_balance`), collect
 
 ## Verify
 
-| Thẩm định | Kết quả |
+| Check | Result |
 |---|---|
 | `just test` | **560 passed, 1 skipped** (engulfing + hitnrun2 characterization tests; `mark_to_market` fixture unchanged). |
 | `ruff` | Clean. |
@@ -51,10 +51,10 @@ Thực ra broker đã có single source (PaperBrokerAdapter `_balance`), collect
 
 ## Next
 
-- **MAE/MFE excursion (260630-0031):** R1+R2+R3+R4 complete; R5 không hard-block. Old approach dùng `_lot_tracker.lots` (xoá R4) → cần redesign trên `PositionAggregate` (soft-blocker, defer phân tích).
+- **MAE/MFE excursion (260630-0031):** R1+R2+R3+R4 complete; R5 doesn't hard-block. Old approach used `_lot_tracker.lots` (removed in R4) → needs redesign on `PositionAggregate` (soft-blocker, defer analysis).
 - **R6+:** Live broker integration; fee currency, funding fee; tiered commission model.
 
 ---
 
 **Status:** DONE  
-**Summary:** R5 hoàn thành: rename service, xoá shadow equity ledger, broker single-source — tất cả metric parity, 560 test pass, 0 linting error.
+**Summary:** R5 complete: rename service, remove shadow equity ledger, broker single-source — all metrics parity, 560 tests pass, 0 linting errors.

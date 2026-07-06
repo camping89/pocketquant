@@ -1,27 +1,27 @@
 # PocketQuant Docs
 
-Tài liệu canonical cho code layout và workflow hiện tại. Docs là **AS-IS only** — không changelog, không version banner, không change narrative (git giữ lịch sử). Xem Documentation Policy trong `CLAUDE.md` của project.
+Canonical documentation for the current code layout and workflow. Docs are **AS-IS only** — no changelog, no version banner, no change narrative (git keeps the history). See the Documentation Policy in the project's `CLAUDE.md`.
 
 ## Reading Order (orient → run → understand → operate)
 
 | # | Doc                                                 | Description                                                                                                                                                                                                                                                              |
 |---|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0 | [Root README](../README.md)                         | Entry point + local workflow: cài deps, chạy Mongo/Redis, chạy API, sync data, chạy UI, smoke-test. **Đọc trước tiên.**                                                                                                                                                  |
-| 1 | [Project Overview / PDR](./project-overview-pdr.md) | Product vision, scope, functional requirements (F1…F10), non-functional (NF1…NF6). Phần "why" và "what".                                                                                                                                                                 |
-| 2 | [System Architecture](./system-architecture.md)     | Design reference duy nhất: layers (Clean Architecture + DDD + CQRS), request flows, "Where Does X Live?", MongoDB ERD, real-time streaming (WS/SSE), strategy lifecycle, DI graph, ops context (CI/CD, config flow), bounded contexts, ubiquitous language, limitations. |
+| 0 | [Root README](../README.md)                         | Entry point + local workflow: install deps, run Mongo/Redis, run the API, sync data, run the UI, smoke-test. **Read this first.**                                                                                                                                        |
+| 1 | [Project Overview / PDR](./project-overview-pdr.md) | Product vision, scope, functional requirements (F1…F10), non-functional (NF1…NF6). The "why" and "what".                                                                                                                                                                 |
+| 2 | [System Architecture](./system-architecture.md)     | The single design reference: layers (Clean Architecture + DDD + CQRS), request flows, "Where Does X Live?", MongoDB ERD, real-time streaming (WS/SSE), strategy lifecycle, DI graph, ops context (CI/CD, config flow), bounded contexts, ubiquitous language, limitations. |
 | 3 | [Code Standards](./code-standards.md)               | Naming, file-size rules, dependency direction, route/service/repository conventions, exception handling, async-suspension patterns, testing, worked example end-to-end.                                                                                                  |
-| 4 | [Deployment](./deployment.md)                       | Production deploy: GitHub Actions → Docker Hub → SSH tới Vultr VPS. Env vars, rollback, operator runbook, port map.                                                                                                                                                      |
+| 4 | [Deployment](./deployment.md)                       | Production deploy: GitHub Actions → Docker Hub → SSH to Vultr VPS. Env vars, rollback, operator runbook, port map.                                                                                                                                                       |
 
 ### Topic docs
 
 | Doc                                                             | Description                                                                                                                                         |
 |-----------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Engine scale-out limitation](./engine-scale-out-limitation.md) | Vì sao engine chốt một entry → một TP → đóng toàn bộ; bốn tầng giới hạn chặn scale-out / multi-TP / partial close.                                  |
-| [Swing pivot & key-level](./swing-pivot-key-level.md)           | Key-level cho take-profit: proxy max/min cửa sổ N bar, TP = max(RR 1:1, key-level), và vì sao chart "show all patterns" khác tập tín hiệu strategy. |
+| [Engine scale-out limitation](./engine-scale-out-limitation.md) | Why the engine settles one entry → one TP → closes the whole position; four limitation layers that block scale-out / multi-TP / partial close.     |
+| [Swing pivot & key-level](./swing-pivot-key-level.md)           | Key-level for take-profit: max/min proxy over an N-bar window, TP = max(RR 1:1, key-level), and why the chart's "show all patterns" differs from the strategy's signal set. |
 
 ## Current Repo Shape
 
-One Python package (`pocketquant`) tại repo-root `src/`; subpackage boundaries enforced bởi import-linter contracts trong `pyproject.toml` (layout chuẩn xem [Root README](../README.md)).
+One Python package (`pocketquant`) at repo-root `src/`; subpackage boundaries enforced by import-linter contracts in `pyproject.toml` (for the canonical layout see [Root README](../README.md)).
 
 ```text
 src/pocketquant/
@@ -31,14 +31,14 @@ src/pocketquant/
 web/        # React 19 + Vite SPA (separate npm app)
 ```
 
-Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. `fastapi` chỉ được import bởi `app`.
+Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. `fastapi` is imported only by `app`.
 
-Single process: app (FastAPI port 41921, serve toàn bộ `/api/*` routes + SPA fallback). Scheduler, WS feed, broker, strategy engine chạy chung process; ràng buộc single-worker (`--workers 1`).
+Single process: app (FastAPI port 41921, serves all `/api/*` routes + SPA fallback). Scheduler, WS feed, broker, strategy engine run in the same process; single-worker constraint (`--workers 1`).
 
 ## Maintenance Note
 
-Khi documentation mâu thuẫn với code:
+When documentation conflicts with the code:
 
-- tin `README.md`
-- verify routes qua FastAPI OpenAPI tại `http://localhost:41921/api/v1/docs`
-- fold nội dung trùng vào doc canonical, xóa bản trùng, sửa inbound links
+- trust `README.md`
+- verify routes via FastAPI OpenAPI at `http://localhost:41921/api/v1/docs`
+- fold duplicate content into the canonical doc, delete the duplicate, fix inbound links

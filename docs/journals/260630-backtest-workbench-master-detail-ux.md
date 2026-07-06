@@ -7,13 +7,13 @@
 
 ## What Happened
 
-Completed 3-phase refactor của trang `/backtest` từ 2-route scattered architecture (`/backtest` list + `/backtest/$runId` detail) thành single-page master-detail layout. Commit `1ee36f9` (code), `0734abe` (plan docs). Scope: new number-format utility, layout grid conversion, compact list with dropdown sort, "+ New run" drawer, error boundary, mobile tabs. **No API contract changes.**
+Completed a 3-phase refactor of the `/backtest` page from a 2-route scattered architecture (`/backtest` list + `/backtest/$runId` detail) into a single-page master-detail layout. Commit `1ee36f9` (code), `0734abe` (plan docs). Scope: new number-format utility, layout grid conversion, compact list with dropdown sort, "+ New run" drawer, error boundary, mobile tabs. **No API contract changes.**
 
 ## The Brutal Truth
 
-Desktop trước đó lãng phí ~430px mỗi bên vì `maxWidth: 1080px` cứng + centered layout. Mobile không có dedicated tab view nên run detail mở route mới = context mất. Quantity/price data tràn cột (order detail + history table) vì không format gọn. Phân tán list+detail qua 2 route làm deep-link fragile: reload detail → load list trước thì `$runId` route param mất context. 
+Desktop previously wasted ~430px on each side because of the hardcoded `maxWidth: 1080px` + centered layout. Mobile had no dedicated tab view so opening run detail opened a new route = context lost. Quantity/price data overflowed columns (order detail + history table) because it wasn't formatted compactly. Scattering list+detail across 2 routes made deep-linking fragile: reload detail → loading the list first meant the `$runId` route param lost context.
 
-Cực kỳ mất thời gian debug mobile responsive + chart resize khi pane mount/unmount, ResizeObserver callbacks fire không dự đoán trước (ảnh hưởng từ strategies layout pattern).
+Extremely time-consuming to debug mobile responsive + chart resize when the pane mounts/unmounts, ResizeObserver callbacks firing unpredictably (an effect from the strategies layout pattern).
 
 ## Technical Details
 
@@ -28,16 +28,16 @@ Cực kỳ mất thời gian debug mobile responsive + chart resize khi pane mou
 - `validateSearch({ run?: string })` pattern: deep-link reload/back/forward preserves `?run=<id>` state
 - Desktop grid: `~400px (list pane) | 1fr (detail)` CSS, full viewport `height: calc(100vh - 41px)`, cloned from `.strategies-layout` pattern
 - `formatQty(qty)` → `toPrecision(8)` (8 significant digits), `formatPrice(price)` → thousands + 2dp; cover orders-table, positions-table, order-detail-drawer
-- Mobile <768px: 2-tab single-pane (List | Detail tabs), chọn run auto-switch Detail tab
+- Mobile <768px: 2-tab single-pane (List | Detail tabs), selecting a run auto-switches to the Detail tab
 - `errorComponent` at route level: pane render error doesn't crash app
 - `useBacktestRun(runId, { enabled: !!runId })`: detail lazy-fetches only when `run` param set (no premature network call)
 
 **Edge cases handled:**
 - `formatQty` scientific notation <1e-7: accepted (crypto qty reality), locked via test
-- Chart resize on pane mount/unmount: ResizeObserver + cleanup effect from existing detail pane pattern, verified thủ công
+- Chart resize on pane mount/unmount: ResizeObserver + cleanup effect from existing detail pane pattern, verified manually
 - Mobile drawer submit + back/forward: mobileTab state synced via **adjust-state-during-render** idiom (compare prev prop in render, update local state) instead of useEffect — avoids eslint `set-state-in-effect` & matches React idiom for derived state
 
-**Breaking changes:** None. Route API preserved (search validation only). Deleted `backtest_.$runId.tsx` → bookmark `/backtest/<id>` cũ becomes 404 (expected, ephemeral runs).
+**Breaking changes:** None. Route API preserved (search validation only). Deleted `backtest_.$runId.tsx` → old `/backtest/<id>` bookmark becomes 404 (expected, ephemeral runs).
 
 ## What We Tried
 
@@ -63,7 +63,7 @@ Cực kỳ mất thời gian debug mobile responsive + chart resize khi pane mou
 
 **Why number format was missed:** Orders/positions tables rendered directly without formatter. When qty/price hit 10+ digits or decimals, inline text overflow clipped content. Existing `positions-utils.fmtPrice` was old pattern (not exported), so every component reimplemented ad-hoc.
 
-**Why routeTree regen broke dev build:** Deleted `backtest_.$runId.tsx` but ran `npm run build` (tĩnh) before dev server regen. TanStack Router plugin only auto-generates on vite dev/build (dynamic). Mitigation: must run dev server once, or manually remove entry from .gen file before tĩnh build.
+**Why routeTree regen broke dev build:** Deleted `backtest_.$runId.tsx` but ran `npm run build` (static) before dev server regen. TanStack Router plugin only auto-generates on vite dev/build (dynamic). Mitigation: must run dev server once, or manually remove the entry from the .gen file before a static build.
 
 ## Lessons Learned
 

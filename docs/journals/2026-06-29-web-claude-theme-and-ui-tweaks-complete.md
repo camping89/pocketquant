@@ -7,30 +7,30 @@
 
 ## What Happened
 
-Hoàn tất 2 commit trên develop (86252ee + b6d16ee): minute-precision backtest range + Claude dark/light theme system + 4 UI tweaks cho web. Toàn bộ feature verified, zero regression, sẵn sàng merge qua master.
+Completed 2 commits on develop (86252ee + b6d16ee): minute-precision backtest range + Claude dark/light theme system + 4 UI tweaks for web. Entire feature verified, zero regression, ready to merge into master.
 
-## Thay đổi chính
+## Key Changes
 
-**Backend:** `BacktestConfig.start_date/end_date` đổi `date` → `datetime` (OpenAPI snapshot regen); backward-compat date-only string vẫn parse; `_load_bars` bỏ `datetime.combine`; end-inclusive tới phút.
+**Backend:** `BacktestConfig.start_date/end_date` changed `date` → `datetime` (OpenAPI snapshot regen); backward-compat date-only string still parses; `_load_bars` drops `datetime.combine`; end-inclusive down to the minute.
 
 **Web:**
-- Theme system: CSS `:root[data-theme=dark|light]` tokens (palette Claude: clay accent + warm-gray/cream), fallback dark `:root`, `ThemeContext` + toggle app-nav, persist localStorage `pq.theme.mode`.
-- Chart re-theme: `theme-colors.ts` getComputedStyle token; `useChart` re-apply layout/grid, zoom intact, candle re-color; bỏ indicator price-line.
-- Strategies page: toggle reuse module (zero duplicate compute), merge engulf+trade markers 1 plugin, persist indicators.
-- Backtest form: `datetime-local` tz-aware, convert UTC submit, tz label suffix, default end=now/start=1y ago.
-- Live clock realtime app-nav.
+- Theme system: CSS `:root[data-theme=dark|light]` tokens (Claude palette: clay accent + warm-gray/cream), fallback dark `:root`, `ThemeContext` + app-nav toggle, persist localStorage `pq.theme.mode`.
+- Chart re-theme: `theme-colors.ts` getComputedStyle token; `useChart` re-applies layout/grid, zoom intact, candle re-color; drop indicator price-line.
+- Strategies page: toggle reuses module (zero duplicate compute), merge engulf+trade markers into 1 plugin, persist indicators.
+- Backtest form: `datetime-local` tz-aware, convert to UTC on submit, tz label suffix, default end=now/start=1y ago.
+- Realtime live clock in app-nav.
 
 ## The Brutal Truth
 
-Plan viết giả định recipe (`just types`, `just baseline`) nhưng justfile thực tế không có — phải dùng ruff/pytest/`BASELINE_UPDATE=1` thực tế. Tốn vài phút trace shell flow thế là ổn.
+The plan assumed recipes (`just types`, `just baseline`) but the actual justfile has none — had to use real ruff/pytest/`BASELINE_UPDATE=1`. Spent a few minutes tracing the shell flow, then fine.
 
-Prod-DB session chứa `MONGODB_URL`/`REDIS_URL` → conftest chặn test ngay. Phải `env -u` để clean, KHÔNG động .env — security guardrail tốt nhưng cần doc/wiki.
+Prod-DB session contained `MONGODB_URL`/`REDIS_URL` → conftest blocks the test immediately. Had to `env -u` to clean, WITHOUT touching .env — a good security guardrail but needs doc/wiki.
 
 ## Technical Details
 
 **Code review findings:**
-- M1: theme token fallback `:root` dark (phòng vỡ UI nếu thiếu data-theme attr) ✓
-- L1/L2/L3: out-of-scope/intended, giữ nguyên
+- M1: theme token fallback `:root` dark (guards against broken UI if data-theme attr is missing) ✓
+- L1/L2/L3: out-of-scope/intended, kept as-is
 
 **Verification:**
 - web: ruff 0 errors, build pass
@@ -43,15 +43,15 @@ Prod-DB session chứa `MONGODB_URL`/`REDIS_URL` → conftest chặn test ngay. 
 
 ## Root Cause Analysis
 
-Plan assumptions về recipe ≠ thực tế là vì plan viết top-down (abstraction), không verify justfile inventory. Prod-DB guard (conftest block) là architectural đúng nhưng undocumented — dev đã quen clean shell trước test.
+Plan assumptions about recipes ≠ reality because the plan was written top-down (abstraction), without verifying the justfile inventory. The prod-DB guard (conftest block) is architecturally correct but undocumented — devs are used to cleaning the shell before testing.
 
 ## Lessons Learned
 
-1. **Recipe assumptions**: verify `just` inventory trước khi write plan tương tác shell.
-2. **Env leakage**: prod-DB URLs trong session = runtime guard bảo vệ tốt; cần wiki entry cho dev context setup.
-3. **Code review efficiency**: M-level feedback (real issue) vs L-level (documentation/nit) = giữ review focus trên behavior + safety.
-4. **Baseline snapshot**: BASELINE_UPDATE=1 + regen = solid pattern, document nó ở CONTRIBUTING.md nếu chưa có.
+1. **Recipe assumptions**: verify the `just` inventory before writing a plan that interacts with the shell.
+2. **Env leakage**: prod-DB URLs in the session = runtime guard protects well; needs a wiki entry for dev context setup.
+3. **Code review efficiency**: M-level feedback (real issue) vs L-level (documentation/nit) = keep review focus on behavior + safety.
+4. **Baseline snapshot**: BASELINE_UPDATE=1 + regen = solid pattern, document it in CONTRIBUTING.md if not already there.
 
 ## Next Steps
 
-Merge qua master (master ← develop thông qua PR/ff). Zero blocking issues, ready production deploy nếu needed.
+Merge into master (master ← develop via PR/ff). Zero blocking issues, ready for production deploy if needed.

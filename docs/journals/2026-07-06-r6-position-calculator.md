@@ -9,27 +9,27 @@
 
 ## What Happened
 
-Hoàn tất refactor R6 (Position Calculator Refactor) — phần LOGIC của initiative trading-calculation-fix. Refactor này thay đổi sizing service interface + trích xuất VO mới:
+Completed the R6 refactor (Position Calculator Refactor) — the LOGIC part of the trading-calculation-fix initiative. This refactor changes the sizing service interface + extracts a new VO:
 
 - Rename `PositionSizerDomainService` → `PositionCalculatorDomainService`; file `position_sizer_domain_service.py` → `position_calculator_domain_service.py`.
-- Thay đổi `calculate_size()` (trả `float`) → `calculate()` (trả VO mới `PositionCalculation` chứa: `size`, `notional`, `risk_amount`, `est_entry_commission`); VO frozen dataclass, file leaf riêng `core/domain/risk/position_calculation.py`.
-- Centralize 3 risk defaults thành class consts (1-source): `RISK_PER_TRADE = 0.02`, `MAX_EXPOSURE_PERCENT = 0.10`, `DEFAULT_SL_RISK_PERCENT = 0.01`. `RiskConfig` fields dùng consts làm default.
-- Xóa dead code: `RiskModel.KELLY` + `RiskModel.FIXED` enum members, hàm `_kelly_size()`, `_fixed_size()`, `validate_size()`; `RiskModel` giữ lại 1 member `PERCENT_RISK`.
-- `RiskCheckHandler`: thêm `config: RiskConfig | None = None`, fallback consts khi không override.
-- Call site `strategy_app_service.py`: đổi `.calculate_size()` → `.calculate(...).size`.
+- Change `calculate_size()` (returns `float`) → `calculate()` (returns new VO `PositionCalculation` containing: `size`, `notional`, `risk_amount`, `est_entry_commission`); VO frozen dataclass, in its own leaf file `core/domain/risk/position_calculation.py`.
+- Centralize 3 risk defaults into class consts (1-source): `RISK_PER_TRADE = 0.02`, `MAX_EXPOSURE_PERCENT = 0.10`, `DEFAULT_SL_RISK_PERCENT = 0.01`. `RiskConfig` fields use the consts as defaults.
+- Remove dead code: `RiskModel.KELLY` + `RiskModel.FIXED` enum members, functions `_kelly_size()`, `_fixed_size()`, `validate_size()`; `RiskModel` keeps a single member `PERCENT_RISK`.
+- `RiskCheckHandler`: add `config: RiskConfig | None = None`, fallback to consts when not overridden.
+- Call site `strategy_app_service.py`: change `.calculate_size()` → `.calculate(...).size`.
 
-Thay đổi trên branch `develop` (9 file src/tests: 8 modify + 1 create, chưa commit). Mục tiêu unblock R7 (BrokerConfig tune defaults) + R-series (backtest commission modeling).
+Changes on branch `develop` (9 src/test files: 8 modify + 1 create, not yet committed). Goal: unblock R7 (BrokerConfig tune defaults) + R-series (backtest commission modeling).
 
 ---
 
 ## The Brutal Truth
 
-Refactor này sạch, an toàn, 560/560 tests pass — nhưng cái ngậm ngầm là **circular import** giữa `RiskConfig` (dùng `CommissionModel` type hint) + `PositionCalculatorDomainService` (dùng `RiskConfig`). Không thể import trực tiếp. Thay vì:
+This refactor is clean, safe, 560/560 tests pass — but the hidden catch is a **circular import** between `RiskConfig` (uses `CommissionModel` type hint) + `PositionCalculatorDomainService` (uses `RiskConfig`). Cannot import directly. Instead of:
 
-- Tạo file trung gian hay di chuyển RiskConfig → quá phức tạp
-- Đã quyết định: VO (`PositionCalculation`) ở file leaf riêng + service dùng `TYPE_CHECKING` cho `RiskConfig`/`CommissionModel`; runtime đọc attribute + duck-type (`.compute` method khi có). Giải pháp này sạch, đôi khi duck-type nhưng rõ ràng + tested.
+- Creating an intermediary file or moving RiskConfig → too complex
+- Decided: VO (`PositionCalculation`) in its own leaf file + service uses `TYPE_CHECKING` for `RiskConfig`/`CommissionModel`; runtime reads attributes + duck-type (`.compute` method when present). This solution is clean, sometimes duck-typed but explicit + tested.
 
-Điểm đau: không thể enforce `commission_model` param ở type-hint (nó `CommissionModel | None`, nhưng `TYPE_CHECKING` block nó). Runtime chain đúng (`value_objects → service → position_calculation`), pyright chỉ complain 1 lỗi baseline (test_engulfing.py:177 Optional — pre-existing, không thuộc R6).
+Pain point: cannot enforce the `commission_model` param at the type-hint level (it's `CommissionModel | None`, but `TYPE_CHECKING` blocks it). Runtime chain is correct (`value_objects → service → position_calculation`), pyright only complains about 1 baseline error (test_engulfing.py:177 Optional — pre-existing, not part of R6).
 
 ---
 
@@ -39,10 +39,10 @@ Refactor này sạch, an toàn, 560/560 tests pass — nhưng cái ngậm ngầm
 
 | Item | Before | After | Motivation |
 |---|---|---|---|
-| Service name | `PositionSizerDomainService` | `PositionCalculatorDomainService` | "Sizer" = naming lỏng; "Calculator" rõ ràng + phản ánh logic phức tạp (size, notional, risk, commission) |
-| Return type | `float` (size only) | `PositionCalculation` VO | Caller cần {size, notional, risk_amount, est_entry_commission} — trả 1 VO thay vì tuple/dict |
-| Risk defaults | Hardcoded 0.02 / 0.10 / 0.01 ở nhiều chỗ | Class consts (1-source) | Easier to tune (centralize), easier to debug (xem consts ngay) |
-| RiskModel enum | KELLY, FIXED, PERCENT_RISK | PERCENT_RISK only | Dead code removal: KELLY/FIXED không dùng, sizing logic đã 100% dùng percent-based |
+| Service name | `PositionSizerDomainService` | `PositionCalculatorDomainService` | "Sizer" = loose naming; "Calculator" is clear + reflects the complex logic (size, notional, risk, commission) |
+| Return type | `float` (size only) | `PositionCalculation` VO | Caller needs {size, notional, risk_amount, est_entry_commission} — return a single VO instead of a tuple/dict |
+| Risk defaults | Hardcoded 0.02 / 0.10 / 0.01 in many places | Class consts (1-source) | Easier to tune (centralize), easier to debug (see consts directly) |
+| RiskModel enum | KELLY, FIXED, PERCENT_RISK | PERCENT_RISK only | Dead code removal: KELLY/FIXED unused, sizing logic already 100% percent-based |
 | Risk handler config | Required | Optional (config: RiskConfig \| None = None) | Tests parameterize sizing; fallback consts when no override |
 | Import coupling | Direct import RiskConfig in service | TYPE_CHECKING + duck-type | Break circular: RiskConfig → CommissionModel \| PositionCalculation |
 
@@ -59,8 +59,8 @@ class PositionCalculation:
 ```
 
 - Frozen: immutable, hashable (cache-safe).
-- VO ở file leaf riêng → avoid circular import (PositionCalculatorDomainService không import RiskConfig trực tiếp).
-- Caller: `.calculate(...).size` (backward-compatible, tests phần lớn chỉ dùng size).
+- VO in its own leaf file → avoid circular import (PositionCalculatorDomainService doesn't import RiskConfig directly).
+- Caller: `.calculate(...).size` (backward-compatible, tests mostly only use size).
 
 ### Risk Defaults Centralization
 
@@ -71,8 +71,8 @@ class PositionCalculatorDomainService:
     DEFAULT_SL_RISK_PERCENT = 0.01   # 1% default SL risk
 ```
 
-- RiskConfig field defaults → tham chiếu consts: `risk_per_trade: float = PositionCalculatorDomainService.RISK_PER_TRADE`.
-- 1-source: muốn đổi default 2% → 1.5%, chỉ đổi const này.
+- RiskConfig field defaults → reference the consts: `risk_per_trade: float = PositionCalculatorDomainService.RISK_PER_TRADE`.
+- 1-source: to change the default 2% → 1.5%, only change this const.
 
 ### Circular Import Fix: TYPE_CHECKING + Duck-Type
 
@@ -98,8 +98,8 @@ class PositionCalculatorDomainService:
 ```
 
 - TYPE_CHECKING block: pyright type-checks; imports don't run.
-- Runtime: duck-type `.compute()` method (RiskConfig có, CommissionModel có); call-site always pass proper type.
-- Tradeoff: pyright không catch type error ở `commission_model.compute()` — nhưng call-site live truyền `None` hoặc real CommissionModel (test coverage xanh).
+- Runtime: duck-type `.compute()` method (RiskConfig has it, CommissionModel has it); call-site always passes the proper type.
+- Tradeoff: pyright doesn't catch the type error at `commission_model.compute()` — but the live call-site passes `None` or a real CommissionModel (test coverage green).
 
 ### Dead Code Removal
 
@@ -109,13 +109,13 @@ class PositionCalculatorDomainService:
 | `RiskModel.FIXED` enum | ✓ | 0 caller; sizing logic 100% percent-based |
 | `_kelly_size()` method | ✓ | Unreachable (KELLY enum gone) |
 | `_fixed_size()` method | ✓ | Unreachable (FIXED enum gone) |
-| `validate_size()` method | ✓ | Unused; size validation inline ở `calculate()` |
+| `validate_size()` method | ✓ | Unused; size validation inline in `calculate()` |
 
 ### Validation
 
 | Gate | Result | Notes |
 |---|---|---|
-| `pytest` | 560 passed | Baseline unchanged; parity verified (engulfing/hitnrun2 characterization số không đổi — min(risk_amount/price_risk, cap) bảo toàn) |
+| `pytest` | 560 passed | Baseline unchanged; parity verified (engulfing/hitnrun2 characterization numbers unchanged — min(risk_amount/price_risk, cap) preserved) |
 | `ruff` + `pyright` | Only pre-existing (test_engulfing.py:177 Optional) | R6 zero new style/type violations |
 | `lint-imports` | 8/8 contracts PASS | Circular import fix: VO → service → calculation chain valid |
 | Code review | CLEAN (0 critical/high/medium) | Logic identical; interface change isolated to strategy_app_service.py (1 line: `.calculate(...).size`) |
@@ -138,36 +138,36 @@ class PositionCalculatorDomainService:
 
 ### Why circular import emerged
 
-- **Intent**: `RiskConfig` mô tả risk policy; `CommissionModel` là provider; `PositionCalculation` VO chứa output (size, notional, risk, commission).
-- **Reality**: RiskConfig cần type-hint CommissionModel (để duck-type `.compute()`); PositionCalculation VO import từ service; service import RiskConfig → cycle.
-- **Why it wasn't caught early**: R5 (CommissionModel) + R6 (Calculator refactor) là parallel tracks; chỉ khi tích hợp VO vào Calculator thì circular mới lộ diện.
+- **Intent**: `RiskConfig` describes the risk policy; `CommissionModel` is the provider; `PositionCalculation` VO contains the output (size, notional, risk, commission).
+- **Reality**: RiskConfig needs to type-hint CommissionModel (to duck-type `.compute()`); PositionCalculation VO is imported from the service; service imports RiskConfig → cycle.
+- **Why it wasn't caught early**: R5 (CommissionModel) + R6 (Calculator refactor) were parallel tracks; the circular import only surfaced when integrating the VO into the Calculator.
 
 ### Why duck-type solution is acceptable
 
-- **Alternative 1** (move types to `core.types`): Infrastructure concerns (broker models) vào shared types module → leak abstraction.
+- **Alternative 1** (move types to `core.types`): Infrastructure concerns (broker models) into a shared types module → leak abstraction.
 - **Alternative 2** (inject at runtime, no type-hint): Loss of type safety; pyright can't reason about `.compute()`.
-- **TYPE_CHECKING solution**: Tradeoff kiểm soát (pyright) vs. pragmatism (duck-type at runtime, call-site validates).
-- **Cost**: Một dòng comment trong service: `# type: ignore` (0 actual ignores needed, riêng TYPE_CHECKING block rõ ràng).
+- **TYPE_CHECKING solution**: Tradeoff between control (pyright) vs. pragmatism (duck-type at runtime, call-site validates).
+- **Cost**: One comment line in the service: `# type: ignore` (0 actual ignores needed, just an explicit TYPE_CHECKING block).
 
-### Why VO ở file leaf riêng
+### Why the VO is in its own leaf file
 
-- VO (`PositionCalculation`) dùng bởi service output + call-site.
-- Nếu VO ở `position_calculator_domain_service.py` → service file import nó → service can't circular-import itself. Nhưng nếu VO dùng CommissionModel (future) → lại circular.
-- File leaf `position_calculation.py` (pure VO, no deps → service) → break cycle.
+- VO (`PositionCalculation`) used by the service output + call-site.
+- If the VO were in `position_calculator_domain_service.py` → the service file imports it → the service can't circular-import itself. But if the VO uses CommissionModel (future) → circular again.
+- Leaf file `position_calculation.py` (pure VO, no deps → service) → break the cycle.
 
 ---
 
 ## Lessons Learned
 
-1. **VO extraction tránh circular import.** Nếu VO mix data từ multi-layer (domain + infra), VO ở file leaf riêng, service import VO (unidirectional).
+1. **VO extraction avoids circular imports.** If a VO mixes data from multiple layers (domain + infra), put the VO in its own leaf file, service imports the VO (unidirectional).
 
-2. **TYPE_CHECKING cho type-safety mà avoid runtime coupling.** Duck-type runtime valid (call-site đã enforce type); pyright happy. Trade: check comment khi maintain (".compute() must exist").
+2. **TYPE_CHECKING for type-safety while avoiding runtime coupling.** Duck-type at runtime is valid (call-site already enforces the type); pyright is happy. Trade: check the comment when maintaining (".compute() must exist").
 
-3. **Risk defaults = 3 consts, 1-source.** Centr tại service class; RiskConfig defaults tham chiếu consts. Thay đổi mặc định → 1 chỗ. (Không centralize `max_positions=3` ở risk_check.py — acceptable trade, chỉ 3 risk-percent consts là 1-source).
+3. **Risk defaults = 3 consts, 1-source.** Centralized in the service class; RiskConfig defaults reference the consts. Change a default → 1 place. (Don't centralize `max_positions=3` in risk_check.py — acceptable trade, only the 3 risk-percent consts are 1-source).
 
-4. **Dead code removal scale với refactor.** KELLY/FIXED enum + 2 hàm đã dead hơn 6 tháng; refactor là cơ hội xóa. Không xóa ngay → tech debt grow.
+4. **Dead code removal scales with the refactor.** KELLY/FIXED enum + 2 functions had been dead for over 6 months; the refactor is the opportunity to remove them. Not removing them now → tech debt grows.
 
-5. **VO return type chargaff interface clarity.** `calculate_size() → float` vs. `calculate() → PositionCalculation{size, notional, risk, commission}` — latter self-document output shape; caller không cần doc to know fields.
+5. **VO return type sharpens interface clarity.** `calculate_size() → float` vs. `calculate() → PositionCalculation{size, notional, risk, commission}` — the latter self-documents the output shape; the caller doesn't need docs to know the fields.
 
 ---
 
@@ -179,13 +179,13 @@ class PositionCalculatorDomainService:
 - [x] Circular import fixed (TYPE_CHECKING + duck-type)
 - [x] All tests pass (560/560)
 - [x] Code review done (CLEAN, 0 critical/high/medium)
-- [ ] **Commit + push develop** — changeset ready, chưa commit
+- [ ] **Commit + push develop** — changeset ready, not yet committed
 - [ ] **Unblock R7** (BrokerConfig: tune RISK_PER_TRADE / MAX_EXPOSURE_PERCENT / DEFAULT_SL_RISK_PERCENT + USD 10k account, 4bps commission, currency defaults)
 - [ ] **Forward R-series** (R7 config tune only; R8+ can wire CommissionModel → `calculate()` commission_model param if live-run needs commission modeling)
 - [ ] **Monitor next VO** — if future VO (e.g., ExecutionResult) needs CommissionModel + other infra types, apply leaf-file lesson: keep pure domain separate, infra concerns in VO properties with duck-type fallback.
 
 **Owner**: Core domain sizing refactor + risk defaults.  
-**Timeline**: Completed 2026-07-06. Changeset ready, chưa commit.  
+**Timeline**: Completed 2026-07-06. Changeset ready, not yet committed.  
 **Key takeaway**: VO leaf file + TYPE_CHECKING duck-type = clean circular-import solution. 3-const risk defaults = 1-source policy change.
 
 ---
@@ -194,7 +194,7 @@ class PositionCalculatorDomainService:
 
 | Artifact | Status |
 |---|---|
-| Changeset | 9 file src/tests (8 modify + 1 create), logic identical, parity verified |
+| Changeset | 9 src/test files (8 modify + 1 create), logic identical, parity verified |
 | Tests | 560 passed (baseline unchanged) |
 | Linting | import-linter 8/8 ✓; ruff/pyright no new errors (except baseline) |
 | Code review | CLEAN (0 critical/high/medium); interface change isolated (1 call site) |

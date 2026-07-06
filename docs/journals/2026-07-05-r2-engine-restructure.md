@@ -9,29 +9,29 @@
 
 ## What Happened
 
-Hoàn tất refactor R2 (Engine Restructure) — phần STRUCTURE-ONLY của initiative trading-calculation-fix. Không thay logic, chỉ tổ chức lại code:
+Completed the R2 refactor (Engine Restructure) — the STRUCTURE-ONLY part of the trading-calculation-fix initiative. No logic changes, just reorganizing code:
 
-- Gộp `src/pocketquant/backtest/` (flat) vào `src/pocketquant/engine/backtest/` (12 files).
-- Tổ chức `engine/` thành 5 feature areas: `strategy/`, `execution/`, `market_data/`, `backtest/`, `live/` (8 files di chuyển phase 1).
-- Đổi tên `engine/handlers/risk/check_risk/handler.py` → `engine/execution/risk_check.py`; tạo `engine/live/` + di chuyển `StrategyReconcileAppService`.
-- Cập nhật import-linter: 4→3 tiers (`app ◁ engine ◁ core`); tổng 8 contracts (loại 1 cũ, thêm 2 mới intra-engine).
-- Rewrite đủ 50+ file import paths; xóa entry `"pocketquant.backtest"` dead code từ test_domain_purity.py.
-- Sync docs (system-architecture, project-overview-pdr, code-standards, CLAUDE.md) + roadmap (R2 → done).
+- Merged `src/pocketquant/backtest/` (flat) into `src/pocketquant/engine/backtest/` (12 files).
+- Organized `engine/` into 5 feature areas: `strategy/`, `execution/`, `market_data/`, `backtest/`, `live/` (8 files moved in phase 1).
+- Renamed `engine/handlers/risk/check_risk/handler.py` → `engine/execution/risk_check.py`; created `engine/live/` + moved `StrategyReconcileAppService`.
+- Updated import-linter: 4→3 tiers (`app ◁ engine ◁ core`); 8 contracts total (removed 1 old, added 2 new intra-engine).
+- Rewrote all 50+ files' import paths; removed the dead-code entry `"pocketquant.backtest"` from test_domain_purity.py.
+- Synced docs (system-architecture, project-overview-pdr, code-standards, CLAUDE.md) + roadmap (R2 → done).
 
-Commit `4f3d9e43` trên `develop` (65 files), chưa push. Mục tiêu unblock R3 (CommissionModel logic) + R8 (live-run orchestration).
+Commit `4f3d9e43` on `develop` (65 files), not yet pushed. Goal: unblock R3 (CommissionModel logic) + R8 (live-run orchestration).
 
 ---
 
 ## The Brutal Truth
 
-Refactor này sạch, an toàn, không phá logic nào. Nhưng cái ngậm ngầm — `grimp`/`import-linter` **không tìm thấy PEP 420 namespace packages** khi contract reference chúng trực tiếp bằng tên — đã đốt 2 giờ debug vì:
+This refactor is clean, safe, breaks no logic. But the hidden catch — `grimp`/`import-linter` **can't find PEP 420 namespace packages** when a contract references them directly by name — burned 2 hours of debugging because:
 
-- Thêm 5 feature-area packages (`engine/strategy/`, `engine/execution/`, ...) nhưng không có `__init__.py`.
-- import-linter config tham chiếu `source_modules = ["pocketquant.engine.strategy", ...]` → grimp parse AST, tìm trong `sys.modules`, không tìm thấy (PEP 420 = không bao giờ nhập hoàn chỉnh như regular package).
-- Contracts mà nên pass bây giờ violation: `pocketquant.engine.strategy` → "not found"
-- Check grimp issue: https://github.com/seddonym/grimp/issues/233 — workaround: thêm `__init__.py` (empty) → grimp load như regular package.
+- Added 5 feature-area packages (`engine/strategy/`, `engine/execution/`, ...) but with no `__init__.py`.
+- import-linter config references `source_modules = ["pocketquant.engine.strategy", ...]` → grimp parses AST, looks in `sys.modules`, doesn't find them (PEP 420 = never imported wholesale like a regular package).
+- Contracts that should pass now violate: `pocketquant.engine.strategy` → "not found"
+- Check grimp issue: https://github.com/seddonym/grimp/issues/233 — workaround: add `__init__.py` (empty) → grimp loads it as a regular package.
 
-Điểm mạnh: plan đã dự đoán này ở risk-table fallback (workaround ready-to-go). Khi lửa bốc lên, chỉ cần thêm 5 dòng `__init__.py`, tất tests xanh ngay.
+Strength: the plan predicted this in the risk-table fallback (workaround ready-to-go). When the fire broke out, just add 5 `__init__.py` lines and all tests go green immediately.
 
 ---
 
@@ -41,12 +41,12 @@ Refactor này sạch, an toàn, không phá logic nào. Nhưng cái ngậm ngầ
 
 | Item | Before | After | Motivation |
 |---|---|---|---|
-| Backtest home | `src/pocketquant/backtest/` (top-level) | `src/pocketquant/engine/backtest/` | Backtest là một driver của engine, không top-level concept |
-| Engine grouping | Flat 12+ files | 5 feature areas (strategy, execution, market_data, backtest, live) | Scaling: ~100 LOC/module ngắn hơn, ownership clear |
-| Risk handler path | `engine/handlers/risk/check_risk/handler.py` | `engine/execution/risk_check.py` | Tên rõ ràng, nesting giảm (3→1), `RiskCheckHandler` class unchanged |
-| Live strategy reconcile | In backtest package | `engine/live/strategy_reconcile_app_service.py` | Live domain riêng, không mix backtest |
-| Import tiers | 4 layers (app → engine → backtest/jobs/workers → core) | 3 layers (app → engine → core) | Loại phân tầng redundant; engine = single driver layer |
-| import-linter contracts | 7 (bao gồm "Backtest ⟂ upper packages") | 8 (loại 1 cũ, +2 mới intra-engine: strategy/execution/market_data ⟂ {backtest,live}; forbidden shared-machinery) | Enforce tính độc lập drivers + tránh duplication logic ở top-level |
+| Backtest home | `src/pocketquant/backtest/` (top-level) | `src/pocketquant/engine/backtest/` | Backtest is a driver of the engine, not a top-level concept |
+| Engine grouping | Flat 12+ files | 5 feature areas (strategy, execution, market_data, backtest, live) | Scaling: ~100 LOC/module shorter, ownership clear |
+| Risk handler path | `engine/handlers/risk/check_risk/handler.py` | `engine/execution/risk_check.py` | Clearer name, less nesting (3→1), `RiskCheckHandler` class unchanged |
+| Live strategy reconcile | In backtest package | `engine/live/strategy_reconcile_app_service.py` | Separate live domain, not mixed with backtest |
+| Import tiers | 4 layers (app → engine → backtest/jobs/workers → core) | 3 layers (app → engine → core) | Remove the redundant tier; engine = single driver layer |
+| import-linter contracts | 7 (including "Backtest ⟂ upper packages") | 8 (removed 1 old, +2 new intra-engine: strategy/execution/market_data ⟂ {backtest,live}; forbidden shared-machinery) | Enforce driver independence + avoid logic duplication at the top level |
 
 ### PEP 420 Namespace Discovery Gotcha
 

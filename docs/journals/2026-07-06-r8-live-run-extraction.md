@@ -9,50 +9,50 @@
 
 ## What Happened
 
-Hàng cuối initiative `trading-calulation-fix` (R1–R8 giờ **done**). Brainstorm reframe: R2 đã tách ~80% structure nên R8 không còn là "trích orchestration khổng lồ" — giá trị thật là **pipeline Trade/metrics cho live** (trước đây live chỉ đọc closed Positions, chưa từng có `Trade`/equity/metrics).
+Last item in the `trading-calulation-fix` initiative (R1–R8 now **done**). Brainstorm reframe: R2 already extracted ~80% of the structure so R8 is no longer "extract a huge orchestration" — the real value is the **Trade/metrics pipeline for live** (previously live only read closed Positions, never had `Trade`/equity/metrics).
 
-Hai track:
+Two tracks:
 
-**Structure (move thuần, gate xanh liên tục):**
-- `BrokerFactory` `app/di/` → `core/infra/brokers/broker_factory.py` (framework-free, chỉ import core).
+**Structure (pure move, gates green throughout):**
+- `BrokerFactory` `app/di/` → `core/infra/brokers/broker_factory.py` (framework-free, only imports core).
 - `QuoteAppService` + `WsSubscriptionAppService` `app/market_data/` → `engine/market_data/app_services/`.
-- Fold `rehydrate_strategies_from_subscriptions` → `StrategyReconcileAppService.bootstrap()` (reuse `_ensure_instances` → boot path và steady-state path không drift). App lifespan giờ thin driver: `inject → bootstrap_live_instances → create_task(reconcile.run) → cancel`.
+- Fold `rehydrate_strategies_from_subscriptions` → `StrategyReconcileAppService.bootstrap()` (reuse `_ensure_instances` → boot path and steady-state path don't drift). App lifespan is now a thin driver: `inject → bootstrap_live_instances → create_task(reconcile.run) → cancel`.
 
-**Logic (M1 relative-per-sub, giá trị lõi):**
-- `TradeRepository` (`trades` collection, `run_id`=subscription_id) — mirror mảnh nhỏ backtest repo, reuse `Trade.to_mongo/from_mongo`.
-- `LiveTradeCollector` — EventBus subscriber (`_on_trade_closed`), build `Trade` + persist. Broker→bus qua `StrategyAppService._forward_trade_to_bus`, wire trong `_get_or_create_broker` (**live-only** — backtest `inject_prepared_strategy` bypass → không double-count).
+**Logic (M1 relative-per-sub, core value):**
+- `TradeRepository` (`trades` collection, `run_id`=subscription_id) — mirror a small slice of the backtest repo, reuse `Trade.to_mongo/from_mongo`.
+- `LiveTradeCollector` — EventBus subscriber (`_on_trade_closed`), builds `Trade` + persists. Broker→bus via `StrategyAppService._forward_trade_to_bus`, wired in `_get_or_create_broker` (**live-only** — backtest `inject_prepared_strategy` bypasses → no double-count).
 - `LiveMetricsQueryService` + route `GET /api/v1/subscriptions/{id}/metrics` — on-demand, stateless, cumsum-pnl equity.
-- OKX `subscribe_trades` giữ no-op (defer future R — cần demo fill payload verify snapshot-delta).
+- OKX `subscribe_trades` kept as no-op (defer to a future R — needs a demo fill payload to verify snapshot-delta).
 
-Gate: `just test` 571 pass (+9 test R8), ruff/pyright/lint-imports (8 contract) sạch.
+Gate: `just test` 571 pass (+9 R8 tests), ruff/pyright/lint-imports (8 contracts) clean.
 
 ---
 
 ## The Brutal Truth
 
-**Hai chỗ suýt sai, code-reviewer bắt được:**
+**Two near-misses, caught by code-reviewer:**
 
-1. **Sharpe phóng đại hàng trăm lần (HIGH).** Ban đầu tôi truyền `periods_per_year = Interval.periods_per_year_for(sub.interval)` = bars/năm (1m → 525,600) như backtest. Nhưng backtest annualize trên curve **per-bar** (mtm_curve đều); live curve của tôi là **trade-keyed** (1 điểm/closure). Annualize per-trade returns bằng √(bars/năm) → Sharpe sai lệch tens–hundreds×. Tệ hơn: path này **chưa được test** vì cả 2 test metrics đều không seed subscription doc → `sub=None` → `periods_per_year=None` → Sharpe=0 → bug ẩn. Fix KISS: trade-keyed curve **không** annualize được bằng bar-freq → `periods_per_year=None` luôn (Sharpe=0, đúng convention "not annualizable"); bỏ luôn `sub_repo` giờ thành dead dependency. Thêm test khoá Sharpe=0.
+1. **Sharpe inflated by hundreds of times (HIGH).** Initially I passed `periods_per_year = Interval.periods_per_year_for(sub.interval)` = bars/year (1m → 525,600) like backtest. But backtest annualizes on a **per-bar** curve (uniform mtm_curve); my live curve is **trade-keyed** (1 point/closure). Annualizing per-trade returns by √(bars/year) → Sharpe off by tens–hundreds×. Worse: this path was **untested** because both metrics tests don't seed the subscription doc → `sub=None` → `periods_per_year=None` → Sharpe=0 → hidden bug. KISS fix: a trade-keyed curve **cannot** be annualized by bar-freq → `periods_per_year=None` always (Sharpe=0, matching the "not annualizable" convention); also drop `sub_repo`, now a dead dependency. Added a test locking Sharpe=0.
 
-2. **Collector thiếu error boundary (MEDIUM).** `save_many` unguarded — Mongo lỗi transient sẽ propagate qua `_forward_trade_to_bus` → paper broker `_notify_trade_callbacks` (`raise errors[0]`) → làm hỏng các subscriber `BarCompletedEvent` còn lại của tick đó + mất Trade. Mọi sibling bus handler đều wrap+log; collector phải khớp. Fix: try/except + log `subscription_id`/`pnl` + swallow.
+2. **Collector missing error boundary (MEDIUM).** `save_many` unguarded — a transient Mongo error would propagate through `_forward_trade_to_bus` → paper broker `_notify_trade_callbacks` (`raise errors[0]`) → breaking the remaining `BarCompletedEvent` subscribers of that tick + losing the Trade. Every sibling bus handler wraps+logs; the collector must match. Fix: try/except + log `subscription_id`/`pnl` + swallow.
 
-**Chỗ tự bắt được lúc implement:** plan viết handler tên `on_trade`, nhưng `EventRegistry.register_instance` chỉ quét method bắt đầu bằng **một** `_` (`startswith("_") and not "__"`) → phải đặt `_on_trade_closed` mới discover được. Nếu theo plan literal thì collector sẽ câm lặng không nhận event nào.
+**Caught myself during implementation:** the plan wrote a handler named `on_trade`, but `EventRegistry.register_instance` only scans methods starting with **one** `_` (`startswith("_") and not "__"`) → must name it `_on_trade_closed` to be discovered. Following the plan literally, the collector would silently receive no events.
 
-**Quyết định baseline drawdown:** plan gợi ý `initial_capital = 0`, nhưng `max_drawdown` chia cho running peak — baseline 0 với trade đầu thua → `(neg)/0 = -inf` → `np.nan_to_num` mặc định biến `-inf` thành `-1.79e308` (drawdown rác, không phải nan). Neo curve tại `paper_initial_balance` (dương, số account thật) → mẫu số luôn > 0 → drawdown hữu hạn. Vẫn omit `total_return`/`cagr` (per-sub %-of-shared-account gây hiểu lầm). Regression test khoá lại.
+**Baseline drawdown decision:** the plan suggested `initial_capital = 0`, but `max_drawdown` divides by the running peak — baseline 0 with a losing first trade → `(neg)/0 = -inf` → `np.nan_to_num` by default turns `-inf` into `-1.79e308` (garbage drawdown, not nan). Anchor the curve at `paper_initial_balance` (positive, the real account number) → denominator always > 0 → finite drawdown. Still omit `total_return`/`cagr` (per-sub %-of-shared-account is misleading). Regression test locks it down.
 
 ---
 
 ## Lessons
 
-- **Reuse ≠ copy tham số một cách mù quáng.** `PerformanceCalculatorDomainService.build` dùng chung backtest + live, nhưng `periods_per_year` phụ thuộc *hình dạng curve* (per-bar vs trade-keyed) — không phải copy nguyên si từ caller khác.
-- **np.nan_to_num mặc định KHÔNG chỉ xử nan** — nó cũng biến ±inf thành ±1.79e308. Div-by-zero trên equity curve tạo inf, không phải nan → guard bằng baseline dương thay vì trông chờ nan_to_num.
-- **register_instance scan `_`-prefix** là một cái bẫy ngầm cho mọi bus subscriber mới — handler public (`on_x`) sẽ không bao giờ được đăng ký.
-- Tách 2 kênh Trade (backtest callback trực tiếp vs live bus-forward) là chìa khoá tránh double-count — verified bằng test chạy backtest parity + integration test broker→bus.
+- **Reuse ≠ blindly copying parameters.** `PerformanceCalculatorDomainService.build` is shared by backtest + live, but `periods_per_year` depends on the *curve shape* (per-bar vs trade-keyed) — not copied verbatim from another caller.
+- **np.nan_to_num by default does NOT only handle nan** — it also turns ±inf into ±1.79e308. Div-by-zero on the equity curve produces inf, not nan → guard with a positive baseline instead of relying on nan_to_num.
+- **register_instance scans the `_`-prefix** is a hidden trap for every new bus subscriber — a public handler (`on_x`) will never be registered.
+- Separating the 2 Trade channels (backtest direct callback vs live bus-forward) is the key to avoiding double-count — verified by a backtest parity test + a broker→bus integration test.
 
 ---
 
 ## Unresolved
 
-- Live Sharpe hiện = 0 (không annualize). Nếu product cần Sharpe live thật → thêm per-bar equity sampler cho live (ngoài scope R8).
-- OKX-backed subscription persist zero trade → `/metrics` trả zeros mãi, không tín hiệu. Chờ R tương lai wire OKX position→Trade (cần demo payload).
-- Soft-coupling `260630-0031-backtest-mae-mfe-excursion`: append `mae/mfe/r_multiple` vào `Trade`+`TradeClosedEvent` → live collector sẽ để field excursion = None, rebase nhẹ khi bên đó land.
+- Live Sharpe is currently = 0 (not annualized). If the product needs a real live Sharpe → add a per-bar equity sampler for live (out of R8 scope).
+- OKX-backed subscription persists zero trades → `/metrics` returns zeros forever, no signal. Waiting for a future R to wire OKX position→Trade (needs a demo payload).
+- Soft-coupling `260630-0031-backtest-mae-mfe-excursion`: appending `mae/mfe/r_multiple` to `Trade`+`TradeClosedEvent` → the live collector will leave excursion fields = None, a light rebase when that side lands.

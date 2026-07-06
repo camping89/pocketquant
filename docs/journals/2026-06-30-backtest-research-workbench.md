@@ -1,24 +1,24 @@
 # Backtest Research Workbench
 
-Reframe `/backtest` từ single-run ephemeral (reload là mất) thành workbench thống kê deep-link-able: stat dashboard 4 tab, history rail scoped, compare cross-scope, orders drill-down, verdict edit. 4 phase tuyến tính (1 BE/TDD → 3 FE), thực thi liền mạch.
+Reframe `/backtest` from single-run ephemeral (reload loses it) into a deep-link-able statistical workbench: 4-tab stat dashboard, scoped history rail, cross-scope compare, orders drill-down, verdict edit. 4 linear phases (1 BE/TDD → 3 FE), executed seamlessly.
 
-## Quyết định đáng nhớ
+## Memorable Decisions
 
-- **Mở rộng endpoint thay vì đẻ mới.** Red-team bắt `GET /runs` trùng `GET /backtest/strategy/{id}` đã có → thêm optional `?symbol=&interval=` vào route cũ. Diff baseline thành thuần-additive (1 route orders mới + 2 param), không xóa route nào.
-- **`symbol` composite `CODE:EXCHANGE` là một invariant một chiều.** Denormalize top-level từ `config_snapshot`, **uppercase tại mọi write-site** (`started`/`finalize`/`from_mongo` fallback) cho khớp filter `.upper()`. Bài học từ review M1: nếu chỉ query-side normalize, một writer tương lai lưu lowercase → history rỗng âm thầm. Một nguồn sự thật, hai phía không được giả định khác nhau.
-- **Tên route theo convention repo, không theo plan.** Plan ghi `backtest.$runId.tsx`, nhưng TanStack file-route đó sẽ nest dưới layout cha (hiện form). Dùng trailing-underscore (`backtest_.$runId.tsx`, `backtest_.compare.tsx`) như `monitor_.jobs.$jobId` sẵn có → detail standalone, URL contract vẫn đúng `/backtest/$runId`.
-- **Không recompute aggregate ở FE.** `profitFactorByDirection` chỉ tính split LONG/SHORT; aggregate đọc thẳng `metrics.profit_factor` của BE — tránh hai định nghĩa lệch nhau (red-team M7).
-- **Hoãn monthly heatmap.** Equity curve persist downsample ≤5000 (strided) → số tài chính xấp xỉ với strategy thưa trade. Risk&Time MVP = equity+underwater (drawdown chính xác mỗi điểm) + drawdown table top-5.
+- **Extend the endpoint instead of spawning a new one.** Red-team caught `GET /runs` duplicating the existing `GET /backtest/strategy/{id}` → added optional `?symbol=&interval=` to the old route. Baseline diff becomes purely additive (1 new orders route + 2 params), removing no route.
+- **The `symbol` composite `CODE:EXCHANGE` is a one-way invariant.** Denormalize top-level from `config_snapshot`, **uppercase at every write-site** (`started`/`finalize`/`from_mongo` fallback) to match the `.upper()` filter. Lesson from review M1: if you only normalize query-side, a future writer storing lowercase → silently empty history. One source of truth; the two sides must not assume different things.
+- **Route names follow repo convention, not the plan.** The plan wrote `backtest.$runId.tsx`, but that TanStack file-route would nest under the parent layout (currently the form). Use trailing-underscore (`backtest_.$runId.tsx`, `backtest_.compare.tsx`) like the existing `monitor_.jobs.$jobId` → standalone detail, URL contract still correct at `/backtest/$runId`.
+- **Do not recompute the aggregate on the FE.** `profitFactorByDirection` only computes the LONG/SHORT split; the aggregate reads BE's `metrics.profit_factor` directly — avoiding two divergent definitions (red-team M7).
+- **Defer the monthly heatmap.** Persisted equity curve downsamples to ≤5000 (strided) → financial numbers are approximate for sparse-trade strategies. Risk&Time MVP = equity+underwater (drawdown exact at each point) + top-5 drawdown table.
 
-## Va vấp
+## Stumbles
 
-- **Lệnh build trong plan sai.** Plan giả định `just lint && just types && just baseline`; `justfile` chỉ có `just test`. Lệnh thật theo CI: `uv run ruff check` / `pyright` / `lint-imports` / `pytest`; baseline regen = `BASELINE_UPDATE=1 uv run pytest tests/baseline`.
-- **Guard prod-DB chặn pytest.** Shell env `MONGODB_URL` trỏ VPS prod → conftest từ chối chạy. Testcontainers tự spin Mongo/Redis ephemeral nên chỉ cần `env -u MONGODB_URL -u REDIS_URL uv run pytest`.
-- **routeTree.gen.ts không regen khi `tsc -b` chạy trước `vite build`.** Phải `npx vite build` một nhịp (plugin ghi tree) rồi mới `npm run build` full typecheck. `npx tsr generate` không đọc đúng entrypoints config.
-- **"adjust state during render" + optimistic update đá nhau (review H1).** VerdictPanel reset textarea khi `verdict` prop đổi — nhưng optimistic-write VÀ revert-on-fail đều chảy qua prop đó, nên nhánh save-fail xóa text user vừa gõ (vi phạm Q6 "GIỮ text"). Fix: track `runId` thay vì `verdict` — chỉ reset khi chuyển sang run KHÁC, không khi verdict cùng run dao động.
+- **Wrong build commands in the plan.** The plan assumed `just lint && just types && just baseline`; the `justfile` only has `just test`. Real commands per CI: `uv run ruff check` / `pyright` / `lint-imports` / `pytest`; baseline regen = `BASELINE_UPDATE=1 uv run pytest tests/baseline`.
+- **Prod-DB guard blocks pytest.** Shell env `MONGODB_URL` points to the prod VPS → conftest refuses to run. Testcontainers spins up ephemeral Mongo/Redis on its own, so just `env -u MONGODB_URL -u REDIS_URL uv run pytest`.
+- **routeTree.gen.ts does not regen when `tsc -b` runs before `vite build`.** Had to run `npx vite build` once (the plugin writes the tree) before the full `npm run build` typecheck. `npx tsr generate` doesn't read the entrypoints config correctly.
+- **"adjust state during render" + optimistic update clash (review H1).** VerdictPanel resets the textarea when the `verdict` prop changes — but both optimistic-write AND revert-on-fail flow through that prop, so the save-fail branch wipes the text the user just typed (violating Q6 "KEEP text"). Fix: track `runId` instead of `verdict` — reset only when switching to a DIFFERENT run, not when the verdict of the same run fluctuates.
 
-## Kết quả
+## Results
 
-BE 608 passed / 1 skipped · ruff + pyright + import-linter 7/7 ✓. FE lint 0 errors · build ✓ · vitest 8/8 (`stats-utils`). Code review DONE_WITH_CONCERNS → H1 + M1 + M2 đã đóng; L1/L2/L3 ghi nhận (dedupe timestamp, normalize off `initial_capital` literal, sampling caveat) — tradeoff chấp nhận.
+BE 608 passed / 1 skipped · ruff + pyright + import-linter 7/7 ✓. FE lint 0 errors · build ✓ · vitest 8/8 (`stats-utils`). Code review DONE_WITH_CONCERNS → H1 + M1 + M2 closed; L1/L2/L3 noted (dedupe timestamp, normalize off `initial_capital` literal, sampling caveat) — tradeoff accepted.
 
-Plan kế tiếp `260630-0031-backtest-mae-mfe-excursion` (blockedBy plan này) giờ mở khóa: FE scatter cần Trades tab + chart wrapper từ phase 3.
+Next plan `260630-0031-backtest-mae-mfe-excursion` (blockedBy this plan) is now unblocked: FE scatter needs the Trades tab + chart wrapper from phase 3.
