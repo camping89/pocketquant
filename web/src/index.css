@@ -1370,6 +1370,44 @@ input, select {
   color: var(--text-secondary);
 }
 
+.positions-table__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.positions-table__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0;
+  transition: color 0.12s, opacity 0.12s;
+}
+
+.positions-table__row:hover .positions-table__copy {
+  opacity: 0.6;
+}
+
+.positions-table__copy:hover {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.positions-table__copy--copied {
+  color: var(--accent);
+  opacity: 1;
+}
+
 .positions-table__empty {
   text-align: center;
   padding: 24px;
@@ -1674,6 +1712,22 @@ input, select {
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+}
+
+.run-detail-header__name-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run-detail-header__name-input {
+  padding: 3px 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-width: 180px;
 }
 
 .run-detail-header__pair {

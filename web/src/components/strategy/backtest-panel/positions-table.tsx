@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   fmtDateTime,
@@ -76,6 +76,14 @@ export function PositionsTable({
   const { mode } = useTimezone()
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  function copyTradeId(id: string) {
+    void navigator.clipboard?.writeText(id).then(() => {
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(null), 1200)
+    })
+  }
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -147,7 +155,23 @@ export function PositionsTable({
                 onMouseEnter={onRowMouseEnter ? () => onRowMouseEnter(t) : undefined}
                 onMouseLeave={onRowMouseLeave}
               >
-                <td className="positions-table__td--mono">{t.trade_id.slice(-5)}</td>
+                <td className="positions-table__td--mono">
+                  <span className="positions-table__id">
+                    <span>{t.trade_id.slice(-5)}</span>
+                    <button
+                      type="button"
+                      className={`positions-table__copy${copiedId === t.trade_id ? ' positions-table__copy--copied' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        copyTradeId(t.trade_id)
+                      }}
+                      aria-label="Copy trade id"
+                      title={copiedId === t.trade_id ? 'Copied' : 'Copy trade id'}
+                    >
+                      {copiedId === t.trade_id ? '✓' : '⧉'}
+                    </button>
+                  </span>
+                </td>
                 <td>{fmtDateTime(t.entry_time, mode)}</td>
                 <td>
                   <span className={`direction-badge direction-badge--${dir.toLowerCase()}`}>{dir}</span>
