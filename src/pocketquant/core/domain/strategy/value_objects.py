@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Literal
 
 from pocketquant.core.domain.risk import RiskConfig
-from pocketquant.core.domain.risk.enums import RiskModel
 from pocketquant.core.domain.strategy.enums import Direction
 
 
@@ -86,47 +85,6 @@ class StrategyConfig:
     risk: RiskConfig = field(default_factory=RiskConfig)
     orders: OrderConfig = field(default_factory=OrderConfig)
     enabled: bool = True
-
-    @classmethod
-    def from_dict(cls, data: dict) -> StrategyConfig:
-        # Parse risk config
-        risk_data = data.get("risk", {})
-        risk_model = risk_data.get("model", "percent_risk")
-        risk_config = RiskConfig(
-            model=RiskModel(risk_model) if risk_model else RiskModel.PERCENT_RISK,
-            risk_per_trade=risk_data.get("risk_per_trade", 0.02),
-            max_positions=risk_data.get("max_positions", 3),
-            max_exposure_percent=risk_data.get("max_exposure_percent", 0.10),
-        )
-
-        # Parse order config
-        orders_data = data.get("orders", {})
-        sl_data = orders_data.get("stop_loss", {})
-        tp_data = orders_data.get("take_profit", {})
-        order_config = OrderConfig(
-            entry_type=orders_data.get("entry_type", "market"),
-            stop_loss=StopLossConfig(
-                enabled=sl_data.get("enabled", True),
-                distance_percent=sl_data.get("distance_percent", 0.01),
-            ),
-            take_profit=TakeProfitConfig(
-                enabled=tp_data.get("enabled", True),
-                distance_percent=tp_data.get("distance_percent", 0.02),
-            ),
-        )
-
-        return cls(
-            id=data.get("id", ""),
-            name=data.get("name", ""),
-            symbol=data.get("symbol", ""),
-            interval=data.get("interval", ""),
-            trigger=data.get("trigger", "bar"),
-            broker=data.get("broker", "paper"),
-            parameters=data.get("parameters", {}),
-            risk=risk_config,
-            orders=order_config,
-            enabled=data.get("enabled", True),
-        )
 
     def validate(self) -> list[str]:
         errors = []
