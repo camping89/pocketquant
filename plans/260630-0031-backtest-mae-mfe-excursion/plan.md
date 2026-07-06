@@ -5,7 +5,7 @@ status: pending
 priority: P3
 branch: "develop"
 tags: [backtest, engine, statistics, tdd]
-blockedBy: [trading-calulation-fix/r2-engine-restructure, 260705-2119-r3-commission-abstraction, 260705-2216-r4-broker-trade-emission-remove-fifo, 260706-0004-r5-report-service-gut-equity]  # R2/R3/R4 đều DONE → hết hard blocker. NHƯNG approach cũ dựa `_lot_tracker.lots` + `_consumed_pnl` đã bị R4 xoá; excursion phải REDESIGN track excursion trên `PositionAggregate` (broker SL/TP path `_fire_synthetic_exit`/`_check_sl_tp`) + đọc từ `TradeClosedEvent`, KHÔNG còn lot_tracker. Soft: R5 rename collector→BacktestReportAppService + gut equity (rebase nhẹ nếu chạy sau R5).
+blockedBy: [archive/trading-calulation-fix/r2-engine-restructure, archive/260705-2119-r3-commission-abstraction, archive/260705-2216-r4-broker-trade-emission-remove-fifo, archive/260706-0004-r5-report-service-gut-equity]  # TẤT CẢ blocker DONE + archived (initiative trading-calulation-fix đóng). Design docs: `../archive/trading-calulation-fix/design-execution-metrics-separation.md` (Model E). Approach cũ dựa `_lot_tracker.lots` + `_consumed_pnl` đã bị R4 xoá; excursion phải REDESIGN track trên `PositionAggregate` (broker SL/TP path `_fire_synthetic_exit`/`_check_sl_tp`) + đọc từ `TradeClosedEvent`, KHÔNG còn lot_tracker. Soft: R5 rename collector→BacktestReportAppService + gut equity.
 blocks: []
 created: "2026-06-30T01:56:28.266Z"
 createdBy: "ck:plan"
@@ -24,7 +24,7 @@ Tính **MAE** (Maximum Adverse Excursion), **MFE** (Maximum Favorable Excursion)
 
 **FORWARD-ONLY:** run mới sau deploy mới có; run cũ = null (không backfill). FE hiển thị "—".
 
-Brainstorm: [`../reports/brainstorm-260630-0031-backtest-research-workbench-report.md`](../reports/brainstorm-260630-0031-backtest-research-workbench-report.md)
+Brainstorm: [`../archive/260630-0031-backtest-research-workbench/reports/brainstorm-260630-0031-backtest-research-workbench-report.md`](../archive/260630-0031-backtest-research-workbench/reports/brainstorm-260630-0031-backtest-research-workbench-report.md)
 
 ## Decisions
 
