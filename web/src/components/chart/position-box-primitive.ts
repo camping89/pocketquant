@@ -1,6 +1,7 @@
 /**
  * Lightweight-charts v5 primitive that renders complete position visualizations:
- * background box, SL/TP dashed lines with price labels, entry price line, and info text.
+ * background box, SL/TP dashed lines with price labels, entry + exit price lines,
+ * and info text.
  */
 
 import type {
@@ -193,6 +194,26 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           ctx.lineTo(rx, y)
           ctx.stroke()
           ctx.restore()
+        }
+
+        // Exit price line — dashed, clipped to the box span (entry→exit time),
+        // mirroring the entry line. Amber (#FFB74D, the info card's Exit color), not
+        // PnL green/red, so it never collides in hue+position with the SL/TP lines
+        // (a winner exits near TP, a loser near SL).
+        if (pos.exit_price != null) {
+          const yExit = this.series.priceToCoordinate(pos.exit_price)
+          if (yExit != null) {
+            const y = yExit * vR
+            ctx.save()
+            ctx.strokeStyle = 'rgba(255,183,77,0.75)'
+            ctx.lineWidth = vR
+            ctx.setLineDash([2 * hR, 2 * hR])
+            ctx.beginPath()
+            ctx.moveTo(lx, y)
+            ctx.lineTo(rx, y)
+            ctx.stroke()
+            ctx.restore()
+          }
         }
 
       }
