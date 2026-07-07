@@ -4,7 +4,7 @@ from datetime import datetime
 import numpy as np
 from pymongo import MongoClient, ASCENDING
 
-URL = "mongodb://pocketquant:***REMOVED***@207.148.79.60:52017/pocketquant?authSource=admin"
+import os; URL = os.environ["MONGODB_URL"]  # do NOT hardcode; export MONGODB_URL from .env
 db = MongoClient(URL, serverSelectionTimeoutMS=15000)["pocketquant"]
 RUN = "019f36d2-5f4f-75cc-95c6-49a7496c3a86"
 FR = 4.0  # maker round-trip friction bps

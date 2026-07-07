@@ -9,7 +9,7 @@
 # PHẦN A — Cách resume (đọc trước khi làm gì)
 
 **Dữ liệu gốc:** MongoDB prod (VPS), đọc-only:
-- `dbread` connection tên `pocketquant_prod` (đã add), HOẶC pymongo: `mongodb://pocketquant:***REMOVED***@207.148.79.60:52017/pocketquant?authSource=admin`, db `pocketquant`.
+- `dbread` connection tên `pocketquant_prod` (đã add), HOẶC pymongo: `MONGODB_URL` (từ `.env`, không hardcode), db `pocketquant`.
 - Collections: `backtest_runs`, `backtest_trades`, `bars` (symbol `BTCUSDT:BINANCE`; interval 1m/5m/15m/1h/4h/1d).
 - Run phân tích: `_id = 019f36d2-5f4f-75cc-95c6-49a7496c3a86` — strategy `engulfing_pullback30_touch`, 1m, 2025-07-06 → 2026-07-06, vốn 10,000 USD, `slippage_bps=1`, `commission_bps=3`.
 
