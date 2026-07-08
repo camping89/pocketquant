@@ -110,6 +110,13 @@ export function BacktestResultView({
     setHoveredTrade(null)
   }
 
+  // Click a trade (chart box or table row) to select it; click the same trade
+  // again to deselect (toggle its box + row highlight off). A null — click
+  // outside every box — always clears.
+  const toggleHighlightedTrade = (t: TradeRow | null) => {
+    setHighlightedTrade((prev) => (t && prev?.trade_id === t.trade_id ? null : t))
+  }
+
   const kpiCards = useMemo(
     () => (metrics ? buildMetricCards(metrics).filter((c) => KPI_KEYS.includes(c.key)) : []),
     [metrics],
@@ -178,7 +185,7 @@ export function BacktestResultView({
                 markers={markersQuery.data}
                 highlightedTrade={highlightedTrade}
                 hoveredTrade={hoveredTrade}
-                onSelectTrade={setHighlightedTrade}
+                onSelectTrade={toggleHighlightedTrade}
                 anchorEndDate={run.end_date}
               />
             </div>
@@ -197,7 +204,7 @@ export function BacktestResultView({
             runId={runId}
             enabled={isFinished}
             highlightedTradeId={highlightedTrade?.trade_id ?? null}
-            onTradeClick={setHighlightedTrade}
+            onTradeClick={toggleHighlightedTrade}
             onTradeHover={setHoveredTrade}
           />
         </div>

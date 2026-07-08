@@ -3,8 +3,10 @@ import {
   CandlestickSeries,
   HistogramSeries,
   createSeriesMarkers,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
   type SeriesMarker,
   type Time,
   type IRange,
@@ -25,6 +27,7 @@ import { toUTCTimestamp } from '../../api/market-data-api'
 import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { TradeMarker, TradeRow } from '../../api/backtest-api'
 import { PositionBoxPrimitive, type PositionData } from './position-box-primitive'
+import { fmtFee, fmtPnl, fmtPrice, fmtQty } from './position-format'
 import { pickTradeAtTime, tradeMarkerToRow } from './trade-hit-test'
 import { useTimezone } from '../../lib/use-timezone'
 import { useTheme } from '../../lib/use-theme'
@@ -100,6 +103,7 @@ export function TradingChart({
   const indicatorRefs = useRef<IndicatorSeriesRefs | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const boxPrimitiveRef = useRef<PositionBoxPrimitive | null>(null)
+  const priceLinesRef = useRef<IPriceLine[]>([])
 
   // Pagination view-preservation: fit the 80-bar window only on the first data
   // load per series; subsequent updates (older-page prepend, realtime rollover)
@@ -471,13 +475,62 @@ export function TradingChart({
     }
   }, [data, highlightedTrade, hoveredTrade, ambientBoxes])
 
+  // On-axis price labels for the active (clicked, else hovered) trade: entry /
+  // exit / SL / TP. The horizontal line is suppressed (lineVisible:false) — the
+  // library keeps only the de-conflicted on-axis label. The line itself is drawn
+  // clamped to the trade's box span by PositionBoxPrimitive, so it stays inside
+  // the box instead of running edge-to-edge. Only the active trade gets labels
+  // (drawing all trades' levels would swamp the axis).
+  useEffect(() => {
+    const candle = candleRef.current
+    if (!candle) return
+
+    for (const pl of priceLinesRef.current) candle.removePriceLine(pl)
+    priceLinesRef.current = []
+
+    const t = highlightedTrade ?? hoveredTrade
+    if (!t) return
+
+    const add = (price: number | null, color: string, title: string) => {
+      if (price == null) return
+      priceLinesRef.current.push(
+        candle.createPriceLine({
+          price,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          lineVisible: false,
+          axisLabelVisible: true,
+          title,
+        }),
+      )
+    }
+
+    add(t.entry_price, '#90CAF9', 'Entry')
+    add(t.exit_price, '#FFB74D', 'Exit')
+    add(t.sl_price, '#ef5350', 'SL')
+    add(t.tp_price, '#26a69a', 'TP')
+
+    return () => {
+      const c = candleRef.current
+      if (c) for (const pl of priceLinesRef.current) c.removePriceLine(pl)
+      priceLinesRef.current = []
+    }
+  }, [data, highlightedTrade, hoveredTrade])
+
   // Scroll the clicked trade into view. Driven by highlight only — hover must not
   // move the viewport, or scanning the table with the mouse would jerk the chart.
   useEffect(() => {
     const chart = chartRef.current
     const candles = data?.candles
     if (!chart || !candles || candles.length === 0) return
-    if (!highlightedTrade) return
+    if (!highlightedTrade) {
+      // A deselect (toggle-off via chart-box click) sets the latch on the hit
+      // but leaves no trade to scroll to — clear it here so the next table-row
+      // click isn't wrongly suppressed.
+      skipScrollOnSelectRef.current = false
+      return
+    }
     // Chart-zone click already has the trade on screen — don't yank the viewport.
     if (skipScrollOnSelectRef.current) {
       skipScrollOnSelectRef.current = false
@@ -505,20 +558,41 @@ export function TradingChart({
     }
   }, [highlightedTrade, data]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Selected (click) trade wins over a transient hover for the legend line.
+  const activeTrade = highlightedTrade ?? hoveredTrade
+
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>
       <div
         ref={containerRef}
         style={{ width: '100%', height: '100%' }}
       />
-      {ohlcv && (
+      {(ohlcv || activeTrade) && (
         <div className="chart-ohlcv-legend">
-          <span className="ohlcv-time">{ohlcv.t}</span>
-          <span>O <b>{ohlcv.o.toFixed(2)}</b></span>
-          <span>H <b>{ohlcv.h.toFixed(2)}</b></span>
-          <span>L <b>{ohlcv.l.toFixed(2)}</b></span>
-          <span>C <b style={{ color: ohlcv.c >= ohlcv.o ? 'var(--up-color)' : 'var(--down-color)' }}>{ohlcv.c.toFixed(2)}</b></span>
-          <span>V <b>{ohlcv.v.toFixed(2)}</b></span>
+          {ohlcv && (
+            <div className="legend-row">
+              <span className="ohlcv-time">{ohlcv.t}</span>
+              <span>O <b>{ohlcv.o.toFixed(2)}</b></span>
+              <span>H <b>{ohlcv.h.toFixed(2)}</b></span>
+              <span>L <b>{ohlcv.l.toFixed(2)}</b></span>
+              <span>C <b style={{ color: ohlcv.c >= ohlcv.o ? 'var(--up-color)' : 'var(--down-color)' }}>{ohlcv.c.toFixed(2)}</b></span>
+              <span>V <b>{ohlcv.v.toFixed(2)}</b></span>
+            </div>
+          )}
+          {activeTrade && (
+            <div className="legend-row">
+              <span style={{ color: (activeTrade.direction ?? 'LONG') === 'LONG' ? '#26a69a' : '#ef5350' }}>
+                [{activeTrade.direction ?? 'LONG'}]
+              </span>
+              <span>Entry <b style={{ color: '#90CAF9' }}>{fmtPrice(activeTrade.entry_price)}</b></span>
+              {activeTrade.exit_price != null && (
+                <span>Exit <b style={{ color: '#FFB74D' }}>{fmtPrice(activeTrade.exit_price)}</b></span>
+              )}
+              <span>Qty <b style={{ color: '#CFD8DC' }}>{fmtQty(activeTrade.quantity)}</b></span>
+              <span>PnL <b style={{ color: activeTrade.pnl >= 0 ? '#26a69a' : '#ef5350' }}>{fmtPnl(activeTrade.pnl)}</b></span>
+              <span>Fee <b style={{ color: '#90A4AE' }}>{fmtFee(activeTrade.commission)}</b></span>
+            </div>
+          )}
         </div>
       )}
       {isLoading && <div className="chart-overlay">Loading...</div>}

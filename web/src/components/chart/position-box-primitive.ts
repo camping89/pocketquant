@@ -1,7 +1,15 @@
 /**
- * Lightweight-charts v5 primitive that renders complete position visualizations:
- * background box, SL/TP dashed lines with price labels, entry + exit price lines,
- * and info text.
+ * Lightweight-charts v5 primitive that renders position ZONES onto the chart in two
+ * stacked layers:
+ *   - Fill layer (zOrder 'bottom', drawBackground) — behind the candles: an ambient
+ *     soft zone per trade (fill + faint entry line) plus a stronger shaded SL↔TP zone
+ *     for the selected / hovered trade.
+ *   - Level-line layer (zOrder 'top', draw) — above the candles: dashed entry/exit/
+ *     SL/TP lines for the active detail box only, each CLAMPED to the trade's box
+ *     span (not full-width). Their on-axis price labels are owned by TradingChart
+ *     (createPriceLine with lineVisible:false, axisLabelVisible:true) so the label
+ *     reaches the price axis while the line stays inside the box.
+ * Numeric stats render in the HTML OHLCV legend.
  */
 
 import type {
@@ -14,8 +22,6 @@ import type {
   Time,
 } from 'lightweight-charts'
 import type { CanvasRenderingTarget2D } from 'fancy-canvas'
-import { fmtPrice } from './position-format'
-import { drawPositionInfoCard } from './position-box-info-card'
 
 export interface PositionData {
   x1: Time
@@ -37,26 +43,42 @@ export interface PositionData {
   ambient?: boolean
 }
 
-const FONT_SIZE = 9   // CSS px
-const PAD = 3         // CSS px
+// On-axis label colors for the active trade's levels — kept in sync with the
+// createPriceLine titles in TradingChart so the box-bounded line matches its
+// axis label hue.
+const LEVEL_COLORS = {
+  entry: '#90CAF9',
+  exit: '#FFB74D',
+  sl: '#ef5350',
+  tp: '#26a69a',
+} as const
 
-function dashedLine(
-  ctx: CanvasRenderingContext2D,
-  x1: number, y: number, x2: number,
-  color: string, hR: number, vR: number,
-) {
-  ctx.save()
-  ctx.strokeStyle = color
-  ctx.lineWidth = vR
-  ctx.setLineDash([4 * hR, 3 * hR])
-  ctx.beginPath()
-  ctx.moveTo(x1, y)
-  ctx.lineTo(x2, y)
-  ctx.stroke()
-  ctx.restore()
+// Project a position's [x1, x2] span to canvas x-pixels, clamped to the canvas
+// and to the visible time window. Returns null when the box is off-screen or
+// collapses to zero width. Shared by the zone-fill and level-line renderers.
+function projectSpan(
+  pos: PositionData,
+  timeScale: ReturnType<IChartApiBase<Time>['timeScale']>,
+  hR: number,
+  width: number,
+  vFrom: number | null,
+  vTo: number | null,
+): { lx: number; rx: number; boxW: number } | null {
+  if (vFrom != null && vTo != null && typeof pos.x1 === 'number' && typeof pos.x2 === 'number') {
+    if (Math.max(pos.x1, pos.x2) < vFrom || Math.min(pos.x1, pos.x2) > vTo) return null
+  }
+  const cx1 = timeScale.timeToCoordinate(pos.x1)
+  const cx2 = timeScale.timeToCoordinate(pos.x2)
+  if (cx1 == null || cx2 == null) return null
+  const lx = Math.max(Math.min(cx1, cx2) * hR, 0)
+  const rx = Math.min(Math.max(cx1, cx2) * hR, width)
+  const boxW = rx - lx
+  if (boxW <= 0) return null
+  return { lx, rx, boxW }
 }
 
-class BoxRenderer implements IPrimitivePaneRenderer {
+// Zone fills — the 'bottom' layer, behind the candles (drawBackground).
+class FillRenderer implements IPrimitivePaneRenderer {
   private readonly positions: PositionData[]
   private readonly chart: IChartApiBase<Time>
   private readonly series: ISeriesApi<'Candlestick', Time>
@@ -71,9 +93,7 @@ class BoxRenderer implements IPrimitivePaneRenderer {
     this.series = series
   }
 
-  draw(target: CanvasRenderingTarget2D): void {
-    void target
-  }
+  draw(): void {}
 
   drawBackground(target: CanvasRenderingTarget2D): void {
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hR, verticalPixelRatio: vR, bitmapSize }) => {
@@ -90,21 +110,9 @@ class BoxRenderer implements IPrimitivePaneRenderer {
       const vTo = typeof vr?.to === 'number' ? vr.to : null
 
       for (const pos of this.positions) {
-        if (vFrom != null && vTo != null && typeof pos.x1 === 'number' && typeof pos.x2 === 'number') {
-          if (Math.max(pos.x1, pos.x2) < vFrom || Math.min(pos.x1, pos.x2) > vTo) continue
-        }
-
-        const cx1 = timeScale.timeToCoordinate(pos.x1)
-        const cx2 = timeScale.timeToCoordinate(pos.x2)
-        if (cx1 == null || cx2 == null) continue
-
-        // Clamp the drawn span to the canvas — a long-duration trade projects to a
-        // box thousands of px wide, and filling (worse, blurring) a rect that size
-        // is what tanks the frame. Off-screen boxes collapse to zero width and skip.
-        const lx = Math.max(Math.min(cx1, cx2) * hR, 0)
-        const rx = Math.min(Math.max(cx1, cx2) * hR, width)
-        const boxW = rx - lx
-        if (boxW <= 0) continue
+        const span = projectSpan(pos, timeScale, hR, width, vFrom, vTo)
+        if (!span) continue
+        const { lx, rx, boxW } = span
 
         const ySL = pos.sl_price != null ? this.series.priceToCoordinate(pos.sl_price) : null
         const yTP = pos.tp_price != null ? this.series.priceToCoordinate(pos.tp_price) : null
@@ -135,98 +143,29 @@ class BoxRenderer implements IPrimitivePaneRenderer {
           continue
         }
 
+        // Selected / hovered trade: a stronger SL↔TP zone fill only. The entry/TP/
+        // SL/exit levels themselves are drawn as box-bounded lines by LineRenderer
+        // (on top of the candles), with on-axis labels owned by TradingChart. Color
+        // by realized PnL (closed) or direction (open).
         if (ySL != null && yTP != null) {
           const boxTop = Math.min(ySL, yTP) * vR
           const boxH = Math.abs(ySL - yTP) * vR
-          // Color by realized PnL (closed positions); open positions tinted by direction
           const isOpen = pos.exit_price == null
           const dir = pos.direction ?? 'LONG'
-          if (isOpen) {
-            ctx.fillStyle = dir === 'LONG' ? 'rgba(38,166,154,0.06)' : 'rgba(239,83,80,0.06)'
-          } else {
-            ctx.fillStyle = pos.pnl >= 0 ? 'rgba(38,166,154,0.09)' : 'rgba(239,83,80,0.09)'
-          }
+          const win = isOpen ? dir === 'LONG' : pos.pnl >= 0
+          const alpha = pos.highlightKind ? 0.24 : isOpen ? 0.06 : 0.09
+          ctx.fillStyle = win ? `rgba(38,166,154,${alpha})` : `rgba(239,83,80,${alpha})`
           ctx.fillRect(lx, boxTop, boxW, boxH)
-
-          // Highlight outline (solid for click selection, dashed for hover)
-          if (pos.highlightKind) {
-            ctx.save()
-            ctx.strokeStyle = '#FFD600'
-            ctx.lineWidth = 2 * vR
-            if (pos.highlightKind === 'hover') ctx.setLineDash([5 * hR, 4 * hR])
-            ctx.strokeRect(lx, boxTop, boxW, boxH)
-            ctx.restore()
-          }
         }
-
-        if (pos.tp_price != null && yTP != null) {
-          const y = yTP * vR
-          dashedLine(ctx, lx, y, rx, '#26a69a', hR, vR)
-          ctx.save()
-          ctx.font = `${FONT_SIZE * vR}px monospace`
-          ctx.fillStyle = '#26a69a'
-          ctx.textAlign = 'right'
-          ctx.textBaseline = 'bottom'
-          ctx.fillText(`TP ${fmtPrice(pos.tp_price)}`, rx - PAD * hR, y - PAD * vR)
-          ctx.restore()
-        }
-
-        if (pos.sl_price != null && ySL != null) {
-          const y = ySL * vR
-          dashedLine(ctx, lx, y, rx, '#ef5350', hR, vR)
-          ctx.save()
-          ctx.font = `${FONT_SIZE * vR}px monospace`
-          ctx.fillStyle = '#ef5350'
-          ctx.textAlign = 'right'
-          ctx.textBaseline = 'top'
-          ctx.fillText(`SL ${fmtPrice(pos.sl_price)}`, rx - PAD * hR, y + PAD * vR)
-          ctx.restore()
-        }
-
-        if (yEntry != null) {
-          const y = yEntry * vR
-          ctx.save()
-          ctx.strokeStyle = 'rgba(144,202,249,0.6)'
-          ctx.lineWidth = vR
-          ctx.setLineDash([2 * hR, 2 * hR])
-          ctx.beginPath()
-          ctx.moveTo(lx, y)
-          ctx.lineTo(rx, y)
-          ctx.stroke()
-          ctx.restore()
-        }
-
-        // Exit price line — dashed, clipped to the box span (entry→exit time),
-        // mirroring the entry line. Amber (#FFB74D, the info card's Exit color), not
-        // PnL green/red, so it never collides in hue+position with the SL/TP lines
-        // (a winner exits near TP, a loser near SL).
-        if (pos.exit_price != null) {
-          const yExit = this.series.priceToCoordinate(pos.exit_price)
-          if (yExit != null) {
-            const y = yExit * vR
-            ctx.save()
-            ctx.strokeStyle = 'rgba(255,183,77,0.75)'
-            ctx.lineWidth = vR
-            ctx.setLineDash([2 * hR, 2 * hR])
-            ctx.beginPath()
-            ctx.moveTo(lx, y)
-            ctx.lineTo(rx, y)
-            ctx.stroke()
-            ctx.restore()
-          }
-        }
-
       }
     })
   }
 }
 
-/**
- * Info cards draw in a separate top-layer pane view so they sit ABOVE the
- * candles — a card at the box's zOrder would be sliced by every candle drawn
- * over the trade region. Box left + top are recomputed here per frame.
- */
-class CardRenderer implements IPrimitivePaneRenderer {
+// Level lines (entry/exit/SL/TP) for the active detail box — the 'top' layer, ON
+// TOP of the candles (draw()), each clamped to the box span. The matching on-axis
+// labels are owned by TradingChart's price lines (lineVisible:false, label-only).
+class LineRenderer implements IPrimitivePaneRenderer {
   private readonly positions: PositionData[]
   private readonly chart: IChartApiBase<Time>
   private readonly series: ISeriesApi<'Candlestick', Time>
@@ -244,36 +183,54 @@ class CardRenderer implements IPrimitivePaneRenderer {
   draw(target: CanvasRenderingTarget2D): void {
     target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hR, verticalPixelRatio: vR, bitmapSize }) => {
       const timeScale = this.chart.timeScale()
+      const width = bitmapSize.width
+      const vr = timeScale.getVisibleRange()
+      const vFrom = typeof vr?.from === 'number' ? vr.from : null
+      const vTo = typeof vr?.to === 'number' ? vr.to : null
 
       for (const pos of this.positions) {
-        if (pos.ambient) continue
-        const cx1 = timeScale.timeToCoordinate(pos.x1)
-        const cx2 = timeScale.timeToCoordinate(pos.x2)
-        if (cx1 == null || cx2 == null) continue
+        // Only the detail (clicked/hovered) box shows level lines — ambient boxes
+        // keep just their faint entry line drawn in the fill layer.
+        if (!pos.highlightKind) continue
 
-        const ySL = pos.sl_price != null ? this.series.priceToCoordinate(pos.sl_price) : null
-        const yTP = pos.tp_price != null ? this.series.priceToCoordinate(pos.tp_price) : null
-        const yEntry = this.series.priceToCoordinate(pos.entry_price)
-        const top = ySL != null && yTP != null
-          ? Math.min(ySL, yTP) * vR
-          : (yEntry != null ? yEntry * vR : null)
-        if (top == null) continue
+        const span = projectSpan(pos, timeScale, hR, width, vFrom, vTo)
+        if (!span) continue
+        const { lx, rx } = span
 
-        drawPositionInfoCard(ctx, hR, vR, bitmapSize, { left: Math.min(cx1, cx2) * hR, top }, pos)
+        const line = (price: number | null, color: string) => {
+          if (price == null) return
+          const yc = this.series.priceToCoordinate(price)
+          if (yc == null) return
+          const y = yc * vR
+          ctx.save()
+          ctx.strokeStyle = color
+          ctx.lineWidth = vR
+          ctx.setLineDash([4 * hR, 4 * hR])
+          ctx.beginPath()
+          ctx.moveTo(lx, y)
+          ctx.lineTo(rx, y)
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        line(pos.entry_price, LEVEL_COLORS.entry)
+        line(pos.exit_price, LEVEL_COLORS.exit)
+        line(pos.sl_price, LEVEL_COLORS.sl)
+        line(pos.tp_price, LEVEL_COLORS.tp)
       }
     })
   }
 }
 
-class BoxPaneView implements IPrimitivePaneView {
-  private _renderer: BoxRenderer
+class FillPaneView implements IPrimitivePaneView {
+  private _renderer: FillRenderer
 
   constructor(
     positions: PositionData[],
     chart: IChartApiBase<Time>,
     series: ISeriesApi<'Candlestick', Time>,
   ) {
-    this._renderer = new BoxRenderer(positions, chart, series)
+    this._renderer = new FillRenderer(positions, chart, series)
   }
 
   zOrder() {
@@ -285,15 +242,15 @@ class BoxPaneView implements IPrimitivePaneView {
   }
 }
 
-class CardPaneView implements IPrimitivePaneView {
-  private _renderer: CardRenderer
+class LinePaneView implements IPrimitivePaneView {
+  private _renderer: LineRenderer
 
   constructor(
     positions: PositionData[],
     chart: IChartApiBase<Time>,
     series: ISeriesApi<'Candlestick', Time>,
   ) {
-    this._renderer = new CardRenderer(positions, chart, series)
+    this._renderer = new LineRenderer(positions, chart, series)
   }
 
   zOrder() {
@@ -316,8 +273,8 @@ export class PositionBoxPrimitive implements ISeriesPrimitive<Time> {
   attached(param: SeriesAttachedParameter<Time, 'Candlestick'>): void {
     const chart = param.chart as IChartApiBase<Time>
     this._views = [
-      new BoxPaneView(this._positions, chart, param.series),
-      new CardPaneView(this._positions, chart, param.series),
+      new FillPaneView(this._positions, chart, param.series),
+      new LinePaneView(this._positions, chart, param.series),
     ]
   }
 

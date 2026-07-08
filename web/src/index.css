@@ -269,11 +269,17 @@ input, select {
   left: 8px;
   z-index: 10;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 12px;
   color: var(--text-secondary);
   pointer-events: none;
+}
+.chart-ohlcv-legend .legend-row {
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
 }
 .chart-ohlcv-legend b {
   color: var(--text-primary);
