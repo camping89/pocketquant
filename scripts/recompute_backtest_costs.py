@@ -1,25 +1,28 @@
-"""Recompute finished backtest runs at a target slippage.
+"""Recompute finished backtest runs at target trading costs (slippage + commission).
 
 Re-executes existing runs through the backtest engine at ``--slippage-bps`` and
-overwrites the same run_id in place. The engine is the source of truth: slippage
-is baked into every fill price and propagates into PnL, equity curve, Sharpe,
-drawdown and profit factor, so only a full replay yields internally-consistent
-metrics — hand-patching stored metrics is not correct.
+``--commission-bps`` and overwrites the same run_id in place. The engine is the
+source of truth: slippage is baked into every fill price and commission into
+position sizing + net equity, and both propagate into PnL, equity curve, Sharpe,
+drawdown and profit factor — so only a full replay yields internally-consistent
+metrics. Hand-patching stored metrics is not correct.
 
 Each run inherits its own ``config_snapshot`` (symbol/interval/range/params);
-only ``slippage_bps`` is overridden. Orders/trades are deleted before the replay
-(save is upsert-by-fresh-id, so stale docs would otherwise linger) and the
-display ``name`` is restored afterwards (the engine writes the config name, not
-the label). A built-in verification asserts slippage math, gross-PnL identity
-and order/trade count consistency per run.
+only ``slippage_bps`` and ``commission_bps`` are overridden. Orders/trades are
+deleted before the replay (save is upsert-by-fresh-id, so stale docs would
+otherwise linger) and the display ``name`` is restored afterwards (the engine
+writes the config name, not the label). A built-in verification asserts slippage
+math, gross-PnL identity, the target cost snapshot and order/trade count
+consistency per run.
 
 Usage:
-    uv run python scripts/recompute_backtest_slippage.py --run-id <id> [--run-id <id> ...]
-    uv run python scripts/recompute_backtest_slippage.py --all-finished [--dry-run]
+    uv run python scripts/recompute_backtest_costs.py --run-id <id> [--run-id <id> ...]
+    uv run python scripts/recompute_backtest_costs.py --all-finished [--dry-run]
 
 Selection:
-    --all-finished    all runs with status=finished AND slippage_bps != target
-    --run-id          explicit id(s), repeatable; recomputed regardless of slippage
+    --all-finished    all finished runs whose slippage_bps OR commission_bps
+                      differs from the target
+    --run-id          explicit id(s), repeatable; recomputed regardless of cost
 
 A run whose config_snapshot predates the isoformat-string date shape, or whose
 bars for the snapshot range are gone, surfaces as a per-run error/degenerate
@@ -35,7 +38,7 @@ failed or failed verification; 2 = bad invocation / MONGODB_URL unset.
 MONGODB_URL must be set in environment (never a CLI flag). The per-run save is
 ~26k individual upserts, ~26 min/run over the remote VPS link but seconds
 against local Mongo — run inside the app container on the VPS:
-`docker exec pocketquant-app python scripts/recompute_backtest_slippage.py ...`.
+`docker exec pocketquant-app python scripts/recompute_backtest_costs.py ...`.
 """
 
 from __future__ import annotations
@@ -64,7 +67,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps, run_single
 
-logger = get_logger("scripts.recompute_backtest_slippage")
+logger = get_logger("scripts.recompute_backtest_costs")
 
 # Verification tolerances / sample sizes.
 _REL_TOL = 1e-4          # relative error on price/PnL identities
@@ -87,13 +90,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--all-finished",
         action="store_true",
-        help="Recompute every finished run whose slippage_bps != target.",
+        help="Recompute every finished run whose slippage_bps or commission_bps != target.",
     )
     parser.add_argument(
         "--slippage-bps",
         type=float,
         default=0.5,
         help="Target slippage in basis points (default 0.5).",
+    )
+    parser.add_argument(
+        "--commission-bps",
+        type=float,
+        default=3.0,
+        help="Target commission in basis points (default 3.0).",
     )
     parser.add_argument(
         "--dry-run",
@@ -110,14 +119,21 @@ async def _select_run_ids(db: Database, args: argparse.Namespace) -> list[str]:
 
     collection = db.get_collection(COLLECTION_BACKTEST_RUNS)
     cursor = collection.find(
-        {"status": "finished", "config_snapshot.slippage_bps": {"$ne": args.slippage_bps}},
+        {
+            "status": "finished",
+            "$or": [
+                {"config_snapshot.slippage_bps": {"$ne": args.slippage_bps}},
+                {"config_snapshot.commission_bps": {"$ne": args.commission_bps}},
+            ],
+        },
         {"_id": 1},
     ).sort("started_at", 1)
     return [doc["_id"] async for doc in cursor]
 
 
 def _verify(
-    target: float,
+    target_slip: float,
+    target_comm: float,
     before: BacktestResult,
     after: BacktestResult,
     trades: list[Any],
@@ -127,14 +143,17 @@ def _verify(
     failures: list[str] = []
 
     snap_slip = after.config_snapshot.get("slippage_bps")
-    if snap_slip != target:
-        failures.append(f"config_snapshot.slippage_bps={snap_slip} != target {target}")
+    if snap_slip != target_slip:
+        failures.append(f"config_snapshot.slippage_bps={snap_slip} != target {target_slip}")
+    snap_comm = after.config_snapshot.get("commission_bps")
+    if snap_comm != target_comm:
+        failures.append(f"config_snapshot.commission_bps={snap_comm} != target {target_comm}")
     if after.status != "finished":
         failures.append(f"status={after.status} != finished")
 
     # A replay that produced no trades where the original had some means the bars
     # were gone or the engine failed mid-run — and the original was already
-    # overwritten. Flag it loudly (re-run at the old slippage restores from bars).
+    # overwritten. Flag it loudly (re-run at the old costs restores from bars).
     if before.metrics.total_trades > 0 and after.metrics.total_trades == 0:
         failures.append(
             f"degenerate replay: before={before.metrics.total_trades} trades, after=0 "
@@ -153,7 +172,7 @@ def _verify(
     # exit side (LONG exits SELL → tp·(1−s); SHORT exits BUY → tp·(1+s)). Identify
     # a TP-hit exit by proximity to the raw TP (slippage ≪ the SL/TP gap), then
     # require every such exit to match the slippage-adjusted price exactly.
-    s = target / 1e4
+    s = target_slip / 1e4
     tp_exits = 0
     tp_matched = 0
     for t in trades:
@@ -169,7 +188,7 @@ def _verify(
         failures.append(f"TP-exit slippage math: only {tp_matched}/{tp_exits} TP exits matched")
 
     # Gross-PnL identity: pnl == sign·(exit − entry)·qty (commission tracked
-    # separately; stored pnl is gross).
+    # separately; stored pnl is gross, so this holds independent of commission).
     for t in trades[:_PNL_SAMPLE]:
         sign = 1.0 if t.direction == "LONG" else -1.0
         expected_pnl = sign * (t.exit_price - t.entry_price) * t.quantity
@@ -188,7 +207,8 @@ async def _recompute_one(
     order_repo: BacktestOrderRepository,
     trade_repo: BacktestTradeRepository,
     run_id: str,
-    target: float,
+    target_slip: float,
+    target_comm: float,
     dry_run: bool,
 ) -> dict[str, Any]:
     """Recompute a single run; returns a summary row (never raises)."""
@@ -200,9 +220,9 @@ async def _recompute_one(
             row["failures"] = ["run not found"]
             return row
 
-        old_slip = before.config_snapshot.get("slippage_bps")
         row["before"] = {
-            "slippage_bps": old_slip,
+            "slippage_bps": before.config_snapshot.get("slippage_bps"),
+            "commission_bps": before.config_snapshot.get("commission_bps"),
             "total_return": before.metrics.total_return,
             "sharpe": before.metrics.sharpe_ratio,
             "trades": before.metrics.total_trades,
@@ -220,7 +240,11 @@ async def _recompute_one(
         await order_repo.delete_by_run(run_id)
         await trade_repo.delete_by_run(run_id)
 
-        payload = {**before.config_snapshot, "slippage_bps": target}
+        payload = {
+            **before.config_snapshot,
+            "slippage_bps": target_slip,
+            "commission_bps": target_comm,
+        }
         await run_single(deps, payload, run_id=run_id)
         await run_repo.set_name(run_id, before.name)  # engine wrote config name, not the label
 
@@ -231,10 +255,11 @@ async def _recompute_one(
             return row
         trades = await trade_repo.list_by_run(run_id)
         orders = await order_repo.list_by_run(run_id)
-        failures = _verify(target, before, after, trades, len(orders))
+        failures = _verify(target_slip, target_comm, before, after, trades, len(orders))
 
         row["after"] = {
             "slippage_bps": after.config_snapshot.get("slippage_bps"),
+            "commission_bps": after.config_snapshot.get("commission_bps"),
             "total_return": after.metrics.total_return,
             "sharpe": after.metrics.sharpe_ratio,
             "trades": after.metrics.total_trades,
@@ -250,8 +275,11 @@ async def _recompute_one(
     return row
 
 
-def _print_summary(rows: list[dict[str, Any]], target: float) -> None:
-    print(f"\n=== Recompute summary (target slippage {target} bps) ===")
+def _print_summary(rows: list[dict[str, Any]], target_slip: float, target_comm: float) -> None:
+    print(
+        f"\n=== Recompute summary "
+        f"(target slippage {target_slip} bps, commission {target_comm} bps) ==="
+    )
     for r in rows:
         rid = r["run_id"]
         status = r["status"]
@@ -260,6 +288,7 @@ def _print_summary(rows: list[dict[str, Any]], target: float) -> None:
             print(
                 f"[{status:>13}] {rid}  "
                 f"slip {b['slippage_bps']}→{a['slippage_bps']}  "
+                f"comm {b['commission_bps']}→{a['commission_bps']}  "
                 f"ret {b['total_return']:.4f}→{a['total_return']:.4f}  "
                 f"sharpe {b['sharpe']:.3f}→{a['sharpe']:.3f}  "
                 f"trades {b['trades']}→{a['trades']}"
@@ -267,7 +296,9 @@ def _print_summary(rows: list[dict[str, Any]], target: float) -> None:
         elif "before" in r:
             b = r["before"]
             print(
-                f"[{status:>13}] {rid}  slip {b['slippage_bps']}→{target}  "
+                f"[{status:>13}] {rid}  "
+                f"slip {b['slippage_bps']}→{target_slip}  "
+                f"comm {b['commission_bps']}→{target_comm}  "
                 f"ret {b['total_return']:.4f}  sharpe {b['sharpe']:.3f}  trades {b['trades']}  "
                 f"(name={b['name']!r})"
             )
@@ -313,6 +344,7 @@ async def run_recompute(args: argparse.Namespace) -> int:
             "recompute.start",
             targets=len(run_ids),
             slippage_bps=args.slippage_bps,
+            commission_bps=args.commission_bps,
             dry_run=args.dry_run,
         )
 
@@ -332,13 +364,13 @@ async def run_recompute(args: argparse.Namespace) -> int:
             rows.append(
                 await _recompute_one(
                     deps, run_repo, order_repo, trade_repo,
-                    run_id, args.slippage_bps, args.dry_run,
+                    run_id, args.slippage_bps, args.commission_bps, args.dry_run,
                 )
             )
     finally:
         await db.disconnect()
 
-    _print_summary(rows, args.slippage_bps)
+    _print_summary(rows, args.slippage_bps, args.commission_bps)
 
     if args.dry_run:
         return 0

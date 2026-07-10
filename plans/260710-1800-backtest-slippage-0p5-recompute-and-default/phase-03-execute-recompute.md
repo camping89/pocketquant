@@ -9,23 +9,27 @@ effort: ""
 
 ## Overview
 
-Backfill: recompute the 5 finished non-0.5 runs to 0.5 bps using the Phase-2 script, on a host with low-latency Mongo access, then verify each run end-to-end.
+Backfill: recompute the finished runs not yet at (slip 0.5, comm 3.0) to those costs using the Phase-2 script, on a host with low-latency Mongo access, then verify each run end-to-end.
 
 ## Target Runs (query at execution time, don't hardcode)
 
 ```
 db.backtest_runs.find(
-  { status: "finished", "config_snapshot.slippage_bps": { $ne: 0.5 } },
-  { _id: 1, "config_snapshot.slippage_bps": 1, name: 1 }
+  { status: "finished", $or: [
+      { "config_snapshot.slippage_bps": { $ne: 0.5 } },
+      { "config_snapshot.commission_bps": { $ne: 3.0 } } ] },
+  { _id: 1, "config_snapshot.slippage_bps": 1, "config_snapshot.commission_bps": 1, name: 1 }
 )
 ```
-Expected: 4 runs @ 10.0 bps + 1 run @ 5.0 bps (the 2 failed @ 5.0 are excluded by `status: finished`). Confirm exactly 5 before running.
+Expected: 5 finished runs (4 originally @ 10/10 bps + 1 @ 5/5 bps; the 2 failed @ 5/5 are excluded by `status: finished`; the most-recent run already at 0.5/3.0 is skipped). Confirm the target set before running.
+
+**Concurrency guard:** the replay does delete-then-rerun per run_id. Before starting, confirm no other recompute is in flight against the same Mongo (`ps`/`pgrep recompute`, or a running `docker exec … recompute_*`) and do not redeploy the app container mid-run — a container restart kills an in-flight `docker exec` and leaves that run empty until re-run.
 
 ## Execution Host — pick low-latency Mongo
 
 The per-run save is ~26k individual upserts. Over the remote VPS link that was **~26 min/run** (~2 h for 5). On the VPS against local Mongo it's seconds.
 
-- **Preferred:** run on the VPS. First verify how prod runs code (`docs/deployment-guide.md` + memory `vps-prod-access-reality`: prod is `root@…:22`, Mongo host-port 52017). If the app container has the repo (image or mount), run `docker exec pocketquant-app python scripts/recompute_backtest_slippage.py --all-finished --dry-run` then without `--dry-run`. If the script isn't in the container yet, `git pull` on the VPS / redeploy first (Phase 1+2 must be pushed).
+- **Preferred:** run on the VPS. First verify how prod runs code (`docs/deployment-guide.md` + memory `vps-prod-access-reality`: prod is `root@…:22`, Mongo host-port 52017). If the app container has the repo (image or mount), run `docker exec pocketquant-app python scripts/recompute_backtest_costs.py --all-finished --dry-run` then without `--dry-run`. If the script isn't in the container yet, `git pull` on the VPS / redeploy first (Phase 1+2 must be pushed).
 - **Fallback:** run locally over the remote link (script already env-driven via `.env` → VPS Mongo). Correct but slow; fine for a one-time backfill. Use `--run-id` per run to checkpoint, or run detached.
 
 ## Implementation Steps
@@ -34,7 +38,7 @@ The per-run save is ~26k individual upserts. Over the remote VPS link that was *
 2. `--dry-run` first: confirm the target list is exactly the 5 expected runs.
 3. Execute the recompute (all 5, or one `--run-id` at a time for checkpointing).
 4. Per-run verification (script does this; also spot-check via DB):
-   - `config_snapshot.slippage_bps == 0.5`, `status == finished`, display name preserved.
+   - `config_snapshot.slippage_bps == 0.5` AND `commission_bps == 3.0`, `status == finished`, display name preserved.
    - `metrics.total_trades` == `backtest_trades` count for the run == `backtest_orders`-derived count.
    - TP-exit slippage math + gross-PnL identity pass.
    - Metrics moved in the expected direction (less slippage → higher return / profit_factor, same trade count).
@@ -43,13 +47,13 @@ The per-run save is ~26k individual upserts. Over the remote VPS link that was *
 
 ## Related Code Files
 
-- Use: `scripts/recompute_backtest_slippage.py` (Phase 2)
+- Use: `scripts/recompute_backtest_costs.py` (Phase 2)
 - Reference: `docs/deployment-guide.md` (execution host), memory `vps-prod-access-reality`.
 
 ## Success Criteria
 
-- [ ] All 5 target runs: `slippage_bps = 0.5`, recomputed metrics, consistent order/trade counts, names preserved.
-- [ ] No `finished` run left with `slippage_bps != 0.5` (except any intentionally out-of-scope) and none with 0 trades.
+- [ ] All 5 target runs: `slippage_bps = 0.5` AND `commission_bps = 3.0`, recomputed metrics, consistent order/trade counts, names preserved.
+- [ ] No `finished` run left with `slippage_bps != 0.5` or `commission_bps != 3.0` (except any intentionally out-of-scope) and none with 0 trades.
 - [ ] Frontend renders updated data for each run.
 
 ## Risk Assessment
