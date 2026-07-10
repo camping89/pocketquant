@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type CSSProperties } from 'react'
+import { Fragment, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { BacktestRunResult, TradeRow } from '../../api/backtest-api'
 import type { IndicatorConfig, Interval } from '../../types/market-data'
 import { useBacktestMarkers, useBacktestStats } from '../../hooks/use-backtest-run'
@@ -50,6 +50,15 @@ function coerceTab(raw: string | undefined): ResultTab {
 
 const KPI_KEYS = ['total_return', 'cagr', 'sharpe', 'max_dd', 'win_rate']
 
+const CHART_MIN = 300
+const CHART_MAX = 1200
+const CHART_DEFAULT = 576
+const CHART_STORAGE_KEY = 'backtest-trades-chart-height'
+
+function clampChart(h: number) {
+  return Math.min(CHART_MAX, Math.max(CHART_MIN, h))
+}
+
 const sectionTitle: CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
@@ -90,6 +99,34 @@ export function BacktestResultView({
   // server-side re-sorts. The clicked/hovered TradeRow feeds the chart's box.
   const [highlightedTrade, setHighlightedTrade] = useState<TradeRow | null>(null)
   const [hoveredTrade, setHoveredTrade] = useState<TradeRow | null>(null)
+  const [chartHeight, setChartHeight] = useState(() => {
+    const saved = Number(localStorage.getItem(CHART_STORAGE_KEY))
+    return saved ? clampChart(saved) : CHART_DEFAULT
+  })
+
+  // Drag the chart's bottom edge to resize. Native CSS `resize` is defeated here
+  // because the lightweight-charts canvas covers the corner grip and swallows
+  // the pointer, so we drive height explicitly (persisted, like the rail width).
+  function startChartResize(e: ReactPointerEvent) {
+    e.preventDefault()
+    const startY = e.clientY
+    const startH = chartHeight
+    function onMove(ev: PointerEvent) {
+      setChartHeight(clampChart(startH + ev.clientY - startY))
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+      setChartHeight((h) => {
+        localStorage.setItem(CHART_STORAGE_KEY, String(h))
+        return h
+      })
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.body.style.cursor = 'ns-resize'
+  }
   const metrics = run.metrics
   const isFinished = run.status === 'finished'
   const tradesActive = tab === 'trades' && isFinished
@@ -177,7 +214,7 @@ export function BacktestResultView({
       {tab === 'trades' && (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {run.symbol && run.interval ? (
-            <div className="backtest-trades-chart">
+            <div className="backtest-trades-chart" style={{ height: chartHeight }}>
               <TradingChart
                 symbol={run.symbol}
                 interval={run.interval as Interval}
@@ -187,6 +224,14 @@ export function BacktestResultView({
                 hoveredTrade={hoveredTrade}
                 onSelectTrade={toggleHighlightedTrade}
                 anchorEndDate={run.end_date}
+              />
+              <div
+                className="backtest-trades-chart__resizer"
+                onPointerDown={startChartResize}
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Resize chart height"
+                title="Drag to resize chart height"
               />
             </div>
           ) : (

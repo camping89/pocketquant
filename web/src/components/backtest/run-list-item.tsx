@@ -40,9 +40,6 @@ export function RunListItem({ row, active, selected, disableSelect, onSelect, on
         <span style={{ color: ret >= 0 ? 'var(--up-color)' : 'var(--down-color)' }}>{pct(row.metrics?.total_return)}</span>
         <span>SR {row.metrics ? row.metrics.sharpe_ratio.toFixed(2) : '—'}</span>
         <span>{row.metrics?.total_trades ?? '—'} trades</span>
-        {row.verdict && (
-          <span className="backtest-run-item__verdict" title={row.verdict}>· {row.verdict}</span>
-        )}
       </div>
     </div>
   )
