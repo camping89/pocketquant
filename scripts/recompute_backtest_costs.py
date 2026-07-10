@@ -32,6 +32,13 @@ Idempotent: delete-then-replay is repeatable, so a failed run can be re-run
 safely. Per-run failures are isolated (one bad run does not abort the batch) and
 listed in the summary; exit is non-zero if any run failed.
 
+Double-persist race: the engine intermittently double-subscribes trade closures,
+persisting every trade/order twice for a run. Two guards: each run is verified by
+trade-doc count and replayed again (bounded) until clean; and a batch (multiple
+run_ids / --all-finished) fans out to one child process per run so a stuck run
+never leaks into the next. Batch children run at LOG_LEVEL=WARNING (a full
+replay's per-bar INFO logs otherwise flood stdout).
+
 Exit codes: 0 = all target runs recomputed + verified; 1 = one or more runs
 failed or failed verification; 2 = bad invocation / MONGODB_URL unset.
 
@@ -45,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from typing import Any
 
@@ -73,6 +81,7 @@ logger = get_logger("scripts.recompute_backtest_costs")
 _REL_TOL = 1e-4          # relative error on price/PnL identities
 _TP_PROXIMITY = 1e-3     # exit within 0.1% of raw TP counts as a TP-hit exit
 _PNL_SAMPLE = 20         # trades to check gross-PnL identity on
+_MAX_REPLAY_ATTEMPTS = 3  # retries when a replay double-persists trades (subscription race)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -233,28 +242,42 @@ async def _recompute_one(
             row["status"] = "dry-run"
             return row
 
-        # Fresh ids on replay → stale orders/trades must be cleared first, then
-        # replayed immediately. A delete-then-failed-replay leaves the run stale
-        # or empty; the degenerate-replay check flags it and the caller re-runs
-        # that id (idempotent).
-        await order_repo.delete_by_run(run_id)
-        await trade_repo.delete_by_run(run_id)
-
         payload = {
             **before.config_snapshot,
             "slippage_bps": target_slip,
             "commission_bps": target_comm,
         }
-        await run_single(deps, payload, run_id=run_id)
-        await run_repo.set_name(run_id, before.name)  # engine wrote config name, not the label
-
-        after = await run_repo.get(run_id)
-        if after is None:
-            row["status"] = "error"
-            row["failures"] = ["run doc missing after replay"]
-            return row
-        trades = await trade_repo.list_by_run(run_id)
-        orders = await order_repo.list_by_run(run_id)
+        # A clean replay writes exactly one trade doc per metric trade. The engine
+        # intermittently double-subscribes trade closures (async subscription race),
+        # so a replay can persist every trade/order twice. A fresh replay usually
+        # wins the race — delete stale docs (fresh ids each replay → must clear) and
+        # replay again until the trade-doc count matches, bounded.
+        after: BacktestResult | None = None
+        trades: list[Any] = []
+        orders: list[Any] = []
+        for attempt in range(1, _MAX_REPLAY_ATTEMPTS + 1):
+            await order_repo.delete_by_run(run_id)
+            await trade_repo.delete_by_run(run_id)
+            await run_single(deps, payload, run_id=run_id)
+            await run_repo.set_name(run_id, before.name)  # engine wrote config name, not the label
+            after = await run_repo.get(run_id)
+            if after is None:
+                row["status"] = "error"
+                row["failures"] = ["run doc missing after replay"]
+                return row
+            trades = await trade_repo.list_by_run(run_id)
+            orders = await order_repo.list_by_run(run_id)
+            if len(trades) == after.metrics.total_trades:
+                break
+            if attempt < _MAX_REPLAY_ATTEMPTS:
+                logger.warning(
+                    "recompute.duplicate_persist_retry",
+                    run_id=run_id,
+                    attempt=attempt,
+                    trade_docs=len(trades),
+                    expected=after.metrics.total_trades,
+                )
+        assert after is not None  # loop runs ≥1 time and returns early on None
         failures = _verify(target_slip, target_comm, before, after, trades, len(orders))
 
         row["after"] = {
@@ -308,6 +331,41 @@ def _print_summary(rows: list[dict[str, Any]], target_slip: float, target_comm: 
             print(f"                  ! {f}")
 
 
+async def _fan_out_per_run(run_ids: list[str], slip: float, comm: float) -> int:
+    """Recompute each run in its own subprocess — one run per interpreter.
+
+    Replaying many runs in a single process leaks a duplicate trade-closure
+    subscription: every replayed trade then persists twice under a fresh id, so
+    the run ends with 2x trade/order docs. One run per process is clean, so batch
+    work fans out to a child per run. Children run sequentially (bounded Mongo
+    load); a non-zero child fails the batch but does not abort the rest.
+    """
+    script = os.path.abspath(__file__)
+    # Per-bar order-fill logs at INFO flood stdout on a full replay (enough to
+    # break an ssh pipe mid-run); children only need their print()ed summary, so
+    # quiet the logger. Single-run callers set LOG_LEVEL themselves if needed.
+    child_env = {**os.environ, "LOG_LEVEL": "WARNING"}
+    failed = 0
+    for i, run_id in enumerate(run_ids, 1):
+        logger.info("recompute.fan_out", run=run_id, index=i, total=len(run_ids))
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, script,
+            "--run-id", run_id,
+            "--slippage-bps", str(slip),
+            "--commission-bps", str(comm),
+            env=child_env,
+        )
+        rc = await proc.wait()
+        if rc != 0:
+            failed += 1
+            logger.error("recompute.fan_out_failed", run=run_id, returncode=rc)
+    if failed:
+        logger.error("recompute.completed_with_failures", failed=failed, total=len(run_ids))
+        return 1
+    logger.info("recompute.completed", total=len(run_ids))
+    return 0
+
+
 async def run_recompute(args: argparse.Namespace) -> int:
     if args.run_ids and args.all_finished:
         logger.error(
@@ -347,6 +405,12 @@ async def run_recompute(args: argparse.Namespace) -> int:
             commission_bps=args.commission_bps,
             dry_run=args.dry_run,
         )
+
+        # Batch replays double-persist trades if run in one process (see
+        # _fan_out_per_run); isolate each run in its own subprocess. --dry-run
+        # mutates nothing and a single run can't leak, so both stay in-process.
+        if not args.dry_run and len(run_ids) > 1:
+            return await _fan_out_per_run(run_ids, args.slippage_bps, args.commission_bps)
 
         run_repo = BacktestRepository(db)
         order_repo = BacktestOrderRepository(db)
