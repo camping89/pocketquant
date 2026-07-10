@@ -29,7 +29,7 @@ class BacktestConfig:
     start_date: datetime
     end_date: datetime
     initial_capital: float = 10_000.0
-    slippage_bps: float = 1.0  # 1 bp = 0.01% default
+    slippage_bps: float = 0.5  # 0.5 bp = 0.005% default
     commission_bps: float = 3.0  # 3 bps default
     replay_speed: float = 0.0  # 0 = max speed, 1 = real-time, 10 = 10x
     parameters: dict[str, Any] = field(default_factory=dict)
