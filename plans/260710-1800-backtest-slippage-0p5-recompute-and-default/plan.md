@@ -30,9 +30,9 @@ Move all backtest trading costs to the current defaults — **slippage 0.5 bps +
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Config Defaults](./phase-01-config-defaults.md) | Code done (commit pending) |
+| 1 | [Config Defaults](./phase-01-config-defaults.md) | Done (committed) |
 | 2 | [Recompute Script](./phase-02-recompute-script.md) | Done (reviewed) |
-| 3 | [Execute Recompute](./phase-03-execute-recompute.md) | Pending (needs low-latency host) |
+| 3 | [Execute Recompute](./phase-03-execute-recompute.md) | Done (verified) |
 
 ## Dependencies
 
@@ -44,5 +44,10 @@ Move all backtest trading costs to the current defaults — **slippage 0.5 bps +
 
 - [x] All backtest cost defaults committed on `develop`: slippage 0.5 bps + commission 3.0 bps (backtest config, command service, live paper, engine dispatch fallback).
 - [x] `scripts/recompute_backtest_costs.py` exists: `--slippage-bps` + `--commission-bps`, `--dry-run`, per-run isolation, env-only Mongo URL, self-verifying (degenerate-replay guard, TP-slippage + gross-PnL identity, cost-snapshot + trade-count consistency). Dry-run lists the 5 targets.
-- [ ] 5 target runs show `config_snapshot.slippage_bps = 0.5` AND `commission_bps = 3.0`, recomputed metrics, consistent order/trade counts, display names preserved. (Phase 3 — pending execution)
+- [x] All 6 finished runs show `config_snapshot.slippage_bps = 0.5` AND `commission_bps = 3.0`, recomputed metrics, order/trade counts consistent (`metrics.total_trades == trade docs == distinct entry_times`, orders ≈ 2× trades), names preserved. Verified at DB level on the VPS. `--all-finished --dry-run` now returns "No targets". Frontend/API render not re-checked this session.
 - [x] ruff + pyright clean on the recompute script.
+- [x] Recompute resilient to an engine trade double-persist race (see Incident): verify-count + retry per run, batch fans out to one child process per run. Underlying engine race left for a separate fix.
+
+## Incident: trade double-persist race
+
+`--all-finished` (5 runs, one process) persisted every trade/order **twice** (2× docs, correct metrics — the run doc's equity/metrics come from the in-memory replay, so only the `backtest_trades`/`backtest_orders` collections were polluted). Root cause: the engine intermittently double-subscribes trade closures (`on_trade` fires twice per closure → two `Trade`s with fresh ids). Reproduced once even in single-run mode, so it is a race, not batch-only. Recovery: recompute each run per-run until the trade-doc count matched; `019f1780-6b52` needed the retry. Tooling hardened (retry-until-clean + subprocess-per-run fan-out + child `LOG_LEVEL=WARNING`). **Follow-up:** fix the engine subscription race so a single replay is always 1× (idempotent `subscribe_trades`, or deterministic wiring) — do not leave the script retry as the only guard long-term.

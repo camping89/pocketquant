@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Execute Recompute"
-status: pending
+status: done
 effort: ""
 ---
 
@@ -52,9 +52,10 @@ The per-run save is ~26k individual upserts. Over the remote VPS link that was *
 
 ## Success Criteria
 
-- [ ] All 5 target runs: `slippage_bps = 0.5` AND `commission_bps = 3.0`, recomputed metrics, consistent order/trade counts, names preserved.
-- [ ] No `finished` run left with `slippage_bps != 0.5` or `commission_bps != 3.0` (except any intentionally out-of-scope) and none with 0 trades.
-- [ ] Frontend renders updated data for each run.
+- [x] All target runs: `slippage_bps = 0.5` AND `commission_bps = 3.0`, recomputed metrics, consistent order/trade counts (`total_trades == trade docs == distinct entry_times`, orders ≈ 2× trades), names preserved.
+- [x] No `finished` run left with `slippage_bps != 0.5` or `commission_bps != 3.0`, and none with 0 trades. `--all-finished --dry-run` returns "No targets".
+- [ ] Frontend render per run — NOT re-checked this session (DB-verified only).
+- Note: batch replay hit an engine trade double-persist race (2× docs); recovered per-run, script hardened with retry + fan-out. See `plan.md` → Incident.
 
 ## Risk Assessment
 
