@@ -143,7 +143,7 @@ async def _sync_by_intervals(
     Symbol source is TrackedSymbolRepository (replaces old SyncStatusRepository scan).
     Each ts.symbol is composite ``{code}:{exchange}``.
     """
-    logger.info(f"market_data.{job_name}.started")
+    logger.debug(f"market_data.{job_name}.started")
 
     tracked = await tracked_symbol_repo.list_all()
     symbols = [ts.symbol for ts in tracked]

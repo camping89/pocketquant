@@ -152,7 +152,7 @@ class BarAppService:
         )
         await self._cache.delete(exact_key)
 
-        logger.info(
+        logger.debug(
             "bar_completed_event_published",
             symbol=bar.symbol,
             interval=bar.interval.value,

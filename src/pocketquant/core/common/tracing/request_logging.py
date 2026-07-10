@@ -36,9 +36,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             method=method,
             path=path,
             query=query,
-            body=request_body,
             client=request.client.host if request.client else None,
         )
+        if request_body is not None:
+            logger.debug("http.request.body", path=path, body=request_body)
 
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start_time) * 1000
@@ -70,7 +71,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             path=path,
             status=response.status_code,
             duration_ms=round(duration_ms, 2),
-            body=response_body,
         )
+        if response_body is not None:
+            logger.debug("http.response.body", path=path, body=response_body)
 
         return response

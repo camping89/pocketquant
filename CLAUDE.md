@@ -10,6 +10,7 @@ One Python package `src/pocketquant/` (subpackages: core, engine, backtest, app)
 - **Single uvicorn worker only** — scheduler/WS feed/broker are in-process singletons; `--workers N` duplicates the reconcile loop + live broker connection.
 - **Primary keys: UUIDv7 only** — never hash / natural key / ObjectId.
 - **Every `await` is a preemption point** — wire deps before consumers (publish-before-subscribe), no `await` inside atomic blocks.
+- **Log level = frequency + audience, not importance** (`LOG_LEVEL=INFO` in prod → INFO+ prints). DEBUG = hot-path / per-iteration (per-bar, per-tick, per-cascade, HTTP bodies); INFO = one-shot lifecycle (startup/shutdown/connect, index creation) + per-trade business events (order/position fills) — must be low-frequency AND bounded; WARNING = recoverable/degraded; ERROR = failed op (+ `exc_info` for exceptions). **Never log unbounded payloads above DEBUG** (HTTP request/response bodies, full market-data arrays, `model_dump()` of large models) — DEBUG + truncate only. A per-bar/per-tick/per-request event at INFO scales with market activity → floods prod.
 
 ## Reference docs (discover detail here)
 

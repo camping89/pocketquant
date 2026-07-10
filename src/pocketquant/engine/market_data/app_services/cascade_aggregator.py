@@ -223,7 +223,7 @@ async def cascade_for_symbol(
 
         persisted_per_tf[tf] = upserted
         if upserted:
-            logger.info(
+            logger.debug(
                 "cascade.completed_tf",
                 symbol=sym,
                 tf=tf.value,
