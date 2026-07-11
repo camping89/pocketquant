@@ -18,6 +18,7 @@ Canonical documentation for the current code layout and workflow. Docs are **AS-
 |-----------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | [Engine scale-out limitation](./engine-scale-out-limitation.md) | Why the engine settles one entry → one TP → closes the whole position; four limitation layers that block scale-out / multi-TP / partial close.     |
 | [Swing pivot & key-level](./swing-pivot-key-level.md)           | Key-level for take-profit: max/min proxy over an N-bar window, TP = max(RR 1:1, key-level), and why the chart's "show all patterns" differs from the strategy's signal set. |
+| [Backtest rubric methodology](./backtest-rubric/methodology.md) | Offline scorecard grading finished runs on Performance/Robustness/Design-integrity (A–F, weakest-axis). Threshold bands, formulas, PSR + sequencing bootstrap, MAE/MFE, AST audit. Tool: `scripts/rubric/`, generated artifacts in `scripts/rubric/output/`. |
 
 ## Current Repo Shape
 

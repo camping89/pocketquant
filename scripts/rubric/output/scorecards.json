@@ -1,0 +1,903 @@
+{
+  "rubric_version": "1.0.0",
+  "caveat": "Thresholds derive from equity/daily research; on 1m crypto they are directional references. Scores describe run health, not future performance.",
+  "runs": [
+    {
+      "run_id": "019f141c-a437-70a9-8d2a-d748b773d9e7",
+      "strategy_code": "engulfing",
+      "symbol": "BTCUSDT:BINANCE",
+      "interval": "1m",
+      "name": null,
+      "rubric_version": "1.0.0",
+      "axes": {
+        "performance": {
+          "name": "performance",
+          "score": 0.1,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "calmar",
+              "value": -0.9995106330811196,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "mar",
+              "value": -0.9995106330811196,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_index",
+              "value": 33.72035876286172,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_performance_index",
+              "value": -1.6031220458044082,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "recovery_factor",
+              "value": 0.9995106330811196,
+              "points": 1,
+              "weight": 0.1
+            }
+          ]
+        },
+        "robustness": {
+          "name": "robustness",
+          "score": 0.15,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "psr",
+              "value": 0.0,
+              "points": 0,
+              "weight": 0.3
+            },
+            {
+              "metric": "sqn",
+              "value": -4.406854046938713,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "tail_ratio",
+              "value": 0.8095163684081035,
+              "points": 1,
+              "weight": 0.15
+            },
+            {
+              "metric": "common_sense_ratio",
+              "value": 0.7506226330137746,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "gain_to_pain",
+              "value": -0.48919757418177334,
+              "points": 0,
+              "weight": 0.15
+            }
+          ]
+        },
+        "design_integrity": {
+          "name": "design_integrity",
+          "score": 1.9500000000000002,
+          "grade": "C",
+          "breakdown": [
+            {
+              "metric": "cost_to_edge",
+              "value": -0.11277328733834903,
+              "points": 0,
+              "weight": 0.35
+            },
+            {
+              "metric": "degrees_of_freedom",
+              "value": 4,
+              "points": 3,
+              "weight": 0.25
+            },
+            {
+              "metric": "mfe_capture",
+              "value": 0.8191467427733906,
+              "points": 4,
+              "weight": 0.2
+            },
+            {
+              "metric": "mae_to_stop",
+              "value": 0.9190609698510424,
+              "points": 2,
+              "weight": 0.2
+            }
+          ]
+        }
+      },
+      "overall_score": 0.1,
+      "overall_grade": "F",
+      "metrics": {
+        "max_drawdown": -0.5408431760104165,
+        "calmar": -0.9995106330811196,
+        "mar": -0.9995106330811196,
+        "ulcer_index": 33.72035876286172,
+        "ulcer_performance_index": -1.6031220458044082,
+        "recovery_factor": 0.9995106330811196,
+        "tail_ratio": 0.8095163684081035,
+        "gain_to_pain": -0.48919757418177334,
+        "common_sense_ratio": 0.7506226330137746,
+        "cpc_index": 0.25547131072856755,
+        "sqn": -4.406854046938713,
+        "kelly": -0.44338416156626265,
+        "risk_of_ruin": 0.0,
+        "cost_to_edge": -0.11277328733834903,
+        "profit_factor": 0.9272482463694439,
+        "win_rate": 0.457427298925858,
+        "win_loss_ratio": 0.6023154953842729,
+        "total_return": -0.5405785052517749,
+        "cagr": -0.5405785052517749,
+        "sharpe_ratio": -29.89962710349081,
+        "sortino_ratio": -30.618596241253005,
+        "total_trades": 11451
+      },
+      "reconciliation": {
+        "planned_rr_median": 0.9550507044261817,
+        "planned_rr_mean": 1.238819087679638,
+        "realized_r_mean": -0.04586749864743673,
+        "realized_r_median": -1.0167678773296467,
+        "expectancy_r": -0.04586749864743673,
+        "gross_edge_bps": -0.7894130113684432,
+        "friction_bps": 7.0,
+        "net_edge_bps": -7.789413011368444
+      },
+      "excursions": {
+        "mfe_capture_mean": 0.8191467427733906,
+        "mae_to_stop_mean": 0.9190609698510424,
+        "mae_r_p50": -1.0163948643933411,
+        "mae_r_p90": -0.3647702721667997,
+        "mfe_r_p50": 0.9328024692953023,
+        "mfe_r_p90": 1.695110083243902,
+        "low_coverage_trades": 1,
+        "total_trades": 11451,
+        "low_coverage": false
+      },
+      "audit": {
+        "strategy_code": "engulfing",
+        "degrees_of_freedom": 4,
+        "params": [
+          "direction",
+          "key_level_lookback_bars",
+          "max_rejection_wick_pct",
+          "sl_buffer_pct"
+        ],
+        "direction_bias": "both",
+        "sl_tp_geometry": "pattern_extreme_sl + max/min(R, key_level)_tp",
+        "entry_frequency_class": "stateful_setup",
+        "lookahead_safety": "safe"
+      },
+      "diagnosis": "no directional edge: gross edge \u2248 0 before costs; statistically unreliable (PSR < 0.5)",
+      "aliases": []
+    },
+    {
+      "run_id": "019f1780-546f-743f-b919-e826b348c51b",
+      "strategy_code": "hitnrun2",
+      "symbol": "BTCUSDT:BINANCE",
+      "interval": "1m",
+      "name": null,
+      "rubric_version": "1.0.0",
+      "axes": {
+        "performance": {
+          "name": "performance",
+          "score": 0.75,
+          "grade": "D",
+          "breakdown": [
+            {
+              "metric": "calmar",
+              "value": -0.4551305035878059,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "mar",
+              "value": -0.45513050358780555,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_index",
+              "value": 4.25491852352169,
+              "points": 3,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_performance_index",
+              "value": -0.7325104318919444,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "recovery_factor",
+              "value": 0.45513050358780555,
+              "points": 0,
+              "weight": 0.1
+            }
+          ]
+        },
+        "robustness": {
+          "name": "robustness",
+          "score": 0.3,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "psr",
+              "value": 0.0,
+              "points": 0,
+              "weight": 0.3
+            },
+            {
+              "metric": "sqn",
+              "value": -1.6276587113545058,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "tail_ratio",
+              "value": 0.5326306974548224,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "common_sense_ratio",
+              "value": 1.125408030794907,
+              "points": 2,
+              "weight": 0.15
+            },
+            {
+              "metric": "gain_to_pain",
+              "value": -0.07365564959570221,
+              "points": 0,
+              "weight": 0.15
+            }
+          ]
+        },
+        "design_integrity": {
+          "name": "design_integrity",
+          "score": 2.05,
+          "grade": "C",
+          "breakdown": [
+            {
+              "metric": "cost_to_edge",
+              "value": 0.7745411766526422,
+              "points": 1,
+              "weight": 0.35
+            },
+            {
+              "metric": "degrees_of_freedom",
+              "value": 6,
+              "points": 2,
+              "weight": 0.25
+            },
+            {
+              "metric": "mfe_capture",
+              "value": 0.4778121236885658,
+              "points": 2,
+              "weight": 0.2
+            },
+            {
+              "metric": "mae_to_stop",
+              "value": 0.7784227092382151,
+              "points": 4,
+              "weight": 0.2
+            }
+          ]
+        }
+      },
+      "overall_score": 0.3,
+      "overall_grade": "F",
+      "metrics": {
+        "max_drawdown": -0.06848084627948053,
+        "calmar": -0.4551305035878059,
+        "mar": -0.45513050358780555,
+        "ulcer_index": 4.25491852352169,
+        "ulcer_performance_index": -0.7325104318919444,
+        "recovery_factor": 0.45513050358780555,
+        "tail_ratio": 0.5326306974548224,
+        "gain_to_pain": -0.07365564959570221,
+        "common_sense_ratio": 1.125408030794907,
+        "cpc_index": 3.105124248402866,
+        "sqn": -1.6276587113545058,
+        "kelly": 0.633741456925465,
+        "risk_of_ruin": 0.0,
+        "cost_to_edge": 0.7745411766526422,
+        "profit_factor": 2.1129237127575884,
+        "win_rate": 0.7584165741768405,
+        "win_loss_ratio": 1.9377036184058147,
+        "total_return": -0.031167722053299075,
+        "cagr": -0.031167722053299096,
+        "sharpe_ratio": -1.0723911104295316,
+        "sortino_ratio": -1.0789481016060365,
+        "total_trades": 5406
+      },
+      "reconciliation": {
+        "planned_rr_median": 45.02626238515522,
+        "planned_rr_mean": 1025.4115125002897,
+        "realized_r_mean": -1.8496033254026036,
+        "realized_r_median": 0.8466283666668089,
+        "expectancy_r": -1.8496033254026036,
+        "gross_edge_bps": 5.421788236568496,
+        "friction_bps": 7.0,
+        "net_edge_bps": -1.5782117634315043
+      },
+      "excursions": {
+        "mfe_capture_mean": 0.4778121236885658,
+        "mae_to_stop_mean": 0.7784227092382151,
+        "mae_r_p50": -0.780687237350612,
+        "mae_r_p90": -0.0926123461815466,
+        "mfe_r_p50": 2.1627847301220093,
+        "mfe_r_p90": 15.601401246292657,
+        "low_coverage_trades": 0,
+        "total_trades": 5406,
+        "low_coverage": false
+      },
+      "audit": {
+        "strategy_code": "hitnrun2",
+        "degrees_of_freedom": 6,
+        "params": [
+          "direction",
+          "entry_lookback_bars",
+          "max_loss_pct",
+          "min_profit_pct",
+          "sl_lookback_bars",
+          "tp_lookback_bars"
+        ],
+        "direction_bias": "both",
+        "sl_tp_geometry": "pattern_extreme_sl + max/min(R, key_level)_tp",
+        "entry_frequency_class": "windowed_continuation",
+        "lookahead_safety": "safe"
+      },
+      "diagnosis": "cost-killed: gross edge positive but costs erase it; statistically unreliable (PSR < 0.5)",
+      "aliases": [
+        "019f1780-6b52-7493-8f84-5b7d7923ba78"
+      ]
+    },
+    {
+      "run_id": "019f1c6b-c4b0-7755-b11d-1edb428801de",
+      "strategy_code": "hitnrun2",
+      "symbol": "BTCUSDT:BINANCE",
+      "interval": "1m",
+      "name": null,
+      "rubric_version": "1.0.0",
+      "axes": {
+        "performance": {
+          "name": "performance",
+          "score": 0.75,
+          "grade": "D",
+          "breakdown": [
+            {
+              "metric": "calmar",
+              "value": -0.43432332396960854,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "mar",
+              "value": -0.4343233239696087,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_index",
+              "value": 4.141012916541763,
+              "points": 3,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_performance_index",
+              "value": -0.7040476962200475,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "recovery_factor",
+              "value": 0.4343233239696087,
+              "points": 0,
+              "weight": 0.1
+            }
+          ]
+        },
+        "robustness": {
+          "name": "robustness",
+          "score": 0.3,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "psr",
+              "value": 0.0,
+              "points": 0,
+              "weight": 0.3
+            },
+            {
+              "metric": "sqn",
+              "value": -1.6255782357464785,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "tail_ratio",
+              "value": 0.5246099847659357,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "common_sense_ratio",
+              "value": 1.1120462116432221,
+              "points": 2,
+              "weight": 0.15
+            },
+            {
+              "metric": "gain_to_pain",
+              "value": -0.0687771377300857,
+              "points": 0,
+              "weight": 0.15
+            }
+          ]
+        },
+        "design_integrity": {
+          "name": "design_integrity",
+          "score": 2.05,
+          "grade": "C",
+          "breakdown": [
+            {
+              "metric": "cost_to_edge",
+              "value": 0.7800313271139895,
+              "points": 1,
+              "weight": 0.35
+            },
+            {
+              "metric": "degrees_of_freedom",
+              "value": 6,
+              "points": 2,
+              "weight": 0.25
+            },
+            {
+              "metric": "mfe_capture",
+              "value": 0.47760293929835945,
+              "points": 2,
+              "weight": 0.2
+            },
+            {
+              "metric": "mae_to_stop",
+              "value": 0.7786004636279577,
+              "points": 4,
+              "weight": 0.2
+            }
+          ]
+        }
+      },
+      "overall_score": 0.3,
+      "overall_grade": "F",
+      "metrics": {
+        "max_drawdown": -0.06712673354177717,
+        "calmar": -0.43432332396960854,
+        "mar": -0.4343233239696087,
+        "ulcer_index": 4.141012916541763,
+        "ulcer_performance_index": -0.7040476962200475,
+        "recovery_factor": 0.4343233239696087,
+        "tail_ratio": 0.5246099847659357,
+        "gain_to_pain": -0.0687771377300857,
+        "common_sense_ratio": 1.1120462116432221,
+        "cpc_index": 3.1192414075233597,
+        "sqn": -1.6255782357464785,
+        "kelly": 0.6349044467276773,
+        "risk_of_ruin": 0.0,
+        "cost_to_edge": 0.7800313271139895,
+        "profit_factor": 2.119757999153184,
+        "win_rate": 0.7591564927857936,
+        "win_loss_ratio": 1.9383464084088955,
+        "total_return": -0.029154706039086885,
+        "cagr": -0.029154706039086875,
+        "sharpe_ratio": -1.0483491744329623,
+        "sortino_ratio": -1.0552187238888262,
+        "total_trades": 5406
+      },
+      "reconciliation": {
+        "planned_rr_median": 44.73710626793002,
+        "planned_rr_mean": 1025.0420593811161,
+        "realized_r_mean": -1.8472402353990685,
+        "realized_r_median": 0.847364983927461,
+        "expectancy_r": -1.8472402353990685,
+        "gross_edge_bps": 5.4602192897979265,
+        "friction_bps": 7.0,
+        "net_edge_bps": -1.5397807102020735
+      },
+      "excursions": {
+        "mfe_capture_mean": 0.47760293929835945,
+        "mae_to_stop_mean": 0.7786004636279577,
+        "mae_r_p50": -0.7808665232970275,
+        "mae_r_p90": -0.09285759604494517,
+        "mfe_r_p50": 2.166615188358544,
+        "mfe_r_p90": 15.63627878385178,
+        "low_coverage_trades": 0,
+        "total_trades": 5406,
+        "low_coverage": false
+      },
+      "audit": {
+        "strategy_code": "hitnrun2",
+        "degrees_of_freedom": 6,
+        "params": [
+          "direction",
+          "entry_lookback_bars",
+          "max_loss_pct",
+          "min_profit_pct",
+          "sl_lookback_bars",
+          "tp_lookback_bars"
+        ],
+        "direction_bias": "both",
+        "sl_tp_geometry": "pattern_extreme_sl + max/min(R, key_level)_tp",
+        "entry_frequency_class": "windowed_continuation",
+        "lookahead_safety": "safe"
+      },
+      "diagnosis": "cost-killed: gross edge positive but costs erase it; statistically unreliable (PSR < 0.5)",
+      "aliases": []
+    },
+    {
+      "run_id": "019f3676-9c08-71f2-a143-d60dc9d7d3b2",
+      "strategy_code": "engulfing",
+      "symbol": "BTCUSDT:BINANCE",
+      "interval": "1m",
+      "name": null,
+      "rubric_version": "1.0.0",
+      "axes": {
+        "performance": {
+          "name": "performance",
+          "score": 0.1,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "calmar",
+              "value": -0.99998795504424,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "mar",
+              "value": -0.9999879550442398,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_index",
+              "value": 33.44337246869475,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_performance_index",
+              "value": -1.6046215103539734,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "recovery_factor",
+              "value": 0.9999879550442398,
+              "points": 1,
+              "weight": 0.1
+            }
+          ]
+        },
+        "robustness": {
+          "name": "robustness",
+          "score": 0.15,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "psr",
+              "value": 0.0,
+              "points": 0,
+              "weight": 0.3
+            },
+            {
+              "metric": "sqn",
+              "value": -3.8270800079919045,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "tail_ratio",
+              "value": 0.8147304288730796,
+              "points": 1,
+              "weight": 0.15
+            },
+            {
+              "metric": "common_sense_ratio",
+              "value": 0.7637301786962307,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "gain_to_pain",
+              "value": -0.4835760800306523,
+              "points": 0,
+              "weight": 0.15
+            }
+          ]
+        },
+        "design_integrity": {
+          "name": "design_integrity",
+          "score": 1.9500000000000002,
+          "grade": "C",
+          "breakdown": [
+            {
+              "metric": "cost_to_edge",
+              "value": -0.09915958513828582,
+              "points": 0,
+              "weight": 0.35
+            },
+            {
+              "metric": "degrees_of_freedom",
+              "value": 4,
+              "points": 3,
+              "weight": 0.25
+            },
+            {
+              "metric": "mfe_capture",
+              "value": 0.817872136435391,
+              "points": 4,
+              "weight": 0.2
+            },
+            {
+              "metric": "mae_to_stop",
+              "value": 0.9184650536270255,
+              "points": 2,
+              "weight": 0.2
+            }
+          ]
+        }
+      },
+      "overall_score": 0.1,
+      "overall_grade": "F",
+      "metrics": {
+        "max_drawdown": -0.5366460122979516,
+        "calmar": -0.99998795504424,
+        "mar": -0.9999879550442398,
+        "ulcer_index": 33.44337246869475,
+        "ulcer_performance_index": -1.6046215103539734,
+        "recovery_factor": 0.9999879550442398,
+        "tail_ratio": 0.8147304288730796,
+        "gain_to_pain": -0.4835760800306523,
+        "common_sense_ratio": 0.7637301786962307,
+        "cpc_index": 0.2606026188735109,
+        "sqn": -3.8270800079919045,
+        "kelly": -0.43354350995106233,
+        "risk_of_ruin": 0.0,
+        "cost_to_edge": -0.09915958513828582,
+        "profit_factor": 0.9374023009704063,
+        "win_rate": 0.4599512449939056,
+        "win_loss_ratio": 0.6044229717267418,
+        "total_return": -0.5366395484204746,
+        "cagr": -0.5366395484204747,
+        "sharpe_ratio": -29.451264720008183,
+        "sortino_ratio": -30.194069672105524,
+        "total_trades": 11486
+      },
+      "reconciliation": {
+        "planned_rr_median": 0.9551529094808753,
+        "planned_rr_mean": 1.2405811058388643,
+        "realized_r_mean": -0.03982089521485105,
+        "realized_r_median": -1.0164503451436029,
+        "expectancy_r": -0.03982089521485105,
+        "gross_edge_bps": -0.6941170959680008,
+        "friction_bps": 7.0,
+        "net_edge_bps": -7.694117095968001
+      },
+      "excursions": {
+        "mfe_capture_mean": 0.817872136435391,
+        "mae_to_stop_mean": 0.9184650536270255,
+        "mae_r_p50": -1.015323720584787,
+        "mae_r_p90": -0.3661656830104607,
+        "mfe_r_p50": 0.936745260098407,
+        "mfe_r_p90": 1.7057324246753267,
+        "low_coverage_trades": 1,
+        "total_trades": 11486,
+        "low_coverage": false
+      },
+      "audit": {
+        "strategy_code": "engulfing",
+        "degrees_of_freedom": 4,
+        "params": [
+          "direction",
+          "key_level_lookback_bars",
+          "max_rejection_wick_pct",
+          "sl_buffer_pct"
+        ],
+        "direction_bias": "both",
+        "sl_tp_geometry": "pattern_extreme_sl + max/min(R, key_level)_tp",
+        "entry_frequency_class": "stateful_setup",
+        "lookahead_safety": "safe"
+      },
+      "diagnosis": "no directional edge: gross edge \u2248 0 before costs; statistically unreliable (PSR < 0.5)",
+      "aliases": []
+    },
+    {
+      "run_id": "019f36d2-5f4f-75cc-95c6-49a7496c3a86",
+      "strategy_code": "engulfing_pullback30_touch",
+      "symbol": "BTCUSDT:BINANCE",
+      "interval": "1m",
+      "name": "engulfing_pullback30_touch_take1",
+      "rubric_version": "1.0.0",
+      "axes": {
+        "performance": {
+          "name": "performance",
+          "score": 0.1,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "calmar",
+              "value": -0.999900328891423,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "mar",
+              "value": -0.9999003288914229,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_index",
+              "value": 27.00696306535301,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "ulcer_performance_index",
+              "value": -1.61180854889943,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "recovery_factor",
+              "value": 0.9999003288914229,
+              "points": 1,
+              "weight": 0.1
+            }
+          ]
+        },
+        "robustness": {
+          "name": "robustness",
+          "score": 0.15,
+          "grade": "F",
+          "breakdown": [
+            {
+              "metric": "psr",
+              "value": 0.0,
+              "points": 0,
+              "weight": 0.3
+            },
+            {
+              "metric": "sqn",
+              "value": -2.7509660557210123,
+              "points": 0,
+              "weight": 0.25
+            },
+            {
+              "metric": "tail_ratio",
+              "value": 0.8392346804602977,
+              "points": 1,
+              "weight": 0.15
+            },
+            {
+              "metric": "common_sense_ratio",
+              "value": 0.778066133660192,
+              "points": 0,
+              "weight": 0.15
+            },
+            {
+              "metric": "gain_to_pain",
+              "value": -0.5376537143907808,
+              "points": 0,
+              "weight": 0.15
+            }
+          ]
+        },
+        "design_integrity": {
+          "name": "design_integrity",
+          "score": 1.9500000000000002,
+          "grade": "C",
+          "breakdown": [
+            {
+              "metric": "cost_to_edge",
+              "value": -0.08861885721521909,
+              "points": 0,
+              "weight": 0.35
+            },
+            {
+              "metric": "degrees_of_freedom",
+              "value": 5,
+              "points": 3,
+              "weight": 0.25
+            },
+            {
+              "metric": "mfe_capture",
+              "value": 0.8112270577754536,
+              "points": 4,
+              "weight": 0.2
+            },
+            {
+              "metric": "mae_to_stop",
+              "value": 0.8966307407070819,
+              "points": 2,
+              "weight": 0.2
+            }
+          ]
+        }
+      },
+      "overall_score": 0.1,
+      "overall_grade": "F",
+      "metrics": {
+        "max_drawdown": -0.4353439306976563,
+        "calmar": -0.999900328891423,
+        "mar": -0.9999003288914229,
+        "ulcer_index": 27.00696306535301,
+        "ulcer_performance_index": -1.61180854889943,
+        "recovery_factor": 0.9999003288914229,
+        "tail_ratio": 0.8392346804602977,
+        "gain_to_pain": -0.5376537143907808,
+        "common_sense_ratio": 0.778066133660192,
+        "cpc_index": 0.24417610938367562,
+        "sqn": -2.7509660557210123,
+        "kelly": -0.5008634608270182,
+        "risk_of_ruin": 0.0,
+        "cost_to_edge": -0.08861885721521909,
+        "profit_factor": 0.9271138952854565,
+        "win_rate": 0.4294819793718855,
+        "win_loss_ratio": 0.6132324575118467,
+        "total_return": -0.43530053948547137,
+        "cagr": -0.4353005394854714,
+        "sharpe_ratio": -28.61761151551821,
+        "sortino_ratio": -23.405024888123386,
+        "total_trades": 8629
+      },
+      "reconciliation": {
+        "planned_rr_median": 0.9688952010239408,
+        "planned_rr_mean": 1.7062270069728744,
+        "realized_r_mean": -0.03941300560065051,
+        "realized_r_median": -1.0229403566068591,
+        "expectancy_r": -0.03941300560065051,
+        "gross_edge_bps": -0.6203320005065336,
+        "friction_bps": 7.0,
+        "net_edge_bps": -7.620332000506534
+      },
+      "excursions": {
+        "mfe_capture_mean": 0.8112270577754536,
+        "mae_to_stop_mean": 0.8966307407070819,
+        "mae_r_p50": -1.030994844667167,
+        "mae_r_p90": -0.1717437706596538,
+        "mfe_r_p50": 0.9630723718553837,
+        "mfe_r_p90": 2.1187215987021686,
+        "low_coverage_trades": 1,
+        "total_trades": 8629,
+        "low_coverage": false
+      },
+      "audit": {
+        "strategy_code": "engulfing_pullback30_touch",
+        "degrees_of_freedom": 5,
+        "params": [
+          "direction",
+          "key_level_lookback_bars",
+          "max_rejection_wick_pct",
+          "pullback_pct",
+          "sl_buffer_pct"
+        ],
+        "direction_bias": "both",
+        "sl_tp_geometry": "pattern_extreme_sl + max/min(R, key_level)_tp",
+        "entry_frequency_class": "stateful_setup",
+        "lookahead_safety": "safe"
+      },
+      "diagnosis": "no directional edge: gross edge \u2248 0 before costs; statistically unreliable (PSR < 0.5)",
+      "aliases": []
+    }
+  ]
+}
