@@ -2,7 +2,7 @@
 
 Conventions:
 - All returns in bps of entry notional. gross = before fees. net = gross - friction.
-- Friction round-trip (bps): taker=11 (4.5x2 + slippage 1x2), maker=4 (2x2, limit no slip),
+- Friction round-trip (bps): taker=10 (4.5x2 + slippage 0.5x2), maker=4 (2x2, limit no slip),
   maker_rebate=-2 (earn 1x2), zero=0. funding ~1 bps / 8h hold (assumption; BTC perp).
 - Entries are dicts with numpy arrays: idx (bar index in its TF), price, islong (bool), epoch (int64 s).
 - Positive edge means signed toward the trade direction.
@@ -11,7 +11,7 @@ import bisect
 import numpy as np
 
 CACHE = "/tmp/pq_cache"
-FR = {"taker": 11.0, "maker": 4.0, "maker_rebate": -2.0, "zero": 0.0}
+FR = {"taker": 10.0, "maker": 4.0, "maker_rebate": -2.0, "zero": 0.0}
 FUNDING_PER_8H = 1.0  # bps per 8h held (assumption)
 SPLIT_EPOCH = int(np.datetime64("2026-01-06", "s").astype("int64"))  # walk-forward boundary (~6/6)
 
