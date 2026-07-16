@@ -15,7 +15,7 @@ export function IntervalSelector({ intervals, value, onChange }: IntervalSelecto
       {intervals.map((iv) => {
         const disabled = !iv.available
         const btn = (
-          <button
+          <button type="button"
             key={iv.value}
             className={`interval-btn ${value === iv.value ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
             onClick={() => { if (!disabled) onChange(iv.value) }}

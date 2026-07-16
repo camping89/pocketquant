@@ -150,7 +150,7 @@ export function RunHistoryRail({ selectedRun, onSelect }: RunHistoryRailProps) {
           <aside className="drawer" role="dialog" aria-modal="true" aria-label="Run backtest">
             <header className="drawer-header">
               <span className="drawer-title">Run Backtest</span>
-              <button className="drawer-close" onClick={() => setFormOpen(false)} aria-label="Close">×</button>
+              <button type="button" className="drawer-close" onClick={() => setFormOpen(false)} aria-label="Close">×</button>
             </header>
             <BacktestForm
               submitting={runBacktest.isPending}

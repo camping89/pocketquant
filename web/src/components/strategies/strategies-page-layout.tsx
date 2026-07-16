@@ -179,7 +179,7 @@ export function StrategiesPageLayout() {
       <div className="strategies-mobile">
         <div className="strategies-mobile__tabs">
           {MOBILE_TABS.map(({ key, label }) => (
-            <button
+            <button type="button"
               key={key}
               className={`strategies-mobile__tab${mobileTab === key ? ' strategies-mobile__tab--active' : ''}`}
               onClick={() => setMobileTab(key)}

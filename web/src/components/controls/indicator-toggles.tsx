@@ -18,7 +18,7 @@ export function IndicatorToggles({ value, onChange }: IndicatorTogglesProps) {
   return (
     <div className="indicator-group">
       {INDICATORS.map((ind) => (
-        <button
+        <button type="button"
           key={ind.key}
           className={`indicator-btn ${value[ind.key] ? 'active' : ''}`}
           style={value[ind.key] ? { borderColor: ind.color, color: ind.color } : undefined}

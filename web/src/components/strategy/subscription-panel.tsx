@@ -54,7 +54,7 @@ function SubRow({ sub, selected, onSelect, onRemove, removing }: SubRowProps) {
           <ForwardStatusBadge desiredState={sub.desired_state} actualState={sub.actual_state} />
         </div>
       </div>
-      <button
+      <button type="button"
         className="btn"
         title="Remove subscription"
         disabled={removing}
@@ -101,10 +101,10 @@ export function SubscriptionPanel({ strategyId, selectedSubId, onSelectSub }: Su
     <div style={panelStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>Symbols</span>
-        <button className="btn-sm" onClick={() => setShowDialog(true)} style={{ padding: '2px 8px', fontSize: 11 }}>
+        <button type="button" className="btn-sm" onClick={() => setShowDialog(true)} style={{ padding: '2px 8px', fontSize: 11 }}>
           + Add
         </button>
-        <button
+        <button type="button"
           className="btn"
           onClick={handleDeleteStrategy}
           disabled={deleteStrat.isPending}

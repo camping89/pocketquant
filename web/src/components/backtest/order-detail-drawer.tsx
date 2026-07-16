@@ -34,7 +34,7 @@ export function OrderDetailDrawer({ order, onClose }: OrderDetailDrawerProps) {
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={`Order ${order.order_id}`}>
         <header className="drawer-header">
           <span className="drawer-title">{order.side} {order.order_type}</span>
-          <button ref={closeRef} className="drawer-close" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" ref={closeRef} className="drawer-close" onClick={onClose} aria-label="Close">×</button>
         </header>
 
         <dl className="drawer-meta">

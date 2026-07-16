@@ -19,6 +19,17 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // An untyped <button> defaults to type="submit" inside a <form>, so a click
+      // silently submits (and e.g. fires a backtest run). Require an explicit type.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXOpeningElement[name.name="button"]:not(:has(JSXAttribute[name.name="type"]))',
+          message: '<button> must set an explicit type="button" or type="submit" — an untyped button submits its enclosing form on click.',
+        },
+      ],
+    },
   },
   {
     files: ['**/*.test.ts'],

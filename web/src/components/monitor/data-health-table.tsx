@@ -149,7 +149,7 @@ export function DataHealthTable({ onIntegrityUpdate }: DataHealthTableProps) {
             />
             Show inactive intervals
           </label>
-          <button
+          <button type="button"
             className="btn-sm"
             onClick={handleCheckAll}
             disabled={isCheckingAny || filtered.length === 0}

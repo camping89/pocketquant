@@ -72,11 +72,11 @@ export function DataHealthRow({
           <StuckBadge show={!!s.is_stuck} />
         </td>
         <td className="actions" onClick={(e) => e.stopPropagation()}>
-          <button className="btn" disabled={checking} onClick={onCheck}>
+          <button type="button" className="btn" disabled={checking} onClick={onCheck}>
             {checking ? '...' : 'Check'}
           </button>
           {hasIssues && !repair && (
-            <button className="btn btn-warn" disabled={repairing} onClick={onRepair}>
+            <button type="button" className="btn btn-warn" disabled={repairing} onClick={onRepair}>
               {repairing ? '...' : 'Repair'}
             </button>
           )}

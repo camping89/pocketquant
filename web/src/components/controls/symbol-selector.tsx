@@ -40,7 +40,7 @@ export function SymbolSelector({ value, onChange, placeholder = 'Select symbolâ€
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(!open)} className="symbol-btn">
+      <button type="button" onClick={() => setOpen(!open)} className="symbol-btn">
         {selectedCode ? (
           <>
             <span className="symbol-code">{selectedCode}</span>
@@ -65,6 +65,7 @@ export function SymbolSelector({ value, onChange, placeholder = 'Select symbolâ€
               return (
                 <button
                   key={s.symbol}
+                  type="button"
                   className={`symbol-option ${s.symbol === value ? 'active' : ''}`}
                   onClick={() => {
                     onChange(s.symbol)

@@ -60,7 +60,7 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
           Strategies
         </span>
-        <button
+        <button type="button"
           className="btn-sm"
           onClick={() => setShowDialog(true)}
           style={{ padding: '2px 10px', fontSize: 11 }}

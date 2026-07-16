@@ -173,7 +173,7 @@ export function BacktestResultView({
 
       <div style={{ display: 'flex', gap: 2, padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
         {TABS.map(({ key, label }) => (
-          <button
+          <button type="button"
             key={key}
             className={`backtest-panel__tab${tab === key ? ' backtest-panel__tab--active' : ''}`}
             onClick={() => onTabChange(key)}

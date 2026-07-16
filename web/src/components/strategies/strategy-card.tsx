@@ -24,7 +24,7 @@ export function StrategyCard({ sub, selected, onClick }: StrategyCardProps) {
   const status = toStrategyStatus(sub)
 
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       style={{
         display: 'flex',

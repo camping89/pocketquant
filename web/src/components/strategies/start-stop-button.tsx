@@ -24,7 +24,7 @@ export function StartStopButton({
   if (isRunning) {
     return (
       <>
-        <button
+        <button type="button"
           className="btn"
           disabled={isLoading || disabled}
           onClick={() => setConfirmOpen(true)}
@@ -68,8 +68,8 @@ export function StartStopButton({
                 This will halt live execution. Open positions will remain unchanged.
               </p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="btn" onClick={() => setConfirmOpen(false)}>Cancel</button>
-                <button
+                <button type="button" className="btn" onClick={() => setConfirmOpen(false)}>Cancel</button>
+                <button type="button"
                   className="btn"
                   disabled={isLoading}
                   onClick={() => { setConfirmOpen(false); onStop() }}
@@ -86,7 +86,7 @@ export function StartStopButton({
   }
 
   return (
-    <button
+    <button type="button"
       className="btn-sm"
       disabled={isLoading || disabled}
       onClick={onStart}
