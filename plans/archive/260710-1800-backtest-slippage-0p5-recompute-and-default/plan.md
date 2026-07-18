@@ -1,7 +1,7 @@
 ---
 title: "Recompute backtests at 0.5 bps + default slippage 0.5"
 description: ""
-status: pending
+status: completed
 priority: P2
 branch: "develop"
 tags: []
