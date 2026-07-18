@@ -110,3 +110,5 @@ repomix-output.xml
 .grimp_cache/
 
 web/.claude/
+
+.claude/settings.json
