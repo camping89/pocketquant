@@ -2,7 +2,7 @@
 
 - Date: 2026-07-18 · Session: brainstorm (ultrathink + research workflow 5 agents)
 - Status: **PAUSED — chờ user trả lời Section 8 (Pending decisions)**. Trả lời xong → resume brainstorm hoặc `/ck:plan` với report này làm context.
-- Nguồn: internal `plans/260706-2238-engulfing-1m-strategy-research/master-report.md`, engine source scan, web research (URLs inline)
+- Nguồn: internal `plans/archive/260706-2238-engulfing-1m-strategy-research/master-report.md`, engine source scan, web research (URLs inline)
 
 ## 1. Problem-first inversion
 
@@ -179,4 +179,4 @@ S1/S2 hold 24h+ → funding thành cost đáng kể (~3 bps/ngày khi sustained 
 1. Đọc report này; check Section 8 answers.
 2. Q1+Q2 đã trả lời → xác nhận lại scope 1 câu, rồi `/ck:plan` với path report này làm context (Option 2 → plan 4 tracks như Section 7).
 3. Research thô đầy đủ (5 agent reports, JSON): `~/.claude/projects/-home-ubuntu-1-W--me-algotrading-pocketquant/cebb79d7-8a7e-429b-9437-4bdadbdb5aab/subagents/workflows/wf_2db9d09f-15a/journal.jsonl` — session-local, có thể đã bị dọn; report này là bản digest đầy đủ nhất còn lại.
-4. Prior-research gốc: `plans/260706-2238-engulfing-1m-strategy-research/master-report.md` (toolkit + methodology + survivor configs).
+4. Prior-research gốc: `plans/archive/260706-2238-engulfing-1m-strategy-research/master-report.md` (toolkit + methodology + survivor configs).
