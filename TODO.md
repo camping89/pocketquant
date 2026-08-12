@@ -1,4 +1,7 @@
 # PocketQuant TODO
+- ops: mongodump bar collections before running any repair/destructive endpoint from a local session (Option 2b has full write creds to prod Mongo)
+- ops: restrict VPS ports 52017/53679/54900 to own IP via firewall (currently open to internet, password-only)
+- ops: pin docker image tags (git SHA or date) instead of :latest on next deploy, for rollback ability
 - uxui - change to claude AI theme, both dark and light
 - on charts page, remove the dot line for indicators (e.g. EMA)
 - in the strategies page, show the same indicator list as the charts page - reuse the code, do not write duplicated code
