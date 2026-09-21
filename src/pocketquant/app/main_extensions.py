@@ -6,11 +6,15 @@ HTTP feature routes plus the SPA.
 """
 
 import asyncio
+import os
+import time
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfoNotFoundError
 
+import tzlocal
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
 from fastapi import APIRouter, FastAPI
@@ -67,6 +71,35 @@ from pocketquant.engine.market_data.app_services.ws_subscription_app_service imp
 )
 
 logger = get_logger(__name__)
+
+
+def assert_utc_runtime() -> None:
+    """Refuse to start unless the process timezone is UTC.
+
+    Bars, cron triggers and session calendars are all UTC instants by
+    construction, not by convention. On a non-UTC process they look correct on
+    the VPS and wrong everywhere else, so fail fast rather than persist skewed
+    data. Logs one INFO line when the zone is correct.
+    """
+    tz_env = os.environ.get("TZ")
+    prefix = f"Process timezone must be UTC, got TZ={tz_env!r} tzname={time.tzname!r}"
+
+    if time.timezone != 0 or time.daylight:
+        raise RuntimeError(f"{prefix}. Set TZ=UTC.")
+
+    try:
+        tz_name = str(tzlocal.get_localzone_name())
+    except ZoneInfoNotFoundError as exc:
+        # A TZ naming a zone the platform cannot resolve (e.g. a tzdata-legacy
+        # alias such as Asia/Saigon) degrades to UTC in libc, so the check above
+        # passes. Report it the way an operator expects instead of letting a bare
+        # lookup error surface from inside zoneinfo.
+        raise RuntimeError(f"{prefix} which names no resolvable zone. Set TZ=UTC.") from exc
+
+    if tz_name not in {"UTC", "Etc/UTC"}:
+        raise RuntimeError(f"{prefix} tzlocal={tz_name!r}. Set TZ=UTC.")
+
+    logger.info("runtime.timezone", tz=tz_env, tzname=time.tzname, tzlocal=tz_name)
 
 # All repository types that need MongoDB indexes on startup
 _REPO_TYPES: list[type] = [

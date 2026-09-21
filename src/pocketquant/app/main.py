@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from pocketquant.app.di.container import create_container
 from pocketquant.app.main_extensions import (
+    assert_utc_runtime,
     bootstrap_live_instances,
     configure_middleware,
     drain_backtest_tasks,
@@ -52,6 +53,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     set_sync_container(container)
 
     try:
+        assert_utc_runtime()
+
         # Expose DB/Cache on app.state for middleware hot-path access
         app.state.database = await container.get(Database)
         app.state.cache = await container.get(Cache)

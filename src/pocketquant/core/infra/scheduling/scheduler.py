@@ -301,6 +301,16 @@ class JobScheduler:
             logger.warning("scheduler.job_not_found", job_id=job_id)
             return False
 
+    def get_raw_jobs(self) -> list[Any]:
+        """Registered APScheduler job objects, for callers that need the trigger.
+
+        ``get_jobs`` projects to DTOs for the HTTP surface and drops the trigger
+        object; startup invariant checks need the trigger itself.
+        """
+        if self._scheduler is None:
+            return []
+        return list(self._scheduler.get_jobs())
+
     async def get_jobs(self) -> list[dict[str, Any]]:
         if self._scheduler is None:
             return []

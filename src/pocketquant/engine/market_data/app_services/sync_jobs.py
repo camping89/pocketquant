@@ -720,6 +720,17 @@ async def register_sync_jobs(
         misfire_grace_time=1800,
     )
 
+    # Every registered trigger must be UTC. One that picked up the host zone
+    # would fire at a different instant per machine and pickle that zone into
+    # the shared Mongo jobstore, where it outlives the process that wrote it.
+    for job in job_scheduler.get_raw_jobs():
+        trigger_tz = getattr(job.trigger, "timezone", None)
+        if trigger_tz is not None and str(trigger_tz) != "UTC":
+            raise RuntimeError(
+                f"Job {job.id!r} registered with a non-UTC trigger timezone "
+                f"{str(trigger_tz)!r}; cron triggers must pass timezone=UTC."
+            )
+
     # Catch-up sweep: enqueue one-off runs for any daily/12h job whose last
     # success exceeds its per-job max_gap. Must run AFTER cron registration so
     # any catch-up's _catchup suffix lives alongside the real cron schedule.
