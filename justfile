@@ -35,7 +35,8 @@ reset:
 # Single worker only — scheduler/WS/broker are in-process singletons; --workers N would duplicate them.
 # Route iteration tip: ENABLE_JOBS=false just be — skips the trading runtime so --reload restarts stay light.
 be:
-    {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41921
+    # The app asserts a UTC process timezone at startup, so pin it here too.
+    TZ=UTC {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41921
 
 # Start frontend dev server (vite proxies /api → app on 41921)
 [working-directory: 'web']

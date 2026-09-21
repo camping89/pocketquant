@@ -42,6 +42,10 @@ services:
     # service names (mongodb, redis), which resolve on this compose network.
     env_file:
       - .env
+    # Declared after env_file so it wins over any TZ key in .env. The app
+    # asserts a UTC process timezone at startup and refuses to run without it.
+    environment:
+      TZ: "UTC"
     depends_on:
       mongodb:
         condition: service_healthy

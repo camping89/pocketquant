@@ -29,9 +29,11 @@ FROM python:3.14-rc-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime deps (curl needed for healthcheck)
+# Install runtime deps (curl for healthcheck, tzdata so zoneinfo can resolve
+# named zones such as America/Chicago — ENV TZ alone ships no zone data)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 appuser
 
@@ -44,7 +46,8 @@ COPY scripts/ scripts/
 # Set environment
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=UTC
 
 # Switch to non-root user
 USER appuser
