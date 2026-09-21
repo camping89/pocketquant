@@ -15,6 +15,7 @@ import httpx
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.bar.services.bar_builder_domain_service import get_bar_start
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.binance.binance_mappers import (
@@ -73,13 +74,14 @@ class BinanceAdapter(IDataProviderPort):
         all_bars: list[Bar] = []
         remaining = n_bars
         # Cap endTime at the last CLOSED bar boundary, excluding the in-progress bar.
-        # Binance returns a kline whose openTime equals floor(now/duration)*duration with
-        # only the partial data accumulated since that boundary; persisting it corrupts
-        # OHLCV until the bar closes. By stopping the window at the previous boundary we
-        # guarantee every returned kline is final.
-        now_ms = int(datetime.now(UTC).timestamp() * 1000)
-        last_closed_open_ms = (now_ms // bar_duration_ms) * bar_duration_ms
-        cutoff_dt = datetime.fromtimestamp(last_closed_open_ms / 1000, tz=UTC)
+        # Binance returns a kline whose openTime equals the current boundary with only
+        # the partial data accumulated since it; persisting that corrupts OHLCV until
+        # the bar closes. The cutoff comes from the same alignment function the drop
+        # filter uses, so the two can never disagree — a plain floor(now / duration)
+        # lands on a Thursday for weekly bars, because the Unix epoch was a Thursday.
+        now = datetime.now(UTC)
+        cutoff_dt = get_bar_start(now, interval)
+        last_closed_open_ms = int(cutoff_dt.timestamp() * 1000)
         end_time_ms = last_closed_open_ms
 
         while remaining > 0:
