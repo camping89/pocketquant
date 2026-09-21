@@ -6,6 +6,9 @@
 Operational scripts. Run from repository root.
 
 - `audit_bar_quality.py` — diagnostic, no writes. Flat-bar / zero-volume / abnormal-volume sweep across tracked symbols, outputs Markdown report.
+- `migrate_symbol_asset_class.py` — one-time. Stamps pre-asset-class symbol documents with
+  `asset_class`/`calendar_id`/`contract_spec` and drops `asset_type`. Dry-run by default;
+  `--apply` writes. Idempotent — skips documents that already carry `asset_class`.
 - `backfill/binance_bars.py` — fetch OHLCV bars from Binance klines. Targeted (`--symbol` + explicit `--start/--end` window, insert-only gap-fill) or bulk (all tracked symbols, rolling `--days` window, optional `--replace` delete + cascade-rebuild, resumable via checkpoint). Test beside it (`backfill/test_binance_bars.py`) runs via `pytest scripts/backfill/`, excluded from the default suite.
 
 ## Conventions

@@ -3,7 +3,6 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC, Bar
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval as DomainInterval
-from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.sync_status.services import (
     SyncProgressDecision,
     SyncProgressTrackerDomainService,
@@ -150,7 +149,7 @@ class SyncService:
         if not records:
             return 0
         inserted_count = await self._bar_repo.insert_many(records, source=source)
-        await self._symbol_repo.upsert(Symbol.create(symbol=symbol))
+        await self._symbol_repo.touch(symbol)
         return inserted_count
 
     async def _get_bar_stats(self, symbol: str, interval: DomainInterval) -> tuple[int, Bar | None]:

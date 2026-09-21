@@ -17,7 +17,8 @@ class SymbolQueryService:
             {
                 "symbol": s.symbol,
                 "name": s.name,
-                "asset_type": s.asset_type,
+                "asset_class": s.asset_class.value,
+                "calendar_id": s.calendar_id,
                 "is_active": s.is_active,
             }
             for s in symbols

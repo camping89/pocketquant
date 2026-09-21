@@ -38,3 +38,15 @@ class Interval(str, Enum):
         stale/queued request carrying an interval no longer in the enum.
         """
         return _PERIODS_PER_YEAR.get(interval)
+
+
+class AssetClass(str, Enum):
+    """What an instrument is, which determines how it trades and settles.
+
+    Drives calendar selection and contract units; see
+    ``pocketquant.core.domain.symbol.value_objects``.
+    """
+
+    CRYPTO_SPOT = "crypto_spot"
+    CRYPTO_PERP = "crypto_perp"
+    INDEX_FUTURE = "index_future"

@@ -31,6 +31,26 @@ class SymbolRepository(BaseRepository):
             upsert=True,
         )
 
+    async def touch(self, symbol: str) -> None:
+        """Ensure a symbol document exists without overwriting its metadata.
+
+        The sync pipeline calls this on every run. A full ``$set`` would reset
+        asset_class / calendar_id / contract_spec to their crypto defaults, so a
+        seeded futures symbol would silently become crypto on its first sync.
+        """
+        doc = Symbol.create(symbol=symbol).to_mongo()
+        symbol_value = doc.pop("symbol")
+        await self._collection().update_one(
+            {"symbol": symbol_value},
+            {"$setOnInsert": {**doc, "symbol": symbol_value}},
+            upsert=True,
+        )
+
+    async def find_by_symbol(self, symbol: str) -> Symbol | None:
+        """Look up one symbol record by composite identifier."""
+        doc = await self._collection().find_one({"symbol": symbol.upper()})
+        return Symbol.from_mongo(doc) if doc else None
+
     async def find_all(self) -> list[Symbol]:
         """Get all symbols, sorted by composite symbol."""
         collection = self._collection()

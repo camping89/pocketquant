@@ -1,6 +1,6 @@
 """Bar entities — Pydantic models with MongoDB persistence."""
 
-from datetime import UTC
+from datetime import UTC, date
 from datetime import datetime as dt
 from typing import Any
 
@@ -40,6 +40,12 @@ class Bar(BaseModel):
     close: float = 0.0
     volume: float = 0.0
     tick_count: int = 0
+    # Session-day key and its calendar. `datetime` still moves with DST, so a
+    # consumer that wants "which trading day is this" needs a stable key that
+    # does not. Populated at the write path from Phase 3; None on crypto bars
+    # written before that.
+    session_date: date | None = None
+    calendar_id: str | None = None
     created_at: dt = Field(default_factory=utc_now)
     # Audit fields — repository is single writer. Entity treats them as read-only:
     # populated by from_mongo(), NOT serialized by to_mongo() (BarRepository writes via $set).
@@ -71,6 +77,10 @@ class Bar(BaseModel):
             "close": self.close,
             "volume": self.volume,
             "tick_count": self.tick_count,
+            # ISO string, not a BSON date: a session day is a calendar key, and
+            # storing it as an instant invites it being read as one.
+            "session_date": self.session_date.isoformat() if self.session_date else None,
+            "calendar_id": self.calendar_id,
             "created_at": self.created_at,
         }
 
@@ -92,6 +102,12 @@ class Bar(BaseModel):
             close=doc.get("close", 0.0),
             volume=doc.get("volume", 0.0),
             tick_count=doc.get("tick_count", 0),
+            session_date=(
+                date.fromisoformat(raw_session_date)
+                if isinstance(raw_session_date := doc.get("session_date"), str)
+                else None
+            ),
+            calendar_id=doc.get("calendar_id"),
             created_at=coerce_utc(doc.get("created_at")) or utc_now(),
             updated_at=coerce_utc(doc.get("updated_at")),
             source=doc.get("source"),

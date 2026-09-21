@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "pandas>=2.1.0",
+    "pandas-market-calendars>=5.4.0",
     "numpy>=1.26.0",
     "pyyaml>=6.0",
     "structlog>=24.1.0",
@@ -143,3 +144,21 @@ name = "No bson/ObjectId usage — UUID7 only"
 type = "forbidden"
 source_modules = ["pocketquant"]
 forbidden_modules = ["bson"]
+
+[[tool.importlinter.contracts]]
+name = "pandas_market_calendars confined to core.infra.calendars"
+type = "forbidden"
+# The holiday and early-close rules must stay replaceable behind
+# ITradingCalendarPort; a domain or engine import of the library would make the
+# vendor's schedule model part of our own.
+source_modules = [
+    "pocketquant.core.domain",
+    "pocketquant.engine",
+    "pocketquant.app",
+]
+forbidden_modules = ["pandas_market_calendars"]
+# Direct imports only. app and engine legitimately reach the adapter through DI
+# wiring, and a transitive chain through that is the architecture working, not a
+# violation. What must never happen is code outside core.infra.calendars
+# importing the library to compute a schedule itself.
+allow_indirect_imports = true

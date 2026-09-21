@@ -288,3 +288,10 @@ class BarRepository(BaseRepository):
             unique=True,
             name="ix_ohlcv_symbol_interval_datetime",
         )
+        # Sparse: only session-aware bars carry session_date, and crypto bars
+        # written before Phase 3 never will.
+        await collection.create_index(
+            [("symbol", 1), ("interval", 1), ("session_date", 1)],
+            name="ix_ohlcv_symbol_interval_session_date",
+            sparse=True,
+        )

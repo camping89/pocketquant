@@ -385,3 +385,36 @@ and every value now matches Binance.
 **G5 is deliberately violated by this repair.** The goal says BTC/ETH/SOL bar values are
 unchanged; the weekly values changed because they were wrong. This is the correction
 landing, not a regression. Intraday intervals are untouched.
+
+### Session 3 — 2026-09-22 (execution, Phase 2)
+
+**Correction 9 — the promised ninth import contract had no owning task.** `plan.md`'s
+success criteria state "9 from Phase 2 onward (the new contract confines
+`pandas_market_calendars` to `core/infra`)", and the verifier open-items table records
+item 4 as folded into "Phase 2, Task 8". Task 8 creates the `TradingCalendarFactory` and
+contains no contract step, so no task would have created it and the plan's own criterion
+could not have been met. Added alongside Task 6, where the library first enters.
+
+It needed `allow_indirect_imports = true`. Written as a plain forbidden contract it
+broke immediately on `app.di.infrastructure -> trading_calendar_factory ->
+cme_globex_calendar_adapter -> pandas_market_calendars`, which is DI wiring doing its
+job, not a violation. Restricting it to direct imports expresses the real rule — nothing
+outside `core.infra.calendars` may import the library to compute a schedule itself — and
+will not fight Phase 3 when engine services start receiving calendars. Verified by
+mutation: a direct `import pandas_market_calendars` in `core.domain` breaks it.
+
+**Correction 10 — Task 7's expected count is arithmetically impossible.** Its Verify
+expects `14 passed`, while its own steps prescribe 6 + 8 test functions with two of them
+parametrized over all 7 intervals. That yields 14 functions and 28 cases. Delivered as
+specified: 14 functions, 28 cases, green under a non-UTC host.
+
+**Environment note, no action needed.** `pandas-market-calendars` pulls in the pip
+`tzdata` package, so `Asia/Saigon` now resolves inside the venv where it previously
+raised. This does not weaken Correction 5's guards: both the test helper and the CI
+matrix key on `time.timezone`, which is glibc's view, and glibc still cannot resolve the
+alias (`time.timezone == 0`, `tzname == ('Asia','Asia')`). The canonical zone remains
+the right choice because it works with or without the pip package.
+
+**Flake observed once.** One unidentified test failed in a single full-suite run and did
+not reproduce across four subsequent runs, including the chained gate. Same class as the
+job-history tie recorded in the Phase 1 report; noted rather than chased.

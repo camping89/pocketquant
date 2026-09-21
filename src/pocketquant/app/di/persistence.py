@@ -40,6 +40,7 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 
 
 class PersistenceProvider(Provider):
@@ -67,6 +68,7 @@ class PersistenceProvider(Provider):
     backtest_order_repository = provide(BacktestOrderRepository, scope=Scope.APP)
     backtest_trade_repository = provide(BacktestTradeRepository, scope=Scope.APP)
     symbol_repository = provide(SymbolRepository, scope=Scope.APP)
+    symbol_lookup_helper = provide(SymbolLookupHelper, scope=Scope.APP)
     sync_status_repository = provide(SyncStatusRepository, scope=Scope.APP)
     job_history_repository = provide(JobHistoryRepository, scope=Scope.APP)
     subscription_repository = provide(SubscriptionRepository, scope=Scope.APP)

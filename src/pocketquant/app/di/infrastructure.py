@@ -7,6 +7,7 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.infra.binance.binance_adapter import BinanceAdapter
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
@@ -31,6 +32,7 @@ class InfrastructureProvider(Provider):
         return BinanceAdapter(settings=settings)
 
     broker_factory = provide(BrokerFactory, scope=Scope.APP)
+    trading_calendar_factory = provide(TradingCalendarFactory, scope=Scope.APP)
 
     @provide(scope=Scope.APP)
     def get_health_coordinator(self) -> HealthCoordinator:

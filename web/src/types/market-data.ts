@@ -23,7 +23,8 @@ export type SelectedSymbol = string
 export interface SymbolInfo {
   symbol: string
   name: string
-  asset_type: string
+  asset_class: string
+  calendar_id: string
   is_active: boolean
 }
 
