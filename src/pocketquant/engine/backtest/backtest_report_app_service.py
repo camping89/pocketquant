@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult, OpenLot
@@ -393,8 +394,8 @@ class BacktestReportAppService:
             "strategy_code": self._config.strategy_code,
             "symbol": self._config.symbol,
             "interval": self._config.interval,
-            "start_date": self._config.start_date.isoformat(),
-            "end_date": self._config.end_date.isoformat(),
+            "start_date": to_utc_iso(self._config.start_date),
+            "end_date": to_utc_iso(self._config.end_date),
             "initial_capital": self._config.initial_capital,
             "slippage_bps": self._config.slippage_bps,
             "commission_bps": self._config.commission_bps,

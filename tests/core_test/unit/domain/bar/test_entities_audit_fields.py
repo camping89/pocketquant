@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.domain.bar.entities import (
     SOURCE_BULK_SYNC,
     SOURCE_CASCADE,
@@ -107,7 +108,7 @@ class TestToDictAuditFields:
         ts = datetime(2026, 2, 1, tzinfo=UTC)
         bar = _build_bar(updated_at=ts, source="cascade")
         d = bar.to_dict()
-        assert d["updated_at"] == ts.isoformat()
+        assert d["updated_at"] == to_utc_iso(ts)
         assert d["source"] == "cascade"
 
     def test_serializes_none_audit_fields(self) -> None:

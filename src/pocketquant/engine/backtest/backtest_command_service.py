@@ -9,9 +9,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.time import coerce_utc, to_utc_iso
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
@@ -35,6 +36,13 @@ class RunBacktestCommand(BaseModel):
     commission_bps: float = Field(default=3.0, ge=0, description="Commission in basis points")
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")
     name: str | None = Field(default=None, max_length=200, description="Optional run label")
+
+    @field_validator("start_date", "end_date", mode="after")
+    @classmethod
+    def _to_utc(cls, v: datetime) -> datetime:
+        # Routes accept an ISO string that may carry no offset; anchor it to UTC
+        # here so the run window means the same thing wherever it was submitted.
+        return coerce_utc(v)  # type: ignore[return-value]
 
 
 class SetVerdictCommand(BaseModel):
@@ -71,8 +79,8 @@ class BacktestCommandService:
             "strategy_code": cmd.strategy_id,
             "symbol": cmd.symbol,
             "interval": cmd.interval,
-            "start_date": cmd.start_date.isoformat(),
-            "end_date": cmd.end_date.isoformat(),
+            "start_date": to_utc_iso(cmd.start_date),
+            "end_date": to_utc_iso(cmd.end_date),
             "initial_capital": cmd.initial_capital,
             "slippage_bps": cmd.slippage_bps,
             "commission_bps": cmd.commission_bps,

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.engine.market_data.ohlcv_service import GetOHLCVQuery, OhlcvService
 
 
@@ -51,7 +52,7 @@ async def test_returns_serialized_bars(svc, cache, bar_repo) -> None:
     assert result.interval == "1d"
     assert result.count == 1
     assert result.data[0]["close"] == 103.0
-    assert result.data[0]["datetime"] == dt.isoformat()
+    assert result.data[0]["datetime"] == to_utc_iso(dt)
 
 
 @pytest.mark.asyncio

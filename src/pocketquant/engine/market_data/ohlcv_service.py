@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from pocketquant.core.common.constants import CACHE_KEY_OHLCV, TTL_OHLCV_QUERY
+from pocketquant.core.common.time import coerce_utc, to_utc_iso
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -22,6 +23,12 @@ class GetOHLCVQuery:
     limit: int = 1000
     start_date: datetime | None = None
     end_date: datetime | None = None
+
+    def __post_init__(self) -> None:
+        # Routes parse these from ISO query strings, which may omit an offset.
+        # Coerce once here so no downstream caller has to wonder.
+        self.start_date = coerce_utc(self.start_date)
+        self.end_date = coerce_utc(self.end_date)
 
 
 @dataclass
@@ -63,7 +70,7 @@ class OhlcvService:
         data = [
             {
                 "id": str(bar.id),
-                "datetime": bar.datetime.isoformat() if bar.datetime else None,
+                "datetime": to_utc_iso(bar.datetime),
                 "open": bar.open,
                 "high": bar.high,
                 "low": bar.low,

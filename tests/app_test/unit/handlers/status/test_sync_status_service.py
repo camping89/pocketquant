@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
@@ -18,7 +19,9 @@ from pocketquant.engine.market_data.sync_status_service import (
 )
 
 SYMBOL = "BINANCE:BTCUSDT"
-NOW = datetime.now(UTC)
+# Whole seconds: BSON stores milliseconds and the JSON contract emits seconds,
+# so a fixture with microseconds would assert a precision nothing can produce.
+NOW = datetime.now(UTC).replace(microsecond=0)
 
 
 def _status(interval: str, last_bar_age_seconds: int, bar_count: int = 1000) -> SyncStatus:
@@ -180,7 +183,7 @@ async def test_last_sync_at_still_from_sync_status(handler, sync_status_repo, ba
 
     result = await handler.get_sync_status(GetSyncStatusQuery())
 
-    assert result[0].last_sync_at == sync_dt.isoformat().replace("+00:00", "Z")
+    assert result[0].last_sync_at == to_utc_iso(sync_dt)
 
 
 # get_symbol_sync_status — single symbol/interval lookup
@@ -215,7 +218,7 @@ async def test_uses_bars_for_count_and_last_bar(handler, sync_status_repo, bar_r
     )
 
     assert result.bar_count == 5907  # ← bars
-    assert result.last_bar_at == fresh_dt.isoformat().replace("+00:00", "Z")
+    assert result.last_bar_at == to_utc_iso(fresh_dt)
     assert result.is_stuck is False
 
 

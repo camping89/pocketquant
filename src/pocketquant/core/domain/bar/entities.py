@@ -1,11 +1,12 @@
 """Bar entities — Pydantic models with MongoDB persistence."""
 
+from datetime import UTC
 from datetime import datetime as dt
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pocketquant.core.common.time import coerce_utc, utc_now
+from pocketquant.core.common.time import coerce_utc, to_utc_iso, utc_now
 from pocketquant.core.common.uuid import UUID, generate_id
 from pocketquant.core.domain.shared.enums import Interval
 
@@ -96,18 +97,34 @@ class Bar(BaseModel):
             source=doc.get("source"),
         )
 
+    @field_validator("datetime", "created_at", "updated_at", mode="after")
+    @classmethod
+    def _require_utc(cls, v: dt | None) -> dt | None:
+        """Reject naive datetimes at the domain boundary.
+
+        A naive value here means an adapter guessed a zone, or failed to. Both
+        produce bars that look right on one host and wrong on every other.
+        """
+        if v is None:
+            return v
+        if v.tzinfo is None:
+            raise ValueError(
+                "Bar datetimes must be timezone-aware; adapters must emit UTC instants"
+            )
+        return v.astimezone(UTC)
+
     def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "symbol": self.symbol,
             "interval": self.interval.value if self.interval else None,
-            "datetime": self.datetime.isoformat() if self.datetime else None,
+            "datetime": to_utc_iso(self.datetime),
             "open": self.open,
             "high": self.high,
             "low": self.low,
             "close": self.close,
             "volume": self.volume,
             "tick_count": self.tick_count,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "updated_at": to_utc_iso(self.updated_at),
             "source": self.source,
         }

@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.sync_status_repository import (
@@ -70,7 +71,7 @@ def _is_stuck(latest_bar_dt: datetime | None, interval: str) -> bool:
 
 
 def _iso_z(dt: datetime | None) -> str | None:
-    return dt.isoformat().replace("+00:00", "Z") if dt else None
+    return to_utc_iso(dt)
 
 
 async def _enrich_with_bars(
