@@ -1,0 +1,5 @@
+A <= candidate-4
+B <= candidate-2
+C <= candidate-5
+D <= candidate-1
+E <= candidate-3

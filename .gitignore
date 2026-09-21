@@ -112,3 +112,6 @@ repomix-output.xml
 web/.claude/
 
 .claude/settings.json
+
+# Subagent scratch memory — never a deliverable, at any depth
+**/.claude/agent-memory/
