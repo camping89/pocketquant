@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -14,8 +14,9 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
     BacktestRepository,
 )
 
-# Mongo strips tz info on roundtrip — naive datetime keeps equality clean.
-NOW = datetime(2026, 1, 5, 10, 0, 0)
+# The Mongo client decodes datetimes as aware UTC, so fixtures must be aware
+# too or a roundtrip comparison comes back unequal.
+NOW = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
 
 RUN_ID = generate_id()
 

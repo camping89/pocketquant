@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.asynchronous.mongo_client import AsyncMongoClient
 
@@ -46,6 +48,10 @@ class Database:
             minPoolSize=settings.mongodb_min_pool_size,
             maxPoolSize=settings.mongodb_max_pool_size,
             serverSelectionTimeoutMS=5000,
+            # BSON stores UTC instants but decodes them naive by default, which
+            # makes every read a place where a zone can be re-guessed.
+            tz_aware=True,
+            tzinfo=UTC,
         )
 
         try:

@@ -5,7 +5,7 @@ Live ``trades`` collection: ``run_id`` == ``subscription_id``, read scoped by su
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
@@ -14,8 +14,9 @@ from pocketquant.core.domain.trading import Trade
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
 
-# Mongo strips tz info on roundtrip — naive datetime keeps equality clean.
-T0 = datetime(2026, 1, 5, 10, 0, 0)
+# The Mongo client decodes datetimes as aware UTC, so fixtures must be aware
+# too or a roundtrip comparison comes back unequal.
+T0 = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
 
 
 def _tid(name: str) -> str:

@@ -47,7 +47,7 @@ async def check_integrity(
     will produce false-positive gap detections on weekends/holidays.
     """
     # Grid ends at last CLOSED bar — current incomplete bar can't exist in DB yet
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC)
     end = get_bar_start(now, interval)
     start = end - timedelta(days=days_back)
     docs = await bar_repo.find_datetimes(symbol, interval, start, end)

@@ -8,6 +8,9 @@ from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 
 
 def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
+    if timestamp.tzinfo is None:
+        raise ValueError("get_bar_start requires a timezone-aware datetime")
+
     seconds = INTERVAL_SECONDS[interval]
 
     if interval == Interval.DAY_1:
@@ -21,7 +24,7 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
         midnight = timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
         return midnight - timedelta(days=midnight.weekday())
 
-    epoch = datetime(1970, 1, 1, tzinfo=UTC) if timestamp.tzinfo else datetime(1970, 1, 1)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
     total_seconds = (timestamp - epoch).total_seconds()
     aligned_seconds = (total_seconds // seconds) * seconds
 

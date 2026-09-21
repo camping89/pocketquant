@@ -51,8 +51,8 @@ async def filter_new_bars(
         start_date=min(times),
         end_date=max(times),
     )
-    # Mongo client is not tz_aware; raw projection returns naive datetimes.
-    # Coerce both sides to tz-aware UTC for set membership equivalence.
+    # The Mongo client is tz_aware=True, so raw projections already return
+    # UTC-aware datetimes; coerce_utc stays as a cheap idempotent safety net.
     existing_set = {coerce_utc(d["datetime"]) for d in existing_docs}
 
     filtered = [

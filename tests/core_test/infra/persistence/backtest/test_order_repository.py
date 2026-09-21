@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
@@ -15,8 +15,9 @@ from pocketquant.core.infra.persistence.repositories.backtest_order_repository i
     BacktestOrderRepository,
 )
 
-# Mongo strips tz info on roundtrip (naive UTC) — use naive to keep equality clean.
-NOW = datetime(2026, 1, 5, 10, 0, 0)
+# The Mongo client decodes datetimes as aware UTC, so fixtures must be aware
+# too or a roundtrip comparison comes back unequal.
+NOW = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
 
 
 def _oid(name: str) -> str:
