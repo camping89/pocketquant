@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Trading Calendar Port and Asset-Class Domain Model"
-status: pending
+status: completed
 priority: P1
 effort: "2d"
 dependencies: [1]
@@ -559,19 +559,19 @@ forbidding the library everywhere else. Update the contract count in `CLAUDE.md`
 
 ## Todo
 
-- [ ] Task 1 — Add `pandas_market_calendars` as a dependency
-- [ ] Task 2 — Add the `AssetClass` enum
-- [ ] Task 3 — Add the `ContractSpec` value object and the asset-class defaults
-- [ ] Task 4 — Define `ITradingCalendarPort`
-- [ ] Task 5 — Implement `Continuous24x7Calendar`
-- [ ] Task 6 — Implement the CME Globex equity calendar adapter
-- [ ] Task 7 — Calendar test suite including the DST and holiday cases
-- [ ] Task 8 — Build the `TradingCalendarFactory` and the cached symbol lookup
-- [ ] Task 9 — Extend `Symbol` with `asset_class`, `calendar_id` and `contract_spec`
-- [ ] Task 10 — Stop the sync pipeline from clobbering symbol metadata
-- [ ] Task 11 — Add `session_date` and `calendar_id` to daily and weekly bars
-- [ ] Task 12 — Migration script: stamp existing symbols
-- [ ] Task 13 — Phase gate
+- [x] Task 1 — Add `pandas_market_calendars` as a dependency
+- [x] Task 2 — Add the `AssetClass` enum
+- [x] Task 3 — Add the `ContractSpec` value object and the asset-class defaults
+- [x] Task 4 — Define `ITradingCalendarPort`
+- [x] Task 5 — Implement `Continuous24x7Calendar`
+- [x] Task 6 — Implement the CME Globex equity calendar adapter
+- [x] Task 7 — Calendar test suite including the DST and holiday cases
+- [x] Task 8 — Build the `TradingCalendarFactory` and the cached symbol lookup
+- [x] Task 9 — Extend `Symbol` with `asset_class`, `calendar_id` and `contract_spec`
+- [x] Task 10 — Stop the sync pipeline from clobbering symbol metadata
+- [x] Task 11 — Add `session_date` and `calendar_id` to daily and weekly bars
+- [x] Task 12 — Migration script: stamp existing symbols
+- [x] Task 13 — Phase gate
 
 ## Risks and rollback
 
