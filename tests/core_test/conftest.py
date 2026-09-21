@@ -25,7 +25,6 @@ from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
 
 
-
 @pytest.fixture
 def host_timezone() -> Iterator[Callable[..., None]]:
     """Switch the process timezone for one test, restoring it on teardown.

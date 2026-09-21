@@ -310,10 +310,12 @@ def mock_bar_repo():
             if start_date and end_date:
                 matching = [b for b in matching if start_date <= b.datetime <= end_date]  # type: ignore[operator]
             # Sort by datetime and return limited results
-            return sorted(matching, key=lambda b: b.datetime or datetime.min, reverse=True)[:limit]
+            epoch = datetime.min.replace(tzinfo=UTC)
+            return sorted(matching, key=lambda b: b.datetime or epoch, reverse=True)[:limit]
 
         async def get_latest(self, symbol: str, interval: Interval):
             matching = [b for b in self.bars if b.symbol == symbol and b.interval == interval]
-            return max(matching, key=lambda b: b.datetime or datetime.min) if matching else None
+            epoch = datetime.min.replace(tzinfo=UTC)
+            return max(matching, key=lambda b: b.datetime or epoch) if matching else None
 
     return MockBarRepository()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
@@ -10,7 +10,7 @@ from scripts.rubric.data_access import _BAR_DTYPE
 from scripts.rubric.trade_path_analysis import _excursion, compute_excursions
 from scripts.rubric.types import TradeRow
 
-_T0 = datetime(2025, 1, 1, 0, 0, 0)
+_T0 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 def _bars(highs_lows: list[tuple[float, float]], start: datetime) -> np.ndarray:

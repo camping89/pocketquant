@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestConfig
@@ -34,7 +34,7 @@ async def resolve_date_range(
     except Exception as exc:
         logger.warning("backtest_jobs.date_range_fallback", error=str(exc))
 
-    today = date.today()
+    today = datetime.now(UTC).date()
     return today - timedelta(days=365), today
 
 

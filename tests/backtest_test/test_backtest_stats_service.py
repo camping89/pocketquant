@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_OID, UUID, uuid5
 
 import pytest
@@ -24,7 +24,7 @@ from pocketquant.engine.backtest.backtest_stats_service import (
     TradeSortKey,
 )
 
-T0 = datetime(2026, 1, 5, 10, 0, 0)
+T0 = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
 _RUN = "019f141c-a437-70a9-8d2a-d748b773d9e7"
 
 

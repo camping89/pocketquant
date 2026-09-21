@@ -78,7 +78,7 @@ def aggregate_ohlcv(bars: list[Bar]) -> dict | None:
     if not bars:
         return None
 
-    sorted_bars = sorted(bars, key=lambda b: b.datetime or datetime.min)
+    sorted_bars = sorted(bars, key=lambda b: b.datetime or datetime.min.replace(tzinfo=UTC))
 
     open_ = sorted_bars[0].open
     high = max(b.high for b in sorted_bars)

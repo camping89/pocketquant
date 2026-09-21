@@ -204,21 +204,21 @@ class TestRollingWindow:
     def test_end_is_floored_minute_minus_1_second(self) -> None:
         with patch(f"{_MODULE}.datetime") as mock_dt:
             mock_dt.now.return_value = self._FROZEN_NOW
-            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)  # noqa: DTZ001 — passthrough forwards the caller's own tzinfo
             _start, end = _rolling_window(730)
         assert end == self._FROZEN_NOW.replace(second=0, microsecond=0) - timedelta(seconds=1)
 
     def test_start_is_end_minus_days(self) -> None:
         with patch(f"{_MODULE}.datetime") as mock_dt:
             mock_dt.now.return_value = self._FROZEN_NOW
-            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)  # noqa: DTZ001 — passthrough forwards the caller's own tzinfo
             start, end = _rolling_window(730)
         assert end - start == timedelta(days=730)
 
     def test_30_day_window(self) -> None:
         with patch(f"{_MODULE}.datetime") as mock_dt:
             mock_dt.now.return_value = self._FROZEN_NOW
-            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)  # noqa: DTZ001 — passthrough forwards the caller's own tzinfo
             start, end = _rolling_window(30)
         assert end - start == timedelta(days=30)
 

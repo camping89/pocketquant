@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from pocketquant.core.domain.trading import EquityPoint
 from pocketquant.core.domain.trading.trade_stats import (
@@ -12,7 +12,7 @@ from pocketquant.core.domain.trading.trade_stats import (
     win_loss_streaks,
 )
 
-T0 = datetime(2026, 1, 1, 0, 0, 0)
+T0 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 def _eq(offset_hours: int, equity: float, drawdown: float) -> EquityPoint:

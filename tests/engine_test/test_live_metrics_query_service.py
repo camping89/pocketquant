@@ -7,7 +7,7 @@ no-crash, and the drawdown-stays-finite regression (a zero baseline made
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -20,7 +20,7 @@ from pocketquant.engine.live.live_metrics_query_service import LiveMetricsQueryS
 pytestmark = pytest.mark.integration
 
 BASELINE = 10_000.0
-T0 = datetime(2026, 1, 5, 10, 0, 0)
+T0 = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture

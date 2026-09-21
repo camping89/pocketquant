@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from scripts.rubric.reconciliation import (
     friction_bps,
@@ -12,8 +12,8 @@ from scripts.rubric.reconciliation import (
 )
 from scripts.rubric.types import TradeRow
 
-_T0 = datetime(2025, 1, 1, 0, 0, 0)
-_T1 = datetime(2025, 1, 1, 0, 10, 0)
+_T0 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+_T1 = datetime(2025, 1, 1, 0, 10, 0, tzinfo=UTC)
 
 
 def _trade(**kw) -> TradeRow:

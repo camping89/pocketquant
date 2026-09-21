@@ -14,8 +14,8 @@ def test_bar_from_mongo_coerces_naive_datetimes_to_utc():
             "symbol": "BTCUSDT",
             "exchange": "BINANCE",
             "interval": "1d",
-            "datetime": datetime(2026, 4, 10, 0, 0, 0),
-            "created_at": datetime(2026, 4, 10, 0, 1, 0),
+            "datetime": datetime(2026, 4, 10, 0, 0, 0),  # noqa: DTZ001 — naive input is the case under test
+            "created_at": datetime(2026, 4, 10, 0, 1, 0),  # noqa: DTZ001 — naive input is the case under test
         }
     )
 
@@ -32,8 +32,8 @@ def test_sync_status_from_mongo_coerces_naive_datetimes_to_utc():
             "exchange": "BINANCE",
             "interval": "1d",
             "status": "completed",
-            "last_sync_at": datetime(2026, 4, 10, 0, 2, 0),
-            "last_bar_at": datetime(2026, 4, 10, 0, 0, 0),
+            "last_sync_at": datetime(2026, 4, 10, 0, 2, 0),  # noqa: DTZ001 — naive input is the case under test
+            "last_bar_at": datetime(2026, 4, 10, 0, 0, 0),  # noqa: DTZ001 — naive input is the case under test
         }
     )
 
