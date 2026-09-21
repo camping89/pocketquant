@@ -18,8 +18,14 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The suite runs under three host zones because the app's own correctness
+    # claim is that nothing depends on one. A UTC-only job cannot catch a leak.
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: ["UTC", "Asia/Ho_Chi_Minh", "America/Chicago"]
     env:
-      TZ: UTC
+      TZ: ${{ matrix.tz }}
     steps:
       - uses: actions/checkout@v5
 
@@ -29,6 +35,12 @@ jobs:
 
       - name: Install Python + deps
         run: uv sync --frozen
+
+      # A zone the runner image cannot resolve degrades to UTC instead of
+      # failing, which would make this leg silently re-run the UTC suite.
+      - name: Verify the host zone resolved
+        if: matrix.tz != 'UTC'
+        run: python -c "import time, sys; sys.exit(0 if time.timezone != 0 else 1)"
 
       - name: Check import contracts (layered architecture)
         run: uv run lint-imports

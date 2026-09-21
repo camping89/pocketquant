@@ -46,3 +46,13 @@ fe:
 # Run tests
 test:
     {{python}} -m pytest
+
+# Run the unit suite under three host timezones — catches host-zone leakage.
+# Each non-UTC leg first proves the zone resolved; an unresolvable zone falls
+# back to UTC rather than failing, which would silently re-run the UTC suite.
+test-tz:
+    TZ=UTC {{python}} -m pytest -q
+    TZ=Asia/Ho_Chi_Minh {{python}} -c "import time,sys; sys.exit(0 if time.timezone != 0 else 1)"
+    TZ=Asia/Ho_Chi_Minh {{python}} -m pytest -q
+    TZ=America/Chicago {{python}} -c "import time,sys; sys.exit(0 if time.timezone != 0 else 1)"
+    TZ=America/Chicago {{python}} -m pytest -q
