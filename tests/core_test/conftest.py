@@ -9,9 +9,13 @@ Local Docker is required.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import os
+import time
+from collections.abc import AsyncIterator, Callable, Iterator
+from zoneinfo import ZoneInfoNotFoundError
 
 import pytest
+import tzlocal
 from testcontainers.mongodb import MongoDbContainer
 from testcontainers.redis import RedisContainer
 
@@ -19,6 +23,49 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
+
+
+
+@pytest.fixture
+def host_timezone() -> Iterator[Callable[..., None]]:
+    """Switch the process timezone for one test, restoring it on teardown.
+
+    ``time.tzset`` only refreshes the C library, while ``tzlocal`` memoizes the
+    zone separately, so a caller that changes only one of them observes a stale
+    zone and silently proves nothing.
+
+    Pass canonical IANA names. Deprecated aliases (``Asia/Saigon``, ``US/Central``)
+    live in the separate ``tzdata-legacy`` package on Debian/Ubuntu, and glibc
+    falls back to UTC for a zone it cannot find rather than raising — hence the
+    resolve check. Set ``require_resolved=False`` to exercise that degradation
+    deliberately.
+    """
+    original = os.environ.get("TZ")
+
+    def refresh_caches() -> None:
+        time.tzset()
+        try:
+            tzlocal.reload_localzone()
+        except ZoneInfoNotFoundError:
+            # An unresolvable zone makes tzlocal's cache refresh raise, even
+            # though get_localzone_name() still returns the alias string. Drop
+            # what we can and let the test observe the degraded state.
+            pass
+
+    def apply(zone: str, *, require_resolved: bool = True) -> None:
+        os.environ["TZ"] = zone
+        refresh_caches()
+        if require_resolved and zone != "UTC":
+            assert time.timezone != 0, f"{zone} did not resolve; it fell back to UTC"
+
+    try:
+        yield apply
+    finally:
+        if original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original
+        refresh_caches()
 
 
 # Per-test settings — fresh DB names so tests don't bleed state.

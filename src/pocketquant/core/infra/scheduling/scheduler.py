@@ -214,6 +214,10 @@ class JobScheduler:
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
+        # APScheduler applies the scheduler's declared timezone only when add_job
+        # builds the trigger itself from a string alias. A pre-built trigger with no
+        # timezone= falls back to tzlocal and pickles the host zone into the Mongo
+        # jobstore, so the same job fires at different instants per host.
         if cron_expression:
             parts = cron_expression.split()
             trigger = CronTrigger(
@@ -223,6 +227,7 @@ class JobScheduler:
                 month=parts[3] if len(parts) > 3 else None,
                 day_of_week=parts[4] if len(parts) > 4 else None,
                 second=second,
+                timezone=UTC,
             )
         else:
             trigger = CronTrigger(
@@ -230,6 +235,7 @@ class JobScheduler:
                 minute=minute,
                 second=second,
                 day_of_week=day_of_week,
+                timezone=UTC,
             )
 
         # Only forward misfire_grace_time when explicitly set so APScheduler falls
