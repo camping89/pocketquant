@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    # Pinned, not latest: the timezone matrix below depends on which zones the
+    # runner image ships, and ubuntu-latest moves to 26.04 during Oct-Nov 2026.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # The suite runs under three host zones because the app's own correctness
     # claim is that nothing depends on one. A UTC-only job cannot catch a leak.
@@ -148,7 +150,10 @@ jobs:
         with:
           deploy-key: ${{ secrets.POCKETQUANT_CONFIG_DEPLOY_KEY }}
 
-      - name: Prune old Docker Hub tags (keep latest 7)
+      # Docker Hub's ordering parameter reads backwards here: '-last_updated'
+      # returns oldest first. Paired with `tail -n +8` that kept the 7 OLDEST
+      # tags and deleted every newer one, leaving no image to roll back to.
+      - name: Prune old Docker Hub tags (keep newest 7)
         env:
           DH_U: ${{ steps.cfg.outputs.dockerhub_username }}
           DH_T: ${{ steps.cfg.outputs.dockerhub_token }}
@@ -165,7 +170,7 @@ jobs:
           for REPO in pocketquant pocketquant-web; do
             echo "=== Cleaning $REPO ==="
             curl -s -H "Authorization: JWT $TOKEN" \
-              "https://hub.docker.com/v2/repositories/$DH_U/$REPO/tags/?page_size=100&ordering=-last_updated" \
+              "https://hub.docker.com/v2/repositories/$DH_U/$REPO/tags/?page_size=100&ordering=last_updated" \
               | jq -r '.results[] | select(.name | startswith("sha-")) | .name' \
               | tail -n +8 \
               | while read tag; do
