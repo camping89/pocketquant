@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
@@ -28,9 +29,11 @@ router = APIRouter(route_class=DishkaRoute)
 async def integrity_check(
     body: IntegrityRequest,
     bar_repo: FromDishka[BarRepository],
+    calendar_factory: FromDishka[TradingCalendarFactory],
 ) -> dict:
     symbol = validate_composite_symbol(body.symbol)
-    return await check_integrity(symbol, body.interval, bar_repo, body.days_back)
+    calendar = await calendar_factory.for_symbol(symbol)
+    return await check_integrity(symbol, body.interval, bar_repo, calendar, body.days_back)
 
 
 @router.post("/integrity/repair")
@@ -38,8 +41,10 @@ async def integrity_repair(
     body: IntegrityRequest,
     bar_repo: FromDishka[BarRepository],
     sync_service: FromDishka[SyncService],
+    calendar_factory: FromDishka[TradingCalendarFactory],
 ) -> dict:
     symbol = validate_composite_symbol(body.symbol)
+    calendar = await calendar_factory.for_symbol(symbol)
     # source is keyword-only; days_back must be passed by name too (it follows the
     # `*` marker). Repaired bars are tagged with the REST-repair provenance.
     return await repair_integrity(
@@ -47,6 +52,7 @@ async def integrity_repair(
         body.interval,
         bar_repo,
         sync_service,
+        calendar,
         source=SOURCE_REST_REPAIR,
         days_back=body.days_back,
     )

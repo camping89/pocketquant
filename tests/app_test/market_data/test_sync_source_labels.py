@@ -86,6 +86,7 @@ async def test_repair_integrity_sends_command_with_source() -> None:
         interval=Interval.MINUTE_1,
         bar_repo=bar_repo,
         sync_service=sync_service,
+        calendar=Continuous24x7Calendar(),
         source=SOURCE_REST_REPAIR,
         days_back=1,
     )

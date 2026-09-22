@@ -288,6 +288,7 @@ async def _run_integrity(name: str) -> None:
     history_repo = await container.get(JobHistoryRepository)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
 
     started = datetime.now(UTC)
     doc_id: str | None = None
@@ -299,8 +300,9 @@ async def _run_integrity(name: str) -> None:
     try:
         tracked = await tracked_symbol_repo.list_all()
         for ts in tracked:
+            calendar = await calendar_factory.for_symbol(ts.symbol)
             for interval in SYNC_INTERVALS:
-                report = await check_integrity(ts.symbol, interval, bar_repo)
+                report = await check_integrity(ts.symbol, interval, bar_repo, calendar)
                 if report["misaligned_count"] or report["missing_count"]:
                     logger.warning(
                         "integrity.issues_found",
@@ -333,6 +335,7 @@ async def _run_repair(name: str) -> None:
     sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
 
     started = datetime.now(UTC)
     doc_id: str | None = None
@@ -344,12 +347,14 @@ async def _run_repair(name: str) -> None:
     try:
         tracked = await tracked_symbol_repo.list_all()
         for ts in tracked:
+            calendar = await calendar_factory.for_symbol(ts.symbol)
             for interval in SYNC_INTERVALS:
                 result = await repair_integrity(
                     ts.symbol,
                     interval,
                     bar_repo,
                     sync_service,
+                    calendar,
                     source=SOURCE_REST_REPAIR,
                 )
                 if result["deleted"] or result["gaps_resynced"]:

@@ -10,7 +10,7 @@ from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
     get_bar_start,
     is_bar_aligned,
 )
-from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -34,28 +34,44 @@ def _group_gaps(missing: list[datetime], step: timedelta) -> list[tuple[datetime
     return ranges
 
 
+def _expected_instants(
+    interval: Interval,
+    start: datetime,
+    end: datetime,
+    calendar: ITradingCalendarPort,
+) -> set[datetime]:
+    """The instants a bar should exist at, according to the symbol's calendar."""
+    if interval == Interval.DAY_1:
+        return {calendar.session_open(d) for d in calendar.sessions(start, end)}
+
+    return {
+        instant
+        for instant in calendar.trading_minutes(start, end)
+        if instant == calendar.bar_start(instant, interval)
+    }
+
+
 async def check_integrity(
     symbol: str,
     interval: Interval,
     bar_repo: BarRepository,
+    calendar: ITradingCalendarPort,
     days_back: int = 7,
 ) -> dict:
     """Check bar alignment + gaps for composite ``symbol``.
 
     Returns misaligned docs, missing count, gap ranges.
 
-    Note: Only reliable for 24/7 markets (crypto). Equity symbols with market hours
-    will produce false-positive gap detections on weekends/holidays.
+    The expected grid comes from the symbol's own calendar, so a market that
+    closes overnight, at weekends or for a holiday reports those hours as shut
+    rather than as gaps. Weekly bars are skipped outright: there is no agreed
+    weekly convention across venues to check them against yet.
     """
     # Grid ends at last CLOSED bar — current incomplete bar can't exist in DB yet
     now = datetime.now(UTC)
     end = get_bar_start(now, interval)
     start = end - timedelta(days=days_back)
     docs = await bar_repo.find_datetimes(symbol, interval, start, end)
-
-    # TEMPORARY: the symbol's own calendar arrives as a parameter in Task 4 of
-    # this phase, which also replaces the arithmetic expected-grid below.
-    calendar = Continuous24x7Calendar()
 
     misaligned, aligned_times = [], set()
     for d in docs:
@@ -64,18 +80,30 @@ async def check_integrity(
         else:
             misaligned.append(d)
 
-    step = timedelta(seconds=INTERVAL_SECONDS[interval])
-    expected = {start + i * step for i in range(int((end - start) / step))}
-
-    missing = sorted(expected - aligned_times)
-    gap_ranges = _group_gaps(missing, step)
-
-    return {
+    base = {
         "symbol": symbol.upper(),
         "interval": interval.value,
         "total": len(docs),
         "misaligned_count": len(misaligned),
         "misaligned_ids": [str(d["_id"]) for d in misaligned],
+    }
+
+    if interval == Interval.WEEK_1:
+        # Deferred, not forgotten: repairing a weekly bar means deciding when a
+        # week opens on each venue, and nothing downstream needs that answer yet.
+        return {
+            **base,
+            "missing_count": 0,
+            "gap_ranges": [],
+            "skipped_reason": "weekly_convention",
+        }
+
+    step = timedelta(seconds=INTERVAL_SECONDS[interval])
+    missing = sorted(_expected_instants(interval, start, end, calendar) - aligned_times)
+    gap_ranges = _group_gaps(missing, step)
+
+    return {
+        **base,
         "missing_count": len(missing),
         "gap_ranges": [(s.isoformat(), e.isoformat()) for s, e in gap_ranges],
     }
@@ -86,6 +114,7 @@ async def repair_integrity(
     interval: Interval,
     bar_repo: BarRepository,
     sync_service: SyncService,
+    calendar: ITradingCalendarPort,
     *,
     source: str,
     days_back: int = 7,
@@ -94,13 +123,27 @@ async def repair_integrity(
 
     ``symbol`` is composite ``{code}:{exchange}``.
     """
-    report = await check_integrity(symbol, interval, bar_repo, days_back)
+    report = await check_integrity(symbol, interval, bar_repo, calendar, days_back)
 
     deleted = 0
     if report["misaligned_ids"]:
         deleted = await bar_repo.delete_many_by_ids(report["misaligned_ids"])
 
     resynced = 0
+    if report.get("skipped_reason"):
+        # Nothing to resync against: the check declined to compute a grid, so a
+        # resync here would be guessing at which bars are missing.
+        return {
+            "symbol": symbol.upper(),
+            "interval": interval.value,
+            "deleted": deleted,
+            "gaps_resynced": 0,
+            "missing_before": 0,
+            "still_missing": 0,
+            "still_missing_ranges": [],
+            "skipped_reason": report["skipped_reason"],
+        }
+
     if report["gap_ranges"]:
         try:
             command = SyncSymbolCommand(
@@ -121,7 +164,7 @@ async def repair_integrity(
             )
 
     # Verify: re-check integrity after repair
-    verify = await check_integrity(symbol, interval, bar_repo, days_back)
+    verify = await check_integrity(symbol, interval, bar_repo, calendar, days_back)
     still_missing = verify["missing_count"]
     still_missing_ranges = verify["gap_ranges"]
 
