@@ -211,7 +211,17 @@ async def cascade_for_symbol(
 
             actual_count = len(source_bars)
             if actual_count < expected_count:
-                logger.warning(
+                # A bucket that has not closed yet is short because it is still
+                # filling, which is arithmetic rather than an anomaly. Every
+                # cascade re-aggregates the open bucket of every timeframe once
+                # a minute, so warning about it costs one line per symbol per
+                # timeframe per minute and scales with the symbol count —
+                # exactly the hot-path flooding CLAUDE.md puts at DEBUG.
+                # A bucket whose window has closed and is still short really has
+                # missing 1m bars, and stays a WARNING.
+                in_progress = bucket_end > now
+                emit = logger.debug if in_progress else logger.warning
+                emit(
                     "cascade.partial_aggregate",
                     symbol=sym,
                     tf=tf.value,
@@ -220,6 +230,7 @@ async def cascade_for_symbol(
                     expected=expected_count,
                     actual=actual_count,
                     missing=expected_count - actual_count,
+                    in_progress=in_progress,
                 )
 
             ohlcv = aggregate_ohlcv(source_bars)

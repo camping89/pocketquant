@@ -468,6 +468,60 @@ class TestExpectedCountComesFromTheCalendar:
         assert hourly[0]["calendar_id"] == CALENDAR.calendar_id
 
 
+class TestPartialAggregateLevelTracksWhetherTheBucketClosed:
+    """An open bucket is short by arithmetic; a closed one is short by a gap."""
+
+    async def _partials(self, boundary: datetime, bar_count: int) -> list[dict]:
+        bars = [
+            Bar(
+                symbol="BTCUSDT:BINANCE",
+                interval=Interval.MINUTE_1,
+                datetime=boundary + timedelta(minutes=i),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1.0,
+            )
+            for i in range(bar_count)
+        ]
+        bar_repo = AsyncMock()
+        bar_repo.find = AsyncMock(return_value=bars)
+        bar_repo.upsert_bar = AsyncMock()
+
+        with (
+            patch(
+                "pocketquant.engine.market_data.app_services.cascade_aggregator.compute_boundaries",
+                side_effect=lambda tf, *a: [boundary] if tf is Interval.HOUR_1 else [],
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            await cascade_for_symbol("BTCUSDT:BINANCE", 120, bar_repo, CALENDAR)
+        return [e for e in logs if e.get("event") == "cascade.partial_aggregate"]
+
+    @pytest.mark.asyncio
+    async def test_the_open_bucket_is_debug(self) -> None:
+        """The hour we are inside cannot be complete — that is not news."""
+        current_hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+        partials = await self._partials(current_hour, bar_count=3)
+
+        assert partials, "expected a shortfall to be reported at some level"
+        assert partials[0]["log_level"] == "debug"
+        assert partials[0]["in_progress"] is True
+
+    @pytest.mark.asyncio
+    async def test_a_closed_bucket_short_of_bars_is_still_a_warning(self) -> None:
+        """A finished hour holding 3 of its 60 minutes has really lost bars."""
+        past_hour = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)
+
+        partials = await self._partials(past_hour, bar_count=3)
+
+        assert partials, "expected a shortfall to be reported at some level"
+        assert partials[0]["log_level"] == "warning"
+        assert partials[0]["in_progress"] is False
+
+
 class TestCascadedBarsCarryTheirCalendar:
     """A cascaded bar records which schedule produced it."""
 
