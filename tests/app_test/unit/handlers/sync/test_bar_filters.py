@@ -17,12 +17,17 @@ import pytest
 import structlog
 
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
 from pocketquant.engine.market_data.sync_internals.bar_filters import (
+    drop_misaligned_bars,
     filter_new_bars,
 )
 
 SYMBOL = "BTCUSDT:BINANCE"
+CALENDAR = Continuous24x7Calendar()
+CME = CmeGlobexCalendarAdapter()
 
 
 def _bar(ts: datetime) -> Bar:
@@ -252,3 +257,35 @@ async def test_query_uses_min_max_of_record_datetimes(bar_repo: AsyncMock) -> No
     kwargs = bar_repo.find_datetimes.call_args.kwargs
     assert kwargs["start_date"] == base
     assert kwargs["end_date"] == base + timedelta(minutes=9)
+
+
+class TestDropMisalignedBarsFollowsTheCalendar:
+    """The drop decision belongs to the symbol's calendar, not to the UTC clock."""
+
+    # A CME session opens 17:00 Chicago the evening before its own date, so a
+    # daily bar stamped at UTC midnight is misaligned there and aligned on 24/7.
+    UTC_MIDNIGHT = datetime(2026, 6, 10, 0, 0, tzinfo=UTC)
+    CME_SESSION_OPEN = datetime(2026, 6, 9, 22, 0, tzinfo=UTC)
+
+    def _daily(self, ts: datetime) -> Bar:
+        bar = _bar(ts)
+        bar.interval = Interval.DAY_1
+        return bar
+
+    def test_same_bars_drop_the_opposite_way_on_each_calendar(self) -> None:
+        bars = [self._daily(self.UTC_MIDNIGHT), self._daily(self.CME_SESSION_OPEN)]
+
+        kept_247 = drop_misaligned_bars(bars, Interval.DAY_1, CALENDAR)
+        kept_cme = drop_misaligned_bars(bars, Interval.DAY_1, CME)
+
+        assert [b.datetime for b in kept_247] == [self.UTC_MIDNIGHT]
+        assert [b.datetime for b in kept_cme] == [self.CME_SESSION_OPEN]
+
+    def test_warning_names_the_calendar_that_rejected_the_bars(self) -> None:
+        with structlog.testing.capture_logs() as logs:
+            drop_misaligned_bars([self._daily(self.UTC_MIDNIGHT)], Interval.DAY_1, CME)
+
+        dropped = [e for e in logs if e.get("event") == "market_data.sync.misaligned_bars_dropped"]
+        assert len(dropped) == 1
+        assert dropped[0]["calendar_id"] == CME.calendar_id
+        assert dropped[0]["count"] == 1

@@ -13,6 +13,7 @@ import time
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.sync_internals.bar_alignment import has_aligned_bar
 
@@ -33,6 +34,7 @@ async def fetch_with_retry(
     symbol: str,
     interval: Interval,
     n_bars: int,
+    calendar: ITradingCalendarPort,
 ) -> tuple[list[Bar], int]:
     """Fetch bars; retry on empty / all-misaligned response.
 
@@ -58,7 +60,7 @@ async def fetch_with_retry(
             n_bars=n_bars,
         )
 
-        if records and has_aligned_bar(records, interval):
+        if records and has_aligned_bar(records, interval, calendar):
             if attempt > 1:
                 logger.info(
                     "market_data.sync.fetch_recovered",

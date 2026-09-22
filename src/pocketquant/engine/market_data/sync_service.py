@@ -7,6 +7,7 @@ from pocketquant.core.domain.sync_status.services import (
     SyncProgressDecision,
     SyncProgressTrackerDomainService,
 )
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
@@ -40,12 +41,14 @@ class SyncService:
         bar_repository: BarRepository,
         symbol_repository: SymbolRepository,
         sync_status_repository: SyncStatusRepository,
+        calendar_factory: TradingCalendarFactory,
     ) -> None:
         self._provider = provider
         self._cache = cache
         self._bar_repo = bar_repository
         self._symbol_repo = symbol_repository
         self._sync_status_repo = sync_status_repository
+        self._calendar_factory = calendar_factory
 
     async def sync_one(self, request: SyncSymbolCommand) -> SyncResponse:
         """Sync OHLCV bars for a single composite symbol."""
@@ -61,9 +64,13 @@ class SyncService:
 
         await self._sync_status_repo.upsert(symbol, interval, "syncing")
 
+        # Resolved once per sync, never per bar: the lookup behind it is cached
+        # but still crosses a repository.
+        calendar = await self._calendar_factory.for_symbol(symbol)
+
         try:
             records, fetch_attempts = await fetch_with_retry(
-                self._provider, symbol, interval, request.n_bars
+                self._provider, symbol, interval, request.n_bars, calendar
             )
             bars_fetched = len(records)
             filtered_existing = 0
@@ -76,7 +83,7 @@ class SyncService:
                     records = await filter_new_bars(records, symbol, interval, self._bar_repo)
                     filtered_existing = pre - len(records)
                 pre_align = len(records)
-                records = drop_misaligned_bars(records, interval)
+                records = drop_misaligned_bars(records, interval, calendar)
                 filtered_misaligned = pre_align - len(records)
 
             inserted_count = await self._persist_bars(symbol, records, request.source)

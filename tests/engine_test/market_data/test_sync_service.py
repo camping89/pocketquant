@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.sync_service import (
     BulkSyncCommand,
@@ -81,12 +82,19 @@ def _build_service(
     sync_status_repo.bump_empty_fetch = AsyncMock(return_value=bump_returns)
     sync_status_repo.reset_empty_fetch = AsyncMock()
 
+    # The calendar itself is real — it is pure domain logic, and mocking it
+    # would hide exactly the drift these tests exist to catch. Only the symbol
+    # lookup behind the factory is faked.
+    calendar_factory = AsyncMock()
+    calendar_factory.for_symbol = AsyncMock(return_value=Continuous24x7Calendar())
+
     svc = SyncService(
         provider=provider,
         cache=cache,
         bar_repository=bar_repo,
         symbol_repository=symbol_repo,
         sync_status_repository=sync_status_repo,
+        calendar_factory=calendar_factory,
     )
     mocks = {
         "provider": provider,
@@ -94,6 +102,7 @@ def _build_service(
         "bar_repo": bar_repo,
         "symbol_repo": symbol_repo,
         "sync_status_repo": sync_status_repo,
+        "calendar_factory": calendar_factory,
     }
 
     # Patch fetch_with_retry so tests control records+attempts directly.
@@ -110,7 +119,7 @@ def _build_service(
         svc._filter_patch = fp  # type: ignore[attr-defined]
 
     if align_returns is not None:
-        align_mock = lambda records, interval: align_returns  # noqa: E731
+        align_mock = lambda records, interval, calendar: align_returns  # noqa: E731
         ap = patch("pocketquant.engine.market_data.sync_service.drop_misaligned_bars", align_mock)
         ap.start()
         svc._align_patch = ap  # type: ignore[attr-defined]

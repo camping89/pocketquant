@@ -8,13 +8,19 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
     BarBuilderDomainService,
+    filter_aligned_bars,
     get_bar_start,
     is_bar_aligned,
 )
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
 
+CALENDAR = Continuous24x7Calendar()
+CME = CmeGlobexCalendarAdapter()
 BAR_START = datetime(2026, 5, 8, 10, 0, 0, tzinfo=UTC)
 BAR_END = BAR_START + timedelta(seconds=60)  # 1m bar
 
@@ -115,7 +121,7 @@ class TestWeeklyAlignment:
     def test_monday_midnight_is_its_own_start(self) -> None:
         monday = datetime(2026, 5, 4, 0, 0, 0, tzinfo=UTC)
         assert get_bar_start(monday, Interval.WEEK_1) == monday
-        assert is_bar_aligned(monday, Interval.WEEK_1) is True
+        assert is_bar_aligned(monday, Interval.WEEK_1, CALENDAR) is True
 
     def test_sunday_belongs_to_prior_monday(self) -> None:
         # Sunday 2026-05-10 → still the week starting Monday 2026-05-04.
@@ -124,4 +130,58 @@ class TestWeeklyAlignment:
 
     def test_non_monday_is_not_aligned(self) -> None:
         tuesday = datetime(2026, 5, 5, 0, 0, 0, tzinfo=UTC)
-        assert is_bar_aligned(tuesday, Interval.WEEK_1) is False
+        assert is_bar_aligned(tuesday, Interval.WEEK_1, CALENDAR) is False
+
+
+class TestCalendarGovernsAlignment:
+    """The symbol's calendar decides the grid — not the UTC clock.
+
+    Without these, threading a calendar through alignment is unobservable:
+    the 24/7 calendar delegates straight back to ``get_bar_start``, so every
+    other test passes just as well when the calendar argument is ignored. The
+    CME calendar is the real one futures will use, and its sessions open the
+    evening before, which puts daily and 4h bars on a different grid.
+    """
+
+    # 2026-06-10 is an ordinary CME Globex equity session; it opens 17:00
+    # Chicago the previous evening, which is 22:00 UTC in summer.
+    UTC_MIDNIGHT = datetime(2026, 6, 10, 0, 0, tzinfo=UTC)
+    CME_SESSION_OPEN = datetime(2026, 6, 9, 22, 0, tzinfo=UTC)
+
+    @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
+    def test_utc_midnight_aligns_only_on_the_continuous_calendar(
+        self, interval: Interval
+    ) -> None:
+        assert is_bar_aligned(self.UTC_MIDNIGHT, interval, CALENDAR) is True
+        assert is_bar_aligned(self.UTC_MIDNIGHT, interval, CME) is False
+
+    @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
+    def test_session_open_aligns_only_on_the_session_calendar(
+        self, interval: Interval
+    ) -> None:
+        assert is_bar_aligned(self.CME_SESSION_OPEN, interval, CME) is True
+        assert is_bar_aligned(self.CME_SESSION_OPEN, interval, CALENDAR) is False
+
+    def test_filter_aligned_bars_partitions_by_the_calendar(self) -> None:
+        bars = [
+            Bar(
+                symbol="ES1!:CME_MINI",
+                interval=Interval.DAY_1,
+                datetime=ts,
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1.0,
+            )
+            for ts in (self.UTC_MIDNIGHT, self.CME_SESSION_OPEN)
+        ]
+
+        aligned_247, dropped_247 = filter_aligned_bars(bars, Interval.DAY_1, CALENDAR)
+        aligned_cme, dropped_cme = filter_aligned_bars(bars, Interval.DAY_1, CME)
+
+        # The same two bars partition the opposite way on the two calendars.
+        assert [b.datetime for b in aligned_247] == [self.UTC_MIDNIGHT]
+        assert [b.datetime for b in dropped_247] == [self.CME_SESSION_OPEN]
+        assert [b.datetime for b in aligned_cme] == [self.CME_SESSION_OPEN]
+        assert [b.datetime for b in dropped_cme] == [self.UTC_MIDNIGHT]

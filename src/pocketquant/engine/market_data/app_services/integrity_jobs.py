@@ -10,6 +10,7 @@ from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
     get_bar_start,
     is_bar_aligned,
 )
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -52,9 +53,13 @@ async def check_integrity(
     start = end - timedelta(days=days_back)
     docs = await bar_repo.find_datetimes(symbol, interval, start, end)
 
+    # TEMPORARY: the symbol's own calendar arrives as a parameter in Task 4 of
+    # this phase, which also replaces the arithmetic expected-grid below.
+    calendar = Continuous24x7Calendar()
+
     misaligned, aligned_times = [], set()
     for d in docs:
-        if is_bar_aligned(d["datetime"], interval):
+        if is_bar_aligned(d["datetime"], interval, calendar):
             aligned_times.add(d["datetime"])
         else:
             misaligned.append(d)

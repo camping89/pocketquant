@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
+
+if TYPE_CHECKING:
+    from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 
 
 def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
@@ -31,14 +34,25 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     return epoch + timedelta(seconds=aligned_seconds)
 
 
-def is_bar_aligned(timestamp: datetime, interval: Interval) -> bool:
-    return timestamp == get_bar_start(timestamp, interval)
+def is_bar_aligned(
+    timestamp: datetime, interval: Interval, calendar: ITradingCalendarPort
+) -> bool:
+    """True when ``timestamp`` is the open instant of its bar on ``calendar``.
+
+    The grid belongs to the symbol's calendar, not to the clock: a session that
+    opens at 22:00 UTC puts its hourly bars on a different grid than a market
+    that never closes. ``Continuous24x7Calendar`` delegates back to
+    ``get_bar_start``, so crypto keeps the UTC-epoch grid exactly.
+    """
+    return timestamp == calendar.bar_start(timestamp, interval)
 
 
-def filter_aligned_bars(bars: list[Bar], interval: Interval) -> tuple[list[Bar], list[Bar]]:
+def filter_aligned_bars(
+    bars: list[Bar], interval: Interval, calendar: ITradingCalendarPort
+) -> tuple[list[Bar], list[Bar]]:
     aligned, misaligned = [], []
     for bar in bars:
-        if bar.datetime and is_bar_aligned(bar.datetime, interval):
+        if bar.datetime and is_bar_aligned(bar.datetime, interval, calendar):
             aligned.append(bar)
         else:
             misaligned.append(bar)

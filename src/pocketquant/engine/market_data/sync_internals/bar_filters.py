@@ -14,6 +14,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import coerce_utc
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.services.bar_builder_domain_service import filter_aligned_bars
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 
@@ -69,14 +70,17 @@ async def filter_new_bars(
     return filtered
 
 
-def drop_misaligned_bars(records: list[Bar], interval: Interval) -> list[Bar]:
-    """Drop bars whose timestamps don't align to the interval grid."""
-    aligned, misaligned = filter_aligned_bars(records, interval)
+def drop_misaligned_bars(
+    records: list[Bar], interval: Interval, calendar: ITradingCalendarPort
+) -> list[Bar]:
+    """Drop bars whose timestamps don't align to the calendar's interval grid."""
+    aligned, misaligned = filter_aligned_bars(records, interval, calendar)
     if misaligned:
         logger.warning(
             "market_data.sync.misaligned_bars_dropped",
             count=len(misaligned),
             interval=interval.value,
+            calendar_id=calendar.calendar_id,
             sample_times=[str(b.datetime) for b in misaligned[:3]],
         )
     return aligned

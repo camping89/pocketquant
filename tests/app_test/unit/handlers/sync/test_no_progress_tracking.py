@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
@@ -73,12 +74,16 @@ def _build_service(
     sync_status_repo.bump_empty_fetch = AsyncMock(return_value=bump_returns)
     sync_status_repo.reset_empty_fetch = AsyncMock()
 
+    calendar_factory = AsyncMock()
+    calendar_factory.for_symbol = AsyncMock(return_value=Continuous24x7Calendar())
+
     svc = SyncService(
         provider=provider,
         cache=cache,
         bar_repository=bar_repo,
         symbol_repository=symbol_repo,
         sync_status_repository=sync_status_repo,
+        calendar_factory=calendar_factory,
     )
 
     mocks = {
@@ -87,6 +92,7 @@ def _build_service(
         "bar_repo": bar_repo,
         "symbol_repo": symbol_repo,
         "sync_status_repo": sync_status_repo,
+        "calendar_factory": calendar_factory,
     }
 
     # Patch fetch_with_retry so we control records + attempts directly.

@@ -7,7 +7,8 @@ calendar refactor is not allowed to have.
 
 Regenerate deliberately and never as a reaction to a failure::
 
-    POCKETQUANT_REGEN_GOLDEN=1 uv run pytest tests/app_test/market_data/test_cascade_calendar_golden.py
+    POCKETQUANT_REGEN_GOLDEN=1 uv run pytest \
+        tests/app_test/market_data/test_cascade_calendar_golden.py
 
 A failing comparison means the production code changed, not that the snapshot
 is stale.
