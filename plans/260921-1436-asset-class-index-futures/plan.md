@@ -78,7 +78,13 @@ registered provider before TradingView enters.
 A real futures broker; multi-year 1m futures history (accepted trade-off — the cron
 accumulates forward); Databento/IBKR adapters; tick-level fidelity beyond the
 scraper; contract-roll modelling inside paper positions; redoing the margin
-accounting shipped in plan `260628-2013`; any branching on the TradingView plan tier.
+accounting shipped in plan `260628-2013`.
+
+~~Any branching on the TradingView plan tier.~~ **Reversed by user decision,
+2026-09-22** — see Session 5 below. The free plan must work untouched and a paid
+plan must light up without a rewrite, which needs the tier represented somewhere.
+What survives of the original non-goal is that nothing below `Settings` branches on
+the plan's name.
 
 ## Dependencies and risks
 
@@ -704,3 +710,93 @@ code:
   ("zero `no_progress`, `stuck_threshold_crossed` or `partial_aggregate` for
   `ES1!:CME_MINI` across one full week") on day one. Confirm the halt against CME's
   contract specs before modelling it.
+
+
+**User decision, 2026-09-22 — the TradingView entitlement is deferred, so both paths
+must be supported.** No data add-on is being bought now. The requirement is that the
+free plan works with no configuration, that buying the ~$10/month CME non-professional
+add-on later is a configuration change rather than a code change, and that the design
+extends to a further plan without a rewrite.
+
+Phase 5 Task 1 originally carried three independent settings — `tradingview_max_bars`,
+`tradingview_poll_seconds` and `tradingview_delayed_data`. They are not independent:
+each is a consequence of the plan the account holds, and setting them separately lets
+an operator express states that cannot exist, such as real-time data on a free account
+or a five-second poll against a feed delayed ten minutes, which is ban risk for no
+benefit. They are now derived from one `tradingview_plan` setting through a
+`TradingViewCapabilities` record, with explicit per-field overrides still winning —
+the same shape Phase 2 Task 3 used to derive `calendar_id` from `asset_class`.
+
+This reverses the "no branching on the TradingView plan tier" non-goal. The part of
+that non-goal worth keeping is kept: no consumer below `Settings` branches on a plan
+name, they ask the capability record what they may do. Adding a plan is one map entry;
+adding a capability is one field.
+
+Phase 6 Task 5 and Task 7 must read `capabilities.min_poll_seconds` as a floor —
+`max(configured, floor)` — rather than reading `tradingview_poll_seconds` directly, so
+a paid plan can poll faster while no plan polls below its own safe limit. Phase 7's UI
+surfaces `capabilities.realtime` rather than the old `tradingview_delayed_data` flag.
+
+### Session 6 — 2026-09-22 (pre-Phase-5 calendar fixes)
+
+Both issues the post-Phase-4 review raised were reproduced directly against the adapter
+before being fixed, and both are fixed and deployed.
+
+**The session-lookup window was shorter than the gap it had to clear.** `_window_rows`
+reached one day either side of the instant. Between Friday's 16:00 Chicago close and
+Sunday's evening open there is no session at all, so a Saturday instant found none
+ahead of it and a Sunday-morning instant none behind, and the lookup raised `KeyError`.
+
+Three callers sit on that gap, and the worst one was not the one first reported.
+`bar_start` and `session_date` would have failed per symbol per minute all weekend,
+which is noisy but contained. `previous_close` also raised, and the sync job evaluates
+it for every symbol at `sync_jobs.py:186` — *before* the per-symbol `try` that begins
+at line 214. One tracked futures symbol would therefore have aborted the whole
+`_sync_by_intervals` loop every Sunday morning, stopping BTC, ETH and SOL as well.
+
+The window is now four days either side, which clears a weekend plus an adjacent
+holiday. Widening is safe for every caller because each filters on the session
+boundaries themselves, so an extra row ahead of the instant can neither contain it nor
+precede it. A guard walks every hour of a full weekend and asserts that the sync gate's
+own expression, `bar_start`, and `session_date` all resolve. Mutation-tested at one day
+(3 tests fail) and at two days (1 still fails), so the width is load-bearing rather
+than arbitrary.
+
+**The daily equity-index halt was not modelled.** ES, NQ and YM pause 15:15-15:30
+Chicago, just after the cash equity close, on top of the 16:00-17:00 maintenance break.
+Confirmed against CME's published contract hours before implementing, because modelling
+a halt that does not exist would skip real bars — and the halt is specific to the index
+products, where CME's crude and gold contracts run straight through that window.
+
+Left unmodelled it would have produced, every weekday and for each of the three
+symbols, a no-progress streak crossing its threshold, a partial hourly bucket, and
+fifteen missing minutes in the nightly integrity scan with the repair job re-fetching
+gaps that were never gaps. That is the direct opposite of this plan's own success
+criterion of a clean live week for `ES1!:CME_MINI`.
+
+The halt is clipped to each session's boundaries, so an early close landing before it
+leaves that session with a shortened halt or none. It is stored as a local wall-clock
+time and converted per session, never as an offset — 15:15 Chicago is 20:15 UTC in
+summer and 21:15 in winter, and the fixed-offset mutation is one of the four that turn
+a test red.
+
+**`periods_per_year(HOUR_1)` moves from 5910.0 to 5848.0.** Correction 12 pinned 5910
+as an exact equality on the reasoning that a closed reference year cannot change. That
+reasoning still holds; what changed is the model, not the year. The 62-hour difference
+is not a clean 259 x 15 minutes because early closes shorten or remove the halt.
+`periods_per_year(DAY_1)` is unchanged at 259.0.
+
+**Measured after the calendar fixes.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `792 passed, 1 skipped` |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 9 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+| `just test-tz` | `792 passed` under all three zones |
+
+Deployed as `dffe5ed`, Actions run `35742858417` green, three post-deploy `sync_1m`
+cycles at `synced_count=3, error_count=0` and zero errors of any kind. Production
+behaviour is unchanged today by construction: every tracked symbol is on the 24/7
+calendar, so none of this code runs until a futures symbol is seeded in Phase 5.

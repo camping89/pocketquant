@@ -12,7 +12,8 @@ dependencies: [3, 4]
 (Advice Phase 4.) The first futures data lands here. The scraper library is isolated
 behind an internal client interface so it can be swapped without touching the adapter,
 the mapper never trusts the library's DataFrame index for timestamps, and the bar cap
-and credentials are configuration with no branching on the TradingView plan tier.
+and credentials are configuration. The plan tier is one setting that derives a
+capability record (Task 1 step 4); nothing below `Settings` branches on its name.
 
 Two verified facts drive the design:
 - `tvDatafeed`'s `__create_df` builds each bar timestamp with
@@ -50,14 +51,64 @@ Two verified facts drive the design:
    tradingview_username: str | None = None
    tradingview_password: SecretStr | None = None
    tradingview_auth_token: SecretStr | None = None
-   tradingview_max_bars: int = 5000
-   tradingview_poll_seconds: int = 60
-   tradingview_delayed_data: bool = True
+   tradingview_plan: TradingViewPlan = TradingViewPlan.FREE
+   # Explicit overrides; each wins over the plan's default when set.
+   tradingview_max_bars: int | None = None
+   tradingview_poll_seconds: int | None = None
    ```
    `SecretStr` is already imported at `core/config.py:6`.
-4. `tradingview_poll_seconds` defaults to 60, not 10: with delayed CME data (the
-   default on every plan until the non-professional add-on is bought) polling faster
-   only increases ban risk.
+4. **Entitlement is one knob, not three flags (user decision, 2026-09-22).** The
+   three separate values this task originally carried — `max_bars`,
+   `poll_seconds`, `delayed_data` — are not independent. They are consequences of
+   which TradingView plan the account holds, and setting them separately lets an
+   operator express states that cannot exist: real-time data on a free account, or
+   a 5-second poll while the feed is delayed ten minutes, which is pure ban risk
+   for no benefit.
+
+   Add to `core/domain/shared/enums.py`:
+   ```python
+   class TradingViewPlan(str, Enum):
+       FREE = "free"                    # delayed CME data, conservative limits
+       CME_NON_PRO = "cme_non_pro"      # the ~$10/month non-professional add-on
+   ```
+   and a capability record next to it, derived from the plan by a module-level
+   map, following the `_DEFAULT_CALENDAR_FOR` precedent Phase 2 Task 3 set for
+   deriving `calendar_id` from `asset_class`:
+   ```python
+   @dataclass(frozen=True)
+   class TradingViewCapabilities:
+       realtime: bool
+       max_bars: int
+       min_poll_seconds: int
+
+   _CAPABILITIES_FOR = {
+       TradingViewPlan.FREE: TradingViewCapabilities(False, 5_000, 60),
+       TradingViewPlan.CME_NON_PRO: TradingViewCapabilities(True, 5_000, 15),
+   }
+   ```
+   Expose it as a `Settings` property that applies the explicit overrides on top,
+   so `settings.tradingview_capabilities` is the single thing every consumer
+   reads. Nothing downstream branches on the plan name; they ask the capability
+   record what they are allowed to do.
+
+   This satisfies three requirements at once: the free plan is the default and
+   works with no configuration, buying the add-on is one setting change that moves
+   the delay flag and the poll floor together and correctly, and adding a future
+   plan is one map entry while adding a capability is one field. Set
+   `tradingview_plan` from `../pocketquant-config/`, never here.
+
+   **This reverses a stated non-goal.** `plan.md` listed "any branching on the
+   TradingView plan tier" as out of scope, and the Context section of this phase
+   repeats it. The user asked on 2026-09-22 for the free and paid paths to be
+   explicitly supported and extensible, which supersedes it. There is still no
+   branching on the plan *name* anywhere below Settings — that was the part of the
+   non-goal worth keeping, and the capability record is what keeps it.
+
+5. `min_poll_seconds` is 60 on the free plan, not 10: with delayed CME data,
+   polling faster only increases ban risk without making a quote any fresher. It
+   is a floor rather than a value — Phase 6 must take
+   `max(configured, capabilities.min_poll_seconds)` so a paid plan can poll faster
+   but no plan can poll below its own safe limit.
 5. Document the field NAMES in `README.md`. Put the VALUES only in
    `../pocketquant-config/vps/default/.env` (prod) and
    `../pocketquant-config/local/all-local.env` (dev). Never write a value into this
@@ -65,7 +116,7 @@ Two verified facts drive the design:
 
 **Success criteria.** The library imports and the settings load with defaults.
 
-**Verify.** `uv run python -c "import tvDatafeed; from pocketquant.core.config import Settings; print(hasattr(tvDatafeed,'TvDatafeed'), Settings().tradingview_max_bars)"` prints `True 5000`.
+**Verify.** `uv run python -c "import tvDatafeed; from pocketquant.core.config import Settings; s=Settings(); print(hasattr(tvDatafeed,'TvDatafeed'), s.tradingview_capabilities.max_bars, s.tradingview_capabilities.realtime)"` prints `True 5000 False`, and the same with `TRADINGVIEW_PLAN=cme_non_pro` prints `True 5000 True`.
 
 ---
 
