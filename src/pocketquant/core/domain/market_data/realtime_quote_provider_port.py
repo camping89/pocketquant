@@ -23,7 +23,18 @@ class IRealtimeQuoteProviderPort(Protocol):
     type resolution and runtime isinstance() checks.
     """
 
-    last_tick_at: datetime | None
+    @property
+    def last_tick_at(self) -> datetime | None:
+        """When this provider last saw a tick; ``None`` before the first.
+
+        Read-only on purpose. No consumer writes it through the port — the
+        only writers are providers updating their own attribute — and a
+        mutable declaration forces every implementation to expose a settable
+        attribute, which rules out a provider that derives the value rather
+        than storing it.
+        """
+        ...
+
 
     async def connect(self) -> None:
         """Open the WebSocket connection."""

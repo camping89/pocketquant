@@ -8,11 +8,15 @@ from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
 from pocketquant.core.infra.binance.binance_websocket_adapter import (
     BinanceWebSocketAdapter,
 )
+from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import (
+    RoutingRealtimeQuoteAdapter,
+)
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.engine.market_data.app_services.quote_app_service import QuoteAppService
 from pocketquant.engine.market_data.app_services.ws_subscription_app_service import (
@@ -32,8 +36,14 @@ class MarketDataProvider(Provider):
         return BarAppService(cache=cache, bar_repository=bar_repository, event_bus=event_bus)
 
     @provide(scope=Scope.APP)
-    def get_realtime_quote_provider(self) -> IRealtimeQuoteProviderPort:
-        return BinanceWebSocketAdapter()  # type: ignore[return-value]  # Protocol satisfied structurally
+    def get_realtime_quote_provider(
+        self, settings: Settings, symbol_lookup: SymbolLookupHelper
+    ) -> IRealtimeQuoteProviderPort:
+        return RoutingRealtimeQuoteAdapter(
+            providers={"binance": BinanceWebSocketAdapter()},
+            settings=settings,
+            symbol_lookup=symbol_lookup,
+        )
 
     @provide(scope=Scope.APP)
     def get_quote_service(

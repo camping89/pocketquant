@@ -8,9 +8,13 @@ from pocketquant.core.domain.market_data.data_provider_port import IDataProvider
 from pocketquant.core.infra.binance.binance_adapter import BinanceAdapter
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
+    RoutingDataProviderAdapter,
+)
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 
 
@@ -28,8 +32,16 @@ class InfrastructureProvider(Provider):
             scheduler.shutdown(wait=True)
 
     @provide(scope=Scope.APP)
-    def get_data_provider(self, settings: Settings) -> IDataProviderPort:
-        return BinanceAdapter(settings=settings)
+    def get_data_provider(
+        self, settings: Settings, symbol_lookup: SymbolLookupHelper
+    ) -> IDataProviderPort:
+        # Binance is the only provider registered today. The routing adapter
+        # implements the same port, so every consumer above it is unchanged.
+        return RoutingDataProviderAdapter(
+            providers={"binance": BinanceAdapter(settings=settings)},
+            settings=settings,
+            symbol_lookup=symbol_lookup,
+        )
 
     broker_factory = provide(BrokerFactory, scope=Scope.APP)
     trading_calendar_factory = provide(TradingCalendarFactory, scope=Scope.APP)
