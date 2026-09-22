@@ -92,6 +92,9 @@ Key prod env vars (full set in `vps/default/.env`):
 | `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host-published ports (use obscure values) |
 | `OKX_API_KEY` / `_SECRET` / `_PASSPHRASE` | No | OKX live trading only |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
+| `TRADINGVIEW_PLAN` | No | `free` (default) or `cme_non_pro`. The single index-futures entitlement knob; derives bar cap, poll floor and real-time. |
+| `TRADINGVIEW_AUTH_TOKEN` | No | Supplies a session token directly and wins over username/password. |
+| `TRADINGVIEW_USERNAME` / `_PASSWORD` | No | Optional login; the scraper falls back to anonymous (delayed, limited) without it. |
 
 Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `$MONGO_PORT`→27017 · Redis `$REDIS_PORT`→6379 · Portainer `$PORTAINER_PORT`→9000.
 

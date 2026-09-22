@@ -308,6 +308,11 @@ core/
 │       ├── binance_adapter.py            # BinanceAdapter (implements core.domain IDataProviderPort)
 │       ├── binance_websocket_adapter.py  # BinanceWebSocketAdapter (@aggTrade stream)
 │       └── binance_mappers.py           # Binance-specific mapping
+├── tradingview/             # TradingView scraper integration (index futures)
+│   ├── tradingview_client_interface.py  # ITradingViewClient + RawBar (the swap seam)
+│   ├── tvdatafeed_client.py             # TvDatafeedClient (lock-serialised, epoch recovery)
+│   ├── tradingview_adapter.py           # TradingViewAdapter (implements IDataProviderPort)
+│   └── tradingview_mappers.py           # Symbol/interval/bar mapping
 ├── scheduling/
 │   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
 ├── http_client/
@@ -332,6 +337,8 @@ core/
 | **OKXBrokerAdapter** | Live trading, HMAC auth, exponential backoff reconnection |
 | **BinanceAdapter** | Implements IDataProviderPort; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilderDomainService). Rate limit: 1200 weight/min. |
 | **BinanceWebSocketAdapter** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
+| **TradingViewAdapter** | Implements IDataProviderPort for index futures (ES/NQ/YM). Clamps the request to the plan's entitlement and drops the in-progress bar using the symbol's own calendar. Symbol search is not supported — routing delegates it to the crypto primary. |
+| **TvDatafeedClient** | Wraps the unofficial `tvDatafeed` scraper behind ITradingViewClient. Serialises every call with an asyncio.Lock: the library assigns `self.ws` per call and shares one chart session, so concurrent calls would return one symbol's series for another. Recovers the true epoch from the library's naive host-local index. |
 | **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
@@ -772,7 +779,7 @@ core ◁ engine ◁ app
 
 ## Configuration
 
-Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), `MARKET_DATA_PROVIDERS` (JSON `{asset_class: [provider_id, ...]}`, ordered primary-first), `SYMBOL_PROVIDER_OVERRIDES` (JSON `{COMPOSITE_SYMBOL: [provider_id, ...]}`). Both routing vars replace their whole mapping rather than merging into the defaults. See [deployment.md](./deployment.md) for per-env details.
+Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), `MARKET_DATA_PROVIDERS` (JSON `{asset_class: [provider_id, ...]}`, ordered primary-first), `SYMBOL_PROVIDER_OVERRIDES` (JSON `{COMPOSITE_SYMBOL: [provider_id, ...]}`). Both routing vars replace their whole mapping rather than merging into the defaults. TradingView (index futures): `TRADINGVIEW_PLAN` (`free` | `cme_non_pro`) is the single entitlement knob and derives the bar cap, the poll floor and whether the feed is real-time; `TRADINGVIEW_USERNAME`/`TRADINGVIEW_PASSWORD` and `TRADINGVIEW_AUTH_TOKEN` (which wins over them) are optional; `TRADINGVIEW_MAX_BARS` and `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than the plan allows. See [deployment.md](./deployment.md) for per-env details.
 
 ## Dependencies
 
