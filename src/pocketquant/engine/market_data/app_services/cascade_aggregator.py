@@ -22,6 +22,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_CASCADE, Bar
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.symbol.value_objects import CALENDAR_CRYPTO_24_7
 
 if TYPE_CHECKING:
     from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -36,6 +37,27 @@ CASCADE_TFS: list[Interval] = [
     Interval.HOUR_4,
     Interval.DAY_1,
 ]
+
+_INTRADAY_CASCADE_TFS: list[Interval] = [
+    Interval.MINUTE_5,
+    Interval.MINUTE_15,
+    Interval.HOUR_1,
+    Interval.HOUR_4,
+]
+
+
+def cascade_tfs(calendar: ITradingCalendarPort) -> list[Interval]:
+    """Timeframes to derive from 1m bars for a symbol on ``calendar``.
+
+    A market that never closes can have its daily bar built by cascading 1m
+    across UTC midnight, because that is exactly where its day begins. A session
+    market's day begins at the session open the evening before, so a cascaded
+    daily bar would never match the vendor's own chart. Those come from the
+    provider instead.
+    """
+    if calendar.calendar_id == CALENDAR_CRYPTO_24_7:
+        return CASCADE_TFS
+    return _INTRADAY_CASCADE_TFS
 
 
 def tf_seconds(tf: Interval) -> int:
@@ -147,7 +169,7 @@ async def cascade_for_symbol(
 
     ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
 
-    For each tf in CASCADE_TFS:
+    For each tf in ``cascade_tfs(calendar)``:
       1. Determine calendar-aligned bucket boundaries within [now - lookback_minutes, now].
       2. For each bucket: query 1m bars in [boundary, boundary + tf_seconds).
       3. Aggregate OHLCV.
@@ -163,7 +185,7 @@ async def cascade_for_symbol(
 
     persisted_per_tf: dict[Interval, int] = {}
 
-    for tf in CASCADE_TFS:
+    for tf in cascade_tfs(calendar):
         boundaries = compute_boundaries(tf, range_start, now, calendar)
         tf_secs = tf_seconds(tf)
         upserted = 0

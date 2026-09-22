@@ -17,6 +17,7 @@ from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     aggregate_ohlcv,
     cascade_for_symbol,
+    cascade_tfs,
     compute_boundaries,
     tf_seconds,
 )
@@ -507,3 +508,41 @@ class TestCascadedBarsCarryTheirCalendar:
         bar = await self._upserted(CALENDAR, Interval.HOUR_1)
         assert bar.calendar_id == CALENDAR.calendar_id
         assert bar.session_date is None
+
+
+class TestCascadeTimeframesDependOnTheCalendar:
+    """Daily bars are cascaded only where the day begins at UTC midnight."""
+
+    def test_a_continuous_market_cascades_its_daily_bar(self) -> None:
+        assert Interval.DAY_1 in cascade_tfs(CALENDAR)
+        assert cascade_tfs(CALENDAR) == CASCADE_TFS
+
+    def test_a_session_market_fetches_its_daily_bar_instead(self) -> None:
+        tfs = cascade_tfs(CME)
+        assert Interval.DAY_1 not in tfs
+        # Intraday timeframes are still derived, in the same order.
+        assert tfs == [t for t in CASCADE_TFS if t is not Interval.DAY_1]
+
+    @pytest.mark.asyncio
+    async def test_a_session_symbol_never_upserts_a_cascaded_daily_bar(self) -> None:
+        bar_repo = AsyncMock()
+        bar_repo.find = AsyncMock(
+            return_value=[
+                Bar(
+                    symbol="ES1!:CME_MINI",
+                    interval=Interval.MINUTE_1,
+                    datetime=datetime(2026, 6, 10, 14, 0, tzinfo=UTC),
+                    open=1.0,
+                    high=1.0,
+                    low=1.0,
+                    close=1.0,
+                    volume=1.0,
+                )
+            ]
+        )
+        bar_repo.upsert_bar = AsyncMock()
+
+        await cascade_for_symbol("ES1!:CME_MINI", 60, bar_repo, CME)
+
+        written = [c.args[0].interval for c in bar_repo.upsert_bar.await_args_list]
+        assert Interval.DAY_1 not in written
