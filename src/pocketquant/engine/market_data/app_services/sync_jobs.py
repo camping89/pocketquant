@@ -28,6 +28,7 @@ from pocketquant.core.domain.bar.entities import (
 )
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
@@ -137,12 +138,16 @@ async def _sync_by_intervals(
     history_repo: JobHistoryRepository,
     doc_id: str | None,
     source: str,
+    calendar_factory: TradingCalendarFactory,
 ) -> tuple[int, int]:
     """For each tracked symbol, sync the given intervals via REST provider.
 
     Returns (total_inserted, total_fetched) rolled up across all sub-syncs.
     Symbol source is TrackedSymbolRepository (replaces old SyncStatusRepository scan).
     Each ts.symbol is composite ``{code}:{exchange}``.
+
+    A symbol whose market is shut is skipped without calling the provider: there
+    is nothing to fetch, and asking anyway spends rate limit on an empty answer.
     """
     logger.debug(f"market_data.{job_name}.started")
 
@@ -158,11 +163,48 @@ async def _sync_by_intervals(
 
     synced = 0
     errors = 0
+    skipped = 0
     first_error: Exception | None = None
     total_inserted = 0
     total_fetched = 0
 
+    # One interval of grace after the close, so the session's final bar is still
+    # fetched once it has actually closed.
+    grace = timedelta(
+        seconds=INTERVAL_SECONDS[max(intervals, key=lambda i: INTERVAL_SECONDS[i])]
+    )
+
     for symbol in symbols:
+        calendar = await calendar_factory.for_symbol(symbol)
+        now = datetime.now(UTC)
+        if not (calendar.is_open(now) or (now - calendar.previous_close(now)) <= grace):
+            skipped += 1
+            logger.debug(
+                f"market_data.{job_name}.symbol_skipped_closed",
+                symbol=symbol,
+                calendar_id=calendar.calendar_id,
+            )
+            if doc_id:
+                try:
+                    await history_repo.record_detail(
+                        doc_id,
+                        symbol=symbol,
+                        interval=intervals[0].value,
+                        bars_fetched=0,
+                        bars_inserted=0,
+                        filtered_existing=0,
+                        filtered_misaligned=0,
+                        status="skipped",
+                        error="closed",
+                    )
+                except Exception:
+                    logger.warning(
+                        "job_history.record_detail_failed",
+                        job_id=job_name,
+                        exc_info=True,
+                    )
+            continue
+
         for interval in intervals:
             try:
                 command = SyncSymbolCommand(
@@ -226,7 +268,12 @@ async def _sync_by_intervals(
                             exc_info=True,
                         )
 
-    logger.info(f"market_data.{job_name}.completed", synced_count=synced, error_count=errors)
+    logger.info(
+        f"market_data.{job_name}.completed",
+        synced_count=synced,
+        error_count=errors,
+        skipped_count=skipped,
+    )
     if first_error:
         raise first_error
     return total_inserted, total_fetched
@@ -242,6 +289,7 @@ async def _run_sync(
     history_repo = await container.get(JobHistoryRepository)
     sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
 
     started = datetime.now(UTC)
     doc_id: str | None = None
@@ -260,6 +308,7 @@ async def _run_sync(
             history_repo,
             doc_id,
             source=source,
+            calendar_factory=calendar_factory,
         )
         if doc_id:
             await history_repo.record_finish(
@@ -411,6 +460,7 @@ async def sync_1m() -> None:
             history_repo,
             doc_id,
             source=SOURCE_REST_SYNC_1M,
+            calendar_factory=calendar_factory,
         )
 
         tracked = await tracked_symbol_repo.list_all()
