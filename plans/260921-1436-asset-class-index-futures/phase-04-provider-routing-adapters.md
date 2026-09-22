@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Provider Routing Adapters and Settings"
-status: pending
+status: complete
 priority: P1
 effort: "1d"
 dependencies: [2]
@@ -86,7 +86,7 @@ adapters.
 **Success criteria.** Overrides win, the map is the fallback, and an unmapped asset
 class returns an empty list.
 
-**Verify.** `uv run pytest tests/core_test/unit/domain/market_data/test_provider_routing.py -q` exits 0 and prints `4 passed` (test written in Task 3).
+**Verify.** `uv run pytest tests/core_test/unit/domain/market_data/test_provider_routing.py -q` exits 0 and prints `5 passed` (tests written in Task 3).
 
 ---
 
@@ -104,9 +104,10 @@ class returns an empty list.
    override registered under `ES1!:CME_MINI`),
    `test_unmapped_asset_class_returns_empty_list`.
 
-**Success criteria.** 4 tests pass.
+**Success criteria.** The routing rule is pinned, including that the returned list
+is a copy (Task 2 step 2), which none of the four named tests covers — hence 5.
 
-**Verify.** `uv run pytest tests/core_test/unit/domain/market_data/test_provider_routing.py -q` exits 0 and prints `4 passed`.
+**Verify.** `uv run pytest tests/core_test/unit/domain/market_data/test_provider_routing.py -q` exits 0 and prints `5 passed`.
 
 ---
 
@@ -146,7 +147,7 @@ the next on exception or empty result.
 **Success criteria.** A fake primary that raises falls through to a fake secondary
 that returns bars.
 
-**Verify.** `uv run pytest tests/core_test/infra/market_data/test_routing_data_provider_adapter.py -q` exits 0 and prints `6 passed` (tests written in Task 6).
+**Verify.** `uv run pytest tests/core_test/infra/market_data/test_routing_data_provider_adapter.py -q` exits 0 and prints `9 passed` (tests written in Task 6).
 
 ---
 
@@ -182,16 +183,28 @@ that returns bars.
    `WsSubscriptionAppService._reconcile` (which reads `provider.subscriptions.keys()`
    at `ws_subscription_app_service.py:68`) sees the full desired set.
 9. `last_tick_at`: implement as a property returning the maximum non-`None`
-   `last_tick_at` across children, or `None`. The Protocol declares it as a plain
-   attribute; a read-only property satisfies structural typing.
+   `last_tick_at` across children, or `None`. **Corrected (Correction 14).** A
+   read-only property satisfies runtime `isinstance`, which only checks that the
+   attribute exists, but NOT static typing: pyright rejects a property against a
+   member declared as a mutable attribute (`"last_tick_at" is invariant because it
+   is mutable`). Declare `last_tick_at` as a read-only `@property` on the PORT
+   instead. Nothing writes it through the port — every write is a provider
+   assigning its own attribute — so read-only is the weakest correct contract.
 
-**Success criteria.** `isinstance(adapter, IRealtimeQuoteProviderPort)` is True (the
-Protocol is `@runtime_checkable`).
+**Success criteria.** The adapter satisfies the port both statically and at runtime.
 
-**Verify.** `uv run python -c "
-from pocketquant.core.domain.market_data.realtime_quote_provider_port import IRealtimeQuoteProviderPort
-from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import RoutingRealtimeQuoteAdapter
-print(hasattr(RoutingRealtimeQuoteAdapter, 'run_forever'), issubclass(RoutingRealtimeQuoteAdapter, IRealtimeQuoteProviderPort) if hasattr(IRealtimeQuoteProviderPort, '_is_runtime_protocol') else 'n/a')"` prints a line starting with `True`.
+**Verify (corrected — Correction 14).** The original command called
+`issubclass` on a Protocol with non-method members, which raises `TypeError` for
+every class including the shipped `BinanceWebSocketAdapter`; it could not pass on
+correct code. `isinstance` alone is also too weak — it checks only that the names
+exist, so it cannot see a wrong signature or the property/attribute mismatch above.
+Gate on both layers:
+
+`uv run pyright src && uv run pytest tests/core_test/infra/market_data/test_routing_realtime_quote_adapter.py -q` exits 0.
+
+This only works with the `# type: ignore` comments REMOVED from the DI binding (see
+Task 7 step 2): pyright treats `# type: ignore[...]` as a blanket suppression of the
+line, and that line is the single place where the adapter meets the port type.
 
 ---
 
@@ -221,9 +234,11 @@ pinned.
    `git diff --stat` reasoning in a comment that the override needed no change in
    `engine/` or `app/` — this is the G4 evidence.
 
-**Success criteria.** 10 tests pass.
+**Success criteria.** Every fallback branch is pinned, and each was confirmed to
+turn a test red by actually being removed — with one registered provider none of
+this is reachable in production, so an unmutated test here proves nothing.
 
-**Verify.** `uv run pytest tests/core_test/infra/market_data/ -q` exits 0 and prints `10 passed`.
+**Verify.** `uv run pytest tests/core_test/infra/market_data/ -q` exits 0 and prints `20 passed`.
 
 ---
 
@@ -252,15 +267,27 @@ sole registered provider.
        )
    ```
 2. In `market_data.py`, do the same for the realtime port with
-   `{"binance": BinanceWebSocketAdapter()}`. Keep the existing
-   `# type: ignore[return-value]` comment style for the Protocol return.
+   `{"binance": BinanceWebSocketAdapter()}`. **Corrected (Correction 14).** Do NOT
+   keep the `# type: ignore[return-value]` comment. Pyright suppresses the whole
+   line, and this is the only place the routing adapter is checked against the
+   port, so the ignore blinds the gate — it was hiding a real type error. With the
+   port's `last_tick_at` declared as a property (Task 5 step 9) no ignore is needed.
 3. Do NOT register a TradingView provider here — Phase 5 adds it.
 4. Verify no other file constructs `BinanceAdapter` or `BinanceWebSocketAdapter`
    outside DI and tests.
 
 **Success criteria.** The whole DI graph still resolves and no consumer changed.
 
-**Verify.** `uv run pytest tests/app_test/integration/ -q && test "$(grep -rln 'BinanceAdapter(\|BinanceWebSocketAdapter(' src/ | grep -vc '^src/pocketquant/app/di/')" = "0"` exits 0.
+**Verify (corrected — Correction 14).** The original grep matched
+`class BinanceAdapter(IDataProviderPort):` at `binance_adapter.py:34` and the
+"Usage:" docstring examples at `binance_adapter.py:38` and
+`binance_websocket_adapter.py:44`, so it returned 2 on correct code. Excluding the
+adapters' own package returns 0, and returns 1 when a construction is planted in
+`engine/`:
+
+```
+uv run pytest tests/app_test/integration/ -q && test "$(grep -rn 'BinanceAdapter(\|BinanceWebSocketAdapter(' src/ --include='*.py' | grep -v '^src/pocketquant/app/di/' | grep -v '^src/pocketquant/core/infra/binance/' | wc -l)" = "0"
+```
 
 ---
 
@@ -284,14 +311,14 @@ sole registered provider.
 
 ## Todo
 
-- [ ] Task 1 — Provider settings
-- [ ] Task 2 — Pure provider-resolution function
-- [ ] Task 3 — Provider-resolution tests
-- [ ] Task 4 — `RoutingDataProviderAdapter`
-- [ ] Task 5 — `RoutingRealtimeQuoteAdapter`
-- [ ] Task 6 — Routing adapter tests
-- [ ] Task 7 — Bind the routing adapters in DI, Binance only
-- [ ] Task 8 — Phase gate: crypto unchanged through the routing layer
+- [x] Task 1 — Provider settings
+- [x] Task 2 — Pure provider-resolution function
+- [x] Task 3 — Provider-resolution tests
+- [x] Task 4 — `RoutingDataProviderAdapter`
+- [x] Task 5 — `RoutingRealtimeQuoteAdapter`
+- [x] Task 6 — Routing adapter tests
+- [x] Task 7 — Bind the routing adapters in DI, Binance only
+- [x] Task 8 — Phase gate: crypto unchanged through the routing layer
 
 ## Risks and rollback
 

@@ -498,3 +498,128 @@ once more in a full-suite run and passed on re-run, the third sighting. Still th
 same-millisecond `$sort`/`$first` tie with no secondary key at
 `job_history_repository.py:193-197`. Still not this phase's business, but it is now a
 recurring rather than an isolated observation.
+
+### Session 5 — 2026-09-22 (execution, Phase 4)
+
+**Correction 14 — three more gates that cannot pass on correct code, and the real
+defect one of them was hiding.** Same class as corrections 1, 4 and 11, with one
+difference that matters: this time the broken gate was not merely useless, it was
+concealing a genuine type error.
+
+*Task 5's Verify calls `issubclass` on a Protocol that forbids it.*
+`IRealtimeQuoteProviderPort` has three non-method members (`last_tick_at`,
+`subscription_count`, `subscriptions`), and CPython raises
+`TypeError: Protocols with non-method members don't support issubclass()` for any
+class at all. The shipped `BinanceWebSocketAdapter` fails the same call identically,
+which is the proof the gate was never measuring the adapter. Task 5's own **Success
+criteria** line names `isinstance`, which does pass; only the Verify command was
+wrong.
+
+*What it was hiding.* Task 5 step 9 asserts that "a read-only property satisfies
+structural typing". That is true of runtime `isinstance`, which only checks that an
+attribute exists, and false of static typing. With the `# type: ignore` comments
+removed from `app/di/market_data.py`, pyright reports
+`"last_tick_at" is invariant because it is mutable / Type "property" is not
+assignable to type "datetime | None"`. The port declared `last_tick_at` as a mutable
+attribute, the routing adapter derives it as a read-only property, and those are
+genuinely incompatible. `uv run pyright src` was green only because Task 7 step 2
+said to keep the existing `# type: ignore` style, and pyright treats any
+`# type: ignore[...]` as a blanket suppression of the line — so the single place
+where the adapter meets the port type was unchecked.
+
+Fixed by declaring `last_tick_at` as a read-only property **on the port**, not by
+giving the adapter a setter. Every write in the codebase is a provider assigning its
+own attribute (`binance_websocket_adapter.py:55,116,197`); no consumer in `app/` or
+`engine/` reads or writes it through the port at all. A port should declare the
+weakest contract its consumers need, and a mutable declaration would forbid any
+provider that derives the value instead of storing it. Both `# type: ignore`
+comments were removed, which is a deliberate deviation from Task 7 step 2.
+
+This is a domain-port edit outside Task 5's listed target files, recorded as a
+deviation in the same spirit as Correction 6's pulled-forward fixture fixes.
+
+*Task 7's Verify grep counts a class definition and two docstrings.* The pattern
+`BinanceAdapter(` matches `class BinanceAdapter(IDataProviderPort):` at
+`binance_adapter.py:34`, and the "Usage:" examples at `binance_adapter.py:38` and
+`binance_websocket_adapter.py:44`. It returns 2 on fully correct code and always
+would have. Replaced with a grep that excludes the DI package and the adapters' own
+package, which returns 0 today and returns 1 when a construction is planted in
+`engine/` — verified by planting one.
+
+*Two expected test counts are wrong, in the harmless direction.* Task 3 says
+`4 passed` and Task 6 says `10 passed`; the delivered counts are 5 and 20. Both
+numbers are now the delivered ones. Task 3's extra test pins Task 2 step 2's "return
+a NEW list" requirement, which none of its four named tests covers.
+
+**The routing layer's own gate proves nothing, exactly as Phase 3 predicted.** With
+Binance as the only registered provider, every fallback branch is unreachable in
+production and each one passed its Verify while being removable. The whole of Task 4
+and Task 5 was therefore mutation-tested against fake children: returning the
+primary's empty answer instead of falling through, ending the walk on an unregistered
+id, dropping either warning, warning more than once, replacing `asyncio.gather` with
+sequential awaits, and swallowing `CancelledError` were each confirmed to turn a test
+red by actually making the change.
+
+**The nested-loop risk is now pinned rather than warned about.**
+`tests/app_test/unit/market_data/test_closed_market_skip_precedes_provider_loops.py` wires
+the real chain — `_sync_by_intervals` to `SyncService.sync_one` to `fetch_with_retry`
+to `RoutingDataProviderAdapter` to fake children — and asserts on the children rather
+than on `sync_one`, which is what the existing calendar-gate suite mocks. A shut
+market reaches zero providers; deleting Phase 3's skip turns that red. An open market
+whose providers are all empty costs exactly `attempts x providers` calls, recorded as
+an exact number so Phase 5 reads the real price of a second provider instead of
+rediscovering it. The loops compose; neither short-circuits the other.
+
+**The unseeded-symbol default is now explicit rather than implicit.** Task 4 step 2's
+"use `AssetClass.CRYPTO_SPOT` when the symbol record is missing" is an ordering
+invariant in disguise, and the failure is worse than it looks. `_persist_bars`
+returns early when no bars arrive, so `SymbolRepository.touch` is never reached; a
+futures symbol tracked before it is seeded routes to a crypto venue, gets nothing
+back, never gets a document written, and repeats forever — with `SymbolLookupHelper`
+caching the miss for 60s in between. The assumption now lives in one named constant,
+`UNSEEDED_SYMBOL_ASSET_CLASS` in `core/infra/market_data/symbol_provider_resolver.py`,
+shared by both routing adapters, and emits a one-shot WARNING naming the symbol and
+the class it assumed. One-shot because this is a per-minute path, and because the
+ongoing alarm is already `emit_no_progress`'s job; this line only names the cause.
+
+**Task 1 carries an unstated footgun.** pydantic-settings does parse
+`dict[AssetClass, list[str]]` from a JSON environment string with no custom parser,
+as the task claims — but the assignment REPLACES the whole mapping rather than
+merging into it, so `MARKET_DATA_PROVIDERS={"index_future":[...]}` leaves crypto with
+no provider and the sync silently fetches nothing. Documented on the field, in
+`README.md` and in `docs/system-architecture.md`, and made audible by a second
+one-shot WARNING when resolution yields an empty provider list.
+
+**Two follow-ups from Phase 3 folded in at the user's request.**
+
+- `cascade.partial_aggregate` now logs at DEBUG for a bucket that has not closed yet
+  and stays at WARNING for one that has. An open bucket is short because it is still
+  filling, which is arithmetic; a closed bucket that is short has really lost bars.
+  This removes roughly 14 WARNING lines a minute at three symbols. Both directions
+  are mutation-tested: always-WARNING, always-DEBUG, and pinning `in_progress` to
+  either constant each turn one of the two tests red.
+- `JobHistoryRepository.get_latest_by_job_ids` sorts on `("started_at", "_id")`
+  instead of `started_at` alone. BSON stores milliseconds, so two runs of a fast job
+  can tie and `$first` was free to return either; `_id` is a UUIDv7 string, monotonic
+  within a millisecond and lexicographically ordered by generation time, so
+  descending on it resolves the tie to the later run. Verified that Python 3.14's
+  `uuid7()` is monotonic within a millisecond before relying on it.
+  `get_last_completed_start` has the same untied sort and needs no fix: it projects
+  only `started_at`, so both sides of a tie return the same value.
+
+  The first version of that test passed with the fix removed, five times out of five.
+  It inserted the rows newest-first, so natural order already agreed with the right
+  answer and the assertion proved nothing. Inserting oldest-first makes the mutation
+  fail five out of five. Worth recording because it is the phase's own lesson in
+  miniature: a test written against a fix is not automatically a test of the fix.
+
+**Measured at Phase 4 close.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `784 passed, 1 skipped` (baseline 751) |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 9 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` — and now actually checking the port binding |
+| `just test-tz` | `784 passed` under all three zones |
+| `cd web && npx tsc --noEmit` | exit 0 |
