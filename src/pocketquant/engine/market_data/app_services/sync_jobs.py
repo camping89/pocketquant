@@ -28,6 +28,7 @@ from pocketquant.core.domain.bar.entities import (
 )
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
@@ -385,6 +386,7 @@ async def sync_1m() -> None:
     sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
 
     name = "sync_1m"
     started = datetime.now(UTC)
@@ -414,6 +416,7 @@ async def sync_1m() -> None:
                     ts.symbol,
                     lookback_minutes=100,
                     bar_repo=bar_repo,
+                    calendar=await calendar_factory.for_symbol(ts.symbol),
                 )
                 for tf, count in counts.items():
                     cascade_total[tf] = cascade_total.get(tf, 0) + count

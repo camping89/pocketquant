@@ -18,6 +18,7 @@ from pocketquant.core.domain.bar.entities import SOURCE_TRACKED_SYMBOL_BACKFILL
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.symbol.entities import COMPOSITE_SYMBOL_PATTERN
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     cascade_for_symbol,
@@ -87,9 +88,11 @@ class TrackedSymbolBackfillService:
         self,
         provider: IDataProviderPort,
         bar_repository: BarRepository,
+        calendar_factory: TradingCalendarFactory,
     ) -> None:
         self._provider = provider
         self._bar_repo = bar_repository
+        self._calendar_factory = calendar_factory
 
     async def run(self, cmd: BackfillTrackedSymbolCommand) -> dict:
         mode = cmd.resolved_mode()
@@ -177,6 +180,7 @@ class TrackedSymbolBackfillService:
             symbol=symbol,
             lookback_minutes=lookback_minutes,
             bar_repo=self._bar_repo,
+            calendar=await self._calendar_factory.for_symbol(symbol),
         )
 
         return counts.get(interval, 0)

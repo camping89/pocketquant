@@ -15,12 +15,12 @@ Design:
 
 from __future__ import annotations
 
-import math
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_CASCADE, Bar
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 
 if TYPE_CHECKING:
@@ -36,15 +36,6 @@ CASCADE_TFS: list[Interval] = [
     Interval.HOUR_4,
     Interval.DAY_1,
 ]
-
-# Expected number of 1m bars per higher tf.
-_TF_EXPECTED_BARS: dict[Interval, int] = {
-    Interval.MINUTE_5: 5,
-    Interval.MINUTE_15: 15,
-    Interval.HOUR_1: 60,
-    Interval.HOUR_4: 240,
-    Interval.DAY_1: 1440,
-}
 
 
 def tf_seconds(tf: Interval) -> int:
@@ -99,8 +90,9 @@ def compute_boundaries(
     tf: Interval,
     range_start: datetime,
     range_end: datetime,
+    calendar: ITradingCalendarPort,
 ) -> list[datetime]:
-    """Return UTC-aligned bucket starts whose bucket overlaps [range_start, range_end).
+    """Return calendar-aligned bucket starts whose bucket overlaps [range_start, range_end).
 
     A bucket [B, B + tf_seconds) overlaps the request range when both:
       - B < range_end                     (bucket starts before the range ends)
@@ -113,26 +105,34 @@ def compute_boundaries(
     sync_jobs.sync_1m uses lookback_minutes=100, so the just-closed 4h bucket
     would otherwise never get a clean post-close aggregation pass.
 
-    Alignment (UTC):
-      5m  : minute % 5 == 0
-      15m : minute % 15 == 0
-      1h  : hour boundary
-      4h  : hour % 4 == 0
-      1d  : midnight
+    Pure: the calendar is a parameter, never a lookup. Each step goes back
+    through ``calendar.bar_start`` rather than adding a fixed number of seconds,
+    which is what keeps the walk correct across a session gap and across a DST
+    transition. On the 24/7 calendar that reproduces the old UTC-epoch grid
+    exactly.
 
-    Both inputs should be UTC-aware datetimes.
+    Both range inputs should be UTC-aware datetimes.
     """
     secs = tf_seconds(tf)
-
-    epoch = range_start.timestamp()
-    first_boundary_epoch = math.floor(epoch / secs) * secs
-    first_boundary = datetime.fromtimestamp(first_boundary_epoch, tz=UTC)
+    step = timedelta(seconds=secs)
 
     boundaries: list[datetime] = []
-    current = first_boundary
+    current = calendar.bar_start(range_start, tf)
     while current < range_end:
         boundaries.append(current)
-        current = current + timedelta(seconds=secs)
+        nxt = calendar.bar_start(current + step, tf)
+        if nxt <= current:
+            # A calendar that maps the next instant back onto this bucket would
+            # spin this loop forever inside a cron job. Step over it instead and
+            # say so, rather than hanging the sync.
+            logger.debug(
+                "cascade.boundary_step_fallback",
+                tf=tf.value,
+                calendar_id=calendar.calendar_id,
+                boundary=current.isoformat(),
+            )
+            nxt = current + step
+        current = nxt
 
     return boundaries
 
@@ -141,13 +141,14 @@ async def cascade_for_symbol(
     symbol: str,
     lookback_minutes: int,
     bar_repo: BarRepository,
+    calendar: ITradingCalendarPort,
 ) -> dict[Interval, int]:
     """Aggregate 1m bars from MongoDB into higher-tf bars and upsert them.
 
     ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
 
     For each tf in CASCADE_TFS:
-      1. Determine UTC-aligned bucket boundaries within [now - lookback_minutes, now].
+      1. Determine calendar-aligned bucket boundaries within [now - lookback_minutes, now].
       2. For each bucket: query 1m bars in [boundary, boundary + tf_seconds).
       3. Aggregate OHLCV.
       4. Upsert Bar with interval=tf into MongoDB.
@@ -163,13 +164,17 @@ async def cascade_for_symbol(
     persisted_per_tf: dict[Interval, int] = {}
 
     for tf in CASCADE_TFS:
-        boundaries = compute_boundaries(tf, range_start, now)
+        boundaries = compute_boundaries(tf, range_start, now, calendar)
         tf_secs = tf_seconds(tf)
-        expected_count = _TF_EXPECTED_BARS.get(tf, 0)
         upserted = 0
 
         for boundary in boundaries:
             bucket_end = boundary + timedelta(seconds=tf_secs)
+            # How many 1m bars this bucket should hold is the calendar's answer,
+            # not a constant: a holiday or an early close makes a session bucket
+            # legitimately shorter, and a fixed table would log every one of
+            # them as a partial aggregate.
+            expected_count = len(calendar.trading_minutes(boundary, bucket_end))
 
             source_bars = await bar_repo.find(
                 symbol=sym,
@@ -188,6 +193,7 @@ async def cascade_for_symbol(
                     "cascade.partial_aggregate",
                     symbol=sym,
                     tf=tf.value,
+                    calendar_id=calendar.calendar_id,
                     boundary=boundary.isoformat(),
                     expected=expected_count,
                     actual=actual_count,
@@ -207,6 +213,8 @@ async def cascade_for_symbol(
                 low=ohlcv["low"],
                 close=ohlcv["close"],
                 volume=ohlcv["volume"],
+                calendar_id=calendar.calendar_id,
+                session_date=calendar.session_date(boundary) if tf is Interval.DAY_1 else None,
             )
 
             try:

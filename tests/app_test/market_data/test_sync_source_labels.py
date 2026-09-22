@@ -14,6 +14,7 @@ from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_SYNC_1M,
     Bar,
 )
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.app_services import sync_jobs
 from pocketquant.engine.market_data.app_services.cascade_aggregator import cascade_for_symbol
@@ -51,6 +52,7 @@ async def test_cascade_for_symbol_passes_source_cascade() -> None:
         symbol="BTCUSDT:BINANCE",
         lookback_minutes=60,
         bar_repo=bar_repo,
+        calendar=Continuous24x7Calendar(),
     )
 
     assert bar_repo.upsert_bar.await_count > 0
@@ -111,6 +113,7 @@ class _FakeContainer:
 
 
 def _wire_container(monkeypatch: pytest.MonkeyPatch, *, sync_service) -> None:
+    from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
     from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
     from pocketquant.core.infra.persistence.repositories.job_history_repository import (
         JobHistoryRepository,
@@ -132,12 +135,16 @@ def _wire_container(monkeypatch: pytest.MonkeyPatch, *, sync_service) -> None:
 
     bar_repo = MagicMock()
 
+    calendar_factory = MagicMock()
+    calendar_factory.for_symbol = AsyncMock(return_value=Continuous24x7Calendar())
+
     container = _FakeContainer(
         {
             SyncService: sync_service,
             JobHistoryRepository: history_repo,
             TrackedSymbolRepository: tracked_repo,
             BarRepository: bar_repo,
+            TradingCalendarFactory: calendar_factory,
         }
     )
     monkeypatch.setattr(sync_jobs, "_container", container)

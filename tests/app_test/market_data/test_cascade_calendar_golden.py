@@ -22,11 +22,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pocketquant.core.domain.bar.services.bar_builder_domain_service import get_bar_start
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     compute_boundaries,
 )
+
+CALENDAR = Continuous24x7Calendar()
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 _REGEN = os.environ.get("POCKETQUANT_REGEN_GOLDEN") == "1"
@@ -66,7 +69,7 @@ def _compare(name: str, actual: dict) -> None:
 
 def _cascade_boundaries() -> dict:
     return {
-        tf.value: [b.isoformat() for b in compute_boundaries(tf, RANGE_START, RANGE_END)]
+        tf.value: [b.isoformat() for b in compute_boundaries(tf, RANGE_START, RANGE_END, CALENDAR)]
         for tf in CASCADE_TFS
     }
 
