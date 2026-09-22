@@ -96,12 +96,39 @@ async def test_empty_result_falls_through_to_secondary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_all_providers_exhausted_returns_empty_list() -> None:
-    primary, secondary = _provider([]), _provider(RuntimeError("also down"))
+async def test_every_provider_answering_empty_returns_an_empty_list() -> None:
+    """Nobody raised, so nobody is broken — this is a quiet market."""
+    primary, secondary = _provider([]), _provider([])
 
     bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
 
     assert bars == []
+
+
+@pytest.mark.asyncio
+async def test_an_outage_is_raised_rather_than_reported_as_an_empty_market() -> None:
+    """Swallowing the failure turns a dead venue into a successful sync.
+
+    Before routing existed a provider exception reached ``sync_one``, which
+    logged ``market_data.sync.failed`` and set the symbol's status to
+    ``error``. Returning ``[]`` instead would report ``completed`` with no
+    progress, and would leave ``fetch_with_retry`` retrying the failure as
+    though it were emptiness — three calls at a venue that is rate-limiting us.
+    """
+    primary, secondary = _provider([]), _provider(RuntimeError("also down"))
+
+    with pytest.raises(RuntimeError, match="also down"):
+        await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
+
+
+@pytest.mark.asyncio
+async def test_a_provider_that_answers_hides_an_earlier_failure() -> None:
+    """Fallback still works: one bad provider is not an outage."""
+    primary, secondary = _provider(RuntimeError("scraper down")), _provider([_bar()])
+
+    bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
+
+    assert len(bars) == 1
 
 
 @pytest.mark.asyncio

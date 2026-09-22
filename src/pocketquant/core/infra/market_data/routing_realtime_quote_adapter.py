@@ -39,9 +39,8 @@ class RoutingRealtimeQuoteAdapter:
     def last_tick_at(self) -> datetime | None:
         """The most recent tick across children.
 
-        The Protocol declares this as a plain attribute; a read-only property
-        satisfies structural typing and keeps the value derived rather than
-        another thing to keep in sync.
+        The port declares this read-only, which is what lets the value be
+        derived here rather than stored and kept in sync.
         """
         ticks = [p.last_tick_at for p in self._providers.values() if p.last_tick_at is not None]
         return max(ticks) if ticks else None

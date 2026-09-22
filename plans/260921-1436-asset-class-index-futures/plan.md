@@ -629,3 +629,78 @@ one-shot WARNING when resolution yields an empty provider list.
 | `uv run pyright src` | `0 errors` — and now actually checking the port binding |
 | `just test-tz` | `782 passed` under all three zones |
 | `cd web && npx tsc --noEmit` | exit 0 |
+
+**Correction 15 — Task 4 step 2 downgrades an outage to a successful sync, which
+violates G5.** Found by the post-phase advisory review, after Phase 4 had already
+deployed, and confirmed by running the two paths side by side.
+
+The step prescribes catching a provider exception, logging it at DEBUG and continuing
+to the next provider, returning `[]` when none is left. Before routing existed a
+`BinanceAdapter` exception — it raises on 429 and on `raise_for_status` — travelled
+through `fetch_with_retry`, which has no `try`, into `SyncService.sync_one`'s handler:
+`market_data.sync.failed` at ERROR, the symbol's sync status set to `error`, and
+`error_count` incremented on the job. After Phase 4 the same failure was invisible at
+production `LOG_LEVEL=INFO` and reported `status=completed` with no progress.
+
+Measured on the same simulated 429, before and after the fix:
+
+| | status | log | provider calls |
+|---|---|---|---|
+| Pre-Phase-4 direct provider | `error` | `market_data.sync.failed` ERROR | 1 |
+| Phase 4 as shipped | `completed` | none above DEBUG | 3 |
+| After this correction | `error` | `market_data.sync.failed` ERROR | 1 |
+
+The call count is the second half of the defect. `fetch_with_retry` retries on an empty
+answer, and a swallowed exception is indistinguishable from one, so every provider
+failure was retried three times inside a 15s budget. Against an unofficial scraper in
+Phase 5 that is three fresh connections per symbol per minute for as long as the ban
+lasts — the precise cost the closed-market containment test was written to bound,
+arriving through the other branch.
+
+`fetch_ohlcv` now keeps the first exception and re-raises it if no provider returned
+bars. An empty answer from every provider still returns `[]`, because that is a quiet
+market rather than a broken one, and a provider that answers still hides an earlier
+one's failure, because that is what a fallback is for. With one registered provider the
+behaviour is exactly pre-Phase-4.
+
+`test_all_providers_exhausted_returns_empty_list` pinned the wrong behaviour and was
+replaced by three tests that separate the cases. Both directions are mutation-tested:
+restoring the swallow, and raising even when a provider answered, each turn two tests
+red.
+
+**Correction 16 — `Settings` declared the two routing fields twice.** Lines 71-78 and
+82-87 held identical values, so Python kept the last and behaviour was unaffected, but
+the surviving block was the one WITHOUT the comment recording that
+`MARKET_DATA_PROVIDERS` replaces rather than merges. Two writers edited `core/config.py`
+in the same session and the file was staged without being re-read. The duplicate is
+removed. The example in that comment also named `binance` as an `index_future`
+fallback, a venue that cannot serve one; it now shows a two-class override instead.
+
+**Measured after corrections 15 and 16.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `785 passed, 1 skipped` |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 9 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+| `just test-tz` | `785 passed` under all three zones |
+
+**Carried to Phase 5 by the same review, verified against the adapter and not yet
+fixed.** Both fire on the first futures symbol in production, and neither is Phase 4
+code:
+
+- `CmeGlobexCalendarAdapter.bar_start` and `session_date` raise `KeyError` from Friday
+  16:00 CT until Sunday 00:00 UTC, because `_window_rows` looks only one calendar day
+  either side and Saturday's window contains no session. The cascade loop in `sync_1m`
+  has no closed-market gate, so once ES/NQ/YM are tracked this is a `cascade_failed`
+  ERROR per symbol per minute for roughly 27 hours every weekend. Existing tests only
+  call `is_open` on a weekend, never `bar_start`.
+- The daily 15:15-15:30 CT equity-index halt is not modelled — upstream
+  `CMEGlobexEquitiesExchangeCalendar` carries no break, so `is_open` is True at 15:20
+  CT. Every weekday that produces `no_progress`, then `stuck_threshold_crossed`, plus
+  `partial_aggregate` on the closed hourly bucket and 15 missing minutes per symbol per
+  day in the nightly integrity scan. That fails this plan's own success criterion
+  ("zero `no_progress`, `stuck_threshold_crossed` or `partial_aggregate` for
+  `ES1!:CME_MINI` across one full week") on day one. Confirm the halt against CME's
+  contract specs before modelling it.

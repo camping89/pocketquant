@@ -37,15 +37,25 @@ class RoutingDataProviderAdapter(IDataProviderPort):
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        """Bars from the first provider that returns any; ``[]`` when none does.
+        """Bars from the first provider that returns any.
 
         An exception or an empty answer falls through to the next provider.
-        Note that this loop is nested inside ``fetch_with_retry``'s retry loop,
-        so the callers that can reach a legitimately empty market must gate on
-        the trading calendar before they get here — see
+        If nobody returned bars and at least one provider raised, the first
+        failure is re-raised rather than reported as an empty market: an outage
+        and a quiet venue are different events, and only the caller can tell
+        that difference to a human. Swallowing it would downgrade a dead
+        provider to a successful sync that happened to insert nothing, and
+        would leave ``fetch_with_retry`` retrying the failure as if it were
+        emptiness. ``[]`` is returned only when every provider genuinely
+        answered empty.
+
+        This loop is nested inside ``fetch_with_retry``'s retry loop, so a
+        caller that can reach a legitimately empty market must gate on the
+        trading calendar before arriving here — see
         ``sync_jobs._sync_by_intervals``.
         """
         provider_ids = await self._resolver.provider_ids(symbol)
+        first_failure: Exception | None = None
 
         for position, provider_id in enumerate(provider_ids):
             next_id = provider_ids[position + 1] if position + 1 < len(provider_ids) else None
@@ -62,6 +72,8 @@ class RoutingDataProviderAdapter(IDataProviderPort):
                 )
             except Exception as exc:
                 # DEBUG, not INFO: this runs once per symbol per interval per minute.
+                # The failure is not lost — it is re-raised below if no provider
+                # manages to answer.
                 logger.debug(
                     "market_data.routing.fallback",
                     symbol=symbol,
@@ -70,6 +82,8 @@ class RoutingDataProviderAdapter(IDataProviderPort):
                     reason="error",
                     error=str(exc),
                 )
+                if first_failure is None:
+                    first_failure = exc
                 continue
 
             if bars:
@@ -82,6 +96,9 @@ class RoutingDataProviderAdapter(IDataProviderPort):
                 next_provider=next_id,
                 reason="empty",
             )
+
+        if first_failure is not None:
+            raise first_failure
 
         return []
 

@@ -86,7 +86,7 @@ def _sync_service(calendar, providers: dict[str, AsyncMock]) -> SyncService:
     )
 
 
-async def _run_job(calendar, providers: dict[str, AsyncMock]) -> None:
+async def _run_job(calendar, providers: dict[str, AsyncMock]) -> MagicMock:
     tracked = MagicMock()
     tracked.symbol = SYMBOL
     tracked_repo = MagicMock()
@@ -109,6 +109,7 @@ async def _run_job(calendar, providers: dict[str, AsyncMock]) -> None:
         source="test",
         calendar_factory=calendar_factory,
     )
+    return history_repo
 
 
 def _calls(providers: dict[str, AsyncMock]) -> int:
@@ -179,3 +180,24 @@ async def test_an_open_market_stops_at_the_primary_once_it_answers() -> None:
 
     assert answering.fetch_ohlcv.await_count == 1
     fallback.fetch_ohlcv.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_failing_sole_provider_costs_one_call_not_three() -> None:
+    """An outage must not be retried as though it were an empty market.
+
+    The retry loop exists for a provider that answers emptily at a bar
+    boundary. A provider that is refusing us is a different event, and
+    retrying it three times a minute is how a rate limit becomes a ban. The
+    routing adapter re-raises when nobody answered, which stops the retry loop
+    at the first attempt — the behaviour that existed before routing did.
+    """
+    refusing = AsyncMock()
+    refusing.fetch_ohlcv = AsyncMock(side_effect=RuntimeError("HTTP 429 rate limited"))
+
+    history = await _run_job(Continuous24x7Calendar(), {"tradingview": refusing})
+
+    assert refusing.fetch_ohlcv.await_count == 1
+    detail = history.record_detail.await_args.kwargs
+    assert detail["status"] == "error"
+    assert "429" in detail["error"]
