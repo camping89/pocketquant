@@ -104,7 +104,10 @@ gives exactly today's answer.
 **Success criteria.** Every caller passes a calendar; no call site retains the
 two-argument form.
 
-**Verify.** `grep -rn "is_bar_aligned(\|filter_aligned_bars(\|drop_misaligned_bars(\|has_aligned_bar(" src/ | grep -vc "calendar" ` prints `0`.
+**Verify.** `uv run pyright src` reports 0 errors — it is what actually catches a
+caller left on the old arity. (Correction 11: the grep this step used to prescribe
+counts `def` lines as call sites and cannot see a signature that ruff's 100-character
+limit forces onto two lines, which two of these four are.)
 
 ---
 
@@ -210,7 +213,9 @@ on the old signature.
 **Verify.** All three exit 0:
 - `uv run pytest tests/app_test/integration/test_sync_backfill_gap_fill.py -q`
 - `uv run pyright src` (catches any caller still passing the old argument list)
-- `test "$(grep -rn 'check_integrity(\|repair_integrity(' --include=*.py src/ | grep -vc 'calendar')" = "0"` — every call site now passes a calendar.
+- `uv run pyright src` again, for the same reason as Task 2 (Correction 11): the
+  grep this step used to prescribe cannot see the wrapped call sites or the `async def`
+  lines, and reports 4 false positives on correct code.
 
 ---
 
@@ -386,11 +391,16 @@ print(len(cascade_tfs(Continuous24x7Calendar())), len(cascade_tfs(CmeGlobexCalen
    ```
    Keep the existing `None` fallback for an interval string that is not a valid
    `Interval` member — wrap the conversion in `try/except ValueError`.
-2. In `performance_calculator_domain_service.py`, change `cagr` to take
-   `days_per_year: float = 365` as a keyword argument instead of reading the module
-   constant, and pass `calendar.periods_per_year(Interval.DAY_1)` from
-   `PerformanceCalculatorDomainService.build`. Keep the module constant as the
-   default so the domain service stays usable without a calendar.
+2. **Correction 13 — do NOT do what this step originally said.** It prescribed
+   giving `cagr` a `days_per_year` argument fed from
+   `calendar.periods_per_year(Interval.DAY_1)`. That is wrong: `build` computes
+   `days` as wall-clock calendar days, so dividing them by a session count (259 for
+   CME) stretches one real year into 1.41 and reports a doubling as 63.5% growth.
+   CAGR is compound *annual* growth and must stay on 365 calendar days for every
+   instrument. Leave `cagr` reading the module constant, and do not add the
+   parameter — a knob that must always hold one value to stay correct is an
+   invitation to set it. Sharpe and Sortino, which count return observations rather
+   than elapsed time, do take the calendar's `periods_per_year`.
 3. Mark `Interval.periods_per_year` and `Interval.periods_per_year_for` as deprecated
    in their docstrings — "the calendar owns annualization; this is the 24/7 default,
    kept as the `Continuous24x7Calendar` data source". Do NOT delete them:
@@ -414,14 +424,20 @@ unchanged; for a CME calendar it is the session-derived value.
 1. Write 4 tests.
 2. `test_crypto_1m_is_525600`: `Continuous24x7Calendar().periods_per_year(Interval.MINUTE_1) == 525600`.
 3. `test_crypto_1d_is_365`: same for `DAY_1` equals `365`.
-4. `test_cme_sessions_per_year_in_range`: `CmeGlobexCalendarAdapter().periods_per_year(Interval.DAY_1)`
-   is between `245` and `255` inclusive.
-5. `test_cme_hourly_in_range`: `periods_per_year(Interval.HOUR_1)` is between `5000`
-   and `6200` inclusive (23h x 252 sessions is about 5796).
+4. `test_cme_sessions_per_year_is_the_2025_reference_count`:
+   `CmeGlobexCalendarAdapter().periods_per_year(Interval.DAY_1)` equals `259.0`
+   exactly — 261 weekdays in the fixed 2025 reference year, less the two full
+   closures (Jan 1, Dec 25). CME Globex equity futures close early on US holidays
+   rather than skipping the session, so those sessions still produce a daily bar.
+   (Correction 12: the original `245`-`255` band assumed an NYSE cash session.)
+5. `test_cme_hourly_is_the_2025_reference_count`: `periods_per_year(Interval.HOUR_1)`
+   equals `5910.0` exactly — 259 sessions x 23h, less 47h of early closes.
+6. `test_cagr_stays_on_calendar_time_whatever_the_calendar`: a doubling over 365
+   calendar days is CAGR 1.0. (Correction 13 — see Task 9.)
 
-**Success criteria.** 4 tests pass.
+**Success criteria.** 5 tests pass.
 
-**Verify.** `uv run pytest tests/backtest_test/domain/test_performance_calculator_calendar_annualization.py -q` exits 0 and prints `4 passed`.
+**Verify.** `uv run pytest tests/backtest_test/domain/test_performance_calculator_calendar_annualization.py -q` exits 0 and prints `5 passed`.
 
 ---
 

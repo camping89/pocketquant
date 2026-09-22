@@ -418,3 +418,83 @@ the right choice because it works with or without the pip package.
 **Flake observed once.** One unidentified test failed in a single full-suite run and did
 not reproduce across four subsequent runs, including the chained gate. Same class as the
 job-history tie recorded in the Phase 1 report; noted rather than chased.
+
+### Session 4 — 2026-09-22 (execution, Phase 3)
+
+**Correction 11 — two Verify greps count definitions as call sites.** Task 2's
+`grep ... | grep -vc "calendar"` prints `4` and Task 4's prints `4` on fully correct
+code. Both matches are `def`/`async def` lines and wrapped call sites: ruff's
+`line-length = 100` forces `filter_aligned_bars` (124 chars on one line) and
+`drop_misaligned_bars` (110) onto two lines, and a line-based grep cannot see an
+argument on the continuation. Satisfying the grep literally would mean violating the
+project's own line length.
+
+Both Verify steps now read `uv run pyright src` instead, which is what actually
+enforces the stated criterion — every caller passes a calendar — across all of `src/`,
+and which Task 4's own Verify already used for exactly this purpose. Same defect class
+as corrections 1 and 4: a gate command that cannot pass on correct code.
+
+**Correction 12 — the CME annualization band assumed the wrong exchange.** Task 10
+asserts `periods_per_year(DAY_1)` between 245 and 255, citing "23h x 252 sessions".
+Measured: the adapter returns `259.0`. Verified against `pandas_market_calendars`
+directly — `CME Globex Equity` has 259 sessions in 2025, which is 261 weekdays less
+the only two full closures, 2025-01-01 and 2025-12-25. Globex equity futures do not
+skip US holidays; they close early, which shows up as 11 sessions shorter than 20h
+(seven at 19:00, three at 19:15, Good Friday at 15:15) rather than as absent days. For
+comparison `NYSE` has 250 sessions in the same year, which is where 245-255 comes from.
+The band is an equity-cash assumption applied to a near-24x5 electronic calendar.
+
+The adapter is correct and unchanged; the assertion was rewritten. Both CME assertions
+are now exact equalities (`259.0` and `5910.0`) rather than ranges. The adapter
+measures over a fixed 2025 reference window specifically so a re-run reports the same
+Sharpe, and 2025 is a closed year whose holiday set cannot change, so an exact value is
+the honest assertion. The original bands asserted almost nothing: 5000-6200 accepts
+5957 (early closes ignored) and 5796 (a 252-session basis) as readily as the true 5910.
+Confirmed by mutation — drifting the reference window to 2024, and falling back to the
+24/7 interval table, each fail both assertions.
+
+**Correction 13 — Task 9 step 2 routes a session count into CAGR, which is wrong.**
+The step prescribes giving `cagr` a `days_per_year` argument fed from
+`calendar.periods_per_year(Interval.DAY_1)`. But `build` computes `days` as
+`(end_date - start_date).days` — wall-clock calendar days. Dividing those by 259
+stretches one real year into 1.41 years, so a CME strategy that doubles its capital
+over a calendar year reports CAGR `0.635` instead of `1.0`, understating it by 36.5%.
+CAGR is compound *annual* growth: the numerator is calendar time, so the denominator
+must be too, for every instrument.
+
+Sharpe and Sortino are the opposite case and keep the calendar's `periods_per_year`;
+they count return observations, not elapsed time. `cagr` was left reading the 365-day
+module constant and the parameter was not added at all, rather than added with a 365
+default: a knob that must always hold one value to stay correct is an invitation to
+set it. A regression test pins that a doubling over 365 calendar days is CAGR 1.0.
+
+Crypto cannot detect this — 365/365 is the identity — so the golden files and Task 11's
+byte-identical gate would both have passed over a wrong futures CAGR indefinitely.
+Found by advisory review of the Correction 12 failure, not by a test.
+
+**Every Phase 3 behaviour was mutation-tested, and most were initially unguarded.**
+Running the phase's own Verify steps passed while proving little: with only the 24/7
+calendar registered, `is_bar_aligned` could ignore its calendar argument entirely and
+all 712 tests still passed. The same was true of the cascade's non-advancing-step
+guard, its calendar-derived expected-bar count, the `calendar_id`/`session_date`
+stamping on both the cascade and sync write paths, the integrity grid and its weekly
+short-circuit, session-aware staleness, the closed-market no-progress silence, the
+`is_market_open` DTO field, the closed-market sync skip and its grace window,
+`cascade_tfs`, and the report service's annualization source — fourteen behaviours, all
+of which passed their prescribed Verify while being undetectable under mutation.
+
+Each now has a test that fails when the behaviour is removed, verified by actually
+removing it. The suite went from 709 to 751 passing. The pattern is the same one
+Phase 1 recorded: on a refactor whose acceptance is "nothing changed", the tests that
+prove the new thing works cannot be the tests that proved the old thing worked.
+
+One guard needed care beyond an assertion. `compute_boundaries`' non-advancing fallback,
+when removed, makes the loop spin forever, so a naive test hangs CI instead of failing
+it. The test drives the call on a daemon thread with a five-second deadline, which turns
+that into a red test in 13 seconds and lets the rest of the suite finish.
+
+**Job-history flake seen again.** `test_get_latest_by_job_ids_awaits_aggregate` failed
+once more in a full-suite run and passed on re-run, the third sighting. Still the
+same-millisecond `$sort`/`$first` tie with no secondary key at
+`job_history_repository.py:193-197`. Still not this phase's business, but it is now a
+recurring rather than an isolated observation.
