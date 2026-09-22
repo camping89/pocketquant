@@ -57,18 +57,22 @@ class _FakeClient:
 
 
 class _StubCalendar:
-    """Only ``bar_start`` is reached by the adapter, and it is frozen."""
+    """``bar_start`` and ``is_open`` are all the adapter reaches, and both are frozen."""
 
-    def __init__(self, cutoff: datetime) -> None:
+    def __init__(self, cutoff: datetime, is_open: bool) -> None:
         self._cutoff = cutoff
+        self._is_open = is_open
 
     def bar_start(self, instant: datetime, interval: Interval) -> datetime:  # noqa: ARG002
         return self._cutoff
 
+    def is_open(self, instant: datetime) -> bool:  # noqa: ARG002
+        return self._is_open
+
 
 class _StubCalendarFactory:
-    def __init__(self, cutoff: datetime) -> None:
-        self._calendar = _StubCalendar(cutoff)
+    def __init__(self, cutoff: datetime, is_open: bool) -> None:
+        self._calendar = _StubCalendar(cutoff, is_open)
 
     async def for_symbol(self, composite: str) -> _StubCalendar:  # noqa: ARG002
         return self._calendar
@@ -77,12 +81,16 @@ class _StubCalendarFactory:
 def _adapter(
     client: _FakeClient,
     cutoff: datetime | None = None,
+    *,
+    is_open: bool = False,
     **overrides: Any,
 ) -> TradingViewAdapter:
     # Far future by default, so nothing is treated as in progress unless a test
-    # sets the cutoff itself.
+    # sets the cutoff itself. Shut by default so the delayed-frontier drop stays
+    # out of the way of tests about clamping, splitting and ordering; the tests
+    # that are about that drop open the market explicitly.
     far_future = datetime(2099, 1, 1, tzinfo=UTC)
-    factory = _StubCalendarFactory(cutoff or far_future)
+    factory = _StubCalendarFactory(cutoff or far_future, is_open)
     return TradingViewAdapter(
         client=client,
         settings=Settings(**overrides),  # pyright: ignore[reportCallIssue]
@@ -160,3 +168,43 @@ async def test_returned_bars_are_utc_aware_and_ascending() -> None:
 
 async def test_empty_client_result_returns_empty_list() -> None:
     assert await _adapter(_FakeClient(bars=[])).fetch_ohlcv(_ES, Interval.HOUR_1, 10) == []
+
+
+async def test_delayed_feed_drops_the_vendor_frontier_bar_while_open() -> None:
+    """On a delayed feed the newest bar is still forming, whatever our clock says.
+
+    Measured on the free plan: the newest 1m bar was 633 seconds behind and its
+    close and volume both moved between two fetches 75 seconds apart. Our cutoff
+    cannot see that, because it is derived from our own clock and the bar sits
+    well before it.
+    """
+    raws = _raw_bars()
+    bars = await _adapter(_FakeClient(), is_open=True).fetch_ohlcv(_ES, Interval.HOUR_1, 10)
+
+    assert len(bars) == len(raws) - 1
+    newest_epoch = max(r.epoch_seconds for r in raws)
+    assert all(b.datetime is not None and b.datetime.timestamp() != newest_epoch for b in bars)
+
+
+async def test_delayed_feed_keeps_the_frontier_bar_once_the_market_shuts() -> None:
+    """A shut market's frontier bar is complete, and stays the frontier.
+
+    Dropping it while shut would never persist the last bar of any session — a
+    permanent one-bar gap per session for the integrity scan to report forever.
+    """
+    bars = await _adapter(_FakeClient(), is_open=False).fetch_ohlcv(_ES, Interval.HOUR_1, 10)
+
+    assert len(bars) == len(_raw_bars())
+
+
+async def test_a_realtime_plan_keeps_the_frontier_bar() -> None:
+    """The positional drop is a delayed-feed remedy, not a permanent tax.
+
+    On a real-time feed the timestamp cutoff already excludes the forming bar, so
+    dropping by position too would throw away a closed one.
+    """
+    bars = await _adapter(
+        _FakeClient(), is_open=True, tradingview_plan="cme_non_pro"
+    ).fetch_ohlcv(_ES, Interval.HOUR_1, 10)
+
+    assert len(bars) == len(_raw_bars())

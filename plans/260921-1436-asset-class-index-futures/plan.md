@@ -1025,3 +1025,80 @@ Also recorded for Task 12's arithmetic: 5000 1m bars cover about 3.5 CME session
 while `check_integrity` scans a fixed 7 days, so the first nightly scans after the
 backfill will report gaps that are not gaps. Judge the clean week from one starting at
 least seven days after the backfill.
+
+**Correction 23 — the free plan serves a bar that is still being written, and the
+in-progress filter cannot see it. Measured, not predicted.** The advisory review rated
+this medium confidence from TradingView's published delay policy. It was checked
+against the live feed instead, twice, 75 seconds apart:
+
+| | value |
+|---|---|
+| Feed lag behind wall clock | 633 s |
+| Frontier 1m bar, snapshot A | close 7828.25, volume 775 |
+| The same bar, snapshot B | close 7828.5, volume 1229 |
+
+So the frontier bar is still accumulating, and it is roughly ten minutes behind — which
+is why `bar_start(now, interval)` cannot exclude it. The cutoff is derived from our
+clock, and a bar ten minutes in the past sits comfortably before it.
+
+Left alone this corrupts data on the first day of seeding rather than eventually.
+`sync_1m` filters out bars that already exist, so a partial bar is written once and
+never revisited, and the cascade then builds 5m, 15m, 1h and 4h buckets on top of it.
+That is `sync_verify_cascade`'s `divergent_fraction` failing Task 12 by construction,
+and it would have been discovered as a gate failure a week later rather than as a
+defect now.
+
+On a delayed feed the forming bar is therefore dropped by POSITION rather than by
+timestamp, which finally gives `capabilities.realtime` a consumer — it recorded the
+fact and nothing acted on it.
+
+The drop applies only while the market is open, and that condition is load-bearing.
+Once trading stops, the frontier bar is the session's genuine last bar and it stays the
+frontier for as long as the market is shut, so an unconditional drop would never persist
+the final bar of any session — a permanent one-bar gap per session for the integrity
+scan to report forever. While open, a bar dropped for being newest is persisted by a
+later fetch once the feed has moved past it, so nothing is lost and each bar is written
+once, complete, one minute later than it otherwise would be.
+
+The sort now precedes the drop, because "the newest" has to mean the newest instant
+rather than whatever the vendor happened to send last. Removing the sort turns that
+test red on its own.
+
+Mutation-tested in all four directions: never dropping the frontier (the behaviour
+before this fix), dropping it regardless of session state, dropping it on a real-time
+plan, and dropping by vendor order instead of newest instant.
+
+Confirmed live afterwards: the client's newest bar was 17:26 and still forming, and the
+adapter returned 17:25 as its newest, logging
+`tradingview.in_progress_bar_filtered count=1 delayed_frontier_dropped=1`.
+
+The review's other two delay predictions remain unverified and are Phase 6's, not
+guesses to act on now. The stuck threshold most likely fires at each session open rather
+than continuously, because the feed advances one bar per minute while trading, so
+`inserted` is normally non-zero and the no-progress streak only builds during the
+ten-minute window after an open.
+
+**Measured after Correction 23.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `826 passed, 1 skipped` |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 10 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+
+**Deploy of the first eight commits, verified on the VPS.** Actions run `35760843677`
+green in 4m07s including all three timezone legs.
+
+| Check | Result |
+|-------|--------|
+| Containers | `pocketquant-app` and `-web` healthy on a fresh image |
+| Health endpoint | `HTTP 200` |
+| Startup assertion | `runtime.timezone tz=UTC tzlocal=UTC tzname=('UTC','UTC')` |
+| `sync_1m`, consecutive cycles | `synced_count=3, error_count=0, skipped_count=0` |
+| Log lines matching `tradingview` | 0 — the dormancy proof |
+| `Traceback` / `TypeError` / `AttributeError` / `offset-naive` | 0 |
+
+Zero TradingView log lines is the whole point of deploying before seeding: the adapter
+is registered, the client is lazy, no tracked symbol carries a non-24/7 calendar, and so
+none of this phase's code has executed in production yet.

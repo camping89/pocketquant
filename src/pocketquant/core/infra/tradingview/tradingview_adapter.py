@@ -74,6 +74,29 @@ class TradingViewAdapter(IDataProviderPort):
         calendar = await self._calendar_factory.for_symbol(symbol)
         cutoff = calendar.bar_start(datetime.now(UTC), interval)
         kept = [b for b in bars if b.datetime is not None and b.datetime < cutoff]
+        # Sorted before any positional decision below: "the newest" must mean the
+        # newest instant, not whatever the vendor happened to send last.
+        kept.sort(key=lambda b: b.datetime or datetime.min.replace(tzinfo=UTC))
+
+        # A delayed feed defeats the cutoff above, because the cutoff is derived
+        # from OUR clock. Measured on the free plan: the newest 1m bar was 633s
+        # behind and still accumulating — its close and volume both changed
+        # between two fetches 75s apart. It sits comfortably before our cutoff,
+        # so it is kept, persisted, and never corrected: `sync_1m` filters out
+        # bars that already exist, and the cascade then builds 5m/15m/1h on top
+        # of a partial bar. The vendor's frontier bar is the forming one, so on a
+        # delayed feed it is dropped by position rather than by timestamp.
+        #
+        # Only while the market is open. Once it shuts, the frontier bar is the
+        # session's genuine last bar and stays the frontier, so dropping it then
+        # would leave a permanent one-bar gap every session. While open, a bar
+        # dropped for being newest is persisted by a later fetch, once the feed
+        # has moved past it.
+        delayed_drop = 0
+        if kept and not self._settings.tradingview_capabilities.realtime:
+            if calendar.is_open(datetime.now(UTC)):
+                kept = kept[:-1]
+                delayed_drop = 1
 
         dropped = len(bars) - len(kept)
         if dropped:
@@ -82,9 +105,10 @@ class TradingViewAdapter(IDataProviderPort):
                 symbol=symbol,
                 interval=interval.value,
                 count=dropped,
+                delayed_frontier_dropped=delayed_drop,
             )
 
-        kept.sort(key=lambda b: b.datetime or datetime.min.replace(tzinfo=UTC))
+
         # One-shot per symbol per interval per cron tick, which is bounded.
         logger.info(
             "tradingview.fetch_completed",

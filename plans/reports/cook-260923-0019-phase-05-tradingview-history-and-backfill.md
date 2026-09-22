@@ -50,12 +50,12 @@ in 2025, reproducing Correction 12's number independently.
 
 | Command | Result |
 |---------|--------|
-| `uv run pytest tests/ -q` | `823 passed, 1 skipped` (baseline 792) |
+| `uv run pytest tests/ -q` | `826 passed, 1 skipped` (baseline 792) |
 | `uv run ruff check src tests scripts` | `All checks passed!` |
 | `uv run lint-imports` | `Contracts: 10 kept, 0 broken` |
 | `uv run pyright src` | `0 errors` |
 | `uv run pyright` (src + tests) | `27 errors`, all pre-existing, 0 in new files |
-| `just test-tz` | `823 passed` under UTC, Asia/Ho_Chi_Minh, America/Chicago |
+| `just test-tz` | `826 passed` under UTC, Asia/Ho_Chi_Minh, America/Chicago |
 | `cd web && npx tsc --noEmit` | exit 0 |
 | `docker build -f deploy/Dockerfile` | exit 0; the runtime image imports `tvDatafeed`, the adapter and `ZoneInfo("America/Chicago")` |
 
@@ -163,6 +163,56 @@ on timeout: cancelling a `to_thread` does not stop the thread (confirmed directl
 `wait_for` returned in 0.10s while its thread slept 2.0s), so the orphan keeps writing to
 that instance's socket, and reusing it would restore the corruption the lock removes.
 
+## The free feed serves a bar that is still being written
+
+The review rated this medium confidence from TradingView's published delay policy. It was
+measured instead, twice, 75 seconds apart, and it is now fact:
+
+| | value |
+|---|---|
+| Feed lag behind wall clock | 633 s |
+| Frontier 1m bar, snapshot A | close 7828.25, volume 775 |
+| The same bar, snapshot B | close 7828.5, volume 1229 |
+
+The frontier bar is still accumulating and sits roughly ten minutes in the past, which is
+exactly why the in-progress cutoff cannot exclude it: the cutoff comes from our clock.
+
+Left alone this corrupts data on the first day of seeding rather than eventually.
+`sync_1m` filters out bars that already exist, so a partial bar is written once and never
+revisited, and the cascade then builds 5m, 15m, 1h and 4h on top of it — Task 12's
+`divergent_fraction` failing by construction, discovered a week late as a gate failure
+instead of now as a defect.
+
+So on a delayed feed the forming bar is dropped by position rather than by timestamp,
+which finally gives `capabilities.realtime` a consumer; it recorded the fact and nothing
+acted on it. The drop applies only while the market is open, and that condition is
+load-bearing: once trading stops the frontier bar is the session's genuine last bar and
+stays the frontier, so an unconditional drop would never persist the final bar of any
+session. While open, a bar dropped for being newest is persisted by a later fetch, so
+each bar is written once, complete, one minute later than it otherwise would be.
+
+Confirmed live afterwards: the client's newest bar was 17:26 and still forming, and the
+adapter returned 17:25, logging `delayed_frontier_dropped=1`. Mutation-tested in four
+directions — never dropping, dropping regardless of session state, dropping on a
+real-time plan, and dropping by vendor order rather than newest instant.
+
+## Deployment
+
+Actions run `35760843677` green in 4m07s including all three timezone legs.
+
+| Check | Result |
+|-------|--------|
+| Containers | `pocketquant-app` and `-web` healthy on a fresh image |
+| Health endpoint | `HTTP 200` |
+| Startup assertion | `runtime.timezone tz=UTC tzlocal=UTC tzname=('UTC','UTC')` |
+| `sync_1m`, consecutive cycles | `synced_count=3, error_count=0, skipped_count=0` |
+| Log lines matching `tradingview` | 0 — the dormancy proof |
+| `Traceback` / `TypeError` / `AttributeError` / `offset-naive` | 0 |
+
+Zero TradingView log lines is the point of deploying before seeding: the adapter is
+registered, the client is lazy, no tracked symbol carries a non-24/7 calendar, so none of
+this phase's code has run in production yet.
+
 ## A tenth import contract
 
 The seam is only real if nothing outside `core.infra.tradingview` can import the library,
@@ -199,11 +249,6 @@ c4f4290 fix(market-data): make a refused scrape loud and a stalled login surviva
 
 ## Unresolved questions
 
-- **Does the free plan's delayed series include a still-forming newest bar?** If it does,
-  the in-progress filter drops nothing, a partial bar can be persisted once and never
-  refreshed because `sync_1m` filters existing bars, and the cascade builds on it.
-  `sync_verify_cascade`'s `divergent_fraction` would catch it, but as a gate rather than
-  a fix. Cheapest check: fetch the same 1m bar twice a minute apart and diff it.
 - **Will the stuck threshold fire at every session open and halt resume?** On a delayed
   feed the first bar after the 17:00 CT open arrives around 17:11, which is past the
   180-second threshold. If so that is six ERRORs per day across three symbols and fails
