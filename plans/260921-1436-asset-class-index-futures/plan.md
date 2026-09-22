@@ -800,3 +800,155 @@ Deployed as `dffe5ed`, Actions run `35742858417` green, three post-deploy `sync_
 cycles at `synced_count=3, error_count=0` and zero errors of any kind. Production
 behaviour is unchanged today by construction: every tracked symbol is on the 24/7
 calendar, so none of this code runs until a futures symbol is seeded in Phase 5.
+
+### Session 7 — 2026-09-22/23 (execution, Phase 5)
+
+Tasks 1-11 are delivered in code. Task 12 is a week-long observation gate and is open
+by construction. Every [UNVERIFIED] item was checked against the installed package
+rather than reasoned about, and three of the checks contradicted the phase text.
+
+**The two items the plan said to verify in place, verified.** `tvDatafeed.Interval`
+carries all seven member names the phase assumed (`in_1_minute`, `in_5_minute`,
+`in_15_minute`, `in_1_hour`, `in_4_hour`, `in_daily`, `in_weekly`), plus six the domain
+has no equivalent for. `pandas_market_calendars.get_calendar("CME Globex Equity")`
+resolves to `CMEGlobexEquitiesExchangeCalendar` with 259 sessions in 2025, which is
+Correction 12's number reproduced independently.
+
+**Correction 17 — `uv sync` cannot install a git dependency until hatchling is told
+to allow one, and that is not the failure Task 1 step 3 guards.** The step says to STOP
+and follow the Failure Protocol if `uv sync` "fails to resolve the dependency". It
+failed with `Dependency #19 ... cannot be a direct reference unless field
+tool.hatch.metadata.allow-direct-references is set to true` — our own build backend
+rejecting the metadata shape, before resolution was attempted, and independent of which
+dependency it is. Adding the flag let the pinned sha resolve unchanged, which is the
+evidence the guarded condition was never met. Recorded because the gate reads as
+broader than the failure it is for, and a literal executor would have stopped here for
+no reason.
+
+The sha is `e6f6aaa7de439ac6e454d9b26d2760ded8dc4923`, resolved 2026-09-22.
+
+**Correction 18 — three claims in Task 3 about the library are wrong, and the phase
+text depends on all three.** Read off the installed package:
+
+- *`tradingview_auth_token` is not a constructor argument.* `TvDatafeed.__init__` takes
+  `username` and `password` only. The setting is kept and the token is assigned to
+  `tv.token` after construction, where `get_hist` reads it — which also makes it the
+  way past a broken login, the highest-likelihood risk in this phase's own table.
+- *Step 2's "on any exception fall back to `TvDatafeed()`" is unreachable.* `__auth`
+  catches every exception and returns `None`; `__init__` then substitutes the literal
+  `"unauthorized_user_token"` and continues. Login never raises, so
+  `is_authenticated()` compares the token value. A genuine construction exception is
+  re-raised rather than degraded to anonymous mode, because Correction 15 established
+  that an outage reported as an empty result becomes a successful sync that inserted
+  nothing.
+- *One instance cannot serve two callers.* `get_hist` calls `__create_connection`,
+  which assigns `self.ws`, then reads `self.ws.recv()` in a loop; `chart_session` is
+  fixed at construction and shared. Two concurrent calls overwrite each other's socket
+  and share one chart session, so the loser reads the winner's series and ES bars are
+  stored under NQ — corruption that passes alignment, deduplication and the integrity
+  scan because every bar is individually well-formed. An `asyncio.Lock` serialises
+  construction and every fetch. Removing it turns the re-entrancy test red.
+
+**Correction 19 — Task 5's host-zone test asserts a property of the standard library,
+not of our code.** `test_naive_local_datetime_recovers_the_same_epoch` builds
+`datetime.fromtimestamp(epoch)` and asserts `naive.timestamp() == epoch`. That holds
+for every non-ambiguous instant whatever the adapter does, so it cannot fail if the
+epoch recovery is wrong — and Task 3's own Verify points at this module, so nothing in
+the phase tested Task 3's code at all.
+
+A client-level test now drives `TvDatafeedClient` against a DataFrame with a naive
+index. Mutating the recovery to read that index as UTC keeps the suite green under
+`TZ=UTC` and turns it red under `TZ=America/Chicago`. That pair is the clearest
+evidence in this plan for why the timezone matrix exists: the bug is invisible on the
+host the tests usually run on.
+
+The fixture straddles the 2026-03-08 spring-forward deliberately. Spring forward skips
+local times, so the naive round trip stays exact; the autumn fall-back is the ambiguous
+direction, where it could be an hour out. That cannot bite here because the ambiguous
+01:00-02:00 window falls on a Sunday morning while CME equity-index futures are shut,
+and it is noted in the test so nobody "improves" the fixture into November.
+
+**Correction 20 — Task 10's stated reason is wrong, and the real failure is worse.**
+The step says cascading a futures daily bar would bucket it at UTC midnight and produce
+a bar that never matches the vendor chart. Phase 3 already prevents that: `cascade_tfs`
+omits `DAY_1` for a session calendar. The actual consequence is that a daily backfill in
+cascade mode fetches and persists 1m bars, builds no daily bar at all, and still reports
+success for work it did not do. The override is kept and is now audible when it
+contradicts an explicit `mode="cascade"`, because honouring that request would be the
+silent failure and overriding it without a word would be the other kind.
+
+**Correction 21 — Task 11 step 6 cannot be followed as written, and step 1 is not the
+cheapest way to satisfy steps 4-6.** `emit_no_progress` takes no instant; it reads
+`datetime.now(UTC)` itself, so "run it with a closed instant" means faking the clock
+while the real calendar still decides. The step also prescribes `caplog`, which captures
+nothing here because structlog renders outside stdlib logging — the repository's own
+pattern is `structlog.testing.capture_logs()`. Step 1's "build the app through
+`app_factory`" was not followed either: dishka offers no way to override one binding in a
+built container and no assertion in steps 4-6 involves HTTP, which is the same reasoning
+`test_sync_backfill_gap_fill.py` already records for skipping the handler graph.
+
+**Two defects in the new tests, both of the class this plan keeps rediscovering.**
+
+- The adapter's ascending-order assertion was vacuous: the fixture is already sorted, so
+  removing the sort left it green. The fake now replays the bars reversed, and removing
+  the sort turns it red.
+- The end-to-end test broke two unrelated unit tests in the same run without touching
+  them. structlog is configured `cache_logger_on_first_use=True`, so a module-level
+  logger first used inside `capture_logs()` stays bound to that configuration and
+  silently stops being capturable after any later reconfigure — and `make_test_app`
+  reconfigures on every integration test. The two victims asserted on captured logs and
+  received an empty list. Fixed by monkeypatching a fresh proxy so the module's own
+  logger is never cached. The suite passed before only because those two tests happened
+  to be the first users of that logger.
+
+**A tenth import contract, and the count in `plan.md` changes.** The success criteria say
+"9 contracts from Phase 2 onward". The scraper is isolated behind `ITradingViewClient`
+only if nothing outside `core.infra.tradingview` can import it, and Task 8's grep checks
+the string `"tradingview"` rather than the library import. The new contract mirrors the
+`pandas_market_calendars` one, including `allow_indirect_imports = true` for DI wiring.
+Mutation-verified by planting a direct import in `engine/`.
+
+**Everything Phase 4 could only mutation-test now has a second provider, and the entire
+new surface was mutation-tested too.** Dead mutations: removing the lock; reading the
+naive index as UTC; dropping the `n_bars` clamp; keeping the in-progress bar; dropping
+the sort; removing the Task 10 override, applying it to crypto, and applying it
+silently; planting a `tvDatafeed` import in `engine/`; removing the closed-market
+silence; dropping the `calendar_id` stamp; deriving `session_date` from the UTC date;
+and replacing the integrity grid with a flat UTC one.
+
+**Verified against the live venue before deploying, not only against fakes.** A single
+anonymous fetch of `ES`/`CME_MINI`/`fut_contract=1` returned five real 1h bars. The
+last was the bar still forming — 2754 contracts against 100k-190k on the closed ones —
+and the adapter dropped exactly that one, logging
+`tradingview.in_progress_bar_filtered count=1` and returning four. This is the only
+check that could have caught a wrong exchange alias or a wrong contract argument, and
+nothing in the phase's own gates performs it. The free plan works unauthenticated, as
+the entitlement design requires.
+
+`bar_start` was also walked across every hour of a full weekend for all seven intervals
+with zero failures, because the adapter calls it on every fetch whether or not the
+market is open — the Session 6 fix holds for this new caller.
+
+**Measured at Phase 5 code-complete.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `820 passed, 1 skipped` (baseline 792) |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 10 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+| `uv run pyright` (src + tests) | `27 errors`, all pre-existing, 0 in new files |
+| `just test-tz` | `820 passed` under all three zones |
+| `cd web && npx tsc --noEmit` | exit 0 |
+| `docker build -f deploy/Dockerfile` | exit 0; runtime image imports `tvDatafeed`, the adapter and `ZoneInfo("America/Chicago")` |
+
+The first commit was verified green in isolation (`812 passed`, 10 contracts, pyright 0),
+so no revision on the branch is red.
+
+**A hazard worth recording for whoever runs the seed in production.** The repository's
+local `.env` points `MONGODB_URL` at the production host, which is the documented
+remote-db dev mode. `scripts/seed_index_futures.py` is a dry run by default, so the
+first run read production and wrote nothing, but `--apply` from a developer machine in
+that mode writes straight to production. The script's write path was therefore proved
+against a disposable Mongo on port 27117 instead: three documents with the right
+multipliers and calendar, and still three after a second `--apply`.
