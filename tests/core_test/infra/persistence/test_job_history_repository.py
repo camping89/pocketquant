@@ -90,6 +90,36 @@ async def test_get_latest_by_job_ids_awaits_aggregate(repo):
 
 
 @pytest.mark.asyncio
+async def test_latest_run_is_decided_when_two_runs_share_a_started_at(repo):
+    """Two runs starting inside one millisecond must still resolve to the later.
+
+    BSON stores milliseconds, so a fast job can write two runs whose
+    ``started_at`` compare equal; sorting on that alone leaves ``$first`` free
+    to return either. The rows are written directly here so the tie is
+    reproduced on purpose rather than waited for — this surfaced as an
+    intermittent failure three times before it was pinned.
+    """
+    shared = datetime(2026, 5, 5, 12, 0, 0, tzinfo=UTC)
+    # UUIDv7 is monotonic within a millisecond, so the greater id is the later
+    # run. Inserted oldest-first on purpose: with equal started_at values the
+    # sort is otherwise free to keep insertion order, which would hand $first
+    # the WRONG row. Reverse this order and the test stops proving anything.
+    older, newer = "0196c0de-0000-7000-8000-00000000000a", "0196c0de-0000-7000-8000-00000000000b"
+    await repo._collection().insert_many(
+        [
+            {"_id": older, "job_id": "sync_5m", "started_at": shared, "status": "completed",
+             "duration_ms": 100, "finished_at": shared, "error": None},
+            {"_id": newer, "job_id": "sync_5m", "started_at": shared, "status": "completed",
+             "duration_ms": 200, "finished_at": shared, "error": None},
+        ]
+    )
+
+    result = await repo.get_latest_by_job_ids(["sync_5m"])
+
+    assert result["sync_5m"]["duration_ms"] == 200
+
+
+@pytest.mark.asyncio
 async def test_record_detail_appends_to_run(repo):
     """Smoke: per-(symbol, interval) detail records flow into details[]."""
     doc_id = await repo.record_start("sync_5m")

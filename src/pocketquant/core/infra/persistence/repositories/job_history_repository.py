@@ -192,7 +192,13 @@ class JobHistoryRepository(BaseRepository):
 
         pipeline = [
             {"$match": {"job_id": {"$in": job_ids}}},
-            {"$sort": {"started_at": -1}},
+            # `_id` breaks the tie when two runs of one job share a started_at.
+            # BSON stores milliseconds, so two runs started inside the same
+            # millisecond compare equal and `$first` would pick arbitrarily
+            # between them. `_id` is a UUIDv7 string, monotonic within a
+            # millisecond and lexicographically ordered by generation time, so
+            # descending on it yields the later run deterministically.
+            {"$sort": {"started_at": -1, "_id": -1}},
             {"$group": {"_id": "$job_id", "doc": {"$first": "$$ROOT"}}},
         ]
         results: dict[str, dict[str, Any]] = {}
