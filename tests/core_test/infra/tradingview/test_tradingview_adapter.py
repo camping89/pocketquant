@@ -106,6 +106,20 @@ async def test_an_override_lowers_the_cap_further() -> None:
     assert client.calls[0]["n_bars"] == 250
 
 
+async def test_an_override_cannot_raise_the_cap_above_the_plan() -> None:
+    """The load-bearing direction: an override may only ask for less.
+
+    A lower override is operator caution; a higher one would claim an
+    entitlement the account does not hold, and 5000 is the scraper's own
+    per-request ceiling. An override below the cap cannot detect a missing
+    clamp, because it is its own answer either way.
+    """
+    client = _FakeClient()
+    await _adapter(client, tradingview_max_bars=9_999).fetch_ohlcv(_ES, Interval.HOUR_1, 99_999)
+
+    assert client.calls[0]["n_bars"] == 5_000
+
+
 async def test_futures_symbol_is_split_with_fut_contract_1() -> None:
     client = _FakeClient()
     await _adapter(client).fetch_ohlcv(_ES, Interval.HOUR_1, 10)

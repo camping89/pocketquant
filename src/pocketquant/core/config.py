@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import MongoDsn, RedisDsn, SecretStr
+from pydantic import Field, MongoDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pocketquant.core.domain.shared.enums import (
@@ -98,9 +98,11 @@ class Settings(BaseSettings):
     tradingview_auth_token: SecretStr | None = None
     tradingview_plan: TradingViewPlan = TradingViewPlan.FREE
     # Explicit overrides. Each may only make a request GENTLER than the plan
-    # allows, never more aggressive — see ``tradingview_capabilities``.
-    tradingview_max_bars: int | None = None
-    tradingview_poll_seconds: int | None = None
+    # allows, never more aggressive — see ``tradingview_capabilities``. Bounded
+    # above zero because 0 is not "unset": it would make every request ask for
+    # no bars and every sync silently insert nothing.
+    tradingview_max_bars: int | None = Field(default=None, gt=0)
+    tradingview_poll_seconds: int | None = Field(default=None, gt=0)
 
     @property
     def tradingview_capabilities(self) -> TradingViewCapabilities:

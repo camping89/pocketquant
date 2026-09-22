@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "TradingView History Adapter, Seeding and Backfill"
-status: pending
+status: in-progress
 priority: P1
 effort: "1.5d"
 dependencies: [3, 4]
@@ -184,8 +184,11 @@ epoch-bearing raw bars.
    the zone the library used to build it — so the round trip recovers the true epoch on
    ANY host, not only under `TZ=UTC`. This is what lets the CI timezone matrix from
    Phase 1 Task 12 pass.
-6. Return `None`/empty safely: `get_hist` returns `None` when its regex match fails.
-   Treat that as an empty list and log one DEBUG.
+6. `get_hist` returns `None` when its regex match fails. **Corrected at cook time:**
+   raise rather than returning an empty list. TradingView serves the last N bars
+   whatever the session state, so a missing series is a rejection, never a quiet
+   market — and `fetch_with_retry` retries on empty, so returning `[]` would open
+   two more sockets per symbol per minute against a venue that just refused us.
 7. Log at DEBUG only — this runs once per symbol per interval per cron tick.
 
 **Success criteria.** The client returns `RawBar`s whose `epoch_seconds` are
@@ -283,7 +286,8 @@ cap, and never returns an in-progress bar.
 1. Constructor takes `client: ITradingViewClient`, `settings: Settings` and
    `calendar_factory: TradingCalendarFactory`.
 2. `fetch_ohlcv(symbol, interval, n_bars)`:
-   - `n_bars = min(n_bars, settings.tradingview_max_bars)`;
+   - `n_bars = min(n_bars, settings.tradingview_capabilities.max_bars)` — the
+     capability record, not the raw field, per Task 1 step 4's user decision;
    - `code, exchange, fut_contract = split_futures_symbol(symbol)`;
    - `raws = await client.fetch_bars(code, exchange, interval, n_bars, fut_contract)`;
    - map each through `raw_bar_to_bar`;

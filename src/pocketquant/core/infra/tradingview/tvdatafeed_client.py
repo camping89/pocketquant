@@ -25,6 +25,12 @@ observe it.
 **The DataFrame index is naive host-local time.** ``__create_df`` builds each
 entry with ``datetime.fromtimestamp(...)`` and no timezone, and the raw epoch is
 not re-exposed. It is recovered here, at the boundary.
+
+A fourth fact governs the error path: ``get_hist`` returns ``None`` when its
+response regex finds no series, and TradingView serves the last N bars whatever
+the session state. So an absent series is a rejection rather than a quiet
+market, and this client raises instead of returning ``[]`` — see
+:class:`TradingViewNoSeriesError`.
 """
 
 from __future__ import annotations
@@ -51,6 +57,32 @@ logger = get_logger(__name__)
 #: this string when login returns no token, so comparing against it is the only
 #: way to tell an authenticated session from an anonymous one.
 _UNAUTHORIZED_TOKEN = "unauthorized_user_token"  # noqa: S105 — sentinel, not a credential
+
+#: Upstream's sign-in performs ``requests.post`` with NO timeout, and it runs
+#: while this client holds its lock. Without a ceiling a stalled sign-in would
+#: hold the lock forever, ``sync_1m`` would never finish, APScheduler's
+#: per-job ``max_instances=1`` would skip every later tick, and BTC/ETH/SOL
+#: would stop syncing — a crypto outage reachable purely from futures config.
+_BUILD_TIMEOUT_S = 30.0
+
+#: ``get_hist`` is loosely bounded already (its socket carries a 5s timeout),
+#: but the read loop has no overall ceiling. Generous enough for a 5000-bar
+#: backfill, small enough that one symbol cannot consume an entire cron cycle.
+_FETCH_TIMEOUT_S = 60.0
+
+
+class TradingViewNoSeriesError(RuntimeError):
+    """The response carried no price series.
+
+    Raised rather than reported as an empty market. TradingView returns the last
+    N bars whatever the session state, so "no series" is never a quiet venue —
+    it is a rejection (bad symbol, entitlement, or rate limit). Returning ``[]``
+    here would be indistinguishable from emptiness to ``fetch_with_retry``,
+    which retries on empty and would open two more sockets per symbol per
+    minute against a venue that has just refused us. Correction 15 settled the
+    principle: an outage must not become a successful sync that inserted
+    nothing.
+    """
 
 
 class TvDatafeedClient:
@@ -84,29 +116,44 @@ class TvDatafeedClient:
 
         async with self._lock:
             tv = await self._ensure_client()
-            frame = await asyncio.to_thread(
-                tv.get_hist,
-                symbol=code,
-                exchange=exchange,
-                interval=tv_interval,
-                n_bars=n_bars,
-                # cast, not a line-level ignore: upstream annotates this
-                # `fut_contract: int = None`, so None is correct at runtime and
-                # wrong per the signature. A `# type: ignore` here would
-                # suppress the whole call and hide a real break in any other
-                # argument, so the lie stays as narrow as the defect.
-                fut_contract=cast("int", fut_contract),
-            )
+            try:
+                frame = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        tv.get_hist,
+                        symbol=code,
+                        exchange=exchange,
+                        interval=tv_interval,
+                        n_bars=n_bars,
+                        # cast, not a line-level ignore: upstream annotates this
+                        # `fut_contract: int = None`, so None is correct at
+                        # runtime and wrong per the signature. A `# type: ignore`
+                        # here would suppress the whole call and hide a real
+                        # break in any other argument, so the lie stays as
+                        # narrow as the defect.
+                        fut_contract=cast("int", fut_contract),
+                    ),
+                    timeout=_FETCH_TIMEOUT_S,
+                )
+            except TimeoutError:
+                # Cancelling a to_thread does NOT stop the thread: it keeps
+                # running and keeps writing to this instance's `ws`. Reusing the
+                # instance would hand the next fetch a socket another thread is
+                # still reading — the exact corruption the lock exists to
+                # prevent. Discard it so the next call builds a fresh one.
+                self._tv = None
+                logger.warning(
+                    "provider.tradingview.fetch_timeout",
+                    code=code,
+                    exchange=exchange,
+                    interval=interval.value,
+                    timeout_seconds=_FETCH_TIMEOUT_S,
+                )
+                raise
 
         if frame is None or frame.empty:
-            # get_hist returns None when its response regex finds no series.
-            logger.debug(
-                "provider.tradingview.empty_result",
-                code=code,
-                exchange=exchange,
-                interval=interval.value,
+            raise TradingViewNoSeriesError(
+                f"TradingView returned no series for {exchange}:{code} at {interval.value}"
             )
-            return []
 
         bars = [self._to_raw_bar(index, row) for index, row in frame.iterrows()]
         logger.debug(
@@ -135,7 +182,19 @@ class TvDatafeedClient:
     async def _ensure_client(self) -> TvDatafeed:
         """The underlying client, built on first use. Caller holds the lock."""
         if self._tv is None:
-            self._tv = await asyncio.to_thread(self._build)
+            try:
+                self._tv = await asyncio.wait_for(
+                    asyncio.to_thread(self._build), timeout=_BUILD_TIMEOUT_S
+                )
+            except TimeoutError:
+                # See _BUILD_TIMEOUT_S: the orphaned thread keeps its own
+                # instance, so nothing is reused after a timeout.
+                self._tv = None
+                logger.warning(
+                    "provider.tradingview.build_timeout",
+                    timeout_seconds=_BUILD_TIMEOUT_S,
+                )
+                raise
         return self._tv
 
     def _build(self) -> TvDatafeed:

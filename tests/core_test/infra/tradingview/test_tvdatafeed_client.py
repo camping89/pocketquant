@@ -23,11 +23,16 @@ from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
+import pytest
 from tvDatafeed import TvDatafeed
 
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
+from pocketquant.core.infra.tradingview import tvdatafeed_client
+from pocketquant.core.infra.tradingview.tvdatafeed_client import (
+    TradingViewNoSeriesError,
+    TvDatafeedClient,
+)
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "es_1h_raw.json"
 _UNAUTHORIZED = "unauthorized_user_token"  # noqa: S105 — upstream's sentinel
@@ -63,9 +68,15 @@ def _naive_local_frame(epochs: list[float]) -> pd.DataFrame:
 class _FakeTv:
     """Stands in for ``TvDatafeed``, recording calls and refusing to overlap."""
 
-    def __init__(self, frame: pd.DataFrame | None, token: str = _UNAUTHORIZED) -> None:
+    def __init__(
+        self,
+        frame: pd.DataFrame | None,
+        token: str = _UNAUTHORIZED,
+        delay: float = 0.05,
+    ) -> None:
         self.token = token
         self._frame = frame
+        self._delay = delay
         self.calls: list[dict[str, object]] = []
         self.overlapped = False
         self._active = 0
@@ -78,7 +89,7 @@ class _FakeTv:
             if self._active > 1:
                 self.overlapped = True
         # Widen the window: without a lock the two to_thread workers overlap here.
-        time.sleep(0.05)
+        time.sleep(self._delay)
         with self._guard:
             self._active -= 1
         return self._frame
@@ -137,10 +148,81 @@ async def test_symbol_and_contract_reach_get_hist_unchanged() -> None:
     assert call["fut_contract"] == 1
 
 
-async def test_none_result_becomes_an_empty_list() -> None:
-    """``get_hist`` returns None when its response regex finds no series."""
-    fake = _FakeTv(None)
-    assert await _client(fake).fetch_bars("ES", "CME_MINI", Interval.HOUR_1, 10, 1) == []
+async def test_no_series_raises_rather_than_reporting_an_empty_market() -> None:
+    """A missing series is a rejection, and must not look like a quiet venue.
+
+    ``get_hist`` returns None when its response regex finds no series, and
+    TradingView serves the last N bars whatever the session state — so this is
+    never emptiness. Returning ``[]`` would be indistinguishable from a quiet
+    market to ``fetch_with_retry``, which retries on empty and would open two
+    more sockets per symbol per minute against a venue that just refused us.
+    """
+    with pytest.raises(TradingViewNoSeriesError, match="no series"):
+        await _client(_FakeTv(None)).fetch_bars("ES", "CME_MINI", Interval.HOUR_1, 10, 1)
+
+
+async def test_a_fetch_timeout_discards_the_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An abandoned fetch must not leave its socket reachable by the next one.
+
+    Cancelling a ``to_thread`` does not stop the thread; it keeps reading into
+    the instance's ``ws``. Reusing that instance would hand the next fetch a
+    socket another thread is still using, which is the corruption the lock
+    exists to prevent, so the instance is dropped and rebuilt.
+    """
+    # Wide margins on purpose: the replacement fake must be comfortably faster
+    # than the patched timeout, or the second fetch races it too.
+    monkeypatch.setattr(tvdatafeed_client, "_FETCH_TIMEOUT_S", 0.3)
+    slow = _FakeTv(_naive_local_frame(_epochs()), delay=3.0)
+    fresh = _FakeTv(_naive_local_frame(_epochs()), delay=0.0)
+    built: list[_FakeTv] = []
+
+    def factory(**_: Any) -> _FakeTv:
+        instance = slow if not built else fresh
+        built.append(instance)
+        return instance
+
+    client = TvDatafeedClient(
+        settings=Settings(),  # pyright: ignore[reportCallIssue]
+        factory=cast("Callable[..., TvDatafeed]", factory),
+    )
+
+    with pytest.raises(TimeoutError):
+        await client.fetch_bars("ES", "CME_MINI", Interval.HOUR_1, 10, 1)
+
+    bars = await client.fetch_bars("NQ", "CME_MINI", Interval.HOUR_1, 10, 1)
+    assert len(built) == 2, "the abandoned instance must not be reused"
+    assert built[1] is fresh
+    assert bars, "the rebuilt client still answers"
+
+
+async def test_a_construction_failure_is_raised_and_retried_next_call() -> None:
+    """A build failure is an outage, not a degradation to anonymous mode.
+
+    Upstream never raises on a failed login — it substitutes an unauthorized
+    token — so anything that does raise here is real, and reporting it as empty
+    would turn a dead provider into a sync that succeeded and inserted nothing.
+    """
+    good = _FakeTv(_naive_local_frame(_epochs()))
+    attempts: list[int] = []
+
+    def factory(**_: Any) -> _FakeTv:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise OSError("no route to host")
+        return good
+
+    client = TvDatafeedClient(
+        settings=Settings(),  # pyright: ignore[reportCallIssue]
+        factory=cast("Callable[..., TvDatafeed]", factory),
+    )
+
+    with pytest.raises(OSError, match="no route to host"):
+        await client.fetch_bars("ES", "CME_MINI", Interval.HOUR_1, 10, 1)
+
+    assert await client.fetch_bars("ES", "CME_MINI", Interval.HOUR_1, 10, 1)
+    assert len(attempts) == 2, "the next call must rebuild rather than stay broken"
 
 
 async def test_unauthorized_token_is_not_authenticated() -> None:

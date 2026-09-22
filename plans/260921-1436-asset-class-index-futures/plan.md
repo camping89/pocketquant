@@ -63,7 +63,8 @@ registered provider before TradingView enters.
   existing crypto test count is unchanged or higher.
 - `uv run ruff check src tests scripts` exits 0 with the `DTZ` rules enabled.
 - `uv run lint-imports` exits 0 — 8 contracts today, 9 from Phase 2 onward (the new
-  contract confines `pandas_market_calendars` to `core/infra`).
+  contract confines `pandas_market_calendars` to `core/infra`), and 10 from Phase 5
+  onward (the tenth confines `tvDatafeed` to `core/infra/tradingview`).
 - Every cron job reports the same `next_run_time` under `TZ=UTC`, `TZ=Asia/Ho_Chi_Minh`
   and `TZ=America/Chicago`.
 - Golden-file comparison: crypto bars, cascade output and performance metrics are
@@ -952,3 +953,75 @@ first run read production and wrote nothing, but `--apply` from a developer mach
 that mode writes straight to production. The script's write path was therefore proved
 against a disposable Mongo on port 27117 instead: three documents with the right
 multipliers and calendar, and still three after a second `--apply`.
+
+**Correction 22 — advisory review before the deploy: an empty answer from this
+provider is never a quiet market, and a stalled login could stop crypto.** Two
+guards landed before the push; both are deviations from Task 3, and one is a latent
+G5 violation reachable from configuration rather than from code.
+
+*The rejection amplifier.* Task 3 step 6 says to treat a `None` frame as an empty
+list. But `get_hist` returns `None` only when its response regex finds no series —
+a bad symbol, an entitlement refusal or a rate limit — and TradingView serves the
+last N bars whatever the session state, so this provider can never answer "the
+market is quiet". Returning `[]` made a refusal indistinguishable from emptiness to
+`fetch_with_retry`, which retries on empty: three sockets per symbol per minute
+against a venue that had just refused us, which is precisely the cost Correction 15
+was written to avoid, arriving through the other branch. `fetch_bars` now raises
+`TradingViewNoSeriesError`, so Correction 15's path gives one socket, one
+`market_data.sync.failed` ERROR and `status=error`.
+
+*The unbounded sign-in under the lock.* Upstream `__auth` calls `requests.post`
+with no timeout, and it runs while this client holds its lock. A stalled sign-in
+would hold the lock indefinitely, `sync_1m` would never finish, APScheduler's
+per-job `max_instances=1` would skip every later tick, and BTC/ETH/SOL would stop
+syncing — a crypto outage caused entirely by futures configuration. Verified that no
+TradingView credentials exist anywhere in `../pocketquant-config/`, so the path is
+currently unreachable, which is exactly why it is worth closing now rather than
+after someone buys the add-on. Both `to_thread` calls are now wrapped in
+`asyncio.wait_for`.
+
+The instance is discarded on either timeout, and that is the load-bearing half.
+Cancelling a `to_thread` does not stop the thread — confirmed directly: `wait_for`
+returned after 0.10s while its thread slept 2.0s — so the orphan keeps running and
+keeps writing to that instance's `ws`. Reusing it would hand the next fetch a socket
+another thread is still reading, which is the corruption the lock exists to prevent.
+Setting `self._tv = None` means the orphan keeps the old instance to itself.
+
+*Two smaller items from the same review.* `test_an_override_lowers_the_cap_further`
+passed with the `min()` removed, because an override of 250 is its own answer either
+way; the load-bearing direction (an override of 9999 still yields 5000) now has a
+test, and dropping the clamp turns it red. Both override fields gained `gt=0`,
+because `tradingview_max_bars=0` is not "unset" — it would ask for no bars and
+insert nothing, silently.
+
+All three new guards are mutation-tested: returning `[]` instead of raising, keeping
+the instance after a fetch timeout, and dropping the `min()` clamp each turn one test
+red. Tests were also added for the construction re-raise and for the rebuild on the
+following call.
+
+**Measured after the guards.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `823 passed, 1 skipped` |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 10 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+| `just test-tz` | `823 passed` under all three zones |
+
+**Carried to the seeding window, not done here.** The review's remaining findings all
+concern the free plan's roughly ten-minute CME delay, which `capabilities.realtime`
+records but nothing yet acts on. Three consumers assume the newest vendor bar is
+current: the in-progress filter drops nothing on a delayed feed (so a forming bar can
+be persisted once and never refreshed, with the cascade building on it); the stuck
+threshold would fire at every 17:00 CT open and every 15:30 CT halt resume, which
+fails Task 12's own criterion by design; and the last minutes of each session arrive
+after the closed-market gate has shut, healing only at the next open. Each needs
+verification against the live feed before it is treated as fact — fetch the same 1m
+bar twice a minute apart and diff it — and Phase 6 already owns the poll floor, so it
+is the natural home for delay-awareness.
+
+Also recorded for Task 12's arithmetic: 5000 1m bars cover about 3.5 CME sessions
+while `check_integrity` scans a fixed 7 days, so the first nightly scans after the
+backfill will report gaps that are not gaps. Judge the clean week from one starting at
+least seven days after the backfill.
