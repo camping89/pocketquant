@@ -26,7 +26,9 @@ class Interval(str, Enum):
     def periods_per_year(self) -> float:
         """Number of bars of this interval in one calendar year (crypto, 365d).
 
-        Used to annualize per-bar return statistics (Sharpe/Sortino).
+        Deprecated as an annualization source: the calendar owns annualization.
+        This is the 24/7 answer, kept because ``Continuous24x7Calendar`` reads
+        this same table. Anything holding a calendar should ask it instead.
         """
         return _PERIODS_PER_YEAR[self.value]
 
@@ -34,8 +36,11 @@ class Interval(str, Enum):
     def periods_per_year_for(interval: str) -> float | None:
         """Safe lookup by raw string; returns None for an unknown interval.
 
-        Annualization callers skip scaling (Sharpe=0) rather than raise on a
-        stale/queued request carrying an interval no longer in the enum.
+        Deprecated as an annualization source, for the same reason as
+        ``periods_per_year``: this is the 24/7 answer, and a symbol on a session
+        calendar has a different one. Annualization callers skip scaling
+        (Sharpe=0) rather than raise on a stale/queued request carrying an
+        interval no longer in the enum.
         """
         return _PERIODS_PER_YEAR.get(interval)
 

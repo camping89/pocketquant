@@ -18,6 +18,7 @@ from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.risk import RiskConfig
@@ -215,6 +216,7 @@ async def _run_backtest(
         broker=broker,
         backtest_repository=bt_repo,  # pyright: ignore[reportArgumentType]
         bar_repository=_FakeBarRepo(bars),  # pyright: ignore[reportArgumentType]
+        calendar=Continuous24x7Calendar(),
         persist_results=False,
     )
     config = BacktestConfig(

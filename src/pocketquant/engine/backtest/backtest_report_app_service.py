@@ -29,6 +29,7 @@ from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult, OpenLot
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.brokers.events import OrderEvent
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.position import PositionAggregate, TradeClosedEvent
 from pocketquant.core.domain.shared.enums import Interval
@@ -63,11 +64,13 @@ class BacktestReportAppService:
         config: BacktestConfig,
         initial_capital: float,
         broker: IBrokerPort,
+        calendar: ITradingCalendarPort,
         run_id: str | None = None,
     ) -> None:
         self._config = config
         self._initial_capital = initial_capital
         self._broker = broker
+        self._calendar = calendar
         self._run_id = run_id or ""
 
         self._equity_curve: list[EquityPoint] = []
@@ -366,12 +369,21 @@ class BacktestReportAppService:
         open_positions = [
             self._position_to_open_lot(p) for p in (positions or []) if not p.is_closed
         ]
-        periods_per_year = Interval.periods_per_year_for(self._config.interval)
-        if periods_per_year is None:
+        # Annualization belongs to the symbol's calendar: a CME year holds
+        # roughly 252 sessions, not 365 days, and Sharpe scales by its square
+        # root. A stale queued request can still carry an interval that is no
+        # longer an Interval member, and that still skips scaling rather than
+        # raising.
+        try:
+            interval = Interval(self._config.interval)
+        except ValueError:
+            periods_per_year = None
             logger.warning(
                 "unknown interval %r — skipping Sharpe/Sortino annualization",
                 self._config.interval,
             )
+        else:
+            periods_per_year = self._calendar.periods_per_year(interval)
         balance = await self._broker.get_balance()
         current_equity = balance.available_balance
         total_commission = sum(

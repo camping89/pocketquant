@@ -22,6 +22,7 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -33,6 +34,8 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
@@ -105,6 +108,7 @@ def _deps(database: Database) -> BacktestDispatchDeps:
         backtest_repo=BacktestRepository(database),
         order_repo=BacktestOrderRepository(database),
         trade_repo=BacktestTradeRepository(database),
+        calendar_factory=TradingCalendarFactory(SymbolLookupHelper(SymbolRepository(database))),
     )
 
 

@@ -17,6 +17,7 @@ from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
@@ -138,6 +139,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
         broker=broker,
         backtest_repository=backtest_repo,
         bar_repository=_FakeBarRepo(bars),  # pyright: ignore[reportArgumentType]
+        calendar=Continuous24x7Calendar(),
         order_repository=order_repo,
         trade_repository=trade_repo,
         persist_results=True,
@@ -235,6 +237,7 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
         broker=broker,
         backtest_repository=backtest_repo,
         bar_repository=_FakeBarRepo(bars),  # pyright: ignore[reportArgumentType]
+        calendar=Continuous24x7Calendar(),
         order_repository=order_repo,
         trade_repository=trade_repo,
         persist_results=True,

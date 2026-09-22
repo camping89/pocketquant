@@ -15,6 +15,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
 )
@@ -37,6 +38,7 @@ class BacktestDispatchDeps:
     backtest_repo: BacktestRepository
     order_repo: BacktestOrderRepository
     trade_repo: BacktestTradeRepository
+    calendar_factory: TradingCalendarFactory
 
 
 def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
@@ -104,6 +106,7 @@ async def run_single(
             broker=broker,
             backtest_repository=deps.backtest_repo,
             bar_repository=deps.bar_repo,
+            calendar=await deps.calendar_factory.for_symbol(config.symbol),
             order_repository=deps.order_repo,
             trade_repository=deps.trade_repo,
         )

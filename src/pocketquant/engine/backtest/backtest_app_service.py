@@ -8,6 +8,7 @@ from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -48,6 +49,7 @@ class BacktestAppService:
         broker: PaperBrokerAdapter,
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
+        calendar: ITradingCalendarPort,
         order_repository: BacktestOrderRepository | None = None,
         trade_repository: BacktestTradeRepository | None = None,
         persist_results: bool = True,
@@ -58,6 +60,7 @@ class BacktestAppService:
         self._order_repo = order_repository
         self._trade_repo = trade_repository
         self._bar_repo = bar_repository
+        self._calendar = calendar
         self._replay_engine = HistoricalReplayAppService(event_bus)
         self._persist_results = persist_results
 
@@ -85,7 +88,11 @@ class BacktestAppService:
         )
 
         collector = BacktestReportAppService(
-            config, config.initial_capital, broker=self._broker, run_id=run_id
+            config,
+            config.initial_capital,
+            broker=self._broker,
+            calendar=self._calendar,
+            run_id=run_id,
         )
 
         # Mark-to-market per bar for an evenly-sampled equity curve (Sharpe

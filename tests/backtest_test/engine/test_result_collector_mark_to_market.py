@@ -22,6 +22,7 @@ import pytest
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.order import OrderSide, OrderStatus
 from pocketquant.core.domain.position import TradeClosedEvent
 from pocketquant.core.domain.trading import PercentageCommissionModel
@@ -121,7 +122,11 @@ def _reset_sim_time():
 async def _round_trip(with_mtm: bool) -> BacktestReportAppService:
     broker = _FakeBroker(10_000.0)
     c = BacktestReportAppService(
-        _config(), initial_capital=10_000.0, broker=broker, run_id=_oid("run")  # type: ignore[arg-type]
+        _config(),  # type: ignore[arg-type]
+        initial_capital=10_000.0,
+        broker=broker,
+        calendar=Continuous24x7Calendar(),
+        run_id=_oid("run"),
     )
     set_simulation_time(_T0)
     await c.on_fill(_fill(OrderSide.BUY, 1.0, 100.0, "o1"))
@@ -187,7 +192,11 @@ async def test_sharpe_uses_mtm_curve_when_present() -> None:
 async def test_persisted_equity_curve_capped() -> None:
     broker = _FakeBroker(10_000.0)
     c = BacktestReportAppService(
-        _config(), initial_capital=10_000.0, broker=broker, run_id=_oid("run")  # type: ignore[arg-type]
+        _config(),  # type: ignore[arg-type]
+        initial_capital=10_000.0,
+        broker=broker,
+        calendar=Continuous24x7Calendar(),
+        run_id=_oid("run"),
     )
     base = 10_000.0
     # 20k MTM points — well over the 5000 cap.
@@ -201,7 +210,11 @@ async def test_persisted_curve_hard_capped_even_with_many_trade_points() -> None
     """Cap is a hard guarantee: even >5000 trade-carrying points get strided down."""
     broker = _FakeBroker(10_000.0)
     c = BacktestReportAppService(
-        _config(), initial_capital=10_000.0, broker=broker, run_id=_oid("run")  # type: ignore[arg-type]
+        _config(),  # type: ignore[arg-type]
+        initial_capital=10_000.0,
+        broker=broker,
+        calendar=Continuous24x7Calendar(),
+        run_id=_oid("run"),
     )
     set_simulation_time(_T0)
     # 8000 round-trips → 8000 trade-carrying equity points (over the cap).
