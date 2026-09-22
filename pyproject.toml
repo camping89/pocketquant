@@ -25,6 +25,10 @@ dependencies = [
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "dishka>=1.9.1",
+    # Unofficial TradingView scraper; not on PyPI. Pinned to a commit because a
+    # silent upstream change is one of this integration's named risks.
+    # sha resolved 2026-09-22 from rongardF/tvdatafeed HEAD.
+    "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git@e6f6aaa7de439ac6e454d9b26d2760ded8dc4923",
 ]
 
 [project.scripts]
@@ -45,6 +49,11 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# Required for the pinned git dependency (tvdatafeed, not on PyPI). Hatchling
+# rejects every direct reference without this, whatever the target.
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pocketquant"]
@@ -161,4 +170,22 @@ forbidden_modules = ["pandas_market_calendars"]
 # wiring, and a transitive chain through that is the architecture working, not a
 # violation. What must never happen is code outside core.infra.calendars
 # importing the library to compute a schedule itself.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "tvDatafeed confined to core.infra.tradingview"
+type = "forbidden"
+# The scraper is unofficial and its login has broken before, so replacing it must
+# stay one new class behind ITradingViewClient. An import anywhere else would
+# make the vendor's DataFrame shape — including its naive host-local index —
+# part of our own model.
+source_modules = [
+    "pocketquant.core.domain",
+    "pocketquant.engine",
+    "pocketquant.app",
+]
+forbidden_modules = ["tvDatafeed"]
+# Direct imports only, for the same reason as the calendars contract above: app
+# reaches the adapter through DI wiring, and that transitive chain is the
+# architecture working rather than a violation.
 allow_indirect_imports = true

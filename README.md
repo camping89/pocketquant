@@ -40,6 +40,13 @@ just fe                      # vite dev UI → :5173 (proxies /api → :41921)
 - Market-data routing: `MARKET_DATA_PROVIDERS` (ordered provider ids per asset class) and
   `SYMBOL_PROVIDER_OVERRIDES` (per composite symbol) are JSON objects. Each one replaces the
   whole mapping rather than merging, so list every asset class you still want served.
+- TradingView (index futures source): entitlement is the single `TRADINGVIEW_PLAN`
+  (`free` — the default, works unconfigured — or `cme_non_pro`), which derives the bar cap,
+  the poll floor and whether the feed is real-time. `TRADINGVIEW_USERNAME` /
+  `TRADINGVIEW_PASSWORD` are optional; `TRADINGVIEW_AUTH_TOKEN` supplies a token directly and
+  wins over them, which is the way past a broken login. `TRADINGVIEW_MAX_BARS` and
+  `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than
+  the plan allows. Values live in `../pocketquant-config/`, never in this repo.
 
 ### Against the prod VPS DB
 

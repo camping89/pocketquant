@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 
 # Crypto trades every calendar day, so a year is 365 days for annualization.
@@ -55,3 +56,50 @@ class AssetClass(str, Enum):
     CRYPTO_SPOT = "crypto_spot"
     CRYPTO_PERP = "crypto_perp"
     INDEX_FUTURE = "index_future"
+
+
+class TradingViewPlan(str, Enum):
+    """Which TradingView subscription the configured account holds.
+
+    Nothing below ``Settings`` branches on this name. Consumers read the
+    :class:`TradingViewCapabilities` record it derives, so adding a plan is one
+    map entry and adding a capability is one field.
+    """
+
+    FREE = "free"
+    """Delayed CME data, conservative limits. The default: works unconfigured."""
+
+    CME_NON_PRO = "cme_non_pro"
+    """The CME non-professional real-time add-on."""
+
+
+@dataclass(frozen=True)
+class TradingViewCapabilities:
+    """What a plan permits, so no consumer has to know which plan is configured.
+
+    ``min_poll_seconds`` is a floor rather than an interval: a caller polls at
+    ``max(configured, min_poll_seconds)``. On a delayed feed, polling faster
+    cannot make a quote fresher, so it buys ban risk and nothing else.
+    """
+
+    realtime: bool
+    max_bars: int
+    min_poll_seconds: int
+
+
+# Derived from the plan by a module-level map, following the precedent
+# ``_DEFAULT_CALENDAR_FOR`` set for deriving ``calendar_id`` from ``asset_class``.
+# 5000 is the scraper's own documented per-request ceiling, which no plan lifts.
+_CAPABILITIES_FOR: dict[TradingViewPlan, TradingViewCapabilities] = {
+    TradingViewPlan.FREE: TradingViewCapabilities(
+        realtime=False, max_bars=5_000, min_poll_seconds=60
+    ),
+    TradingViewPlan.CME_NON_PRO: TradingViewCapabilities(
+        realtime=True, max_bars=5_000, min_poll_seconds=15
+    ),
+}
+
+
+def capabilities_for(plan: TradingViewPlan) -> TradingViewCapabilities:
+    """The capability record for ``plan``."""
+    return _CAPABILITIES_FOR[plan]

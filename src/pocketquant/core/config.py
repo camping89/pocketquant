@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -6,7 +7,12 @@ from typing import Literal
 from pydantic import MongoDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pocketquant.core.domain.shared.enums import AssetClass
+from pocketquant.core.domain.shared.enums import (
+    AssetClass,
+    TradingViewCapabilities,
+    TradingViewPlan,
+    capabilities_for,
+)
 
 
 def _find_project_root() -> Path:
@@ -76,6 +82,41 @@ class Settings(BaseSettings):
     # Per-symbol escape hatch, keyed by upper-cased composite symbol. Wins over
     # the asset-class map outright.
     symbol_provider_overrides: dict[str, list[str]] = {}
+
+    # TradingView (index futures data source).
+    #
+    # Entitlement is ONE knob. The three values this used to carry — bar cap,
+    # poll interval and a delayed-data flag — are consequences of the plan the
+    # account holds, and setting them independently lets an operator express
+    # states that cannot exist, such as real-time data on a free account.
+    # Set these from ../pocketquant-config/, never here.
+    tradingview_username: str | None = None
+    tradingview_password: SecretStr | None = None
+    # A token supplied directly, which bypasses username/password login. The
+    # scraper's login is its most fragile part, and it is NOT a constructor
+    # argument upstream — the client assigns it after construction.
+    tradingview_auth_token: SecretStr | None = None
+    tradingview_plan: TradingViewPlan = TradingViewPlan.FREE
+    # Explicit overrides. Each may only make a request GENTLER than the plan
+    # allows, never more aggressive — see ``tradingview_capabilities``.
+    tradingview_max_bars: int | None = None
+    tradingview_poll_seconds: int | None = None
+
+    @property
+    def tradingview_capabilities(self) -> TradingViewCapabilities:
+        """What the configured plan permits, with explicit overrides applied.
+
+        An override may only make a request gentler. A lower bar count is
+        operator caution; a higher one would claim an entitlement the account
+        does not hold, which is the impossible state this single knob exists to
+        prevent. ``min_poll_seconds`` is a floor for the same reason and is
+        never overridden — ``tradingview_poll_seconds`` is the configured
+        interval, which callers clamp with ``max(configured, min_poll_seconds)``.
+        """
+        base = capabilities_for(self.tradingview_plan)
+        if self.tradingview_max_bars is None:
+            return base
+        return replace(base, max_bars=min(self.tradingview_max_bars, base.max_bars))
 
     # OKX Broker (optional, for live trading)
     okx_api_key: str | None = None

@@ -1,0 +1,8 @@
+[
+  {"epoch_seconds": 1772942400.0, "open": 5812.25, "high": 5818.50, "low": 5809.75, "close": 5816.00, "volume": 18422.0},
+  {"epoch_seconds": 1772946000.0, "open": 5816.00, "high": 5821.25, "low": 5813.50, "close": 5814.75, "volume": 15003.0},
+  {"epoch_seconds": 1772949600.0, "open": 5814.75, "high": 5819.00, "low": 5811.00, "close": 5817.50, "volume": 12874.0},
+  {"epoch_seconds": 1772953200.0, "open": 5817.50, "high": 5823.75, "low": 5816.25, "close": 5822.00, "volume": 11209.0},
+  {"epoch_seconds": 1772956800.0, "open": 5822.00, "high": 5828.50, "low": 5820.50, "close": 5826.25, "volume": 13560.0},
+  {"epoch_seconds": 1772960400.0, "open": 5826.25, "high": 5830.00, "low": 5822.75, "close": 5824.50, "volume": 14118.0}
+]
