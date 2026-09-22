@@ -772,7 +772,7 @@ core ◁ engine ◁ app
 
 ## Configuration
 
-Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true). See [deployment.md](./deployment.md) for per-env details.
+Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), `MARKET_DATA_PROVIDERS` (JSON `{asset_class: [provider_id, ...]}`, ordered primary-first), `SYMBOL_PROVIDER_OVERRIDES` (JSON `{COMPOSITE_SYMBOL: [provider_id, ...]}`). Both routing vars replace their whole mapping rather than merging into the defaults. See [deployment.md](./deployment.md) for per-env details.
 
 ## Dependencies
 

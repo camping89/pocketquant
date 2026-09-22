@@ -37,6 +37,9 @@ just fe                      # vite dev UI → :5173 (proxies /api → :41921)
 - API docs: `:41921/api/v1/docs` · OpenAPI: `/api/v1/openapi.json` · Health: `/health`
 - `.env` sanity: `MONGODB_URL`/`REDIS_URL` hosts+ports must match `MONGO_PORT`/`REDIS_PORT`.
 - Fast route iteration: `ENABLE_JOBS=false just be` skips the trading runtime so `--reload` stays light.
+- Market-data routing: `MARKET_DATA_PROVIDERS` (ordered provider ids per asset class) and
+  `SYMBOL_PROVIDER_OVERRIDES` (per composite symbol) are JSON objects. Each one replaces the
+  whole mapping rather than merging, so list every asset class you still want served.
 
 ### Against the prod VPS DB
 

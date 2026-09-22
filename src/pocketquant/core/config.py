@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import MongoDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pocketquant.core.domain.shared.enums import AssetClass
+
 
 def _find_project_root() -> Path:
     if root := os.environ.get("POCKETQUANT_ROOT"):
@@ -55,6 +57,34 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"]
 
     enable_jobs: bool = True
+
+    # Market-data provider routing.
+    #
+    # Ordered provider ids per asset class: primary first, then fallbacks.
+    # pydantic-settings parses these from a JSON string in the environment with
+    # no custom parser, e.g.
+    #   MARKET_DATA_PROVIDERS={"index_future":["tradingview","binance"]}
+    #
+    # That assignment REPLACES the whole mapping rather than merging into it, so
+    # an override naming one asset class drops the others and leaves them with no
+    # provider at all. Always spell out every asset class you still want served.
+    market_data_providers: dict[AssetClass, list[str]] = {
+        AssetClass.CRYPTO_SPOT: ["binance"],
+        AssetClass.CRYPTO_PERP: ["binance"],
+        AssetClass.INDEX_FUTURE: ["tradingview"],
+    }
+    # Per-symbol escape hatch, keyed by upper-cased composite symbol. Wins over
+    # the asset-class map outright.
+    symbol_provider_overrides: dict[str, list[str]] = {}
+
+    # Market-data provider routing — which providers serve an instrument, in
+    # priority order. Override keys are the upper-cased composite symbol.
+    market_data_providers: dict[AssetClass, list[str]] = {
+        AssetClass.CRYPTO_SPOT: ["binance"],
+        AssetClass.CRYPTO_PERP: ["binance"],
+        AssetClass.INDEX_FUTURE: ["tradingview"],
+    }
+    symbol_provider_overrides: dict[str, list[str]] = {}
 
     # OKX Broker (optional, for live trading)
     okx_api_key: str | None = None
