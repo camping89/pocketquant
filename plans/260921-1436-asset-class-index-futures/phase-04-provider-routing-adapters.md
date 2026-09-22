@@ -302,8 +302,11 @@ uv run pytest tests/app_test/integration/ -q && test "$(grep -rn 'BinanceAdapter
 2. Deploy to the VPS and observe one `sync_1m` cycle. Compare `synced_count` and
    `bars_inserted` in `job_history` against the pre-deploy run at the same minute of
    the previous hour.
-3. Confirm the WS quote feed still delivers ticks: `GET /api/v1/market-data/quotes/BTCUSDT%3ABINANCE`
-   returns a timestamp within the last 60 seconds.
+3. Confirm the WS quote feed still delivers ticks. **Corrected (Correction 14):** the
+   path given here was `/api/v1/market-data/quotes/{symbol}`, which does not exist —
+   the quotes router mounts at `/quotes` with a `/latest/` path. Use
+   `GET /api/v1/quotes/latest/BTCUSDT%3ABINANCE` and expect a timestamp within the
+   last 60 seconds.
 
 **Success criteria.** Identical counts and a live quote.
 

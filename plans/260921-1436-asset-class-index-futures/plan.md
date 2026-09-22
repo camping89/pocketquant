@@ -546,6 +546,12 @@ would have. Replaced with a grep that excludes the DI package and the adapters' 
 package, which returns 0 today and returns 1 when a construction is planted in
 `engine/` — verified by planting one.
 
+*Task 8 step 3's URL does not exist.* It gives
+`/api/v1/market-data/quotes/BTCUSDT%3ABINANCE`, which returns
+`{"detail":"Not Found"}`. The quotes router mounts at `/quotes` with a `/latest/`
+path, so the live check is `/api/v1/quotes/latest/BTCUSDT%3ABINANCE`. A manual
+verification rather than an automated gate, so it costs minutes rather than blocking.
+
 *Two expected test counts are wrong, in the harmless direction.* Task 3 says
 `4 passed` and Task 6 says `10 passed`; the delivered counts are 5 and 20. Both
 numbers are now the delivered ones. Task 3's extra test pins Task 2 step 2's "return
@@ -617,9 +623,9 @@ one-shot WARNING when resolution yields an empty provider list.
 
 | Command | Result |
 |---------|--------|
-| `uv run pytest tests/ -q` | `784 passed, 1 skipped` (baseline 751) |
+| `uv run pytest tests/ -q` | `782 passed, 1 skipped` (baseline 751) |
 | `uv run ruff check src tests scripts` | `All checks passed!` |
 | `uv run lint-imports` | `Contracts: 9 kept, 0 broken` |
 | `uv run pyright src` | `0 errors` — and now actually checking the port binding |
-| `just test-tz` | `784 passed` under all three zones |
+| `just test-tz` | `782 passed` under all three zones |
 | `cd web && npx tsc --noEmit` | exit 0 |
