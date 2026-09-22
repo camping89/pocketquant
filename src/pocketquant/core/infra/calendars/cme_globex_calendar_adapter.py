@@ -13,7 +13,7 @@ winter, so no boundary may ever be computed by adding a fixed offset.
 from __future__ import annotations
 
 import functools
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -34,6 +34,20 @@ _REFERENCE_YEAR_START = date(2025, 1, 1)
 _REFERENCE_YEAR_END = date(2025, 12, 31)
 
 _MINUTE = timedelta(minutes=1)
+
+# Days either side of an instant that `_window_rows` asks the schedule for. Four
+# clears a weekend plus an adjacent holiday in both directions.
+_WINDOW_DAYS = timedelta(days=4)
+
+# Equity-index futures pause for fifteen minutes just after the cash equity
+# close, on top of the 16:00-17:00 maintenance break. The upstream calendar
+# models only the maintenance break, so this is applied on top of its rows.
+# It is specific to the index products (ES, NQ, YM); CME's other Globex
+# contracts, such as crude and gold, run straight through this window.
+# Stored as a local wall-clock time, never a UTC offset: 15:15 Chicago is
+# 20:15 UTC in summer and 21:15 UTC in winter.
+_HALT_START_LOCAL = time(15, 15)
+_HALT_END_LOCAL = time(15, 30)
 
 
 class CmeGlobexCalendarAdapter(ITradingCalendarPort):
@@ -118,14 +132,26 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
 
     def is_open(self, instant: datetime) -> bool:
         instant = instant.astimezone(UTC)
-        return any(
-            self._as_utc(row["market_open"]) <= instant < self._as_utc(row["market_close"])
-            for _, row in self._window_rows(instant)
-        )
+        for session, row in self._window_rows(instant):
+            if self._as_utc(row["market_open"]) <= instant < self._as_utc(row["market_close"]):
+                halt = self._halt_window(session, row)
+                return halt is None or not (halt[0] <= instant < halt[1])
+        return False
 
     def previous_close(self, instant: datetime) -> datetime:
-        """The most recent instant a bar could have closed, at or before ``instant``."""
+        """The most recent instant a bar could have closed, at or before ``instant``.
+
+        Inside the intraday halt this is the halt's start rather than
+        ``instant`` itself. Callers use the gap between the two to decide
+        whether a quiet symbol is quiet because the market is shut, and
+        returning ``instant`` would keep that gap at zero for the whole halt,
+        which reads as "it only just closed" fifteen minutes running.
+        """
         instant = instant.astimezone(UTC)
+        for session, row in self._window_rows(instant):
+            halt = self._halt_window(session, row)
+            if halt is not None and halt[0] <= instant < halt[1]:
+                return halt[0]
         closes = [
             self._as_utc(row["market_close"])
             for _, row in self._window_rows(instant)
@@ -146,12 +172,17 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
         # Reach back a day: a session open the evening before can still be
         # contributing minutes inside the requested window.
         schedule = self._schedule(start.date() - timedelta(days=1), end.date())
-        for _, row in schedule.iterrows():
+        for ts, row in schedule.iterrows():
             lower = max(start, self._as_utc(row["market_open"]))
             upper = min(end, self._as_utc(row["market_close"]))
             if lower >= upper:
                 continue
-            minutes.extend(lower + i * _MINUTE for i in range(int((upper - lower) // _MINUTE)))
+            halt = self._halt_window(self._session_date_of(ts), row)
+            for i in range(int((upper - lower) // _MINUTE)):
+                minute = lower + i * _MINUTE
+                if halt is not None and halt[0] <= minute < halt[1]:
+                    continue
+                minutes.append(minute)
         return minutes
 
     def bar_start(self, instant: datetime, interval: Interval) -> datetime:
@@ -191,16 +222,51 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
         if interval == Interval.WEEK_1:
             return session_count / 5.0
 
-        total_minutes = sum(
-            (self._as_utc(row["market_close"]) - self._as_utc(row["market_open"])) // _MINUTE
-            for _, row in schedule.iterrows()
-        )
+        total_minutes = 0
+        for ts, row in schedule.iterrows():
+            span = (
+                self._as_utc(row["market_close"]) - self._as_utc(row["market_open"])
+            ) // _MINUTE
+            halt = self._halt_window(self._session_date_of(ts), row)
+            if halt is not None:
+                span -= (halt[1] - halt[0]) // _MINUTE
+            total_minutes += span
         return total_minutes / (INTERVAL_SECONDS[interval] / 60.0)
 
     # --- internals -------------------------------------------------------
 
+    def _halt_window(self, session: date, row: pd.Series) -> tuple[datetime, datetime] | None:
+        """The intraday halt inside one session, as UTC instants, or ``None``.
+
+        Clipped to the session's own boundaries so an early close that lands
+        before 15:15 Chicago simply has no halt, rather than one hanging off
+        the end of a session that already finished.
+        """
+        start = datetime.combine(session, _HALT_START_LOCAL, tzinfo=_TZ).astimezone(UTC)
+        end = datetime.combine(session, _HALT_END_LOCAL, tzinfo=_TZ).astimezone(UTC)
+        start = max(start, self._as_utc(row["market_open"]))
+        end = min(end, self._as_utc(row["market_close"]))
+        return (start, end) if start < end else None
+
     def _window_rows(self, instant: datetime):
-        """Session rows that could contain ``instant``, allowing for the evening open."""
+        """Session rows near ``instant`` — the one holding it, and its neighbours.
+
+        The window has to clear a whole weekend in both directions, not just the
+        evening open. Callers ask three different questions of these rows: which
+        session holds this instant, which session opens next, and when did the
+        last one close. Between Friday's 16:00 Chicago close and Sunday's
+        evening open there is no session at all, so a window of one day either
+        side returns rows that answer none of them and the caller raises —
+        ``previous_close`` on a Sunday morning found nothing behind it, and
+        ``session_date`` on a Saturday found nothing ahead.
+
+        ``_WINDOW_DAYS`` spans further than any real gap in this calendar: CME
+        Globex equity futures close fully on only two days a year and otherwise
+        close early rather than skipping a session, so the longest run without
+        one is a weekend plus a holiday. Widening is safe for every caller
+        because each one filters on the boundaries themselves — an extra row
+        ahead of ``instant`` can never contain it or precede it.
+        """
         day = instant.date()
-        schedule = self._schedule(day - timedelta(days=1), day + timedelta(days=1))
+        schedule = self._schedule(day - _WINDOW_DAYS, day + _WINDOW_DAYS)
         return [(self._session_date_of(ts), row) for ts, row in schedule.iterrows()]
