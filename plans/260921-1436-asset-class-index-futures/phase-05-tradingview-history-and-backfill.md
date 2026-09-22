@@ -480,18 +480,30 @@ print('FRESH' if age <= 720 else f'STALE {age}')"` prints `FRESH` while a CME se
 
 ## Todo
 
-- [ ] Task 1 — Add the scraper dependency and TradingView settings
-- [ ] Task 2 — Internal TradingView client interface
-- [ ] Task 3 — `TvDatafeedClient`
-- [ ] Task 4 — TradingView mappers
-- [ ] Task 5 — Offline mapper tests with a host-zone matrix
-- [ ] Task 6 — `TradingViewAdapter` (the history port)
-- [ ] Task 7 — Adapter tests against a fake client
-- [ ] Task 8 — Register TradingView in DI
-- [ ] Task 9 — Seed the three futures symbols
-- [ ] Task 10 — Initial backfill to the configured cap
-- [ ] Task 11 — End-to-end futures sync test
+- [x] Task 1 — Add the scraper dependency and TradingView settings
+- [x] Task 2 — Internal TradingView client interface
+- [x] Task 3 — `TvDatafeedClient`
+- [x] Task 4 — TradingView mappers
+- [x] Task 5 — Offline mapper tests with a host-zone matrix
+- [x] Task 6 — `TradingViewAdapter` (the history port)
+- [x] Task 7 — Adapter tests against a fake client
+- [x] Task 8 — Register TradingView in DI
+- [x] Task 9 — Seed the three futures symbols — script written and proved against a
+      disposable Mongo (idempotent, correct multipliers); `--apply` against production
+      is NOT yet run
+- [x] Task 10 — Initial backfill to the configured cap — the `resolved_mode` change is
+      shipped; the backfill runs themselves are NOT yet done
+- [x] Task 11 — End-to-end futures sync test
 - [ ] Task 12 — Phase gate: one live week
+
+**Deferred to a separate, watched window (not blocked, sequenced).** Seeding is what
+turns a live unofficial scraper on, so it wants a weekday CME session rather than the
+deploy window. Deploying the code is inert by construction: the scraper client is built
+lazily so DI performs no network I/O, and no tracked symbol carries a non-24/7 calendar.
+Before committing 21 fetches of 5000 bars, run each interval at `n=3` and check the
+stamps against the calendar grid — `_direct` upserts whatever the provider returns with
+no alignment filter, so a misaligned vendor stamp at full size is 5000 documents the
+nightly scan flags and `sync_repair` re-fetches.
 
 ## Risks and rollback
 
