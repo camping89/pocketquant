@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Calendar-Threaded Pipeline on the 24/7 Calendar"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [2]
@@ -463,17 +463,17 @@ three zones, and one prod cron cycle produces the same counts as before.
 
 ## Todo
 
-- [ ] Task 1 — Capture golden files BEFORE any refactor
-- [ ] Task 2 — Thread the calendar through bar alignment
-- [ ] Task 3 — Thread the calendar through the cascade aggregator
-- [ ] Task 4 — Thread the calendar through the integrity check
-- [ ] Task 5 — Make freshness and anomaly gating session-aware
-- [ ] Task 6 — Populate `session_date` and `calendar_id` on the sync write path
-- [ ] Task 7 — Gate the sync job on the calendar
-- [ ] Task 8 — Fetch 1d and 1w natively for calendar-based asset classes
-- [ ] Task 9 — Move annualization onto the calendar
-- [ ] Task 10 — Calendar annualization test
-- [ ] Task 11 — Phase gate: crypto must be byte-identical
+- [x] Task 1 — Capture golden files BEFORE any refactor
+- [x] Task 2 — Thread the calendar through bar alignment
+- [x] Task 3 — Thread the calendar through the cascade aggregator
+- [x] Task 4 — Thread the calendar through the integrity check
+- [x] Task 5 — Make freshness and anomaly gating session-aware
+- [x] Task 6 — Populate `session_date` and `calendar_id` on the sync write path
+- [x] Task 7 — Gate the sync job on the calendar
+- [x] Task 8 — Fetch 1d and 1w natively for calendar-based asset classes
+- [x] Task 9 — Move annualization onto the calendar
+- [x] Task 10 — Calendar annualization test
+- [x] Task 11 — Phase gate: crypto must be byte-identical
 
 ## Risks and rollback
 
