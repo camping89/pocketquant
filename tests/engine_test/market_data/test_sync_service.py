@@ -6,7 +6,7 @@ bulk fan-out, and first-sync-no-data failure.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -297,3 +297,37 @@ async def test_provider_exception_returns_error_response() -> None:
 
     assert result.status == "error"
     assert "provider down" in (result.message or "")
+
+
+class TestPersistedBarsCarryTheirCalendar:
+    """Every synced bar records the schedule it was aligned against."""
+
+    async def _persisted(self, interval: Interval) -> list[Bar]:
+        bar = Bar(
+            symbol=SYMBOL,
+            interval=interval,
+            datetime=datetime(2026, 6, 10, 0, 0, tzinfo=UTC),
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            volume=1.0,
+        )
+        svc, mocks = _build_service(fetch_records=[bar], align_returns=[bar])
+        try:
+            await svc.sync_one(_cmd(interval=interval))
+        finally:
+            _stop(svc)
+        return mocks["bar_repo"].insert_many.await_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_daily_bars_get_a_session_date(self) -> None:
+        (persisted,) = await self._persisted(Interval.DAY_1)
+        assert persisted.calendar_id == Continuous24x7Calendar().calendar_id
+        assert persisted.session_date == date(2026, 6, 10)
+
+    @pytest.mark.asyncio
+    async def test_intraday_bars_get_a_calendar_but_no_session_date(self) -> None:
+        (persisted,) = await self._persisted(Interval.MINUTE_1)
+        assert persisted.calendar_id == Continuous24x7Calendar().calendar_id
+        assert persisted.session_date is None

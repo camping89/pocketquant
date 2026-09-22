@@ -2,6 +2,7 @@ from pocketquant.core.common.constants import build_bar_cache_key
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_BULK_SYNC, Bar
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval as DomainInterval
 from pocketquant.core.domain.sync_status.services import (
     SyncProgressDecision,
@@ -86,7 +87,9 @@ class SyncService:
                 records = drop_misaligned_bars(records, interval, calendar)
                 filtered_misaligned = pre_align - len(records)
 
-            inserted_count = await self._persist_bars(symbol, records, request.source)
+            inserted_count = await self._persist_bars(
+                symbol, records, request.source, interval, calendar
+            )
             total_bars, latest_bar = await self._get_bar_stats(symbol, interval)
 
             if bars_fetched == 0 and total_bars == 0:
@@ -153,12 +156,36 @@ class SyncService:
 
     # Private helpers
 
-    async def _persist_bars(self, symbol: str, records: list[Bar], source: str) -> int:
+    async def _persist_bars(
+        self,
+        symbol: str,
+        records: list[Bar],
+        source: str,
+        interval: DomainInterval,
+        calendar: ITradingCalendarPort,
+    ) -> int:
         if not records:
             return 0
+        self._stamp_calendar(records, interval, calendar)
         inserted_count = await self._bar_repo.insert_many(records, source=source)
         await self._symbol_repo.touch(symbol)
         return inserted_count
+
+    @staticmethod
+    def _stamp_calendar(
+        records: list[Bar], interval: DomainInterval, calendar: ITradingCalendarPort
+    ) -> None:
+        """Record which schedule a bar belongs to, and its session day key.
+
+        The session day is only meaningful for bars that span one, so intraday
+        bars are left without one rather than given the UTC date, which for a
+        session opening the evening before is the wrong day.
+        """
+        session_keyed = interval in (DomainInterval.DAY_1, DomainInterval.WEEK_1)
+        for bar in records:
+            bar.calendar_id = calendar.calendar_id
+            if session_keyed and bar.datetime is not None:
+                bar.session_date = calendar.session_date(bar.datetime)
 
     async def _get_bar_stats(self, symbol: str, interval: DomainInterval) -> tuple[int, Bar | None]:
         total_bars = await self._bar_repo.count(symbol, interval)
