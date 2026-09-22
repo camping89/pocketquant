@@ -10,7 +10,7 @@ summary: "Phase 4 shipped. Three of its eight Verify steps could not pass on cor
 
 Phase 4 of the asset-class futures plan — make provider choice a function of asset
 class, behind adapters that implement the ports they replace — went from `pending` to
-deployed in one session. Six commits, the suite from 751 to 782, green under three host
+deployed in one session. Six commits, the suite from 751 to 785, green under three host
 zones, and the crypto path unchanged because Binance is still the only provider
 registered.
 

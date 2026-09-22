@@ -23,11 +23,11 @@ Phase gate, exit 0 on every command:
 
 | Command | Result |
 |---------|--------|
-| `uv run pytest tests/ -q` | `782 passed, 1 skipped` (baseline 751) |
+| `uv run pytest tests/ -q` | `785 passed, 1 skipped` (baseline 751) |
 | `uv run ruff check src tests scripts` | `All checks passed!` |
 | `uv run lint-imports` | `Contracts: 9 kept, 0 broken` |
 | `uv run pyright src` | `0 errors` — and now actually checking the port binding |
-| `just test-tz` | `782 passed` under UTC, Asia/Ho_Chi_Minh, America/Chicago |
+| `just test-tz` | `785 passed` under UTC, Asia/Ho_Chi_Minh, America/Chicago |
 | `cd web && npx tsc --noEmit` | exit 0 |
 
 ## The two things the phase was asked to pin anyway
@@ -197,6 +197,72 @@ is only one provider and it is the same one as before. The fallback order, the
 unseeded warning, the no-provider warning and the realtime owner map have only their
 mutation tests until Phase 5 registers TradingView. This is the same shape as Phase
 3's closed-market caveat and for the same structural reason.
+
+## Two defects found after the first deploy, fixed and redeployed
+
+The post-phase advisory review found two things in what had already shipped. Both are
+recorded in `plan.md` as Corrections 15 and 16, and both were confirmed by measurement
+before being acted on.
+
+**An outage was being reported as a successful sync (G5 regression).** Task 4 step 2
+prescribes catching a provider exception, logging it at DEBUG and returning `[]`. Before
+routing existed, a `BinanceAdapter` exception — it raises on 429 and on
+`raise_for_status` — passed through `fetch_with_retry`, which has no `try`, into
+`sync_one`'s handler: `market_data.sync.failed` at ERROR and the symbol set to `error`.
+After Phase 4 the same failure was invisible at production `LOG_LEVEL=INFO` and
+reported `completed`. Measured on one simulated 429:
+
+| | status | log | provider calls |
+|---|---|---|---|
+| Pre-Phase-4 direct provider | `error` | `sync.failed` ERROR | 1 |
+| Phase 4 as shipped | `completed` | none above DEBUG | 3 |
+| After the fix | `error` | `sync.failed` ERROR | 1 |
+
+The call count is the second half of it: `fetch_with_retry` retries on empty, and a
+swallowed exception is indistinguishable from empty, so every failure was retried three
+times. Against Phase 5's scraper that is three fresh connections per symbol per minute
+for as long as a ban lasts — the same cost the containment test was written to bound,
+arriving through the other branch. `fetch_ohlcv` now re-raises the first exception when
+no provider returned bars; everyone answering empty is still `[]`, and a provider that
+answers still covers for an earlier failure.
+
+**`Settings` declared the two routing fields twice.** Identical values, so nothing
+behaved differently, but the surviving copy was the one missing the note that
+`MARKET_DATA_PROVIDERS` replaces rather than merges. Two writers edited
+`core/config.py` in the same session and I staged it without re-reading it — the same
+class of miss as trusting a gate without checking what it measures.
+
+Redeployed as `86e8ef0`, Actions run `35707504713` green. Five post-fix `sync_1m` cycles
+at `synced_count=3, error_count=0`, `job_history` at `total_fetched=300,
+total_inserted=3`, duration 5.4s, quote 25ms old, zero errors and zero
+`market_data.sync.failed` — the last being correct, since Binance is healthy.
+
+## Carried to Phase 5 by the same review, verified but not fixed
+
+Neither is Phase 4 code; both fire on the first futures symbol in production and should
+land before Phase 5 Task 8 registers TradingView.
+
+- **`CmeGlobexCalendarAdapter.bar_start` and `session_date` raise `KeyError` from
+  Friday 16:00 CT to Sunday 00:00 UTC.** `_window_rows` looks one calendar day either
+  side, and Saturday's window contains no session. The `sync_1m` cascade loop has no
+  closed-market gate, so once ES/NQ/YM are tracked this is a `cascade_failed` ERROR per
+  symbol per minute for roughly 27 hours every weekend. The existing weekend tests only
+  call `is_open`, never `bar_start`.
+- **The daily 15:15-15:30 CT equity-index halt is not modelled.** Upstream
+  `CMEGlobexEquitiesExchangeCalendar` carries no break, so `is_open` is True at 15:20
+  CT. Every weekday that produces `no_progress`, then `stuck_threshold_crossed`, a
+  `partial_aggregate` on the closed hourly bucket, and 15 missing minutes per symbol
+  per day in the nightly integrity scan — failing this plan's own success criterion for
+  ES on day one. Confirm the halt against CME's contract specs before modelling it.
+
+A third item worth carrying: Phase 5 Task 3 builds one lazily-created `TvDatafeed`
+instance called through `asyncio.to_thread` with no lock, and upstream `get_hist`
+overwrites `self.ws` per call with no synchronisation. `sync_verify_cascade` fires at
+`:00:00` and `sync_1m` at `:00:02`, and APScheduler's `max_instances=1` is per job, so
+concurrency is guaranteed rather than hypothetical. Two concurrent calls would let one
+thread read the other's series and store it under the wrong symbol and interval —
+silent corruption that passes alignment, existing-bar and integrity checks. A lock and
+a re-entrancy test are the fix; the fake client in Tasks 5 and 7 cannot show it.
 
 ## Follow-ups, not done and not in Phase 4 scope
 
