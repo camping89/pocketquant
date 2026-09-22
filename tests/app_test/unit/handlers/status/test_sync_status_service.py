@@ -10,6 +10,7 @@ import pytest
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
 from pocketquant.engine.market_data.sync_status_service import (
@@ -61,8 +62,15 @@ def bar_repo() -> AsyncMock:
 
 
 @pytest.fixture
-def handler(sync_status_repo, bar_repo) -> SyncStatusQueryService:
-    return SyncStatusQueryService(sync_status_repo, bar_repo)
+def calendar_factory() -> AsyncMock:
+    factory = AsyncMock()
+    factory.for_symbol = AsyncMock(return_value=Continuous24x7Calendar())
+    return factory
+
+
+@pytest.fixture
+def handler(sync_status_repo, bar_repo, calendar_factory) -> SyncStatusQueryService:
+    return SyncStatusQueryService(sync_status_repo, bar_repo, calendar_factory)
 
 
 # get_sync_status — list of all tracked symbols/intervals

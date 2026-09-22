@@ -30,6 +30,7 @@ async def get_sync_statuses(
             "error_message": s.error_message,
             "consecutive_empty_fetches": s.consecutive_empty_fetches,
             "is_stuck": s.is_stuck,
+            "is_market_open": s.is_market_open,
         }
         for s in statuses
     ]
@@ -53,4 +54,5 @@ async def get_symbol_sync_status(
         "last_sync_at": status.last_sync_at,
         "last_bar_at": status.last_bar_at,
         "error_message": status.error_message,
+        "is_market_open": status.is_market_open,
     }

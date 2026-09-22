@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 
 logger = get_logger(__name__)
@@ -27,11 +28,25 @@ def emit_no_progress(
     attempts: int,
     streak: int,
     latest_bar: Bar | None,
+    calendar: ITradingCalendarPort,
 ) -> None:
     """Emit anomaly log for a no-progress sync (inserted == 0 with existing data).
 
     ``symbol`` is composite ``{code}:{exchange}``.
+
+    Silent while the market is shut: no bars arriving out of hours is the
+    schedule working, not an anomaly, and warning about it once per symbol per
+    minute all night would bury the real ones.
     """
+    if not calendar.is_open(datetime.now(UTC)):
+        # DEBUG, not INFO: this is a per-symbol-per-minute hot path.
+        logger.debug(
+            "market_data.sync.skipped_closed",
+            symbol=symbol,
+            interval=interval.value,
+        )
+        return
+
     cadence = INTERVAL_SECONDS.get(interval.value, 0)
     age_s = (
         int((datetime.now(UTC) - latest_bar.datetime).total_seconds())

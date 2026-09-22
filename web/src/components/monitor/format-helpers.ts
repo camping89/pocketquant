@@ -15,6 +15,8 @@ export {
 
 export function statusVariant(s: SyncStatus): 'ok' | 'warn' | 'error' | 'neutral' {
   if (s.error_message) return 'error'
+  // A closed market is not falling behind, so it never reads as stuck.
+  if (s.is_market_open === false) return 'neutral'
   // Stuck overrides "completed" green — sync ran but data isn't progressing.
   if (s.is_stuck) return 'warn'
   if (s.status === 'completed') return 'ok'

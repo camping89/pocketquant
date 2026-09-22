@@ -45,16 +45,21 @@ export function DataHealthRow({
     .join(' ')
 
   const variant = statusVariant(s)
+  const marketClosed = s.is_market_open === false
   const statusLabel = s.error_message
     ? 'error'
+    : marketClosed
+      ? 'closed'
+      : s.is_stuck
+        ? 'delayed'
+        : s.status === 'completed'
+          ? 'synced'
+          : s.status
+  const statusTitle = marketClosed
+    ? 'Market is closed on this symbol\u2019s trading calendar — no new bars are expected.'
     : s.is_stuck
-      ? 'delayed'
-      : s.status === 'completed'
-        ? 'synced'
-        : s.status
-  const statusTitle = s.is_stuck
-    ? 'Sync ran successfully — provider data lag detected. Auto-recovers when provider publishes the next bar.'
-    : undefined
+      ? 'Sync ran successfully — provider data lag detected. Auto-recovers when provider publishes the next bar.'
+      : undefined
 
   return (
     <>
@@ -69,7 +74,7 @@ export function DataHealthRow({
         <td className={integrityColorClass(report)}>{formatIntegrity(report)}</td>
         <td>
           <StatusPill variant={variant} label={statusLabel} title={statusTitle} />
-          <StuckBadge show={!!s.is_stuck} />
+          <StuckBadge show={!!s.is_stuck && !marketClosed} />
         </td>
         <td className="actions" onClick={(e) => e.stopPropagation()}>
           <button type="button" className="btn" disabled={checking} onClick={onCheck}>

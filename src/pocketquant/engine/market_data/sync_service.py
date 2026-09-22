@@ -114,6 +114,7 @@ class SyncService:
                     attempts=fetch_attempts,
                     streak=streak,
                     latest_bar=latest_bar,
+                    calendar=calendar,
                 )
 
             return build_success(

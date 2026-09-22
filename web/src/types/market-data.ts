@@ -87,6 +87,7 @@ export interface SyncStatus {
   error_message: string | null
   consecutive_empty_fetches?: number
   is_stuck?: boolean
+  is_market_open?: boolean
 }
 
 export interface IntegrityReport {

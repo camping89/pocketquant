@@ -19,7 +19,9 @@ from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import to_utc_iso
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.sync_status_repository import (
     SyncStatusRepository,
@@ -58,15 +60,21 @@ class SyncStatusResult:
     # Diagnostics for UI: counter + derived stuck flag.
     consecutive_empty_fetches: int = 0
     is_stuck: bool = False
+    is_market_open: bool = True
 
 
-def _is_stuck(latest_bar_dt: datetime | None, interval: str) -> bool:
+def _is_stuck(
+    latest_bar_dt: datetime | None, interval: str, calendar: ITradingCalendarPort
+) -> bool:
     if latest_bar_dt is None:
         return False
     cadence = INTERVAL_SECONDS.get(interval)
     if not cadence:
         return False
-    age = (datetime.now(UTC) - latest_bar_dt).total_seconds()
+    # Age is measured to the last instant a bar could have closed, not to now.
+    # An overnight market is not falling behind while it is shut; on a 24/7
+    # calendar previous_close is the identity, so crypto arithmetic is unchanged.
+    age = (calendar.previous_close(datetime.now(UTC)) - latest_bar_dt).total_seconds()
     return age > _STUCK_MULTIPLIER * cadence
 
 
@@ -90,22 +98,31 @@ class SyncStatusQueryService:
         self,
         sync_status_repository: SyncStatusRepository,
         bar_repository: BarRepository,
+        calendar_factory: TradingCalendarFactory,
     ) -> None:
         self._sync_status_repo = sync_status_repository
         self._bar_repo = bar_repository
+        self._calendar_factory = calendar_factory
 
     async def get_sync_status(self, request: GetSyncStatusQuery) -> list[SyncStatusResult]:
         statuses = await self._sync_status_repo.find_all()
         if not statuses:
             return []
 
-        enrichments = await asyncio.gather(
-            *(_enrich_with_bars(s.symbol, s.interval, self._bar_repo) for s in statuses),
-            return_exceptions=True,
+        # One round of concurrency for both lookups, not two.
+        enrichments, calendars = await asyncio.gather(
+            asyncio.gather(
+                *(_enrich_with_bars(s.symbol, s.interval, self._bar_repo) for s in statuses),
+                return_exceptions=True,
+            ),
+            asyncio.gather(
+                *(self._calendar_factory.for_symbol(s.symbol) for s in statuses),
+            ),
         )
 
+        now = datetime.now(UTC)
         results: list[SyncStatusResult] = []
-        for s, enrichment in zip(statuses, enrichments, strict=True):
+        for s, enrichment, calendar in zip(statuses, enrichments, calendars, strict=True):
             if isinstance(enrichment, BaseException):
                 logger.warning(
                     "sync_status.enrich_failed",
@@ -128,7 +145,8 @@ class SyncStatusQueryService:
                     last_bar_at=_iso_z(latest_dt),
                     error_message=s.error_message,
                     consecutive_empty_fetches=s.consecutive_empty_fetches,
-                    is_stuck=_is_stuck(latest_dt, s.interval),
+                    is_stuck=_is_stuck(latest_dt, s.interval, calendar),
+                    is_market_open=calendar.is_open(now),
                 )
             )
         return results
@@ -144,6 +162,7 @@ class SyncStatusQueryService:
         latest_bar = await self._bar_repo.get_latest(status.symbol, interval)
         bar_count = await self._bar_repo.count(status.symbol, interval)
         latest_dt = latest_bar.datetime if latest_bar else None
+        calendar = await self._calendar_factory.for_symbol(status.symbol)
 
         return SyncStatusResult(
             symbol=status.symbol,
@@ -154,5 +173,6 @@ class SyncStatusQueryService:
             last_bar_at=_iso_z(latest_dt),
             error_message=status.error_message,
             consecutive_empty_fetches=status.consecutive_empty_fetches,
-            is_stuck=_is_stuck(latest_dt, status.interval),
+            is_stuck=_is_stuck(latest_dt, status.interval, calendar),
+            is_market_open=calendar.is_open(datetime.now(UTC)),
         )
