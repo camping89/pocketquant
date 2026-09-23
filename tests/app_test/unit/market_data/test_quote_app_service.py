@@ -42,7 +42,7 @@ def mock_cache() -> AsyncMock:
 @pytest.fixture
 def service(mock_bar_manager: AsyncMock, mock_cache: AsyncMock) -> QuoteAppService:
     """QuoteAppService with all external dependencies mocked."""
-    settings = MagicMock()
+    settings = MagicMock(tradingview_effective_poll_seconds=60)
     provider = MagicMock()
     return QuoteAppService(
         settings=settings,
@@ -107,3 +107,21 @@ class TestOnQuoteUpdateVolumeClamping:
         assert tick.volume == pytest.approx(0.0)
         # Price must still be set (OHLC update)
         assert tick.price == pytest.approx(50000.0)
+
+
+@pytest.mark.asyncio
+async def test_latest_quote_outlives_three_polls_of_a_polled_feed(
+    mock_bar_manager: AsyncMock, mock_cache: AsyncMock
+) -> None:
+    """A 60s-polled futures quote must not expire before the next poll lands."""
+    from pocketquant.core.config import Settings
+
+    service = QuoteAppService(
+        settings=Settings(),
+        cache=mock_cache,
+        bar_manager=mock_bar_manager,
+        provider=MagicMock(),
+    )
+    await service.on_quote_update(_make_quote_data(volume=1.0))
+
+    assert mock_cache.set.call_args.kwargs["ttl"] == 180

@@ -29,6 +29,9 @@ class QuoteAppService:
     ):
         self.settings = settings
         self._cache = cache
+        # A polled feed (TradingView, one quote a minute at most) must not see
+        # its latest quote expire between polls, so the TTL spans three polls.
+        self._quote_ttl = max(TTL_QUOTE_LATEST, settings.tradingview_effective_poll_seconds * 3)
         self.provider = provider
         self.bar_manager = bar_manager
         self.running = False
@@ -65,7 +68,7 @@ class QuoteAppService:
         )
 
         cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=symbol)
-        await self._cache.set(cache_key, quote.to_cache_dict(), ttl=TTL_QUOTE_LATEST)
+        await self._cache.set(cache_key, quote.to_cache_dict(), ttl=self._quote_ttl)
 
         # Clamp incoming volume delta: Binance @aggTrade `q` is per-trade delta.
         # Negative values are spec-violations; clamp to 0.0 and warn for observability.

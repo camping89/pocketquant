@@ -61,13 +61,9 @@ class TradingViewQuoteAdapter:
     ) -> None:
         self._client = client
         self._calendar_factory = calendar_factory
-        capabilities = settings.tradingview_capabilities
         # Faster than the plan's floor cannot make a delayed quote fresher; it
         # only adds ban risk.
-        self._poll_seconds = max(
-            settings.tradingview_poll_seconds or capabilities.min_poll_seconds,
-            capabilities.min_poll_seconds,
-        )
+        self._poll_seconds = settings.tradingview_effective_poll_seconds
         self._subscriptions: dict[str, QuoteCallback] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
         # symbol -> (bar datetime, bar volume, close) as last emitted.

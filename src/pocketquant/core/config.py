@@ -120,6 +120,12 @@ class Settings(BaseSettings):
             return base
         return replace(base, max_bars=min(self.tradingview_max_bars, base.max_bars))
 
+    @property
+    def tradingview_effective_poll_seconds(self) -> int:
+        """The quote poll interval: the configured one, never below the plan floor."""
+        floor = self.tradingview_capabilities.min_poll_seconds
+        return max(self.tradingview_poll_seconds or floor, floor)
+
     # OKX Broker (optional, for live trading)
     okx_api_key: str | None = None
     okx_api_secret: str | None = None
