@@ -34,11 +34,18 @@ class InfrastructureProvider(Provider):
             scheduler.shutdown(wait=True)
 
     @provide(scope=Scope.APP)
+    def get_tradingview_client(self, settings: Settings) -> TvDatafeedClient:
+        # One scraper session for history and quotes: its lock then serialises
+        # both, instead of two sessions bursting at an unofficial endpoint.
+        return TvDatafeedClient(settings=settings)
+
+    @provide(scope=Scope.APP)
     def get_data_provider(
         self,
         settings: Settings,
         symbol_lookup: SymbolLookupHelper,
         calendar_factory: TradingCalendarFactory,
+        tradingview_client: TvDatafeedClient,
     ) -> IDataProviderPort:
         # Adding a provider is one entry here plus one config entry. The routing
         # adapter implements the same port, so every consumer above it is
@@ -47,7 +54,7 @@ class InfrastructureProvider(Provider):
             providers={
                 "binance": BinanceAdapter(settings=settings),
                 "tradingview": TradingViewAdapter(
-                    client=TvDatafeedClient(settings=settings),
+                    client=tradingview_client,
                     settings=settings,
                     calendar_factory=calendar_factory,
                 ),
