@@ -8,14 +8,23 @@ from pocketquant.core.domain.position import PositionAggregate, PositionOpenedEv
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 
 logger = structlog.get_logger(__name__)
 
 
 class PositionAppService:
-    def __init__(self, event_bus: EventBus, position_repository: PositionRepository) -> None:
+    def __init__(
+        self,
+        event_bus: EventBus,
+        position_repository: PositionRepository,
+        symbol_lookup: SymbolLookupHelper | None = None,
+    ) -> None:
         self._event_bus = event_bus
         self._position_repo = position_repository
+        # The persisted mirror reports PnL to the UI, so it needs the same contract
+        # multiplier as the broker; without a lookup every position is linear.
+        self._symbol_lookup = symbol_lookup
         self._positions: dict[str, PositionAggregate] = {}
         self._lock = asyncio.Lock()
 
@@ -42,6 +51,11 @@ class PositionAppService:
 
             if position is None:
                 side = PositionSide.LONG if event.side == OrderSide.BUY else PositionSide.SHORT
+                multiplier = (
+                    (await self._symbol_lookup.contract_spec(event.symbol)).multiplier
+                    if self._symbol_lookup
+                    else 1.0
+                )
 
                 position = PositionAggregate.open(
                     subscription_id=event.subscription_id,
@@ -49,6 +63,7 @@ class PositionAppService:
                     side=side,
                     entry_price=event.filled_price,
                     quantity=event.filled_quantity,
+                    multiplier=multiplier,
                 )
 
                 self._positions[event.subscription_id] = position

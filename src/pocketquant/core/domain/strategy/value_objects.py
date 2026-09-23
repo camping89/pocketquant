@@ -4,6 +4,7 @@ from typing import Literal
 
 from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.domain.strategy.enums import Direction
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,8 @@ class StrategyConfig:
     risk: RiskConfig = field(default_factory=RiskConfig)
     orders: OrderConfig = field(default_factory=OrderConfig)
     enabled: bool = True
+    contract_spec: ContractSpec = LINEAR_SPEC
+    """The symbol's contract units, resolved by whoever builds the config."""
 
     def validate(self) -> list[str]:
         errors = []

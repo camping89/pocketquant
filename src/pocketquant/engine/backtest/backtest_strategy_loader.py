@@ -7,6 +7,7 @@ from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.backtest.backtest_sandbox_app_service import BacktestSandboxAppService
@@ -45,6 +46,7 @@ def build_backtest_config(
     interval: str,
     start_date: date,
     end_date: date,
+    contract_spec: ContractSpec = LINEAR_SPEC,
 ) -> BacktestConfig:
     """Build a BacktestConfig from base strategy config overriding symbol/interval.
 
@@ -59,6 +61,7 @@ def build_backtest_config(
         end_date=datetime.combine(end_date, datetime.max.time()),
         initial_capital=10_000.0,
         parameters=dict(base_config.parameters) if base_config.parameters else {},
+        contract_spec=contract_spec,
     )
 
 
@@ -70,6 +73,7 @@ async def inject_strategy_into_sandbox(
     symbol: str,
     interval: str,
     initial_capital: float = 10_000.0,
+    contract_spec: ContractSpec = LINEAR_SPEC,
 ) -> PaperBrokerAdapter:
     """Resolve strategy class, build its broker, inject into the sandbox engine.
 
@@ -101,9 +105,10 @@ async def inject_strategy_into_sandbox(
         trigger=base_config.trigger,
         broker="paper",
         parameters=dict(base_config.parameters) if base_config.parameters else {},
+        contract_spec=contract_spec,
     )
 
-    broker = sandbox.create_broker(initial_balance=initial_capital)
+    broker = sandbox.create_broker(initial_balance=initial_capital, contract_spec=contract_spec)
     strategy_instance = strategy_class(bt_strategy_cfg)
     await sandbox.strategy_app_service.inject_prepared_strategy(
         synthetic_id, strategy_instance, broker, bt_strategy_cfg

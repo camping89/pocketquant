@@ -103,12 +103,14 @@ async def _seed_bars(database: Database, bars: list[Bar]) -> None:
 
 def _deps(database: Database) -> BacktestDispatchDeps:
     """run_single builds its own isolated sandbox, so deps is just the repos."""
+    symbol_lookup = SymbolLookupHelper(SymbolRepository(database))
     return BacktestDispatchDeps(
         bar_repo=BarRepository(database),
         backtest_repo=BacktestRepository(database),
         order_repo=BacktestOrderRepository(database),
         trade_repo=BacktestTradeRepository(database),
-        calendar_factory=TradingCalendarFactory(SymbolLookupHelper(SymbolRepository(database))),
+        calendar_factory=TradingCalendarFactory(symbol_lookup),
+        symbol_lookup=symbol_lookup,
     )
 
 

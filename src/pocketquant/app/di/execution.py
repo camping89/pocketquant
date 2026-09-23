@@ -19,6 +19,7 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
     SubscriptionRepository,
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
@@ -43,9 +44,12 @@ class ExecutionProvider(Provider):
 
     @provide(scope=Scope.APP)
     async def get_position_tracker(
-        self, event_bus: EventBus, position_repository: PositionRepository
+        self,
+        event_bus: EventBus,
+        position_repository: PositionRepository,
+        symbol_lookup: SymbolLookupHelper,
     ) -> PositionAppService:
-        tracker = PositionAppService(event_bus, position_repository)
+        tracker = PositionAppService(event_bus, position_repository, symbol_lookup)
         await tracker.start()
         return tracker
 
@@ -85,11 +89,13 @@ class ExecutionProvider(Provider):
         subscription_repository: SubscriptionRepository,
         strategy_app_service: StrategyAppService,
         settings: Settings,
+        symbol_lookup: SymbolLookupHelper,
     ) -> StrategyReconcileAppService:
         return StrategyReconcileAppService(
             subscription_repository,
             strategy_app_service,
             interval_s=settings.reconcile_interval_seconds,
+            symbol_lookup=symbol_lookup,
         )
 
     @provide(scope=Scope.APP)

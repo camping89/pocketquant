@@ -13,7 +13,7 @@ from typing import cast
 from cachetools import TTLCache
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.domain.symbol import Symbol
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec, Symbol
 from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
 
 logger = get_logger(__name__)
@@ -39,3 +39,8 @@ class SymbolLookupHelper:
         _CACHE[key] = symbol
         logger.debug("symbol_lookup.miss", symbol=key, found=symbol is not None)
         return symbol
+
+    async def contract_spec(self, composite: str) -> ContractSpec:
+        """The symbol's contract units; linear for an unseeded symbol."""
+        symbol = await self.get(composite)
+        return symbol.contract_spec if symbol else LINEAR_SPEC

@@ -30,9 +30,11 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.subscription import RunState, Subscription
+from pocketquant.core.domain.symbol import LINEAR_SPEC
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
@@ -50,6 +52,8 @@ class StrategyReconcileAppService:
         sub_repo: Subscription persistence (desired_state source, actual_state sink).
         strategy_service: Live engine; start/stop are ``_lock``-guarded + idempotent.
         interval_s: Seconds between reconcile ticks (default 5.0).
+        symbol_lookup: Resolves each subscription's contract units; without it
+            every instance loads linear, which is only right for crypto.
     """
 
     def __init__(
@@ -57,10 +61,12 @@ class StrategyReconcileAppService:
         sub_repo: SubscriptionRepository,
         strategy_service: StrategyAppService,
         interval_s: float = 5.0,
+        symbol_lookup: SymbolLookupHelper | None = None,
     ) -> None:
         self._sub_repo = sub_repo
         self._strategy_service = strategy_service
         self._interval_s = interval_s
+        self._symbol_lookup = symbol_lookup
 
     async def bootstrap(self) -> None:
         """Load one RAM instance per persisted subscription, once at startup.
@@ -152,12 +158,18 @@ class StrategyReconcileAppService:
                 )
                 continue
             try:
+                contract_spec = (
+                    await self._symbol_lookup.contract_spec(sub.symbol)
+                    if self._symbol_lookup
+                    else LINEAR_SPEC
+                )
                 await self._strategy_service.load_strategy(
                     StrategyConfig(
                         id=sub_id,
                         name=sub.strategy_code,
                         symbol=sub.symbol,
                         interval=sub.interval.value,
+                        contract_spec=contract_spec,
                     ),
                     strategy_class=strategy_class,
                 )

@@ -15,6 +15,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
+from pocketquant.core.domain.symbol import ContractSpec
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -26,6 +27,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.backtest.backtest_app_service import BacktestAppService
 from pocketquant.engine.backtest.backtest_sandbox_app_service import build_backtest_sandbox
 
@@ -39,9 +41,10 @@ class BacktestDispatchDeps:
     order_repo: BacktestOrderRepository
     trade_repo: BacktestTradeRepository
     calendar_factory: TradingCalendarFactory
+    symbol_lookup: SymbolLookupHelper
 
 
-def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
+def _config_from_dict(payload: dict[str, Any], contract_spec: ContractSpec) -> BacktestConfig:
     return BacktestConfig(
         strategy_code=payload["strategy_code"],
         symbol=payload["symbol"],
@@ -53,6 +56,7 @@ def _config_from_dict(payload: dict[str, Any]) -> BacktestConfig:
         commission_bps=payload.get("commission_bps", 3.0),
         parameters=payload.get("parameters") or {},
         name=payload.get("name"),
+        contract_spec=contract_spec,
     )
 
 
@@ -70,7 +74,8 @@ async def run_single(
     ``run_id`` (route-allocated) is threaded into the engine so the persisted run
     doc and its orders/trades all share the id the started doc was created under.
     """
-    config = _config_from_dict(config_payload)
+    contract_spec = await deps.symbol_lookup.contract_spec(config_payload["symbol"])
+    config = _config_from_dict(config_payload, contract_spec)
 
     strategy_class = STRATEGY_REGISTRY.get(config.strategy_code)
     if strategy_class is None:
@@ -87,6 +92,7 @@ async def run_single(
         trigger="bar",
         broker="paper",
         parameters={**config.parameters},
+        contract_spec=config.contract_spec,
     )
 
     sandbox = await build_backtest_sandbox()
@@ -95,6 +101,7 @@ async def run_single(
             initial_balance=config.initial_capital,
             slippage_percent=config.slippage_percent,
             commission_bps=config.commission_bps,
+            contract_spec=config.contract_spec,
         )
         strategy_instance = strategy_class(strategy_cfg)
         await sandbox.strategy_app_service.inject_prepared_strategy(

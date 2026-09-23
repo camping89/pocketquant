@@ -17,6 +17,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
     BacktestTradeRepository,
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 
@@ -30,6 +31,7 @@ class BacktestWorkerProvider(Provider):
         backtest_order_repository: BacktestOrderRepository,
         backtest_trade_repository: BacktestTradeRepository,
         calendar_factory: TradingCalendarFactory,
+        symbol_lookup: SymbolLookupHelper,
     ) -> BacktestDispatchDeps:
         return BacktestDispatchDeps(
             bar_repo=bar_repository,
@@ -37,6 +39,7 @@ class BacktestWorkerProvider(Provider):
             order_repo=backtest_order_repository,
             trade_repo=backtest_trade_repository,
             calendar_factory=calendar_factory,
+            symbol_lookup=symbol_lookup,
         )
 
     @provide(scope=Scope.APP)

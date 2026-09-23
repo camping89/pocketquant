@@ -23,6 +23,7 @@ from pocketquant.core.domain.quote.events import QuoteReceivedEvent
 from pocketquant.core.domain.risk import PositionCalculatorDomainService
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
+from pocketquant.core.domain.symbol import ContractSpec
 
 if TYPE_CHECKING:
     from pocketquant.engine.execution.order_app_service import OrderAppService
@@ -57,6 +58,9 @@ class StrategyAppService:
 
         self._strategies: dict[str, IStrategyService] = {}
         self._brokers: dict[str, IBrokerPort] = {}
+        # One broker per (type, contract units): a broker prices every fill with a
+        # single spec, so an ES subscription cannot share the crypto paper account.
+        self._broker_pool: dict[tuple[str, ContractSpec], IBrokerPort] = {}
         self._configs: dict[str, StrategyConfig] = {}
         self._running = False
         self._lock = asyncio.Lock()
@@ -113,7 +117,7 @@ class StrategyAppService:
             if config.id in self._strategies:
                 raise ValueError(f"Strategy already loaded: {config.id}")
 
-            broker = await self._get_or_create_broker(config.broker)
+            broker = await self._get_or_create_broker(config.broker, config.contract_spec)
 
             if strategy_class:
                 strategy = strategy_class(config)
@@ -364,6 +368,7 @@ class StrategyAppService:
             current_price,
             stop_loss,
             strategy.config.risk,
+            contract_spec=strategy.config.contract_spec,
         )
         size = calc.size
 
@@ -418,17 +423,21 @@ class StrategyAppService:
         """
         await self._event_bus.publish(event)
 
-    async def _get_or_create_broker(self, broker_type: str) -> IBrokerPort:
-        for broker in self._brokers.values():
-            if broker.name == broker_type or broker.name == f"{broker_type}-demo":
-                return broker
+    async def _get_or_create_broker(
+        self, broker_type: str, contract_spec: ContractSpec
+    ) -> IBrokerPort:
+        key = (broker_type, contract_spec)
+        broker = self._broker_pool.get(key)
+        if broker is not None:
+            return broker
 
-        config = self._default_broker_config.copy()
+        config = {**self._default_broker_config, "contract_spec": contract_spec}
         broker = self._broker_factory.create(broker_type, config)
         # Live path only (reached via load_strategy). Wire once, on creation — the
-        # reuse branch above returns already-wired brokers, so N subscriptions
+        # pool hit above returns already-wired brokers, so N subscriptions
         # sharing one broker get exactly one forward, not one per subscription.
         await broker.subscribe_trades(self._forward_trade_to_bus)
+        self._broker_pool[key] = broker
         return broker
 
 
