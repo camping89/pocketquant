@@ -428,7 +428,9 @@ class StrategyAppService:
     ) -> IBrokerPort:
         key = (broker_type, contract_spec)
         broker = self._broker_pool.get(key)
-        if broker is not None:
+        # Reuse only while a loaded strategy still holds the broker, so unloading
+        # the last subscription retires its account exactly as before pooling.
+        if broker is not None and any(b is broker for b in self._brokers.values()):
             return broker
 
         config = {**self._default_broker_config, "contract_spec": contract_spec}

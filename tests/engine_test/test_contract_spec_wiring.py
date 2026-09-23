@@ -197,3 +197,15 @@ async def test_position_mirror_reports_contract_scaled_pnl() -> None:
     assert closed.multiplier == 50.0
     assert closed.realized_pnl == pytest.approx(25.0)
     assert PositionAggregate.from_mongo(closed.to_mongo()).multiplier == 50.0
+
+
+@pytest.mark.asyncio
+async def test_unloading_the_last_subscription_retires_its_paper_account() -> None:
+    engine = _engine()
+    await engine.load_strategy(_config("btc", "BTCUSDT:BINANCE", LINEAR_SPEC))
+    first = engine._brokers["btc"]
+    await engine.unload_strategy("btc")
+
+    await engine.load_strategy(_config("eth", "ETHUSDT:BINANCE", LINEAR_SPEC))
+
+    assert engine._brokers["eth"] is not first
