@@ -149,6 +149,12 @@ class TvDatafeedClient:
                     timeout_seconds=_FETCH_TIMEOUT_S,
                 )
                 raise
+            except asyncio.CancelledError:
+                # The same hazard from the other side: a cancelled caller (a quote
+                # poller being unsubscribed, or shutdown) releases the lock while
+                # the thread is still reading this instance's socket.
+                self._tv = None
+                raise
 
         if frame is None or frame.empty:
             raise TradingViewNoSeriesError(

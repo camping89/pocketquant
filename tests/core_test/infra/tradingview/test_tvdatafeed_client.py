@@ -197,6 +197,36 @@ async def test_a_fetch_timeout_discards_the_instance(
     assert bars, "the rebuilt client still answers"
 
 
+async def test_a_cancelled_fetch_discards_the_instance() -> None:
+    """A poller cancelled mid-fetch leaves a thread reading the socket behind it.
+
+    The next fetch must build a fresh instance rather than share that socket.
+    """
+    slow = _FakeTv(_naive_local_frame(_epochs()), delay=1.0)
+    fresh = _FakeTv(_naive_local_frame(_epochs()), delay=0.0)
+    built: list[_FakeTv] = []
+
+    def factory(**_: Any) -> _FakeTv:
+        instance = slow if not built else fresh
+        built.append(instance)
+        return instance
+
+    client = TvDatafeedClient(
+        settings=Settings(),  # pyright: ignore[reportCallIssue]
+        factory=cast("Callable[..., TvDatafeed]", factory),
+    )
+
+    poll = asyncio.create_task(client.fetch_bars("ES", "CME_MINI", Interval.MINUTE_1, 2, 1))
+    while not slow.calls:
+        await asyncio.sleep(0.01)
+    poll.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await poll
+
+    await client.fetch_bars("NQ", "CME_MINI", Interval.HOUR_1, 10, 1)
+    assert built == [slow, fresh], "the instance a live thread still reads must not be reused"
+
+
 async def test_a_construction_failure_is_raised_and_retried_next_call() -> None:
     """A build failure is an outage, not a degradation to anonymous mode.
 
