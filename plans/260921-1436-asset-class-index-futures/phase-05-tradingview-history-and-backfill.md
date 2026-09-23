@@ -488,13 +488,15 @@ print('FRESH' if age <= 720 else f'STALE {age}')"` prints `FRESH` while a CME se
 - [x] Task 6 — `TradingViewAdapter` (the history port)
 - [x] Task 7 — Adapter tests against a fake client
 - [x] Task 8 — Register TradingView in DI
-- [x] Task 9 — Seed the three futures symbols — script written and proved against a
-      disposable Mongo (idempotent, correct multipliers); `--apply` against production
-      is NOT yet run
-- [x] Task 10 — Initial backfill to the configured cap — the `resolved_mode` change is
-      shipped; the backfill runs themselves are NOT yet done
+- [x] Task 9 — Seed the three futures symbols — applied to production 2026-09-23
+      10:08 UTC after a `mongodump` of `symbols` and `tracked_symbols`
+- [x] Task 10 — Initial backfill to the configured cap — 21 direct-mode runs at
+      `n=5000` on 2026-09-23, every interval probed at `n=5` against the calendar grid
+      first (0 misaligned); Verify prints 3 daily bars at `22:00:00Z`
 - [x] Task 11 — End-to-end futures sync test
-- [ ] Task 12 — Phase gate: one live week
+- [ ] Task 12 — Phase gate: one live week — cannot pass as the pipeline stands: the
+      free feed's delay and YM's untraded minutes produce `partial_aggregate`,
+      `no_progress` and integrity findings by construction (plan.md, Session 8)
 
 **Deferred to a separate, watched window (not blocked, sequenced).** Seeding is what
 turns a live unofficial scraper on, so it wants a weekday CME session rather than the

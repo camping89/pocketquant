@@ -1102,3 +1102,77 @@ green in 4m07s including all three timezone legs.
 Zero TradingView log lines is the whole point of deploying before seeding: the adapter
 is registered, the client is lazy, no tracked symbol carries a non-24/7 calendar, and so
 none of this phase's code has executed in production yet.
+
+### Session 8 — 2026-09-23 (Phase 5 seeding and backfill, live)
+
+Seeded and backfilled during a Wednesday CME session. Three defects surfaced within
+minutes of real futures data flowing, and all three are fixed and deployed as run
+`35849469193` (`686043f`).
+
+**Seed and backfill.** `symbols` and `tracked_symbols` were dumped on the VPS first
+(3 documents each), then `seed_index_futures.py --apply` ran inside the app container.
+Before the full backfill, every symbol and interval was fetched at `n=5` and checked
+against `CmeGlobexCalendarAdapter.bar_start`: 0 misaligned across all 21, which
+answers the phase report's question about `_direct` persisting unfiltered stamps. The
+21 direct runs at `n=5000` then persisted 4998-4999 bars per interval from 1m to 1d,
+and 1276-1515 weekly bars (full vendor history). Task 10's Verify prints three daily
+bars at `22:00:00Z`.
+
+**Correction 24 — the 15:15-15:30 Chicago halt from Session 6 does not exist.** CME
+eliminated it for its equity-index futures effective trade date 2021-06-28 (Globex
+notice of 2021-06-14). The 1m data shows a traded bar for every minute from 20:15 to
+20:29 UTC on each of the four weekdays loaded, for all three symbols, at 208-1067 ES
+contracts a minute. Session 6's "confirmed against CME's published contract hours"
+relied on a stale source; many third-party hours pages still list the pause. The
+model is removed, a comment in the adapter records why, and the tests now pin trading
+through that window. `periods_per_year(HOUR_1)` returns to `5910.0`. Upstream
+`pandas_market_calendars` was right all along.
+
+**Correction 25 — Correction 23's delayed-feed drop discarded a closed bar on long
+intervals.** It dropped the newest bar left after the clock cutoff. For an interval
+longer than the feed delay, the vendor's forming bar starts after our cutoff and is
+already gone, so the drop removed the last *closed* bar instead. Measured: the newest
+stored daily bar was 09-20 while the closed 09-21 session was missing, and the newest
+weekly bar was 09-06 with the closed 09-13 week missing. `sync_backfill` runs at 03:00
+UTC while the market is open, so this would have kept daily bars a day behind and
+weekly bars a week behind permanently. The drop now applies only when the vendor
+frontier survived the cutoff; re-running 1d and 1w filled both bars.
+
+**Correction 26 — the quote reconciler warned every 5 seconds for each futures
+symbol.** No realtime provider serves `index_future` until Phase 6, so every reconcile
+tick logged three `subscribe_failed` WARNINGs and an INFO `reconciled added=3` that
+counted attempts, not subscriptions: about 48 lines a minute. It now warns once per
+symbol while the failure lasts and logs the summary only for a real change. All four
+guards were mutation-tested.
+
+**Measured after the corrections.**
+
+| Command | Result |
+|---------|--------|
+| `uv run pytest tests/ -q` | `831 passed, 1 skipped` |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 10 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+| `just test-tz` | `831 passed` under all three zones |
+
+**Task 12 cannot pass on the pipeline as it stands. Observed over six undisturbed
+cycles, not predicted:**
+
+- *The feed delay makes closed buckets look partial.* `last_bar_age_seconds` sits
+  around 728. A 5m or 15m bucket is closed by our clock about twelve minutes before its
+  last minute arrives, so `cascade.partial_aggregate` fires about ten times a minute
+  across the three symbols and `no_progress` appears whenever the feed skips a minute.
+  The buckets heal as the feed catches up, so the stored bars converge. This is the
+  delay-awareness item the phase report already routed to Phase 6.
+- *TradingView omits 1m bars for minutes with no trades.* YM is thin overnight: its
+  5000 1m bars have about 90 single-minute holes outside the maintenance break and
+  weekend. ES and NQ have none. A cascaded bucket missing an untraded minute is still
+  correct, yet it warns every minute while in the lookback, and the nightly integrity
+  scan will flag those minutes indefinitely with `sync_repair` re-fetching bars that
+  cannot exist. This is new; Binance emits zero-volume klines, so crypto never had it.
+- *Anonymous scrapes drop about one connection in nine.* 2 of 18 fetches failed in
+  six minutes at normal cadence (3 fetches a minute), each as one socket and one
+  `market_data.sync.failed` ERROR, healing the next minute. Bursts fail sooner: the
+  pre-seed probe lost its connection after 12-16 back-to-back fetches, while 20s
+  spacing gave 21 of 21. The nightly `sync_backfill` requests 21 futures fetches of
+  5000 bars back to back, so expect some of those to fail each night.

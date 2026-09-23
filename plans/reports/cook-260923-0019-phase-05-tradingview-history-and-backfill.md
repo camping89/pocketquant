@@ -262,3 +262,19 @@ c4f4290 fix(market-data): make a refused scrape loud and a stalled login surviva
   from Phase 4 and now sharper: with this provider raising rather than returning `[]`, the
   remaining empty-fallthrough case is a genuinely quiet venue, which TradingView never
   reports.
+
+## Addendum — 2026-09-23, seeding and backfill in production
+
+Tasks 9 and 10 are now done in production: seeded after a backup, every interval probed
+at `n=5` against the calendar grid (0 misaligned, which settles the `_direct` alignment
+question above), then 21 backfills at `n=5000`. Real data exposed three defects, all fixed
+and deployed (`686043f`): a 15:15 Chicago halt that CME removed in 2021, a delayed-feed
+drop that discarded the last closed daily and weekly bar, and a quote reconciler that
+warned every five seconds per futures symbol. Details are in `plan.md` Session 8.
+
+Task 12 stays open, and it cannot pass until two design questions are answered: how
+bucket closure and the stuck threshold should account for the free feed's delay of about
+twelve minutes, and how integrity and the cascade should treat minutes the vendor omits
+because nothing traded. The stuck-threshold question above is now partly answered:
+`no_progress` fires during normal trading whenever the feed skips a minute, not only at
+the session open.
