@@ -43,6 +43,11 @@ class WsSubscriptionAppService:
         self._repo = tracked_symbol_repo
         self._quote_app_service = quote_app_service
         self._interval_s = interval_s
+        # Symbols whose subscribe failure has already been logged at WARNING. A
+        # symbol no realtime provider serves (index futures before a quote
+        # adapter exists) fails every tick, so repeating the WARNING every 5s
+        # would flood the log with a state that is configured, not transient.
+        self._warned_subscribe_failed: set[str] = set()
 
     async def run(self) -> None:
         """Async reconcile loop. Runs until cancelled by lifespan shutdown."""
@@ -69,28 +74,43 @@ class WsSubscriptionAppService:
 
         to_add = desired - current
         to_remove = current - desired
+        # An untracked symbol warns afresh if it is tracked again later.
+        self._warned_subscribe_failed &= desired
 
         if not to_add and not to_remove:
             return
 
+        added = 0
         for symbol_key in to_add:
             try:
                 await self._provider.subscribe(
                     symbol=symbol_key,
                     callback=self._quote_app_service.on_quote_update,
                 )
+                added += 1
+                self._warned_subscribe_failed.discard(symbol_key)
                 # Rate-limit burst subscriptions to avoid provider IP-ban
                 await asyncio.sleep(_SUBSCRIBE_DELAY_S)
             except Exception as exc:
-                logger.warning(
-                    "ws_subscription_manager.subscribe_failed",
-                    symbol=symbol_key,
-                    error=str(exc),
-                )
+                if symbol_key in self._warned_subscribe_failed:
+                    logger.debug(
+                        "ws_subscription_manager.subscribe_failed",
+                        symbol=symbol_key,
+                        error=str(exc),
+                    )
+                else:
+                    self._warned_subscribe_failed.add(symbol_key)
+                    logger.warning(
+                        "ws_subscription_manager.subscribe_failed",
+                        symbol=symbol_key,
+                        error=str(exc),
+                    )
 
+        removed = 0
         for symbol_key in to_remove:
             try:
                 await self._provider.unsubscribe(symbol=symbol_key)
+                removed += 1
             except Exception as exc:
                 logger.warning(
                     "ws_subscription_manager.unsubscribe_failed",
@@ -98,8 +118,11 @@ class WsSubscriptionAppService:
                     error=str(exc),
                 )
 
-        logger.info(
-            "ws_subscription_manager.reconciled",
-            added=len(to_add),
-            removed=len(to_remove),
-        )
+        # Counts what changed, not what was attempted: a symbol that fails every
+        # tick would otherwise log a phantom INFO change every 5s.
+        if added or removed:
+            logger.info(
+                "ws_subscription_manager.reconciled",
+                added=added,
+                removed=removed,
+            )
