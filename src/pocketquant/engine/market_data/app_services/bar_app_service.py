@@ -9,10 +9,12 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
     BarBuilderDomainService,
-    get_bar_start,
 )
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.quote_dto import QuoteTick
@@ -59,8 +61,14 @@ class BarAppService:
         bar_repository: BarRepository,
         event_bus: EventBus,
         intervals: list[Interval] | None = None,
+        calendar_factory: TradingCalendarFactory | None = None,
     ):
         self._cache = cache
+        # Bucket boundaries belong to the symbol's calendar: a CME daily bar opens
+        # at the session open, not at 00:00 UTC. Without a factory every symbol
+        # uses the 24/7 grid, which is exactly right for crypto.
+        self._calendar_factory = calendar_factory
+        self._default_calendar = Continuous24x7Calendar()
         self._bar_repo = bar_repository  # kept for get_current_bar DB fallback
         self._event_bus = event_bus
         self._intervals = intervals or _DEFAULT_INTERVALS
@@ -74,18 +82,24 @@ class BarAppService:
         # tick.symbol is already composite ``{code}:{exchange}``
         symbol_key = tick.symbol.upper()
 
+        calendar = (
+            await self._calendar_factory.for_symbol(symbol_key)
+            if self._calendar_factory
+            else self._default_calendar
+        )
         async with self._lock:
             for interval in self._intervals:
-                await self._process_tick_for_interval(tick, symbol_key, interval)
+                await self._process_tick_for_interval(tick, symbol_key, interval, calendar)
 
     async def _process_tick_for_interval(
         self,
         tick: QuoteTick,
         symbol_key: str,
         interval: Interval,
+        calendar: ITradingCalendarPort | None = None,
     ) -> None:
         current_bar = self._bars[symbol_key].get(interval)
-        bar_start = get_bar_start(tick.timestamp, interval)
+        bar_start = (calendar or self._default_calendar).bar_start(tick.timestamp, interval)
 
         if current_bar is None:
             current_bar = BarBuilderDomainService(
@@ -100,7 +114,10 @@ class BarAppService:
             await self._seed_builder_from_mongo(current_bar)
             self._bars[symbol_key][interval] = current_bar
 
-        elif current_bar.is_complete(tick.timestamp):
+        # A later bucket closes the current bar. On a uniform grid this is the
+        # same test as ``tick >= bar_end``, but a session calendar's buckets are
+        # not all one interval long (a DST day, a short last bar of the session).
+        elif bar_start > current_bar.bar_start:
             completed = current_bar
             await self._save_completed_bar(completed)
 

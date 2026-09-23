@@ -328,3 +328,74 @@ class TestFlushAllBars:
         assert len(bar_service._last_flush_ts) == 0
         # Events published for any non-empty bars
         assert count > 0
+
+
+class _CmeCalendars:
+    """Stands in for TradingCalendarFactory: every symbol is on CME Globex."""
+
+    async def for_symbol(self, composite: str):
+        from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import (
+            CmeGlobexCalendarAdapter,
+        )
+
+        return CmeGlobexCalendarAdapter()
+
+
+class TestSessionCalendarBuckets:
+    """Futures realtime bars open on the session grid, not at 00:00 UTC."""
+
+    @pytest.mark.asyncio
+    async def test_es_daily_and_4h_bars_open_at_the_session_open(
+        self, mock_cache, mock_bar_repo, mock_event_bus
+    ):
+        service = BarAppService(
+            cache=mock_cache,
+            bar_repository=mock_bar_repo,
+            event_bus=mock_event_bus,
+            intervals=[Interval.HOUR_4, Interval.DAY_1],
+            calendar_factory=_CmeCalendars(),  # type: ignore[arg-type]
+        )
+        symbol = "ES1!:CME_MINI"
+        # Wednesday 2026-09-23: the CME session opened at 22:00 UTC (17:00 CDT).
+        for ts, price in (
+            (datetime(2026, 9, 23, 23, 0, tzinfo=UTC), 6600.0),
+            (datetime(2026, 9, 24, 2, 30, tzinfo=UTC), 6601.0),
+        ):
+            await service.add_tick(QuoteTick(symbol=symbol, timestamp=ts, price=price, volume=1.0))
+
+        session_open = datetime(2026, 9, 23, 22, 0, tzinfo=UTC)
+        assert service._bars[symbol][Interval.DAY_1].bar_start == session_open
+        assert service._bars[symbol][Interval.HOUR_4].bar_start == datetime(
+            2026, 9, 24, 2, 0, tzinfo=UTC
+        )
+        completed = [c.args[0] for c in mock_event_bus.publish.await_args_list]
+        assert [(e.interval, e.bar_start) for e in completed] == [
+            (Interval.HOUR_4.value, session_open)
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_bucket_shorter_than_its_interval_still_closes_on_time(
+        self, mock_cache, mock_bar_repo, mock_event_bus
+    ):
+        # US clocks spring forward on 2027-03-14, so the week that opened at
+        # 23:00 UTC on 03-07 is followed by one opening at 22:00 UTC: an hour
+        # short of seven days. The first tick of the new week must close it.
+        service = BarAppService(
+            cache=mock_cache,
+            bar_repository=mock_bar_repo,
+            event_bus=mock_event_bus,
+            intervals=[Interval.WEEK_1],
+            calendar_factory=_CmeCalendars(),  # type: ignore[arg-type]
+        )
+        symbol = "ES1!:CME_MINI"
+        for ts, price in (
+            (datetime(2027, 3, 8, 15, 0, tzinfo=UTC), 6600.0),
+            (datetime(2027, 3, 14, 22, 30, tzinfo=UTC), 6610.0),
+        ):
+            await service.add_tick(QuoteTick(symbol=symbol, timestamp=ts, price=price, volume=1.0))
+
+        new_week = service._bars[symbol][Interval.WEEK_1]
+        assert new_week.bar_start == datetime(2027, 3, 14, 22, 0, tzinfo=UTC)
+        assert new_week.close == 6610.0
+        completed = [c.args[0] for c in mock_event_bus.publish.await_args_list]
+        assert [e.bar_start for e in completed] == [datetime(2027, 3, 7, 23, 0, tzinfo=UTC)]

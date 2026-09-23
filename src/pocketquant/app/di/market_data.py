@@ -34,9 +34,18 @@ class MarketDataProvider(Provider):
 
     @provide(scope=Scope.APP)
     def get_bar_manager(
-        self, cache: Cache, bar_repository: BarRepository, event_bus: EventBus
+        self,
+        cache: Cache,
+        bar_repository: BarRepository,
+        event_bus: EventBus,
+        calendar_factory: TradingCalendarFactory,
     ) -> BarAppService:
-        return BarAppService(cache=cache, bar_repository=bar_repository, event_bus=event_bus)
+        return BarAppService(
+            cache=cache,
+            bar_repository=bar_repository,
+            event_bus=event_bus,
+            calendar_factory=calendar_factory,
+        )
 
     @provide(scope=Scope.APP)
     def get_realtime_quote_provider(
