@@ -222,3 +222,46 @@ async def test_a_raising_subscriber_does_not_end_the_feed() -> None:
         assert not task.done()
     finally:
         task.cancel()
+
+
+@pytest.mark.asyncio
+async def test_a_new_minute_at_the_same_price_is_still_emitted() -> None:
+    adapter, client, quotes = _adapter()
+    client.bars = [_bar(4500.0, 10.0)]
+    await adapter._poll_once(ES)
+
+    client.bars = [_bar(4500.0, 4.0, MINUTE + 60)]
+    await adapter._poll_once(ES)
+
+    assert [(q["timestamp"].minute, q["volume"]) for q in quotes] == [(30, 10.0), (31, 4.0)]
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_does_not_swallow_the_callers_cancellation() -> None:
+    adapter, _, _ = _adapter(open_=False)
+    del adapter._subscriptions[ES]
+    await adapter.subscribe(ES, lambda quote: None)
+    poll = adapter._tasks[ES]
+
+    # A poll task slow to finish keeps unsubscribe waiting; cancelling the
+    # caller there must still end the caller.
+    blocker = asyncio.Event()
+
+    async def slow_poll() -> None:
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            await blocker.wait()
+            raise
+
+    poll.cancel()
+    adapter._tasks[ES] = asyncio.create_task(slow_poll())
+    await asyncio.sleep(0)
+
+    caller = asyncio.create_task(adapter.unsubscribe(ES))
+    await asyncio.sleep(0.01)
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    blocker.set()
+    await asyncio.sleep(0)

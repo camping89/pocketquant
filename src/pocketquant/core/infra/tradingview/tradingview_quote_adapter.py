@@ -11,7 +11,8 @@ Two consequences of polling that consumers should know:
 - ``volume`` is a per-emission DELTA, because ``add_tick`` accumulates it. The
   poller remembers the bar total it last emitted and sends the growth since;
   a poll that emits nothing leaves that baseline alone, so its volume is
-  carried into the next emission rather than lost.
+  carried into the next emission of the same minute. Growth a minute gains
+  after its last emission is not delivered once the next minute has begun.
 - ``tick_count`` downstream is one per emission, so it measures poll cadence
   and price changes, not market activity.
 """
@@ -19,7 +20,6 @@ Two consequences of polling that consumers should know:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import inspect
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -144,8 +144,9 @@ class TradingViewQuoteAdapter:
         if task is None:
             return
         task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        # wait() absorbs the poll task's own cancellation but still raises if the
+        # caller is cancelled, which suppressing CancelledError here would hide.
+        await asyncio.wait({task})
 
     async def _poll_loop(self, symbol: str) -> None:
         while True:
@@ -154,7 +155,9 @@ class TradingViewQuoteAdapter:
             except Exception as exc:
                 # A calendar lookup or subscriber failure must not end the feed;
                 # fetch failures are counted separately in ``_poll_once``.
-                logger.error("tradingview_quote.poll_error", symbol=symbol, error=str(exc))
+                logger.error(
+                    "tradingview_quote.poll_error", symbol=symbol, error=str(exc), exc_info=True
+                )
             await asyncio.sleep(self._poll_seconds)
 
     async def _poll_once(self, symbol: str) -> None:
@@ -184,7 +187,9 @@ class TradingViewQuoteAdapter:
         bar_dt = datetime.fromtimestamp(newest.epoch_seconds, tz=UTC)
 
         previous = self._last_emitted.get(symbol)
-        if previous is not None and previous[2] == newest.close:
+        # A new minute is emitted even at an unchanged price, so the bar builder
+        # opens that minute and receives its volume.
+        if previous is not None and previous[0] == bar_dt and previous[2] == newest.close:
             logger.debug("tradingview_quote.unchanged", symbol=symbol, close=newest.close)
             return
 
