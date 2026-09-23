@@ -5,6 +5,8 @@ PerformanceMetrics, PerformanceCalculatorDomainService, CommissionModel, trade_s
 from pocketquant.core.domain.trading.commission_model import (
     CommissionModel,
     PercentageCommissionModel,
+    PerContractCommissionModel,
+    commission_model_for,
 )
 from pocketquant.core.domain.trading.performance_calculator_domain_service import (
     PerformanceCalculatorDomainService,
@@ -22,6 +24,8 @@ __all__ = [
     "Fill",
     "PerformanceCalculatorDomainService",
     "PercentageCommissionModel",
+    "PerContractCommissionModel",
     "PerformanceMetrics",
     "Trade",
+    "commission_model_for",
 ]

@@ -60,6 +60,7 @@ from pocketquant.core.domain.position import (
     PositionSide,
     TradeClosedEvent,
 )
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.domain.trading import CommissionModel, PercentageCommissionModel
 
 # STOP_LIMIT / STOP_MARKET share the LIMIT pending path until real STOP
@@ -113,6 +114,7 @@ class PaperBrokerAdapter(IBrokerPort):
         currency: str = "USD",
         event_bus: EventBus | None = None,
         commission_model: CommissionModel | None = None,
+        contract_spec: ContractSpec = LINEAR_SPEC,
     ) -> None:
         self._initial_balance = initial_balance
         self._balance = initial_balance
@@ -123,6 +125,8 @@ class PaperBrokerAdapter(IBrokerPort):
         # Default bps=0 keeps pre-R3 balances when no model is injected; real bps
         # (backtest commission_bps / live paper_commission_bps) wired via factory.
         self._commission_model = commission_model or PercentageCommissionModel(bps=0.0)
+        # Positions opened here realize PnL in account currency via this multiplier.
+        self._contract_spec = contract_spec
 
         self._positions: dict[str, PositionAggregate] = {}
         # _orders holds every OrderAggregate observed by submit_order, including
@@ -497,6 +501,7 @@ class PaperBrokerAdapter(IBrokerPort):
         if existing is not None and not existing.is_closed and existing.side == PositionSide.SHORT:
             return True
         commission = self._commission(fill_price, order.quantity)
+        # Price-unit notional on purpose: the shipped margin model, not contract value.
         return fill_price * order.quantity + commission <= self._balance
 
     @staticmethod
@@ -578,6 +583,7 @@ class PaperBrokerAdapter(IBrokerPort):
             entry_order_id=str(order.id),
             entry_commission=commission,
             opened_at=get_current_time(),
+            multiplier=self._contract_spec.multiplier,
         )
 
     def _execute_fill_with_commission(

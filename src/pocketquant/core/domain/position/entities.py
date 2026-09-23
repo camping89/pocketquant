@@ -42,6 +42,8 @@ class PositionAggregate(BaseModel):
     entry_order_id: str | None = None
     # Accumulated entry-side commission; reduce/close drains a proportional portion.
     entry_commission: float = 0.0
+    multiplier: float = 1.0
+    """Account currency per 1.0 of price move per contract; 1.0 for linear instruments."""
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     @classmethod
@@ -57,6 +59,7 @@ class PositionAggregate(BaseModel):
         entry_order_id: str | None = None,
         entry_commission: float = 0.0,
         opened_at: datetime | None = None,
+        multiplier: float = 1.0,
     ) -> PositionAggregate:
         if quantity <= 0:
             raise ValueError("Quantity must be positive")
@@ -75,6 +78,7 @@ class PositionAggregate(BaseModel):
             tp_price=tp_price,
             entry_order_id=entry_order_id,
             entry_commission=entry_commission,
+            multiplier=multiplier,
         )
         # opened_at omitted → keep the field default_factory (utc_now) value.
         if opened_at is not None:
@@ -146,7 +150,7 @@ class PositionAggregate(BaseModel):
         direction = self.side.name
 
         pnl_per_unit = self._calculate_pnl_per_unit(price)
-        realized = pnl_per_unit * quantity
+        realized = pnl_per_unit * quantity * self.multiplier
         self.realized_pnl += realized
         self.quantity -= quantity
         self.current_price = price
@@ -224,7 +228,7 @@ class PositionAggregate(BaseModel):
     def unrealized_pnl(self) -> float:
         if self.is_closed:
             return 0.0
-        return self._calculate_pnl_per_unit(self.current_price) * self.quantity
+        return self._calculate_pnl_per_unit(self.current_price) * self.quantity * self.multiplier
 
     @property
     def pnl(self) -> PnL:
@@ -232,10 +236,12 @@ class PositionAggregate(BaseModel):
 
     @property
     def market_value(self) -> float:
+        # Price-unit notional, unmultiplied: the shipped margin and exposure checks read it.
         return self.quantity * self.current_price
 
     @property
     def cost_basis(self) -> float:
+        # Price-unit notional, unmultiplied: the shipped margin and exposure checks read it.
         return self.quantity * self.entry_price
 
     def collect_events(self) -> list[DomainEvent]:
@@ -259,6 +265,7 @@ class PositionAggregate(BaseModel):
             "closed_at": self.closed_at,
             "sl_price": self.sl_price,
             "tp_price": self.tp_price,
+            "multiplier": self.multiplier,
         }
 
     @classmethod
@@ -278,4 +285,5 @@ class PositionAggregate(BaseModel):
             closed_at=doc.get("closed_at"),
             sl_price=doc.get("sl_price"),
             tp_price=doc.get("tp_price"),
+            multiplier=doc.get("multiplier", 1.0),
         )

@@ -1,6 +1,7 @@
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
-from pocketquant.core.domain.trading import PercentageCommissionModel
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
+from pocketquant.core.domain.trading import commission_model_for
 from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
@@ -34,13 +35,19 @@ class BrokerFactory:
             # slippage as a fraction, so convert here at the boundary.
             commission_bps = config.get("commission_bps", 0.0)
             slippage_bps = config.get("slippage_bps", 0.0)
+            contract_spec: ContractSpec = config.get("contract_spec") or LINEAR_SPEC
+            # An explicit config fee wins; otherwise the symbol's spec decides.
+            per_contract = config.get("commission_per_contract")
+            if per_contract is None:
+                per_contract = contract_spec.commission_per_contract
             return PaperBrokerAdapter(
                 initial_balance=config.get("initial_balance", 10_000.0),
                 slippage_percent=slippage_bps / 10_000,
                 fill_delay_ms=config.get("fill_delay_ms", 50),
                 currency=config.get("currency", "USD"),
                 event_bus=self._event_bus,
-                commission_model=PercentageCommissionModel(bps=commission_bps),
+                commission_model=commission_model_for(per_contract, commission_bps),
+                contract_spec=contract_spec,
             )
 
         elif broker_type == "okx":

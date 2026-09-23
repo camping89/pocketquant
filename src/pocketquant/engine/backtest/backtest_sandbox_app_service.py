@@ -27,7 +27,8 @@ from pocketquant.core.common.messaging import EventBus, EventRegistry
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.core.domain.trading import PercentageCommissionModel
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
+from pocketquant.core.domain.trading import commission_model_for
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
@@ -115,6 +116,7 @@ class BacktestSandboxAppService:
         fill_delay_ms: int = 0,
         currency: str = "USD",
         commission_bps: float = 0.0,
+        contract_spec: ContractSpec = LINEAR_SPEC,
     ) -> PaperBrokerAdapter:
         broker = PaperBrokerAdapter(
             initial_balance=initial_balance,
@@ -122,7 +124,10 @@ class BacktestSandboxAppService:
             fill_delay_ms=fill_delay_ms,
             currency=currency,
             event_bus=self.event_bus,
-            commission_model=PercentageCommissionModel(bps=commission_bps),
+            commission_model=commission_model_for(
+                contract_spec.commission_per_contract, commission_bps
+            ),
+            contract_spec=contract_spec,
         )
         self._broker = broker
         # Late-bind the broker into the factory so any (unexpected) factory
