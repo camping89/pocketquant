@@ -197,6 +197,25 @@ async def test_delayed_feed_keeps_the_frontier_bar_once_the_market_shuts() -> No
     assert len(bars) == len(_raw_bars())
 
 
+async def test_delayed_feed_keeps_a_closed_bar_when_the_cutoff_took_the_frontier() -> None:
+    """For an interval longer than the delay, the forming bar is past our cutoff.
+
+    The cutoff has already removed the vendor's frontier, so the newest bar left
+    is closed. Dropping it too kept the last closed daily and weekly bar out of
+    storage for as long as the market was open — every nightly backfill runs
+    while it is.
+    """
+    raws = _raw_bars()
+    cutoff = datetime.fromtimestamp(raws[-1].epoch_seconds, tz=UTC)
+
+    bars = await _adapter(_FakeClient(), cutoff=cutoff, is_open=True).fetch_ohlcv(
+        _ES, Interval.DAY_1, 10
+    )
+
+    assert len(bars) == len(raws) - 1
+    assert bars[-1].datetime == datetime.fromtimestamp(raws[-2].epoch_seconds, tz=UTC)
+
+
 async def test_a_realtime_plan_keeps_the_frontier_bar() -> None:
     """The positional drop is a delayed-feed remedy, not a permanent tax.
 

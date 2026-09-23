@@ -92,11 +92,21 @@ class TradingViewAdapter(IDataProviderPort):
         # would leave a permanent one-bar gap every session. While open, a bar
         # dropped for being newest is persisted by a later fetch, once the feed
         # has moved past it.
+        #
+        # Only when the frontier survived the cutoff, too. For an interval
+        # longer than the delay, the forming bar starts after our cutoff and is
+        # already gone; dropping "the newest" again would discard a closed bar —
+        # measured as the last closed daily and weekly bars never persisting.
         delayed_drop = 0
-        if kept and not self._settings.tradingview_capabilities.realtime:
-            if calendar.is_open(datetime.now(UTC)):
-                kept = kept[:-1]
-                delayed_drop = 1
+        frontier = max((b.datetime for b in bars if b.datetime is not None), default=None)
+        if (
+            kept
+            and kept[-1].datetime == frontier
+            and not self._settings.tradingview_capabilities.realtime
+            and calendar.is_open(datetime.now(UTC))
+        ):
+            kept = kept[:-1]
+            delayed_drop = 1
 
         dropped = len(bars) - len(kept)
         if dropped:
