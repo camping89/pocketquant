@@ -13,7 +13,7 @@ winter, so no boundary may ever be computed by adding a fixed offset.
 from __future__ import annotations
 
 import functools
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -39,15 +39,11 @@ _MINUTE = timedelta(minutes=1)
 # clears a weekend plus an adjacent holiday in both directions.
 _WINDOW_DAYS = timedelta(days=4)
 
-# Equity-index futures pause for fifteen minutes just after the cash equity
-# close, on top of the 16:00-17:00 maintenance break. The upstream calendar
-# models only the maintenance break, so this is applied on top of its rows.
-# It is specific to the index products (ES, NQ, YM); CME's other Globex
-# contracts, such as crude and gold, run straight through this window.
-# Stored as a local wall-clock time, never a UTC offset: 15:15 Chicago is
-# 20:15 UTC in summer and 21:15 UTC in winter.
-_HALT_START_LOCAL = time(15, 15)
-_HALT_END_LOCAL = time(15, 30)
+# There is no 15:15-15:30 Chicago pause. CME eliminated it for these equity-index
+# futures effective trade date 2021-06-28, and TradingView's 1m ES/NQ/YM series
+# carries traded bars through that window on every weekday. Many third-party
+# hours pages still list it; the only daily break is 16:00-17:00 maintenance,
+# which the upstream schedule already models.
 
 
 class CmeGlobexCalendarAdapter(ITradingCalendarPort):
@@ -132,26 +128,14 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
 
     def is_open(self, instant: datetime) -> bool:
         instant = instant.astimezone(UTC)
-        for session, row in self._window_rows(instant):
+        for _, row in self._window_rows(instant):
             if self._as_utc(row["market_open"]) <= instant < self._as_utc(row["market_close"]):
-                halt = self._halt_window(session, row)
-                return halt is None or not (halt[0] <= instant < halt[1])
+                return True
         return False
 
     def previous_close(self, instant: datetime) -> datetime:
-        """The most recent instant a bar could have closed, at or before ``instant``.
-
-        Inside the intraday halt this is the halt's start rather than
-        ``instant`` itself. Callers use the gap between the two to decide
-        whether a quiet symbol is quiet because the market is shut, and
-        returning ``instant`` would keep that gap at zero for the whole halt,
-        which reads as "it only just closed" fifteen minutes running.
-        """
+        """The most recent instant a bar could have closed, at or before ``instant``."""
         instant = instant.astimezone(UTC)
-        for session, row in self._window_rows(instant):
-            halt = self._halt_window(session, row)
-            if halt is not None and halt[0] <= instant < halt[1]:
-                return halt[0]
         closes = [
             self._as_utc(row["market_close"])
             for _, row in self._window_rows(instant)
@@ -172,17 +156,12 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
         # Reach back a day: a session open the evening before can still be
         # contributing minutes inside the requested window.
         schedule = self._schedule(start.date() - timedelta(days=1), end.date())
-        for ts, row in schedule.iterrows():
+        for _, row in schedule.iterrows():
             lower = max(start, self._as_utc(row["market_open"]))
             upper = min(end, self._as_utc(row["market_close"]))
             if lower >= upper:
                 continue
-            halt = self._halt_window(self._session_date_of(ts), row)
-            for i in range(int((upper - lower) // _MINUTE)):
-                minute = lower + i * _MINUTE
-                if halt is not None and halt[0] <= minute < halt[1]:
-                    continue
-                minutes.append(minute)
+            minutes.extend(lower + i * _MINUTE for i in range(int((upper - lower) // _MINUTE)))
         return minutes
 
     def bar_start(self, instant: datetime, interval: Interval) -> datetime:
@@ -223,30 +202,13 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
             return session_count / 5.0
 
         total_minutes = 0
-        for ts, row in schedule.iterrows():
-            span = (
+        for _, row in schedule.iterrows():
+            total_minutes += (
                 self._as_utc(row["market_close"]) - self._as_utc(row["market_open"])
             ) // _MINUTE
-            halt = self._halt_window(self._session_date_of(ts), row)
-            if halt is not None:
-                span -= (halt[1] - halt[0]) // _MINUTE
-            total_minutes += span
         return total_minutes / (INTERVAL_SECONDS[interval] / 60.0)
 
     # --- internals -------------------------------------------------------
-
-    def _halt_window(self, session: date, row: pd.Series) -> tuple[datetime, datetime] | None:
-        """The intraday halt inside one session, as UTC instants, or ``None``.
-
-        Clipped to the session's own boundaries so an early close that lands
-        before 15:15 Chicago simply has no halt, rather than one hanging off
-        the end of a session that already finished.
-        """
-        start = datetime.combine(session, _HALT_START_LOCAL, tzinfo=_TZ).astimezone(UTC)
-        end = datetime.combine(session, _HALT_END_LOCAL, tzinfo=_TZ).astimezone(UTC)
-        start = max(start, self._as_utc(row["market_open"]))
-        end = min(end, self._as_utc(row["market_close"]))
-        return (start, end) if start < end else None
 
     def _window_rows(self, instant: datetime):
         """Session rows near ``instant`` — the one holding it, and its neighbours.

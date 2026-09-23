@@ -123,18 +123,15 @@ class TestEveryCallerSurvivesTheWeekendGap:
         assert calendar.is_open(saturday) is False
 
 
-class TestTheIntradayEquityIndexHalt:
-    """ES, NQ and YM pause 15:15-15:30 Chicago, just after the cash close.
+class TestNoIntradayEquityIndexHalt:
+    """ES, NQ and YM trade straight through 15:15-15:30 Chicago.
 
-    The upstream calendar models only the 16:00-17:00 maintenance break, so
-    without this the pipeline believes fifteen minutes of every weekday are
-    trading minutes that produce no bars. That reads downstream as a stuck
-    symbol, a partial hourly bucket, and fifteen missing minutes per symbol per
-    day in the nightly integrity scan.
-
-    The halt is specific to the index products; CME's crude and gold contracts
-    run straight through this window, which is why it lives in this adapter
-    rather than in a shared rule.
+    CME eliminated that pause for its equity-index futures effective trade date
+    2021-06-28, yet many hours pages still list it, and it was once modelled
+    here from one of them. Modelling a halt that does not exist makes the sync
+    gate skip fifteen live minutes a day, the cascade expect 45 bars of an hour
+    that holds 60, and the hourly annualization count 62 hours short. Measured
+    against TradingView's 1m series: every one of those minutes carries a bar.
     """
 
     CT = ZoneInfo("America/Chicago")
@@ -143,45 +140,28 @@ class TestTheIntradayEquityIndexHalt:
         # A plain Tuesday, no holiday and no early close.
         return datetime(2026, 9, 22, hour, minute, tzinfo=self.CT).astimezone(UTC)
 
-    def test_the_market_is_shut_only_between_the_halt_boundaries(
+    def test_the_market_is_open_through_the_former_halt(
         self, calendar: CmeGlobexCalendarAdapter
     ) -> None:
-        assert calendar.is_open(self._at(15, 14)) is True
-        assert calendar.is_open(self._at(15, 15)) is False
-        assert calendar.is_open(self._at(15, 29)) is False
-        assert calendar.is_open(self._at(15, 30)) is True
+        for minute in (14, 15, 20, 29, 30):
+            assert calendar.is_open(self._at(15, minute)) is True
 
-    def test_the_halt_is_not_counted_as_trading_minutes(
+    def test_every_minute_of_that_hour_is_a_trading_minute(
         self, calendar: CmeGlobexCalendarAdapter
     ) -> None:
         """The cascade takes a bucket's expected bar count from this."""
         minutes = calendar.trading_minutes(self._at(15, 0), self._at(16, 0))
 
-        assert len(minutes) == 45
+        assert len(minutes) == 60
 
-    def test_previous_close_holds_at_the_halt_start(
+    def test_previous_close_is_the_instant_itself_while_trading(
         self, calendar: CmeGlobexCalendarAdapter
     ) -> None:
-        """Otherwise the gap the sync gate measures stays at zero throughout.
+        assert calendar.previous_close(self._at(15, 20)) == self._at(15, 20)
 
-        ``previous_close`` returns the instant itself while a market is open,
-        so without this the gate would read "it closed just now" for every one
-        of the fifteen minutes and keep fetching through the whole halt.
-        """
-        assert calendar.previous_close(self._at(15, 20)) == self._at(15, 15)
-
-    def test_a_dst_shift_moves_the_halt_with_the_wall_clock(
+    def test_the_maintenance_break_is_still_the_daily_close(
         self, calendar: CmeGlobexCalendarAdapter
     ) -> None:
-        """15:15 Chicago is 20:15 UTC in summer and 21:15 UTC in winter.
-
-        A fixed offset would look correct for months and then halt the wrong
-        quarter-hour — the failure this whole adapter exists to prevent.
-        """
-        summer = datetime(2026, 7, 15, 15, 20, tzinfo=self.CT)
-        winter = datetime(2026, 12, 15, 15, 20, tzinfo=self.CT)
-
-        assert summer.astimezone(UTC).hour == 20
-        assert winter.astimezone(UTC).hour == 21
-        assert calendar.is_open(summer) is False
-        assert calendar.is_open(winter) is False
+        assert calendar.is_open(self._at(15, 59)) is True
+        assert calendar.is_open(self._at(16, 0)) is False
+        assert calendar.is_open(self._at(16, 59)) is False

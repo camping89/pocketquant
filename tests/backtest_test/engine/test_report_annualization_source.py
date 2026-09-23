@@ -1,7 +1,7 @@
 """The backtest report annualizes on the symbol's calendar, not on the interval.
 
 The interval table answers for a market that never closes. A CME 1h series has
-about 5848 bars a year, not 8760, and Sharpe scales by the square root of that,
+about 5910 bars a year, not 8760, and Sharpe scales by the square root of that,
 so reading the wrong source overstates a futures Sharpe by roughly 22%.
 
 Every other backtest test runs on crypto, where the two sources agree exactly —
@@ -67,7 +67,7 @@ async def _periods_passed_to_metrics(calendar, interval: str) -> float | None:
 async def test_a_session_symbol_annualizes_on_its_sessions() -> None:
     periods = await _periods_passed_to_metrics(CmeGlobexCalendarAdapter(), "1h")
 
-    assert periods == 5_848.0
+    assert periods == 5_910.0
     # Emphatically not the 24/7 answer for the same interval.
     assert periods != Interval.HOUR_1.periods_per_year
 

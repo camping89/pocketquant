@@ -1,7 +1,6 @@
 """Annualization is the calendar's answer, not the clock's — and only for Sharpe.
 
-A CME Globex equity year holds 259 sessions of up to 23 hours less a daily
-15-minute halt, not 365 days of
+A CME Globex equity year holds 259 sessions of up to 23 hours, not 365 days of
 24. Sharpe and Sortino scale by the square root of that count, so taking it from
 the wrong calendar silently misstates every risk-adjusted figure a futures
 backtest reports.
@@ -47,15 +46,13 @@ def test_cme_sessions_per_year_is_the_2025_reference_count() -> None:
 
 
 def test_cme_hourly_is_the_2025_reference_count() -> None:
-    """5848 = 259 sessions x 23h, less early closes and the daily 15-minute halt.
+    """5910 = 259 sessions x 23h, less early closes.
 
-    Equity-index futures pause 15:15-15:30 Chicago, just after the cash equity
-    close, on top of the 16:00-17:00 maintenance break. It was 5910 before that
-    halt was modelled; the 62-hour difference is not a clean 259 x 15 minutes
-    because an early close can land before the halt, leaving that session with
-    a shortened one or none at all.
+    The only daily break is the 16:00-17:00 Chicago maintenance period. A
+    15:15-15:30 pause that CME eliminated in June 2021 was once modelled here and
+    moved this count to 5848; TradingView's bars show trading through it.
     """
-    assert CmeGlobexCalendarAdapter().periods_per_year(Interval.HOUR_1) == 5_848.0
+    assert CmeGlobexCalendarAdapter().periods_per_year(Interval.HOUR_1) == 5_910.0
 
 
 def test_cagr_stays_on_calendar_time_whatever_the_calendar() -> None:
