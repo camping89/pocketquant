@@ -1176,3 +1176,146 @@ cycles, not predicted:**
   pre-seed probe lost its connection after 12-16 back-to-back fetches, while 20s
   spacing gave 21 of 21. The nightly `sync_backfill` requests 21 futures fetches of
   5000 bars back to back, so expect some of those to fail each night.
+
+### Session 9 — 2026-09-23 (execution, Phase 6)
+
+Tasks 1-8 are implemented and committed as `e29e625`, `c4c542a`, `efc8ee4` and
+`2305e0d`. Three review fixes followed in `f022ac8`, `dfa9290` and `59dac6d`, and a
+production fix in `1d5b8cf`. Every new guard was mutation-tested, 43 in all: 23 in the
+contract math and wiring, 15 in the quote adapter, 2 in the bar builder, and one each for
+the client, the pool lifetime and the quote TTL. Each one turned a test red when
+broken. The initial mutation run left four survivors: the lot-flooring epsilon,
+backtest dispatch passing the spec (twice), and the sandbox passing it. Tests were
+added until they died.
+
+**Correction 27 — Task 5 step 3 cannot thread a multiplier per order, so its Failure
+Protocol ran.** The shared paper broker is reached only through `IBrokerPort`, which has
+no per-order spec channel. Step 4 forbids a field on `OrderAggregate`, and the engine
+had no way to learn a symbol's spec. The alternative the step names was adopted on
+kongming's counsel: `StrategyConfig` and `BacktestConfig` carry the `ContractSpec`,
+resolved from the symbol record where configs are built. Those places are the reconcile
+loop for live subscriptions and backtest dispatch for ad-hoc runs. The live engine keys
+its broker pool by `(broker_type, contract_spec)`. The consequence is a split paper
+account per spec: every crypto subscription still shares one linear paper broker and
+balance, byte-identical to before, while ES, NQ and YM each get their own account
+funded with `paper_initial_balance`. A single cross-asset paper account would need a
+per-symbol spec registry inside the broker, which is a separate design decision.
+
+**Correction 28 — the position mirror the UI reads PnL from was not in the plan.**
+`PositionAppService` builds its own `PositionAggregate` from `OrderFilledEvent` and
+persists it. `StrategyQueryService.get_trades` and `get_positions` read that copy, not
+the broker's. Without the multiplier an ES trade would show one fiftieth of the broker's
+PnL, which contradicts G2. The service now resolves the multiplier through
+`SymbolLookupHelper.contract_spec`, and that same helper serves the reconcile loop and
+dispatch.
+
+**Correction 29 — Task 7 step 5 would report production permanently disconnected.**
+`client.is_authenticated()` reports an account login, and production scrapes
+anonymously (Session 8). `is_connected()` now follows poll health instead: true while
+some symbol is polling without a streak of three failed fetches. Per Session 8's
+measurements, a single dropped scrape (about one in nine) stays at DEBUG. Only a streak
+warns, and recovery after a warning logs INFO.
+
+**Correction 30 — Task 7 step 4's per-poll volume delta loses volume.** Measuring the
+delta against the previous *poll* discards the growth seen by any poll that emitted
+nothing, because the close was unchanged. The baseline is now the last *emitted* bar
+total, so skipped growth is carried into the next emission. The negative-delta clamp and
+the new-minute full-volume rule are unchanged.
+
+**Correction 31 — realtime futures bars used the UTC epoch grid.** Wiring the quote
+adapter made a Phase 3 gap reachable. `BarAppService.add_tick` bucketed with
+`get_bar_start`, so live ES 4h and daily candles, and the `BarCompletedEvent`s that
+strategies consume, opened at 00:00 UTC instead of the 22:00 UTC session open. Buckets
+now come from the symbol's calendar. A bar also closes when a tick lands in a later
+bucket, rather than at start plus interval: the weekly bar that opens 2027-03-07 23:00
+UTC is followed by one at 03-14 22:00 UTC, an hour short of seven days. Both halves are
+pinned by tests on the real CME adapter. `integrity_jobs` still calls `get_bar_start`
+for its scan window end, which this phase did not change.
+
+**Decisions taken without a correction.**
+- `BrokerFactory` uses an explicit `commission_per_contract` from config first, and
+  otherwise the spec's own field, as `ContractSpec`'s docstring promises. The seeded
+  ES/NQ/YM specs carry none, so futures still pay `commission_bps` on price-unit
+  notional: 3 bps of 7800 is 2.34 USD per contract, close to a retail CME fee.
+  Seeding a real per-contract fee is a product decision for Phase 7.
+- `commission_model_for(usd_per_contract, bps)` holds the choice once for the factory
+  and the backtest sandbox.
+- The lot floor adds `1e-9` before `math.floor`. A 10 M balance at 0.007% risk over a
+  two-tick ES stop is exactly 28 contracts, which float division gives as
+  27.999999999999996.
+- History and quotes share one `TvDatafeedClient`, provided once in DI, whose lock
+  serialises both instead of two sessions bursting at the scraper.
+- `backtest_strategy_loader.py` has no callers in `src`, `tests` or `scripts`. It
+  took a `contract_spec` parameter rather than a lookup.
+- Task 8 step 2: no global staleness threshold reads `provider.last_tick_at`. Only the
+  Binance adapter's own watchdog does, so nothing changed there.
+- Task 8's Verify expects `5 passed`. The file has 10 tests: the five named ones plus
+  guards for the volume rules, the failure streak, the poll floor, the port, and loop
+  survival.
+
+**Task 4's exposure cap sizes ES to zero at the default balances.** The formula
+divides `min(risk / price_risk, cap)` by the multiplier, so the 10% cap applies to
+contract notional. One ES contract at 7800 is 390,000 USD of notional, so
+`paper_initial_balance = 10_000` and the backtest default of 10,000 can never hold a
+contract. A live ES subscription on defaults will log `zero_position_size` on every
+signal. This is the prescribed arithmetic and was not changed. Whether futures should
+cap margin rather than notional, or run with a larger paper balance, is a risk-policy
+decision for Phase 7.
+
+**Correction 32 — pre-deploy review: pollers made a Phase 5 hazard reachable.** An
+independent review of the phase's commits found two defects, and both are fixed and
+mutation-tested.
+- *A cancelled fetch left its scraper instance in place.* `TvDatafeedClient` discarded
+  it only on a timeout. Cancelling a `to_thread` does not stop the thread, so an
+  unsubscribed or shut-down poller released the lock while its thread still read the
+  socket, and the next history fetch shared it. That is the cross-symbol corruption the
+  lock exists to prevent. Quote pollers share the client and are cancelled in normal
+  operation, so cancellation now discards the instance as well (`f022ac8`).
+- *The broker pool outlived its strategies.* Before pooling, unloading the last
+  subscription retired its paper account. The pool kept it, so a new subscription would
+  inherit the old balance and positions. A pooled broker is now reused only while a
+  loaded strategy still holds it (`dfa9290`).
+- The same review also found: a new minute at an unchanged price emitted nothing;
+  `_stop` suppressed the caller's own cancellation; and the poll loop's ERROR lacked
+  `exc_info`. All three are fixed (`59dac6d`).
+- The review also rated the zero-contract sizing above as high. It is recorded there
+  and deliberately unchanged. Dividing only the risk term would not help, because the
+  cap is still about 0.13 units at a 10,000 balance, and a 10,000 account cannot carry one
+  ES contract at roughly 20,000 USD of initial margin anyway.
+
+**Correction 33 — the latest-quote TTL equalled the poll interval.** This was found in
+production minutes after the deploy. `QuoteAppService` cached the latest quote for
+`TTL_QUOTE_LATEST = 60` seconds, which is also the TradingView poll interval, so the ES
+latest-quote endpoint returned 404 whenever the price held between polls. That cache is
+the global staleness threshold Task 8 step 2 asks about, so its own rule was applied:
+the TTL is now `max(60, 3 x effective poll seconds)`, which is 180 s. Only display paths
+read the key, the latest-quote route and the SSE stream. `Settings` now owns the
+effective poll interval, so the poller and the quote service read one value (`1d5b8cf`,
+mutation-tested).
+
+**Measured after deploy (runs `35856304174`, `35857069557`).**
+
+| Check | Result |
+|-------|--------|
+| `uv run pytest tests/ -q` | `865 passed, 1 skipped` |
+| `uv run ruff check src tests scripts` | `All checks passed!` |
+| `uv run lint-imports` | `Contracts: 10 kept, 0 broken` |
+| `uv run pyright src` | `0 errors` |
+| CI under UTC, Asia/Ho_Chi_Minh, America/Chicago | green, deployed |
+
+- *Realtime.* Reconcile added 6 subscriptions (3 crypto, 3 futures) at a 60 s poll.
+  Latest quotes for ES, NQ and YM are served, stamped about 12 minutes behind. The live
+  ES 1d bar opens at 22:00 UTC and the 4h bar at 10:00 UTC. No WARNING or ERROR in the
+  15 minutes observed.
+- *G3.* An `engulfing` 1h backtest on `ES1!:CME_MINI` (run
+  `01a0ce20-2ce0-744b-b4a6-eec0641b861d`, 10 M capital, no commission or slippage)
+  closed 132 trades. All were whole contracts, and all equalled
+  `(exit - entry) x 50 x contracts` to the cent. The reported Sharpe of 0.527017 matches
+  a recomputation from the stored equity curve at 5910 periods a year to 12 digits; 8760
+  would give 0.641627. Task 9's "roughly 5796" predates Correction 24's 5910.
+- *G2 is open.* At the default paper balance, ES sizes to zero contracts (above), so a
+  live full-session round trip needs the risk-policy decision first. The arithmetic G2
+  checks is pinned end to end by tests.
+- *Seen, not changed.* `ContractSpec.tick_size` is not applied to fills, so SL/TP exits
+  land off the tick grid (`7799.00825` in the G3 run). This predates the phase.
+

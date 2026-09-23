@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Polling Quote Adapter and Contract-Aware Trading Math"
-status: pending
+status: in-progress
 priority: P1
 effort: "1.5d"
 dependencies: [5]
@@ -344,15 +344,20 @@ on a 60s poll cadence.
 
 ## Todo
 
-- [ ] Task 1 — `PerContractCommissionModel`
-- [ ] Task 2 — Contract multiplier on `PositionAggregate`
-- [ ] Task 3 — Thread `ContractSpec` through the paper broker
-- [ ] Task 4 — Contract-aware position sizing
-- [ ] Task 5 — Wire the spec into the strategy and backtest paths
-- [ ] Task 6 — Contract math tests
-- [ ] Task 7 — `TradingViewQuoteAdapter` (the realtime port)
-- [ ] Task 8 — Quote adapter tests and a relaxed staleness threshold
-- [ ] Task 9 — Phase gate: G2 and G3
+- [x] Task 1 — `PerContractCommissionModel`
+- [x] Task 2 — Contract multiplier on `PositionAggregate`
+- [x] Task 3 — Thread `ContractSpec` through the paper broker
+- [x] Task 4 — Contract-aware position sizing — the exposure cap sizes ES to zero
+      contracts at the default 10,000 balances (plan.md, Session 9)
+- [x] Task 5 — Wire the spec into the strategy and backtest paths — via the
+      `(broker_type, contract_spec)` pool after the Failure Protocol (Correction 27)
+- [x] Task 6 — Contract math tests
+- [x] Task 7 — `TradingViewQuoteAdapter` (the realtime port) — Corrections 29, 30
+- [x] Task 8 — Quote adapter tests and a relaxed staleness threshold — no global
+      staleness check reads `last_tick_at`, so nothing changed there
+- [ ] Task 9 — Phase gate: G2 and G3 — G3 verified on production data (132 ES trades
+      exact to the cent, Sharpe on 5910 periods a year). G2's live session waits on the
+      paper-balance and exposure-cap decision (plan.md, Session 9)
 
 ## Risks and rollback
 
