@@ -31,12 +31,13 @@ def _calendars() -> MagicMock:
     return factory
 
 
-async def _check(tradingview_authenticated: bool, *symbols: str) -> dict:
+async def _check(tradingview_authenticated: bool, *symbols: str, credentialed: bool = True) -> dict:
     resolver = SymbolProviderResolver(
         settings=build_settings(MAP), symbol_lookup=lookup_returning(AssetClass.INDEX_FUTURE)
     )
     return await check_market_data_providers(
         {"binance": lambda: True, "tradingview": lambda: tradingview_authenticated},
+        {"tradingview"} if credentialed else set(),
         resolver,
         _calendars(),
         _tracked(*symbols),
@@ -48,8 +49,8 @@ async def test_reports_route_and_market_state_per_tracked_symbol() -> None:
     result = await _check(True, FUTURES)
 
     assert result["providers"] == {
-        "binance": {"authenticated": True},
-        "tradingview": {"authenticated": True},
+        "binance": {"authenticated": True, "credentialed": False},
+        "tradingview": {"authenticated": True, "credentialed": True},
     }
     assert result["symbols"][FUTURES] == {
         "provider": "tradingview",
@@ -72,4 +73,12 @@ async def test_lost_session_on_an_unused_provider_is_not_degraded() -> None:
     result = await _check(False)
 
     assert result["symbols"] == {}
+    assert "status" not in result
+
+
+@pytest.mark.asyncio
+async def test_an_anonymous_session_by_configuration_is_not_degraded() -> None:
+    result = await _check(False, FUTURES, credentialed=False)
+
+    assert result["providers"]["tradingview"] == {"authenticated": False, "credentialed": False}
     assert "status" not in result

@@ -5,14 +5,20 @@ provider it routes to and whether its calendar says the market is open now.
 
 Nothing here touches the network. Authentication is read from a cached flag,
 because the container health check polls ``/health`` every 30s and a blocking
-scraper call would time it out. A lost TradingView session reports
-``degraded``, never ``unhealthy``: the scraper re-logs on its next fetch, and a
-health check that fails for it would restart the container for nothing.
+scraper call would time it out.
+
+``degraded`` means a provider was given credentials and holds no session. An
+anonymous provider is not degraded: production scrapes TradingView anonymously
+by choice, and a permanent warning would teach everyone to ignore the flag. It
+reports ``degraded``, never ``unhealthy``: the scraper re-logs on its next
+fetch, and a health check that fails for it would restart the container for
+nothing. The session is built on first fetch, so a credentialed provider reads
+``degraded`` for the first minute after a restart.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,13 +28,10 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 
-#: Providers whose sessions matter to the data they return. An anonymous
-#: TradingView session still answers, but with delayed data and a shorter history.
-SESSION_PROVIDERS = frozenset({"tradingview"})
-
 
 async def check_market_data_providers(
     authenticated: Mapping[str, Callable[[], bool]],
+    credentialed: Collection[str],
     resolver: SymbolProviderResolver,
     calendar_factory: TradingCalendarFactory,
     tracked_symbols: TrackedSymbolRepository,
@@ -36,7 +39,8 @@ async def check_market_data_providers(
     """Provider sessions plus per-symbol routing and market state.
 
     ``authenticated`` maps each registered provider id to a cached,
-    non-blocking session probe. The payload is bounded by the tracked-symbol
+    non-blocking session probe; ``credentialed`` names the providers that were
+    configured to log in. The payload is bounded by the tracked-symbol
     list and never carries bars.
     """
     now = datetime.now(UTC)
@@ -50,12 +54,15 @@ async def check_market_data_providers(
             "is_market_open": calendar.is_open(now),
         }
 
-    providers = {pid: {"authenticated": probe()} for pid, probe in authenticated.items()}
+    providers = {
+        pid: {"authenticated": probe(), "credentialed": pid in credentialed}
+        for pid, probe in authenticated.items()
+    }
     in_use = {s["provider"] for s in symbols.values()}
     degraded = sorted(
         pid
         for pid, state in providers.items()
-        if pid in SESSION_PROVIDERS and pid in in_use and not state["authenticated"]
+        if state["credentialed"] and pid in in_use and not state["authenticated"]
     )
 
     result: dict[str, Any] = {"providers": providers, "symbols": symbols}

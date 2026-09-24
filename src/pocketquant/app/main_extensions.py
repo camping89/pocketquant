@@ -303,6 +303,12 @@ async def drain_backtest_tasks(app: FastAPI, timeout: float = 10.0) -> None:
         logger.warning("backtest_tasks.drain_timeout", abandoned=len(still_pending))
 
 
+def _tradingview_credentialed(settings: Settings) -> bool:
+    """Whether TradingView was configured to log in rather than scrape anonymously."""
+    has_login = settings.tradingview_username and settings.tradingview_password
+    return bool(settings.tradingview_auth_token or has_login)
+
+
 async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
     hc = await container.get(HealthCoordinator)
     hc.register("database", partial(check_database, app.state.database))
@@ -315,6 +321,7 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
         partial(
             check_market_data_providers,
             {"binance": lambda: True, "tradingview": tradingview_client.is_authenticated},
+            {"tradingview"} if _tradingview_credentialed(settings) else set(),
             SymbolProviderResolver(
                 settings=settings, symbol_lookup=await container.get(SymbolLookupHelper)
             ),

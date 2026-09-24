@@ -697,7 +697,7 @@ round-trip chunk).
 4. Create dishka AsyncContainer with providers (initialization order: Core → Persistence → Infrastructure → MarketData → Execution → Services)
 5. Register command/query services with container
 6. `ensure_all_indexes()` creates MongoDB indexes
-7. `register_health_checks()` registers DB/Redis probes and `market_data_providers` (per-provider session state, per-tracked-symbol route and market-open flag; a lost TradingView session reports `degraded`, which keeps the overall status healthy)
+7. `register_health_checks()` registers DB/Redis probes and `market_data_providers` (per-provider session state, per-tracked-symbol route and market-open flag; a provider configured with credentials that holds no session reports `degraded`, which keeps the overall status healthy; an anonymous-by-configuration scraper is not degraded)
 8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`
 9. `recover_orphan_jobs()` detects and resets scheduler jobs stuck in `running` state (crash recovery)
 10. `seed_tracked_symbols()` ensures at least one symbol in registry
