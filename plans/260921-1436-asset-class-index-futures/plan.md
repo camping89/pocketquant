@@ -1424,6 +1424,22 @@ lag read zero for two hours every evening, and the integrity grid expected nothi
 there. It now loads one day past the end. Regression tests in
 `test_cme_globex_calendar.py::TestAWindowEndingAfterTheEveningOpen`.
 
+**Production data repair (after Correction 39).** The calendar bug had also corrupted
+stored bars: every 15m and 1h futures cascade bucket starting 22:00-23:59 UTC was built
+from only its last five 1m bars. Checking every such bar against its own 1m bars on
+2026-09-24 found 7 bad 15m bars and 1 bad 1h bar per symbol, all from the evening of
+2026-09-23 when `sync_1m` first ran for futures (for example ES 1h 22:00: stored
+volume 87, true volume 5091). Older evening bars came from the REST backfill and were
+correct; `sync_backfill` never overwrites an existing bar, so it would not have healed
+them. After a filtered `mongodump` of the futures 15m/1h bars
+(`/opt/pocketquant/backup-futures-15m-1h-20260924T0958.archive` on the VPS), only
+the 24 mismatched bars were rewritten from their 1m bars; a re-check found none left.
+
+**Verified in production after deploy `cbb039f`.** `data_lag_check` ran at 10:01:30 UTC:
+ES/NQ/YM `delayed` at 600 s, BTC `ok` at 0, one `data_lag.state_changed` line per
+symbol. `/sync-status` shows the futures rows delayed, none stuck. Zero
+`partial_aggregate` lines since the deploy.
+
 **Still open.** The 04:00 UTC `sync_integrity` run falls inside a Globex session, so the
 last ~12 minutes of the delayed feed can show as missing on that run and are healed by
 the next sync. Ending the integrity grid at `now - lag` would remove that; not done.
