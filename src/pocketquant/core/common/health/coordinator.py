@@ -18,10 +18,12 @@ class HealthCoordinator:
         results = await asyncio.gather(*checks, return_exceptions=False)
 
         dependencies = dict(zip(self._checks.keys(), results))
+        # A check may report "degraded" — working, but short of full service. It
+        # is surfaced per dependency and never fails the whole instance.
         overall = (
-            "healthy"
-            if all(r.get("status") == "healthy" for r in dependencies.values())
-            else "unhealthy"
+            "unhealthy"
+            if any(r.get("status") == "unhealthy" for r in dependencies.values())
+            else "healthy"
         )
 
         return {"status": overall, "dependencies": dependencies}

@@ -30,6 +30,9 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.core.infra.market_data.provider_health_check import check_market_data_providers
+from pocketquant.core.infra.market_data.symbol_provider_resolver import SymbolProviderResolver
 from pocketquant.core.infra.persistence.health_checks import check_database, check_redis
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -60,7 +63,9 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
+from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
 from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
@@ -100,6 +105,7 @@ def assert_utc_runtime() -> None:
         raise RuntimeError(f"{prefix} tzlocal={tz_name!r}. Set TZ=UTC.")
 
     logger.info("runtime.timezone", tz=tz_env, tzname=time.tzname, tzlocal=tz_name)
+
 
 # All repository types that need MongoDB indexes on startup
 _REPO_TYPES: list[type] = [
@@ -301,6 +307,21 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
     hc = await container.get(HealthCoordinator)
     hc.register("database", partial(check_database, app.state.database))
     hc.register("redis", partial(check_redis, app.state.cache))
+
+    settings = await container.get(Settings)
+    tradingview_client = await container.get(TvDatafeedClient)
+    hc.register(
+        "market_data_providers",
+        partial(
+            check_market_data_providers,
+            {"binance": lambda: True, "tradingview": tradingview_client.is_authenticated},
+            SymbolProviderResolver(
+                settings=settings, symbol_lookup=await container.get(SymbolLookupHelper)
+            ),
+            await container.get(TradingCalendarFactory),
+            await container.get(TrackedSymbolRepository),
+        ),
+    )
 
 
 def handle_startup_failure(error: Exception) -> None:
