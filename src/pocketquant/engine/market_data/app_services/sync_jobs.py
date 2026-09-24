@@ -7,6 +7,10 @@ API calls). Sole MongoDB writer for `bars` collection across all timeframes.
 sync_verify_cascade runs hourly: picks one sample tracked symbol round-robin,
 fetches REST 5m bars, compares with cascade-computed 5m, logs divergence alerts.
 
+data_lag_check runs every minute after sync_1m: measures how far each tracked
+symbol's 1m feed runs behind real time and stores the reading in Redis for the
+UI. It logs only when a symbol's feed state changes.
+
 All job entrypoints are module-level coroutines so APScheduler can serialize them
 as text references for MongoDBJobStore. Dependencies (SyncService, repos) are
 resolved at job-execution time from a module-level container reference set by
@@ -20,6 +24,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from pocketquant.core.common.constants import CACHE_KEY_DATA_LAG, TTL_DATA_LAG
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_BACKFILL,
@@ -30,9 +35,13 @@ from pocketquant.core.domain.market_data.data_provider_port import IDataProvider
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.core.infra.persistence import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
+)
+from pocketquant.core.infra.persistence.repositories.sync_status_repository import (
+    SyncStatusRepository,
 )
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
@@ -43,6 +52,7 @@ from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
 )
+from pocketquant.engine.market_data.data_lag_service import FeedState, compute_data_lag
 from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 if TYPE_CHECKING:
@@ -176,9 +186,7 @@ async def _sync_by_intervals(
 
     # One interval of grace after the close, so the session's final bar is still
     # fetched once it has actually closed.
-    grace = timedelta(
-        seconds=INTERVAL_SECONDS[max(intervals, key=lambda i: INTERVAL_SECONDS[i])]
-    )
+    grace = timedelta(seconds=INTERVAL_SECONDS[max(intervals, key=lambda i: INTERVAL_SECONDS[i])])
 
     for symbol in symbols:
         calendar = await calendar_factory.for_symbol(symbol)
@@ -670,6 +678,82 @@ async def sync_verify_cascade() -> None:
         raise
 
 
+async def _run_data_lag(name: str) -> None:
+    container = _get_container()
+    history_repo = await container.get(JobHistoryRepository)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+    sync_status_repo = await container.get(SyncStatusRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
+    cache = await container.get(Cache)
+
+    started = datetime.now(UTC)
+    doc_id: str | None = None
+    try:
+        doc_id = await history_repo.record_start(name)
+    except Exception:
+        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
+
+    try:
+        for ts in await tracked_symbol_repo.list_all():
+            symbol = ts.symbol.upper()
+            try:
+                calendar = await calendar_factory.for_symbol(symbol)
+                snapshot = await compute_data_lag(
+                    symbol, bar_repo, sync_status_repo, calendar, now=started
+                )
+                key = CACHE_KEY_DATA_LAG.format(symbol=symbol)
+                previous = await cache.get(key)
+                await cache.set(key, snapshot.to_cache_dict(), ttl=TTL_DATA_LAG)
+            except Exception:
+                logger.error("data_lag.check_failed", symbol=symbol, exc_info=True)
+                continue
+            _log_feed_transition(previous, snapshot.state, symbol, snapshot.lag_seconds)
+        if doc_id:
+            await history_repo.record_finish(
+                doc_id, status="completed", duration_ms=_ms_since(started)
+            )
+    except Exception as exc:
+        if doc_id:
+            try:
+                await history_repo.record_finish(
+                    doc_id,
+                    status="failed",
+                    duration_ms=_ms_since(started),
+                    error=str(exc),
+                )
+            except Exception:
+                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
+        raise
+
+
+def _log_feed_transition(
+    previous: dict | None, state: FeedState, symbol: str, lag_seconds: int | None
+) -> None:
+    """Log a feed state change once, never the steady state.
+
+    A delayed feed stays delayed all session, so logging every reading would be
+    a per-symbol-per-minute line. Entering STUCK is the one actionable change and
+    is a WARNING; the rest (a session opening delayed, a feed recovering) are
+    bounded to a few per symbol per day and stay INFO.
+    """
+    before = previous.get("state") if previous else FeedState.UNKNOWN.value
+    if before == state.value:
+        return
+    emit = logger.warning if state is FeedState.STUCK else logger.info
+    emit(
+        "data_lag.state_changed",
+        symbol=symbol,
+        from_state=before,
+        to_state=state.value,
+        lag_seconds=lag_seconds,
+    )
+
+
+async def data_lag_check() -> None:
+    await _run_data_lag("data_lag_check")
+
+
 async def sync_backfill() -> None:
     await _run_sync("sync_backfill", SYNC_INTERVALS, 5000, source=SOURCE_REST_BACKFILL)
 
@@ -728,7 +812,7 @@ async def register_sync_jobs(
     container: AsyncContainer,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Wire container reference + register 5 sync/integrity jobs as text refs.
+    """Wire container reference + register 6 sync/integrity/lag jobs as text refs.
 
     Per-job ``misfire_grace_time`` matches each cadence (tight for high-frequency,
     1h for heavy daily). After registration, scans ``job_history`` for missed
@@ -756,6 +840,15 @@ async def register_sync_jobs(
         cron_expression="*/1 * * * *",
         second=2,
         misfire_grace_time=120,
+    )
+    # data_lag_check reads what sync_1m just wrote, so it runs mid-minute.
+    # A tight grace: a reading older than a minute is replaced by the next one.
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:data_lag_check",
+        job_id="data_lag_check",
+        cron_expression="*/1 * * * *",
+        second=30,
+        misfire_grace_time=60,
     )
     job_scheduler.add_cron_job(
         f"{_MODULE}:sync_verify_cascade",
@@ -801,4 +894,4 @@ async def register_sync_jobs(
     history_repo = await container.get(JobHistoryRepository)
     await enqueue_missed_catchups(history_repo, job_scheduler)
 
-    logger.info("market_data.registered_sync_jobs", job_count=5)
+    logger.info("market_data.registered_sync_jobs", job_count=6)

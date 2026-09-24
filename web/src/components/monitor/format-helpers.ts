@@ -19,6 +19,8 @@ export function statusVariant(s: SyncStatus): 'ok' | 'warn' | 'error' | 'neutral
   if (s.is_market_open === false) return 'neutral'
   // Stuck overrides "completed" green — sync ran but data isn't progressing.
   if (s.is_stuck) return 'warn'
+  // A delayed feed is working as designed, just late: flagged, not alarming.
+  if (s.is_delayed) return 'neutral'
   if (s.status === 'completed') return 'ok'
   if (s.status === 'pending') return 'warn'
   return 'neutral'

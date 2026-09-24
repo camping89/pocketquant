@@ -3,6 +3,11 @@ from fastapi import APIRouter, Query
 
 from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.engine.market_data.data_lag_service import (
+    DataLagQueryService,
+    DataLagResponse,
+    GetDataLagQuery,
+)
 from pocketquant.engine.market_data.sync_status_service import (
     GetSymbolSyncStatusQuery,
     GetSyncStatusQuery,
@@ -31,6 +36,8 @@ async def get_sync_statuses(
             "consecutive_empty_fetches": s.consecutive_empty_fetches,
             "is_stuck": s.is_stuck,
             "is_market_open": s.is_market_open,
+            "lag_seconds": s.lag_seconds,
+            "is_delayed": s.is_delayed,
         }
         for s in statuses
     ]
@@ -55,4 +62,17 @@ async def get_symbol_sync_status(
         "last_bar_at": status.last_bar_at,
         "error_message": status.error_message,
         "is_market_open": status.is_market_open,
+        "is_stuck": status.is_stuck,
+        "lag_seconds": status.lag_seconds,
+        "is_delayed": status.is_delayed,
     }
+
+
+@router.get("/data-lag/{symbol}", response_model=DataLagResponse)
+async def get_data_lag(
+    symbol: str,
+    data_lag_service: FromDishka[DataLagQueryService],
+) -> DataLagResponse:
+    """How far this symbol's data runs behind real time, as the minute check last saw it."""
+    symbol = validate_composite_symbol(symbol)
+    return await data_lag_service.get_data_lag(GetDataLagQuery(symbol=symbol))

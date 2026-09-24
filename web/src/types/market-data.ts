@@ -88,6 +88,22 @@ export interface SyncStatus {
   consecutive_empty_fetches?: number
   is_stuck?: boolean
   is_market_open?: boolean
+  /** Trading seconds the symbol's 1m feed runs behind real time; null with no 1m bars. */
+  lag_seconds?: number | null
+  /** The feed is more than three minutes behind (delayed or stalled). */
+  is_delayed?: boolean
+}
+
+/** How far a symbol's data runs behind real time, from GET /market-data/data-lag/{symbol}. */
+export type FeedState = 'ok' | 'delayed' | 'stuck' | 'closed' | 'unknown'
+
+export interface DataLag {
+  symbol: string
+  state: FeedState
+  lag_seconds: number | null
+  is_market_open: boolean | null
+  last_bar_at: string | null
+  checked_at: string | null
 }
 
 export interface IntegrityReport {

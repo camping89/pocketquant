@@ -8,6 +8,8 @@ import {
   statusVariant,
 } from './format-helpers'
 import { useFmt } from '../../lib/use-timezone'
+import { dataLagMessage, formatLag } from '../../lib/data-lag'
+import { parseSymbol } from '../../lib/symbol-format'
 import { StatusPill } from './status-pill'
 import { StuckBadge } from './stuck-badge'
 
@@ -46,20 +48,28 @@ export function DataHealthRow({
 
   const variant = statusVariant(s)
   const marketClosed = s.is_market_open === false
+  const lag = s.lag_seconds ?? null
+  // The feed's own state lives on the 1m row. A higher row can be stuck on its
+  // own (its cascade stopped) while the feed is merely delayed, and must not be
+  // told the feed stalled.
+  const feedStalled = s.is_stuck && s.interval === '1m'
+  const feedState = feedStalled ? 'stuck' : s.is_delayed ? 'delayed' : 'ok'
   const statusLabel = s.error_message
     ? 'error'
     : marketClosed
       ? 'closed'
       : s.is_stuck
-        ? 'delayed'
-        : s.status === 'completed'
-          ? 'synced'
-          : s.status
+        ? 'stalled'
+        : s.is_delayed && lag !== null
+          ? `delayed ${formatLag(lag)}`
+          : s.status === 'completed'
+            ? 'synced'
+            : s.status
   const statusTitle = marketClosed
     ? 'Market is closed on this symbol\u2019s trading calendar — no new bars are expected.'
-    : s.is_stuck
-      ? 'Sync ran successfully — provider data lag detected. Auto-recovers when provider publishes the next bar.'
-      : undefined
+    : s.is_stuck && !feedStalled
+      ? `No new ${s.interval} bar in 3× its cadence, beyond what the feed delay explains.`
+      : (dataLagMessage(parseSymbol(s.symbol).code, feedState, lag) ?? undefined)
 
   return (
     <>

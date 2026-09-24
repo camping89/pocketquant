@@ -1,4 +1,5 @@
 import { useRealtimeQuote } from '../../hooks/use-realtime-quote'
+import { DataLagBadge } from '../data-lag-badge'
 import { parseSymbol } from '../../lib/symbol-format'
 import { TickerStaleIndicator } from './ticker-stale-indicator'
 
@@ -49,6 +50,7 @@ export function TickerWidget({ symbol }: TickerWidgetProps) {
       <div className="ticker-widget" style={containerStyle}>
         <TickerStaleIndicator lastUpdateTs={lastUpdateTs} />
         <span style={{ color: '#8b8b9a', fontSize: 12 }}>{code} — loading…</span>
+        <DataLagBadge symbol={symbol} />
       </div>
     )
   }
@@ -73,6 +75,7 @@ export function TickerWidget({ symbol }: TickerWidgetProps) {
           {formatChange(quote.change, quote.change_percent)}
         </span>
       )}
+      <DataLagBadge symbol={symbol} />
     </div>
   )
 }

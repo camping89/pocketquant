@@ -14,6 +14,7 @@ from dishka import Provider, Scope, provide
 from pocketquant.engine.backtest.backtest_command_service import BacktestCommandService
 from pocketquant.engine.backtest.backtest_query_service import BacktestQueryService
 from pocketquant.engine.backtest.backtest_stats_service import BacktestStatsService
+from pocketquant.engine.market_data.data_lag_service import DataLagQueryService
 from pocketquant.engine.market_data.ohlcv_service import OhlcvService
 from pocketquant.engine.market_data.quotes_service import QuoteQueryService
 from pocketquant.engine.market_data.symbols_service import SymbolQueryService
@@ -28,6 +29,7 @@ class ServicesProvider(Provider):
     ohlcv_service = provide(OhlcvService, scope=Scope.APP)
     quote_query_service = provide(QuoteQueryService, scope=Scope.APP)
     sync_status_query_service = provide(SyncStatusQueryService, scope=Scope.APP)
+    data_lag_query_service = provide(DataLagQueryService, scope=Scope.APP)
     symbol_query_service = provide(SymbolQueryService, scope=Scope.APP)
     backtest_command_service = provide(BacktestCommandService, scope=Scope.APP)
     backtest_query_service = provide(BacktestQueryService, scope=Scope.APP)

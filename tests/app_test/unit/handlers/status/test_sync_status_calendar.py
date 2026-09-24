@@ -18,10 +18,12 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
+from pocketquant.engine.market_data.data_lag_service import FeedState
 from pocketquant.engine.market_data.sync_internals.anomaly_log import emit_no_progress
 from pocketquant.engine.market_data.sync_status_service import (
     GetSyncStatusQuery,
     SyncStatusQueryService,
+    _Feed,
     _is_stuck,
 )
 
@@ -39,24 +41,27 @@ class _ClosedCalendar(Continuous24x7Calendar):
         return instant - timedelta(hours=1)
 
 
+_HEALTHY_FEED = _Feed(lag_seconds=0, state=FeedState.OK)
+
+
 class TestStucknessIsMeasuredToTheLastClose:
     def test_a_bar_from_just_before_the_close_is_not_stuck(self) -> None:
         now = datetime.now(UTC)
         closed = _ClosedCalendar()
-        # Two minutes before the close an hour ago: ancient by wall clock,
+        # Ten minutes before the close an hour ago: ancient by wall clock,
         # current by the calendar.
-        last_bar = closed.previous_close(now) - timedelta(minutes=2)
+        last_bar = closed.previous_close(now) - timedelta(minutes=10)
 
-        assert _is_stuck(last_bar, Interval.MINUTE_1.value, closed) is False
+        assert _is_stuck(last_bar, Interval.MINUTE_5.value, closed, _HEALTHY_FEED, now) is False
         # The same bar against a market that never closes is plainly stale.
-        assert _is_stuck(last_bar, Interval.MINUTE_1.value, CALENDAR) is True
+        assert _is_stuck(last_bar, Interval.MINUTE_5.value, CALENDAR, _HEALTHY_FEED, now) is True
 
     def test_a_bar_from_long_before_the_close_is_still_stuck(self) -> None:
         now = datetime.now(UTC)
         closed = _ClosedCalendar()
         last_bar = closed.previous_close(now) - timedelta(hours=5)
 
-        assert _is_stuck(last_bar, Interval.MINUTE_1.value, closed) is True
+        assert _is_stuck(last_bar, Interval.MINUTE_5.value, closed, _HEALTHY_FEED, now) is True
 
 
 class TestNoProgressIsSilentWhileTheMarketIsShut:

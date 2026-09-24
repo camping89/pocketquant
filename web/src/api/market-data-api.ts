@@ -1,6 +1,7 @@
 import { apiFetch } from './api-client'
 import type {
   OHLCVResponse,
+  DataLag,
   SymbolInfo,
   SyncStatus,
   CurrentBarResponse,
@@ -57,6 +58,10 @@ export async function fetchCurrentBar(
 
 export async function fetchSyncStatus(): Promise<SyncStatus[]> {
   return apiFetch<SyncStatus[]>('/api/v1/market-data/sync-status')
+}
+
+export async function fetchDataLag(symbol: string): Promise<DataLag> {
+  return apiFetch<DataLag>(`/api/v1/market-data/data-lag/${encodeSymbolForUrl(symbol)}`)
 }
 
 export { toUTCTimestamp }

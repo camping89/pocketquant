@@ -35,4 +35,9 @@ describe('statusVariant', () => {
   it('stays neutral on a stuck symbol in a closed market', () => {
     expect(statusVariant({ ...stuck, is_market_open: false })).toBe('neutral')
   })
+
+  it('reads a delayed but flowing feed as neutral, not synced-green', () => {
+    const delayed = { ...stuck, is_stuck: false, is_delayed: true, is_market_open: true }
+    expect(statusVariant(delayed)).toBe('neutral')
+  })
 })

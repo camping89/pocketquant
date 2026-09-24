@@ -68,9 +68,27 @@ def calendar_factory() -> AsyncMock:
     return factory
 
 
+class _FreshFeedBarRepo:
+    """Serves a just-closed 1m bar for the feed-lag lookup and delegates the rest.
+
+    These tests are about each row's own bars. Without this, the one bar a test
+    configures would also stand in for the symbol's 1m feed and make every row
+    look delayed.
+    """
+
+    def __init__(self, inner: AsyncMock) -> None:
+        self._inner = inner
+        self.count = inner.count
+
+    async def get_latest(self, symbol: str, interval: Interval):
+        if interval is Interval.MINUTE_1:
+            return _bar(NOW - timedelta(seconds=60), Interval.MINUTE_1)
+        return await self._inner.get_latest(symbol, interval)
+
+
 @pytest.fixture
 def handler(sync_status_repo, bar_repo, calendar_factory) -> SyncStatusQueryService:
-    return SyncStatusQueryService(sync_status_repo, bar_repo, calendar_factory)
+    return SyncStatusQueryService(sync_status_repo, _FreshFeedBarRepo(bar_repo), calendar_factory)
 
 
 # get_sync_status — list of all tracked symbols/intervals
