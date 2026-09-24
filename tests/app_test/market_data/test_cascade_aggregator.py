@@ -418,63 +418,24 @@ class TestBoundaryStepFallback:
         assert [e for e in logs if e.get("event") == "cascade.boundary_step_fallback"] == []
 
 
-class TestExpectedCountComesFromTheCalendar:
-    """A bucket's expected bar count is the calendar's, not a constant 60/1440."""
+class TestShortBucketsAreNotReportedByTheCascade:
+    """A short bucket is still aggregated, and never logged by the cascade.
+
+    An open bucket is still filling, a delayed feed fills closed buckets late,
+    and a thin market has untraded minutes. Real gaps belong to the daily
+    integrity check, so the cascade stays silent about all of them.
+    """
 
     # 21:00-22:00 UTC is the CME daily maintenance halt: zero trading minutes
     # there, sixty on a market that never closes.
     HALT_START = datetime(2026, 6, 10, 21, 0, tzinfo=UTC)
 
-    async def _cascade_one_bucket(self, calendar, bar_count: int) -> list[dict]:
+    async def _cascade_one_bucket(
+        self, symbol: str, boundary: datetime, calendar, bar_count: int
+    ) -> tuple[AsyncMock, list[dict]]:
         bars = [
             Bar(
-                symbol="ES1!:CME_MINI",
-                interval=Interval.MINUTE_1,
-                datetime=self.HALT_START + timedelta(minutes=i),
-                open=1.0,
-                high=1.0,
-                low=1.0,
-                close=1.0,
-                volume=1.0,
-            )
-            for i in range(bar_count)
-        ]
-        bar_repo = AsyncMock()
-        bar_repo.find = AsyncMock(return_value=bars)
-        bar_repo.upsert_bar = AsyncMock()
-
-        # Only the hour under test gets a bucket; other timeframes would span
-        # the halt differently and their warnings are not what this pins.
-        with (
-            patch(
-                "pocketquant.engine.market_data.app_services.cascade_aggregator.compute_boundaries",
-                side_effect=lambda tf, *a: [self.HALT_START] if tf is Interval.HOUR_1 else [],
-            ),
-            structlog.testing.capture_logs() as logs,
-        ):
-            await cascade_for_symbol("ES1!:CME_MINI", 60, bar_repo, calendar)
-        return [e for e in logs if e.get("event") == "cascade.partial_aggregate"]
-
-    @pytest.mark.asyncio
-    async def test_a_halted_hour_expects_nothing_and_reports_no_shortfall(self) -> None:
-        partials = await self._cascade_one_bucket(CME, bar_count=3)
-        assert partials == []
-
-    @pytest.mark.asyncio
-    async def test_the_same_hour_on_a_24x7_calendar_expects_sixty(self) -> None:
-        partials = await self._cascade_one_bucket(CALENDAR, bar_count=3)
-        hourly = [p for p in partials if p["tf"] == Interval.HOUR_1.value]
-        assert hourly and hourly[0]["expected"] == 60
-        assert hourly[0]["calendar_id"] == CALENDAR.calendar_id
-
-
-class TestPartialAggregateLevelTracksWhetherTheBucketClosed:
-    """An open bucket is short by arithmetic; a closed one is short by a gap."""
-
-    async def _partials(self, boundary: datetime, bar_count: int) -> list[dict]:
-        bars = [
-            Bar(
-                symbol="BTCUSDT:BINANCE",
+                symbol=symbol,
                 interval=Interval.MINUTE_1,
                 datetime=boundary + timedelta(minutes=i),
                 open=1.0,
@@ -496,30 +457,36 @@ class TestPartialAggregateLevelTracksWhetherTheBucketClosed:
             ),
             structlog.testing.capture_logs() as logs,
         ):
-            await cascade_for_symbol("BTCUSDT:BINANCE", 120, bar_repo, CALENDAR)
-        return [e for e in logs if e.get("event") == "cascade.partial_aggregate"]
+            await cascade_for_symbol(symbol, 120, bar_repo, calendar)
+        return bar_repo, logs
 
     @pytest.mark.asyncio
-    async def test_the_open_bucket_is_debug(self) -> None:
-        """The hour we are inside cannot be complete — that is not news."""
-        current_hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-
-        partials = await self._partials(current_hour, bar_count=3)
-
-        assert partials, "expected a shortfall to be reported at some level"
-        assert partials[0]["log_level"] == "debug"
-        assert partials[0]["in_progress"] is True
-
-    @pytest.mark.asyncio
-    async def test_a_closed_bucket_short_of_bars_is_still_a_warning(self) -> None:
-        """A finished hour holding 3 of its 60 minutes has really lost bars."""
+    async def test_a_closed_bucket_short_of_bars_is_aggregated_silently(self) -> None:
+        """A finished hour holding 3 of its 60 minutes still becomes a bar."""
         past_hour = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)
 
-        partials = await self._partials(past_hour, bar_count=3)
+        bar_repo, logs = await self._cascade_one_bucket(
+            "BTCUSDT:BINANCE", past_hour, CALENDAR, bar_count=3
+        )
 
-        assert partials, "expected a shortfall to be reported at some level"
-        assert partials[0]["log_level"] == "warning"
-        assert partials[0]["in_progress"] is False
+        assert bar_repo.upsert_bar.await_count == 1
+        assert [e for e in logs if e.get("log_level") in ("warning", "error")] == []
+        assert not any("partial" in str(e.get("event")) for e in logs)
+
+    @pytest.mark.asyncio
+    async def test_a_halted_hour_bounds_the_query_by_the_calendar(self) -> None:
+        """The halt has no trading minutes, so only the edge headroom is fetched."""
+        bar_repo, _ = await self._cascade_one_bucket(
+            "ES1!:CME_MINI", self.HALT_START, CME, bar_count=3
+        )
+        assert bar_repo.find.await_args.kwargs["limit"] == 5
+
+    @pytest.mark.asyncio
+    async def test_the_same_hour_on_a_24x7_calendar_fetches_sixty(self) -> None:
+        bar_repo, _ = await self._cascade_one_bucket(
+            "BTCUSDT:BINANCE", self.HALT_START, CALENDAR, bar_count=3
+        )
+        assert bar_repo.find.await_args.kwargs["limit"] == 65
 
 
 class TestCascadedBarsCarryTheirCalendar:

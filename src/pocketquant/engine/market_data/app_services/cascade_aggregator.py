@@ -192,10 +192,8 @@ async def cascade_for_symbol(
 
         for boundary in boundaries:
             bucket_end = boundary + timedelta(seconds=tf_secs)
-            # How many 1m bars this bucket should hold is the calendar's answer,
-            # not a constant: a holiday or an early close makes a session bucket
-            # legitimately shorter, and a fixed table would log every one of
-            # them as a partial aggregate.
+            # The calendar says how many 1m bars this bucket can hold; a holiday
+            # or an early close makes a session bucket legitimately shorter.
             expected_count = len(calendar.trading_minutes(boundary, bucket_end))
 
             source_bars = await bar_repo.find(
@@ -206,32 +204,13 @@ async def cascade_for_symbol(
                 limit=expected_count + 5,  # small headroom for alignment edge bars
             )
 
+            # A bucket short of 1m bars is not reported here. An open bucket is
+            # still filling, a delayed feed fills closed buckets late, and a
+            # thin market has minutes with no trade at all. Real gaps are the
+            # daily integrity check's job (``integrity_jobs.check_integrity``),
+            # which feeds ``sync_repair``.
             if not source_bars:
                 continue
-
-            actual_count = len(source_bars)
-            if actual_count < expected_count:
-                # A bucket that has not closed yet is short because it is still
-                # filling, which is arithmetic rather than an anomaly. Every
-                # cascade re-aggregates the open bucket of every timeframe once
-                # a minute, so warning about it costs one line per symbol per
-                # timeframe per minute and scales with the symbol count —
-                # exactly the hot-path flooding CLAUDE.md puts at DEBUG.
-                # A bucket whose window has closed and is still short really has
-                # missing 1m bars, and stays a WARNING.
-                in_progress = bucket_end > now
-                emit = logger.debug if in_progress else logger.warning
-                emit(
-                    "cascade.partial_aggregate",
-                    symbol=sym,
-                    tf=tf.value,
-                    calendar_id=calendar.calendar_id,
-                    boundary=boundary.isoformat(),
-                    expected=expected_count,
-                    actual=actual_count,
-                    missing=expected_count - actual_count,
-                    in_progress=in_progress,
-                )
 
             ohlcv = aggregate_ohlcv(source_bars)
             if ohlcv is None:
