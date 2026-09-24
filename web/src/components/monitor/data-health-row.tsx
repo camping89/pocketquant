@@ -70,7 +70,7 @@ export function DataHealthRow({
         </td>
         <td className="num">{s.bar_count?.toLocaleString() ?? '—'}</td>
         <td className="num">{fmt.barDate(s.last_bar_at)}</td>
-        <td className={`num ${ageColorClass(s.last_bar_at, s.interval)}`}>{formatAge(s.last_bar_at)}</td>
+        <td className={`num ${ageColorClass(s.last_bar_at, s.interval, s.is_market_open)}`}>{formatAge(s.last_bar_at)}</td>
         <td className={integrityColorClass(report)}>{formatIntegrity(report)}</td>
         <td>
           <StatusPill variant={variant} label={statusLabel} title={statusTitle} />

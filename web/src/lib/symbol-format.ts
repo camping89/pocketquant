@@ -1,5 +1,5 @@
 /**
- * Helpers for composite symbol format: "{CODE}:{EXCHANGE}" (e.g. "BTCUSDT:BINANCE").
+ * Helpers for composite symbol format: "{CODE}:{EXCHANGE}" (e.g. "BTCUSDT:BINANCE" or "ES1!:CME_MINI").
  * Decomposition is allowed ONLY at the display layer — never in business logic.
  */
 

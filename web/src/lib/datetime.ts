@@ -85,7 +85,9 @@ export function formatAge(iso: string | null): string {
   return `${Math.floor(ms / 86_400_000)}d`
 }
 
-export function ageColorClass(lastBarAt: string | null, interval: string): string {
+/** A closed market is not ageing, so `isMarketOpen === false` always reads neutral. */
+export function ageColorClass(lastBarAt: string | null, interval: string, isMarketOpen?: boolean): string {
+  if (isMarketOpen === false) return 'age-neutral'
   const parsed = parseIso(lastBarAt)
   if (!parsed) return 'age-neutral'
   const ageMs = Date.now() - parsed.valueOf()

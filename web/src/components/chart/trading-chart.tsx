@@ -35,7 +35,7 @@ import { readChartColors } from '../../lib/theme-colors'
 import { makeChartTimeFormatter, type TimezoneMode } from '../../lib/datetime'
 
 interface TradingChartProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "ES1!:CME_MINI" */
   symbol: string
   interval: Interval
   indicators: IndicatorConfig
