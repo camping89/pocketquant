@@ -153,9 +153,12 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
         start = start.astimezone(UTC)
         end = end.astimezone(UTC)
         minutes: list[datetime] = []
-        # Reach back a day: a session open the evening before can still be
-        # contributing minutes inside the requested window.
-        schedule = self._schedule(start.date() - timedelta(days=1), end.date())
+        # Reach a day each way. A session is dated by the day it closes but
+        # opens the evening before, so the session that closes the day before
+        # ``start`` can still be trading inside the window, and the one dated the
+        # day after ``end`` is already trading when the window ends after its
+        # evening open.
+        schedule = self._schedule(start.date() - timedelta(days=1), end.date() + timedelta(days=1))
         for _, row in schedule.iterrows():
             lower = max(start, self._as_utc(row["market_open"]))
             upper = min(end, self._as_utc(row["market_close"]))

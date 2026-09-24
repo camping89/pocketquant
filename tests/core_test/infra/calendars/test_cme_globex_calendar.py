@@ -99,8 +99,7 @@ class TestEveryCallerSurvivesTheWeekendGap:
             # Exactly what sync_jobs._sync_by_intervals evaluates per symbol.
             # The value is not the point — reaching it without raising is.
             skip = not (
-                calendar.is_open(instant)
-                or (instant - calendar.previous_close(instant)) <= grace
+                calendar.is_open(instant) or (instant - calendar.previous_close(instant)) <= grace
             )
             assert isinstance(skip, bool)
 
@@ -165,3 +164,33 @@ class TestNoIntradayEquityIndexHalt:
         assert calendar.is_open(self._at(15, 59)) is True
         assert calendar.is_open(self._at(16, 0)) is False
         assert calendar.is_open(self._at(16, 59)) is False
+
+
+class TestAWindowEndingAfterTheEveningOpen:
+    """A session opens the evening before the day it is dated by.
+
+    A window that ends between that open and UTC midnight holds trading minutes
+    from the next-dated session. Counting only up to the window's own date
+    reads those two hours of every evening as closed, which made feed lag read
+    zero and the integrity grid expect nothing there.
+    """
+
+    def test_the_first_minutes_after_the_sunday_open_are_trading_minutes(
+        self, calendar: CmeGlobexCalendarAdapter
+    ) -> None:
+        sunday_open = datetime(2026, 9, 20, 22, 0, tzinfo=UTC)
+
+        minutes = calendar.trading_minutes(sunday_open, sunday_open + timedelta(minutes=5))
+
+        assert minutes == [sunday_open + timedelta(minutes=i) for i in range(5)]
+
+    def test_a_weekday_evening_window_spans_the_halt_and_the_reopen(
+        self, calendar: CmeGlobexCalendarAdapter
+    ) -> None:
+        # Tuesday 20:30-22:30 UTC: 30 minutes before the 21:00 close, the halt,
+        # then 30 minutes of Wednesday's session.
+        start = datetime(2026, 9, 22, 20, 30, tzinfo=UTC)
+
+        minutes = calendar.trading_minutes(start, start + timedelta(hours=2))
+
+        assert len(minutes) == 60
