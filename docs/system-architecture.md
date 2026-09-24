@@ -170,7 +170,7 @@ domain/
 All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mongo()` for persistence.
 
 **Example - Symbol Entity (Flattened from SymbolAggregate):**
-Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_type`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
+Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_class`, `calendar_id`, `contract_spec`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
 
 **Composite Symbol Format:**
 Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
@@ -500,6 +500,11 @@ src/
 | Redis connection | `core/infra/persistence/redis.py` |
 | All repositories | `core/infra/persistence/repositories/` |
 | Binance REST + WS clients | `core/infra/binance/` |
+| Trading calendar port + 24/7 implementation | `core/domain/market_data/trading_calendar_port.py`, `core/domain/market_data/continuous_24x7_calendar.py` |
+| CME Globex equity calendar | `core/infra/calendars/cme_globex_calendar_adapter.py` |
+| Provider routing adapters | `core/infra/market_data/` |
+| TradingView client, mappers, adapters | `core/infra/tradingview/` |
+| Asset class + contract spec | `core/domain/shared/enums.py`, `core/domain/symbol/value_objects.py` |
 | OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
 | PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
 | APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
@@ -678,7 +683,7 @@ round-trip chunk).
 
 6 providers + auto-resolution via type hints. Files: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py` lifespan.
 
-**Providers:** CoreProvider (Settings, EventBus max_history=50) → PersistenceProvider (Database, Cache, 12 repos) → InfrastructureProvider (BrokerFactory, Binance/OKX WS, JobScheduler) → MarketDataProvider (BarAppService, QuoteAppService, 8 sync jobs) → ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService, LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService).
+**Providers:** CoreProvider (Settings, EventBus max_history=50) → PersistenceProvider (Database, Cache, 12 repos) → InfrastructureProvider (BrokerFactory, Binance/OKX WS, JobScheduler, TradingCalendarFactory, and the `IDataProviderPort` as a `RoutingDataProviderAdapter` over `{binance, tradingview}`) → MarketDataProvider (BarAppService, QuoteAppService, the realtime quote port as a `RoutingRealtimeQuoteAdapter`, 8 sync jobs) → ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService, LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService).
 
 **8 Background Jobs:** `sync_5m/15m/hourly/swing` (every Nm +2s offset, prevent bar-close race), `sync_daily` (cron 00:05 UTC), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC check gaps 7d), `sync_repair` (every 12h delete/resync). Sub-daily bounded retry (0/3/8s, 15s budget); catch-up on startup if > grace window.
 
@@ -692,7 +697,7 @@ round-trip chunk).
 4. Create dishka AsyncContainer with providers (initialization order: Core → Persistence → Infrastructure → MarketData → Execution → Services)
 5. Register command/query services with container
 6. `ensure_all_indexes()` creates MongoDB indexes
-7. `register_health_checks()` registers DB/Redis/job health probes
+7. `register_health_checks()` registers DB/Redis probes and `market_data_providers` (per-provider session state, per-tracked-symbol route and market-open flag; a lost TradingView session reports `degraded`, which keeps the overall status healthy)
 8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`
 9. `recover_orphan_jobs()` detects and resets scheduler jobs stuck in `running` state (crash recovery)
 10. `seed_tracked_symbols()` ensures at least one symbol in registry
@@ -779,11 +784,11 @@ core ◁ engine ◁ app
 
 ## Configuration
 
-Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), `MARKET_DATA_PROVIDERS` (JSON `{asset_class: [provider_id, ...]}`, ordered primary-first), `SYMBOL_PROVIDER_OVERRIDES` (JSON `{COMPOSITE_SYMBOL: [provider_id, ...]}`). Both routing vars replace their whole mapping rather than merging into the defaults. TradingView (index futures): `TRADINGVIEW_PLAN` (`free` | `cme_non_pro`) is the single entitlement knob and derives the bar cap, the poll floor and whether the feed is real-time; `TRADINGVIEW_USERNAME`/`TRADINGVIEW_PASSWORD` and `TRADINGVIEW_AUTH_TOKEN` (which wins over them) are optional; `TRADINGVIEW_MAX_BARS` and `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than the plan allows. See [deployment.md](./deployment.md) for per-env details.
+Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), `MARKET_DATA_PROVIDERS` (JSON `{asset_class: [provider_id, ...]}`, ordered primary-first), `SYMBOL_PROVIDER_OVERRIDES` (JSON `{COMPOSITE_SYMBOL: [provider_id, ...]}`). Both routing vars replace their whole mapping rather than merging into the defaults. TradingView (index futures): `TRADINGVIEW_PLAN` (`free` | `cme_non_pro`) is the single entitlement knob and derives the bar cap, the poll floor and whether the feed is real-time; `TRADINGVIEW_USERNAME`/`TRADINGVIEW_PASSWORD` and `TRADINGVIEW_AUTH_TOKEN` (which wins over them) are optional; `TRADINGVIEW_MAX_BARS` and `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than the plan allows. `TZ` must be `UTC`: `assert_utc_runtime()` refuses to start on any other process zone. See [deployment.md](./deployment.md) for per-env details.
 
 ## Dependencies
 
-FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pytest, ruff (lint), pyright (type check).
+FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pandas_market_calendars (CME session calendar, confined to `core.infra.calendars`), tvdatafeed (TradingView scraper, installed from a pinned git commit, confined to `core.infra.tradingview`), pytest, ruff (lint), pyright (type check).
 
 ## Known Limitations
 
@@ -798,7 +803,7 @@ FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT 
 
 **Two Repositories (secret boundary):** `pocketquant` (code, no secrets) ← `pocketquant-config` (prod .env, creds). CI/CD secret: `POCKETQUANT_CONFIG_DEPLOY_KEY` (read-only git key).
 
-**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), Docker Hub, GitHub Actions.
+**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), TradingView (index-futures history and polled quotes; an unofficial scraper with no stability promise — `/health` → `market_data_providers` reports its session state), Docker Hub, GitHub Actions.
 
 **Deployment:** Public entry `pocketquant.xyz` via Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare proxies HTTP/HTTPS only — SSH + published DB ports reach the VPS by IP directly. Config flow: `pocketquant-config/.env` → CI reads at deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler coordinates via `apscheduler_jobs` Mongo collection; first to claim `next_run_time` wins. Remote-DB dev mode must set `ENABLE_JOBS=false` (else double-schedule).
 

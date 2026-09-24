@@ -170,7 +170,7 @@ domain/
 Tất cả domain entity dùng Pydantic BaseModel với `to_mongo()` / `from_mongo()` tích hợp sẵn cho persistence.
 
 **Example - Symbol Entity (Flattened from SymbolAggregate):**
-Symbol giờ là một entity phẳng đơn giản với các trường `code`, `exchange`, `name`, `asset_type`, `is_active` và các method chuẩn `to_mongo()`/`from_mongo()`.
+Symbol giờ là một entity phẳng đơn giản với các trường `code`, `exchange`, `name`, `asset_class`, `calendar_id`, `contract_spec`, `is_active` và các method chuẩn `to_mongo()`/`from_mongo()`.
 
 **Composite Symbol Format:**
 Exchange encapsulation thay thế trường `exchange` độc lập trên các domain entity (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Định dạng định danh symbol giờ là composite: `{CODE}:{EXCHANGE}` (ví dụ `BTCUSDT:BINANCE`). Một trường bất biến `symbol: str` thay thế các cặp `(code, exchange)`. Business logic không bao giờ tách nhỏ—exchange là postfix opaque.

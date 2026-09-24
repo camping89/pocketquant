@@ -47,6 +47,8 @@ just fe                      # vite dev UI → :5173 (proxies /api → :41921)
   wins over them, which is the way past a broken login. `TRADINGVIEW_MAX_BARS` and
   `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than
   the plan allows. Values live in `../pocketquant-config/`, never in this repo.
+- `TZ` must be `UTC`. The app refuses to start on any other process zone, because bars, cron
+  triggers and session calendars are UTC instants.
 
 ### Against the prod VPS DB
 
@@ -108,7 +110,7 @@ Strategies exposed by the API:
 just test                    # pytest
 uv run ruff check .          # lint
 uv run pyright               # types
-uv run lint-imports          # 7 import-linter contracts
+uv run lint-imports          # 10 import-linter contracts
 ```
 
 Manual API: Bruno [`tests/http`](./tests/http) · curl [`tests/manual/api-test.http`](./tests/manual/api-test.http).
