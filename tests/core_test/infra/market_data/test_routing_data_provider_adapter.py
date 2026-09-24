@@ -163,6 +163,30 @@ async def test_symbol_override_selects_the_overridden_provider_first() -> None:
     primary.fetch_ohlcv.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_a_third_provider_serves_only_the_symbol_overridden_to_it() -> None:
+    """G4 evidence: a new venue is reached only through configuration.
+
+    The third provider is registered beside the existing two and named by one
+    override. A symbol of the same asset class without the override never
+    reaches it.
+    """
+    tradingview, binance, third = _provider([_bar()]), _provider([_bar()]), _provider([_bar()])
+    adapter = _adapter(
+        {"tradingview": tradingview, "binance": binance, "third": third},
+        overrides={FUTURES: ["third"]},
+    )
+
+    await _fetch(adapter)
+    await adapter.fetch_ohlcv(symbol="NQ1!:CME_MINI", interval=Interval.MINUTE_1)
+
+    assert [c.kwargs["symbol"] for c in third.fetch_ohlcv.await_args_list] == [FUTURES]
+    assert [c.kwargs["symbol"] for c in tradingview.fetch_ohlcv.await_args_list] == [
+        "NQ1!:CME_MINI"
+    ]
+    binance.fetch_ohlcv.assert_not_awaited()
+
+
 class TestTheAdapterSaysWhatItAssumed:
     """Two silent assumptions are made audible, once per symbol."""
 
