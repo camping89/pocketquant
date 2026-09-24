@@ -25,6 +25,7 @@ from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     cascade_for_symbol,
     tf_seconds,
 )
+from pocketquant.engine.market_data.sync_internals.calendar_stamp import stamp_calendar
 
 logger = get_logger(__name__)
 
@@ -159,6 +160,7 @@ class TrackedSymbolBackfillService:
             )
             return 0
 
+        stamp_calendar(bars, interval, await self._calendar_factory.for_symbol(symbol))
         persisted = 0
         for bar in bars:
             try:
@@ -191,6 +193,8 @@ class TrackedSymbolBackfillService:
             )
             return 0
 
+        calendar = await self._calendar_factory.for_symbol(symbol)
+        stamp_calendar(bars_1m, Interval.MINUTE_1, calendar)
         for bar in bars_1m:
             try:
                 await self._bar_repo.upsert_bar(bar, source=SOURCE_TRACKED_SYMBOL_BACKFILL)
@@ -205,7 +209,7 @@ class TrackedSymbolBackfillService:
             symbol=symbol,
             lookback_minutes=lookback_minutes,
             bar_repo=self._bar_repo,
-            calendar=await self._calendar_factory.for_symbol(symbol),
+            calendar=calendar,
         )
 
         return counts.get(interval, 0)

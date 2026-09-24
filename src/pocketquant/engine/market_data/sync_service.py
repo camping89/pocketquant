@@ -25,6 +25,7 @@ from pocketquant.engine.market_data.sync_internals.bar_filters import (
     drop_misaligned_bars,
     filter_new_bars,
 )
+from pocketquant.engine.market_data.sync_internals.calendar_stamp import stamp_calendar
 from pocketquant.engine.market_data.sync_internals.provider_fetch import fetch_with_retry
 from pocketquant.engine.market_data.sync_internals.responses import build_success
 
@@ -166,26 +167,10 @@ class SyncService:
     ) -> int:
         if not records:
             return 0
-        self._stamp_calendar(records, interval, calendar)
+        stamp_calendar(records, interval, calendar)
         inserted_count = await self._bar_repo.insert_many(records, source=source)
         await self._symbol_repo.touch(symbol)
         return inserted_count
-
-    @staticmethod
-    def _stamp_calendar(
-        records: list[Bar], interval: DomainInterval, calendar: ITradingCalendarPort
-    ) -> None:
-        """Record which schedule a bar belongs to, and its session day key.
-
-        The session day is only meaningful for bars that span one, so intraday
-        bars are left without one rather than given the UTC date, which for a
-        session opening the evening before is the wrong day.
-        """
-        session_keyed = interval in (DomainInterval.DAY_1, DomainInterval.WEEK_1)
-        for bar in records:
-            bar.calendar_id = calendar.calendar_id
-            if session_keyed and bar.datetime is not None:
-                bar.session_date = calendar.session_date(bar.datetime)
 
     async def _get_bar_stats(self, symbol: str, interval: DomainInterval) -> tuple[int, Bar | None]:
         total_bars = await self._bar_repo.count(symbol, interval)
