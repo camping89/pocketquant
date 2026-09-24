@@ -1388,3 +1388,42 @@ bar cap and the poll floor. The docs list the settings that exist, plus `TZ`.
   interrupts, because a deploy clears the container log.
 - Carried from Session 2, and not part of Phase 7's task list: about twenty JSON
   `.isoformat()` emitters remain.
+
+### Session 11 — 2026-09-24 (follow-up: data-lag flag, partial_aggregate retired)
+
+**User decisions.**
+- `cascade.partial_aggregate` is removed outright. It confused the operator and
+  duplicated `sync_integrity`, which already reports missing 1m bars against the
+  trading calendar and feeds `sync_repair`. Metric 4's `partial_aggregate` clause
+  therefore no longer applies; the other four events in that metric still do.
+- A data-lag flag, maintained by a background job and shown in the SPA with an
+  explanation, replaces "is the feed delayed?" guesswork.
+
+**What shipped.**
+- `engine/market_data/data_lag_service.py`: lag counted in trading minutes from the
+  newest 1m bar, classified `ok | delayed | stuck | closed | unknown`. No branch on the
+  provider, so G4 is untouched. `stuck` needs 10 consecutive empty 1m syncs (not 3,
+  because YM trades thinly overnight), or more than 30 trading minutes of lag, or no
+  1m sync for 5 minutes; the last two catch a sync that stopped running, which never
+  grows the streak. A shut market is `closed` whatever its lag: the sync stops after
+  the close, so a delayed feed's last minutes only arrive at the next open.
+- `data_lag_check` cron (every minute at :30) writes `data_lag:{symbol}` to Redis with
+  a 5-minute TTL and logs `data_lag.state_changed` only on transitions (WARNING only
+  when entering `stuck`). `GET /market-data/data-lag/{symbol}` reads it back; a missing
+  key is `unknown`, never healthy.
+- `/sync-status` rows carry `lag_seconds` and `is_delayed`. `is_stuck` no longer fires
+  permanently on futures 1m rows: the 1m row is stuck only when the feed is, and other
+  rows may be as late as a delayed feed plus 3x their own cadence.
+- SPA: `DataLagBadge` beside the ticker ("Delayed ~12 min", hover explains), and the
+  Monitor row labels `delayed 12 min` / `stalled` with the same wording.
+
+**Correction 39.** `CmeGlobexCalendarAdapter.trading_minutes` loaded sessions only up to
+the window's end date. A session opens the evening before the date it carries, so any
+window ending between the 22:00/23:00 UTC open and midnight dropped those minutes:
+lag read zero for two hours every evening, and the integrity grid expected nothing
+there. It now loads one day past the end. Regression tests in
+`test_cme_globex_calendar.py::TestAWindowEndingAfterTheEveningOpen`.
+
+**Still open.** The 04:00 UTC `sync_integrity` run falls inside a Globex session, so the
+last ~12 minutes of the delayed feed can show as missing on that run and are healed by
+the next sync. Ending the integrity grid at `now - lag` would remove that; not done.
