@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "UI, Docs and Success-Metric Run-Through"
-status: pending
+status: completed
 priority: P2
 effort: "1d"
 dependencies: [6]
@@ -243,13 +243,13 @@ repository.
 
 ## Todo
 
-- [ ] Task 1 — Generic SPA placeholders
-- [ ] Task 2 — Exchange badge and closed-market state
-- [ ] Task 3 — Provider status on `/health`
-- [ ] Task 4 — Update the architecture documentation
-- [ ] Task 5 — Journal the timezone and calendar decision
-- [ ] Task 6 — Success-metric run-through
-- [ ] Task 7 — Final full gate
+- [x] Task 1 — Generic SPA placeholders
+- [x] Task 2 — Exchange badge and closed-market state
+- [x] Task 3 — Provider status on `/health`
+- [x] Task 4 — Update the architecture documentation
+- [x] Task 5 — Journal the timezone and calendar decision
+- [x] Task 6 — Success-metric run-through
+- [x] Task 7 — Final full gate
 
 ## Risks and rollback
 

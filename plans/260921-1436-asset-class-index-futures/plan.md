@@ -1319,3 +1319,72 @@ mutation-tested).
 - *Seen, not changed.* `ContractSpec.tick_size` is not applied to fills, so SL/TP exits
   land off the tick grid (`7799.00825` in the G3 run). This predates the phase.
 
+
+### Session 10 — 2026-09-24 (execution, Phase 7)
+
+All seven tasks are delivered. Commits `c9309c9` (SPA), `5cd3ba2`, `dec1824` (health),
+`a46333a` (docs and journal), `6264c8c` (G4 test) and `f101f4e` (backfill calendar
+stamp) were deployed by CI/CD runs `35961834309`, `35962350918` and `35963033181`. The
+18 metrics are in [completion-report.md](./completion-report.md): 11 pass, 2 fail and 5
+are open with a dated measurement. Every new guard was mutation-tested.
+
+**Correction 34 — Task 6's secrets gate cannot print 0 on correct code, so its Failure
+Protocol ran.** `git grep -i "tradingview_.*="` matches any line with a
+`tradingview_` token and an `=` anywhere after it. It printed 20: nine structlog event
+names whose kwargs supply the `=`, a local variable, three non-credential `Settings`
+fields with `Field(...)` or enum defaults, and non-secret test kwargs. It also skipped
+`*.md`, so the docs that name `TRADINGVIEW_*` were never inspected. On kongming's
+counsel, it was replaced by two checks, each shown to fail on a planted leak. The first
+requires the three credential declarations to end `= None`. The second finds no
+credential literal outside `tests/` and `plans/`, including in docs and env files. No
+credential value exists in the repo or in `pocketquant-config`.
+
+**Correction 35 — Task 3 step 4 would report production permanently degraded.**
+Production scrapes TradingView anonymously (Session 8), so `is_authenticated()` is
+always false. Reading that as `degraded` repeats Correction 29's trap: a flag that is
+always on is a flag nobody reads. A provider now degrades only when it was configured
+with credentials and holds no session, and each provider reports `credentialed`.
+Prod `/health` is `healthy`, with `tradingview: {authenticated: false, credentialed:
+false}`. The coordinator also changed: it fails the instance only on an `unhealthy`
+dependency. Before, any status other than `healthy` did.
+
+**Correction 36 — backfilled bars carried no trading calendar.** Metric 5 found
+`session_date` on 1 of 5000 stored ES daily bars. `SyncService` stamped `calendar_id`
+and `session_date` before insert. `TrackedSymbolBackfillService._direct` and its
+cascade path upserted provider bars as they came, so the Session 8 seed wrote the
+whole history unstamped. Both paths now share `sync_internals.calendar_stamp`. Stored
+rows are not repaired, because nothing reads the field yet. The repair is a `bars`
+dump followed by a direct 1d/1w backfill per futures symbol.
+
+**Correction 37 — Task 4 step 8 names the wrong contract count.** `pyproject.toml`
+defines 10 import-linter contracts, not 8, as this plan's own success criteria say from
+Phase 5 onward. The README now says 10.
+
+**Correction 38 — Task 4 step 3 lists `TRADINGVIEW_DELAYED_DATA`, which does not
+exist.** Session 5 replaced it with `TRADINGVIEW_PLAN`, which derives the delay, the
+bar cap and the poll floor. The docs list the settings that exist, plus `TZ`.
+
+**Decisions taken without a correction.**
+- The other `"BTCUSDT:BINANCE"` examples in `web/src`, in API, hook and route
+  docstrings, were left alone. Task 1 lists its files, and its criterion is about
+  user-visible hints. The defaults at `__root.tsx:17`, `index.tsx:21` and
+  `backtest-form.tsx:44` are unchanged, as step 4 requires.
+- The journal is at the path Task 5 names, `docs/journals/`. This plan's session
+  journals live in `plans/journals/`.
+- The CLOSED state was already rendered by Phase 3. Task 2 added the `isMarketOpen`
+  parameter to `ageColorClass` and the first web tests for both helpers.
+- G4 as literally worded fails by one file: registering a real adapter is one entry in
+  `app/di/infrastructure.py`, the composition root. No engine module, route or
+  service changes.
+
+**Still open after this phase.**
+- *Metric 4 fails.* `cascade.partial_aggregate` fires about 17 times a minute across
+  the futures symbols (Session 8's feed-delay and untraded-minute causes). The cascade
+  needs a delay-aware closed-bucket rule.
+- *G2* waits on the risk-policy decision in Session 9.
+- *Dated measurements.* Weekend quiet on 2026-09-28. 24 consecutive
+  `divergent_fraction` runs on 2026-09-25. The full anomaly week, with the Thanksgiving
+  early close, on 2026-11-30. Each log-based measurement needs a window no deploy
+  interrupts, because a deploy clears the container log.
+- Carried from Session 2, and not part of Phase 7's task list: about twenty JSON
+  `.isoformat()` emitters remain.
