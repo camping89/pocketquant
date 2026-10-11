@@ -2,10 +2,10 @@
 
 from pocketquant.core.common.constants import COLLECTION_POSITIONS
 from pocketquant.core.domain.position import PositionAggregate
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 
-class PositionRepository(BaseRepository):
+class PositionRepository(SymbolScopedRepository):
     _collection_name = COLLECTION_POSITIONS
 
     async def save(self, position: PositionAggregate) -> None:

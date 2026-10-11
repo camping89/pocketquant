@@ -4,13 +4,14 @@ from typing import Any
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_RUNS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.backtest import BacktestResult
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 logger = get_logger(__name__)
 
 
-class BacktestRepository(BaseRepository):
+class BacktestRepository(SymbolScopedRepository):
     _collection_name = COLLECTION_BACKTEST_RUNS
+    _symbol_fields = ("symbol", "config_snapshot.symbol")
 
     async def save(self, result: BacktestResult) -> str:
         collection = self._collection()

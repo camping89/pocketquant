@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_SYMBOLS
 from pocketquant.core.domain.symbol import Symbol
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 
-class SymbolRepository(BaseRepository):
+class SymbolRepository(SymbolScopedRepository):
     """Repository for symbol tracking. ``symbol`` is composite ``{code}:{exchange}``."""
 
     _collection_name = COLLECTION_SYMBOLS

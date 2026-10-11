@@ -518,6 +518,10 @@ src/
 | `job_history` | uuid7 | JobHistoryRepository | APScheduler job execution history |
 | `apscheduler_jobs` | job name | (APScheduler) | Serialized scheduled jobs |
 
+### Symbol removal
+
+`DELETE /api/v1/market-data/tracked-symbols/{symbol}` (`TrackedSymbolService.remove`) deletes the symbol and every piece of data that references it: `tracked_symbols` first (sync jobs and the WS feed stop picking it up), then each subscription (stopped, then removed via `StrategyCommandService`), then `symbols`, `bars` (plus the in-process bar write cache), `sync_status`, `backtest_orders`/`backtest_trades`/`backtest_runs`, live `orders`/`positions`, the symbol's `job_history.details[]` entries, and the Redis keys `quote:latest:{symbol}`, `bar:current:{symbol}:*`, `ohlcv:{symbol}:*`. Repositories holding a `symbol` field extend `SymbolScopedRepository.delete_by_symbol`. The call is idempotent (always 200) and returns per-collection counts under `deleted`.
+
 ### Strategy Lifecycle (User POV)
 
 **Create subscription:** `POST /api/v1/strategies/{strategy_code}/subscriptions` with `{symbol, interval}`. Validates symbol is tracked, looks up strategy in `STRATEGY_REGISTRY`, computes deterministic `sub_id = sha256(strategy_code|symbol|interval)[:16]`, instantiates `IStrategy` via `StrategyAppService.load_strategy()`, persists `Subscription` to MongoDB with `desired_state="stopped"` (opt-in to trading, no auto-start). Returns `{id, strategy_code, symbol, interval, created_at, is_running}`.

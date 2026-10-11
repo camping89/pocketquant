@@ -1,4 +1,4 @@
-"""Integration tests for TrackedSymbolRepository — upsert idempotency, uuid7 _id, dedup."""
+"""Integration tests for TrackedSymbolRepository â€” upsert idempotency, uuid7 _id, dedup."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ async def test_upsert_twice_same_symbol_yields_one_doc_with_stable_id(repo, db):
     docs = await coll.find({"symbol": "BTCUSDT:BINANCE"}).to_list(length=10)
 
     assert len(docs) == 1
-    # $setOnInsert keeps the original _id — second upsert must not re-key
+    # $setOnInsert keeps the original _id â€” second upsert must not re-key
     assert docs[0]["_id"] == first["_id"]
     assert docs[0]["seeded_from"] == "auto-seed"
 
@@ -108,6 +108,6 @@ async def test_exists_update_delete_by_symbol(repo):
     assert await repo.update("BNBUSDT:BINANCE", {}) is True
     assert await repo.update("NOPE:BINANCE", {}) is False
 
-    assert await repo.delete("BNBUSDT:BINANCE") is True
-    assert await repo.delete("BNBUSDT:BINANCE") is False
+    assert await repo.delete_by_symbol("BNBUSDT:BINANCE") == 1
+    assert await repo.delete_by_symbol("BNBUSDT:BINANCE") == 0
     assert await repo.exists("BNBUSDT:BINANCE") is False

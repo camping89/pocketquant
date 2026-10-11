@@ -1,4 +1,4 @@
-"""Unit tests for TrackedSymbolRepository — persistence layer."""
+"""Unit tests for TrackedSymbolRepository â€” persistence layer."""
 
 from collections.abc import AsyncGenerator
 
@@ -15,7 +15,7 @@ class TestTrackedSymbolRepository:
 
     @pytest.mark.asyncio
     async def test_upsert_idempotent(self, repo: TrackedSymbolRepository):
-        """Upsert same symbol twice → idempotent (no duplicates)."""
+        """Upsert same symbol twice â†’ idempotent (no duplicates)."""
         symbol = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test")
 
         await repo.upsert(symbol)
@@ -57,11 +57,11 @@ class TestTrackedSymbolRepository:
 
     @pytest.mark.asyncio
     async def test_delete_removes_symbol(self, repo: TrackedSymbolRepository):
-        """delete removes symbol."""
+        """delete_by_symbol removes symbol."""
         symbol = TrackedSymbol(symbol="BTC:BINANCE", seeded_from="test")
         await repo.upsert(symbol)
 
-        await repo.delete("BTC:BINANCE")
+        await repo.delete_by_symbol("BTC:BINANCE")
 
         exists = await repo.exists("BTC:BINANCE")
         assert not exists

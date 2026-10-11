@@ -367,10 +367,13 @@ async def remove_tracked_symbol(
     symbol: str,
     service: FromDishka[TrackedSymbolService],
 ) -> dict:
-    """Remove composite symbol from tracked list. Requires X-Admin-Token.
+    """Remove a symbol and all data that references it. Requires X-Admin-Token.
 
-    ``symbol`` path param is URL-encoded composite ``{code}:{exchange}``
-    (e.g. ``BTCUSDT%3ABINANCE``).
+    Cascades to symbols, bars, sync_status, subscriptions (stopped first),
+    backtest runs/orders/trades, live orders/positions, job_history details and
+    symbol-keyed cache keys. Idempotent: always 200, ``deleted`` holds
+    per-collection counts. ``symbol`` path param is URL-encoded composite
+    ``{code}:{exchange}`` (e.g. ``BTCUSDT%3ABINANCE``).
     """
     symbol = validate_composite_symbol(symbol)
     return await service.remove(symbol)

@@ -8,10 +8,10 @@ from pocketquant.core.common.constants import COLLECTION_SYNC_STATUS
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status import SyncStatus
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 
-class SyncStatusRepository(BaseRepository):
+class SyncStatusRepository(SymbolScopedRepository):
     """Repository for sync status tracking. ``symbol`` is composite ``{code}:{exchange}``."""
 
     _collection_name = COLLECTION_SYNC_STATUS

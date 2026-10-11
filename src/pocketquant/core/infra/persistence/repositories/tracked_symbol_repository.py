@@ -2,10 +2,10 @@ from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_TRACKED_SYMBOLS
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 
-class TrackedSymbolRepository(BaseRepository):
+class TrackedSymbolRepository(SymbolScopedRepository):
     """Repository for tracked_symbols — uuid7 ``_id``, unique index on composite ``symbol``."""
 
     _collection_name = COLLECTION_TRACKED_SYMBOLS
@@ -40,10 +40,6 @@ class TrackedSymbolRepository(BaseRepository):
             {"$set": fields},
         )
         return result.matched_count > 0
-
-    async def delete(self, symbol: str) -> bool:
-        result = await self._collection().delete_one({"symbol": symbol})
-        return result.deleted_count > 0
 
     async def exists(self, symbol: str) -> bool:
         """Return True if composite ``symbol`` is in the collection."""

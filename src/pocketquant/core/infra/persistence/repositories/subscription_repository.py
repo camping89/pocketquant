@@ -51,6 +51,10 @@ class SubscriptionRepository(BaseRepository):
         cursor = collection.find({"strategy_code": strategy_code})
         return [Subscription.from_mongo(doc) async for doc in cursor]
 
+    async def list_by_symbol(self, symbol: str) -> list[Subscription]:
+        cursor = self._collection().find({"symbol": symbol})
+        return [Subscription.from_mongo(doc) async for doc in cursor]
+
     async def list_all(self) -> list[Subscription]:
         collection = self._collection()
         cursor = collection.find({})

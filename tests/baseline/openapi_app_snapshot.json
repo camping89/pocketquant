@@ -1679,7 +1679,7 @@
     },
     "/api/v1/market-data/tracked-symbols/{symbol}": {
       "delete": {
-        "description": "Remove composite symbol from tracked list. Requires X-Admin-Token.\n\n``symbol`` path param is URL-encoded composite ``{code}:{exchange}``\n(e.g. ``BTCUSDT%3ABINANCE``).",
+        "description": "Remove a symbol and all data that references it. Requires X-Admin-Token.\n\nCascades to symbols, bars, sync_status, subscriptions (stopped first),\nbacktest runs/orders/trades, live orders/positions, job_history details and\nsymbol-keyed cache keys. Idempotent: always 200, ``deleted`` holds\nper-collection counts. ``symbol`` path param is URL-encoded composite\n``{code}:{exchange}`` (e.g. ``BTCUSDT%3ABINANCE``).",
         "operationId": "remove_tracked_symbol_api_v1_market_data_tracked_symbols__symbol__delete",
         "parameters": [
           {
