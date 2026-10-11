@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
 
 

@@ -7,6 +7,7 @@ No tri-state (had_existing/no_existing) — those branches must not exist.
 from __future__ import annotations
 
 import pytest
+
 from pocketquant.core.domain.sync_status.services import (
     SyncProgressDecision,
     SyncProgressTracker,
