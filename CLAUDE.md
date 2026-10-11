@@ -1,6 +1,6 @@
 # CLAUDE.md — PocketQuant
 
-Single Python package `src/pocketquant/` (with subpackages: core, engine, backtest, app) + 1 Node SPA (`web/`). Pattern: DDD + Clean Architecture + Dishka DI. Dependency enforcement via import-linter contracts in `pyproject.toml` (7 contracts).
+Single Python package `src/pocketquant/` (with subpackages: core, engine, backtest, app) + 1 Node SPA (`web/`). Pattern: DDD + Clean Architecture + Dishka DI. Dependency enforcement via import-linter contracts in `pyproject.toml` (3 contracts).
 
 ## Layout
 
@@ -9,7 +9,7 @@ Dependency graph: `core ◁ engine ◁ backtest ◁ app`, `web → app`. Backend
 ## Rules that change decisions
 
 - **All repositories in core** (`core.infra.persistence.repositories`) — zero repos in backtest/app.
-- **Routes** use `FromDishka[SomeCommandService/SomeQueryService]` + `DishkaRoute`, never `Depends()`. Service methods take Pydantic command/query models and return DTOs. Example: `StrategyCommandService`, `BacktestQueryService`.
+- **Routes** use `FromDishka[SomeCommandService/SomeQueryService]` + `DishkaRoute`, never `Depends()`. Service methods take Pydantic models only for real request bodies; scalar parameters are passed directly. Example: `StrategyCommandService`, `BacktestQueryService`.
 - **fastapi only in app** — core/engine/backtest never import fastapi (import-linter enforced).
 - **Single uvicorn worker only** — scheduler/WS feed/broker là in-process singletons; `--workers N` sẽ nhân bản reconcile loop + live broker connection.
 - **Primary keys: UUIDv7 only** — never hash / natural key / ObjectId.

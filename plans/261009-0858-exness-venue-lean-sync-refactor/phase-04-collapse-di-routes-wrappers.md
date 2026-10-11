@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Collapse DI, routes and scalar wrappers"
-status: in-progress
+status: done
 priority: P1
 effort: 3d
 dependencies: [3]
@@ -44,6 +44,7 @@ dependencies: [3]
 
 ## Execution notes
 - T4.1–T4.6 are done and the T4.6 gate is green: `just test` 685 passed, ruff clean, pyright 0 errors, `Contracts: 3 kept, 0 broken.`, venue 79 (baseline 79), `tests/baseline` 9 passed with `BASELINE_UPDATE` never set. The T4.2 test set is 40 passed before and after the change.
+- T4.7: 26451e9 is on master. CI run 38145138292 is green with verdict `HEALTHY (20/20 passed, 0 warnings, 0 failures)`, and the tracked-symbols smoke test prints `200`. The commit also carried two kongming memory notes under this plan's `.claude/agent-memory/kongming/` (process notes, no secrets).
 - Deviations from the task text:
   - Tests ran through `uv run python -m pytest` instead of `.venv/Scripts/python.exe -m pytest` (a local hook blocks `.venv` paths); it is the same interpreter.
   - The T4.4 grep used `-I` to skip binary files: stale `__pycache__` files of the deleted modules match the class names otherwise. Over `*.py` sources the count is 0.

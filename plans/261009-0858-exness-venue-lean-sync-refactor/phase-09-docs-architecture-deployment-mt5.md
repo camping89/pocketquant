@@ -20,7 +20,7 @@ dependencies: [8]
 The docs describe the system as it is now (D7): the Exness adapters, the `SyncPolicies` registry that resolves providers strictly by exchange suffix, the shared runner, 3 DI providers, the Exness broker built but switched off behind `EXNESS_LIVE_TRADING`, the new env keys, the real add-a-provider touchpoint list, and MT5 as a documented future provider that is not built.
 
 ## Files to Create or Modify
-- Modify: `docs/system-architecture.md`, `docs/deployment.md`, `docs/code-standards.md`, `scripts/README.md`, `README.md`, `docs/project-overview-pdr.md` and `docs/README.md`.
+- Modify: `docs/system-architecture.md`, `docs/deployment.md`, `docs/code-standards.md`, `scripts/README.md`, `README.md`, `docs/project-overview-pdr.md`, `docs/README.md` and `CLAUDE.md`.
 
 ## Tasks
 
@@ -36,7 +36,8 @@ The docs describe the system as it is now (D7): the Exness adapters, the `SyncPo
   4. "Broker & Middleware": add `ExnessBroker` and its rules: market orders only, SL required, lots computed inside the adapter (`contract_size`, `volume_step`, `volume_min` cap unless `EXNESS_MAX_LOTS`) with `normalize_quantity` before order creation, the daily loss cap, orders blocked until the trading snapshot is reconciled, and async fill wiring only for brokers that set `fills_async` (today only `ExnessBroker`; PaperBroker and OKX are not wired). The daily loss cap counts `close`, `swap_fee`, `admin_fee` and `dividend` deals plus commissions, and excludes `balance` deposits and withdrawals; a 429 from Exness is never retried automatically. State that `EXNESS_LIVE_TRADING` defaults to false, that `BrokerFactory` refuses `exness` and the client refuses order operations while it is false, and that no API selects a broker per subscription.
   5. "Dependency Injection": 3 providers (`InfrastructureProvider`, `AdaptersProvider`, `ServicesProvider`), `Settings` via `from_context`, `STRICT_VALIDATION`, and `build_sync_policies` in `app/di/adapters.py`. Replace the "6 providers" sentence at :606.
   6. "Where Does X Live?": fix the rows at :472 and :483, and add rows for `engine/market_data/sync_policy.py`, `sync_runner.py`, `bar_integrity.py`, `core/infra/exness/`, `scripts/backfill/policy_bars.py` and `scripts/code_metrics.py`.
-  7. Add `## MT5 (future provider, not built)`: the same 3 ports, a policy sketch (bar source `copy_rates_from`, live source `copy_ticks_from`, `order_send` behind `IBroker`), the Windows host or Wine bridge (`mt5linux`/`mt5-remote`) deployment constraint, and the fact that Exness API keys apply to Exness-platform accounts, not MT5 accounts.
+  7. The callout near :630 cites `code-standards.md` → "Async Suspension Points — Await Is Preemption"; Phase 05 renamed that heading, so cite `## Async: await là preemption point` instead.
+  8. Add `## MT5 (future provider, not built)`: the same 3 ports, a policy sketch (bar source `copy_rates_from`, live source `copy_ticks_from`, `order_send` behind `IBroker`), the Windows host or Wine bridge (`mt5linux`/`mt5-remote`) deployment constraint, and the fact that Exness API keys apply to Exness-platform accounts, not MT5 accounts.
 - **Success criteria:** No stale statements remain.
 - **Verify:**
   - `grep -cE "SyncPolicies|sync_runner.py|core/infra/exness|copy_rates_from|ExnessBroker|EXNESS_LIVE_TRADING" docs/system-architecture.md` is ≥ 6.
@@ -53,6 +54,8 @@ The docs describe the system as it is now (D7): the Exness adapters, the `SyncPo
   3. `README.md` line 3: mention Exness (signed REST/WS market data and quotes) next to Binance. Line 11: add `exness` to the `core/` adapter list.
   4. `docs/project-overview-pdr.md:260`: replace `Max 200 LOC per file (exceptions documented)` with `File ~400 LOC soft guidance, functions ≲60 lines (xem code-standards.md)`.
   5. `docs/README.md:12` code-standards row: replace `file-size rules` with `rules of thumb, sync policy pattern, metric ratchet`.
+  6. `docs/project-overview-pdr.md:340`: the link `code-standards.md#routes--services` never resolved; point it at `code-standards.md#routes-và-services`.
+  7. `CLAUDE.md:21`: the code-standards pointer still lists "schema" and "perf", which the Phase 05 standard no longer has; replace the list with the real section topics (principles, naming, routes/services, DI, repositories, sync policy, composite symbol, async, comment policy, testing, quality gate).
 - **Success criteria:** No stale claims remain and the links are valid.
 - **Verify:**
   - `grep -cE "EXNESS_LIVE_TRADING|EXNESS_DAILY_LOSS_CAP" docs/deployment.md` is ≥ 2.

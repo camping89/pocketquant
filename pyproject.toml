@@ -104,3 +104,7 @@ source_modules = [
 # can't be listed here; tests/baseline/test_package_layout_contract.py greps
 # for it instead.
 forbidden_modules = ["fastapi"]
+
+[tool.code-metrics]
+max_tiny_share = 0.4754
+max_delegations = 63

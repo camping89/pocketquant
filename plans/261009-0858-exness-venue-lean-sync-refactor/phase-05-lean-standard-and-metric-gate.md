@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Lean coding standard and metric ratchet"
-status: pending
+status: in-progress
 priority: P1
 effort: 2d
 dependencies: [4]
@@ -109,6 +109,12 @@ A standard that matches the code as it exists at the end of Phase 04 (D5). The m
   4. Ask the user for approval, then merge, push and watch CI as in Phase 01 T1.7 steps 4-6.
 - **Success criteria:** Green.
 - **Verify:** The gate passes with the same pass conditions as Phase 04 T4.6, `Contracts: 3 kept, 0 broken.` included, and the ratchet exits 0. `gh run watch` exits 0. `gh run view <databaseId> --log | grep -c "Code metrics ratchet"` ≥ 1, and the `=== Verdict:` line contains `, 0 failures)`.
+
+## Execution notes
+- T5.1–T5.4 are done. T5.2 greps print `0`, `14`, `4` and `1`, and the Comment Policy section is byte-identical to the old one. T5.3 diff is `2 insertions(+), 2 deletions(-)`. T5.4 froze `max_tiny_share = 0.4754` and `max_delegations = 63` (baseline 0.4766 / 63); the equality check prints `True`, the ratchet exits 0 and the YAML loads.
+- T5.5 gate: `685 passed, 1 skipped`, ruff `All checks passed!`, pyright `0 errors`, `Contracts: 3 kept, 0 broken.`, venue 79 (baseline 79), ratchet exit 0. The first pytest run had 119 setup errors because Docker Desktop was not running (testcontainers could not reach the daemon); Docker Desktop was started at 2026-10-11 21:07 and left running, and the rerun is the result above.
+- Deviation: tests ran through `uv run python -m pytest` instead of `just test`, as in Phase 04 (a local hook blocks `.venv` paths).
+- Stale references created or exposed by the rewrite are deferred to Phase 09, which owns those files: `docs/system-architecture.md:630` (T9.1 step 7), `docs/project-overview-pdr.md:340` and `CLAUDE.md:21` (T9.2 steps 6–7).
 
 ## Verification
 T5.2 (greps), T5.3, T5.4 (frozen ceiling equals the measurement) and T5.5 (CI runs the ratchet).

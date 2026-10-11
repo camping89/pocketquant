@@ -28,8 +28,8 @@ The ports `IDataProvider`, `IRealtimeQuoteProvider`, `IBroker` and `IStrategy` s
 | 01 | [Exness read-only spike](./phase-01-exness-read-only-spike.md) | 2d | Pending |
 | 02 | [Characterization tests and metric baseline](./phase-02-characterization-and-metric-baseline.md) | 2d | Pending |
 | 03 | [Sync policy registry, shared runner and suffix routing](./phase-03-sync-policy-shared-runner.md) | 5d | Done |
-| 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | In progress |
-| 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Pending |
+| 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | Done |
+| 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | In progress |
 | 06 | [Exness market data, quotes and policy](./phase-06-exness-market-data-and-policy.md) | 7d | Pending |
 | 07 | [Exness broker behind the live-trading switch (off)](./phase-07-exness-broker-off-by-default.md) | 6d | Pending |
 | 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | Pending |
