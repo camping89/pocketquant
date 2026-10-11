@@ -9,7 +9,7 @@ from pocketquant.core.common.constants import COLLECTION_BARS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 logger = get_logger(__name__)
 
@@ -34,7 +34,7 @@ def _cache_value(bar: Bar) -> tuple[float, float, float, float, float]:
     return (bar.open, bar.high, bar.low, bar.close, bar.volume)
 
 
-class BarRepository(BaseRepository):
+class BarRepository(SymbolScopedRepository):
     """Repository for bar data operations. ``symbol`` is composite ``{code}:{exchange}``."""
 
     _collection_name = COLLECTION_BARS
@@ -279,6 +279,17 @@ class BarRepository(BaseRepository):
             end_dt=end_dt.isoformat(),
             deleted_count=deleted,
         )
+        return deleted
+
+    async def delete_by_symbol(self, symbol: str) -> int:
+        """Delete every bar of ``symbol`` and drop its write-dedup cache entries.
+
+        A stale cache entry would make a later re-add of the symbol skip writing
+        bars whose values match the cached ones, leaving gaps in Mongo.
+        """
+        deleted = await super().delete_by_symbol(symbol)
+        for key in [k for k in _BAR_VALUE_CACHE if k[0] == symbol]:
+            _BAR_VALUE_CACHE.pop(key, None)
         return deleted
 
     async def ensure_indexes(self) -> None:

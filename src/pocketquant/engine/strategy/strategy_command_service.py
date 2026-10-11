@@ -128,14 +128,15 @@ class StrategyCommandService:
             "created_at": sub.created_at.isoformat(),
         }
 
-    async def remove_symbol(self, cmd: RemoveSymbolCommand) -> None:
+    async def remove_symbol(self, cmd: RemoveSymbolCommand) -> int:
         """Cascade-delete a subscription's persisted state — pure Mongo write.
 
         No RAM unload: the app control-plane (reconcile orphan-unload) tears down
         the instance once the subscription doc is gone. Subscriptions no longer
         own any backtest state (forward-testing only), so only the sub doc drops.
+        Returns the number of subscription docs deleted.
         """
-        await self._sub_repo.delete(cmd.sub_id)
+        return await self._sub_repo.delete(cmd.sub_id)
 
     async def delete_strategy(self, cmd: DeleteStrategyCommand) -> None:
         """Cascade-delete every persisted doc for a strategy template — pure Mongo.

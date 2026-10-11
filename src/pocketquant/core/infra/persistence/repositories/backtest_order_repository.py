@@ -10,12 +10,12 @@ from __future__ import annotations
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_ORDERS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.order import OrderRecord
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 logger = get_logger(__name__)
 
 
-class BacktestOrderRepository(BaseRepository):
+class BacktestOrderRepository(SymbolScopedRepository):
     """Repository for backtest order records (with embedded events + fills)."""
 
     _collection_name = COLLECTION_BACKTEST_ORDERS

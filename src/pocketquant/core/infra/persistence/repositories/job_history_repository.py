@@ -303,6 +303,17 @@ class JobHistoryRepository(BaseRepository):
 
         return {"by_status": by_status, "p50_ms": p50_ms, "p95_ms": p95_ms}
 
+    async def remove_symbol_details(self, symbol: str) -> int:
+        """Pull ``symbol``'s ``details[]`` entries from every run doc; runs stay.
+
+        Returns the number of run docs modified.
+        """
+        result = await self._collection().update_many(
+            {"details.symbol": symbol}, {"$pull": {"details": {"symbol": symbol}}}
+        )
+        logger.info("job_history.symbol_details_removed", symbol=symbol, docs=result.modified_count)
+        return result.modified_count
+
     async def ensure_indexes(self) -> None:
         """Create compound + TTL + idempotency indexes."""
         coll = self._collection()

@@ -1,18 +1,57 @@
 """tracked_symbols feature service — CRUD on the tracked composite-symbol list.
 
+Removing a symbol cascades to every document and cache key that references it.
 Request DTOs keep their original class names so OpenAPI schema components
 stay stable (routes expose them as request bodies).
 """
 
 from pydantic import BaseModel, Field, field_validator
 
+from pocketquant.core.common.constants import (
+    CACHE_KEY_BAR_CURRENT,
+    CACHE_KEY_DATA_LAG,
+    CACHE_KEY_OHLCV,
+    CACHE_KEY_QUOTE_LATEST,
+)
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.symbol.entities import COMPOSITE_SYMBOL_PATTERN
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
+from pocketquant.core.infra.persistence.redis import Cache
+from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.job_history_repository import (
+    JobHistoryRepository,
+)
+from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
+from pocketquant.core.infra.persistence.repositories.position_repository import (
+    PositionRepository,
+)
+from pocketquant.core.infra.persistence.repositories.subscription_repository import (
+    SubscriptionRepository,
+)
+from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.core.infra.persistence.repositories.sync_status_repository import (
+    SyncStatusRepository,
+)
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
+)
+from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
+from pocketquant.engine.strategy.strategy_command_service import (
+    RemoveSymbolCommand,
+    StopStrategyCommand,
+    StrategyCommandService,
 )
 
 logger = get_logger(__name__)
@@ -45,7 +84,7 @@ class UpdateTrackedSymbolCommand(BaseModel):
 
 
 class RemoveTrackedSymbolCommand(BaseModel):
-    """Remove composite symbol from tracked_symbols."""
+    """Remove a composite symbol and every piece of data that references it."""
 
     symbol: str = Field(..., description="Composite symbol to remove, e.g. BTCUSDT:BINANCE")
 
@@ -55,10 +94,43 @@ class ListTrackedSymbolsQuery(BaseModel):
 
 
 class TrackedSymbolService:
-    """CRUD on tracked_symbols backed by the Mongo repository."""
+    """CRUD on tracked_symbols; ``remove`` cascades to all data of the symbol."""
 
-    def __init__(self, tracked_symbol_repository: TrackedSymbolRepository) -> None:
+    def __init__(
+        self,
+        tracked_symbol_repository: TrackedSymbolRepository,
+        symbol_repository: SymbolRepository,
+        bar_repository: BarRepository,
+        sync_status_repository: SyncStatusRepository,
+        subscription_repository: SubscriptionRepository,
+        strategy_command_service: StrategyCommandService,
+        backtest_repository: BacktestRepository,
+        backtest_order_repository: BacktestOrderRepository,
+        backtest_trade_repository: BacktestTradeRepository,
+        order_repository: OrderRepository,
+        position_repository: PositionRepository,
+        trade_repository: TradeRepository,
+        job_history_repository: JobHistoryRepository,
+        cache: Cache,
+    ) -> None:
         self._repo = tracked_symbol_repository
+        self._sub_repo = subscription_repository
+        self._strategy_commands = strategy_command_service
+        self._job_history_repo = job_history_repository
+        self._cache = cache
+        # Backtest orders/trades go before their runs so a crash mid-cascade
+        # still leaves the runs findable by symbol on retry.
+        self._symbol_data: dict[str, SymbolScopedRepository] = {
+            "symbols": symbol_repository,
+            "bars": bar_repository,
+            "sync_status": sync_status_repository,
+            "backtest_orders": backtest_order_repository,
+            "backtest_trades": backtest_trade_repository,
+            "backtest_runs": backtest_repository,
+            "orders": order_repository,
+            "positions": position_repository,
+            "trades": trade_repository,
+        }
 
     async def add(self, request: AddTrackedSymbolCommand) -> dict:
         """Upsert composite symbol into tracked_symbols. Returns current state."""
@@ -89,15 +161,38 @@ class TrackedSymbolService:
         return {"symbol": request.symbol, "status": "updated"}
 
     async def remove(self, request: RemoveTrackedSymbolCommand) -> dict:
-        """Delete composite symbol from tracked_symbols. 404 if not found."""
-        deleted = await self._repo.delete(request.symbol)
-        if not deleted:
-            raise NotFoundError(
-                f"Tracked symbol '{request.symbol}' not found",
-                error_code="TRACKED_SYMBOL_NOT_FOUND",
+        """Delete the symbol and every document and cache key that references it.
+
+        Idempotent: each step deletes whatever is left, so a retry after a
+        partial run (or on an already-removed symbol) finishes the cleanup and
+        reports 0 for steps already done. tracked_symbols goes first so sync
+        jobs and the quote feed stop producing data for the symbol; each
+        subscription is stopped, then removed through the strategy command path.
+        Returns per-collection deleted counts under ``deleted``.
+        """
+        symbol = request.symbol
+        deleted = {"tracked_symbols": await self._repo.delete_by_symbol(symbol)}
+        deleted["subscriptions"] = 0
+        for sub in await self._sub_repo.list_by_symbol(symbol):
+            sub_id = str(sub.id)
+            await self._strategy_commands.stop(StopStrategyCommand(subscription_id=sub_id))
+            deleted["subscriptions"] += await self._strategy_commands.remove_symbol(
+                RemoveSymbolCommand(sub_id=sub_id)
             )
-        logger.info("tracked_symbols.removed", symbol=request.symbol)
-        return {"symbol": request.symbol, "status": "removed"}
+        for name, repo in self._symbol_data.items():
+            deleted[name] = await repo.delete_by_symbol(symbol)
+        deleted["job_history_runs"] = await self._job_history_repo.remove_symbol_details(symbol)
+        patterns = (
+            CACHE_KEY_QUOTE_LATEST.format(symbol=symbol),
+            CACHE_KEY_BAR_CURRENT.format(symbol=symbol, interval="*"),
+            CACHE_KEY_OHLCV.format(symbol=symbol, interval="*", limit="*"),
+            CACHE_KEY_DATA_LAG.format(symbol=symbol),
+        )
+        deleted["cache_keys"] = 0
+        for pattern in patterns:
+            deleted["cache_keys"] += await self._cache.delete_pattern(pattern)
+        logger.info("tracked_symbols.removed", symbol=symbol, deleted=deleted)
+        return {"symbol": symbol, "status": "removed", "deleted": deleted}
 
     async def list_all(self, request: ListTrackedSymbolsQuery) -> list[dict]:
         """Return all tracked composite symbols."""

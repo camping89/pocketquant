@@ -108,6 +108,6 @@ async def test_exists_update_delete_by_symbol(repo):
     assert await repo.update("BNBUSDT:BINANCE", {}) is True
     assert await repo.update("NOPE:BINANCE", {}) is False
 
-    assert await repo.delete("BNBUSDT:BINANCE") is True
-    assert await repo.delete("BNBUSDT:BINANCE") is False
+    assert await repo.delete_by_symbol("BNBUSDT:BINANCE") == 1
+    assert await repo.delete_by_symbol("BNBUSDT:BINANCE") == 0
     assert await repo.exists("BNBUSDT:BINANCE") is False

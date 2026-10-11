@@ -10,12 +10,12 @@ from __future__ import annotations
 from pocketquant.core.common.constants import COLLECTION_TRADES
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.trading import Trade
-from pocketquant.core.infra.persistence.base_repository import BaseRepository
+from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 logger = get_logger(__name__)
 
 
-class TradeRepository(BaseRepository):
+class TradeRepository(SymbolScopedRepository):
     _collection_name = COLLECTION_TRADES
 
     async def save_many(self, trades: list[Trade]) -> None:
