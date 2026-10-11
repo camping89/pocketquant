@@ -16,7 +16,6 @@ from pocketquant.app.market_data.app_services.ws_subscription_manager import (
 )
 from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IDataProvider, IRealtimeQuoteProvider
 from pocketquant.core.infra.binance.binance_client import BinanceClient
 from pocketquant.core.infra.binance.binance_websocket_client import BinanceWebSocketClient
 from pocketquant.core.infra.brokers.okx.okx_broker import OKXBroker
@@ -27,6 +26,7 @@ from pocketquant.engine.app_services.position_app_service import PositionAppServ
 from pocketquant.engine.app_services.strategy_app_service import StrategyAppService
 from pocketquant.engine.app_services.strategy_reconcile_service import StrategyReconcileService
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 from pocketquant.engine.market_data.sync_service import SyncService
 from pocketquant.engine.market_data.tracked_symbols_service import TrackedSymbolService
 from pocketquant.engine.orders_positions_service import OrderPositionQueryService
@@ -65,8 +65,13 @@ async def container(settings: Settings):
 
 
 async def test_market_data_ports_resolve_to_binance(container) -> None:
-    assert isinstance(await container.get(IDataProvider), BinanceClient)
-    assert isinstance(await container.get(IRealtimeQuoteProvider), BinanceWebSocketClient)
+    policies = await container.get(SyncPolicies)
+    assert isinstance(policies, SyncPolicies)
+    binance = policies.policy_for("BTCUSDT:BINANCE")
+    assert binance is not None
+    assert isinstance(binance.data_provider, BinanceClient)
+    assert isinstance(binance.quote_provider, BinanceWebSocketClient)
+    assert policies.policy_for("BTCUSDT:OKX") is None
 
 
 async def test_broker_factory_types_and_creation(container) -> None:

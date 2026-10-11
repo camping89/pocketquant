@@ -24,6 +24,11 @@ COMPOSITE_SYMBOL_RE = re.compile(r"^[A-Z0-9_-]+:[A-Z0-9_-]+$")
 COMPOSITE_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._-]{1,32}:[A-Z0-9._-]{1,32}$")
 
 
+def split_composite(symbol: str) -> tuple[str, str]:
+    code, _, exchange = symbol.strip().upper().partition(":")
+    return code, exchange
+
+
 class Symbol(BaseModel):
     """Tradeable instrument - persisted to MongoDB.
 

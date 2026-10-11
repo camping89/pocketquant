@@ -2,7 +2,7 @@
 
 Covers:
   - compare_bar_fields: per-field divergence (price 0.01% / volume 5%).
-  - _verify_one_symbol: REST↔DB join, no-overlap edge cases.
+  - verify_one_symbol: REST↔DB join, no-overlap edge cases.
 """
 
 from __future__ import annotations
@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pocketquant.engine.market_data.app_services.sync_jobs import (
+from pocketquant.engine.market_data.bar_integrity import (
     PRICE_THRESHOLD_PCT,
     VOLUME_THRESHOLD_PCT,
-    _verify_one_symbol,
     compare_bar_fields,
+    verify_one_symbol,
 )
 
 
@@ -98,7 +98,7 @@ class TestVerifyOneSymbol:
         provider = SimpleNamespace(fetch_ohlcv=AsyncMock(return_value=[]))
         bar_repo = SimpleNamespace(find=AsyncMock())
 
-        out = await _verify_one_symbol(
+        out = await verify_one_symbol(
             "BINANCE:BTCUSDT",
             provider=provider,  # pyright: ignore[reportArgumentType]
             bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
@@ -113,7 +113,7 @@ class TestVerifyOneSymbol:
         provider = SimpleNamespace(fetch_ohlcv=AsyncMock(return_value=rest))
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=[]))
 
-        out = await _verify_one_symbol(
+        out = await verify_one_symbol(
             "BINANCE:BTCUSDT",
             provider=provider,  # pyright: ignore[reportArgumentType]
             bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
@@ -128,7 +128,7 @@ class TestVerifyOneSymbol:
         provider = SimpleNamespace(fetch_ohlcv=AsyncMock(return_value=rest))
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
 
-        out = await _verify_one_symbol(
+        out = await verify_one_symbol(
             "BINANCE:BTCUSDT",
             provider=provider,  # pyright: ignore[reportArgumentType]
             bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
@@ -145,7 +145,7 @@ class TestVerifyOneSymbol:
         provider = SimpleNamespace(fetch_ohlcv=AsyncMock(return_value=rest))
         bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
 
-        out = await _verify_one_symbol(
+        out = await verify_one_symbol(
             "BINANCE:BTCUSDT",
             provider=provider,  # pyright: ignore[reportArgumentType]
             bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]

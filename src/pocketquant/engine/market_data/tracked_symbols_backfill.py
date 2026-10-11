@@ -5,7 +5,7 @@ Two modes:
   cascade — REST-fetch 1m bars (n * tf_minutes worth), upsert 1m, then cascade
              to the requested tf and all higher tfs within the lookback window.
 
-Needs direct access to provider + bar_repo + cascade_aggregator — route injects
+Needs direct access to the symbol's policy provider + bar_repo + cascade_aggregator — route injects
 the service via DI and calls ``run()``.
 """
 
@@ -23,6 +23,7 @@ from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     cascade_for_symbol,
     tf_seconds,
 )
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 
 logger = get_logger(__name__)
 
@@ -85,15 +86,19 @@ class TrackedSymbolBackfillService:
 
     def __init__(
         self,
-        provider: IDataProvider,
+        policies: SyncPolicies,
         bar_repository: BarRepository,
     ) -> None:
-        self._provider = provider
+        self._policies = policies
         self._bar_repo = bar_repository
 
     async def run(self, cmd: BackfillTrackedSymbolCommand) -> dict:
         mode = cmd.resolved_mode()
         symbol = cmd.symbol.upper()
+        policy = self._policies.policy_for(symbol)
+        if policy is None:
+            logger.warning("backfill.unknown_exchange", symbol=symbol)
+            return {"persisted_count": 0, "mode_used": mode}
 
         logger.info(
             "backfill.started",
@@ -104,9 +109,9 @@ class TrackedSymbolBackfillService:
         )
 
         if mode == "direct":
-            persisted = await self._direct(symbol, cmd.interval, cmd.n)
+            persisted = await self._direct(policy.data_provider, symbol, cmd.interval, cmd.n)
         else:
-            persisted = await self._cascade(symbol, cmd.interval, cmd.n)
+            persisted = await self._cascade(policy.data_provider, symbol, cmd.interval, cmd.n)
 
         logger.info(
             "backfill.completed",
@@ -117,8 +122,10 @@ class TrackedSymbolBackfillService:
         )
         return {"persisted_count": persisted, "mode_used": mode}
 
-    async def _direct(self, symbol: str, interval: Interval, n: int) -> int:
-        bars = await self._provider.fetch_ohlcv(
+    async def _direct(
+        self, provider: IDataProvider, symbol: str, interval: Interval, n: int
+    ) -> int:
+        bars = await provider.fetch_ohlcv(
             symbol=symbol,
             interval=interval,
             n_bars=n,
@@ -145,12 +152,14 @@ class TrackedSymbolBackfillService:
                 )
         return persisted
 
-    async def _cascade(self, symbol: str, interval: Interval, n: int) -> int:
+    async def _cascade(
+        self, provider: IDataProvider, symbol: str, interval: Interval, n: int
+    ) -> int:
         tf_secs = tf_seconds(interval)
         tf_minutes = tf_secs // 60
         lookback_minutes = n * tf_minutes
 
-        bars_1m = await self._provider.fetch_ohlcv(
+        bars_1m = await provider.fetch_ohlcv(
             symbol=symbol,
             interval=Interval.MINUTE_1,
             n_bars=min(lookback_minutes + 10, 5000),  # headroom; cap at provider limit

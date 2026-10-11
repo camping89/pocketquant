@@ -13,6 +13,7 @@ from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvide
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,7 @@ class WsSubscriptionManager:
     """Reconciles live WS subscriptions against the tracked_symbols collection.
 
     Args:
-        provider: Realtime WS client (singleton, shared with QuoteAppService).
+        policies: Per-exchange policies; each symbol subscribes through its policy's quote provider.
         tracked_symbol_repo: MongoDB repository for tracked symbols.
         quote_app_service: Provides the on_quote_update callback registered per symbol.
         interval_s: Reconcile interval in seconds (default 5.0).
@@ -32,12 +33,12 @@ class WsSubscriptionManager:
 
     def __init__(
         self,
-        provider: IRealtimeQuoteProvider,
+        policies: SyncPolicies,
         tracked_symbol_repo: TrackedSymbolRepository,
         quote_app_service: QuoteAppService,  # type: ignore[name-defined]  # noqa: F821 — forward ref avoids circular import
         interval_s: float = 5.0,
     ):
-        self._provider = provider
+        self._policies = policies
         self._repo = tracked_symbol_repo
         self._quote_app_service = quote_app_service
         self._interval_s = interval_s
@@ -62,18 +63,22 @@ class WsSubscriptionManager:
     async def _reconcile(self) -> None:
         tracked = await self._repo.list_all()
         # tracked_symbols store composite symbol; uppercase to match provider format
-        desired: set[str] = {ts.symbol.upper() for ts in tracked}
-        current: set[str] = set(self._provider.subscriptions.keys())
+        desired: dict[str, IRealtimeQuoteProvider] = {
+            s: p.quote_provider
+            for s in (ts.symbol.upper() for ts in tracked)
+            if (p := self._policies.policy_for(s)) is not None and p.quote_provider is not None
+        }
+        current: set[str] = {k for qp in self._policies.quote_providers() for k in qp.subscriptions}
 
-        to_add = desired - current
-        to_remove = current - desired
+        to_add = desired.keys() - current
+        to_remove = current - desired.keys()
 
         if not to_add and not to_remove:
             return
 
         for symbol_key in to_add:
             try:
-                await self._provider.subscribe(
+                await desired[symbol_key].subscribe(
                     symbol=symbol_key,
                     callback=self._quote_app_service.on_quote_update,
                 )
@@ -88,7 +93,9 @@ class WsSubscriptionManager:
 
         for symbol_key in to_remove:
             try:
-                await self._provider.unsubscribe(symbol=symbol_key)
+                for qp in self._policies.quote_providers():
+                    if symbol_key in qp.subscriptions:
+                        await qp.unsubscribe(symbol=symbol_key)
             except Exception as exc:
                 logger.warning(
                     "ws_subscription_manager.unsubscribe_failed",

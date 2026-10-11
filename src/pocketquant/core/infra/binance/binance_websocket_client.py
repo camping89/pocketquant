@@ -20,6 +20,7 @@ from typing import Any
 import websockets
 
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.domain.symbol.entities import split_composite
 from pocketquant.core.infra.binance.binance_mappers import (
     aggtrade_to_quote_dict,
     validate_symbol,
@@ -80,7 +81,7 @@ class BinanceWebSocketClient:
     ) -> str:
         """Register a subscription. ``symbol`` composite ``{code}:{exchange}``. Returns key."""
         # Extract bare code for Binance API stream name (BINANCE-specific boundary)
-        code = symbol.split(":")[0] if ":" in symbol else symbol
+        code = split_composite(symbol)[0]
         validated = validate_symbol(code)
         composite = symbol.upper()
         self._subscriptions[composite] = (validated, callback)

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-from pocketquant.engine.market_data.app_services.sync_jobs import (
+from pocketquant.engine.market_data.sync_runner import (
     CATCHUP_TARGETS,
     enqueue_missed_catchups,
 )

@@ -1,8 +1,7 @@
-"""Unit tests: DI container wires BinanceClient → IDataProvider and
-BinanceWebSocketClient → IRealtimeQuoteProvider.
+"""Unit tests: DI builds the policy registry whose Binance policy carries BinanceClient
+as its IDataProvider and BinanceWebSocketClient as its IRealtimeQuoteProvider.
 
-These tests use minimal Dishka providers — no real MongoDB/Redis needed.
-We stub Settings and verify concrete types returned by the provider methods.
+These tests use the provider method directly — no real MongoDB/Redis needed.
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from pocketquant.app.di.infrastructure import InfrastructureProvider
-from pocketquant.app.di.market_data import MarketDataProvider
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IDataProvider, IRealtimeQuoteProvider
 from pocketquant.core.infra.binance.binance_client import BinanceClient
@@ -28,37 +26,17 @@ def mock_settings() -> Settings:
     return s
 
 
-def test_get_data_provider_returns_binance_client(mock_settings: Settings) -> None:
-    """InfrastructureProvider.get_data_provider must return a BinanceClient."""
-    provider = InfrastructureProvider()
-    result = provider.get_data_provider(mock_settings)
+def test_binance_policy_data_provider_is_binance_client(mock_settings: Settings) -> None:
+    policy = InfrastructureProvider().get_sync_policies(mock_settings).policy_for("BTCUSDT:BINANCE")
 
-    assert isinstance(result, BinanceClient), f"Expected BinanceClient, got {type(result).__name__}"
-
-
-def test_get_data_provider_satisfies_idataprovider_abc(mock_settings: Settings) -> None:
-    """BinanceClient returned by DI must be a subclass of IDataProvider ABC."""
-    provider = InfrastructureProvider()
-    result = provider.get_data_provider(mock_settings)
-
-    assert isinstance(result, IDataProvider), "BinanceClient must satisfy IDataProvider ABC"
+    assert policy is not None
+    assert isinstance(policy.data_provider, BinanceClient)
+    assert isinstance(policy.data_provider, IDataProvider)
 
 
-def test_get_realtime_quote_provider_returns_binance_ws_client() -> None:
-    """MarketDataProvider.get_realtime_quote_provider must return a BinanceWebSocketClient."""
-    provider = MarketDataProvider()
-    result = provider.get_realtime_quote_provider()
+def test_binance_policy_quote_provider_is_binance_ws_client(mock_settings: Settings) -> None:
+    policy = InfrastructureProvider().get_sync_policies(mock_settings).policy_for("BTCUSDT:BINANCE")
 
-    assert isinstance(result, BinanceWebSocketClient), (
-        f"Expected BinanceWebSocketClient, got {type(result).__name__}"
-    )
-
-
-def test_get_realtime_quote_provider_satisfies_protocol() -> None:
-    """BinanceWebSocketClient must satisfy IRealtimeQuoteProvider Protocol (runtime_checkable)."""
-    provider = MarketDataProvider()
-    result = provider.get_realtime_quote_provider()
-
-    assert isinstance(result, IRealtimeQuoteProvider), (
-        "BinanceWebSocketClient must satisfy IRealtimeQuoteProvider Protocol"
-    )
+    assert policy is not None
+    assert isinstance(policy.quote_provider, BinanceWebSocketClient)
+    assert isinstance(policy.quote_provider, IRealtimeQuoteProvider)

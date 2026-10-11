@@ -110,7 +110,7 @@ def compute_boundaries(
     once with its complete 1m source, even when the bucket *boundary* itself is
     older than range_start. Without this, larger timeframes (4h, 1d) freeze the
     moment their start instant falls outside the cron's lookback window —
-    sync_jobs.sync_1m uses lookback_minutes=100, so the just-closed 4h bucket
+    sync_runner.sync_1m uses lookback_minutes=100, so the just-closed 4h bucket
     would otherwise never get a clean post-close aggregation pass.
 
     Alignment (UTC):

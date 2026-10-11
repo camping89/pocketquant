@@ -25,7 +25,6 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 from pocketquant.core.infra.persistence.health_checks import check_database, check_redis
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -59,6 +58,7 @@ from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 
 logger = get_logger(__name__)
 
@@ -166,7 +166,7 @@ async def rehydrate_strategies_from_subscriptions(container: AsyncContainer) -> 
 async def start_background_jobs(container: AsyncContainer) -> None:
     """Register background sync jobs with the scheduler.
 
-    NOTE: the sync_jobs module-level container is wired at the top of lifespan()
+    NOTE: the sync_runner module-level container is wired at the top of lifespan()
     in main.py — before any `await` — to win the race against persisted
     MongoDBJobStore jobs that may dispatch during early Dishka resolves.
     """
@@ -175,7 +175,7 @@ async def start_background_jobs(container: AsyncContainer) -> None:
         logger.info("background_jobs_disabled")
         return
 
-    from pocketquant.engine.market_data.app_services.sync_jobs import register_sync_jobs
+    from pocketquant.engine.market_data.sync_runner import register_sync_jobs
 
     await register_sync_jobs(
         container=container,
@@ -188,7 +188,7 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     """Start WS feed + subscription reconcile loop as background tasks.
 
     Stores task handles on app.state for lifespan cleanup:
-      app.state.ws_task          — IRealtimeQuoteProvider.run_forever()
+      app.state.ws_task          — run_forever() of every policy's quote provider
       app.state.subscription_task — WsSubscriptionManager.run()
     """
     quote_svc = await container.get(QuoteAppService)
@@ -211,8 +211,8 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
             except (TimeoutError, asyncio.CancelledError):
                 pass
 
-    provider = await container.get(IRealtimeQuoteProvider)
-    await provider.disconnect()
+    for quote_provider in (await container.get(SyncPolicies)).quote_providers():
+        await quote_provider.disconnect()
     logger.info("quote_feed.stopped")
 
 

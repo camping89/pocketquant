@@ -16,11 +16,5 @@ import structlog
 @pytest.fixture(autouse=True)
 def fresh_structlog_module_loggers(monkeypatch: pytest.MonkeyPatch) -> None:
     from pocketquant.engine.market_data import sync_service
-    from pocketquant.engine.market_data.sync_internals import (
-        anomaly_log,
-        bar_filters,
-        provider_fetch,
-    )
 
-    for module in (bar_filters, provider_fetch, anomaly_log, sync_service):
-        monkeypatch.setattr(module, "logger", structlog.get_logger(module.__name__))
+    monkeypatch.setattr(sync_service, "logger", structlog.get_logger(sync_service.__name__))

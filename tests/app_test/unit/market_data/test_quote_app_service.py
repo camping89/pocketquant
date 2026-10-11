@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
+from pocketquant.engine.market_data.sync_policy import SyncPolicies, binance_policy
 
 
 def _make_quote_data(volume: float | None, price: float = 50000.0) -> dict:
@@ -48,7 +49,7 @@ def service(mock_bar_manager: AsyncMock, mock_cache: AsyncMock) -> QuoteAppServi
         settings=settings,
         cache=mock_cache,
         bar_manager=mock_bar_manager,
-        provider=provider,
+        policies=SyncPolicies([binance_policy(data_provider=MagicMock(), quote_provider=provider)]),
     )
 
 

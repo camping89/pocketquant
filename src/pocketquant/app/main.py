@@ -28,9 +28,7 @@ from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
-from pocketquant.engine.market_data.app_services.sync_jobs import (
-    set_container as set_sync_container,
-)
+from pocketquant.engine.market_data.sync_runner import set_container as set_sync_container
 
 logger = get_logger(__name__)
 
@@ -46,7 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # APP-scoped and may resolve+start inside any subsequent `await
     # container.get(...)` chain (e.g. via StrategyAppService during rehydrate).
     # Once started, persisted MongoDBJobStore sync jobs whose next_run_time is
-    # within misfire_grace_time can dispatch and call sync_jobs._get_container().
+    # within misfire_grace_time can dispatch and call sync_runner._get_container().
     # Synchronous global assignment — no await means no preemption point.
     set_sync_container(container)
 

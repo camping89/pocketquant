@@ -7,10 +7,10 @@ from typing import Any
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST, TTL_QUOTE_LATEST
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.engine.market_data.app_services.quote_dto import Quote, QuoteTick
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 
 logger = get_logger(__name__)
 
@@ -23,11 +23,11 @@ class QuoteAppService:
         settings: Settings,
         cache: Cache,
         bar_manager: BarAppService,
-        provider: IRealtimeQuoteProvider,
+        policies: SyncPolicies,
     ):
         self.settings = settings
         self._cache = cache
-        self.provider = provider
+        self._policies = policies
         self.bar_manager = bar_manager
         self.running = False
         self.ws_task: asyncio.Task | None = None
@@ -99,5 +99,12 @@ class QuoteAppService:
             return
 
         self.running = True
-        self.ws_task = asyncio.create_task(self.provider.run_forever())
+        self.ws_task = asyncio.create_task(self._run_quote_feeds())
         logger.info("quote_service.ws_task_started")
+
+    async def _run_quote_feeds(self) -> None:
+        # One feed per exchange; return_exceptions keeps a failed feed from cancelling the rest.
+        await asyncio.gather(
+            *(qp.run_forever() for qp in self._policies.quote_providers()),
+            return_exceptions=True,
+        )

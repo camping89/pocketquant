@@ -17,6 +17,7 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.interfaces import IDataProvider
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.symbol.entities import split_composite
 from pocketquant.core.infra.binance.binance_mappers import (
     INTERVAL_TO_BINANCE,
     kline_to_bar,
@@ -59,7 +60,7 @@ class BinanceClient(IDataProvider):
         Paginates automatically when n_bars > 1000 (Binance limit per call).
         """
         # Extract bare code from composite symbol for Binance API (BINANCE-specific boundary)
-        code = symbol.split(":")[0] if ":" in symbol else symbol
+        code = split_composite(symbol)[0]
         validated_symbol = validate_symbol(code)
         binance_interval, bar_duration_ms = INTERVAL_TO_BINANCE[interval]
 

@@ -8,7 +8,7 @@ import pytest
 
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.engine.market_data.app_services.integrity_jobs import repair_integrity
+from pocketquant.engine.market_data.bar_integrity import repair_integrity
 from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 

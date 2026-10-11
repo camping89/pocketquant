@@ -6,10 +6,8 @@ from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.engine.market_data.app_services.integrity_jobs import (
-    check_integrity,
-    repair_integrity,
-)
+from pocketquant.engine.market_data.bar_integrity import check_integrity, repair_integrity
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 from pocketquant.engine.market_data.sync_service import SyncService
 
 
@@ -28,9 +26,16 @@ router = APIRouter(route_class=DishkaRoute)
 async def integrity_check(
     body: IntegrityRequest,
     bar_repo: FromDishka[BarRepository],
+    policies: FromDishka[SyncPolicies],
 ) -> dict:
     symbol = validate_composite_symbol(body.symbol)
-    return await check_integrity(symbol, body.interval, bar_repo, body.days_back)
+    return await check_integrity(
+        symbol,
+        body.interval,
+        bar_repo,
+        body.days_back,
+        calendar=policies.market_calendar(symbol),
+    )
 
 
 @router.post("/integrity/repair")
@@ -38,6 +43,7 @@ async def integrity_repair(
     body: IntegrityRequest,
     bar_repo: FromDishka[BarRepository],
     sync_service: FromDishka[SyncService],
+    policies: FromDishka[SyncPolicies],
 ) -> dict:
     symbol = validate_composite_symbol(body.symbol)
     # source is keyword-only; days_back must be passed by name too (it follows the
@@ -49,4 +55,5 @@ async def integrity_repair(
         sync_service,
         source=SOURCE_REST_REPAIR,
         days_back=body.days_back,
+        calendar=policies.market_calendar(symbol),
     )

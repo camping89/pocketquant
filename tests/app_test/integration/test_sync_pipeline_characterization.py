@@ -46,7 +46,8 @@ from pocketquant.core.infra.persistence.repositories.sync_status_repository impo
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
-from pocketquant.engine.market_data.app_services.sync_jobs import register_sync_jobs
+from pocketquant.engine.market_data.sync_policy import SyncPolicies, binance_policy
+from pocketquant.engine.market_data.sync_runner import register_sync_jobs
 from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 pytestmark = pytest.mark.asyncio
@@ -223,8 +224,9 @@ async def _assert_cascade_matches_1m(db: Database) -> None:
 async def test_sync_pipeline_characterization(deps: Deps) -> None:
     db = deps.db
     fake = FakeProvider()
+    policies = SyncPolicies([binance_policy(data_provider=fake, quote_provider=None)])
     sync_service = SyncService(
-        provider=fake,
+        policies=policies,
         cache=deps.cache,
         bar_repository=deps.bars,
         symbol_repository=deps.symbols,
@@ -236,7 +238,7 @@ async def test_sync_pipeline_characterization(deps: Deps) -> None:
             JobHistoryRepository: deps.history,
             TrackedSymbolRepository: deps.tracked,
             BarRepository: deps.bars,
-            IDataProvider: fake,
+            SyncPolicies: policies,
         }
     )
     scheduler = RecordingScheduler()

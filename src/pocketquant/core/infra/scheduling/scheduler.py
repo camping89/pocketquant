@@ -6,7 +6,7 @@ collection; the first to update next_run_time wins each tick.
 
 Jobs MUST be passed as text references (e.g. "module.path:func") so they can be
 serialized into Mongo. Module-level coroutine functions only — no closures.
-History recording lives inside each job function (see sync_jobs.py).
+History recording lives inside each job function (see sync_runner.py).
 """
 
 from __future__ import annotations

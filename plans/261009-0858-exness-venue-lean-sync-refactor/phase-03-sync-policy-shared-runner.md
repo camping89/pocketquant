@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Sync policy registry, shared runner and suffix routing (Binance)"
-status: pending
+status: in-progress
 priority: P1
 effort: 5d
 dependencies: [2]
@@ -55,6 +55,17 @@ File hops against G2, counted honestly. Manual sync: `routes/market_data_sync.py
   - `tests/app_test/unit/handlers/sync/conftest.py`, `.../sync/test_bar_filters.py`, `.../sync/test_provider_fetch.py`, `.../sync/test_no_progress_tracking.py` (:78)
   - `tests/app_test/unit/market_data/test_sync_jobs_catchup.py`, `tests/app_test/unit/market_data/test_sync_verify_cascade.py`, `tests/app_test/unit/market_data/test_quote_app_service.py` (:46)
   - `tests/engine_test/market_data/test_sync_service.py` (:84)
+
+<!-- Updated: Execution 2026-10-11 - deviations recorded during cook; kongming counsel on each failed Verify -->
+## Execution notes
+- T3.1–T3.13 are done and the T3.13 gate is green: `just test` 685 passed, ruff clean, pyright 0 errors, 7 contracts kept, venue 79 (baseline 79), `tests/baseline` 9 passed, no function over 60 lines.
+- T3.14: the prod inventory reports `total_okx_docs: 0`, so T3.15–T3.17 are skipped and `user-preconditions.md` records `OKX migration: nothing to migrate`.
+- Deviations from the task text, each needed to meet a stated Verify condition:
+  - T3.5: the step 4 folds left `sync_one` at 93 lines. `sync_one` keeps the policy guard, the started log, the `syncing` status and the error path, and `_sync_with(provider, symbol, request)` runs fetch → persist → `_record_progress`. Calls run in the same order as before. `test_no_progress_tracking.py` used the reversed symbol `BINANCE:BTCUSDT`, which now has no policy; that test data was changed to `BTCUSDT:BINANCE`, with no assertion change.
+  - T3.6/T3.7: `_verify_one_symbol` is renamed `verify_one_symbol`, because pyright `reportPrivateUsage` rejects the cross-module call from `sync_runner`.
+  - T3.7: the `_run_recorded` body takes `doc_id`, because `_sync_symbols` records detail rows against it. `_cascade` and `_log_verify_summary` are split out, and the `register_sync_jobs` comment is condensed, to keep every function ≤ 60 lines.
+  - T3.8: `asyncio.create_task` rejects a `gather` future, so `QuoteAppService.start` runs the gather inside `_run_quote_feeds()`. `WsSubscriptionManager._reconcile` maps each desired symbol to its policy's quote provider.
+  - The `scheduler.py` docstring now names `sync_runner.py`. `test_sync_policy.py` rebinds `sync_policy.logger` per test (the same `cache_logger_on_first_use` isolation as `handlers/sync/conftest.py`).
 
 ## Tasks
 

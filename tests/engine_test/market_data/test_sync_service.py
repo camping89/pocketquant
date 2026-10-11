@@ -14,6 +14,7 @@ import pytest
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.engine.market_data.sync_policy import SyncPolicies, binance_policy
 from pocketquant.engine.market_data.sync_service import (
     BulkSyncCommand,
     SyncResponse,
@@ -82,7 +83,7 @@ def _build_service(
     sync_status_repo.reset_empty_fetch = AsyncMock()
 
     svc = SyncService(
-        provider=provider,
+        policies=SyncPolicies([binance_policy(data_provider=provider, quote_provider=None)]),
         cache=cache,
         bar_repository=bar_repo,
         symbol_repository=symbol_repo,

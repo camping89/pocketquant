@@ -10,7 +10,8 @@ from pocketquant.core.domain.bar.entities import (
     SOURCE_REST_BACKFILL,
     SOURCE_REST_SYNC_1M,
 )
-from pocketquant.engine.market_data.app_services import sync_jobs
+from pocketquant.engine.market_data import sync_runner as sync_jobs
+from pocketquant.engine.market_data.sync_policy import SyncPolicies, binance_policy
 from pocketquant.engine.market_data.sync_service import SyncService, SyncSymbolCommand
 
 
@@ -52,6 +53,9 @@ def _wire_container(monkeypatch: pytest.MonkeyPatch, *, sync_service) -> None:
             JobHistoryRepository: history_repo,
             TrackedSymbolRepository: tracked_repo,
             BarRepository: bar_repo,
+            SyncPolicies: SyncPolicies(
+                [binance_policy(data_provider=MagicMock(), quote_provider=None)]
+            ),
         }
     )
     monkeypatch.setattr(sync_jobs, "_container", container)

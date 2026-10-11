@@ -4,16 +4,13 @@ from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppS
 from pocketquant.app.market_data.app_services.ws_subscription_manager import WsSubscriptionManager
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
-from pocketquant.core.domain.market_data.interfaces import IRealtimeQuoteProvider
-from pocketquant.core.infra.binance.binance_websocket_client import (
-    BinanceWebSocketClient,
-)
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
+from pocketquant.engine.market_data.sync_policy import SyncPolicies
 from pocketquant.engine.market_data.sync_service import SyncService
 
 
@@ -28,30 +25,26 @@ class MarketDataProvider(Provider):
         return BarAppService(cache=cache, bar_repository=bar_repository, event_bus=event_bus)
 
     @provide(scope=Scope.APP)
-    def get_realtime_quote_provider(self) -> IRealtimeQuoteProvider:
-        return BinanceWebSocketClient()  # type: ignore[return-value]  # Protocol satisfied structurally
-
-    @provide(scope=Scope.APP)
     def get_quote_service(
         self,
         settings: Settings,
         cache: Cache,
         bar_manager: BarAppService,
-        provider: IRealtimeQuoteProvider,
+        policies: SyncPolicies,
     ) -> QuoteAppService:
         return QuoteAppService(
-            settings=settings, cache=cache, bar_manager=bar_manager, provider=provider
+            settings=settings, cache=cache, bar_manager=bar_manager, policies=policies
         )
 
     @provide(scope=Scope.APP)
     def get_ws_subscription_manager(
         self,
-        provider: IRealtimeQuoteProvider,
+        policies: SyncPolicies,
         tracked_symbol_repo: TrackedSymbolRepository,
         quote_app_service: QuoteAppService,
     ) -> WsSubscriptionManager:
         return WsSubscriptionManager(
-            provider=provider,
+            policies=policies,
             tracked_symbol_repo=tracked_symbol_repo,
             quote_app_service=quote_app_service,
         )

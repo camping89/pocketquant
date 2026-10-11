@@ -38,9 +38,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
-from pocketquant.engine.market_data.app_services.sync_jobs import (
-    set_container as set_sync_container,
-)
+from pocketquant.engine.market_data.sync_runner import set_container as set_sync_container
 
 
 class TestCoreProvider(Provider):

@@ -2,7 +2,7 @@
 
 Two write paths:
   - Wrapper path (`record_start` + `record_finish`): keyed by generated UUID;
-    used by sync_jobs._run_sync. Writes "running" → "completed"|"failed".
+    used by sync_runner._run_recorded. Writes "running" → "completed"|"failed".
   - Listener path (`record_skip`): keyed by (job_id, scheduled_run_time);
     used by APScheduler EVENT_JOB_MISSED/MAX_INSTANCES/ERROR. Idempotent
     upsert so multi-instance races converge.
