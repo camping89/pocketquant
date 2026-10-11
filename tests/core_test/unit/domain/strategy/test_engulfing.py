@@ -170,6 +170,7 @@ async def test_short_strong_emits_short_signal_with_mirrored_sl_tp() -> None:
     sl = pattern_high * 1.001
     assert sig.stop_loss_price == pytest.approx(sl)
     assert sig.take_profit_price == pytest.approx(entry - (sl - entry))
+    assert sig.take_profit_price is not None
     assert sig.take_profit_price < entry  # TP below entry for a short
 
 
