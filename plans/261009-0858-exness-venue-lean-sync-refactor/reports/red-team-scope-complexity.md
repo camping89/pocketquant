@@ -1,0 +1,13 @@
+# Red team: Scope & Complexity Critic (Contract Verifier)
+
+The reviewer returned nine findings: two High and seven Medium. The full text is in the controller transcript; this is a summary.
+
+1. **High, Phase 06 T6.12/T6.14.** `venue_router.py` adds a dispatch layer nobody requested, and most of its surface has no consumer. It adds a file hop that breaks the G2 "≤3 files" target. Its `subscribe` raises an error for an unconfigured exchange, which makes the 5 s reconcile log `subscribe_failed` indefinitely. Evidence: `core/domain/market_data/interfaces.py:51-78`, `ws_subscription_manager.py:38,66,76,91`, `binance_client.py:132-137`.
+2. **High, Phase 06 T6.16, Phase 07 T7.8 and D4.** The code metrics are never re-measured after Phases 06–07, even though the Exness client wrappers add pure delegations. The soft CI gate then silently violates D4. Fix: re-measure at the end of Phase 07 with a stop-and-ask, and drop the per-endpoint wrappers.
+3. **Medium, Phase 07 T7.7.** The per-subscription `broker` field is a domain and public-API change nobody requested. The existing dead `Settings.default_broker` (`core/config.py:70`) is ignored. The broker-name list ends up in three hardcoded copies (`broker_factory.py:60-62`).
+4. **Medium, Phase 02 T2.6.** The OKX characterization test pins code that no phase touches, and makes D6 circular. No OKX tests exist today (`tests/core_test/infra/brokers/` has only paper broker tests).
+5. **Medium, Phase 05 T5.2 §8.** The standard documents the router before it exists, which breaks the AS-IS rule. The add-a-provider checklist is wrong: a provider really touches 7 or more places. Phase 09 never revisits `code-standards.md`.
+6. **Medium, Phase 06 T6.15.** The Exness-specific backfill script duplicates `scripts/backfill/binance_bars.py:143` (`--exchange`) and `tracked_symbols_backfill.py:85-114`.
+7. **Medium, Phase 03 T3.2 and Phase 06.** `SyncPolicy.live_source` is never read. `rate_budget_per_minute` is hardcoded, though the advice says limits are runtime-configured. There are two calendar accessors and four copies of composite-symbol parsing. Evidence: `binance_client.py:62`, `binance_websocket_client.py:83`, `symbol/entities.py:24`.
+8. **Medium, Phase 07 T7.4 versus Phase 06 T6.4.** `client.account()` is used but never defined in the client contract. Phase 01 cites the wrong line for `Settings`: `config.py:98` should be `:30`.
+9. **Medium, Phase 01 T1.2–T1.4, T1.8 and T1.12.** The "read-only spike" ships `src/` code, settings and a dependency, and takes two prod deploys before feasibility is known. Evidence: `cicd.yml:6-10`, `deploy/Dockerfile:42`.

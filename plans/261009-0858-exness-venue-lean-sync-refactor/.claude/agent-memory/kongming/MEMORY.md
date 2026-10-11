@@ -1,0 +1,1 @@
+- [Ship flow](project_ship_flow.md) — push to master = prod deploy; user gates merge; checkpoint reviews inspect diff vs master

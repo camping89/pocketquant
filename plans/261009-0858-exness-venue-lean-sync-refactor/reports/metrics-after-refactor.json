@@ -1,0 +1,25 @@
+{
+  "functions_total": 806,
+  "functions_measured": 671,
+  "tiny": 319,
+  "tiny_share": 0.4754,
+  "delegations": 63,
+  "functions_over_60": [
+    "app/main_extensions.py:366 register_routes 65",
+    "app/routes/market_data.py:205 stream_bars 71",
+    "app/routes/market_data_quotes.py:76 stream_quote 64",
+    "backtest/engine/backtest_app_service.py:65 run 113",
+    "backtest/engine/historical_replay_app_service.py:43 replay 74",
+    "backtest/engine/lot_tracker.py:73 feed 76",
+    "backtest/engine/result_collector.py:394 finalize 69",
+    "core/infra/binance/binance_client.py:51 fetch_ohlcv 81",
+    "core/infra/brokers/okx/okx_broker.py:124 submit_order 66",
+    "core/infra/brokers/paper/paper_broker.py:234 _handle_limit 83",
+    "core/infra/persistence/repositories/bar_repository.py:71 upsert_bar 74",
+    "core/infra/persistence/repositories/job_history_repository.py:238 aggregate_stats 61",
+    "core/infra/scheduling/scheduler.py:192 add_cron_job 65",
+    "engine/app_services/order_app_service.py:34 submit 91",
+    "engine/app_services/position_app_service.py:39 _on_order_filled 73",
+    "engine/market_data/app_services/cascade_aggregator.py:140 cascade_for_symbol 96"
+  ]
+}
