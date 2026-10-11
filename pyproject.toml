@@ -29,6 +29,7 @@ dependencies = [
     # silent upstream change is one of this integration's named risks.
     # sha resolved 2026-09-22 from rongardF/tvdatafeed HEAD.
     "tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git@e6f6aaa7de439ac6e454d9b26d2760ded8dc4923",
+    "cryptography>=46",
 ]
 
 [project.scripts]

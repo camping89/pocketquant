@@ -72,6 +72,10 @@ runs:
 
         # 2) .env (multi-line). Mask each non-empty value.
         ENV_CONTENT=$(normalize "$VPS_DIR/.env")
+        if grep -q 'BEGIN' <<< "$ENV_CONTENT" || grep -vE '^[[:space:]]*(#|$)' <<< "$ENV_CONTENT" | grep -qv '='; then
+          echo "::error::.env must contain only single-line KEY=VALUE entries"
+          exit 1
+        fi
         while IFS='=' read -r k v; do
           [[ -z "$k" || "$k" =~ ^[[:space:]]*# ]] && continue
           v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
