@@ -73,7 +73,7 @@ def test_no_stale_references_to_old_paths():
                 if not file.endswith(".py") or file == os.path.basename(__file__):
                     continue
                 path = os.path.join(root, file)
-                with open(path) as f:
+                with open(path, encoding="utf-8") as f:
                     content = f.read()
                 for fragment in old_fragments:
                     if fragment in content:
