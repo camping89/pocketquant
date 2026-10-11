@@ -5,7 +5,7 @@ from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
-from pocketquant.app.di.container import create_container
+from pocketquant.app.di import create_container
 from pocketquant.app.main_extensions import (
     configure_middleware,
     drain_backtest_tasks,
@@ -102,7 +102,7 @@ def create_app() -> FastAPI:
     )
 
     # setup_dishka must be called before app starts (adds middleware)
-    container = create_container()
+    container = create_container(settings)
     setup_dishka(container, app)
 
     configure_middleware(app, settings)

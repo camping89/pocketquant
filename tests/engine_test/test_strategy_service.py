@@ -25,18 +25,9 @@ from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.engine.strategy_command_service import (
     AddSymbolCommand,
-    DeleteStrategyCommand,
-    RemoveSymbolCommand,
-    StartStrategyCommand,
-    StopStrategyCommand,
     StrategyCommandService,
 )
 from pocketquant.engine.strategy_query_service import (
-    GetStrategiesQuery,
-    GetStrategyPositionsQuery,
-    GetStrategyQuery,
-    GetStrategyTradesQuery,
-    ListSymbolsQuery,
     StrategyQueryService,
 )
 
@@ -115,8 +106,8 @@ def _closed_position(idx: int = 1, subscription_id: str = "sub-1") -> PositionAg
 @pytest.mark.parametrize(
     ("op", "command", "written_state"),
     [
-        pytest.param("start", StartStrategyCommand(subscription_id="sub-1"), "running", id="start"),
-        pytest.param("stop", StopStrategyCommand(subscription_id="sub-1"), "stopped", id="stop"),
+        pytest.param("start", "sub-1", "running", id="start"),
+        pytest.param("stop", "sub-1", "stopped", id="stop"),
     ],
 )
 @pytest.mark.asyncio
@@ -134,8 +125,8 @@ async def test_start_stop_writes_desired_state(op, command, written_state) -> No
 @pytest.mark.parametrize(
     ("op", "command"),
     [
-        pytest.param("start", StartStrategyCommand(subscription_id="missing"), id="start"),
-        pytest.param("stop", StopStrategyCommand(subscription_id="missing"), id="stop"),
+        pytest.param("start", "missing", id="start"),
+        pytest.param("stop", "missing", id="stop"),
     ],
 )
 @pytest.mark.asyncio
@@ -216,7 +207,7 @@ async def test_remove_symbol_deletes_subscription() -> None:
     sub_repo.delete = AsyncMock()
 
     svc = _cmd_svc(sub_repo=sub_repo)
-    await svc.remove_symbol(RemoveSymbolCommand(sub_id="sub-1"))
+    await svc.remove_symbol("sub-1")
 
     sub_repo.delete.assert_awaited_once_with("sub-1")
 
@@ -233,7 +224,7 @@ async def test_delete_strategy_cascades_in_order() -> None:
     sub_repo.delete_by_strategy_code.side_effect = lambda _: call_order.append("sub")
 
     svc = _cmd_svc(sub_repo=sub_repo, bt_repo=bt_repo)
-    await svc.delete_strategy(DeleteStrategyCommand(strategy_id="hitnrun2"))
+    await svc.delete_strategy("hitnrun2")
 
     assert call_order == ["bt", "sub"]
 
@@ -246,7 +237,7 @@ async def test_delete_strategy_cascades_in_order() -> None:
 @pytest.mark.asyncio
 async def test_get_all_returns_registry_codes() -> None:
     svc = _query_svc()
-    result = await svc.get_all(GetStrategiesQuery())
+    result = await svc.get_all()
     assert isinstance(result, list)
     # STRATEGY_REGISTRY may have entries in test env; just check shape
     for entry in result:
@@ -256,7 +247,7 @@ async def test_get_all_returns_registry_codes() -> None:
 @pytest.mark.asyncio
 async def test_get_one_returns_none_for_unknown_code() -> None:
     svc = _query_svc()
-    result = await svc.get_one(GetStrategyQuery(strategy_code="definitely-does-not-exist-xyz"))
+    result = await svc.get_one("definitely-does-not-exist-xyz")
     assert result is None
 
 
@@ -293,7 +284,7 @@ async def test_list_symbols_derives_is_running_from_actual_state(
     sub_repo.list_all = AsyncMock(return_value=[sub])
 
     svc = _query_svc(sub_repo=sub_repo)
-    rows = await svc.list_symbols(ListSymbolsQuery())
+    rows = await svc.list_symbols()
 
     assert len(rows) == 1
     assert rows[0]["is_running"] is expected_is_running
@@ -306,7 +297,7 @@ async def test_list_symbols_returns_empty_when_no_subs() -> None:
     sub_repo = MagicMock()
     sub_repo.list_all = AsyncMock(return_value=[])
     svc = _query_svc(sub_repo=sub_repo)
-    assert await svc.list_symbols(ListSymbolsQuery()) == []
+    assert await svc.list_symbols() == []
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +311,7 @@ async def test_get_positions_maps_open_positions() -> None:
     pos_repo.find_open_by_subscription = AsyncMock(return_value=[_open_position()])
     svc = _query_svc(position_repo=pos_repo)
 
-    result = await svc.get_positions(GetStrategyPositionsQuery(subscription_id="sub-1"))
+    result = await svc.get_positions("sub-1")
 
     pos_repo.find_open_by_subscription.assert_awaited_once_with("sub-1")
     assert len(result) == 1
@@ -337,7 +328,7 @@ async def test_get_positions_returns_empty_when_none_open() -> None:
     pos_repo = MagicMock()
     pos_repo.find_open_by_subscription = AsyncMock(return_value=[])
     svc = _query_svc(position_repo=pos_repo)
-    assert await svc.get_positions(GetStrategyPositionsQuery(subscription_id="sub-1")) == []
+    assert await svc.get_positions("sub-1") == []
 
 
 @pytest.mark.asyncio
@@ -348,7 +339,7 @@ async def test_get_trades_maps_closed_positions() -> None:
     )
     svc = _query_svc(position_repo=pos_repo)
 
-    result = await svc.get_trades(GetStrategyTradesQuery(subscription_id="sub-1", limit=50))
+    result = await svc.get_trades("sub-1", 50)
 
     pos_repo.find_closed_by_subscription.assert_awaited_once_with("sub-1", limit=50)
     assert len(result) == 2
@@ -365,4 +356,4 @@ async def test_get_trades_returns_empty_when_no_closed() -> None:
     pos_repo = MagicMock()
     pos_repo.find_closed_by_subscription = AsyncMock(return_value=[])
     svc = _query_svc(position_repo=pos_repo)
-    assert await svc.get_trades(GetStrategyTradesQuery(subscription_id="sub-1")) == []
+    assert await svc.get_trades("sub-1") == []

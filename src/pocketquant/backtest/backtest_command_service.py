@@ -36,15 +36,6 @@ class RunBacktestCommand(BaseModel):
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")
 
 
-class SetVerdictCommand(BaseModel):
-    """Command to set (or clear) the human-readable verdict on a finished run."""
-
-    run_id: str = Field(..., description="Backtest run id")
-    verdict: str | None = Field(
-        default=None, max_length=2000, description="Conclusion text; null clears it"
-    )
-
-
 class BacktestCommandService:
     def __init__(self, backtest_repository: BacktestRepository) -> None:
         self._backtest_repo = backtest_repository
@@ -71,8 +62,8 @@ class BacktestCommandService:
         await self._backtest_repo.save(BacktestResult.started(run_id, config))
         return run_id, config
 
-    async def set_verdict(self, cmd: SetVerdictCommand) -> None:
+    async def set_verdict(self, run_id: str, verdict: str | None) -> None:
         """Set the run's verdict; raise NotFoundError if the run does not exist."""
-        matched = await self._backtest_repo.set_verdict(cmd.run_id, cmd.verdict)
+        matched = await self._backtest_repo.set_verdict(run_id, verdict)
         if not matched:
-            raise NotFoundError(f"Backtest not found: {cmd.run_id}")
+            raise NotFoundError(f"Backtest not found: {run_id}")

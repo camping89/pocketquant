@@ -15,15 +15,8 @@ from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
-from dishka import make_async_container
 
-from pocketquant.app.di import (
-    BacktestWorkerProvider,
-    ExecutionProvider,
-    InfrastructureProvider,
-    MarketDataProvider,
-    PersistenceProvider,
-)
+from pocketquant.app.di import create_container
 from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.config import Settings
@@ -43,8 +36,6 @@ from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
 )
 
-from .app_factory import TestCoreProvider
-
 pytestmark = pytest.mark.asyncio
 
 _STRATEGY = "hitnrun2"
@@ -54,14 +45,7 @@ _SYMBOL = "BTCUSDT:BINANCE"
 @pytest_asyncio.fixture
 async def app_container(settings: Settings):
     """Full app DI graph — every runtime provider."""
-    c = make_async_container(
-        TestCoreProvider(settings),
-        PersistenceProvider(),
-        InfrastructureProvider(),
-        ExecutionProvider(),
-        MarketDataProvider(),
-        BacktestWorkerProvider(),
-    )
+    c = create_container(settings)
     yield c
     await c.close()
 

@@ -12,10 +12,6 @@ import pytest
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.engine.orders_positions_service import (
-    GetOrderQuery,
-    GetPositionQuery,
-    ListOrdersQuery,
-    ListPositionsQuery,
     OrderPositionQueryService,
 )
 
@@ -75,7 +71,7 @@ async def test_get_order_returns_dict() -> None:
     o = _order()
     svc = _build_svc(get_order_return=o)
 
-    result = await svc.get_order(GetOrderQuery(order_id="ord-1"))
+    result = await svc.get_order("ord-1")
 
     assert result["id"] == "ord-1"
     assert result["subscription_id"] == "sub-1"
@@ -89,7 +85,7 @@ async def test_get_order_raises_not_found_when_missing() -> None:
     svc = _build_svc(get_order_return=None)
 
     with pytest.raises(NotFoundError):
-        await svc.get_order(GetOrderQuery(order_id="missing"))
+        await svc.get_order("missing")
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +109,7 @@ async def test_list_orders_combines_pending_and_filled() -> None:
         position_app_service=position_svc,
     )
 
-    result = await svc.list_orders(ListOrdersQuery())
+    result = await svc.list_orders()
 
     assert len(result) == 2
     ids = {r["id"] for r in result}
@@ -123,7 +119,7 @@ async def test_list_orders_combines_pending_and_filled() -> None:
 @pytest.mark.asyncio
 async def test_list_orders_returns_empty_when_none() -> None:
     svc = _build_svc()
-    result = await svc.list_orders(ListOrdersQuery())
+    result = await svc.list_orders()
     assert result == []
 
 
@@ -137,7 +133,7 @@ async def test_get_position_returns_summary() -> None:
     summary = {"strategy_id": "strat-1", "pnl": 100.0}
     svc = _build_svc(position_summary=summary)
 
-    result = await svc.get_position(GetPositionQuery(strategy_id="strat-1"))
+    result = await svc.get_position("strat-1")
 
     assert result == summary
 
@@ -147,7 +143,7 @@ async def test_get_position_raises_not_found_when_missing() -> None:
     svc = _build_svc(position_summary=None)
 
     with pytest.raises(NotFoundError):
-        await svc.get_position(GetPositionQuery(strategy_id="missing"))
+        await svc.get_position("missing")
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +156,7 @@ async def test_list_positions_delegates_to_app_service() -> None:
     summaries = [{"strategy_id": "s1"}, {"strategy_id": "s2"}]
     svc = _build_svc(all_summaries=summaries)
 
-    result = await svc.list_positions(ListPositionsQuery())
+    result = await svc.list_positions()
 
     assert result == summaries
 
@@ -168,4 +164,4 @@ async def test_list_positions_delegates_to_app_service() -> None:
 @pytest.mark.asyncio
 async def test_list_positions_returns_empty_when_none() -> None:
     svc = _build_svc(all_summaries=[])
-    assert await svc.list_positions(ListPositionsQuery()) == []
+    assert await svc.list_positions() == []

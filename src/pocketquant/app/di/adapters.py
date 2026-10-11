@@ -1,7 +1,19 @@
+"""Adapters provider: venue adapters behind the ports.
+
+``SyncPolicies`` builds the per-exchange data and quote adapters;
+``BrokerFactory`` builds the broker adapters.
+"""
+
+from dishka import Provider, Scope, provide
+
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.config import Settings
 from pocketquant.core.domain.brokers.interfaces import IBroker
+from pocketquant.core.infra.binance.binance_client import BinanceClient
+from pocketquant.core.infra.binance.binance_websocket_client import BinanceWebSocketClient
 from pocketquant.core.infra.brokers.okx.okx_broker import OKXBroker
 from pocketquant.core.infra.brokers.paper.paper_broker import PaperBroker
+from pocketquant.engine.market_data.sync_policy import SyncPolicies, binance_policy
 
 
 class BrokerFactory:
@@ -60,3 +72,18 @@ class BrokerFactory:
     @staticmethod
     def get_available_types() -> list[str]:
         return ["paper", "okx"]
+
+
+class AdaptersProvider(Provider):
+    broker_factory = provide(BrokerFactory, scope=Scope.APP)
+
+    @provide(scope=Scope.APP)
+    def get_sync_policies(self, settings: Settings) -> SyncPolicies:
+        return SyncPolicies(
+            [
+                binance_policy(
+                    data_provider=BinanceClient(settings=settings),
+                    quote_provider=BinanceWebSocketClient(),
+                )
+            ]
+        )

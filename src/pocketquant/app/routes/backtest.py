@@ -15,13 +15,11 @@ from pydantic import BaseModel, Field
 from pocketquant.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
-    SetVerdictCommand,
 )
 from pocketquant.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.backtest.backtest_query_service import (
     BacktestQueryService,
     EnqueueBacktestResponse,
-    GetBacktestQuery,
     ListBacktestsQuery,
 )
 from pocketquant.backtest.backtest_stats_service import (
@@ -74,7 +72,7 @@ async def get_backtest(
     run_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
+    result = await query_svc.get_result(run_id)
     return result.to_dict()
 
 
@@ -85,7 +83,7 @@ async def set_backtest_verdict(
     cmd_svc: FromDishka[BacktestCommandService],
 ) -> dict:
     """Set (or clear) the human-readable verdict on a run. 404 if run unknown."""
-    await cmd_svc.set_verdict(SetVerdictCommand(run_id=run_id, verdict=body.verdict))
+    await cmd_svc.set_verdict(run_id, body.verdict)
     return {"run_id": run_id, "verdict": body.verdict}
 
 
@@ -94,7 +92,7 @@ async def get_backtest_equity(
     run_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
+    result = await query_svc.get_result(run_id)
     return {
         "run_id": str(result.id),
         "equity_curve": [

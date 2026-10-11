@@ -1,31 +1,35 @@
-"""Dishka DI providers — one per domain slice.
+"""Dishka DI: three providers (infrastructure, adapters, services).
 
 Adding a new service:
-  1. Add a @provide method in the appropriate provider
+  1. Add a @provide method or a `provide(...)` line in the owning provider
   2. Dishka auto-resolves constructor deps via type hints
   3. Use generator factories (yield) for services needing cleanup
 
-Adding a new CQRS handler:
-  1. Add @handles(RequestType) decorator to your Handler subclass
-  2. Add a `provide(YourHandler, scope=Scope.APP)` line in HandlerProvider
+STRICT_VALIDATION rejects a type registered twice, so every type has exactly
+one provider.
 """
 
-from pocketquant.app.di.backtest_worker import BacktestWorkerProvider
-from pocketquant.app.di.core import CoreProvider
-from pocketquant.app.di.execution import ExecutionProvider
+from dishka import STRICT_VALIDATION, AsyncContainer, make_async_container
+
+from pocketquant.app.di.adapters import AdaptersProvider, BrokerFactory
 from pocketquant.app.di.infrastructure import InfrastructureProvider
-from pocketquant.app.di.market_data import MarketDataProvider
-from pocketquant.app.di.persistence import PersistenceProvider
 from pocketquant.app.di.services import ServicesProvider
-from pocketquant.app.di.trading_services import AppTradingServiceProvider
+from pocketquant.core.config import Settings, get_settings
 
 __all__ = [
-    "AppTradingServiceProvider",
-    "BacktestWorkerProvider",
-    "CoreProvider",
-    "ExecutionProvider",
+    "AdaptersProvider",
+    "BrokerFactory",
     "InfrastructureProvider",
-    "MarketDataProvider",
-    "PersistenceProvider",
     "ServicesProvider",
+    "create_container",
 ]
+
+
+def create_container(settings: Settings | None = None) -> AsyncContainer:
+    return make_async_container(
+        InfrastructureProvider(),
+        AdaptersProvider(),
+        ServicesProvider(),
+        context={Settings: settings or get_settings()},
+        validation_settings=STRICT_VALIDATION,
+    )

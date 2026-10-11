@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pocketquant.app.di.infrastructure import InfrastructureProvider
+from pocketquant.app.di.adapters import AdaptersProvider
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.interfaces import IDataProvider, IRealtimeQuoteProvider
 from pocketquant.core.infra.binance.binance_client import BinanceClient
@@ -27,7 +27,7 @@ def mock_settings() -> Settings:
 
 
 def test_binance_policy_data_provider_is_binance_client(mock_settings: Settings) -> None:
-    policy = InfrastructureProvider().get_sync_policies(mock_settings).policy_for("BTCUSDT:BINANCE")
+    policy = AdaptersProvider().get_sync_policies(mock_settings).policy_for("BTCUSDT:BINANCE")
 
     assert policy is not None
     assert isinstance(policy.data_provider, BinanceClient)
@@ -35,7 +35,7 @@ def test_binance_policy_data_provider_is_binance_client(mock_settings: Settings)
 
 
 def test_binance_policy_quote_provider_is_binance_ws_client(mock_settings: Settings) -> None:
-    policy = InfrastructureProvider().get_sync_policies(mock_settings).policy_for("BTCUSDT:BINANCE")
+    policy = AdaptersProvider().get_sync_policies(mock_settings).policy_for("BTCUSDT:BINANCE")
 
     assert policy is not None
     assert isinstance(policy.quote_provider, BinanceWebSocketClient)

@@ -21,10 +21,6 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 )
 
 
-class GetBacktestQuery(BaseModel):
-    run_id: str
-
-
 class ListBacktestsQuery(BaseModel):
     strategy_id: str
     limit: int = 20
@@ -48,10 +44,10 @@ class BacktestQueryService:
         self._backtest_repo = backtest_repository
         self._order_repo = backtest_order_repository
 
-    async def get_result(self, query: GetBacktestQuery) -> BacktestResult:
-        result = await self._backtest_repo.get(query.run_id)
+    async def get_result(self, run_id: str) -> BacktestResult:
+        result = await self._backtest_repo.get(run_id)
         if result is None:
-            raise NotFoundError(f"Backtest not found: {query.run_id}")
+            raise NotFoundError(f"Backtest not found: {run_id}")
         return result
 
     async def list_results(self, query: ListBacktestsQuery) -> list[BacktestResult]:

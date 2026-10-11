@@ -8,15 +8,8 @@ from __future__ import annotations
 
 import pytest
 import pytest_asyncio
-from dishka import make_async_container
 
-from pocketquant.app.di import (
-    AppTradingServiceProvider,
-    ExecutionProvider,
-    InfrastructureProvider,
-    MarketDataProvider,
-    PersistenceProvider,
-)
+from pocketquant.app.di import create_container
 from pocketquant.core.config import Settings
 from pocketquant.engine.app_services.strategy_reconcile_service import (
     StrategyReconcileService,
@@ -24,21 +17,12 @@ from pocketquant.engine.app_services.strategy_reconcile_service import (
 from pocketquant.engine.strategy_command_service import StrategyCommandService
 from pocketquant.engine.strategy_query_service import StrategyQueryService
 
-from .app_factory import TestCoreProvider
-
 pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture
 async def container(settings: Settings):
-    c = make_async_container(
-        TestCoreProvider(settings),
-        PersistenceProvider(),
-        InfrastructureProvider(),
-        ExecutionProvider(),
-        MarketDataProvider(),
-        AppTradingServiceProvider(),
-    )
+    c = create_container(settings)
     yield c
     await c.close()
 

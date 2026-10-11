@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 
-from pocketquant.app.di.broker_factory import BrokerFactory
+from pocketquant.app.di.adapters import BrokerFactory
 from pocketquant.app.market_data.app_services.quote_app_service import QuoteAppService
 from pocketquant.app.market_data.app_services.ws_subscription_manager import (
     WsSubscriptionManager,

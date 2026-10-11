@@ -31,19 +31,6 @@ _STUCK_MULTIPLIER = 3
 
 
 @dataclass
-class GetSyncStatusQuery:
-    pass
-
-
-@dataclass
-class GetSymbolSyncStatusQuery:
-    """Query to get sync status for a specific composite symbol."""
-
-    symbol: str
-    interval: str = "1d"
-
-
-@dataclass
 class SyncStatusResult:
     """Result of a sync status query. ``symbol`` is composite ``{code}:{exchange}``."""
 
@@ -93,7 +80,7 @@ class SyncStatusQueryService:
         self._sync_status_repo = sync_status_repository
         self._bar_repo = bar_repository
 
-    async def get_sync_status(self, request: GetSyncStatusQuery) -> list[SyncStatusResult]:
+    async def get_sync_status(self) -> list[SyncStatusResult]:
         statuses = await self._sync_status_repo.find_all()
         if not statuses:
             return []
@@ -132,16 +119,16 @@ class SyncStatusQueryService:
             )
         return results
 
-    async def get_symbol_sync_status(self, request: GetSymbolSyncStatusQuery) -> SyncStatusResult:
+    async def get_symbol_sync_status(self, symbol: str, interval: str = "1d") -> SyncStatusResult:
         """Return sync status for a single composite symbol. 404 if not found."""
-        interval = Interval(request.interval)
+        interval_enum = Interval(interval)
 
-        status = await self._sync_status_repo.find_one(request.symbol, interval)
+        status = await self._sync_status_repo.find_one(symbol, interval_enum)
         if not status:
-            raise NotFoundError(f"No sync status found for {request.symbol}")
+            raise NotFoundError(f"No sync status found for {symbol}")
 
-        latest_bar = await self._bar_repo.get_latest(status.symbol, interval)
-        bar_count = await self._bar_repo.count(status.symbol, interval)
+        latest_bar = await self._bar_repo.get_latest(status.symbol, interval_enum)
+        bar_count = await self._bar_repo.count(status.symbol, interval_enum)
         latest_dt = latest_bar.datetime if latest_bar else None
 
         return SyncStatusResult(

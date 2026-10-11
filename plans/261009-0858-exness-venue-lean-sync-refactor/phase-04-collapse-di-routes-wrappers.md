@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Collapse DI, routes and scalar wrappers"
-status: pending
+status: in-progress
 priority: P1
 effort: 3d
 dependencies: [3]
@@ -41,6 +41,16 @@ dependencies: [3]
   - `tests/engine_test/market_data/test_quotes_service.py`, `tests/engine_test/market_data/test_tracked_symbols_service.py`
   - `tests/engine_test/test_strategy_handlers_declarative.py`, `tests/engine_test/test_strategy_service.py`, `tests/engine_test/test_orders_positions_service.py`, `tests/engine_test/test_strategy_position_and_trade_handlers.py`
   - `tests/app_test/unit/handlers/status/test_get_sync_status.py`, `tests/app_test/unit/handlers/status/test_get_symbol_sync_status.py`
+
+## Execution notes
+- T4.1–T4.6 are done and the T4.6 gate is green: `just test` 685 passed, ruff clean, pyright 0 errors, `Contracts: 3 kept, 0 broken.`, venue 79 (baseline 79), `tests/baseline` 9 passed with `BASELINE_UPDATE` never set. The T4.2 test set is 40 passed before and after the change.
+- Deviations from the task text:
+  - Tests ran through `uv run python -m pytest` instead of `.venv/Scripts/python.exe -m pytest` (a local hook blocks `.venv` paths); it is the same interpreter.
+  - The T4.4 grep used `-I` to skip binary files: stale `__pycache__` files of the deleted modules match the class names otherwise. Over `*.py` sources the count is 0.
+  - `main.py` calls `create_container(settings)` with the `Settings` it already holds.
+  - The test shims in `test_strategy_handlers_declarative.py` and `test_strategy_position_and_trade_handlers.py` take the scalar parameters, so their `# type: ignore[arg-type]` comments are gone.
+  - `SetVerdictCommand.verdict` carried `max_length=2000`; `SetVerdictBody` in `routes/backtest.py` keeps the same validation at the HTTP edge, so behaviour is unchanged.
+- Follow-up: `README.md:87` still says 7 import-linter contracts and no later phase owns that line.
 
 ## Tasks
 

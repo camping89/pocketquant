@@ -15,7 +15,6 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
 from pocketquant.engine.market_data.sync_status_service import (
-    GetSyncStatusQuery,
     SyncStatusQueryService,
 )
 
@@ -74,7 +73,7 @@ async def test_cascade_fresh_bars_show_not_stuck(handler, sync_status_repo, bar_
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_5)
     bar_repo.count.return_value = 150
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert len(result) == 1
     assert result[0].is_stuck is False
@@ -88,7 +87,7 @@ async def test_all_stuck_when_bars_old(handler, sync_status_repo, bar_repo) -> N
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=2000), Interval.MINUTE_5)
     bar_repo.count.return_value = 10
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     # 5m cadence = 300s; 3× = 900s; bar age 2000s > 900s → stuck
     assert result[0].is_stuck is True
@@ -101,7 +100,7 @@ async def test_no_bars_yet_returns_not_stuck(handler, sync_status_repo, bar_repo
     bar_repo.get_latest.return_value = None
     bar_repo.count.return_value = 0
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert result[0].is_stuck is False
     assert result[0].bar_count == 0
@@ -115,7 +114,7 @@ async def test_count_overrides_status_count(handler, sync_status_repo, bar_repo)
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.HOUR_1)
     bar_repo.count.return_value = 5907
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert result[0].bar_count == 5907
 
@@ -147,7 +146,7 @@ async def test_per_row_exception_isolated_with_fallback(
     bar_repo.get_latest.side_effect = get_latest_side_effect
     bar_repo.count.side_effect = count_side_effect
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert len(result) == 2
     # Row 0 (5m) failed → fell back to sync_status
@@ -161,7 +160,7 @@ async def test_per_row_exception_isolated_with_fallback(
 @pytest.mark.asyncio
 async def test_empty_status_list_returns_empty(handler, sync_status_repo, bar_repo) -> None:
     sync_status_repo.find_all.return_value = []
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
     assert result == []
     bar_repo.get_latest.assert_not_called()
     bar_repo.count.assert_not_called()
@@ -177,6 +176,6 @@ async def test_last_sync_at_still_from_sync_status(handler, sync_status_repo, ba
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_5)
     bar_repo.count.return_value = 100
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert result[0].last_sync_at == sync_dt.isoformat().replace("+00:00", "Z")

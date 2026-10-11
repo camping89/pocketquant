@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Sync policy registry, shared runner and suffix routing (Binance)"
-status: in-progress
+status: done
 priority: P1
 effort: 5d
 dependencies: [2]
@@ -60,6 +60,7 @@ File hops against G2, counted honestly. Manual sync: `routes/market_data_sync.py
 ## Execution notes
 - T3.1–T3.13 are done and the T3.13 gate is green: `just test` 685 passed, ruff clean, pyright 0 errors, 7 contracts kept, venue 79 (baseline 79), `tests/baseline` 9 passed, no function over 60 lines.
 - T3.14: the prod inventory reports `total_okx_docs: 0`, so T3.15–T3.17 are skipped and `user-preconditions.md` records `OKX migration: nothing to migrate`.
+- T3.18: c245ba9 is on master. CI run 38142141699 is green with verdict `HEALTHY (20/20 passed, 0 warnings, 0 failures)`. The first post-deploy `sync_1m` is `completed` (3 inserted, 300 fetched), the jobs check prints `True 0`, and all 3 prod tracked symbols are `:BINANCE`.
 - Deviations from the task text, each needed to meet a stated Verify condition:
   - T3.5: the step 4 folds left `sync_one` at 93 lines. `sync_one` keeps the policy guard, the started log, the `syncing` status and the error path, and `_sync_with(provider, symbol, request)` runs fetch → persist → `_record_progress`. Calls run in the same order as before. `test_no_progress_tracking.py` used the reversed symbol `BINANCE:BTCUSDT`, which now has no policy; that test data was changed to `BTCUSDT:BINANCE`, with no assertion change.
   - T3.6/T3.7: `_verify_one_symbol` is renamed `verify_one_symbol`, because pyright `reportPrivateUsage` rejects the cross-module call from `sync_runner`.

@@ -37,23 +37,6 @@ class AddTrackedSymbolCommand(BaseModel):
         return v
 
 
-class UpdateTrackedSymbolCommand(BaseModel):
-    """Update metadata on an existing composite symbol. Future-proof placeholder."""
-
-    symbol: str = Field(..., description="Composite symbol to update, e.g. BTCUSDT:BINANCE")
-    # Extensible: add metadata fields here as requirements evolve (e.g. alias, tags)
-
-
-class RemoveTrackedSymbolCommand(BaseModel):
-    """Remove composite symbol from tracked_symbols."""
-
-    symbol: str = Field(..., description="Composite symbol to remove, e.g. BTCUSDT:BINANCE")
-
-
-class ListTrackedSymbolsQuery(BaseModel):
-    pass
-
-
 class TrackedSymbolService:
     """CRUD on tracked_symbols backed by the Mongo repository."""
 
@@ -75,31 +58,30 @@ class TrackedSymbolService:
             "seeded_from": ts.seeded_from,
         }
 
-    async def update(self, request: UpdateTrackedSymbolCommand) -> dict:
+    async def update(self, symbol: str) -> dict:
         # Currently no mutable metadata beyond the composite symbol itself —
         # update is a no-op placeholder that validates existence.
-        # Extend fields in command when needed.
-        found = await self._repo.update(request.symbol, {})
+        found = await self._repo.update(symbol, {})
         if not found:
             raise NotFoundError(
-                f"Tracked symbol '{request.symbol}' not found",
+                f"Tracked symbol '{symbol}' not found",
                 error_code="TRACKED_SYMBOL_NOT_FOUND",
             )
-        logger.info("tracked_symbols.updated", symbol=request.symbol)
-        return {"symbol": request.symbol, "status": "updated"}
+        logger.info("tracked_symbols.updated", symbol=symbol)
+        return {"symbol": symbol, "status": "updated"}
 
-    async def remove(self, request: RemoveTrackedSymbolCommand) -> dict:
+    async def remove(self, symbol: str) -> dict:
         """Delete composite symbol from tracked_symbols. 404 if not found."""
-        deleted = await self._repo.delete(request.symbol)
+        deleted = await self._repo.delete(symbol)
         if not deleted:
             raise NotFoundError(
-                f"Tracked symbol '{request.symbol}' not found",
+                f"Tracked symbol '{symbol}' not found",
                 error_code="TRACKED_SYMBOL_NOT_FOUND",
             )
-        logger.info("tracked_symbols.removed", symbol=request.symbol)
-        return {"symbol": request.symbol, "status": "removed"}
+        logger.info("tracked_symbols.removed", symbol=symbol)
+        return {"symbol": symbol, "status": "removed"}
 
-    async def list_all(self, request: ListTrackedSymbolsQuery) -> list[dict]:
+    async def list_all(self) -> list[dict]:
         """Return all tracked composite symbols."""
         symbols = await self._repo.list_all()
         return [

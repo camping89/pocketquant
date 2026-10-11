@@ -9,19 +9,11 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from dishka import AsyncContainer, Provider, Scope, make_async_container, provide
+from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 
-from pocketquant.app.di import (
-    AppTradingServiceProvider,
-    BacktestWorkerProvider,
-    ExecutionProvider,
-    InfrastructureProvider,
-    MarketDataProvider,
-    PersistenceProvider,
-    ServicesProvider,
-)
+from pocketquant.app.di import create_container
 from pocketquant.app.main_extensions import (
     configure_middleware,
     drain_backtest_tasks,
@@ -34,45 +26,15 @@ from pocketquant.app.main_extensions import (
     start_background_jobs,
 )
 from pocketquant.core.common.logging import setup_logging
-from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.sync_runner import set_container as set_sync_container
 
 
-class TestCoreProvider(Provider):
-    """Module-level provider that injects a pre-built Settings instance.
-
-    Defined here (not inside a function) so dishka's get_type_hints() can
-    resolve forward references correctly on Python 3.14+.
-    """
-
-    def __init__(self, settings: Settings) -> None:
-        super().__init__()
-        self._settings = settings
-
-    @provide(scope=Scope.APP)
-    def get_settings(self) -> Settings:
-        return self._settings
-
-    @provide(scope=Scope.APP)
-    def get_event_bus(self) -> EventBus:
-        return EventBus(max_history=100)
-
-
 def build_test_container(settings: Settings) -> AsyncContainer:
     """Production provider list with the testcontainer ``Settings`` injected."""
-    return make_async_container(
-        TestCoreProvider(settings),
-        PersistenceProvider(),
-        InfrastructureProvider(),
-        ExecutionProvider(),
-        MarketDataProvider(),
-        AppTradingServiceProvider(),
-        BacktestWorkerProvider(),
-        ServicesProvider(),
-    )
+    return create_container(settings)
 
 
 def make_test_app(settings: Settings) -> FastAPI:

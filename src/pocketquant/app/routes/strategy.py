@@ -11,22 +11,8 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from pocketquant.core.common.exceptions import NotFoundError
-from pocketquant.engine.strategy_command_service import (
-    AddSymbolCommand,
-    DeleteStrategyCommand,
-    RemoveSymbolCommand,
-    StartStrategyCommand,
-    StopStrategyCommand,
-    StrategyCommandService,
-)
-from pocketquant.engine.strategy_query_service import (
-    GetStrategiesQuery,
-    GetStrategyPositionsQuery,
-    GetStrategyQuery,
-    GetStrategyTradesQuery,
-    ListSymbolsQuery,
-    StrategyQueryService,
-)
+from pocketquant.engine.strategy_command_service import AddSymbolCommand, StrategyCommandService
+from pocketquant.engine.strategy_query_service import StrategyQueryService
 
 
 class CreateSubscriptionBody(BaseModel):
@@ -52,7 +38,7 @@ class StrategyTemplateResponse(BaseModel):
 async def list_strategy_templates(
     query_svc: FromDishka[StrategyQueryService],
 ) -> list[dict]:
-    return await query_svc.get_all(GetStrategiesQuery())
+    return await query_svc.get_all()
 
 
 @strategy_router.get("/{strategy_code}")
@@ -60,7 +46,7 @@ async def get_strategy_template(
     strategy_code: str,
     query_svc: FromDishka[StrategyQueryService],
 ) -> dict:
-    result = await query_svc.get_one(GetStrategyQuery(strategy_code=strategy_code))
+    result = await query_svc.get_one(strategy_code)
     if not result:
         raise NotFoundError(f"Strategy template not found: {strategy_code}")
     return result
@@ -90,7 +76,7 @@ async def delete_strategy_by_code(
     strategy_code: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> Response:
-    await cmd_svc.delete_strategy(DeleteStrategyCommand(strategy_id=strategy_code))
+    await cmd_svc.delete_strategy(strategy_code)
     return Response(status_code=204)
 
 
@@ -106,7 +92,7 @@ async def list_subscriptions(
     query_svc: FromDishka[StrategyQueryService],
     strategy_code: str | None = None,
 ) -> list:
-    return await query_svc.list_symbols(ListSymbolsQuery(strategy_code=strategy_code))
+    return await query_svc.list_symbols(strategy_code)
 
 
 @subscription_router.post("/{sub_id}/start")
@@ -114,7 +100,7 @@ async def start_subscription(
     sub_id: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    await cmd_svc.start(StartStrategyCommand(subscription_id=sub_id))
+    await cmd_svc.start(sub_id)
     return {"subscription_id": sub_id, "status": "started"}
 
 
@@ -123,7 +109,7 @@ async def stop_subscription(
     sub_id: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    await cmd_svc.stop(StopStrategyCommand(subscription_id=sub_id))
+    await cmd_svc.stop(sub_id)
     return {"subscription_id": sub_id, "status": "stopped"}
 
 
@@ -132,7 +118,7 @@ async def get_subscription_positions(
     sub_id: str,
     query_svc: FromDishka[StrategyQueryService],
 ) -> list[dict]:
-    return await query_svc.get_positions(GetStrategyPositionsQuery(subscription_id=sub_id))
+    return await query_svc.get_positions(sub_id)
 
 
 @subscription_router.get("/{sub_id}/trades")
@@ -141,7 +127,7 @@ async def get_subscription_trades(
     query_svc: FromDishka[StrategyQueryService],
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
-    return await query_svc.get_trades(GetStrategyTradesQuery(subscription_id=sub_id, limit=limit))
+    return await query_svc.get_trades(sub_id, limit)
 
 
 @subscription_router.delete("/{sub_id}", status_code=204)
@@ -149,5 +135,5 @@ async def remove_subscription(
     sub_id: str,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> Response:
-    await cmd_svc.remove_symbol(RemoveSymbolCommand(sub_id=sub_id))
+    await cmd_svc.remove_symbol(sub_id)
     return Response(status_code=204)

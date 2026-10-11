@@ -8,10 +8,7 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
 from pocketquant.engine.market_data.tracked_symbols_service import (
     AddTrackedSymbolCommand,
-    ListTrackedSymbolsQuery,
-    RemoveTrackedSymbolCommand,
     TrackedSymbolService,
-    UpdateTrackedSymbolCommand,
 )
 
 
@@ -57,7 +54,7 @@ async def test_add_upserts_and_returns_state():
 async def test_update_validates_existence():
     repo = FakeTrackedSymbolRepo([_ts("BTCUSDT:BINANCE")])
     svc = TrackedSymbolService(tracked_symbol_repository=repo)  # type: ignore[arg-type]
-    result = await svc.update(UpdateTrackedSymbolCommand(symbol="BTCUSDT:BINANCE"))
+    result = await svc.update("BTCUSDT:BINANCE")
     assert result == {"symbol": "BTCUSDT:BINANCE", "status": "updated"}
 
 
@@ -65,23 +62,23 @@ async def test_update_validates_existence():
 async def test_update_missing_raises_not_found():
     svc = TrackedSymbolService(tracked_symbol_repository=FakeTrackedSymbolRepo())  # type: ignore[arg-type]
     with pytest.raises(NotFoundError):
-        await svc.update(UpdateTrackedSymbolCommand(symbol="NOPE:BINANCE"))
+        await svc.update("NOPE:BINANCE")
 
 
 @pytest.mark.asyncio
 async def test_remove_deletes_and_404s_when_missing():
     repo = FakeTrackedSymbolRepo([_ts("ETHUSDT:BINANCE")])
     svc = TrackedSymbolService(tracked_symbol_repository=repo)  # type: ignore[arg-type]
-    result = await svc.remove(RemoveTrackedSymbolCommand(symbol="ETHUSDT:BINANCE"))
+    result = await svc.remove("ETHUSDT:BINANCE")
     assert result == {"symbol": "ETHUSDT:BINANCE", "status": "removed"}
     with pytest.raises(NotFoundError):
-        await svc.remove(RemoveTrackedSymbolCommand(symbol="ETHUSDT:BINANCE"))
+        await svc.remove("ETHUSDT:BINANCE")
 
 
 @pytest.mark.asyncio
 async def test_list_serializes_all():
     repo = FakeTrackedSymbolRepo([_ts("BTCUSDT:BINANCE"), _ts("ETHUSDT:BINANCE")])
     svc = TrackedSymbolService(tracked_symbol_repository=repo)  # type: ignore[arg-type]
-    result = await svc.list_all(ListTrackedSymbolsQuery())
+    result = await svc.list_all()
     assert {r["symbol"] for r in result} == {"BTCUSDT:BINANCE", "ETHUSDT:BINANCE"}
     assert all(set(r) == {"symbol", "created_at", "seeded_from"} for r in result)

@@ -1,8 +1,4 @@
-"""Strategy command service — writes desired_state and cascade-deletes.
-
-Command DTOs keep their original class names so callers that reference them
-by name are unaffected by the handler→service migration.
-"""
+"""Strategy command service — writes desired_state and cascade-deletes."""
 
 from __future__ import annotations
 
@@ -26,14 +22,6 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 )
 
 
-class StartStrategyCommand(BaseModel):
-    subscription_id: str
-
-
-class StopStrategyCommand(BaseModel):
-    subscription_id: str
-
-
 class AddSymbolCommand(BaseModel):
     """Subscribe a strategy to a (symbol, interval) tuple.
 
@@ -43,14 +31,6 @@ class AddSymbolCommand(BaseModel):
     strategy_id: str
     symbol: str
     interval: str
-
-
-class RemoveSymbolCommand(BaseModel):
-    sub_id: str
-
-
-class DeleteStrategyCommand(BaseModel):
-    strategy_id: str
 
 
 class StrategyCommandService:
@@ -70,24 +50,24 @@ class StrategyCommandService:
         self._bt_repo = backtest_repository
         self._tracked_repo = tracked_symbol_repository
 
-    async def start(self, cmd: StartStrategyCommand) -> bool:
+    async def start(self, subscription_id: str) -> bool:
         """Set desired_state=running; reconcile converges actual within one tick.
 
         Declarative: returns before the strategy actually runs.
         """
-        modified = await self._sub_repo.update_desired_state(cmd.subscription_id, "running")
+        modified = await self._sub_repo.update_desired_state(subscription_id, "running")
         if modified == 0:
-            raise NotFoundError(f"Subscription '{cmd.subscription_id}' not found.")
+            raise NotFoundError(f"Subscription '{subscription_id}' not found.")
         return True
 
-    async def stop(self, cmd: StopStrategyCommand) -> bool:
+    async def stop(self, subscription_id: str) -> bool:
         """Set desired_state=stopped; reconcile converges actual within one tick.
 
         Declarative: returns before the strategy actually stops.
         """
-        modified = await self._sub_repo.update_desired_state(cmd.subscription_id, "stopped")
+        modified = await self._sub_repo.update_desired_state(subscription_id, "stopped")
         if modified == 0:
-            raise NotFoundError(f"Subscription '{cmd.subscription_id}' not found.")
+            raise NotFoundError(f"Subscription '{subscription_id}' not found.")
         return True
 
     async def add_symbol(self, cmd: AddSymbolCommand) -> dict:
@@ -128,21 +108,21 @@ class StrategyCommandService:
             "created_at": sub.created_at.isoformat(),
         }
 
-    async def remove_symbol(self, cmd: RemoveSymbolCommand) -> None:
+    async def remove_symbol(self, sub_id: str) -> None:
         """Cascade-delete a subscription's persisted state — pure Mongo write.
 
         No RAM unload: the app control-plane (reconcile orphan-unload) tears down
         the instance once the subscription doc is gone. Subscriptions no longer
         own any backtest state (forward-testing only), so only the sub doc drops.
         """
-        await self._sub_repo.delete(cmd.sub_id)
+        await self._sub_repo.delete(sub_id)
 
-    async def delete_strategy(self, cmd: DeleteStrategyCommand) -> None:
+    async def delete_strategy(self, strategy_id: str) -> None:
         """Cascade-delete every persisted doc for a strategy template — pure Mongo.
 
         No RAM unload, no scheduler: the app control-plane (reconcile orphan-unload)
         tears down each instance once its subscription doc is gone. Ad-hoc backtest
         runs for this strategy are dropped too; then the subscriptions.
         """
-        await self._bt_repo.delete_by_strategy_code(cmd.strategy_id)
-        await self._sub_repo.delete_by_strategy_code(cmd.strategy_id)
+        await self._bt_repo.delete_by_strategy_code(strategy_id)
+        await self._sub_repo.delete_by_strategy_code(strategy_id)

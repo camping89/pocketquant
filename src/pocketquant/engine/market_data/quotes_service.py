@@ -7,12 +7,6 @@ from pocketquant.core.infra.persistence import Cache
 from pocketquant.engine.market_data.app_services.quote_dto import Quote
 
 
-class GetLatestQuoteQuery(BaseModel):
-    """Get the latest quote. ``symbol`` is composite ``{code}:{exchange}``."""
-
-    symbol: str
-
-
 class QuoteResponse(BaseModel):
     """``symbol`` is composite ``{code}:{exchange}``."""
 
@@ -51,9 +45,9 @@ class QuoteQueryService:
     def __init__(self, cache: Cache) -> None:
         self._cache = cache
 
-    async def get_latest(self, request: GetLatestQuoteQuery) -> QuoteResponse | None:
+    async def get_latest(self, symbol: str) -> QuoteResponse | None:
         """Return the latest quote for a composite symbol, or None if not in cache."""
-        cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=request.symbol.upper())
+        cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=symbol.upper())
         data = await self._cache.get(cache_key)
         if data:
             quote = Quote.from_cache_dict(data)

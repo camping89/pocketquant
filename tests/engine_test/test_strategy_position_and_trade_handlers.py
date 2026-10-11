@@ -11,10 +11,6 @@ import pytest
 
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
-from pocketquant.engine.strategy_query_service import (
-    GetStrategyPositionsQuery,
-    GetStrategyTradesQuery,
-)
 
 
 class GetStrategyPositionsHandler:
@@ -30,8 +26,8 @@ class GetStrategyPositionsHandler:
             position_repository=position_repository,
         )
 
-    async def handle(self, request: Any) -> list[dict]:
-        return await self._svc.get_positions(request)  # type: ignore[arg-type]
+    async def handle(self, subscription_id: str) -> list[dict]:
+        return await self._svc.get_positions(subscription_id)
 
 
 class GetStrategyTradesHandler:
@@ -47,8 +43,8 @@ class GetStrategyTradesHandler:
             position_repository=position_repository,
         )
 
-    async def handle(self, request: Any) -> list[dict]:
-        return await self._svc.get_trades(request)  # type: ignore[arg-type]
+    async def handle(self, subscription_id: str, limit: int = 100) -> list[dict]:
+        return await self._svc.get_trades(subscription_id, limit)
 
 
 def _open_position(subscription_id: str = "strat-1") -> PositionAggregate:
@@ -88,7 +84,7 @@ async def test_positions_handler_returns_open_only_as_dicts() -> None:
     repo.find_open_by_subscription = AsyncMock(return_value=[_open_position()])
 
     handler = GetStrategyPositionsHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyPositionsQuery(subscription_id="strat-1"))
+    result = await handler.handle("strat-1")
 
     repo.find_open_by_subscription.assert_awaited_once_with("strat-1")
     assert len(result) == 1
@@ -109,7 +105,7 @@ async def test_positions_handler_returns_empty_list_when_none_open() -> None:
     repo.find_open_by_subscription = AsyncMock(return_value=[])
 
     handler = GetStrategyPositionsHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyPositionsQuery(subscription_id="strat-1"))
+    result = await handler.handle("strat-1")
 
     assert result == []
 
@@ -122,7 +118,7 @@ async def test_trades_handler_maps_closed_positions_to_strategy_trade_shape() ->
     )
 
     handler = GetStrategyTradesHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyTradesQuery(subscription_id="strat-1", limit=50))
+    result = await handler.handle("strat-1", 50)
 
     repo.find_closed_by_subscription.assert_awaited_once_with("strat-1", limit=50)
     assert len(result) == 2
@@ -142,6 +138,6 @@ async def test_trades_handler_empty_when_no_closed_positions() -> None:
     repo.find_closed_by_subscription = AsyncMock(return_value=[])
 
     handler = GetStrategyTradesHandler(position_repository=repo)
-    result = await handler.handle(GetStrategyTradesQuery(subscription_id="strat-1"))
+    result = await handler.handle("strat-1")
 
     assert result == []

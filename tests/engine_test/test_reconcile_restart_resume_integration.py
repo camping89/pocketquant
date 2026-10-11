@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from pocketquant.app.di.broker_factory import BrokerFactory
+from pocketquant.app.di.adapters import BrokerFactory
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval

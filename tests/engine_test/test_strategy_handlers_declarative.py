@@ -41,13 +41,8 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
 )
 from pocketquant.engine.strategy_command_service import (
     AddSymbolCommand,
-    DeleteStrategyCommand,
-    RemoveSymbolCommand,
-    StartStrategyCommand,
-    StopStrategyCommand,
     StrategyCommandService,
 )
-from pocketquant.engine.strategy_query_service import ListSymbolsQuery
 
 
 class StartStrategyHandler:
@@ -58,8 +53,8 @@ class StartStrategyHandler:
             tracked_symbol_repository=MagicMock(),
         )
 
-    async def handle(self, request: Any) -> bool:
-        return await self._svc.start(request)  # type: ignore[arg-type]
+    async def handle(self, subscription_id: str) -> bool:
+        return await self._svc.start(subscription_id)
 
 
 class StopStrategyHandler:
@@ -70,8 +65,8 @@ class StopStrategyHandler:
             tracked_symbol_repository=MagicMock(),
         )
 
-    async def handle(self, request: Any) -> bool:
-        return await self._svc.stop(request)  # type: ignore[arg-type]
+    async def handle(self, subscription_id: str) -> bool:
+        return await self._svc.stop(subscription_id)
 
 
 class AddSymbolHandler:
@@ -99,8 +94,8 @@ class ListSymbolsHandler:
             position_repository=MagicMock(),
         )
 
-    async def handle(self, request: Any) -> list:
-        return await self._svc.list_symbols(request)  # type: ignore[arg-type]
+    async def handle(self, strategy_code: str | None = None) -> list:
+        return await self._svc.list_symbols(strategy_code)
 
 
 class RemoveSymbolHandler:
@@ -117,8 +112,8 @@ class RemoveSymbolHandler:
             tracked_symbol_repository=MagicMock(),
         )
 
-    async def handle(self, request: RemoveSymbolCommand) -> None:
-        await self._svc.remove_symbol(request)
+    async def handle(self, sub_id: str) -> None:
+        await self._svc.remove_symbol(sub_id)
 
 
 class DeleteStrategyHandler:
@@ -135,8 +130,8 @@ class DeleteStrategyHandler:
             tracked_symbol_repository=MagicMock(),
         )
 
-    async def handle(self, request: DeleteStrategyCommand) -> None:
-        await self._svc.delete_strategy(request)
+    async def handle(self, strategy_id: str) -> None:
+        await self._svc.delete_strategy(strategy_id)
 
 
 _STRATEGY = "hitnrun2"
@@ -281,7 +276,7 @@ async def test_start_handler_writes_running_desired_state(repo):
     await repo.add(sub)
 
     handler = StartStrategyHandler(repo)
-    result = await handler.handle(StartStrategyCommand(subscription_id=str(sub.id)))
+    result = await handler.handle(str(sub.id))
 
     assert result is True
     fetched = await repo.get(str(sub.id))
@@ -294,7 +289,7 @@ async def test_start_handler_writes_running_desired_state(repo):
 async def test_start_handler_missing_sub_raises_not_found(repo):
     handler = StartStrategyHandler(repo)
     with pytest.raises(NotFoundError):
-        await handler.handle(StartStrategyCommand(subscription_id="does-not-exist"))
+        await handler.handle("does-not-exist")
 
 
 @pytest.mark.integration
@@ -305,7 +300,7 @@ async def test_stop_handler_writes_stopped_desired_state(repo):
     await repo.update_desired_state(str(sub.id), "running")
 
     handler = StopStrategyHandler(repo)
-    result = await handler.handle(StopStrategyCommand(subscription_id=str(sub.id)))
+    result = await handler.handle(str(sub.id))
 
     assert result is True
     fetched = await repo.get(str(sub.id))
@@ -317,7 +312,7 @@ async def test_stop_handler_writes_stopped_desired_state(repo):
 async def test_stop_handler_missing_sub_raises_not_found(repo):
     handler = StopStrategyHandler(repo)
     with pytest.raises(NotFoundError):
-        await handler.handle(StopStrategyCommand(subscription_id="does-not-exist"))
+        await handler.handle("does-not-exist")
 
 
 # --- add_symbol: real-DB persisted shape ---
@@ -359,7 +354,7 @@ async def test_list_symbols_sources_state_from_db_no_ram_read(repo):
     # No strategy_service dependency — handler must not need RAM to report state.
     handler = ListSymbolsHandler(subscription_repository=repo)
 
-    rows = await handler.handle(ListSymbolsQuery())
+    rows = await handler.handle()
 
     assert len(rows) == 1
     row = rows[0]
@@ -376,7 +371,7 @@ async def test_list_symbols_is_running_false_when_actual_stopped(repo):
     await repo.update_desired_state(str(sub.id), "running")  # desired running, actual still stopped
 
     handler = ListSymbolsHandler(subscription_repository=repo)
-    rows = await handler.handle(ListSymbolsQuery())
+    rows = await handler.handle()
 
     row = rows[0]
     assert row["desired_state"] == "running"
@@ -397,7 +392,7 @@ async def test_remove_symbol_pure_db_delete(repos):
     handler = RemoveSymbolHandler(bt_repo, sub_repo)
     _has_no_attr(handler, "StrategyAppService", "JobScheduler")
 
-    await handler.handle(RemoveSymbolCommand(sub_id=str(sub.id)))
+    await handler.handle(str(sub.id))
 
     assert await sub_repo.get(str(sub.id)) is None
 
@@ -414,6 +409,6 @@ async def test_delete_strategy_cascades_all_subs(repos):
     handler = DeleteStrategyHandler(sub_repo, bt_repo)
     _has_no_attr(handler, "StrategyAppService", "JobScheduler")
 
-    await handler.handle(DeleteStrategyCommand(strategy_id=_STRATEGY))
+    await handler.handle(_STRATEGY)
 
     assert await sub_repo.list_by_strategy_code(_STRATEGY) == []

@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pocketquant.engine.market_data.quotes_service import (
-    GetLatestQuoteQuery,
     QuoteQueryService,
     QuoteResponse,
 )
@@ -36,7 +35,7 @@ async def test_returns_quote_response_when_cache_hit() -> None:
     cache.get = AsyncMock(return_value=_cache_dict())
     svc = QuoteQueryService(cache=cache)
 
-    result = await svc.get_latest(GetLatestQuoteQuery(symbol="BTCUSDT:BINANCE"))
+    result = await svc.get_latest("BTCUSDT:BINANCE")
 
     assert isinstance(result, QuoteResponse)
     assert result.symbol == "BTCUSDT:BINANCE"
@@ -49,7 +48,7 @@ async def test_returns_none_when_cache_miss() -> None:
     cache.get = AsyncMock(return_value=None)
     svc = QuoteQueryService(cache=cache)
 
-    result = await svc.get_latest(GetLatestQuoteQuery(symbol="BTCUSDT:BINANCE"))
+    result = await svc.get_latest("BTCUSDT:BINANCE")
 
     assert result is None
 
@@ -60,7 +59,7 @@ async def test_symbol_uppercased_for_cache_key() -> None:
     cache.get = AsyncMock(return_value=None)
     svc = QuoteQueryService(cache=cache)
 
-    await svc.get_latest(GetLatestQuoteQuery(symbol="btcusdt:binance"))
+    await svc.get_latest("btcusdt:binance")
 
     # Cache key must use upper-cased symbol.
     called_key = cache.get.call_args[0][0]
@@ -73,7 +72,7 @@ async def test_all_fields_propagated() -> None:
     cache.get = AsyncMock(return_value=_cache_dict())
     svc = QuoteQueryService(cache=cache)
 
-    result = await svc.get_latest(GetLatestQuoteQuery(symbol="BTCUSDT:BINANCE"))
+    result = await svc.get_latest("BTCUSDT:BINANCE")
 
     assert result is not None
     assert result.bid == 49990.0
