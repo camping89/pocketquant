@@ -1,0 +1,7 @@
+branch-point: master 22f04b6 (Phase 01 fixture commit not yet on master)
+full: ================ 647 passed, 1 skipped, 18 warnings in 20.61s =================
+ruff-before: Found 4 errors. [*] 4 fixable with the `--fix` option.  (pre-existing I001 on master 22f04b6, fixed in 3bd4439)
+ruff: All checks passed!
+pyright: 0 errors, 0 warnings, 0 informations
+lint-imports: Contracts: 7 kept, 0 broken.
+venue: 79 passed, 3 warnings in 0.48s

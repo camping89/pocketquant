@@ -63,13 +63,9 @@ class TestCoreProvider(Provider):
         return EventBus(max_history=100)
 
 
-def make_test_app(settings: Settings) -> FastAPI:
-    """Build a fully-wired FastAPI test app using testcontainer settings.
-
-    Identical lifecycle to production: indexes, stale recovery, health checks,
-    background jobs (enabled only if settings.enable_jobs=True).
-    """
-    providers = [
+def build_test_container(settings: Settings) -> AsyncContainer:
+    """Production provider list with the testcontainer ``Settings`` injected."""
+    return make_async_container(
         TestCoreProvider(settings),
         PersistenceProvider(),
         InfrastructureProvider(),
@@ -78,8 +74,16 @@ def make_test_app(settings: Settings) -> FastAPI:
         AppTradingServiceProvider(),
         BacktestWorkerProvider(),
         ServicesProvider(),
-    ]
-    container = make_async_container(*providers)
+    )
+
+
+def make_test_app(settings: Settings) -> FastAPI:
+    """Build a fully-wired FastAPI test app using testcontainer settings.
+
+    Identical lifecycle to production: indexes, stale recovery, health checks,
+    background jobs (enabled only if settings.enable_jobs=True).
+    """
+    container = build_test_container(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
