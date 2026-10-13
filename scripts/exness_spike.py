@@ -275,6 +275,7 @@ class Session:
     client: httpx.AsyncClient
     clock: ServerClock = field(default_factory=ServerClock)
     min_interval_s: float = 0.0
+    ap_base: str | None = None
     _last_request_at: float = 0.0
 
     def signed(self, method: str, path_with_query: str) -> dict[str, str]:
@@ -295,7 +296,9 @@ class Session:
         if wait > 0:
             await asyncio.sleep(wait)
         target = f"{path}?{urllib.parse.urlencode(params)}" if params else path
-        request = self.client.build_request("GET", (base or self.cfg.base_url) + target)
+        request = self.client.build_request(
+            "GET", (base or self.ap_base or self.cfg.base_url) + target
+        )
         request.headers.update(self.signed("GET", request.url.raw_path.decode()))
         response = await self.client.send(request)
         self._last_request_at = time.monotonic()
@@ -358,6 +361,13 @@ def rate_limits(limits: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def min_request_interval(limits: dict[str, Any]) -> float:
+    rest = limits["limits"]["rest"]
+    rates = [rest["global_account_rate"]] + [m["rate_limit"] for m in rest["methods"]]
+    # 20% headroom so a sliding window never sees two requests inside one slot.
+    return max(r["window_seconds"] / r["limit"] for r in rates) * 1.2
+
+
 def max_candles(limits: dict[str, Any]) -> int:
     for method in limits["limits"]["rest"]["methods"]:
         if method["api_operation_id"] == "getCandleHistory":
@@ -400,10 +410,11 @@ async def fetch_rest(s: Session, summary: dict[str, Any]) -> dict[str, Any]:
     cfg, acc = s.cfg, f"/v1/configuration/accounts/{s.cfg.account_id}"
     ap_base = await resolve_access_point(s)
     summary["access_point_resolved"] = ap_base is not None
+    summary["rest_host"] = "access_point" if ap_base else "base"
+    s.ap_base = ap_base
     limits = await s.get_ok(f"{acc}/limits")
     write_json(cfg, "limits.json", limits)
-    global_rate = limits["limits"]["rest"]["global_account_rate"]
-    s.min_interval_s = global_rate["window_seconds"] / global_rate["limit"]
+    s.min_interval_s = min_request_interval(limits)
     summary["max_candles_per_request"] = max_candles(limits)
     summary["rate_limits"] = rate_limits(limits)
     account = await s.get_ok(f"{acc}/account")

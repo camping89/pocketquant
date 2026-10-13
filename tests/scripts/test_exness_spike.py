@@ -6,16 +6,21 @@ import base64
 import email.utils
 import json
 import time
+from pathlib import Path
 
+import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from scripts.exness_spike import (
     ServerClock,
+    Session,
+    SpikeConfig,
     allowed_access_point,
     body_hash,
     load_secret_key,
+    min_request_interval,
     redact,
     sign_headers,
     validate_base_url,
@@ -175,3 +180,55 @@ def test_server_clock_tracks_offset_from_date_header() -> None:
     clock.update_from_date_header(email.utils.formatdate(time.time() + 5, usegmt=True))
 
     assert 4000 <= clock.offset_ms <= 6000
+
+
+def _limits(deals_limits: dict[str, int] | None = None) -> dict[str, object]:
+    deals: dict[str, object] = {
+        "api_operation_id": "getDealsHistory",
+        "rate_limit": {"limit": 2, "window_seconds": 1},
+    }
+    if deals_limits is not None:
+        deals["limits"] = deals_limits
+    return {
+        "limits": {
+            "rest": {
+                "global_account_rate": {"limit": 10, "window_seconds": 1},
+                "methods": [
+                    {
+                        "api_operation_id": "getLimits",
+                        "rate_limit": {"limit": 4, "window_seconds": 1},
+                    },
+                    deals,
+                ],
+            }
+        }
+    }
+
+
+def test_min_request_interval_follows_the_strictest_rate_with_headroom() -> None:
+    assert min_request_interval(_limits()) == pytest.approx(0.6)
+
+
+async def test_session_sends_requests_to_the_access_point_once_resolved() -> None:
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        return httpx.Response(200, json={})
+
+    cfg = SpikeConfig(
+        base_url="https://api.example.test",
+        account_id="1",
+        api_key="k",
+        private_key=Ed25519PrivateKey.generate(),
+        out=Path("unused"),
+        tick_seconds=1,
+        instruments=["XAUUSD"],
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        session = Session(cfg=cfg, client=client)
+        await session.get("/v1/a")
+        session.ap_base = "https://ap-x.exness.com"
+        await session.get("/v1/b", {"x": 1})
+    assert [u.host for u in seen] == ["api.example.test", "ap-x.exness.com"]
+    assert seen[1].raw_path == b"/v1/b?x=1"
