@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Lean coding standard and metric ratchet"
-status: pending
+status: done
 priority: P1
 effort: 2d
 dependencies: [4]

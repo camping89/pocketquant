@@ -27,11 +27,11 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
-| 01 | [Exness read-only spike](./phase-01-exness-read-only-spike.md) | 2d | Pending |
-| 02 | [Characterization tests and metric baseline](./phase-02-characterization-and-metric-baseline.md) | 2d | Pending |
-| 03 | [Sync policy registry, shared runner and suffix routing](./phase-03-sync-policy-shared-runner.md) | 5d | Pending |
-| 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | Pending |
-| 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Pending |
+| 01 | [Exness read-only spike](./phase-01-exness-read-only-spike.md) | 2d | In progress (T1.1–T1.7 done on develop) |
+| 02 | [Characterization tests and metric baseline](./phase-02-characterization-and-metric-baseline.md) | 2d | Done on develop (integration steps 2, 4) |
+| 03 | [Sync policy registry, shared runner and suffix routing](./phase-03-sync-policy-shared-runner.md) | 5d | Superseded: suffix routing via resolver swap (integration step 2) |
+| 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | Done on develop (integration step 3) |
+| 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Done on develop (integration step 4) |
 | 06 | [Exness market data, quotes and policy](./phase-06-exness-market-data-and-policy.md) | 7d | Pending |
 | 07 | [Exness broker behind the live-trading switch (off)](./phase-07-exness-broker-off-by-default.md) | 6d | Pending |
 | 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | Pending |

@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Sync policy registry, shared runner and suffix routing (Binance)"
-status: pending
+status: superseded
 priority: P1
 effort: 5d
 dependencies: [2]

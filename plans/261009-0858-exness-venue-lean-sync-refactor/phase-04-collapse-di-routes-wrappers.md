@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Collapse DI, routes and scalar wrappers"
-status: pending
+status: done
 priority: P1
 effort: 3d
 dependencies: [3]

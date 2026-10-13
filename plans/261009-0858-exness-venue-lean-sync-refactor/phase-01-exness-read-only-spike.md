@@ -1,13 +1,20 @@
 ---
 phase: 1
 title: "Exness read-only spike"
-status: pending
+status: in-progress
 priority: P1
 effort: 2d
 dependencies: []
 ---
 
 # Phase 01: Exness read-only spike
+
+<!-- Updated: 2026-10-13 develop re-base - T1.1-T1.7 done on develop; resume at T1.8 -->
+## Develop status
+- The base branch is `develop` (worktree `D:/w/_me/algotrading/pq-develop`, local branch `develop-sync` tracking `origin/develop`). Every `master` in this file means `develop`; push with `git push origin develop-sync:develop`. Deploys to the VPS are approved.
+- T1.1 is done: `reports/user-preconditions.md` holds U1 and U2 confirmed and host `api.exness.com`.
+- T1.2–T1.5 and T1.7 are done: the spike script, its tests, `cryptography>=46` and the `.env` guard reached develop and prod in CI run 38362717425 (verdict HEALTHY). Evidence: `reports/integrate-develop-step1-ports.md`. On develop the spike checks candle alignment with `is_bar_aligned(..., Continuous24x7Calendar())` from `bar_builder_domain_service`.
+- Start at T1.8. T1.6 is the gate for the T1.12 commit only.
 
 ## Context Links
 - Advice: `D:/w/_me/algotrading/plans/reports/advise-261008-1148-exness-api-replacement.md` §2.1, §8, §9
@@ -19,7 +26,7 @@ dependencies: []
 
 <!-- Updated: Validation Session 1 - spike stays in scripts/, no src/ change, one deploy only -->
 ## Goal
-Settle assumptions A-i..A-v with real numbers and record redacted fixtures for the adapter tests. The spike lives entirely in `scripts/` until feasibility is known; nothing in `src/` changes and runtime behaviour is untouched. The signer is promoted into `src/` in Phase 06. The phase deploys exactly once (the spike runs in the prod container and the image needs `cryptography`); the fixtures and journal are committed locally and ride along with the Phase 02 push.
+Settle assumptions A-i..A-v with real numbers and record redacted fixtures for the adapter tests. The spike lives entirely in `scripts/` until feasibility is known; nothing in `src/` changes and runtime behaviour is untouched. The signer is promoted into `src/` in Phase 06. The phase deploys exactly once (the spike runs in the prod container and the image needs `cryptography`); the fixtures and journal are committed and pushed to develop in T1.12.
 
 ## Files to Create or Modify
 - Create: `scripts/exness_spike.py`, `tests/scripts/test_exness_spike.py`
@@ -140,7 +147,8 @@ Settle assumptions A-i..A-v with real numbers and record redacted fixtures for t
   - Step 2 exits 0, and the output contains `passed` but not `failed` or ` error`.
   - Step 3 exits 0 and prints `All checks passed!`.
   - Step 4 exits 0, and the output contains `0 errors`.
-  - Step 5 exits 0 and contains `Contracts: 7 kept, 0 broken.`.
+  - Step 5 exits 0 and contains `Contracts: 8 kept, 0 broken.`.
+  - On develop, steps 3 and 4 need 0 errors only in `src/` and in touched files; pre-existing test lint and type debt is accepted. Step 2 may show only the 4 known Windows `time.tzset` failures. `uv run python scripts/code_metrics.py --ratchet` exits 0.
 
 <!-- Updated: Validation Session 1 - the only deploy of this phase; no src/ files staged -->
 ### T1.7 Ship the spike build
@@ -211,7 +219,7 @@ Settle assumptions A-i..A-v with real numbers and record redacted fixtures for t
 - **Goal:** A-i..A-v are settled in writing, with stop-and-ask on infeasibility.
 - **Target files and symbols:** `docs/journals/<YYYY-MM-DD>-exness-api-spike.md`
 - **Steps:**
-  1. Write the journal in Vietnamese prose, keeping English technical terms (`CLAUDE.md` docs rule). Cover:
+  1. Write the journal in English, matching develop's docs. Cover:
      - the WS subprotocol and `ticks_subscribe_mode` (add or replace);
      - `max_candles_per_request` and the rate limits per `api_operation_id`;
      - per instrument: the Exness instrument name, `contract_size`, `volume_min`, `volume_step`, `point_digits` and `trade_sessions` (including any daily break);
@@ -234,17 +242,18 @@ Settle assumptions A-i..A-v with real numbers and record redacted fixtures for t
 - **Success criteria:** The journal makes an explicit feasibility decision and records the inputs Phase 06 needs.
 - **Verify:** `grep -c "A-v feasible: yes" docs/journals/*-exness-api-spike.md` prints `1`. `grep -cE "^- ?A-(i|ii|iii|iv|v):" docs/journals/*-exness-api-spike.md` prints `5`. `grep -cE "^(access_point|ws_subprotocol|ticks_subscribe_mode|instrument_names|sizer_feasibility): " docs/journals/*-exness-api-spike.md` prints `5`. The step 3 (f) command prints `True`.
 
-<!-- Updated: Validation Session 1 - committed locally, no extra deploy; Phase 02 push carries it -->
-### T1.12 Commit fixtures and journal locally
-- **Goal:** The evidence is versioned without a deploy of its own. The Phase 02 push publishes this commit.
-- **Target files and symbols:** git (local `master` only)
+<!-- Updated: 2026-10-13 develop re-base - commit on develop-sync and push to develop -->
+### T1.12 Commit fixtures and journal and push to develop
+- **Goal:** The evidence is versioned on develop. Phase 02 is already integrated, so this commit is pushed on its own.
+- **Target files and symbols:** git `develop-sync` → `origin/develop`, CI `.github/workflows/cicd.yml`
 - **Steps:**
-  1. `git switch -c test/exness-fixtures`
+  1. `git pull --ff-only`, then run the T1.6 gate.
   2. `git add tests/core_test/infra/exness/fixtures docs/journals`
-  3. `git commit -m "test(exness): record redacted read-only api fixtures and spike findings"`
-  4. `git switch master && git merge --ff-only test/exness-fixtures`. Do not push.
-- **Success criteria:** Local `master` is one commit ahead of `origin/master`, and that commit holds only fixtures and the journal.
-- **Verify:** `git log master -1 --format=%s` prints `test(exness): record redacted read-only api fixtures and spike findings`. `git rev-list --count origin/master..master` prints `1`. `git show --stat --format= HEAD | grep -vcE "tests/core_test/infra/exness/fixtures/|docs/journals/|files? changed"` prints `0`.
+  3. `git diff --cached | grep -ciE "BEGIN [A-Z ]*PRIVATE KEY|EXN-SIGN: [A-Za-z0-9_-]{20}"` must print `0`.
+  4. `git commit -m "test(exness): record redacted read-only api fixtures and spike findings"`
+  5. `git push origin develop-sync:develop`, then wait for the CI run whose `headSha` equals `git rev-parse HEAD` and run `gh run watch <databaseId> --exit-status`.
+- **Success criteria:** The commit holds only fixtures and the journal, and its CI run is green with a HEALTHY deploy.
+- **Verify:** `git show --stat --format= HEAD | grep -vcE "tests/core_test/infra/exness/fixtures/|docs/journals/|files? changed"` prints `0`. `gh run watch <databaseId> --exit-status` exits 0. `gh run view <databaseId> --log | grep "=== Verdict:" | grep -c ", 0 failures)"` prints a number ≥ 1.
 
 ## Verification
 T1.3 (guard), T1.5 (spike tests), T1.6 (gate), T1.8 (boolean config check), T1.9 (no secret values), T1.10 (redacted fixtures) and T1.11 (feasibility lines).

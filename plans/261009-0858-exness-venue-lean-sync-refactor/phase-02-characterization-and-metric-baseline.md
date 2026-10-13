@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Characterization tests and metric baseline"
-status: pending
+status: done
 priority: P1
 effort: 2d
 dependencies: [1]
