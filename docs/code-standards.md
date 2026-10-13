@@ -282,11 +282,14 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 
 ## Composite Symbol Format
 
-**Format:** `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`, `AAPL:NYSE`)
+**Format:** `{CODE}:{PROVIDER}` (e.g., `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`)
 
 **Rules:**
 - Single immutable `symbol: str` field replaces `(code: str, exchange: str)` pairs across domain entities
-- Exchange is opaque postfix—business logic never decomposes `symbol` into parts
+- The suffix is the id of the data provider that produces the symbol's bars, written as `provider_id.upper()` in full — `BINANCE`, `TRADINGVIEW`, never a short code and never the exchange. Routing reads it in one place, `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py`; everything else treats `symbol` as opaque
+- A suffix that names no registered provider fails loudly (`UnknownDataProviderError`, a `ValueError`) — it is never guessed or routed by asset class
+- An unseeded symbol takes its provider's defaults (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`); registering a provider means adding it to both routing adapters in `app/di/` and to that table
+- The execution broker (paper, OKX) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (TradingView's exchange per code is `TRADINGVIEW_EXCHANGE_BY_CODE` in `tradingview_mappers.py`; OKX composes `instId` in `okx_mapper.py`)
 - URL-encoded: `:` serialized as `%3A` in path segments (e.g., `/api/v1/bar/BTCUSDT%3ABINANCE`)
 - JSON/database: raw `:` preserved (no encoding inside payloads)
 - Cache keys: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`, etc.
