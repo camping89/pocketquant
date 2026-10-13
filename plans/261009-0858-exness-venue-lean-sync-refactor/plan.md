@@ -27,7 +27,7 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
-| 01 | [Exness read-only spike](./phase-01-exness-read-only-spike.md) | 2d | In progress (T1.1–T1.7 done on develop) |
+| 01 | [Exness read-only spike](./phase-01-exness-read-only-spike.md) | 2d | Completed 2026-10-13 (A-v feasible; fixtures and journal on develop) |
 | 02 | [Characterization tests and metric baseline](./phase-02-characterization-and-metric-baseline.md) | 2d | Done on develop (integration steps 2, 4) |
 | 03 | [Sync policy registry, shared runner and suffix routing](./phase-03-sync-policy-shared-runner.md) | 5d | Superseded: suffix routing via resolver swap (integration step 2) |
 | 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | Done on develop (integration step 3) |

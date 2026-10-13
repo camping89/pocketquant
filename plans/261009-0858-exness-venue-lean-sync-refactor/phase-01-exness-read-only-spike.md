@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Exness read-only spike"
-status: in-progress
+status: completed
 priority: P1
 effort: 2d
 dependencies: []
@@ -18,6 +18,7 @@ dependencies: []
 - 2026-10-13: T1.9 failed on the access-point host check because the API returns `access_point` as a full https URL, not a bare host. `allowed_access_point` now accepts a bare host or a plain https URL and returns the host; the fix ships in a second deploy, then resume at T1.8.
 - 2026-10-13: the second T1.9 run exited 3 with `HTTP_404` on `getLimits`. A read-only probe showed `api.exness.com` returns a bare 404 for every account route and the access point answers all of them, and that a deals window of exactly `history_age_days` (30) returns 400 `REQUEST_INVALID_TIME_RANGE` while 29 days returns 200. The spike now sends every call after discovery to the access point, spaces requests by the strictest published rate limit with 20% headroom, and reads the deals window from `limits`; the fix ships in a third deploy, then resume at T1.8.
 - 2026-10-13: the third T1.9 run exited 3 with `REQUEST_RATE_LIMIT` on the second M1 candles request, at 0.6 s spacing under the published 2 per second. Three read-only replays of the same sequence returned 200 throughout and no response carried a rate-limit or `Retry-After` header, so the cause is unverified; the spec lists `REQUEST_RATE_LIMIT` on every operation and reports REST limits for the whole access-point cluster. The spike now retries a 429 at most 3 times with backoff and records `rate_limited_retries`; the fix ships in a fourth deploy, then resume at T1.8.
+- 2026-10-13: phase complete. The fourth run exited 0 with one absorbed 429 (`rate_limited_retries: 1`). T1.8–T1.12 passed; the fixtures and the journal `docs/journals/2026-10-13-exness-api-spike.md` (`A-v feasible: yes`) are on develop as commit 20baa15, and CI run 38378550812 deployed HEALTHY. The phase took four deploys (spike fixes: access-point URL form, access-point routing, deals window, 429 retry) instead of one. The T1.12 file-scope Verify used `git show --stat`, which shortens long paths to `.../`; it now uses `--name-only`, which prints `0` for 20baa15.
 
 ## Context Links
 - Advice: `D:/w/_me/algotrading/plans/reports/advise-261008-1148-exness-api-replacement.md` §2.1, §8, §9
@@ -257,7 +258,7 @@ Settle assumptions A-i..A-v with real numbers and record redacted fixtures for t
   4. `git commit -m "test(exness): record redacted read-only api fixtures and spike findings"`
   5. `git push origin develop-sync:develop`, then wait for the CI run whose `headSha` equals `git rev-parse HEAD` and run `gh run watch <databaseId> --exit-status`.
 - **Success criteria:** The commit holds only fixtures and the journal, and its CI run is green with a HEALTHY deploy.
-- **Verify:** `git show --stat --format= HEAD | grep -vcE "tests/core_test/infra/exness/fixtures/|docs/journals/|files? changed"` prints `0`. `gh run watch <databaseId> --exit-status` exits 0. `gh run view <databaseId> --log | grep "=== Verdict:" | grep -c ", 0 failures)"` prints a number ≥ 1.
+- **Verify:** `git show --name-only --format= HEAD | grep -vcE "^(tests/core_test/infra/exness/fixtures/|docs/journals/)"` prints `0`. `gh run watch <databaseId> --exit-status` exits 0. `gh run view <databaseId> --log | grep "=== Verdict:" | grep -c ", 0 failures)"` prints a number ≥ 1.
 
 ## Verification
 T1.3 (guard), T1.5 (spike tests), T1.6 (gate), T1.8 (boolean config check), T1.9 (no secret values), T1.10 (redacted fixtures) and T1.11 (feasibility lines).
