@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "event_time": "2026-10-03T07:33:47.318614+00:00",
+      "deal": {
+        "deal_id": "REDACTED",
+        "type": "balance",
+        "profit": {
+          "amount": "0.00",
+          "currency": "USD"
+        },
+        "create_time": "2026-10-03T07:33:47.318614+00:00",
+        "comment": "D-ALLINT-USD-INT-1119966924805"
+      }
+    }
+  ],
+  "has_more": false,
+  "range": {
+    "from": "2026-09-14T09:28:12+00:00",
+    "to": "2026-10-13T09:28:13.077702+00:00"
+  }
+}

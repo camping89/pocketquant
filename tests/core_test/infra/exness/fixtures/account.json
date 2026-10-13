@@ -1,0 +1,15 @@
+{
+  "account_id": "REDACTED",
+  "account_name": "REDACTED",
+  "create_date": "2026-10-03T07:31:17.843685Z",
+  "is_demo": false,
+  "settings": {
+    "currency": "USD",
+    "leverage": "2000",
+    "margin_call_level": "30",
+    "stopout_level": "0",
+    "trade_mode": "enabled",
+    "account_status": "active",
+    "execution_mode": "market"
+  }
+}

@@ -1,0 +1,300 @@
+[
+  {
+    "id": "spike-ticks-all",
+    "code": 200
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.94,
+    "ask": 83363.42,
+    "timestamp": "2026-10-13T09:29:03.613Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.932,
+    "ask": 4184.099999999999,
+    "timestamp": "2026-10-13T09:29:03.35Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.11782,
+    "ask": 1.11788,
+    "timestamp": "2026-10-13T09:29:03.655Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.697,
+    "ask": 4183.865,
+    "timestamp": "2026-10-13T09:29:03.907Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.49,
+    "ask": 83362.97,
+    "timestamp": "2026-10-13T09:29:04.689Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.731,
+    "ask": 4183.898999999999,
+    "timestamp": "2026-10-13T09:29:04.91Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178100000000002,
+    "ask": 1.1178700000000001,
+    "timestamp": "2026-10-13T09:29:05.092Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83357.65000000001,
+    "ask": 83362.13,
+    "timestamp": "2026-10-13T09:29:05.689Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.921,
+    "ask": 4184.089,
+    "timestamp": "2026-10-13T09:29:05.916Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178100000000002,
+    "ask": 1.1178700000000001,
+    "timestamp": "2026-10-13T09:29:06.283Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.23,
+    "ask": 83362.70999999999,
+    "timestamp": "2026-10-13T09:29:06.709Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.936,
+    "ask": 4184.103999999999,
+    "timestamp": "2026-10-13T09:29:06.956Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.599,
+    "ask": 4183.767,
+    "timestamp": "2026-10-13T09:29:07.392Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178100000000002,
+    "ask": 1.1178700000000001,
+    "timestamp": "2026-10-13T09:29:07.416Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83357.04000000001,
+    "ask": 83361.52,
+    "timestamp": "2026-10-13T09:29:07.818Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.722,
+    "ask": 4183.889999999999,
+    "timestamp": "2026-10-13T09:29:08.225Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178000000000001,
+    "ask": 1.11786,
+    "timestamp": "2026-10-13T09:29:08.545Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.86,
+    "ask": 83363.34,
+    "timestamp": "2026-10-13T09:29:08.86Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.831,
+    "ask": 4183.999,
+    "timestamp": "2026-10-13T09:29:09.402Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178000000000001,
+    "ask": 1.11786,
+    "timestamp": "2026-10-13T09:29:09.809Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.84,
+    "ask": 83363.31999999999,
+    "timestamp": "2026-10-13T09:29:09.89Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.834,
+    "ask": 4184.0019999999995,
+    "timestamp": "2026-10-13T09:29:10.575Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.784,
+    "ask": 4183.951999999999,
+    "timestamp": "2026-10-13T09:29:10.676Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.59,
+    "ask": 83363.06999999999,
+    "timestamp": "2026-10-13T09:29:10.89Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178000000000001,
+    "ask": 1.11786,
+    "timestamp": "2026-10-13T09:29:11.246Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.814,
+    "ask": 4183.982,
+    "timestamp": "2026-10-13T09:29:11.708Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83358.5,
+    "ask": 83362.98,
+    "timestamp": "2026-10-13T09:29:12.14Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178000000000001,
+    "ask": 1.11786,
+    "timestamp": "2026-10-13T09:29:12.293Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83352.39,
+    "ask": 83356.87,
+    "timestamp": "2026-10-13T09:29:12.693Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.713,
+    "ask": 4183.880999999999,
+    "timestamp": "2026-10-13T09:29:12.994Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.1178100000000002,
+    "ask": 1.1178700000000001,
+    "timestamp": "2026-10-13T09:29:13.575Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.217,
+    "ask": 4183.384999999999,
+    "timestamp": "2026-10-13T09:29:13.742Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83351.69,
+    "ask": 83356.17,
+    "timestamp": "2026-10-13T09:29:13.701Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.11779,
+    "ask": 1.11785,
+    "timestamp": "2026-10-13T09:29:13.765Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83351.68000000001,
+    "ask": 83356.16,
+    "timestamp": "2026-10-13T09:29:14.725Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.213,
+    "ask": 4183.380999999999,
+    "timestamp": "2026-10-13T09:29:14.763Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.11778,
+    "ask": 1.11784,
+    "timestamp": "2026-10-13T09:29:15.043Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.271,
+    "ask": 4183.438999999999,
+    "timestamp": "2026-10-13T09:29:15.335Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83350.98,
+    "ask": 83355.45999999999,
+    "timestamp": "2026-10-13T09:29:15.837Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.11778,
+    "ask": 1.11784,
+    "timestamp": "2026-10-13T09:29:16.268Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.29,
+    "ask": 4183.458,
+    "timestamp": "2026-10-13T09:29:16.344Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83352.13,
+    "ask": 83356.61,
+    "timestamp": "2026-10-13T09:29:16.872Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.11778,
+    "ask": 1.11784,
+    "timestamp": "2026-10-13T09:29:17.293Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.301,
+    "ask": 4183.469,
+    "timestamp": "2026-10-13T09:29:17.541Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83352.05,
+    "ask": 83356.53,
+    "timestamp": "2026-10-13T09:29:17.909Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.246,
+    "ask": 4183.414,
+    "timestamp": "2026-10-13T09:29:18.17Z"
+  },
+  {
+    "instrument": "EURUSD",
+    "bid": 1.11776,
+    "ask": 1.11782,
+    "timestamp": "2026-10-13T09:29:18.176Z"
+  },
+  {
+    "instrument": "BTCUSD",
+    "bid": 83351.83,
+    "ask": 83356.31,
+    "timestamp": "2026-10-13T09:29:18.924Z"
+  },
+  {
+    "instrument": "XAUUSD",
+    "bid": 4183.328,
+    "ask": 4183.496,
+    "timestamp": "2026-10-13T09:29:19.563Z"
+  }
+]

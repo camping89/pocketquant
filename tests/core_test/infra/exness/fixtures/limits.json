@@ -1,0 +1,232 @@
+{
+  "limits": {
+    "rest": {
+      "global_account_rate": {
+        "limit": 10,
+        "window_seconds": 1
+      },
+      "methods": [
+        {
+          "api_operation_id": "getCandleHistory",
+          "http_method": "GET",
+          "path": "/v1/market-data/accounts/{account_id}/candles",
+          "rate_limit": {
+            "limit": 2,
+            "window_seconds": 1
+          },
+          "limits": {
+            "max_candles_per_request": 1000,
+            "max_candles_per_request_description": "The maximum number of candles that can be requested in a single API call. Requests exceeding this limit will be rejected."
+          }
+        },
+        {
+          "api_operation_id": "placePendingOrder",
+          "http_method": "POST",
+          "path": "/v1/trading/accounts/{account_id}/orders",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "modifyOrder",
+          "http_method": "PATCH",
+          "path": "/v1/trading/accounts/{account_id}/orders/{order_id}",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "cancelPendingOrder",
+          "http_method": "DELETE",
+          "path": "/v1/trading/accounts/{account_id}/orders/{order_id}",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "openPosition",
+          "http_method": "POST",
+          "path": "/v1/trading/accounts/{account_id}/positions",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "closePosition",
+          "http_method": "DELETE",
+          "path": "/v1/trading/accounts/{account_id}/positions/{position_id}",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "getTradingStateSnapshot",
+          "http_method": "GET",
+          "path": "/v1/trading/accounts/{account_id}/snapshot",
+          "rate_limit": {
+            "limit": 2,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "getOperationStatus",
+          "http_method": "GET",
+          "path": "/v1/trading/accounts/{account_id}/operations/{operation_id}",
+          "rate_limit": {
+            "limit": 10,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "getOrdersHistory",
+          "http_method": "GET",
+          "path": "/v1/history/accounts/{account_id}/orders",
+          "rate_limit": {
+            "limit": 2,
+            "window_seconds": 1
+          },
+          "limits": {
+            "history_range_days": 30,
+            "history_age_days": 30
+          }
+        },
+        {
+          "api_operation_id": "getDealsHistory",
+          "http_method": "GET",
+          "path": "/v1/history/accounts/{account_id}/deals",
+          "rate_limit": {
+            "limit": 2,
+            "window_seconds": 1
+          },
+          "limits": {
+            "history_range_days": 30,
+            "history_age_days": 30
+          }
+        },
+        {
+          "api_operation_id": "getAccountDetails",
+          "http_method": "GET",
+          "path": "/v1/configuration/accounts/{account_id}/account",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "getAvailableInstrumentList",
+          "http_method": "GET",
+          "path": "/v1/configuration/accounts/{account_id}/instruments",
+          "rate_limit": {
+            "limit": 2,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "getInstrumentCondition",
+          "http_method": "GET",
+          "path": "/v1/configuration/accounts/{account_id}/instruments/{instrument}/conditions",
+          "rate_limit": {
+            "limit": 4,
+            "window_seconds": 1
+          }
+        },
+        {
+          "api_operation_id": "getLimits",
+          "http_method": "GET",
+          "path": "/v1/configuration/accounts/{account_id}/limits",
+          "rate_limit": {
+            "limit": 2,
+            "window_seconds": 1
+          }
+        }
+      ]
+    },
+    "websocket": {
+      "global_account_limits": {
+        "max_active_connections": 10,
+        "max_inbound_message_bytes": 8192,
+        "connection_rate": {
+          "limit": 10,
+          "window_seconds": 1.0,
+          "burst": 20
+        },
+        "inbound_message_rate": {
+          "limit": 50,
+          "window_seconds": 1.0,
+          "burst": 100
+        },
+        "strikes": {
+          "refill_amount": 1,
+          "threshold": 10,
+          "period_ms": 600000
+        }
+      },
+      "endpoints": [
+        {
+          "api_operation_id": "getWSEvents",
+          "http_method": "POST",
+          "path": "/v1/server-events/accounts/{account_id}/ws/events",
+          "connection_rate": {
+            "limit": 5,
+            "window_seconds": 1.0,
+            "burst": 10
+          },
+          "inbound_message_rate": {
+            "limit": 25,
+            "window_seconds": 1.0,
+            "burst": 50
+          },
+          "subscription_operation_rate": {
+            "account_state": {
+              "limit": 10,
+              "window_seconds": 1.0,
+              "burst": 20
+            },
+            "hmr": {
+              "limit": 5,
+              "window_seconds": 1.0,
+              "burst": 100
+            },
+            "instruments": {
+              "limit": 5,
+              "window_seconds": 1.0,
+              "burst": 100
+            },
+            "transactions": {
+              "limit": 10,
+              "window_seconds": 1.0,
+              "burst": 20
+            }
+          }
+        },
+        {
+          "api_operation_id": "getWSTicks",
+          "http_method": "POST",
+          "path": "/v1/server-events/accounts/{account_id}/ws/ticks",
+          "connection_rate": {
+            "limit": 5,
+            "window_seconds": 1.0,
+            "burst": 10
+          },
+          "inbound_message_rate": {
+            "limit": 25,
+            "window_seconds": 1.0,
+            "burst": 50
+          },
+          "subscription_operation_rate": {
+            "ticks": {
+              "limit": 25,
+              "window_seconds": 1.0,
+              "burst": 100
+            }
+          }
+        }
+      ]
+    }
+  }
+}

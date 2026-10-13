@@ -1,0 +1,10 @@
+{
+  "account_state": {
+    "balance": "0.00",
+    "equity": "0.00",
+    "used_margin": "0.00",
+    "leverage": "2000"
+  },
+  "orders": [],
+  "positions": []
+}

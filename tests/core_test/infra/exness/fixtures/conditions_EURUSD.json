@@ -1,0 +1,97 @@
+{
+  "instrument": "EURUSD",
+  "description": "Euro vs US Dollar",
+  "international_name": "EUR/USD",
+  "category": "Majors",
+  "base_currency": "EUR",
+  "quote_currency": "USD",
+  "margin_currency": "EUR",
+  "point_digits": 5,
+  "calc_mode": "forex",
+  "exec_mode": "market",
+  "margin_percent": "1",
+  "contract_size": "100000",
+  "volume_min": "0.01",
+  "volume_max": "200",
+  "volume_step": "0.01",
+  "swap_long": "-5.7",
+  "swap_short": "0",
+  "swap_multipliers": [
+    {
+      "day": "FRI",
+      "multiplier": 1
+    },
+    {
+      "day": "MON",
+      "multiplier": 1
+    },
+    {
+      "day": "SAT",
+      "multiplier": 0
+    },
+    {
+      "day": "SUN",
+      "multiplier": 0
+    },
+    {
+      "day": "THU",
+      "multiplier": 1
+    },
+    {
+      "day": "TUE",
+      "multiplier": 1
+    },
+    {
+      "day": "WED",
+      "multiplier": 3
+    }
+  ],
+  "trade_mode": "enabled",
+  "trade_sessions": [
+    {
+      "trade_mode": "trading_disabled",
+      "week_start_time": "Sun, 00:00:00",
+      "week_end_time": "Sun, 21:04:59"
+    },
+    {
+      "trade_mode": "enabled",
+      "week_start_time": "Sun, 21:05:00",
+      "week_end_time": "Sun, 23:59:59"
+    },
+    {
+      "trade_mode": "enabled",
+      "week_start_time": "Mon, 00:00:00",
+      "week_end_time": "Mon, 23:59:59"
+    },
+    {
+      "trade_mode": "enabled",
+      "week_start_time": "Tue, 00:00:00",
+      "week_end_time": "Tue, 23:59:59"
+    },
+    {
+      "trade_mode": "enabled",
+      "week_start_time": "Wed, 00:00:00",
+      "week_end_time": "Wed, 23:59:59"
+    },
+    {
+      "trade_mode": "enabled",
+      "week_start_time": "Thu, 00:00:00",
+      "week_end_time": "Thu, 23:59:59"
+    },
+    {
+      "trade_mode": "enabled",
+      "week_start_time": "Fri, 00:00:00",
+      "week_end_time": "Fri, 20:58:59"
+    },
+    {
+      "trade_mode": "trading_disabled",
+      "week_start_time": "Fri, 20:59:00",
+      "week_end_time": "Fri, 23:59:59"
+    },
+    {
+      "trade_mode": "trading_disabled",
+      "week_start_time": "Sat, 00:00:00",
+      "week_end_time": "Sat, 23:59:59"
+    }
+  ]
+}
