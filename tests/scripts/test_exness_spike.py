@@ -132,7 +132,23 @@ def test_allowed_access_point_accepts_exness_subdomain() -> None:
     assert allowed_access_point("ap-x.trading.exness.com") == "ap-x.trading.exness.com"
 
 
-@pytest.mark.parametrize("host", ["exness.com.evil.test", "evil.test"])
+@pytest.mark.parametrize("url", ["https://ap-x.exness.com", "https://ap-x.exness.com/"])
+def test_allowed_access_point_accepts_plain_https_url(url: str) -> None:
+    assert allowed_access_point(url) == "ap-x.exness.com"
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "exness.com.evil.test",
+        "evil.test",
+        "http://ap-x.exness.com",
+        "https://ap-x.exness.com.evil.test",
+        "https://u:p@ap-x.exness.com",
+        "https://ap-x.exness.com:8443",
+        "https://ap-x.exness.com/v1",
+    ],
+)
 def test_allowed_access_point_rejects_foreign_hosts(host: str) -> None:
     with pytest.raises(ValueError):
         allowed_access_point(host)

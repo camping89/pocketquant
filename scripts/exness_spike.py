@@ -169,8 +169,22 @@ def validate_base_url(url: str, api_host: str) -> str:
     return url.rstrip("/")
 
 
-def allowed_access_point(host: str) -> str:
-    host = host.lower()
+def allowed_access_point(value: str) -> str:
+    host = value.strip().lower()
+    if "://" in host:
+        parts = urllib.parse.urlsplit(host)
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or parts.port is not None
+            or parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+            or parts.path not in ("", "/")
+        ):
+            raise ValueError("access point must be a plain https URL or host")
+        host = parts.hostname
     if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)*\.(exness\.com|exness-api\.com)", host):
         raise ValueError("access point host is not an Exness host")
     return host
