@@ -19,6 +19,7 @@ from scripts.exness_spike import (
     SpikeConfig,
     allowed_access_point,
     body_hash,
+    history_age_days,
     load_secret_key,
     min_request_interval,
     redact,
@@ -207,6 +208,11 @@ def _limits(deals_limits: dict[str, int] | None = None) -> dict[str, object]:
 
 def test_min_request_interval_follows_the_strictest_rate_with_headroom() -> None:
     assert min_request_interval(_limits()) == pytest.approx(0.6)
+
+
+def test_history_age_days_reads_deals_limit_with_default() -> None:
+    assert history_age_days(_limits({"history_age_days": 14})) == 14
+    assert history_age_days(_limits()) == 30
 
 
 async def test_session_sends_requests_to_the_access_point_once_resolved() -> None:

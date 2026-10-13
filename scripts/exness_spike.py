@@ -368,6 +368,13 @@ def min_request_interval(limits: dict[str, Any]) -> float:
     return max(r["window_seconds"] / r["limit"] for r in rates) * 1.2
 
 
+def history_age_days(limits: dict[str, Any]) -> int:
+    for method in limits["limits"]["rest"]["methods"]:
+        if method["api_operation_id"] == "getDealsHistory":
+            return int(method.get("limits", {}).get("history_age_days", 30))
+    return 30
+
+
 def max_candles(limits: dict[str, Any]) -> int:
     for method in limits["limits"]["rest"]["methods"]:
         if method["api_operation_id"] == "getCandleHistory":
@@ -416,6 +423,7 @@ async def fetch_rest(s: Session, summary: dict[str, Any]) -> dict[str, Any]:
     write_json(cfg, "limits.json", limits)
     s.min_interval_s = min_request_interval(limits)
     summary["max_candles_per_request"] = max_candles(limits)
+    summary["history_age_days"] = history_age_days(limits)
     summary["rate_limits"] = rate_limits(limits)
     account = await s.get_ok(f"{acc}/account")
     write_json(cfg, "account.json", account)
@@ -472,7 +480,9 @@ async def fetch_account_state(s: Session, ap_base: str | None) -> float | None:
 
 async def fetch_deals(s: Session, summary: dict[str, Any]) -> None:
     path = f"/v1/history/accounts/{s.cfg.account_id}/deals"
-    since = iso_seconds(s.clock.now_ms() - 30 * 86_400_000)
+    # The API rejects a window of exactly history_age_days, so stay one day inside it.
+    days = max(1, summary["history_age_days"] - 1)
+    since = iso_seconds(s.clock.now_ms() - days * 86_400_000)
     params: dict[str, Any] = {"from": since, "limit": 200}
     types: set[str] = set()
     for page in range(5):
