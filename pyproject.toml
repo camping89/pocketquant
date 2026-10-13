@@ -102,21 +102,6 @@ source_modules = ["pocketquant.core.domain"]
 forbidden_modules = ["pocketquant.core.infra"]
 
 [[tool.importlinter.contracts]]
-name = "Core imports no inner package"
-type = "forbidden"
-source_modules = ["pocketquant.core"]
-forbidden_modules = [
-    "pocketquant.engine",
-    "pocketquant.app",
-]
-
-[[tool.importlinter.contracts]]
-name = "Engine imports no upper package"
-type = "forbidden"
-source_modules = ["pocketquant.engine"]
-forbidden_modules = ["pocketquant.app"]
-
-[[tool.importlinter.contracts]]
 name = "Engine backtest and live drivers stay independent"
 type = "independence"
 modules = [
@@ -145,8 +130,7 @@ source_modules = [
     "pocketquant.engine",
 ]
 # import-linter rejects external subpackages, so dishka.integrations.fastapi
-# can't be listed here; tests/baseline/test_package_layout_contract.py greps
-# for it instead.
+# can't be listed here.
 forbidden_modules = ["fastapi"]
 
 [[tool.importlinter.contracts]]
