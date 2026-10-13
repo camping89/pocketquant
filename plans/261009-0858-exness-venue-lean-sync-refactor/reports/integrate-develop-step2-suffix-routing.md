@@ -38,7 +38,7 @@ I committed the characterization tests first and ran them green against the old 
 - Domain and infra: `provider_routing_domain_service.py`, `routing_data_provider_adapter.py`, `routing_realtime_quote_adapter.py`, `provider_health_check.py`, `trading_calendar_factory.py`, `symbol_repository.py`, `tradingview_mappers.py`, and docstring examples in `tradingview_adapter.py` and `tradingview_quote_adapter.py`. `symbol_provider_resolver.py` is deleted.
 - Wiring and config: `app/di/infrastructure.py`, `app/di/market_data.py`, `app/main_extensions.py`, `core/config.py`.
 - Scripts: `scripts/seed_index_futures.py`, `scripts/README.md`.
-- Web: example strings only (`ES1!:CME_MINI` → `ES1!:TRADINGVIEW`) in 9 files under `web/src`. No logic changed.
+- Web: example strings only (`ES1!:CME_MINI` → `ES1!:TRADINGVIEW`) in 10 files under `web/src`. No logic changed.
 - Docs: `README.md`, `docs/code-standards.md` (Composite Symbol Format), `docs/system-architecture.md` (TradingView row, a new "Market-data routing" paragraph, health check, env vars). The prose is English, matching develop's docs, as the coordinator confirmed.
 
 ## Tests
