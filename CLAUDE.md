@@ -20,5 +20,5 @@ One Python package `src/pocketquant/` (subpackages: core, engine, backtest, app)
 ## Reference docs (discover detail here)
 
 - Architecture, layers, DI providers, request flows, "Where does X live", real-time streaming, strategy lifecycle → `docs/system-architecture.md`
-- **Naming convention (suffix theo layer)**, comment policy, route/service/repo conventions, async-suspension patterns, schema, testing, perf → `docs/code-standards.md` (Section "Class Naming by Layer" + "Naming Principles & Exemptions")
+- **Naming convention (suffix theo layer)**, comment policy, route/service/repo conventions, async-suspension patterns, testing, quality gate + code metric ratchet → `docs/code-standards.md` (Section "Class Naming by Layer" + "Naming Principles & Exemptions")
 - Run / test / canonical routes / remote-DB dev modes → `README.md`

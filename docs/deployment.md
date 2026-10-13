@@ -18,7 +18,7 @@ git push origin develop
                                            ssh → 11-verify.sh   (19 checks → report artifact)
 ```
 
-- `tests` gates the build: `uv sync --frozen` → `lint-imports` (import-linter contracts) → `pytest tests/ -q`. `build-app`/`build-web` need it green.
+- `tests` gates the build. It runs once per host timezone (`UTC`, `Asia/Ho_Chi_Minh`, `America/Chicago`): `uv sync --frozen` → host-zone check → `lint-imports` (import-linter contracts) → `scripts/code_metrics.py --ratchet` (code metric ratchet, see [code-standards.md](./code-standards.md#quality-gate)) → `pytest tests/ -q`. `build-app`/`build-web` need every leg green.
 - Images tagged `:latest` + `:sha-<short>`. `deploy` runs on `develop`/`master`/`workflow_dispatch`.
 - **Concurrency `deploy`, `cancel-in-progress`** — a new push cancels an in-flight deploy; newest wins.
 

@@ -1,159 +1,98 @@
-# Code Standards & Patterns
+# Code Standards
 
-Kiến trúc: Clean Architecture + DDD + Dishka. Type checker: Pyright.
+Các quy tắc dưới đây là rules of thumb, không phải mandate: áp dụng khi chúng làm code dễ đọc hơn, bỏ qua khi chúng làm code tệ đi. Lệnh chạy và test nằm ở [README](../../README.md); thiết kế tổng thể nằm ở [system-architecture.md](./system-architecture.md).
 
-Tài liệu này tập trung vào các pattern và quy ước kiến trúc. Về các lệnh khởi động và lệnh test hiện hành, xem [README](../../README.md).
+## Principles
 
-## Clean Architecture Rules
+- **KISS:** chọn lời giải đơn giản nhất còn đúng. Không thêm layer, interface hay config cho nhu cầu chưa có.
+- **DRY:** một khái niệm có một chỗ định nghĩa. Lặp lại hai lần là chấp nhận được; lần thứ ba thì gom lại.
+- **Cân bằng:** không có god-function ôm cả luồng, cũng không có micro-helper chỉ bọc một lời gọi. Một hàm làm một việc có tên rõ ràng.
+- **Dependency direction cố định:** `core ◁ engine ◁ app`. `core.domain` không import `core.infra` và không làm I/O (không pymongo, redis hay aiohttp; Pydantic được phép). Chỉ `app` import `fastapi`. import-linter enforce các luật này (xem [Quality Gate](#quality-gate)); `tests/core_test/unit/domain/test_domain_purity.py` kiểm tra thêm domain purity.
+- **Backtest và live là hai driver trên một engine:** `engine.backtest` và `engine.live` không import lẫn nhau, và phần máy dùng chung (`engine.strategy`, `engine.execution`, `engine.market_data`) không import driver nào.
 
-### Dependency Direction (MANDATORY)
+## When to Extract a Helper
+
+- Extract khi tên của helper thêm ý nghĩa mà code inline không nói được, hoặc khi code đó được dùng lại ở ít nhất hai chỗ.
+- Không extract chỉ để hàm ngắn đi. Một hàm 2 dòng chỉ `return self._x.y(...)` là pure delegation: người đọc phải nhảy file mà không học thêm gì. [Metric ratchet](#quality-gate) đếm các hàm này.
+- Một flow nên đọc được trong một file khi có thể, và tối đa 3 file (cộng các leaf call như repository hay client).
+
+## File and Function Size
+
+- Khoảng 400 LOC mỗi file là soft guidance, không phải trigger để split. Split khi file chứa hai concern độc lập, không phải khi nó dài.
+- Hàm nên giữ ≲ 60 dòng. Hàm dài hơn thường đang làm nhiều việc; tách theo bước có tên, không tách theo số dòng. `scripts/code_metrics.py --json` liệt kê mọi hàm dài hơn 60 dòng.
+
+## Naming
+
+Tên class và tên file mã hoá layer. Domain concept (entity, value object, enum) không có suffix — chúng chính là ngôn ngữ domain.
+
+### File Naming
+
+`snake_case`, đặt theo mục đích của module; suffix mã hoá layer và khớp với class chính bên trong:
+
 ```
-Features (routes, commands, queries, handlers)
-  ↓ imports
-Application (orchestrators: StrategyAppService, BacktestAppService, etc.)
-  ↓ imports
-Domain (aggregates, value objects, events)
-  ↑ imports ← Adapters (brokers, providers, persistence in core.*)
-
-CRITICAL: No reverse dependencies.
-- Domain NEVER imports from Application, Features, or Adapters
-- Enforced via test_domain_purity.py (AST check)
-```
-
-### Layer Responsibilities
-
-| Layer | Trách nhiệm | I/O |
-|-------|---|---|
-| **Domain** | Business rules, validation, events | NONE (zero I/O) |
-| **Services** | Orchestrators, command/query services, điều phối | Gọi adapters |
-| **Routes** | Định tuyến HTTP, parse request, format response | Gọi services |
-| **Adapters** | DB, brokers, providers, scheduling, HTTP | Toàn bộ I/O ngoài |
-| **Common** | EventBus, middleware, tiện ích | Cross-cutting concerns |
-
-## Architecture Patterns
-
-### 0. Route Layer Rules
-
-Routes là handler HTTP mỏng. Toàn bộ business logic nằm trong services.
-
-| Component | Location | Trách nhiệm |
-|-----------|----------|---|
-| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → gọi service với scalar hoặc request body → trả DTO |
-| **Command Service** | `src/pocketquant/{pkg}/{feature}_command_service.py` | Thay đổi state: validate, persist, publish events |
-| **Query Service** | `src/pocketquant/{pkg}/{feature}_query_service.py` | Chỉ đọc: fetch, serialize, trả DTO |
-
-**Route signature pattern:**
-```python
-from dishka.integrations.fastapi import FromDishka, DishkaRoute
-
-@router.post("/path", status_code=201, route_class=DishkaRoute)
-async def endpoint_name(
-    body: RequestBody,
-    cmd_svc: FromDishka[SomeCommandService],
-) -> dict:
-    return await cmd_svc.method(body.field, ...)
+app/routes/market_data.py            # market-data route functions
+quote_app_service.py                 # QuoteAppService (application orchestrator)
+bar_builder_domain_service.py        # BarBuilderDomainService (domain logic)
+engulfing_strategy_service.py        # EngulfingStrategyService (strategy impl)
+strategy_service_interface.py        # IStrategyService (strategy interface)
+bar_repository.py                    # BarRepository (data access)
+data_provider_port.py                # IDataProviderPort (infra boundary)
+binance_adapter.py                   # BinanceAdapter (infra impl)
+okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separate adapter)
 ```
 
-**Quy tắc chính:**
-- Không bao giờ try/catch trong routes hay services (exception propagate → global handler)
-- Dùng `FromDishka[ServiceType]`, không bao giờ dùng `Depends()`
-- Pydantic tự động validate input
-- Trả status code tường minh: `201` (created), `204` (no content), `404` (not found)
+### Class Naming by Layer
 
-### 1. Route + Service Layer Architecture
+| Layer | Pattern | Class Suffix | File | Ví dụ |
+|-------|---------|--------|--------|--------|
+| Entities | `{Name}` hoặc `{Name}Aggregate` | None / `Aggregate` | `entities.py` | `Bar`, `Symbol`, `OrderAggregate` |
+| Events | `{Entity}{PastTense}Event` | `Event` | `events.py` | `OrderFilledEvent`, `BarCompletedEvent` |
+| Enums / Value Objects | `{Concept}` | None | `.py` | `Interval`, `OrderSide`, `PnL`, `OHLCV` |
+| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionCalculatorDomainService`, `BarBuilderDomainService` |
+| **Domain Strategy (Impl)** | `{Name}StrategyService` | `StrategyService` | `*_strategy_service.py` | `EngulfingStrategyService`, `HitNRun2StrategyService` |
+| **Domain Strategy (Interface)** | `IStrategyService` | `IStrategyService` | `strategy_service_interface.py` | `IStrategyService` |
+| Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
+| **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IDataProviderPort`, `IRealtimeQuoteProviderPort` |
+| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter` |
+| **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (chỉ khi module helper thật sự cần) |
+| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestReportAppService` |
+| Query / Command Models | `{Get\|List}{Entity}Query`, `{Action}{Entity}Command` | `Query` / `Command` | cạnh service nhận nó | `GetOHLCVQuery`, `SyncSymbolCommand`, `RunBacktestCommand` |
+| CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |
+| DTOs | `{Name}Response` | `Response` | `.py` | `SyncResponse`, `QuoteResponse` |
+| Routes | (functions) | — | `app/routes/{feature}.py` | `async def sync_symbol(...)` |
+| Middleware | `{Name}Middleware` | `Middleware` | `*middleware.py` | `RateLimitMiddleware` |
+| Errors | `{Name}Error` | `Error` | `.py` | `AppError`, `NotFoundError`, `DomainError` |
+| DI Providers | `{Domain}Provider` | `Provider` | `app/di/{domain}.py` | `InfrastructureProvider`, `ServicesProvider` |
+| Configs | `{Name}Config` | `Config` | `config.py` / `value_objects.py` | `BacktestConfig`, `RiskConfig` |
+| Background Jobs | (functions) | — | `*_jobs.py` | `sync_1m()`, `sync_integrity()` |
 
-Routes là lớp HTTP mỏng. Services cung cấp business logic qua pattern 5 bước: Fetch → Validate → Persist → Invalidate Cache → Publish Events.
+### Naming Principles & Exemptions
 
-**Cấu trúc:**
-```
-routes/{feature}.py                    # HTTP handlers
-{pkg}/{feature}_command_service.py    # Write logic
-{pkg}/{feature}_query_service.py      # Read logic (cached)
-core/domain/{entity}/                  # Pure logic (no I/O)
-core/infra/persistence/repositories/   # Data access
-```
+1. **Tên class + file tự mã hoá layer/role.** Đọc `PositionCalculatorDomainService` hay `binance_adapter.py` là biết layer mà không cần nhìn thư mục.
+2. **Không chồng hai doer-suffix chung chung (`-er`/`-or`) trong một tên.** Dùng gerund thay thế (`*TrackingHelper`, không phải `*TrackerHelper`). Danh từ nghiệp vụ tận cùng bằng `-er` (`Broker`) không phải doer-suffix, nên `BrokerAdapter` hợp lệ.
+3. **Data class hoặc role đã có suffix chuẩn thì giữ nguyên.** Danh sách miễn trừ (không ép theo convention):
 
-**Ví dụ:** Route → BacktestCommandService → BarRepository + PerformanceCalculatorDomainService (domain, pure).
+| Nhóm | Ví dụ |
+|---|---|
+| CQRS | `*CommandService`, `*QueryService` (request-scoped, không phải orchestrator) |
+| Persistence | `*Repository` |
+| DI / cross-cutting | `*Provider`, `*Middleware` |
+| App handler | `RiskCheckHandler`, `event_handler` (decorator) |
+| Infra factory/scheduler | `BrokerFactory`, `JobScheduler` |
+| Infra sub-component (OKX) | `OkxMessageParser`, `OkxOrderMapper`, `OkxPositionMapper`, `OkxReconnectionHandler`, `OkxStateReconciler` |
+| Data class | Entity, VO, enum, event, `*Command`/`*Query`/`*Response` |
 
-**Quy tắc chính:**
-1. Routes: parse, inject service, delegate, respond (không business logic)
-2. Services: một method cho mỗi command/query, nhận scalar (chỉ nhận Pydantic model khi đó là request body hoặc query nhiều field có validate riêng), trả DTO
-3. Dùng `FromDishka[ServiceClass]` cho DI (không bao giờ dùng `Depends()`)
-4. KHÔNG try/catch trong routes/services (propagate tới global handler)
-5. Service method publish domain event cho mọi thay đổi state
+## Routes & Services
 
-### 2. Application Layer (Orchestrators & State Machines)
-
-Các service có state, điều phối domain + adapters. Có thể gọi Adapters (khác với Domain). Được gọi bởi service method, thường là singleton.
-
-**Ví dụ:** StrategyAppService (market events → signals → orders), BarAppService (tick aggregation), OrderAppService (state machine), PositionAppService (P&L tracking).
-
-**Quy tắc:** Có thể import Domain + Adapters. Stateless (không decorator). Khởi tạo trong lifespan, inject bởi DI.
-
-### 3. Dependency Injection (Dishka)
-
-dishka phân giải dependency theo type hint. Routes inject qua `FromDishka[ServiceType]`. `src/pocketquant/app/di/` có ba provider: `InfrastructureProvider` (Settings, EventBus, Database, Cache, repositories, calendar, scheduler, health), `AdaptersProvider` (routing adapter cho data và quote, `BrokerFactory`) và `ServicesProvider` (app service, execution engine, các feature service mà route inject). `create_container(settings)` đưa `Settings` vào qua `from_context` và build với `STRICT_VALIDATION`, nên một type đăng ký hai lần sẽ lỗi ngay khi khởi động thay vì đăng ký sau âm thầm thắng. `main.py` nối container qua `setup_dishka(container, app)`.
-
-### 4. Repository Pattern (Instance-Based Data Access)
-
-Toàn bộ data access qua instance method trong `src/pocketquant/core/infra/persistence/repositories/`. Tất cả repository kế thừa từ `BaseRepository`, dùng helper `_collection(name)`, inject `Database` qua constructor. Domain entity serialize qua `to_mongo()` / `from_mongo()`. Không có thư mục schemas/. Lợi ích: testable, pure domain, single source of truth.
-
-### 5. Service Pattern (Business Logic)
-
-Toàn bộ dependency qua constructor (do DI quản lý). Service có state được khởi tạo trong lifespan với try/finally để shutdown sạch. Ví dụ: `OrderAppService` gọi `await load_pending_orders()` trong lifespan trước khi bất kỳ handler nào dùng nó.
-
-### 6. Provider Pattern (External Integrations)
-
-Adapter cụ thể (vd `BinanceAdapter`) đứng sau một interface trong core (vd `IDataProviderPort`). Cô lập I/O ngoài, xử lý lỗi sạch, testable.
-
-### 7. Event Handler Auto-Discovery Pattern
-
-Dùng decorator `@event_handler` trên service method. Tự động đăng ký lúc startup qua `registry.register_instance(service, event_bus)`. Rõ ràng, scalable, type-safe.
-
-### 8. Exception Handler Registration
-
-Global exception handler tự động ánh xạ domain error sang HTTP response. Đăng ký lúc startup trong `src/pocketquant/app/main_extensions.py`:
+- Route nằm trong `src/pocketquant/app/routes/`, dùng `route_class=DishkaRoute` và inject service bằng `FromDishka[...]`. Không bao giờ dùng `Depends()` cho service.
+- Route mỏng: parse request, gọi một method của service, trả kết quả. Logic nghiệp vụ nằm trong service.
+- Service method nhận scalar. Pydantic model chỉ được truyền khi nó là request body thật (`SyncSymbolCommand`, `AddTrackedSymbolCommand`, `RunBacktestCommand`) hoặc parameter object nhiều field tự mang validation (`GetOHLCVQuery`, `BackfillTrackedSymbolCommand`). Không bọc scalar của path hay query vào model.
+- Không try/except trong route hay service để đổi exception thành response. Exception propagate tới global handler đăng ký bởi `register_exception_handlers` (`core/common/exceptions.py`, wire trong `app/main_extensions.py`): `NotFoundError` → 404, `DomainError` → 400, `AppError` → 500, body `{error: {code, message}}`. Chỉ catch exception cụ thể ở nơi code thật sự phục hồi (một job, một lần retry của adapter); không bao giờ `except:` trần.
+- Thay đổi state thì publish domain event. Handler là method đánh dấu `@event_handler(...)` và được đăng ký bằng `registry.register_instance(service, event_bus)`.
+- Datetime trả cho frontend luôn qua `to_utc_iso()` (`pocketquant.core.common.time`) để có hậu tố `Z` đúng. `.isoformat()` trần chỉ dùng nội bộ (log, cache key).
 
 ```python
-from pocketquant.core.common.exceptions import register_exception_handlers
-from fastapi import Request
-from fastapi.exceptions import RequestValidationError
-
-register_exception_handlers(app, validation_error_cls=RequestValidationError)
-```
-
-**Ánh xạ tự động:**
-- `NotFoundError` → 404 JSON `{error: {code, message}}`
-- `DomainError` → 400 JSON `{error: {code, message}}`
-- `AppError` (base) → 500 JSON `{error: {code, message}}`
-
-Services KHÔNG bao giờ try/catch; exception propagate tới global handler.
-
-### 8.5. Command/Query Service Pattern
-
-Một service method cho mỗi command/query. Constructor nhận dependency (dishka tự wire). Method nhận scalar trực tiếp; chỉ truyền Pydantic model khi đó là request body (vd. `SyncSymbolCommand`, `AddTrackedSymbolCommand`, `RunBacktestCommand`) hoặc parameter object nhiều field tự validate (vd. `GetOHLCVQuery`, `BackfillTrackedSymbolCommand`). Method: fetch adapters → validate domain → persist → publish events → trả DTO.
-
-**Template:**
-```python
-class SomeCommandService:
-    def __init__(self, repo: SomeRepository):
-        self.repo = repo
-
-    async def handle(self, some_id: str) -> dict:
-        # Fetch + Validate
-        if not await self.repo.exists(some_id):
-            raise NotFoundError("NOT_FOUND")
-        # Persist + Publish
-        result = await self.repo.upsert({...})
-        await EventBus.publish(SomeEvent(...))
-        return result.to_dto()
-```
-
-**Worked Example: POST `/api/v1/strategies/{strategy_code}/subscriptions`**
-
-Route:
-```python
-@strategy_router.post("/{strategy_code}/subscriptions", status_code=201)
+@router.post("/{strategy_code}/subscriptions", status_code=201)
 async def create_subscription(
     strategy_code: str,
     body: CreateSubscriptionBody,
@@ -162,109 +101,21 @@ async def create_subscription(
     return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
 ```
 
-Service:
-```python
-async def add_symbol(self, strategy_id: str, symbol: str, interval: str) -> dict:
-    if not await self.tracked_symbol_repo.exists(symbol):
-        raise NotFoundError("SYMBOL_NOT_TRACKED")
-    sub = Subscription(id=generate_id(), strategy_code=strategy_id, ...)
-    await self.subscription_repo.add(sub)
-    return sub.to_dto()
-```
+## Dependency Injection
 
-Flow: Route → Service → Repository → MongoDB. Exception propagate tới global handler → 4xx/5xx JSON.
+- `src/pocketquant/app/di/` có đúng ba provider: `InfrastructureProvider` (Settings, EventBus, Database, Cache, repositories, calendars, scheduler, health), `AdaptersProvider` (routing data adapter và quote adapter, `BrokerFactory`) và `ServicesProvider` (app services, execution engine, các service mà route inject).
+- `create_container(settings)` đưa `Settings` vào qua `from_context` và build với `STRICT_VALIDATION`: một type đăng ký hai lần sẽ lỗi lúc startup thay vì lần đăng ký sau âm thầm thắng. Mỗi type có đúng một provider.
+- Mọi dependency đi vào qua constructor. Service cần cleanup dùng generator factory: mọi setup trước `yield`, cleanup trong `try/finally` (xem [Async](#async-suspension-points--await-is-preemption), pattern 5).
 
-### 9. Service Extract-Method Pattern
+## Domain & Repositories
 
-Với các service method phức tạp vượt ~30 dòng với 8+ operation, tách thành private helper method. Method đơn giản (1-3 op) KHÔNG nên tách method.
+- Entity là Pydantic `BaseModel` tự serialize bằng `to_mongo()` / `@classmethod from_mongo()`. Không có thư mục schemas và không có subclass `Create`; factory là classmethod (`Symbol.create()`, `OrderAggregate.create()`, `PositionAggregate.open()`). Value object và event là frozen dataclass.
+- Aggregate phải xứng đáng với độ phức tạp của nó: chỉ dùng khi entity bảo vệ invariant, có lifecycle behaviour, sở hữu entity khác hoặc phát event. Một data record (`Bar`) hay model chỉ CRUD thì là entity thường.
+- Strategy implement `IStrategyService` (`on_bar_completed` bắt buộc; `on_quote_received` và `on_order_filled` tuỳ chọn) và trả `Signal | None`. Chúng giữ thuần — không broker, không database; `StrategyAppService` thực thi signal.
+- Mọi repository nằm trong `core.infra.persistence.repositories`; `engine` và `app` không có repository nào. Repository là instance class kế thừa `BaseRepository`, nhận `Database` qua constructor và dùng `_collection(name)`.
 
-**Hướng dẫn:** Tách khi method trở nên khó đọc. Mỗi helper làm MỘT operation logic. Tham chiếu: các sync service phức tạp có thể có 8 private helper (_fetch_bars, _persist_bars, _fail, _success, v.v.).
+**Primary key: chỉ UUIDv7.** Mọi document mà code của chúng ta ghi đều có `_id` là UUIDv7 sinh bằng `generate_id()` (`core/common/uuid.py`); entity được persist khai báo `id: UUID`. Không hash key, không natural key, không Mongo ObjectId, không composite-string key. Uniqueness và idempotency đặt trên secondary unique index, không bao giờ trên `_id`. Ngoại lệ duy nhất là collection có `_id` do thư viện bên thứ ba ghi (`apscheduler_jobs` của APScheduler); không patch thư viện để ép uuid7.
 
-**Quy tắc chính:**
-- Prefix `_` (private) để chỉ dùng nội bộ
-- Giữ `handle()` như một checklist dễ đọc (không chi tiết logic)
-- Mỗi helper: single-responsibility, async hoặc sync tùy nhu cầu
-- Cải thiện testability: dễ test 8 helper tập trung hơn là một method khổng lồ
-
-### 9.5. Integrity Repair Flow
-
-Bar integrity repair: check → delete misaligned → resync gaps → verify.
-
-**Quy trình 5 bước:**
-1. **Check:** `check_integrity()` → liệt kê misaligned + missing bars
-2. **Delete:** `bar_repo.delete_many_by_ids(misaligned_ids)`
-3. **Resync:** `SyncSymbolCommand(..., skip_filter=True, n_bars=5000)` — bỏ qua filter để lấp gap
-4. **Verify:** re-check integrity, ghi lại số `still_missing` + ranges
-5. **Log:** cảnh báo nếu còn gap sau khi repair
-
-**Vì sao skip_filter:** `filter_new_bars` truy vấn `bar_repo.find_datetimes` để chỉ loại các record có datetime đã tồn tại. Đúng cho các gap thưa. `skip_filter=True` vẫn hữu ích cho các repair flow muốn buộc re-upsert (vd để làm mới các giá trị OHLCV có thể đã dịch chuyển), bỏ qua cả existence check LẪN việc giảm wire-noise.
-
-**Usage:** Background job `sync_repair` (mỗi 12h) hoặc endpoint `/api/v1/market-data/integrity/repair`. `repair_integrity()` trả về `dict` gồm deleted count, gaps_resynced, still_missing, still_missing_ranges.
-
-### 10. Schema Consolidation (Use Base Classes)
-
-Loại bỏ các subclass Create rỗng dư thừa. Dùng trực tiếp base class cho các thao tác repository.
-
-**Quy tắc:** Một định nghĩa schema cho mỗi domain concept (OHLCV, Symbol, Order, v.v.). Không có Create subclass.
-
-**Consolidation:**
-- Không có thư mục schemas — repository dùng trực tiếp domain entity
-- Mọi entity có `to_mongo()` / `from_mongo()` cho persistence MongoDB
-- Factory method: `Symbol.create()`, `OrderAggregate.create()`, `PositionAggregate.open()`
-
-**Lợi ích:** Một schema (bảo trì dễ hơn), type hint đơn giản hơn, không trùng lặp.
-
-### 11. Strategy Implementation Pattern
-
-Triển khai interface `IStrategyService`. Triển khai `on_bar_completed(bar)` (bắt buộc), tùy chọn `on_quote_received(tick)`, `on_order_filled(order, fill_price)`. Trả `Signal | None`. Giữ pure logic, không broker/database (StrategyAppService quản lý execution). Lifecycle: `on_start()` → `on_bar_completed()` / `on_quote_received()` / `on_order_filled()` → `on_stop()`.
-
-### 12. Domain Layer Patterns (Pydantic BaseModel + MongoDB Persistence)
-
-Domain entity dùng **Pydantic BaseModel** (không phải dataclass) với MongoDB persistence tích hợp sẵn:
-- **Entities (5):** `Bar`, `OrderAggregate`, `PositionAggregate`, `Symbol` (flattened), `SyncStatus`
-- **Pattern:** Mỗi aggregate có `to_mongo()` → dict và `@classmethod from_mongo(doc)` → entity
-- **Lợi ích:** Validation, serialization, schema evolution qua Pydantic
-- **Value Objects:** Frozen qua `field(frozen=True)` hoặc `@dataclass(frozen=True)`
-- **Events:** `@dataclass(frozen=True, eq=False)` với `__eq__` tùy chỉnh theo event_id
-- **Quy tắc:** Dùng `generate_id()` (UUID7), VO/event bất biến, mọi aggregate extend BaseModel
-- **Cache Keys:** `build_bar_cache_key()`
-- **Collections:** `COLLECTION_BARS`
-
-### 12.5. DDD Classification Guide (When to Use an Aggregate)
-
-**Khi nào dùng Aggregate:**
-- Entity có **invariants** cần bảo vệ (vd state machine của `OrderAggregate`)
-- Entity có **lifecycle behavior** (vd `PositionAggregate` open → scale → close)
-- Entity **sở hữu entity khác** trong một consistency boundary
-- Entity **phát domain event** từ các business operation
-
-**Khi nào KHÔNG dùng Aggregate:**
-- Entity là **data record** (vd `Bar` — chỉ là dữ liệu OHLCV, chỉ serialization)
-- Class là **event factory** không có state (anti-pattern)
-- Class **không bao giờ được khởi tạo** trên thực tế
-- Behavior là **CRUD-only** — dùng plain entity hoặc model
-
-**Quy tắc dự án:**
-1. Aggregate phải xứng đáng với độ phức tạp của nó — không invariant, không aggregate.
-2. Event có thể tạo trực tiếp ở nơi cần — không cần wrapper aggregate.
-3. Value object giữ dạng frozen dataclass — đơn giản, bất biến, không persistence.
-4. DTO nằm ở application layer — chúng là infrastructure, không phải domain.
-
-### 12.6. Primary Key Rule — UUIDv7 Only (MANDATORY)
-
-**Mọi document được persist mà ta kiểm soát PHẢI dùng `_id` UUIDv7.** Không hash key, không natural key, không Mongo ObjectId, không composite-string key.
-
-**Quy tắc:**
-1. Sinh mọi id qua `generate_id()` (trả về `UUID`) từ `core/common/uuid.py`. Domain entity khai báo `id: UUID`; serialize với `"_id": str(self.id)` trong `to_mongo()`. Không bao giờ khai báo `id: str` cho entity được persist.
-2. **Không bao giờ** derive `_id` từ business data (không `sha256(...)`, không composite-symbol-as-id, không slug).
-3. **Không bao giờ** dựa vào ObjectId mặc định của Mongo — luôn set `_id` tường minh bằng uuid7.
-4. **Uniqueness và idempotency thuộc về secondary unique index, không bao giờ trên `_id`.** Nếu một bộ ba `(strategy_code, symbol, interval)` phải unique, hãy enforce bằng unique compound index — không phải bằng cách biến nó thành primary key.
-
-**Ngoại lệ duy nhất được phép — collection do thư viện third-party sở hữu.** Các collection có `_id` do thư viện ngoài ghi (vd MongoDBJobStore của APScheduler → `apscheduler_jobs`) được miễn. Ta **không** patch hay fork thư viện để ép uuid7. Ngoại lệ này CHỈ áp dụng cho collection ta không tạo ra; mọi collection do code của ta ghi đều tuân quy tắc không ngoại lệ.
-
-**Lý do:** một kiểu id duy nhất xuyên suốt mọi code ta sở hữu. Dự đoán được, có thứ tự theo thời gian, không có special case cần nhớ, không có representation drift — mà không bị coupling với internal storage của third-party.
-
-**Anti-patterns (đều bị cấm):**
 ```python
 # ❌ hash / natural / objectid as primary key
 _id = hashlib.sha256(f"{a}|{b}|{c}".encode()).hexdigest()[:16]
@@ -282,175 +133,90 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 
 ## Composite Symbol Format
 
-**Format:** `{CODE}:{EXCHANGE}` (vd `BTCUSDT:BINANCE`, `AAPL:NYSE`)
+**Format:** `{CODE}:{PROVIDER}` (vd `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`)
 
-**Quy tắc:**
-- Một field bất biến duy nhất `symbol: str` thay thế các cặp `(code: str, exchange: str)` xuyên suốt domain entity
-- Exchange là postfix mờ — business logic không bao giờ tách `symbol` thành các phần
-- URL-encoded: `:` serialize thành `%3A` trong path segment (vd `/api/v1/bar/BTCUSDT%3ABINANCE`)
-- JSON/database: giữ nguyên `:` thô (không encode bên trong payload)
-- Cache key: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`, v.v.
-- Entity bị ảnh hưởng: Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol
+- Một field bất biến `symbol: str` thay cho cặp `(code, exchange)` trên mọi entity: Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol.
+- Suffix là id của data provider sinh ra bar của symbol, viết đầy đủ dạng `provider_id.upper()` — `BINANCE`, `TRADINGVIEW`, không bao giờ là mã rút gọn và không bao giờ là sàn. Routing đọc nó ở đúng một chỗ, `provider_id_for()` trong `core/domain/market_data/provider_routing_domain_service.py`; mọi chỗ khác coi `symbol` là mờ.
+- Suffix không trỏ tới provider nào đã đăng ký thì fail rõ ràng (`UnknownDataProviderError`, một `ValueError`) — không bao giờ đoán hay route theo asset class.
+- Symbol chưa seed nhận default của provider (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`); đăng ký một provider nghĩa là thêm nó vào cả hai routing adapter trong `app/di/` và vào bảng đó.
+- Execution broker (paper, OKX) là setting của strategy (`StrategyConfig.broker`), không thuộc symbol. Tên instrument riêng của broker là việc của broker adapter: nó map từ composite symbol đầy đủ trong bảng riêng (`TRADINGVIEW_EXCHANGE_BY_CODE` trong `tradingview_mappers.py`; OKX ghép `instId` trong `okx_mapper.py`).
+- Validation: `COMPOSITE_SYMBOL_RE` cho dữ liệu nội bộ, `COMPOSITE_SYMBOL_PATTERN` cho input HTTP (`core/domain/symbol/entities.py`).
+- URL: `:` được encode thành `%3A` trong path segment (`/api/v1/bar/BTCUSDT%3ABINANCE`). JSON và database giữ nguyên `:`. Cache key dùng symbol nguyên vẹn: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`.
 
-**Ví dụ Repository Usage:**
+## Strategy IDs
+
+Ba id không bao giờ được nhầm lẫn:
+
+| ID | Ý nghĩa | Ví dụ |
+|---|---|---|
+| `strategy_code` | Tên template đăng ký trong `STRATEGY_REGISTRY`; chọn strategy class | `"hitnrun2"` |
+| `subscription_id` | uuid7 của một binding `(strategy_code, symbol, interval)`; là key của instance in-memory, order, position và backtest doc | `"019ebe98-…"` |
+| `template_id` | **Deprecated**, tên cũ của `strategy_code`; coi mọi tham chiếu là `strategy_code` | — |
+
+Chốt chặn trùng lặp duy nhất cho subscription là unique compound index `ix_subscriptions_dedup_triple` trên `(strategy_code, symbol, interval)`. Index phân biệt hoa thường, nên `add_symbol` upper-case `symbol` trước khi lưu — bước chuẩn hoá đó là load-bearing (`tests/core_test/infra/persistence/test_subscription_repository.py::test_concurrent_add_same_triple_one_doc_one_error`).
+
+## Async Suspension Points — "Await Is Preemption"
+
+**Quy tắc một dòng:** mỗi `await` là một preemption point. Event loop có thể resume bất kỳ coroutine sẵn sàng nào tại đó, nên state mà coroutine khác đọc phải hợp lệ **trước** suspension point cho phép nó chạy.
+
+| Construct | Suspension? | Ghi chú |
+|---|---|---|
+| `await coro()` | Có | Trường hợp hiển nhiên. |
+| `await asyncio.sleep(0)` | Có | Yield tường minh, kể cả với 0. |
+| `yield x` trong `async def` | **Có** | Dễ bỏ sót. Async generator và `@asynccontextmanager` dùng nó. |
+| `async for x in iterable` | Có | Mỗi vòng gọi `await iterable.__anext__()`. |
+| `async with cm:` | Có (vào và ra) | Gọi `await cm.__aenter__()` và `__aexit__()`. |
+| `await asyncio.gather(...)` | Có | Các coroutine con xen kẽ nhau tại mỗi `await` của chúng. |
+| `await container.get(X)` | Có nếu provider làm I/O | Factory `AsyncIterator` của Dishka giấu `await`. |
+| Gán biến, `if`, số học | Không | Đồng bộ giữa hai `await`; dùng cho vùng atomic. |
+
+**1. Publish-before-subscribe** — wire dependency TRƯỚC lời gọi khởi động worker (scheduler, queue consumer, websocket reader, background task). Khi lời gọi đó trả về, worker có thể dispatch ở `await` kế tiếp. `app/main.py` gọi `set_sync_container(container)` trước `await` đầu tiên vì lý do này: APScheduler lưu `next_run_time` qua các lần restart, nên một job đến hạn trong `misfire_grace_time` có thể dispatch trong một `container.get(...)` sớm và gặp module global chưa được set.
+
 ```python
-# composite symbol (single field, no separate exchange param)
-await bar_repo.find(symbol="BTCUSDT:BINANCE", interval="1d")
-```
+# Anti-pattern (racy)
+await register_sync_jobs(
+    container=container,
+    job_scheduler=await container.get(JobScheduler),  # scheduler may start here
+)
+# the container global is set inside register_sync_jobs — too late
 
-## Strategy ID Disambiguation
-
-**PHÂN BIỆT QUAN TRỌNG:** Ba ID không bao giờ được nhầm lẫn.
-
-| ID | Type | Ý nghĩa | Ví dụ | Persistence | Ghi chú |
-|---|---|---|---|---|---|
-| `strategy_code` | string | Tên template đăng ký trong `STRATEGY_REGISTRY` | `"hitnrun2"` | Class name (immutable) | Xác định class strategy nào để khởi tạo. Dùng để tra class và load từ persistent subscription. |
-| `subscription_id` | string (uuid7) | ID của một binding (strategy_code, symbol, interval) | `"019ebe98-209c-71f2-af3d-981810e2d783"` | MongoDB `subscriptions._id` (immutable after creation) | uuid7 ngẫu nhiên qua `generate_id()`. Tính unique của bộ ba được enforce bởi unique compound index `ix_subscriptions_dedup_triple`, không phải bởi id. Key cho in-memory strategy instance, order, position, backtest result doc. |
-| `template_id` | **DEPRECATED** | Tên cũ của path param từng giữ strategy_code | từng là `"hitnrun2"` trong URL | — | Không dùng. Dùng `strategy_code`; coi mọi tham chiếu legacy `template_id` là `strategy_code`. |
-
-**Field Renames (Live Refactor):**
-- MongoDB `strategy_subscriptions` → `subscriptions` (tên collection)
-- Subscription doc: `strategy_id: "{code}"` → `strategy_code: "{code}"` (tên field + semantics)
-- Order doc: `strategy_id: "{subscription_id}"` → `subscription_id: "{subscription_id}"` (tên field + semantics)
-- Position doc: `strategy_id: "{subscription_id}"` → `subscription_id: "{subscription_id}"` (tên field + semantics)
-- Backtest doc: `strategy_id: "{code}"` → `strategy_code: "{code}"`; giữ nguyên `subscription_id`
-
-**Repository Method Renames:**
-- `SubscriptionRepository.list_by_strategy(strategy_id)` → `list_by_strategy_code(strategy_code)`
-- `OrderRepository.find_by_strategy(strategy_id)` → `find_by_subscription(subscription_id)`
-- `PositionRepository.get_by_strategy(strategy_id)` → `get_by_subscription(subscription_id)`
-- `BacktestRepository.list_by_strategy(strategy_id)` → `list_by_strategy_code(strategy_code)`
-
-**HTTP Route Semantics (Post-Refactor):**
-- `POST /strategies/{strategy_code}/subscriptions` — tạo subscription cho template này
-- `POST /subscriptions/{sub_id}/start` — start subscription instance này
-- `GET /subscriptions/?strategy_code=X` — lọc subscription theo template (tùy chọn)
-
-**Dedup Invariant (CRITICAL):**
-Subscription id là uuid7 ngẫu nhiên — chúng không nói gì về bộ ba. Guard chống trùng duy nhất là unique compound index:
-```python
-await collection.create_index(
-    [("strategy_code", 1), ("symbol", 1), ("interval", 1)],
-    unique=True, name="ix_subscriptions_dedup_triple",
+# Fix
+set_sync_container(container)   # synchronous, wired FIRST
+await register_sync_jobs(
+    container=container,
+    job_scheduler=await container.get(JobScheduler),
 )
 ```
-`symbol` được normalize (`.upper()`) trong `add_symbol` trước khi lưu — index là case-sensitive, nên việc normalize đó là load-bearing.
-Concurrency test: `tests/core_test/infra/persistence/test_subscription_repository.py:test_concurrent_add_same_triple_one_doc_one_error`
 
-## Code Organization Guidelines
+**2. Initialize-before-first-await** — không bao giờ để lộ object dở dang cho task khác. Làm hết I/O, dựng object một lần, rồi mới publish.
 
-### File Naming
+**3. TOCTOU qua `await`** — một check trước `await` có thể đã cũ sau nó. Đẩy invariant xuống storage (`await db.try_debit(...)` với `WHERE balance >= amount`), giữ `asyncio.Lock` theo key qua `await`, hoặc đọc lại sau nó.
 
-Dùng kebab-case với tên mô tả mục đích (suffix trong tên file mã hóa layer):
+**4. Atomic block không có `await`** — giữa cặp đọc và ghi shared state không có suspension. `counters[key] += 1` là atomic giữa hai `await` trong CPython, không bao giờ atomic qua một `await`.
 
-```
-quote_routes.py                      # QuoteRoute functions (API HTTP handlers)
-quote_app_service.py                 # QuoteAppService (application orchestrator)
-bar_builder_domain_service.py        # BarBuilderDomainService (domain logic)
-engulfing_strategy_service.py        # EngulfingStrategyService (strategy impl)
-strategy_service_interface.py        # IStrategyService (strategy interface)
-bar_repository.py                    # BarRepository (data access)
-data_provider_port.py                # IDataProviderPort (infra boundary)
-binance_adapter.py                   # BinanceAdapter (infra impl)
-okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separate adapter)
-```
+**5. `yield` trong `@asynccontextmanager` / factory `AsyncIterator` LÀ suspension point.** Mọi setup trước `yield`, cleanup trong `try/finally` sau nó.
 
-### Class Naming by Layer
-
-Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain concepts (entities, VOs, enums) không có suffix — chúng là ngôn ngữ miền.
-
-| Layer | Pattern | Class Suffix | File Suffix | Ví dụ |
-|-------|---------|--------|--------|--------|
-| Entities | `{Name}` hoặc `{Name}Aggregate` | None / `Aggregate` | `.py` | `Bar`, `Symbol`, `OrderAggregate` |
-| Events | `{Entity}{PastTense}Event` | `Event` | `.py` | `OrderFilledEvent`, `BarCompletedEvent` |
-| Enums | `{Concept}` | None | `.py` | `Interval`, `OrderType`, `OrderSide` |
-| Value Objects | `{Concept}` | None | `.py` | `PnL`, `OHLCV`, `BarRange` |
-| **Domain Services** | `{Name}DomainService` | `DomainService` | `*_domain_service.py` | `PositionCalculatorDomainService`, `BarBuilderDomainService`, `PerformanceCalculatorDomainService` |
-| **Domain Strategy (Impl)** | `{Name}StrategyService` | `StrategyService` | `*_strategy_service.py` | `EngulfingStrategyService`, `HitNRun2StrategyService` |
-| **Domain Strategy (Interface)** | `IStrategyService` | `IStrategyService` | `strategy_service_interface.py` | `IStrategyService` |
-| Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
-| **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IBrokerFactoryPort`, `IDataProviderPort`, `IRealtimeQuoteProviderPort` |
-| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter`, `OKXWebSocketAdapter` |
-| **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (utility pattern; follow naming rule when used) |
-| **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestReportAppService` |
-| Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListTradesQuery` |
-| Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `RunBacktestCommand` |
-| CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |
-| DTOs | `{Name}Response` | `Response` | `.py` | `SyncResponse`, `QuoteResponse` |
-| Routes | (functions) | — | `*_routes.py` | `async def sync_symbol(...)` |
-| Middleware | `{Name}Middleware` | `Middleware` | `*_middleware.py` | `RateLimitMiddleware` |
-| Errors | `{Name}Error` | `Error` | `.py` | `AppError`, `NotFoundError`, `DomainError` |
-| DI Providers | `{Domain}Provider` | `Provider` | `app/di/{domain}.py` | `InfrastructureProvider`, `ServicesProvider` |
-| Configs | `{Name}Config` | `Config` | `*_config.py` | `BacktestConfig`, `RiskConfig` |
-| Background Jobs | (functions) | — | `*_jobs.py` | `sync_1m()`, `sync_integrity()` |
-
-### Naming Principles & Exemptions
-
-**Ba nguyên tắc cốt lõi:**
-
-1. **Tên class + file tự mã hóa layer/role.** Đọc `PositionCalculatorDomainService` hoặc `binance_adapter.py` biết ngay layer không cần xem folder.
-
-2. **Không stack 2 doer-suffix generic (`-er`/`-or`) trong 1 tên.** Nếu bị dính (vd một class vừa mang `-Tracker` vừa `-Helper` → `*TrackerHelper`), dùng gerund: `*TrackingHelper`. **Ngoại lệ:** danh từ nghiệp vụ kết `-er` (vd `Broker`) không tính là doer-suffix → `BrokerAdapter` hợp lệ.
-
-3. **Data class + role đã có suffix chuẩn → giữ nguyên.** Exempt list bên dưới.
-
-**Exempt list** (giữ suffix hiện tại, KHÔNG ép convention):
-
-| Nhóm | Ví dụ |
-|---|---|
-| CQRS | `*CommandService`, `*QueryService` (app layer, request-scoped ≠ orchestrator) |
-| Persistence | `*Repository` |
-| DI / cross-cutting | `*Provider`, `*Middleware` |
-| App handler | `RiskCheckHandler`, `event_handler` (decorator) |
-| Infra factory/scheduler | `BrokerFactory`, `JobScheduler` |
-| Infra sub-component (OKX) | `OkxMessageParser`, `OkxOrderMapper`, `OkxPositionMapper`, `OkxReconnectionHandler`, `OkxStateReconciler`, `BrokerFactory`, `JobScheduler` |
-| Data class | Entity, VO, enum, event, `*Command`/`*Query`/`*Response` |
-
-### Module Size
-
-Giữ mỗi file dưới 200 LOC để quản lý context tối ưu:
-
-- Nếu file vượt 200 LOC, tách thành các module tập trung
-- Dùng composition (import và delegate) thay vì inheritance
-- Trích các utility function ra module riêng
-- Tạo service class chuyên biệt cho logic phức tạp
-
-**Ngoại lệ đã biết (được biện minh bởi độ phức tạp):**
-- `core/infra/brokers/paper/paper_broker_adapter.py` (~850 LOC — 4 fill path + futures/margin accounting + SL/TP synthetic exits)
-- `engine/market_data/app_services/sync_jobs.py` (~730 LOC — multi-interval backfill + integrity jobs)
-
-### Import Organization
-
-**Ví dụ (Features layer - Pydantic allowed):**
 ```python
-# 1. Standard library
-import asyncio
-from datetime import datetime
-from typing import Optional, List
-
-# 2. Third-party
-from pydantic import BaseModel  # OK in Features/Config layers
-import structlog
-
-# 3. Local
-from pocketquant.core.common.database import Database
-from pocketquant.core.common.logging import get_logger
-from pocketquant.app.features.market_data.base.models import OHLCV
+@provide(scope=Scope.APP)
+async def my_service(self) -> AsyncIterator[Service]:
+    svc = Service()
+    await svc.connect()          # all setup BEFORE yield
+    try:
+        yield svc
+    finally:
+        await svc.aclose()       # cleanup in finally — survives cancellation
 ```
 
-**Ví dụ (Domain layer - Stdlib dataclasses only):**
-```python
-# 1. Standard library
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional, ClassVar
+**6. Cancellation rơi vào bất kỳ `await` nào.** Sau `task.cancel()`, `asyncio.CancelledError` có thể nổ ở `await` kế tiếp. Cặp ghi đi đôi phải nằm trong transaction, hoặc trong `try/finally` với hành động bù trừ.
 
-# 2. Local (no third-party, no I/O)
-from pocketquant.core.domain.shared.domain_event import DomainEvent
-from pocketquant.core.common.uuid import generate_id
+**Symmetry check:** khi hai subsystem kề nhau wiring giống nhau (vd `init_backtest_tasks` và `register_sync_jobs`), so sánh thứ tự startup của chúng. Thứ tự lệch nhau gần như luôn là bug.
 
-# NOTE: No pydantic, pymongo, redis, aiohttp imports in domain/
-```
+**Checklist trước mỗi `await`:**
+- Lời gọi này có publish handle, đăng ký callback hay khởi động worker không? Nếu có, object đã khởi tạo xong chưa?
+- Invariant nào đang ở trạng thái trung gian?
+- Giá trị vừa đọc có thể bị coroutine khác sửa trước dòng kế tiếp dùng nó không?
+- Nếu `CancelledError` rơi vào đây, cleanup có chạy không? Có cần `try/finally` hay `asyncio.shield` không?
+- `async for` / `async with` / `gather` này có giấu thêm suspension point không?
 
 ## Comment Policy — Explain WHY, Not WHAT
 
@@ -489,338 +255,40 @@ bar = await repo.get(bar_id)
 
 **Docstrings:** Tối thiểu. Để type hint gánh phần nặng. Module-level: chỉ nêu mục đích ngắn khi không hiển nhiên.
 
-## Type Hints
-
-Dùng full type hint trên mọi public API: function, class attribute, kiểu phức tạp. Công cụ: `pyright` để type check (scope từ `pyrightconfig.json`).
-
-## Error Handling
-
-**Try-Except:** Bắt exception cụ thể, không bao giờ `except` trần. Dùng structured logging kèm context.
-
-**Propagation:** Routes bắt/trả 4xx-5xx, Services bắt/log/trả error dict, Repositories propagate.
-
-## Testing Standards
-
-Tối thiểu 80% code coverage (service method, repository method, error path, integration point):
-
-```bash
-pytest --cov=src --cov-report=term-missing
-pytest tests/test_market_data.py::test_sync --pdb  # Run + debug
-```
-
-Dùng pytest fixture + monkeypatch để mock:
-
-```python
-@pytest.fixture
-async def mock_database(monkeypatch):
-    mock_db = AsyncMock()
-    monkeypatch.setattr("src.common.database.Database._database", mock_db)
-    return mock_db
-```
-
-## Code Quality Tools
-
-### Linting (ruff)
-
-```bash
-ruff check .              # Lint check
-ruff check . --fix        # Auto-fix issues
-```
-
-**Rule được enforce:**
-- Unused import (không import tên class cũ như `BinanceAdapter`, `IStrategyService`, `PaperBrokerAdapter`)
-- Undefined name
-- Syntax error
-- Duplicate code
-- Complexity metric
-
-### Formatting (ruff)
-
-```bash
-ruff format .             # Auto-format code
-```
-
-### Type Checking (Pyright)
-
-Ta dùng **Pyright** (qua Pylance trong VSCode), không phải mypy:
-- **Nhanh hơn 3-5x** so với mypy trên codebase lớn
-- **Tích hợp VSCode native** qua extension Pylance
-- **Type inference tốt hơn** cho các pattern phức tạp
-- **Hỗ trợ Pydantic v2 native** (không cần plugin)
-
-```bash
-pyright                                 # Type check (scopes from pyrightconfig.json)
-pyright src/pocketquant/engine/backtest/  # Check specific module
-```
-
-## Performance Considerations
-
-### Blocking I/O
-
-Chạy blocking operation trong thread pool để tránh block event loop:
-
-```python
-# Good: native async I/O (Binance via BinanceAdapter/aiohttp)
-bars = await self.provider.fetch_ohlcv(symbol, interval, n_bars)
-
-# Bad: blocking call on the event loop
-bars = some_sync_client.get_bars(symbol)  # Blocks!
-# If a sync lib is unavoidable, isolate it:
-#   await loop.run_in_executor(self.executor, sync_fn, symbol)
-```
-
-### Bulk Operations
-
-Dùng bulk upsert thay vì insert từng cái:
-
-```python
-# Good: Single bulk operation
-await BarRepository.upsert_many(records)  # One round trip to DB
-
-# Bad: Loop of individual inserts
-for record in records:
-    await BarRepository.insert_one(record)  # N round trips!
-```
-
-### Cache Invalidation
-
-Dùng xóa theo pattern để đảm bảo tính đúng (thay vì xóa chọn lọc):
-
-```python
-# Good: Pattern-based deletion (simple, correct)
-await Cache.delete_pattern("bar:AAPL:*")
-
-# Bad: Selective deletion (easy to miss keys)
-await Cache.delete(f"bar:AAPL:NYSE:1d:100")
-```
-
-### Concurrency
-
-Dùng asyncio.Lock cho shared state:
-
-```python
-# Good: Lock protects bar builder state
-async with self._lock:
-    self._bar_builders[interval].update_ohlc(tick)
-
-# Bad: No protection against race conditions
-self._bar_builders[interval].update_ohlc(tick)
-```
-
-### Async Suspension Points — "Await Is Preemption"
-
-**Quy tắc một dòng:** mỗi `await` là một preemption point. Event loop có thể resume bất kỳ coroutine sẵn sàng nào tại đây. State mà một coroutine khác đọc phải hợp lệ **trước** suspension point cho phép nó chạy.
-
-Lối tắt tư duy: `await` ≈ `Thread.yield()`. Nếu bạn không tin một giá trị qua `Thread.yield()` trong chương trình threaded, đừng tin nó qua một `await`.
-
-**Điều gì tính là suspension point (kể cả những cái không hiển nhiên):**
-
-| Construct | Suspension? | Notes |
-|---|---|---|
-| `await coro()` | Yes | The obvious one. |
-| `await asyncio.sleep(0)` | Yes | Explicit yield even with 0. |
-| `yield x` inside `async def` | **Yes** | Easy to miss. Async generators + `@asynccontextmanager` use this. |
-| `async for x in iterable` | Yes | Calls `await iterable.__anext__()` each loop. |
-| `async with cm:` | Yes (entry & exit) | Calls `await cm.__aenter__()` and `__aexit__()`. |
-| `await asyncio.gather(...)` | Yes | Children interleave between each other's awaits. |
-| `await container.get(X)` | Yes if provider does I/O | Dishka `AsyncIterator` factories hide awaits. |
-| Plain assignment, `if`, arithmetic | No | Synchronous between awaits — use this for atomic regions. |
-
-**Sáu sub-pattern để áp dụng.** Cùng root cause, khác hình dạng:
-
-**1. Publish-before-subscribe** — wire dependency TRƯỚC lời gọi khởi động worker (scheduler, queue consumer, websocket reader, background task). Sau khi lời gọi trả về, worker trở nên quan sát được với event loop và có thể dispatch tại `await` kế tiếp.
-
-```python
-# Anti-pattern (racy)
-register_sync_jobs(
-    container=container,
-    job_scheduler=await container.get(JobScheduler),  # scheduler now LIVE
-)
-# set_sync_container() inside register_sync_jobs runs AFTER scheduler may dispatch
-
-# Fix
-set_sync_container(container)   # wire global FIRST
-register_sync_jobs(
-    container=container,
-    job_scheduler=await container.get(JobScheduler),
-)
-```
-
-Vì sao nó cắn: APScheduler persist `next_run_time` qua các lần restart. Tick đầu tiên dispatch bất cứ thứ gì đến hạn trong `misfire_grace_time` (thiết lập per-job, vd 120s cho sync_1m, 3600s cho daily job). Nếu module-level global chưa được set → `RuntimeError` ở dòng đầu tiên của mọi job được dispatch. Orphan recovery chạy lúc startup qua `recover_orphan_jobs()` để bắt job kẹt ở trạng thái `running` (crash resilience).
-
-**2. Initialize-before-first-await** — không bao giờ `await` trên thứ phơi bày object nửa vời cho task khác. Dựng đầy đủ, rồi mới publish.
-
-```python
-# Anti-pattern
-async def make_session():
-    sess = Session()
-    REGISTRY[sess.id] = sess          # published
-    sess.user = await load_user()     # other tasks see sess with no user
-
-# Fix
-async def make_session():
-    user = await load_user()           # all I/O first
-    sess = Session(user=user)          # construct atomically
-    REGISTRY[sess.id] = sess           # publish fully-formed
-```
-
-**3. TOCTOU across `await`** — race condition kinh điển, phiên bản async.
-
-```python
-# Anti-pattern
-if user.balance >= amount:        # CHECK
-    await db.debit(user, amount)  # USE — balance may have changed → double-spend
-
-# Fix A: storage-layer atomicity (preferred)
-result = await db.try_debit(user, amount)  # WHERE balance >= amount
-
-# Fix B: per-key async lock
-async with user_locks[user.id]:
-    if user.balance >= amount:
-        await db.debit(user, amount)
-```
-
-Quy tắc chung: re-read shared state sau mỗi `await`, giữ lock xuyên `await`, hoặc đẩy invariant xuống storage layer.
-
-**4. Atomic block phải không có `await`** — giữa cặp read/write của shared state, không suspension.
-
-```python
-# Anti-pattern: lost increment
-counter = counters[key]
-await some_io()
-counters[key] = counter + 1   # another coroutine may have done the same → lost update
-
-# Fix: atomic between awaits
-counters[key] = counters[key] + 1
-await some_io()
-```
-
-`dict[key] += 1` là atomic trong CPython giữa các await (vùng single bytecode dưới GIL). **Không** atomic xuyên `await`.
-
-**5. `yield` trong `@asynccontextmanager` / `AsyncIterator` factory LÀ một suspension point.** Toàn bộ setup trước `yield`, cleanup trong `try/finally` sau đó.
-
-```python
-# Anti-pattern (Dishka factory)
-@provide(scope=Scope.APP)
-async def my_service(self) -> AsyncIterator[Service]:
-    svc = Service()
-    GLOBAL_HANDLE = svc          # published before initialized
-    yield svc                    # caller now has svc and may use it
-    await svc.connect()          # NEVER runs at the right time
-
-# Fix
-@provide(scope=Scope.APP)
-async def my_service(self) -> AsyncIterator[Service]:
-    svc = Service()
-    await svc.connect()          # all setup BEFORE yield
-    try:
-        yield svc
-    finally:
-        await svc.aclose()       # cleanup in finally — survives cancellation
-```
-
-**6. Cancellation rơi vào bất kỳ `await` nào.** `asyncio.CancelledError` có thể được raise tại `await` kế tiếp sau `task.cancel()`. Cleanup không nằm trong `try/finally` có thể không chạy.
-
-```python
-# Anti-pattern: money disappears if cancelled between debit and credit
-async def transfer():
-    await db.debit(src, amount)
-    await network.notify()        # cancellation here → credit never runs
-    await db.credit(dst, amount)
-
-# Fix: transactional storage (preferred)
-async with db.transaction():
-    await db.debit(src, amount)
-    await db.credit(dst, amount)
-
-# Or: try/finally + compensating action
-async def transfer():
-    debited = False
-    try:
-        await db.debit(src, amount)
-        debited = True
-        await db.credit(dst, amount)
-    except (asyncio.CancelledError, Exception):
-        if debited:
-            await db.credit(src, amount)  # compensate
-        raise
-```
-
-**Symmetry check:** khi hai subsystem kề nhau làm wiring tương tự (vd `backtest_jobs` và `sync_jobs`), diff trình tự startup của chúng. Ordering bất đối xứng gần như luôn là bug.
-
-**Pre-`await` checklist.** Trước mỗi `await`, tự hỏi:
-- Nó có publish một handle / register một callback / khởi động một worker không? Nếu có, object đã được khởi tạo đầy đủ chưa?
-- Ta đang để invariant nào ở trạng thái trung gian?
-- Ta vừa đọc một giá trị mà một coroutine khác có thể sửa trước khi dòng kế tiếp dùng nó?
-- Nếu `CancelledError` rơi vào đây, cleanup có chạy không? Cái này có nên nằm trong `try/finally` hay `asyncio.shield`?
-- `async for` / `async with` / `gather` này có che giấu nhiều suspension point hơn ta đang nghĩ không?
-
-**Worked-example reference:** `plans/reports/debugger-260524-1324-sync-jobs-container-race.md`
+## Testing
+
+- Test bám theo package: `tests/core_test/`, `tests/engine_test/`, `tests/backtest_test/`, `tests/app_test/`, và `tests/scripts/` cho `scripts/`.
+- Trước khi đổi cấu trúc một flow, pin hành vi hiện tại bằng test; refactor mà làm đổi kết quả test đó nghĩa là hành vi đã đổi.
+- Integration test cần MongoDB hoặc Redis thật dùng `testcontainers` (`tests/app_test/conftest.py`), nên Docker phải đang chạy. Không mock database khi hành vi cần kiểm tra là query hay index.
+- Không gì được phụ thuộc timezone của host: CI chạy suite dưới `UTC`, `Asia/Ho_Chi_Minh` và `America/Chicago`, và `just test-tz` làm điều tương tự ở local.
+- Dùng pytest fixture và `monkeypatch` để mock. Cover service method, repository method và error path; không có coverage gate (`pytest --cov=src` có sẵn).
+
+## Performance
+
+- Không blocking I/O trên event loop. Dùng client async native; nếu buộc phải dùng thư viện sync, cô lập nó bằng `await loop.run_in_executor(...)`.
+- Ghi theo lô (`BarRepository.insert_many`), không ghi từng bản trong vòng lặp.
+- Invalidate cache theo pattern (`Cache.delete_pattern("bar:...:*")`), không đoán từng key.
+- Bảo vệ shared in-memory state (ví dụ các bar builder) bằng `asyncio.Lock`.
+- Type hint đầy đủ cho public function và class attribute; Pyright kiểm tra chúng.
+
+## Quality Gate
+
+Một thay đổi chỉ xong khi tất cả các check dưới đây pass. Ruff và Pyright phải báo 0 lỗi trong `src/` và trong mọi file bạn sửa; các file test cũ vẫn còn lint debt, nên `ruff check .` toàn repo chưa sạch.
+
+| Check | Lệnh |
+|---|---|
+| Tests | `just test` |
+| Lint | `uv run ruff check src <touched files>`; format file đã sửa bằng `uv run ruff format` |
+| Type check | `uv run pyright src <touched files>` (cấu hình từ `pyrightconfig.json`) |
+| Import contracts | `uv run lint-imports` → `Contracts: 8 kept, 0 broken.` |
+| Metric ratchet | `uv run python scripts/code_metrics.py --ratchet` |
+
+- CI job `tests` trong `.github/workflows/cicd.yml` chạy `lint-imports`, metric ratchet và `pytest` ở mỗi timezone leg. Ruff và Pyright không phải CI step; chạy chúng ở local.
+- **Import contracts** (`[tool.importlinter]` trong `pyproject.toml`): layer `app → engine → core`, domain không phụ thuộc infra, hai driver backtest/live độc lập, phần máy dùng chung của engine không import driver, `fastapi` chỉ trong `app`, không `bson`, `pandas_market_calendars` chỉ trong `core.infra.calendars`, và `tvDatafeed` chỉ trong `core.infra.tradingview`.
+- **Metric ratchet:** `scripts/code_metrics.py` đo `tiny_share` (tỉ lệ hàm có thân ≤ 2 statement) và `delegations` (hàm chỉ gồm một `return` hoặc expression gọi một attribute) trên `src/pocketquant`; định nghĩa chính xác nằm trong docstring của script. `--ratchet` so chúng với `max_tiny_share` và `max_delegations` trong `[tool.code-metrics]` của `pyproject.toml` và exit 1 khi metric nào vượt ceiling.
+- Ceiling chỉ đi xuống. Hạ nó khi một thay đổi cải thiện metric; nâng nó là quyết định của user, không bao giờ là cách để làm CI xanh. Khi ratchet chặn một thay đổi, sửa bằng cách tái cấu trúc (ví dụ inline một wrapper mỏng) — không inline code chỉ để đẩy con số.
+- Tiny share ≤ 30% và ≤ 20 delegations là aspiration, không phải gate.
 
 ## Configuration & Secrets
 
-Không bao giờ hardcode. Dùng `.env` (local) và environment variable (prod). Không bao giờ commit `.env` hay secret. Định nghĩa trong `src/pocketquant/core/config.py::Settings` với Pydantic.
-
-
-
-## Clean Architecture Rules (MANDATORY)
-
-| Layer | Rules |
-|-------|-------|
-| **Domain** | ❌ No I/O imports (pymongo, redis, aiohttp) ✅ Pydantic BaseModel with to_mongo/from_mongo ✅ Validation in __post_init__ ✅ Pure logic only |
-| **Services** | ❌ No decorators ✅ Orchestrate domain + adapters ✅ Stateful services ✅ Called by routes |
-| **Routes** | ❌ No business logic ✅ Thin HTTP handlers ✅ Inject services via FromDishka ✅ Call service methods |
-| **Adapters** | ❌ Never imported by Domain ✅ Brokers, persistence, scheduling ✅ All external I/O |
-
-## Datetime Serialization (API Responses)
-
-Khi serialize `datetime` sang JSON cho frontend tiêu thụ, **luôn dùng `to_utc_iso()`**:
-
-```python
-from pocketquant.core.common.time import to_utc_iso
-
-# Good: consistent UTC, JavaScript-safe
-"next_run": to_utc_iso(job.next_run_time)   # → "2026-04-14T01:43:57Z" or None
-
-# Bad: malformed if datetime has tz offset (e.g. +07:00Z)
-"next_run": dt.isoformat() + "Z"
-
-# Bad: missing Z suffix, JS parses as local time
-"next_run": dt.isoformat()
-```
-
-**Dùng nội bộ** (logging, cache key): `.isoformat()` trần là được.
-
-## Deprecated Patterns (DO NOT USE)
-
-- Business logic trong features/ → chuyển sang Application layer
-- Gọi DB trực tiếp ngoài persistence/ → dùng repository pattern
-- Pydantic BaseModel trong domain/ → dùng stdlib dataclass (domain phải zero I/O)
-- Mệnh đề `except:` trần → bắt exception cụ thể
-- Synchronous blocking I/O trong code async → dùng ThreadPoolExecutor
-- UUID4 cho ID → dùng UUID7 (time-ordered, thân thiện B-tree)
-- Wiring DI thủ công → dùng Dishka provider
-- Gọi trực tiếp Database.get_collection() ngoài persistence/ → dùng BaseRepository._collection()
-- Class schema viết tay → dùng domain entity với to_mongo/from_mongo
-
-## Import Contracts (Dependency Boundaries)
-
-Enforce qua `import-linter` trong `pyproject.toml`. Bề mặt phổ biến:
-
-| From | To | Via |
-|------|----|----|
-| Routes | Command/Query Service | `FromDishka[ServiceType]` |
-| Services | Repository | Constructor DI |
-| Services | Exceptions | `raise NotFoundError`, `raise DomainError` |
-| Routes | Exception Handler | Global registration |
-| Repositories | MongoDB | `Database.get_collection()` |
-
-Không reverse dep (routes ← services, services ← repositories). Domain không bao giờ import từ Adapters/Application/Features.
-
-## Quality Checklist
-
-- [ ] Có đủ type hint | [ ] Không lỗi syntax (ruff check passes)
-- [ ] Code đã format (ruff format) | [ ] Type checking passes (pyright)
-- [ ] Tests pass (pytest) | [ ] Coverage ≥80%
-- [ ] Không blocking I/O trong async | [ ] Đã test error path
-- [ ] Dùng environment variable | [ ] Không secret trong code/config
+Không bao giờ hardcode. Dùng `.env` (local) và biến môi trường (prod). Không bao giờ commit `.env` hay secret. Định nghĩa trong `src/pocketquant/core/config.py::Settings` bằng Pydantic.

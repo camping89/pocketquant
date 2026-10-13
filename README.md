@@ -110,6 +110,7 @@ just test                    # pytest
 uv run ruff check .          # lint
 uv run pyright               # types
 uv run lint-imports          # 8 import-linter contracts
+uv run python scripts/code_metrics.py --ratchet   # code metric ratchet (ceiling in pyproject.toml)
 ```
 
 Manual API: Bruno [`tests/http`](./tests/http) · curl [`tests/manual/api-test.http`](./tests/manual/api-test.http).

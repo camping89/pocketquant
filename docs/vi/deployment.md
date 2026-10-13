@@ -18,7 +18,7 @@ git push origin develop
                                            ssh → 11-verify.sh   (19 checks → report artifact)
 ```
 
-- `tests` là cửa chặn cho phần build: `uv sync --frozen` → `lint-imports` (import-linter contracts) → `pytest tests/ -q`. `build-app`/`build-web` cần nó xanh mới chạy.
+- `tests` là cửa chặn cho phần build. Nó chạy một lần cho mỗi timezone của host (`UTC`, `Asia/Ho_Chi_Minh`, `America/Chicago`): `uv sync --frozen` → kiểm tra host zone → `lint-imports` (import-linter contracts) → `scripts/code_metrics.py --ratchet` (code metric ratchet, xem [code-standards.md](./code-standards.md#quality-gate)) → `pytest tests/ -q`. `build-app`/`build-web` cần mọi leg xanh mới chạy.
 - Images gắn tag `:latest` + `:sha-<short>`. `deploy` chạy trên `develop`/`master`/`workflow_dispatch`.
 - **Concurrency `deploy`, `cancel-in-progress`** — một push mới hủy deploy đang chạy dở; bản mới nhất thắng.
 
