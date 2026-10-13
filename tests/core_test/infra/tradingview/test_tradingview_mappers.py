@@ -27,6 +27,7 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.tradingview.tradingview_client_interface import RawBar
 from pocketquant.core.infra.tradingview.tradingview_mappers import (
     INTERVAL_TO_TRADINGVIEW,
+    TRADINGVIEW_EXCHANGE_BY_CODE,
     raw_bar_to_bar,
     split_futures_symbol,
 )
@@ -39,17 +40,38 @@ def _raw_bars() -> list[RawBar]:
     return [RawBar(**row) for row in rows]
 
 
-def test_split_es_futures_symbol() -> None:
-    assert split_futures_symbol("ES1!:CME_MINI") == ("ES", "CME_MINI", 1)
+@pytest.mark.parametrize(
+    ("composite", "expected"),
+    [
+        ("ES1!:TRADINGVIEW", ("ES", "CME_MINI", 1)),
+        ("NQ1!:TRADINGVIEW", ("NQ", "CME_MINI", 1)),
+        ("YM1!:TRADINGVIEW", ("YM", "CBOT_MINI", 1)),
+    ],
+)
+def test_split_takes_the_exchange_from_the_table(
+    composite: str, expected: tuple[str, str, int]
+) -> None:
+    """The suffix names the data provider, so it never becomes the exchange."""
+    assert split_futures_symbol(composite) == expected
 
 
-def test_split_non_futures_symbol() -> None:
-    assert split_futures_symbol("BTCUSDT:BINANCE") == ("BTCUSDT", "BINANCE", None)
+def test_the_exchange_table_holds_exactly_the_seeded_futures() -> None:
+    assert TRADINGVIEW_EXCHANGE_BY_CODE == {
+        "ES1!": "CME_MINI",
+        "NQ1!": "CME_MINI",
+        "YM1!": "CBOT_MINI",
+    }
 
 
-def test_split_rejects_a_symbol_with_no_exchange() -> None:
+def test_split_rejects_a_code_missing_from_the_exchange_table() -> None:
+    """Guessing an exchange would send a silently wrong scraper request."""
+    with pytest.raises(ValueError, match="No TradingView exchange known for 'RTY1!'"):
+        split_futures_symbol("RTY1!:TRADINGVIEW")
+
+
+def test_split_rejects_a_symbol_with_no_suffix() -> None:
     """A bare code must fail loudly rather than reach the scraper as ':ES'."""
-    with pytest.raises(ValueError, match="needs an exchange"):
+    with pytest.raises(ValueError, match="needs a composite symbol"):
         split_futures_symbol("ES1!")
 
 
@@ -60,14 +82,14 @@ def test_interval_map_is_total() -> None:
 
 def test_raw_bar_to_bar_is_utc_aware() -> None:
     for raw in _raw_bars():
-        bar = raw_bar_to_bar(raw, "ES1!:CME_MINI", Interval.HOUR_1)
+        bar = raw_bar_to_bar(raw, "ES1!:TRADINGVIEW", Interval.HOUR_1)
         assert bar.datetime is not None
         assert bar.datetime.tzinfo is UTC
 
 
 def test_raw_bar_epoch_round_trip() -> None:
     for raw in _raw_bars():
-        bar = raw_bar_to_bar(raw, "ES1!:CME_MINI", Interval.HOUR_1)
+        bar = raw_bar_to_bar(raw, "ES1!:TRADINGVIEW", Interval.HOUR_1)
         assert bar.datetime is not None
         assert bar.datetime.timestamp() == raw.epoch_seconds
 

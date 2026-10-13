@@ -21,7 +21,7 @@ from pocketquant.engine.market_data.app_services.ws_subscription_app_service imp
 )
 
 CRYPTO = "BTCUSDT:BINANCE"
-FUTURE = "ES1!:CME_MINI"
+FUTURE = "ES1!:TRADINGVIEW"
 
 
 class _FakeProvider:
@@ -43,9 +43,7 @@ class _FakeProvider:
 
 def _service(provider: _FakeProvider, tracked: list[str]) -> WsSubscriptionAppService:
     repo = MagicMock()
-    repo.list_all = AsyncMock(
-        side_effect=lambda: [SimpleNamespace(symbol=s) for s in tracked]
-    )
+    repo.list_all = AsyncMock(side_effect=lambda: [SimpleNamespace(symbol=s) for s in tracked])
     return WsSubscriptionAppService(
         provider=provider,  # type: ignore[arg-type]
         tracked_symbol_repo=repo,

@@ -149,23 +149,19 @@ class TestCalendarGovernsAlignment:
     CME_SESSION_OPEN = datetime(2026, 6, 9, 22, 0, tzinfo=UTC)
 
     @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
-    def test_utc_midnight_aligns_only_on_the_continuous_calendar(
-        self, interval: Interval
-    ) -> None:
+    def test_utc_midnight_aligns_only_on_the_continuous_calendar(self, interval: Interval) -> None:
         assert is_bar_aligned(self.UTC_MIDNIGHT, interval, CALENDAR) is True
         assert is_bar_aligned(self.UTC_MIDNIGHT, interval, CME) is False
 
     @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
-    def test_session_open_aligns_only_on_the_session_calendar(
-        self, interval: Interval
-    ) -> None:
+    def test_session_open_aligns_only_on_the_session_calendar(self, interval: Interval) -> None:
         assert is_bar_aligned(self.CME_SESSION_OPEN, interval, CME) is True
         assert is_bar_aligned(self.CME_SESSION_OPEN, interval, CALENDAR) is False
 
     def test_filter_aligned_bars_partitions_by_the_calendar(self) -> None:
         bars = [
             Bar(
-                symbol="ES1!:CME_MINI",
+                symbol="ES1!:TRADINGVIEW",
                 interval=Interval.DAY_1,
                 datetime=ts,
                 open=1.0,

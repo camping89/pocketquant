@@ -19,7 +19,7 @@ from pocketquant.core.infra.tradingview.tradingview_adapter import TradingViewAd
 from pocketquant.core.infra.tradingview.tradingview_client_interface import RawBar
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "es_1h_raw.json"
-_ES = "ES1!:CME_MINI"
+_ES = "ES1!:TRADINGVIEW"
 
 
 def _raw_bars() -> list[RawBar]:
@@ -222,8 +222,8 @@ async def test_a_realtime_plan_keeps_the_frontier_bar() -> None:
     On a real-time feed the timestamp cutoff already excludes the forming bar, so
     dropping by position too would throw away a closed one.
     """
-    bars = await _adapter(
-        _FakeClient(), is_open=True, tradingview_plan="cme_non_pro"
-    ).fetch_ohlcv(_ES, Interval.HOUR_1, 10)
+    bars = await _adapter(_FakeClient(), is_open=True, tradingview_plan="cme_non_pro").fetch_ohlcv(
+        _ES, Interval.HOUR_1, 10
+    )
 
     assert len(bars) == len(_raw_bars())

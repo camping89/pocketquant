@@ -68,7 +68,7 @@ class TestNoProgressIsSilentWhileTheMarketIsShut:
     def _emit(self, calendar) -> list[dict]:
         with structlog.testing.capture_logs() as logs:
             emit_no_progress(
-                "ES1!:CME_MINI",
+                "ES1!:TRADINGVIEW",
                 Interval.MINUTE_1,
                 bars_fetched=0,
                 filtered_misaligned=0,
@@ -76,7 +76,7 @@ class TestNoProgressIsSilentWhileTheMarketIsShut:
                 attempts=3,
                 streak=1,
                 latest_bar=Bar(
-                    symbol="ES1!:CME_MINI",
+                    symbol="ES1!:TRADINGVIEW",
                     interval=Interval.MINUTE_1,
                     datetime=datetime.now(UTC) - timedelta(hours=9),
                     open=1.0,
@@ -106,7 +106,7 @@ class TestNoProgressIsSilentWhileTheMarketIsShut:
 @pytest.mark.asyncio
 async def test_status_reports_whether_the_market_is_open() -> None:
     status = AsyncMock()
-    status.symbol = "ES1!:CME_MINI"
+    status.symbol = "ES1!:TRADINGVIEW"
     status.interval = Interval.MINUTE_1.value
     status.status = "completed"
     status.bar_count = 10

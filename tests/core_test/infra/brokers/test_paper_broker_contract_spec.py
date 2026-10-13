@@ -76,7 +76,7 @@ async def _round_trip(
 
 @pytest.mark.asyncio
 async def test_es_round_trip_realizes_25_usd() -> None:
-    broker, trades = await _round_trip(ES, "ES1!:CME_MINI", qty=2, entry=4500.00, exit_=4500.25)
+    broker, trades = await _round_trip(ES, "ES1!:TRADINGVIEW", qty=2, entry=4500.00, exit_=4500.25)
 
     assert len(trades) == 1
     assert trades[0].pnl == pytest.approx(25.0, abs=1e-9)
@@ -87,7 +87,7 @@ async def test_es_round_trip_realizes_25_usd() -> None:
 async def test_es_round_trip_with_per_contract_commission() -> None:
     broker, trades = await _round_trip(
         ES,
-        "ES1!:CME_MINI",
+        "ES1!:TRADINGVIEW",
         qty=2,
         entry=4500.00,
         exit_=4500.25,
@@ -103,14 +103,14 @@ async def test_es_round_trip_with_per_contract_commission() -> None:
 
 @pytest.mark.asyncio
 async def test_nq_multiplier_20() -> None:
-    _, trades = await _round_trip(NQ, "NQ1!:CME_MINI", qty=1, entry=19_000.00, exit_=19_001.00)
+    _, trades = await _round_trip(NQ, "NQ1!:TRADINGVIEW", qty=1, entry=19_000.00, exit_=19_001.00)
 
     assert trades[0].pnl == pytest.approx(20.0, abs=1e-9)
 
 
 @pytest.mark.asyncio
 async def test_ym_multiplier_5() -> None:
-    _, trades = await _round_trip(YM, "YM1!:CBOT_MINI", qty=1, entry=42_000.0, exit_=42_001.0)
+    _, trades = await _round_trip(YM, "YM1!:TRADINGVIEW", qty=1, entry=42_000.0, exit_=42_001.0)
 
     assert trades[0].pnl == pytest.approx(5.0, abs=1e-9)
 
@@ -128,7 +128,7 @@ async def test_linear_default_is_unchanged() -> None:
 
 @pytest.mark.asyncio
 async def test_equity_curve_has_no_jump_at_fill_beyond_commission() -> None:
-    symbol = "ES1!:CME_MINI"
+    symbol = "ES1!:TRADINGVIEW"
     broker, bus, trades = await _broker(ES, PerContractCommissionModel(2.5))
 
     before_open = await broker.get_balance()

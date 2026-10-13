@@ -6,7 +6,6 @@ import pytest
 from pydantic import SecretStr
 
 from pocketquant.app.main_extensions import _tradingview_credentialed
-from pocketquant.core.domain.shared.enums import AssetClass
 from tests.core_test.infra.market_data.conftest import build_settings
 
 
@@ -20,6 +19,6 @@ from tests.core_test.infra.market_data.conftest import build_settings
     ],
 )
 def test_only_a_configured_login_expects_a_session(fields: dict, expected: bool) -> None:
-    settings = build_settings({AssetClass.CRYPTO_SPOT: ["binance"]}).model_copy(update=fields)
+    settings = build_settings().model_copy(update=fields)
 
     assert _tradingview_credentialed(settings) is expected

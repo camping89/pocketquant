@@ -8,7 +8,6 @@ from pydantic import Field, MongoDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pocketquant.core.domain.shared.enums import (
-    AssetClass,
     TradingViewCapabilities,
     TradingViewPlan,
     capabilities_for,
@@ -63,25 +62,6 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"]
 
     enable_jobs: bool = True
-
-    # Market-data provider routing.
-    #
-    # Ordered provider ids per asset class: primary first, then fallbacks.
-    # pydantic-settings parses these from a JSON string in the environment with
-    # no custom parser, e.g.
-    #   MARKET_DATA_PROVIDERS={"crypto_spot":["binance"],"index_future":["tradingview"]}
-    #
-    # That assignment REPLACES the whole mapping rather than merging into it, so
-    # an override naming one asset class drops the others and leaves them with no
-    # provider at all. Always spell out every asset class you still want served.
-    market_data_providers: dict[AssetClass, list[str]] = {
-        AssetClass.CRYPTO_SPOT: ["binance"],
-        AssetClass.CRYPTO_PERP: ["binance"],
-        AssetClass.INDEX_FUTURE: ["tradingview"],
-    }
-    # Per-symbol escape hatch, keyed by upper-cased composite symbol. Wins over
-    # the asset-class map outright.
-    symbol_provider_overrides: dict[str, list[str]] = {}
 
     # TradingView (index futures data source).
     #

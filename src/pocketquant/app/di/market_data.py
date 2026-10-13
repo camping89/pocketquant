@@ -17,7 +17,6 @@ from pocketquant.core.infra.persistence.repositories.bar_repository import BarRe
 from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
     TrackedSymbolRepository,
 )
-from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.core.infra.tradingview.tradingview_quote_adapter import TradingViewQuoteAdapter
 from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
@@ -51,7 +50,6 @@ class MarketDataProvider(Provider):
     def get_realtime_quote_provider(
         self,
         settings: Settings,
-        symbol_lookup: SymbolLookupHelper,
         calendar_factory: TradingCalendarFactory,
         tradingview_client: TvDatafeedClient,
     ) -> IRealtimeQuoteProviderPort:
@@ -64,8 +62,6 @@ class MarketDataProvider(Provider):
                     calendar_factory=calendar_factory,
                 ),
             },
-            settings=settings,
-            symbol_lookup=symbol_lookup,
         )
 
     @provide(scope=Scope.APP)

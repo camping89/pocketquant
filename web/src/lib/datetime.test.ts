@@ -18,7 +18,7 @@ describe('ageColorClass', () => {
 
 describe('statusVariant', () => {
   const stuck: SyncStatus = {
-    symbol: 'ES1!:CME_MINI',
+    symbol: 'ES1!:TRADINGVIEW',
     interval: '1m',
     status: 'completed',
     bar_count: 10,

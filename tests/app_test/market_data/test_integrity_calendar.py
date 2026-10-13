@@ -41,7 +41,7 @@ async def test_a_session_calendar_expects_far_fewer_hours_than_a_247_one() -> No
     repo = _empty_bar_repo()
 
     continuous = await check_integrity("BTCUSDT:BINANCE", Interval.HOUR_1, repo, CALENDAR, 7)
-    session = await check_integrity("ES1!:CME_MINI", Interval.HOUR_1, repo, CME, 7)
+    session = await check_integrity("ES1!:TRADINGVIEW", Interval.HOUR_1, repo, CME, 7)
 
     # 7 days of hours on a market that never closes.
     assert continuous["missing_count"] == 7 * 24
@@ -53,7 +53,7 @@ async def test_a_session_calendar_expects_far_fewer_hours_than_a_247_one() -> No
 async def test_daily_grid_is_session_opens_not_utc_midnights() -> None:
     repo = _empty_bar_repo()
 
-    session = await check_integrity("ES1!:CME_MINI", Interval.DAY_1, repo, CME, 7)
+    session = await check_integrity("ES1!:TRADINGVIEW", Interval.DAY_1, repo, CME, 7)
 
     # Five sessions in a week, not seven days.
     assert session["missing_count"] <= 6
@@ -101,7 +101,7 @@ async def test_misalignment_is_judged_against_the_symbols_calendar() -> None:
     )
 
     continuous = await check_integrity("BTCUSDT:BINANCE", Interval.DAY_1, repo, CALENDAR, 7)
-    session = await check_integrity("ES1!:CME_MINI", Interval.DAY_1, repo, CME, 7)
+    session = await check_integrity("ES1!:TRADINGVIEW", Interval.DAY_1, repo, CME, 7)
 
     assert continuous["misaligned_count"] == 0
     assert session["misaligned_count"] == 1

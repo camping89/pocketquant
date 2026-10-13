@@ -49,7 +49,7 @@ class TradingViewQuoteAdapter:
 
     Usage:
         adapter = TradingViewQuoteAdapter(client, settings, calendar_factory)
-        await adapter.subscribe("ES1!:CME_MINI", on_quote)
+        await adapter.subscribe("ES1!:TRADINGVIEW", on_quote)
         await adapter.run_forever()   # blocks until cancelled
     """
 
@@ -86,7 +86,7 @@ class TradingViewQuoteAdapter:
         logger.info("tradingview_quote.disconnected")
 
     async def subscribe(self, symbol: str, callback: QuoteCallback) -> str:
-        """Register ``symbol`` (composite ``{code}:{exchange}``) and start polling it."""
+        """Register ``symbol`` (composite ``{code}:TRADINGVIEW``) and start polling it."""
         composite = symbol.upper()
         # Validates the composite now rather than on the first poll.
         split_futures_symbol(composite)

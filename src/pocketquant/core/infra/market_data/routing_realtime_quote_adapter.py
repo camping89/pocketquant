@@ -1,4 +1,4 @@
-"""Route realtime subscriptions to the one provider that owns each symbol.
+"""Route realtime subscriptions to the provider each symbol's suffix names.
 
 Satisfies ``IRealtimeQuoteProviderPort`` structurally, so
 ``WsSubscriptionAppService`` and ``QuoteAppService`` need no edits.
@@ -12,12 +12,13 @@ from datetime import datetime
 from typing import Any
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.config import Settings
+from pocketquant.core.domain.market_data.provider_routing_domain_service import (
+    UnknownDataProviderError,
+    provider_id_for,
+)
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
-from pocketquant.core.infra.market_data.symbol_provider_resolver import SymbolProviderResolver
-from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 
 logger = get_logger(__name__)
 
@@ -28,11 +29,8 @@ class RoutingRealtimeQuoteAdapter:
     def __init__(
         self,
         providers: dict[str, IRealtimeQuoteProviderPort],
-        settings: Settings,
-        symbol_lookup: SymbolLookupHelper,
     ) -> None:
         self._providers = providers
-        self._resolver = SymbolProviderResolver(settings=settings, symbol_lookup=symbol_lookup)
         self._owner: dict[str, str] = {}
 
     @property
@@ -66,17 +64,21 @@ class RoutingRealtimeQuoteAdapter:
         symbol: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Subscribe through the primary provider only — never a fallback.
+        """Subscribe through the provider the suffix names — never a second one.
 
         Two realtime feeds for one symbol would both reach
         ``BarBuilderDomainService`` and double-count its ticks, which is worse
         than a missing feed because it is silent.
+
+        Raises:
+            UnknownDataProviderError: when the suffix names no registered
+                provider.
         """
-        provider_id = await self._owner_id_for(symbol)
-        provider = self._providers.get(provider_id) if provider_id else None
+        provider_id = provider_id_for(symbol)
+        provider = self._providers.get(provider_id)
         if provider is None:
-            raise ValueError(
-                f"No realtime provider registered for {symbol}: resolved {provider_id or 'nothing'}"
+            raise UnknownDataProviderError(
+                f"No realtime provider registered for {symbol}: suffix names {provider_id!r}"
             )
 
         key = await provider.subscribe(symbol=symbol, callback=callback)
@@ -112,8 +114,3 @@ class RoutingRealtimeQuoteAdapter:
         for provider in self._providers.values():
             merged.update(provider.subscriptions)
         return merged
-
-    async def _owner_id_for(self, symbol: str) -> str:
-        """The single provider that owns this symbol's stream; ``""`` when none."""
-        ids = await self._resolver.provider_ids(symbol)
-        return ids[0] if ids else ""

@@ -1,7 +1,7 @@
 """One futures symbol through the real pipeline, against real Mongo and Redis.
 
 Everything Phases 2 and 3 built for session calendars has so far only run on the
-24/7 calendar, where most of it is the identity. This drives ``ES1!:CME_MINI``
+24/7 calendar, where most of it is the identity. This drives ``ES1!:TRADINGVIEW``
 on the CME calendar through ``SyncService.sync_one``, the integrity scan and the
 no-progress anomaly path, with a stub provider in place of TradingView.
 
@@ -55,7 +55,7 @@ from pocketquant.engine.market_data.sync_internals import anomaly_log
 from pocketquant.engine.market_data.sync_internals.anomaly_log import emit_no_progress
 from pocketquant.engine.market_data.sync_service import SyncService
 
-SYMBOL = "ES1!:CME_MINI"
+SYMBOL = "ES1!:TRADINGVIEW"
 SESSION = date(2026, 6, 10)
 SOURCE = SOURCE_REST_SYNC_1M
 ES_SPEC = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, currency="USD")
@@ -67,9 +67,7 @@ class _StubProvider:
     def __init__(self, bars: list[Bar]) -> None:
         self._bars = bars
 
-    async def fetch_ohlcv(
-        self, symbol: str, interval: Interval, n_bars: int = 1000
-    ) -> list[Bar]:
+    async def fetch_ohlcv(self, symbol: str, interval: Interval, n_bars: int = 1000) -> list[Bar]:
         return [b for b in self._bars if b.interval is interval]
 
     async def search_symbols(self, query: str) -> list[dict]:

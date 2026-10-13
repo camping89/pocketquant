@@ -3,7 +3,7 @@
 ``SyncService._persist_bars`` runs on every sync cycle. It used to call
 ``upsert(Symbol.create(symbol))``, which sends the whole document as ``$set`` —
 and ``Symbol.create`` with no asset class produces crypto defaults. A seeded
-``ES1!:CME_MINI`` would therefore have become crypto spot on its first 1m sync,
+``ES1!:TRADINGVIEW`` would therefore have become crypto spot on its first 1m sync,
 silently, and every calendar decision after that would have been wrong.
 """
 
@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import pytest
 
+from pocketquant.core.domain.market_data.provider_routing_domain_service import (
+    UnknownDataProviderError,
+)
 from pocketquant.core.domain.shared.enums import AssetClass
 from pocketquant.core.domain.symbol import (
     CALENDAR_CME_GLOBEX_EQUITY,
@@ -20,7 +23,7 @@ from pocketquant.core.domain.symbol import (
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
 
-FUTURES_SYMBOL = "ES1!:CME_MINI"
+FUTURES_SYMBOL = "ES1!:TRADINGVIEW"
 
 
 @pytest.fixture
@@ -63,3 +66,24 @@ async def test_upsert_still_overwrites_deliberately(repo: SymbolRepository) -> N
     stored = await repo.find_by_symbol(FUTURES_SYMBOL)
     assert stored is not None
     assert stored.asset_class is AssetClass.CRYPTO_SPOT
+
+
+async def test_touch_stamps_an_unseeded_symbol_with_its_providers_defaults(
+    repo: SymbolRepository,
+) -> None:
+    """A futures symbol synced before seeding must not become 24/7 crypto."""
+    await repo.touch("NQ1!:TRADINGVIEW")
+
+    stored = await repo.find_by_symbol("NQ1!:TRADINGVIEW")
+    assert stored is not None
+    assert stored.asset_class is AssetClass.INDEX_FUTURE
+    assert stored.calendar_id == CALENDAR_CME_GLOBEX_EQUITY
+
+
+async def test_touch_refuses_a_symbol_whose_provider_is_not_registered(
+    repo: SymbolRepository,
+) -> None:
+    with pytest.raises(UnknownDataProviderError):
+        await repo.touch("XAUUSD:EXNESS")
+
+    assert await repo.find_by_symbol("XAUUSD:EXNESS") is None

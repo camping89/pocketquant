@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_SYMBOLS
+from pocketquant.core.domain.market_data.provider_routing_domain_service import unseeded_symbol
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
@@ -35,10 +36,16 @@ class SymbolRepository(SymbolScopedRepository):
         """Ensure a symbol document exists without overwriting its metadata.
 
         The sync pipeline calls this on every run. A full ``$set`` would reset
-        asset_class / calendar_id / contract_spec to their crypto defaults, so a
-        seeded futures symbol would silently become crypto on its first sync.
+        asset_class / calendar_id / contract_spec to the provider defaults, so a
+        seeded symbol would silently lose its metadata on its first sync. A
+        missing document is created from the defaults of the data provider the
+        symbol's suffix names.
+
+        Raises:
+            UnknownDataProviderError: when the suffix names no registered data
+                provider.
         """
-        doc = Symbol.create(symbol=symbol).to_mongo()
+        doc = unseeded_symbol(symbol).to_mongo()
         symbol_value = doc.pop("symbol")
         await self._collection().update_one(
             {"symbol": symbol_value},

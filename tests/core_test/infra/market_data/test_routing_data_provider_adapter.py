@@ -1,34 +1,25 @@
-"""Fallback order, and the assumptions the routing adapter makes out loud.
-
-The crypto path cannot exercise any of this: production registers one provider,
-so every fallback branch is dead code until a second one exists. These fakes are
-the only place the routing is observable before Phase 5.
-"""
+"""REST routing: the symbol's suffix names the one provider that serves it."""
 
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
 import pytest
-import structlog
 
 from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.shared.enums import AssetClass, Interval
+from pocketquant.core.domain.market_data.provider_routing_domain_service import (
+    UnknownDataProviderError,
+)
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
+    DEFAULT_SEARCH_PROVIDER_ID,
     RoutingDataProviderAdapter,
 )
-from tests.core_test.infra.market_data.conftest import build_settings, lookup_returning
-
-FUTURES = "ES1!:CME_MINI"
-MAP = {
-    AssetClass.CRYPTO_SPOT: ["binance"],
-    AssetClass.INDEX_FUTURE: ["tradingview", "binance"],
-}
 
 
-def _bar() -> Bar:
+def _bar(symbol: str) -> Bar:
     return Bar(
-        symbol=FUTURES,
+        symbol=symbol,
         interval=Interval.MINUTE_1,
         datetime=None,
         open=1.0,
@@ -45,201 +36,131 @@ def _provider(result: list[Bar] | Exception) -> AsyncMock:
         provider.fetch_ohlcv = AsyncMock(side_effect=result)
     else:
         provider.fetch_ohlcv = AsyncMock(return_value=result)
+    provider.search_symbols = AsyncMock(return_value=[{"symbol": "BTCUSDT"}])
     return provider
 
 
-def _adapter(
-    providers: dict[str, AsyncMock],
-    *,
-    asset_class: AssetClass | None = AssetClass.INDEX_FUTURE,
-    overrides: dict[str, list[str]] | None = None,
-) -> RoutingDataProviderAdapter:
-    return RoutingDataProviderAdapter(
-        providers=providers,  # pyright: ignore[reportArgumentType]
-        settings=build_settings(MAP, overrides),
-        symbol_lookup=lookup_returning(asset_class),  # pyright: ignore[reportArgumentType]
+def _adapter(providers: dict[str, AsyncMock]) -> RoutingDataProviderAdapter:
+    return RoutingDataProviderAdapter(providers=providers)  # pyright: ignore[reportArgumentType]
+
+
+async def _fetch(adapter: RoutingDataProviderAdapter, symbol: str) -> list[Bar]:
+    return await adapter.fetch_ohlcv(symbol=symbol, interval=Interval.MINUTE_1, n_bars=10)
+
+
+@pytest.mark.asyncio
+async def test_a_binance_suffix_is_served_by_binance_only() -> None:
+    binance = _provider([_bar("BTCUSDT:BINANCE")])
+    tradingview = _provider([_bar("BTCUSDT:BINANCE"), _bar("BTCUSDT:BINANCE")])
+
+    bars = await _fetch(
+        _adapter({"tradingview": tradingview, "binance": binance}), "BTCUSDT:BINANCE"
     )
 
-
-async def _fetch(adapter: RoutingDataProviderAdapter) -> list[Bar]:
-    return await adapter.fetch_ohlcv(symbol=FUTURES, interval=Interval.MINUTE_1, n_bars=10)
-
-
-@pytest.mark.asyncio
-async def test_primary_result_returned() -> None:
-    primary, secondary = _provider([_bar()]), _provider([_bar(), _bar()])
-
-    bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
-
     assert len(bars) == 1
-    secondary.fetch_ohlcv.assert_not_awaited()
+    binance.fetch_ohlcv.assert_awaited_once_with(
+        symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1, n_bars=10
+    )
+    tradingview.fetch_ohlcv.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_exception_falls_through_to_secondary() -> None:
-    primary, secondary = _provider(RuntimeError("scraper down")), _provider([_bar()])
+async def test_a_tradingview_suffix_is_served_by_tradingview_only() -> None:
+    binance = _provider([_bar("ES1!:TRADINGVIEW")])
+    tradingview = _provider([_bar("ES1!:TRADINGVIEW")])
 
-    bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
+    await _fetch(_adapter({"binance": binance, "tradingview": tradingview}), "ES1!:TRADINGVIEW")
 
-    assert len(bars) == 1
-    secondary.fetch_ohlcv.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_empty_result_falls_through_to_secondary() -> None:
-    primary, secondary = _provider([]), _provider([_bar()])
-
-    bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
-
-    assert len(bars) == 1
-    secondary.fetch_ohlcv.assert_awaited_once()
+    tradingview.fetch_ohlcv.assert_awaited_once()
+    binance.fetch_ohlcv.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_every_provider_answering_empty_returns_an_empty_list() -> None:
-    """Nobody raised, so nobody is broken — this is a quiet market."""
-    primary, secondary = _provider([]), _provider([])
+async def test_the_suffix_is_matched_case_insensitively() -> None:
+    binance = _provider([_bar("BTCUSDT:BINANCE")])
 
-    bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
+    assert len(await _fetch(_adapter({"binance": binance}), "btcusdt:binance")) == 1
 
-    assert bars == []
+
+@pytest.mark.asyncio
+async def test_an_unknown_suffix_fails_loudly() -> None:
+    """Returning nothing would look exactly like a quiet market."""
+    binance = _provider([_bar("XAUUSD:EXNESS")])
+
+    with pytest.raises(UnknownDataProviderError, match="'exness'"):
+        await _fetch(_adapter({"binance": binance}), "XAUUSD:EXNESS")
+
+    binance.fetch_ohlcv.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_symbol_without_a_suffix_fails_loudly() -> None:
+    with pytest.raises(UnknownDataProviderError):
+        await _fetch(_adapter({"binance": _provider([])}), "BTCUSDT")
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_suffix_is_a_value_error_for_existing_callers() -> None:
+    with pytest.raises(ValueError):
+        await _fetch(_adapter({"binance": _provider([])}), "XAUUSD:EXNESS")
 
 
 @pytest.mark.asyncio
 async def test_an_outage_is_raised_rather_than_reported_as_an_empty_market() -> None:
     """Swallowing the failure turns a dead venue into a successful sync.
 
-    Before routing existed a provider exception reached ``sync_one``, which
-    logged ``market_data.sync.failed`` and set the symbol's status to
-    ``error``. Returning ``[]`` instead would report ``completed`` with no
-    progress, and would leave ``fetch_with_retry`` retrying the failure as
-    though it were emptiness — three calls at a venue that is rate-limiting us.
+    A provider exception reaches ``sync_one``, which logs
+    ``market_data.sync.failed`` and sets the symbol's status to ``error``.
+    Returning ``[]`` instead would report ``completed`` with no progress, and
+    would leave ``fetch_with_retry`` retrying the failure as though it were
+    emptiness — three calls at a venue that is rate-limiting us.
     """
-    primary, secondary = _provider([]), _provider(RuntimeError("also down"))
+    adapter = _adapter({"tradingview": _provider(RuntimeError("scraper down"))})
 
-    with pytest.raises(RuntimeError, match="also down"):
-        await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
-
-
-@pytest.mark.asyncio
-async def test_a_provider_that_answers_hides_an_earlier_failure() -> None:
-    """Fallback still works: one bad provider is not an outage."""
-    primary, secondary = _provider(RuntimeError("scraper down")), _provider([_bar()])
-
-    bars = await _fetch(_adapter({"tradingview": primary, "binance": secondary}))
-
-    assert len(bars) == 1
+    with pytest.raises(RuntimeError, match="scraper down"):
+        await _fetch(adapter, "ES1!:TRADINGVIEW")
 
 
 @pytest.mark.asyncio
-async def test_unknown_provider_id_is_skipped() -> None:
-    """A provider named in config but never registered must not end the walk."""
-    secondary = _provider([_bar()])
+async def test_a_failing_provider_does_not_fall_back_to_another() -> None:
+    """Another provider's bars for the same code would be another instrument."""
+    binance = _provider([_bar("ES1!:TRADINGVIEW")])
+    adapter = _adapter({"tradingview": _provider(RuntimeError("down")), "binance": binance})
 
-    bars = await _fetch(_adapter({"binance": secondary}))
+    with pytest.raises(RuntimeError):
+        await _fetch(adapter, "ES1!:TRADINGVIEW")
 
-    assert len(bars) == 1
-    secondary.fetch_ohlcv.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_symbol_override_selects_the_overridden_provider_first() -> None:
-    """G4 evidence: moving one symbol to another venue is a config edit.
-
-    Nothing in ``engine/`` or ``app/`` participates — the override is read by
-    the routing adapter through Settings, and every consumer above it still
-    holds the same ``IDataProviderPort`` it held before.
-    """
-    primary, secondary = _provider([_bar()]), _provider([_bar(), _bar()])
-
-    bars = await _fetch(
-        _adapter(
-            {"tradingview": primary, "binance": secondary},
-            overrides={FUTURES: ["binance"]},
-        )
-    )
-
-    assert len(bars) == 2
-    primary.fetch_ohlcv.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_a_third_provider_serves_only_the_symbol_overridden_to_it() -> None:
-    """G4 evidence: a new venue is reached only through configuration.
-
-    The third provider is registered beside the existing two and named by one
-    override. A symbol of the same asset class without the override never
-    reaches it.
-    """
-    tradingview, binance, third = _provider([_bar()]), _provider([_bar()]), _provider([_bar()])
-    adapter = _adapter(
-        {"tradingview": tradingview, "binance": binance, "third": third},
-        overrides={FUTURES: ["third"]},
-    )
-
-    await _fetch(adapter)
-    await adapter.fetch_ohlcv(symbol="NQ1!:CME_MINI", interval=Interval.MINUTE_1)
-
-    assert [c.kwargs["symbol"] for c in third.fetch_ohlcv.await_args_list] == [FUTURES]
-    assert [c.kwargs["symbol"] for c in tradingview.fetch_ohlcv.await_args_list] == [
-        "NQ1!:CME_MINI"
-    ]
     binance.fetch_ohlcv.assert_not_awaited()
 
 
-class TestTheAdapterSaysWhatItAssumed:
-    """Two silent assumptions are made audible, once per symbol."""
+@pytest.mark.asyncio
+async def test_a_quiet_provider_returns_an_empty_list() -> None:
+    assert await _fetch(_adapter({"binance": _provider([])}), "BTCUSDT:BINANCE") == []
 
-    @pytest.mark.asyncio
-    async def test_an_unseeded_symbol_warns_that_it_assumed_crypto(self) -> None:
-        """Seeding must precede the first sync, so say so when it did not.
 
-        An unseeded futures symbol routes to a crypto venue that has no such
-        instrument, returns nothing, and so never reaches the ``touch`` that
-        would have created its document — the miss is self-reinforcing and the
-        symbol lookup caches it for 60s in between.
-        """
-        adapter = _adapter({"binance": _provider([_bar()])}, asset_class=None)
+@pytest.mark.asyncio
+async def test_search_goes_to_the_named_default_provider() -> None:
+    assert DEFAULT_SEARCH_PROVIDER_ID == "binance"
+    binance, tradingview = _provider([]), _provider([])
 
-        with structlog.testing.capture_logs() as logs:
-            await _fetch(adapter)
+    result = await _adapter({"tradingview": tradingview, "binance": binance}).search_symbols("btc")
 
-        unseeded = [e for e in logs if e["event"] == "market_data.routing.unseeded_symbol"]
-        assert len(unseeded) == 1
-        assert unseeded[0]["log_level"] == "warning"
-        assert unseeded[0]["assumed_asset_class"] == AssetClass.CRYPTO_SPOT.value
+    assert result == [{"symbol": "BTCUSDT"}]
+    binance.search_symbols.assert_awaited_once_with("btc")
+    tradingview.search_symbols.assert_not_awaited()
 
-    @pytest.mark.asyncio
-    async def test_the_unseeded_warning_is_not_repeated_per_fetch(self) -> None:
-        """It sits on a per-minute path; once per symbol is the whole point."""
-        adapter = _adapter({"binance": _provider([_bar()])}, asset_class=None)
 
-        with structlog.testing.capture_logs() as logs:
-            await _fetch(adapter)
-            await _fetch(adapter)
-            await _fetch(adapter)
+@pytest.mark.asyncio
+async def test_search_without_its_default_provider_registered_returns_nothing() -> None:
+    assert await _adapter({"tradingview": _provider([])}).search_symbols("btc") == []
 
-        assert len([e for e in logs if e["event"] == "market_data.routing.unseeded_symbol"]) == 1
 
-    @pytest.mark.asyncio
-    async def test_resolving_no_provider_at_all_warns(self) -> None:
-        """Reachable by configuration, not just by an unmapped asset class.
+@pytest.mark.asyncio
+async def test_close_reaches_every_child_even_when_one_fails() -> None:
+    failing, healthy = _provider([]), _provider([])
+    failing.close = AsyncMock(side_effect=RuntimeError("stuck"))
 
-        Setting MARKET_DATA_PROVIDERS replaces the whole mapping rather than
-        merging into it, so an override naming one asset class leaves every
-        other class with nothing. Returning no bars in silence is
-        indistinguishable from a dead venue.
-        """
-        adapter = RoutingDataProviderAdapter(
-            providers={"binance": _provider([_bar()])},  # pyright: ignore[reportArgumentType]
-            settings=build_settings({AssetClass.INDEX_FUTURE: ["tradingview"]}),
-            symbol_lookup=lookup_returning(AssetClass.CRYPTO_SPOT),  # pyright: ignore[reportArgumentType]
-        )
+    with pytest.raises(RuntimeError, match="stuck"):
+        await _adapter({"tradingview": failing, "binance": healthy}).close()
 
-        with structlog.testing.capture_logs() as logs:
-            bars = await _fetch(adapter)
-
-        assert bars == []
-        no_provider = [e for e in logs if e["event"] == "market_data.routing.no_provider"]
-        assert len(no_provider) == 1
-        assert no_provider[0]["log_level"] == "warning"
+    healthy.close.assert_awaited_once()

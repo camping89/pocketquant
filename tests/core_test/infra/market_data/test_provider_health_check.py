@@ -7,16 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
-from pocketquant.core.domain.shared.enums import AssetClass
 from pocketquant.core.infra.market_data.provider_health_check import check_market_data_providers
-from pocketquant.core.infra.market_data.symbol_provider_resolver import SymbolProviderResolver
-from tests.core_test.infra.market_data.conftest import build_settings, lookup_returning
 
-FUTURES = "ES1!:CME_MINI"
-MAP = {
-    AssetClass.CRYPTO_SPOT: ["binance"],
-    AssetClass.INDEX_FUTURE: ["tradingview"],
-}
+FUTURES = "ES1!:TRADINGVIEW"
 
 
 def _tracked(*symbols: str) -> MagicMock:
@@ -32,13 +25,9 @@ def _calendars() -> MagicMock:
 
 
 async def _check(tradingview_authenticated: bool, *symbols: str, credentialed: bool = True) -> dict:
-    resolver = SymbolProviderResolver(
-        settings=build_settings(MAP), symbol_lookup=lookup_returning(AssetClass.INDEX_FUTURE)
-    )
     return await check_market_data_providers(
         {"binance": lambda: True, "tradingview": lambda: tradingview_authenticated},
         {"tradingview"} if credentialed else set(),
-        resolver,
         _calendars(),
         _tracked(*symbols),
     )
@@ -81,4 +70,23 @@ async def test_an_anonymous_session_by_configuration_is_not_degraded() -> None:
     result = await _check(False, FUTURES, credentialed=False)
 
     assert result["providers"]["tradingview"] == {"authenticated": False, "credentialed": False}
+    assert "status" not in result
+
+
+@pytest.mark.asyncio
+async def test_each_symbol_reports_the_provider_its_suffix_names() -> None:
+    result = await _check(True, FUTURES, "BTCUSDT:BINANCE")
+
+    assert result["symbols"][FUTURES]["provider"] == "tradingview"
+    assert result["symbols"]["BTCUSDT:BINANCE"]["provider"] == "binance"
+
+
+@pytest.mark.asyncio
+async def test_an_unregistered_suffix_is_reported_on_its_row_not_raised() -> None:
+    """One bad tracked symbol must not hide the state of every other one."""
+    result = await _check(True, "XAUUSD:EXNESS", "BTCUSDT:BINANCE")
+
+    assert result["symbols"]["XAUUSD:EXNESS"]["provider"] is None
+    assert "'exness'" in result["symbols"]["XAUUSD:EXNESS"]["error"]
+    assert result["symbols"]["BTCUSDT:BINANCE"]["provider"] == "binance"
     assert "status" not in result

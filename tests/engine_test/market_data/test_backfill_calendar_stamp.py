@@ -19,7 +19,7 @@ from pocketquant.engine.market_data.tracked_symbols_backfill import (
     TrackedSymbolBackfillService,
 )
 
-ES = "ES1!:CME_MINI"
+ES = "ES1!:TRADINGVIEW"
 SESSION_OPEN = datetime(2026, 9, 22, 22, 0, tzinfo=UTC)
 
 

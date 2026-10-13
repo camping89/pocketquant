@@ -32,7 +32,6 @@ from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
 )
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.market_data.provider_health_check import check_market_data_providers
-from pocketquant.core.infra.market_data.symbol_provider_resolver import SymbolProviderResolver
 from pocketquant.core.infra.persistence.health_checks import check_database, check_redis
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -63,7 +62,6 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
-from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
 from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
@@ -322,9 +320,6 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
             check_market_data_providers,
             {"binance": lambda: True, "tradingview": tradingview_client.is_authenticated},
             {"tradingview"} if _tradingview_credentialed(settings) else set(),
-            SymbolProviderResolver(
-                settings=settings, symbol_lookup=await container.get(SymbolLookupHelper)
-            ),
             await container.get(TradingCalendarFactory),
             await container.get(TrackedSymbolRepository),
         ),

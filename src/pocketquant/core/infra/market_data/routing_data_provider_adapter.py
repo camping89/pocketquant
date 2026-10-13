@@ -1,4 +1,4 @@
-"""Route REST history to the providers that serve each symbol.
+"""Route REST history to the provider each symbol's suffix names.
 
 Implements ``IDataProviderPort`` itself, so the fetch path above it is
 unchanged: ``fetch_with_retry`` still sees one provider and one coroutine.
@@ -7,29 +7,30 @@ unchanged: ``fetch_with_retry`` still sees one provider and one coroutine.
 from __future__ import annotations
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.config import Settings
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
-from pocketquant.core.domain.shared.enums import AssetClass, Interval
-from pocketquant.core.infra.market_data.symbol_provider_resolver import SymbolProviderResolver
-from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
+from pocketquant.core.domain.market_data.provider_routing_domain_service import (
+    UnknownDataProviderError,
+    provider_id_for,
+)
+from pocketquant.core.domain.shared.enums import Interval
 
 logger = get_logger(__name__)
 
+#: Symbol search has no symbol to route by, so it asks this provider.
+DEFAULT_SEARCH_PROVIDER_ID = "binance"
+
 
 class RoutingDataProviderAdapter(IDataProviderPort):
-    """Try each provider that serves a symbol in turn, primary first."""
+    """Send each fetch to the one provider the symbol's suffix names."""
 
     def __init__(
         self,
         providers: dict[str, IDataProviderPort],
-        settings: Settings,
-        symbol_lookup: SymbolLookupHelper,
+        search_provider_id: str = DEFAULT_SEARCH_PROVIDER_ID,
     ) -> None:
         self._providers = providers
-        self._settings = settings
-        self._resolver = SymbolProviderResolver(settings=settings, symbol_lookup=symbol_lookup)
-        self._warned_unknown: set[str] = set()
+        self._search_provider_id = search_provider_id
 
     async def fetch_ohlcv(
         self,
@@ -37,79 +38,33 @@ class RoutingDataProviderAdapter(IDataProviderPort):
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        """Bars from the first provider that returns any.
+        """Bars from the provider ``symbol`` names.
 
-        An exception or an empty answer falls through to the next provider.
-        If nobody returned bars and at least one provider raised, the first
-        failure is re-raised rather than reported as an empty market: an outage
-        and a quiet venue are different events, and only the caller can tell
-        that difference to a human. Swallowing it would downgrade a dead
-        provider to a successful sync that happened to insert nothing, and
-        would leave ``fetch_with_retry`` retrying the failure as if it were
-        emptiness. ``[]`` is returned only when every provider genuinely
-        answered empty.
+        There is no fallback: another provider's bars for the same code would
+        be a different instrument's prices. A provider failure propagates
+        rather than being reported as an empty market, because an outage and a
+        quiet venue are different events and only the caller can tell that
+        difference to a human.
 
-        This loop is nested inside ``fetch_with_retry``'s retry loop, so a
+        This call is nested inside ``fetch_with_retry``'s retry loop, so a
         caller that can reach a legitimately empty market must gate on the
         trading calendar before arriving here — see
         ``sync_jobs._sync_by_intervals``.
+
+        Raises:
+            UnknownDataProviderError: when the suffix names no registered
+                provider.
         """
-        provider_ids = await self._resolver.provider_ids(symbol)
-        first_failure: Exception | None = None
-
-        for position, provider_id in enumerate(provider_ids):
-            next_id = provider_ids[position + 1] if position + 1 < len(provider_ids) else None
-            provider = self._providers.get(provider_id)
-            if provider is None:
-                self._warn_unknown(provider_id, symbol)
-                continue
-
-            try:
-                bars = await provider.fetch_ohlcv(
-                    symbol=symbol,
-                    interval=interval,
-                    n_bars=n_bars,
-                )
-            except Exception as exc:
-                # DEBUG, not INFO: this runs once per symbol per interval per minute.
-                # The failure is not lost — it is re-raised below if no provider
-                # manages to answer.
-                logger.debug(
-                    "market_data.routing.fallback",
-                    symbol=symbol,
-                    provider=provider_id,
-                    next_provider=next_id,
-                    reason="error",
-                    error=str(exc),
-                )
-                if first_failure is None:
-                    first_failure = exc
-                continue
-
-            if bars:
-                return bars
-
-            logger.debug(
-                "market_data.routing.fallback",
-                symbol=symbol,
-                provider=provider_id,
-                next_provider=next_id,
-                reason="empty",
-            )
-
-        if first_failure is not None:
-            raise first_failure
-
-        return []
+        provider = self._provider_for(symbol)
+        return await provider.fetch_ohlcv(symbol=symbol, interval=interval, n_bars=n_bars)
 
     async def search_symbols(self, query: str) -> list[dict]:
-        """Delegate to the first crypto-spot provider.
+        """Delegate to the default search provider.
 
         Symbol search stays single-provider: merging two venues' results needs a
         dedup rule that nothing asks for yet.
         """
-        ids = self._settings.market_data_providers.get(AssetClass.CRYPTO_SPOT, [])
-        provider = self._providers.get(ids[0]) if ids else None
+        provider = self._providers.get(self._search_provider_id)
         if provider is None:
             return []
         return await provider.search_symbols(query)
@@ -134,13 +89,11 @@ class RoutingDataProviderAdapter(IDataProviderPort):
         if first is not None:
             raise first
 
-    def _warn_unknown(self, provider_id: str, symbol: str) -> None:
-        # Once per id, not once per fetch — this sits on the per-minute sync path.
-        if provider_id in self._warned_unknown:
-            return
-        self._warned_unknown.add(provider_id)
-        logger.warning(
-            "market_data.routing.unknown_provider",
-            provider=provider_id,
-            symbol=symbol,
-        )
+    def _provider_for(self, symbol: str) -> IDataProviderPort:
+        provider_id = provider_id_for(symbol)
+        provider = self._providers.get(provider_id)
+        if provider is None:
+            raise UnknownDataProviderError(
+                f"No data provider registered for {symbol}: suffix names {provider_id!r}"
+            )
+        return provider

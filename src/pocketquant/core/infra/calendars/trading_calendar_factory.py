@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
+from pocketquant.core.domain.market_data.provider_routing_domain_service import (
+    provider_defaults_for,
+)
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
 from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
@@ -42,6 +45,17 @@ class TradingCalendarFactory:
         return self._default
 
     async def for_symbol(self, composite: str) -> ITradingCalendarPort:
-        """The calendar for a composite symbol; 24/7 when the symbol is unknown."""
+        """The calendar for a composite symbol.
+
+        An unseeded symbol takes its data provider's default calendar, so a
+        symbol whose bars come from a session-hours venue is never read as 24/7
+        just because nobody seeded it.
+
+        Raises:
+            UnknownDataProviderError: when the symbol is unseeded and its suffix
+                names no registered data provider.
+        """
         symbol = await self._symbol_lookup.get(composite)
-        return self.get(symbol.calendar_id if symbol else None)
+        if symbol is None:
+            return self.get(provider_defaults_for(composite).calendar_id)
+        return self.get(symbol.calendar_id)

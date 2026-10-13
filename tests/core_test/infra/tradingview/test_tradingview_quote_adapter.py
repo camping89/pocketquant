@@ -20,7 +20,7 @@ from pocketquant.core.infra.binance.binance_mappers import aggtrade_to_quote_dic
 from pocketquant.core.infra.tradingview.tradingview_client_interface import RawBar
 from pocketquant.core.infra.tradingview.tradingview_quote_adapter import TradingViewQuoteAdapter
 
-ES = "ES1!:CME_MINI"
+ES = "ES1!:TRADINGVIEW"
 MINUTE = datetime(2026, 9, 23, 14, 30, tzinfo=UTC).timestamp()
 
 

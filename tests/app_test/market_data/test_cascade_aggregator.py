@@ -477,7 +477,7 @@ class TestShortBucketsAreNotReportedByTheCascade:
     async def test_a_halted_hour_bounds_the_query_by_the_calendar(self) -> None:
         """The halt has no trading minutes, so only the edge headroom is fetched."""
         bar_repo, _ = await self._cascade_one_bucket(
-            "ES1!:CME_MINI", self.HALT_START, CME, bar_count=3
+            "ES1!:TRADINGVIEW", self.HALT_START, CME, bar_count=3
         )
         assert bar_repo.find.await_args.kwargs["limit"] == 5
 
@@ -550,7 +550,7 @@ class TestCascadeTimeframesDependOnTheCalendar:
         bar_repo.find = AsyncMock(
             return_value=[
                 Bar(
-                    symbol="ES1!:CME_MINI",
+                    symbol="ES1!:TRADINGVIEW",
                     interval=Interval.MINUTE_1,
                     datetime=datetime(2026, 6, 10, 14, 0, tzinfo=UTC),
                     open=1.0,
@@ -563,7 +563,7 @@ class TestCascadeTimeframesDependOnTheCalendar:
         )
         bar_repo.upsert_bar = AsyncMock()
 
-        await cascade_for_symbol("ES1!:CME_MINI", 60, bar_repo, CME)
+        await cascade_for_symbol("ES1!:TRADINGVIEW", 60, bar_repo, CME)
 
         written = [c.args[0].interval for c in bar_repo.upsert_bar.await_args_list]
         assert Interval.DAY_1 not in written

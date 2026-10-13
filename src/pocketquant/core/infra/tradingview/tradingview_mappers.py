@@ -32,25 +32,39 @@ INTERVAL_TO_TRADINGVIEW: dict[Interval, TvInterval] = {
 _FRONT_MONTH_SUFFIX = "1!"
 _FRONT_MONTH_CONTRACT = 1
 
+# The composite suffix names the data provider (``ES1!:TRADINGVIEW``), not the
+# exchange, so the exchange TradingView files each code under lives here.
+TRADINGVIEW_EXCHANGE_BY_CODE: dict[str, str] = {
+    "ES1!": "CME_MINI",
+    "NQ1!": "CME_MINI",
+    "YM1!": "CBOT_MINI",
+}
+
 
 def split_futures_symbol(composite: str) -> tuple[str, str, int | None]:
-    """Split ``{CODE}:{EXCHANGE}`` into the three arguments ``get_hist`` wants.
+    """Split ``{CODE}:TRADINGVIEW`` into the three arguments ``get_hist`` wants.
 
-    A continuous front-month code carries its contract in the name, which the
-    scraper takes as a separate argument instead: ``ES1!:CME_MINI`` becomes
-    ``("ES", "CME_MINI", 1)``. Anything else keeps its code and gets no
-    contract, so ``BTCUSDT:BINANCE`` becomes ``("BTCUSDT", "BINANCE", None)``.
+    The exchange comes from :data:`TRADINGVIEW_EXCHANGE_BY_CODE`. A continuous
+    front-month code carries its contract in the name, which the scraper takes
+    as a separate argument instead: ``ES1!:TRADINGVIEW`` becomes
+    ``("ES", "CME_MINI", 1)``.
 
     Raises:
-        ValueError: when ``composite`` carries no exchange. Every symbol
-            reaching a provider has been through ``COMPOSITE_SYMBOL_RE``, so a
-            bare code is a programming error, and guessing an exchange here
-            would send a silently wrong request to an unofficial scraper.
+        ValueError: when ``composite`` carries no suffix, or its code has no
+            entry in the exchange table. Guessing an exchange would send a
+            silently wrong request to an unofficial scraper.
     """
-    code, separator, exchange = composite.partition(":")
-    if not separator or not exchange:
+    code, separator, suffix = composite.upper().partition(":")
+    if not separator or not suffix:
         raise ValueError(
-            f"TradingView needs an exchange: {composite!r} is not '{{CODE}}:{{EXCHANGE}}'"
+            f"TradingView needs a composite symbol: {composite!r} is not '{{CODE}}:TRADINGVIEW'"
+        )
+
+    exchange = TRADINGVIEW_EXCHANGE_BY_CODE.get(code)
+    if exchange is None:
+        raise ValueError(
+            f"No TradingView exchange known for {code!r} (from {composite!r}); "
+            "add it to TRADINGVIEW_EXCHANGE_BY_CODE"
         )
 
     if code.endswith(_FRONT_MONTH_SUFFIX):

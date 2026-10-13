@@ -1,17 +1,12 @@
-"""Where the closed-market skip sits relative to the two retry loops.
+"""Where the closed-market skip sits relative to the retry loop.
 
-After provider routing there are two nested loops that both read an empty
-result as "try again": ``fetch_with_retry``'s backoff loop, and the routing
-adapter's walk across the providers that serve a symbol. Nothing registers a
-second provider yet, so with the production container the two are
-indistinguishable and every assertion about them is vacuous.
-
-That stops being true in Phase 5, where the fallback provider is an unofficial
-scraper and a halted CME session is a legitimately empty answer. These tests
-wire the real chain — ``_sync_by_intervals`` -> ``SyncService.sync_one`` ->
-``fetch_with_retry`` -> ``RoutingDataProviderAdapter`` -> fake children — and
-pin two things about it: a shut market reaches no provider at all, and an open
-one costs exactly attempts x providers calls in the worst case.
+``fetch_with_retry``'s backoff loop reads an empty result as "try again", and a
+halted CME session is a legitimately empty answer from an unofficial scraper.
+These tests wire the real chain — ``_sync_by_intervals`` ->
+``SyncService.sync_one`` -> ``fetch_with_retry`` ->
+``RoutingDataProviderAdapter`` -> fake children — and pin two things about it:
+a shut market reaches no provider at all, and an open one costs exactly one
+call per attempt, all of them to the provider the suffix names.
 
 The existing calendar-gate suite stops at ``sync_one``, which it mocks, so it
 can only show the skip is upstream of the service. It cannot see either loop.
@@ -25,17 +20,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
-from pocketquant.core.domain.shared.enums import AssetClass, Interval
-from pocketquant.core.domain.symbol import Symbol
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
     RoutingDataProviderAdapter,
 )
 from pocketquant.engine.market_data.app_services.sync_jobs import _sync_by_intervals
 from pocketquant.engine.market_data.sync_service import SyncService
-from tests.core_test.infra.market_data.conftest import build_settings
 
-SYMBOL = "ES1!:CME_MINI"
-PROVIDER_MAP = {AssetClass.INDEX_FUTURE: ["tradingview", "binance"]}
+SYMBOL = "ES1!:TRADINGVIEW"
 
 
 class _Shut(Continuous24x7Calendar):
@@ -56,11 +48,6 @@ def _empty_provider() -> AsyncMock:
 
 
 def _sync_service(calendar, providers: dict[str, AsyncMock]) -> SyncService:
-    symbol_lookup = MagicMock()
-    symbol_lookup.get = AsyncMock(
-        return_value=Symbol.create(symbol=SYMBOL, asset_class=AssetClass.INDEX_FUTURE)
-    )
-
     bar_repo = AsyncMock()
     bar_repo.count = AsyncMock(return_value=0)
     bar_repo.get_latest = AsyncMock(return_value=None)
@@ -75,8 +62,6 @@ def _sync_service(calendar, providers: dict[str, AsyncMock]) -> SyncService:
     return SyncService(
         provider=RoutingDataProviderAdapter(
             providers=providers,  # pyright: ignore[reportArgumentType]
-            settings=build_settings(PROVIDER_MAP),
-            symbol_lookup=symbol_lookup,
         ),
         cache=cache,
         bar_repository=bar_repo,
@@ -118,13 +103,12 @@ def _calls(providers: dict[str, AsyncMock]) -> int:
 
 @pytest.mark.asyncio
 async def test_a_shut_market_reaches_no_provider_through_either_loop() -> None:
-    """The skip is upstream of both the backoff loop and the provider walk.
+    """The skip is upstream of the backoff loop.
 
-    This is the guard that keeps a halted session from costing
-    attempts x providers scrape calls a minute once a real scraper is
-    registered. Asserting on the children rather than on ``sync_one`` is the
-    whole point: a skip that merely stopped the service would still let a
-    caller elsewhere spin both loops.
+    This is the guard that keeps a halted session from costing a burst of
+    scrape calls a minute. Asserting on the children rather than on
+    ``sync_one`` is the whole point: a skip that merely stopped the service
+    would still let a caller elsewhere spin the loop.
     """
     providers = {"tradingview": _empty_provider(), "binance": _empty_provider()}
 
@@ -134,12 +118,11 @@ async def test_a_shut_market_reaches_no_provider_through_either_loop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_open_market_costs_attempts_times_providers_when_all_are_empty() -> None:
-    """The worst case is a product, and this is the number it multiplies to.
+async def test_an_open_empty_market_costs_one_call_per_attempt_to_its_own_provider() -> None:
+    """The worst case is the retry count, spent on the provider the suffix names.
 
-    Recorded as an exact count rather than a bound so that Phase 5 reads the
-    real cost of adding a second provider instead of rediscovering it: the two
-    loops compose, they do not short-circuit one another.
+    There is no provider walk to multiply it: another provider's bars for the
+    same code would be a different instrument.
 
     The backoff delays are flattened because this pins how many calls happen,
     not how long they wait; leaving them real would add 11s of sleeping.
@@ -152,15 +135,14 @@ async def test_an_open_market_costs_attempts_times_providers_when_all_are_empty(
     ):
         await _run_job(Continuous24x7Calendar(), providers)
 
-    attempts, provider_count = 3, 2
-    assert _calls(providers) == attempts * provider_count
-    for provider in providers.values():
-        assert provider.fetch_ohlcv.await_count == attempts
+    attempts = 3
+    assert providers["tradingview"].fetch_ohlcv.await_count == attempts
+    providers["binance"].fetch_ohlcv.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_an_open_market_stops_at_the_primary_once_it_answers() -> None:
-    """The product is a worst case, not a toll — a good primary is one call."""
+async def test_an_open_market_costs_one_call_once_the_provider_answers() -> None:
+    """A provider that answers is one call, and no other provider is asked."""
     answering = AsyncMock()
     answering.fetch_ohlcv = AsyncMock(
         return_value=[
@@ -189,8 +171,8 @@ async def test_a_failing_sole_provider_costs_one_call_not_three() -> None:
     The retry loop exists for a provider that answers emptily at a bar
     boundary. A provider that is refusing us is a different event, and
     retrying it three times a minute is how a rate limit becomes a ban. The
-    routing adapter re-raises when nobody answered, which stops the retry loop
-    at the first attempt — the behaviour that existed before routing did.
+    routing adapter lets the failure propagate, which stops the retry loop at
+    the first attempt.
     """
     refusing = AsyncMock()
     refusing.fetch_ohlcv = AsyncMock(side_effect=RuntimeError("HTTP 429 rate limited"))

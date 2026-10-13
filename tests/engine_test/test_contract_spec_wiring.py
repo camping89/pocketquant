@@ -26,7 +26,7 @@ from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
-ES_SYMBOL = "ES1!:CME_MINI"
+ES_SYMBOL = "ES1!:TRADINGVIEW"
 ES = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, commission_per_contract=2.5)
 NOW = datetime(2026, 9, 23, 14, tzinfo=UTC)
 

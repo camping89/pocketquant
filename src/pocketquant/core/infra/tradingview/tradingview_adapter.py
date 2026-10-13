@@ -29,7 +29,7 @@ class TradingViewAdapter(IDataProviderPort):
 
     Usage:
         adapter = TradingViewAdapter(client, settings, calendar_factory)
-        bars = await adapter.fetch_ohlcv("ES1!:CME_MINI", Interval.HOUR_1, 500)
+        bars = await adapter.fetch_ohlcv("ES1!:TRADINGVIEW", Interval.HOUR_1, 500)
     """
 
     def __init__(
@@ -50,7 +50,7 @@ class TradingViewAdapter(IDataProviderPort):
     ) -> list[Bar]:
         """Closed bars for ``symbol``, ascending by ``datetime``.
 
-        ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``ES1!:CME_MINI``).
+        ``symbol`` is composite ``{code}:TRADINGVIEW`` (e.g. ``ES1!:TRADINGVIEW``).
         The request is clamped to what the configured plan entitles us to, which
         is also the scraper's own per-request ceiling.
         """
@@ -117,7 +117,6 @@ class TradingViewAdapter(IDataProviderPort):
                 count=dropped,
                 delayed_frontier_dropped=delayed_drop,
             )
-
 
         # One-shot per symbol per interval per cron tick, which is bounded.
         logger.info(

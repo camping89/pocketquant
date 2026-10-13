@@ -13,17 +13,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pocketquant.core.domain.market_data.provider_routing_domain_service import (
+    UnknownDataProviderError,
+)
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
-from pocketquant.core.domain.shared.enums import AssetClass
 from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import (
     RoutingRealtimeQuoteAdapter,
 )
-from tests.core_test.infra.market_data.conftest import build_settings, lookup_returning
 
-SYMBOL = "ES1!:CME_MINI"
-PROVIDERS = {AssetClass.INDEX_FUTURE: ["tradingview", "binance"]}
+SYMBOL = "ES1!:TRADINGVIEW"
 
 
 def _child(
@@ -44,29 +44,22 @@ def _child(
     return child
 
 
-def _adapter(
-    providers: dict,
-    overrides: dict[str, list[str]] | None = None,
-) -> RoutingRealtimeQuoteAdapter:
-    return RoutingRealtimeQuoteAdapter(
-        providers=providers,
-        settings=build_settings(PROVIDERS, overrides),
-        symbol_lookup=lookup_returning(AssetClass.INDEX_FUTURE),
-    )
+def _adapter(providers: dict) -> RoutingRealtimeQuoteAdapter:
+    return RoutingRealtimeQuoteAdapter(providers=providers)
 
 
 @pytest.mark.asyncio
-async def test_subscribe_uses_only_the_first_provider() -> None:
-    primary = _child()
-    secondary = _child()
+async def test_subscribe_uses_only_the_provider_the_suffix_names() -> None:
+    binance = _child()
+    tradingview = _child()
 
-    key = await _adapter({"tradingview": primary, "binance": secondary}).subscribe(
+    key = await _adapter({"binance": binance, "tradingview": tradingview}).subscribe(
         SYMBOL, lambda _: None
     )
 
     assert key == "sub-key"
-    primary.subscribe.assert_awaited_once()
-    secondary.subscribe.assert_not_awaited()
+    tradingview.subscribe.assert_awaited_once()
+    binance.subscribe.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -78,15 +71,12 @@ async def test_unsubscribe_reaches_the_owning_provider() -> None:
     """
     first_registered = _child()
     owner = _child()
-    adapter = _adapter(
-        {"tradingview": first_registered, "binance": owner},
-        overrides={SYMBOL: ["binance"]},
-    )
+    adapter = _adapter({"tradingview": first_registered, "binance": owner})
 
-    await adapter.subscribe(SYMBOL, lambda _: None)
-    await adapter.unsubscribe(SYMBOL)
+    await adapter.subscribe("BTCUSDT:BINANCE", lambda _: None)
+    await adapter.unsubscribe("BTCUSDT:BINANCE")
 
-    owner.unsubscribe.assert_awaited_once_with(SYMBOL)
+    owner.unsubscribe.assert_awaited_once_with("BTCUSDT:BINANCE")
     first_registered.unsubscribe.assert_not_awaited()
 
 
@@ -108,12 +98,12 @@ async def test_subscriptions_merges_children() -> None:
     """
     adapter = _adapter(
         {
-            "tradingview": _child(subscriptions={"ES1!:CME_MINI": ("k1", None)}),
+            "tradingview": _child(subscriptions={"ES1!:TRADINGVIEW": ("k1", None)}),
             "binance": _child(subscriptions={"BTCUSDT:BINANCE": ("k2", None)}),
         }
     )
 
-    assert set(adapter.subscriptions.keys()) == {"ES1!:CME_MINI", "BTCUSDT:BINANCE"}
+    assert set(adapter.subscriptions.keys()) == {"ES1!:TRADINGVIEW", "BTCUSDT:BINANCE"}
     assert adapter.subscription_count == 2
 
 
@@ -144,17 +134,17 @@ async def test_last_tick_at_ignores_a_child_that_has_never_ticked() -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_unroutable_symbol_raises_rather_than_silently_not_subscribing() -> None:
-    """The resolved provider is not registered — reconcile must see a failure.
+async def test_an_unknown_suffix_raises_rather_than_silently_not_subscribing() -> None:
+    """The suffix names no registered provider — reconcile must see a failure.
 
-    Returning a key would make the caller believe a feed exists. Phase 6 gives
-    index futures a polling quote adapter; until it is registered this is the
-    state a tracked futures symbol lands in.
+    Returning a key would make the caller believe a feed exists.
     """
-    adapter = _adapter({"binance": _child()}, overrides={SYMBOL: ["nowhere"]})
+    child = _child()
 
-    with pytest.raises(ValueError, match="No realtime provider registered"):
-        await adapter.subscribe(SYMBOL, lambda _: None)
+    with pytest.raises(UnknownDataProviderError, match="No realtime provider registered"):
+        await _adapter({"binance": child}).subscribe("XAUUSD:EXNESS", lambda _: None)
+
+    child.subscribe.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -170,9 +160,7 @@ async def test_one_bad_child_does_not_block_shutdown_of_the_others() -> None:
 
 @pytest.mark.asyncio
 async def test_is_connected_is_true_when_any_child_is() -> None:
-    adapter = _adapter(
-        {"tradingview": _child(connected=False), "binance": _child(connected=True)}
-    )
+    adapter = _adapter({"tradingview": _child(connected=False), "binance": _child(connected=True)})
 
     assert adapter.is_connected() is True
     assert _adapter({"tradingview": _child(connected=False)}).is_connected() is False

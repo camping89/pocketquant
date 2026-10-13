@@ -29,7 +29,7 @@ _T0 = datetime(2026, 6, 10, 14, 0, tzinfo=UTC)
 def _config(interval: str) -> BacktestConfig:
     return BacktestConfig(
         strategy_code="s1",
-        symbol="ES1!:CME_MINI",
+        symbol="ES1!:TRADINGVIEW",
         interval=interval,
         start_date=datetime(2026, 1, 1, tzinfo=UTC),
         end_date=datetime(2026, 6, 30, tzinfo=UTC),

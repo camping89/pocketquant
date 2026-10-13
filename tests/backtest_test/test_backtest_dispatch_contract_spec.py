@@ -11,7 +11,7 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.engine.backtest import backtest_dispatch
 from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps, run_single
 
-ES_SYMBOL = "ES1!:CME_MINI"
+ES_SYMBOL = "ES1!:TRADINGVIEW"
 ES = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, commission_per_contract=2.5)
 
 

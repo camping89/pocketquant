@@ -34,7 +34,7 @@ from pocketquant.engine.market_data.sync_status_service import (
 
 CRYPTO = Continuous24x7Calendar()
 CME = CmeGlobexCalendarAdapter()
-ES = "ES1!:CME_MINI"
+ES = "ES1!:TRADINGVIEW"
 # A Monday mid-session, and the Sunday evening Globex open before it.
 MONDAY = datetime(2026, 9, 21, 14, 0, 30, tzinfo=UTC)
 SUNDAY_OPEN = datetime(2026, 9, 20, 22, 0, tzinfo=UTC)
@@ -164,7 +164,7 @@ class TestDataLagQueryService:
         cache.get = AsyncMock(return_value=None)
 
         result = await DataLagQueryService(cache).get_data_lag(
-            GetDataLagQuery(symbol="es1!:cme_mini")
+            GetDataLagQuery(symbol="es1!:tradingview")
         )
 
         cache.get.assert_awaited_once_with(CACHE_KEY_DATA_LAG.format(symbol=ES))

@@ -31,9 +31,7 @@ class _RecordingProvider:
     def __init__(self) -> None:
         self.requested: list[Interval] = []
 
-    async def fetch_ohlcv(
-        self, symbol: str, interval: Interval, n_bars: int = 1000
-    ) -> list[Bar]:
+    async def fetch_ohlcv(self, symbol: str, interval: Interval, n_bars: int = 1000) -> list[Bar]:
         self.requested.append(interval)
         return []
 
@@ -68,7 +66,7 @@ def _service(provider: _RecordingProvider, calendar_id: str) -> TrackedSymbolBac
 async def test_session_calendar_daily_backfill_goes_direct() -> None:
     provider = _RecordingProvider()
     result = await _service(provider, CALENDAR_CME_GLOBEX_EQUITY).run(
-        BackfillTrackedSymbolCommand(symbol="ES1!:CME_MINI", interval=Interval.DAY_1, n=10)
+        BackfillTrackedSymbolCommand(symbol="ES1!:TRADINGVIEW", interval=Interval.DAY_1, n=10)
     )
 
     assert result["mode_used"] == "direct"
@@ -99,7 +97,7 @@ async def test_an_explicit_cascade_is_overridden_audibly() -> None:
     with structlog.testing.capture_logs() as logs:
         result = await _service(provider, CALENDAR_CME_GLOBEX_EQUITY).run(
             BackfillTrackedSymbolCommand(
-                symbol="ES1!:CME_MINI", interval=Interval.DAY_1, n=10, mode="cascade"
+                symbol="ES1!:TRADINGVIEW", interval=Interval.DAY_1, n=10, mode="cascade"
             )
         )
 
@@ -116,7 +114,7 @@ async def test_auto_mode_is_overridden_silently() -> None:
     provider = _RecordingProvider()
     with structlog.testing.capture_logs() as logs:
         await _service(provider, CALENDAR_CME_GLOBEX_EQUITY).run(
-            BackfillTrackedSymbolCommand(symbol="ES1!:CME_MINI", interval=Interval.DAY_1, n=10)
+            BackfillTrackedSymbolCommand(symbol="ES1!:TRADINGVIEW", interval=Interval.DAY_1, n=10)
         )
 
     assert [e for e in logs if e["event"] == "backfill.mode_overridden"] == []

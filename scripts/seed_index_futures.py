@@ -1,12 +1,10 @@
 """Seed the three CME/CBOT continuous index futures into symbols + tracked_symbols.
 
-These are the first non-crypto instruments in the system, and seeding must happen
-BEFORE the first sync cycle reaches them. ``SyncService._persist_bars`` returns
-early when no bars arrive, so ``SymbolRepository.touch`` is never called; an
-unseeded futures symbol is assumed to be crypto spot, routes to a crypto venue
-that has no such instrument, receives nothing, and therefore never gets the
-document that would have corrected the assumption. See
-``core/infra/market_data/symbol_provider_resolver.py``.
+The suffix names the data provider (``TRADINGVIEW``), which serves the bars; the
+exchange TradingView files each code under lives in
+``core/infra/tradingview/tradingview_mappers.py``. Without a seed, a symbol takes
+its provider's defaults (index future, CME calendar) but a linear contract spec,
+so seeding is what records the real multiplier and tick size.
 
 The full ``upsert`` is used here rather than ``touch``: this is the deliberate
 metadata write, and re-running it is how a corrected multiplier or tick size
@@ -44,17 +42,17 @@ SEEDED_FROM = "script"
 # CME/CBOT contract specifications, not preferences.
 SEEDS: list[tuple[str, str, ContractSpec]] = [
     (
-        "ES1!:CME_MINI",
+        "ES1!:TRADINGVIEW",
         "E-mini S&P 500 continuous",
         ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, currency="USD"),
     ),
     (
-        "NQ1!:CME_MINI",
+        "NQ1!:TRADINGVIEW",
         "E-mini Nasdaq-100 continuous",
         ContractSpec(multiplier=20.0, tick_size=0.25, lot_step=1.0, currency="USD"),
     ),
     (
-        "YM1!:CBOT_MINI",
+        "YM1!:TRADINGVIEW",
         "E-mini Dow continuous",
         ContractSpec(multiplier=5.0, tick_size=1.0, lot_step=1.0, currency="USD"),
     ),

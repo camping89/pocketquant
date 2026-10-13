@@ -355,7 +355,7 @@ class TestSessionCalendarBuckets:
             intervals=[Interval.HOUR_4, Interval.DAY_1],
             calendar_factory=_CmeCalendars(),  # type: ignore[arg-type]
         )
-        symbol = "ES1!:CME_MINI"
+        symbol = "ES1!:TRADINGVIEW"
         # Wednesday 2026-09-23: the CME session opened at 22:00 UTC (17:00 CDT).
         for ts, price in (
             (datetime(2026, 9, 23, 23, 0, tzinfo=UTC), 6600.0),
@@ -387,7 +387,7 @@ class TestSessionCalendarBuckets:
             intervals=[Interval.WEEK_1],
             calendar_factory=_CmeCalendars(),  # type: ignore[arg-type]
         )
-        symbol = "ES1!:CME_MINI"
+        symbol = "ES1!:TRADINGVIEW"
         for ts, price in (
             (datetime(2027, 3, 8, 15, 0, tzinfo=UTC), 6600.0),
             (datetime(2027, 3, 14, 22, 30, tzinfo=UTC), 6610.0),

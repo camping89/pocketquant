@@ -16,7 +16,7 @@ from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continu
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.engine.market_data.app_services.sync_jobs import _sync_by_intervals
 
-SYMBOL = "ES1!:CME_MINI"
+SYMBOL = "ES1!:TRADINGVIEW"
 
 
 class _ClosedSince(Continuous24x7Calendar):

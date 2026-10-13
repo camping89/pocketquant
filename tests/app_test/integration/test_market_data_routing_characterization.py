@@ -29,7 +29,6 @@ from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
 from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import (
     RoutingRealtimeQuoteAdapter,
 )
-from pocketquant.core.infra.market_data.symbol_provider_resolver import SymbolProviderResolver
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -89,8 +88,6 @@ def _routing_rest(
 ) -> RoutingDataProviderAdapter:
     return RoutingDataProviderAdapter(
         providers=children,  # pyright: ignore[reportArgumentType]
-        settings=settings,
-        symbol_lookup=lookup,
     )
 
 
@@ -99,8 +96,6 @@ def _routing_realtime(
 ) -> RoutingRealtimeQuoteAdapter:
     return RoutingRealtimeQuoteAdapter(
         providers=children,  # pyright: ignore[reportArgumentType]
-        settings=settings,
-        symbol_lookup=lookup,
     )
 
 
@@ -113,7 +108,6 @@ async def _health(
     return await check_market_data_providers(
         {"binance": lambda: True, "tradingview": lambda: True},
         set(),
-        SymbolProviderResolver(settings=settings, symbol_lookup=lookup),
         calendars,
         tracked,
     )

@@ -18,10 +18,10 @@ export function AddSymbolDialog({ strategyId, onClose }: AddSymbolDialogProps) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setErrorMsg(null)
-    // Expect composite format: "BTCUSDT:BINANCE" or "ES1!:CME_MINI"
+    // Expect composite format: "BTCUSDT:BINANCE" or "ES1!:TRADINGVIEW"
     const trimmed = symbol.trim().toUpperCase()
-    if (!trimmed) { setErrorMsg('Symbol is required: CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:CME_MINI)'); return }
-    if (!trimmed.includes(':')) { setErrorMsg('Use composite format: CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:CME_MINI)'); return }
+    if (!trimmed) { setErrorMsg('Symbol is required: CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:TRADINGVIEW)'); return }
+    if (!trimmed.includes(':')) { setErrorMsg('Use composite format: CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:TRADINGVIEW)'); return }
 
     addSymbol.mutate(
       { symbol: trimmed, interval },
@@ -69,7 +69,7 @@ export function AddSymbolDialog({ strategyId, onClose }: AddSymbolDialogProps) {
             <input
               style={inputStyle}
               type="text"
-              placeholder="CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:CME_MINI)"
+              placeholder="CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:TRADINGVIEW)"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
               onBlur={(e) => setSymbol(e.target.value.trim().toUpperCase())}
