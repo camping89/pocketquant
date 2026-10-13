@@ -9,90 +9,105 @@ dependencies: [8]
 
 # Phase 09: Architecture, deployment, standard and MT5 docs
 
-## Context Links
-- Advice §2.9. `CLAUDE.md` docs rules: Vietnamese prose, English technical terms, AS-IS only, no banners or change narrative, Mermaid v11 for 2+ parts.
-- `docs/system-architecture.md` sections: "Where Does X Live?" (:455), "Real-Time Streaming" (:553), "Broker & Middleware" (:573), "Dependency Injection (Dishka)" (:604). Stale rows: "Dishka DI container (6 providers)" (:472), "Background sync job registration" (:483) and the "6 providers" sentence (:606).
-- `docs/deployment.md` "Environment & Credentials" (:62, the prod env table). `scripts/README.md`. `README.md` line 3 (Binance-only wording) and line 11 (the `core/` adapter list). `docs/project-overview-pdr.md:260` ("Max 200 LOC per file"). `docs/README.md:12` (code-standards row).
-- `docs/code-standards.md` §8 `## Sync policy pattern` and §14 `## Configuration & Secrets`, written AS-IS in Phase 05 before Exness existed.
+<!-- Updated: 2026-10-13 develop reshape - develop docs layout (English docs with docs/vi mirrors), suffix routing instead of a policy registry, push develop-sync to develop -->
+## Develop status
+- Base branch: `develop` (`develop-sync` tracking `origin/develop`); ship with `git push origin develop-sync:develop`. CI `paths-ignore` (`docs/**`, `plans/**`, `**/*.md`) skips the build and deploy for a docs-only push.
+- On develop the docs are English and AS-IS only (`docs/README.md:3`: no changelog, no version banner, no change narrative). Each of `system-architecture.md`, `deployment.md`, `code-standards.md`, `project-overview-pdr.md` and `codebase-summary.md` has a Vietnamese mirror in `docs/vi/` that is updated in the same commit.
+- Develop has no sync policy registry (`sync_policy.py`, `sync_runner.py`, `SyncPolicies` do not exist). Providers are routed by symbol suffix (`provider_id_for`, `DATA_PROVIDER_DEFAULTS`) through `RoutingDataProviderAdapter` and `RoutingRealtimeQuoteAdapter`, and the docs already describe that model. This phase adds Exness to the existing descriptions instead of writing a policy section.
+- Already current on develop, so no step here touches them: `docs/README.md:12` (the code-standards row), `CLAUDE.md:23` (the code-standards pointer), the `code-standards.md#routes--services` link in `docs/project-overview-pdr.md:342` (it resolves to `## Routes & Services`, `code-standards.md:85`), and the async callout in `system-architecture.md:716`, which cites the real heading `## Async Suspension Points — "Await Is Preemption"` (`code-standards.md:158`). Phase 06 T6.16 and T6.17 already add the `seed_exness_symbols.py` and `backfill/provider_bars.py` lines to `scripts/README.md`.
 
-<!-- Updated: Validation Session 1 - docs describe the policy registry (no router) and an Exness broker that is off -->
+## Context Links
+- Advice §2.9. `docs/README.md:3` (AS-IS rule). Mermaid v11 for diagrams of 2+ parts.
+- `docs/system-architecture.md`: the `core/infra/` tree (:300-320, `tradingview/` at :311-315), the infrastructure component table (:334-342), "Where Does X Live?" (:486, provider rows :502-508), "Symbol removal" (:573), "Real-Time Streaming" (:631; inbound items :634-635; "Trade emission" paragraph :643), "Broker & Middleware" (:655-657), "Dependency Injection (Dishka)" (:686; providers :690, background jobs :692, market-data routing :694, data lag :696), "Configuration" env list (:795), "Known Limitations" (:801), "Ops Context" external services (:814).
+- `docs/deployment.md`: "Environment & Credentials" (:62, prod env table :85-97), "2-Year Bar Re-Sync" (:205), "Sync Gap Repair" (:219).
+- `docs/code-standards.md` (15 H2): "Composite Symbol Format" (:134-144; the add-a-provider sentence is at :141), "Dependency Injection" (:104), "Configuration & Secrets" (:292).
+- `docs/codebase-summary.md`: infrastructure list (:12), `core/infra` tree (:36), inbound streaming (:152-153).
+- `README.md` line 3 (Binance-only description) and line 11 (the `core/` adapter list). `scripts/README.md` (no `exness_spike.py` line). `docs/project-overview-pdr.md:260` and `docs/vi/project-overview-pdr.md:260` (still "Max 200 LOC per file").
+- What the code does after Phases 06–08 (source of every statement written here): Phase 06 (`core/infra/exness/`, `core/infra/calendars/exness_session_calendar_adapter.py`, `AssetClass.CFD`, `DATA_PROVIDER_DEFAULTS["exness"]`, the two DI routers, the health map, the seed and backfill scripts, the 429 rule), Phase 07 (`core/infra/brokers/exness/`, the `BrokerFactory` branch refused while `EXNESS_LIVE_TRADING` is false, async fill wiring, `on_order_rejected`, trade emission), Phase 08 (`spread` on `PaperBrokerAdapter` and the backtest API).
+
+<!-- Updated: Validation Session 1 - docs describe an Exness broker that is off -->
 ## Goal
-The docs describe the system as it is now (D7): the Exness adapters, the `SyncPolicies` registry that resolves providers strictly by exchange suffix, the shared runner, 3 DI providers, the Exness broker built but switched off behind `EXNESS_LIVE_TRADING`, the new env keys, the real add-a-provider touchpoint list, and MT5 as a documented future provider that is not built.
+The docs describe the system as it is now (D7): Exness as a third suffix-routed data and quote provider (`:EXNESS`), its session calendars and CFD contract specs, the 429 rule, the Exness broker built but switched off behind `EXNESS_LIVE_TRADING`, the backtest `spread`, the new env keys and scripts, the real add-a-provider touchpoint list, and MT5 as a documented future provider that is not built. Every edit lands in the English doc and its `docs/vi` mirror.
 
 ## Files to Create or Modify
-- Modify: `docs/system-architecture.md`, `docs/deployment.md`, `docs/code-standards.md`, `scripts/README.md`, `README.md`, `docs/project-overview-pdr.md`, `docs/README.md` and `CLAUDE.md`.
+- Modify: `docs/system-architecture.md`, `docs/deployment.md`, `docs/code-standards.md`, `docs/codebase-summary.md`, `docs/project-overview-pdr.md`, the same five files under `docs/vi/`, `README.md` and `scripts/README.md`.
 
 ## Tasks
 
-<!-- Updated: Validation Session 1 - registry flow, broker off, policy_bars row -->
-<!-- Updated: Validation Session 1 - follow-up: Exness-only async wiring, loss-cap deal set, no 429 retry -->
-### T9.1 Branch and `system-architecture.md`
-- **Goal:** D7 holds.
-- **Target files and symbols:** `docs/system-architecture.md`
+<!-- Updated: 2026-10-13 develop reshape - extend the existing routing, DI and streaming sections; no policy section -->
+### T9.1 Base and `system-architecture.md`
+- **Goal:** D7 holds for the architecture reference.
+- **Target files and symbols:** `docs/system-architecture.md`, `docs/vi/system-architecture.md`
 - **Steps:**
-  1. `git switch master && git pull --ff-only && git switch -c docs/exness-architecture`
-  2. Add `## Market Data Sync Policy`: the `SyncPolicy` fields table, the Binance and Exness policy values, the rule that `policy_for` resolves by exchange suffix only (no fallback; an unknown suffix logs once and is skipped; `:OKX` has no data policy because OKX is a broker only), a Mermaid v11 `flowchart` of `APScheduler → sync_runner → SyncPolicies.policy_for → SyncPolicy.data_provider (BinanceClient | ExnessDataProvider) ← SyncService → BarRepository (+ cascade_aggregator when cascade)`, and the 3-file flow list (`routes/market_data.py → sync_service.py → sync_policy.py`; `sync_runner.py → sync_policy.py → sync_service.py`, with `bar_integrity.py` and `cascade_aggregator.py` as leaf calls).
-  3. "Real-Time Streaming": add the Exness ticks WS (`ExnessQuoteProvider`, reached through the EXNESS policy's `quote_provider`; at most 1 tick per 500 ms; bid used as `last_price`; subscriptions validated against the instrument list) and the Exness events WS (`ExnessBroker`: fills, broker-side closes, snapshot reconciliation).
-  4. "Broker & Middleware": add `ExnessBroker` and its rules: market orders only, SL required, lots computed inside the adapter (`contract_size`, `volume_step`, `volume_min` cap unless `EXNESS_MAX_LOTS`) with `normalize_quantity` before order creation, the daily loss cap, orders blocked until the trading snapshot is reconciled, and async fill wiring only for brokers that set `fills_async` (today only `ExnessBroker`; PaperBroker and OKX are not wired). The daily loss cap counts `close`, `swap_fee`, `admin_fee` and `dividend` deals plus commissions, and excludes `balance` deposits and withdrawals; a 429 from Exness is never retried automatically. State that `EXNESS_LIVE_TRADING` defaults to false, that `BrokerFactory` refuses `exness` and the client refuses order operations while it is false, and that no API selects a broker per subscription.
-  5. "Dependency Injection": 3 providers (`InfrastructureProvider`, `AdaptersProvider`, `ServicesProvider`), `Settings` via `from_context`, `STRICT_VALIDATION`, and `build_sync_policies` in `app/di/adapters.py`. Replace the "6 providers" sentence at :606.
-  6. "Where Does X Live?": fix the rows at :472 and :483, and add rows for `engine/market_data/sync_policy.py`, `sync_runner.py`, `bar_integrity.py`, `core/infra/exness/`, `scripts/backfill/policy_bars.py` and `scripts/code_metrics.py`.
-  7. The callout near :630 cites `code-standards.md` → "Async Suspension Points — Await Is Preemption"; Phase 05 renamed that heading, so cite `## Async: await là preemption point` instead.
-  8. Add `## MT5 (future provider, not built)`: the same 3 ports, a policy sketch (bar source `copy_rates_from`, live source `copy_ticks_from`, `order_send` behind `IBroker`), the Windows host or Wine bridge (`mt5linux`/`mt5-remote`) deployment constraint, and the fact that Exness API keys apply to Exness-platform accounts, not MT5 accounts.
-- **Success criteria:** No stale statements remain.
+  1. `git switch develop-sync && git pull --ff-only && git rev-parse HEAD > .cache/phase09-base`
+  2. `core/infra/` tree (:300-320): add `exness/` (`exness_signer.py`, `exness_client.py`, `exness_mappers.py`, `exness_stream.py`, `exness_adapter.py`, `exness_quote_adapter.py`), `brokers/exness/exness_broker_adapter.py` and `calendars/exness_session_calendar_adapter.py`, with one-line comments in the existing style.
+  3. Component table (:334-342): add rows for `ExnessClient` (signed REST: every call after `getAccessPoint` goes to the per-account access point; requests paced by the strictest published rate with headroom; a 429 on a data call is retried at most 3 times with backoff and logged, a 429 on an order call is never retried), `ExnessAdapter` (`IDataProviderPort` over native bid candles, paged by `max_candles_per_request`, in-progress candle dropped), `ExnessQuoteAdapter` (`IRealtimeQuoteProviderPort` over the ticks WS, bid as `last_price`) and `ExnessSessionCalendarAdapter` (`ITradingCalendarPort` from recorded `trade_sessions`, UTC).
+  4. "Where Does X Live?" (:502-508): add `| Exness client, mappers, data and quote adapters | core/infra/exness/ |`, `| Exness broker (live trading off) | core/infra/brokers/exness/ |` and `| Exness session calendars | core/infra/calendars/exness_session_calendar_adapter.py |`.
+  5. "Real-Time Streaming" inbound list (:634-635): add item 3, the Exness ticks WS (`ExnessQuoteAdapter` under `RoutingRealtimeQuoteAdapter`, subprotocol `exness-ws-protocol`, `subscribe` mode `add`, reconnect 1 s→30 s with a 10-failure circuit breaker), and item 4, the Exness events WS (per broker instance: transaction events, broker-side closes, snapshot reconciliation). In "Trade emission" (:643) add that `ExnessBrokerAdapter` forwards a `TradeClosedEvent` per close deal after the fill.
+  6. "Broker & Middleware" (:655-657): add `ExnessBrokerAdapter` and its rules: market orders only, SL required, quantity normalized to the lot grid by `normalize_quantity` before the order is created (capped at the minimum lot unless `EXNESS_MAX_LOTS`), the daily loss cap from real deals (`close`, `swap_fee`, `admin_fee`, `dividend` and commissions; `balance` deposits and withdrawals excluded; fails closed), orders blocked until the trading snapshot is reconciled, a 429 on an order rejected and reconciled rather than retried, and async fill wiring only for brokers with `fills_async` (only Exness). State that `EXNESS_LIVE_TRADING` defaults to false, that `BrokerFactory` refuses `exness` and the client refuses order operations while it is false, and that no API selects a broker per subscription (`config.broker` stays `paper` for subscriptions). Add `PaperBrokerAdapter` `spread` (ask = bid + spread; BUY entries and SHORT exits at ask; SHORT SL/TP on the ask high/low; backtest-only, the live paper broker has none).
+  7. "Dependency Injection" (:690, :694): the routers are over `{binance, tradingview, exness}`; `AdaptersProvider` adds `ExnessClient` and builds `BrokerFactory` with it. Routing adds `XAUUSD:EXNESS` → `exness`, and `exness` → CFD with the Exness FX calendar in the `DATA_PROVIDER_DEFAULTS` sentence. Background jobs (:692): `sync_1m` covers `:EXNESS` symbols through the same path, gated by their calendar.
+  8. "Configuration" (:795): add `EXNESS_API_BASE_URL`, `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY`, `EXNESS_SECRET_KEY`, `EXNESS_LIVE_TRADING` (default false), `EXNESS_RATE_FRACTION`, `EXNESS_DAILY_LOSS_CAP` and `EXNESS_MAX_LOTS`. "Ops Context" (:814): add Exness (signed REST + WS market data and quotes; trading built but off).
+  9. Add `## MT5 (future provider, not built)` before "Known Limitations" (:801): the same ports (`IDataProviderPort`, `IRealtimeQuoteProviderPort`, optional `IBrokerPort`), a suffix (`:MT5`, which the routing tests already pin as unregistered), a sketch (bars from `copy_rates_from`, quotes from `copy_ticks_from`, `order_send` behind `IBrokerPort`), the Windows host or Wine bridge (`mt5linux`/`mt5-remote`) deployment constraint, and the fact that Exness API keys apply to Exness-platform accounts, not MT5 accounts.
+  10. "Symbol removal" (:573): if Phases 06–07 added any symbol-keyed collection or Redis key, add it to the list; otherwise leave the section unchanged.
+  11. Apply the same changes to `docs/vi/system-architecture.md` (Vietnamese prose, English technical terms).
+- **Success criteria:** No statement contradicts the code, and the mirror matches.
 - **Verify:**
-  - `grep -cE "SyncPolicies|sync_runner.py|core/infra/exness|copy_rates_from|ExnessBroker|EXNESS_LIVE_TRADING" docs/system-architecture.md` is ≥ 6.
-  - `grep -cE "sync_jobs|sync_internals|6 providers|Last Updated" docs/system-architecture.md` prints `0`.
+  - `grep -cE "core/infra/exness|ExnessBrokerAdapter|EXNESS_LIVE_TRADING|exness-ws-protocol|copy_rates_from|XAUUSD:EXNESS" docs/system-architecture.md` is ≥ 6, and the same command on `docs/vi/system-architecture.md` is ≥ 6.
+  - `grep -cE "sync_policy|SyncPolicies|sync_runner|policy_bars|Last Updated" docs/system-architecture.md docs/vi/system-architecture.md` prints `0` for each file.
+  - Every store in `TrackedSymbolsService._symbol_data` (`engine/market_data/tracked_symbols_service.py:102-112`) is named in the doc: `uv run python -c "import re;t=open('docs/system-architecture.md',encoding='utf-8').read();s=open('src/pocketquant/engine/market_data/tracked_symbols_service.py',encoding='utf-8').read();i=s.find('self._symbol_data:');w=re.findall(r'\"(\w+)\":',s[i:s.find('}',i)]);print(len(w)>=9 and all(c in t for c in w))"` prints `True`.
 
-<!-- Updated: Validation Session 1 - env rows match the single-line key rule and the live switch; one backfill runbook -->
-<!-- Updated: Validation Session 3 - access point note reduced to the in-memory per-process resolve -->
-### T9.2 Deployment, scripts and README
-- **Goal:** Operators can configure Exness data and know that trading is off.
-- **Target files and symbols:** `docs/deployment.md` (the env table and a new runbook section `## Deep History Backfill`), `scripts/README.md`, `README.md`, `docs/project-overview-pdr.md:260` and `docs/README.md:12`.
+<!-- Updated: 2026-10-13 develop reshape - env table, seed and backfill runbook, README, pdr -->
+### T9.2 Deployment, scripts, README and overview docs
+- **Goal:** Operators can configure Exness data, seed and backfill it, and know that trading is off.
+- **Target files and symbols:** `docs/deployment.md` (env table :85-97; a `### Exness symbols and deep history` subsection under "2-Year Bar Re-Sync" :205), `scripts/README.md`, `README.md`, `docs/project-overview-pdr.md:260`, `docs/codebase-summary.md` (:12, :36, :152-153), and their `docs/vi` mirrors.
 - **Steps:**
-  1. `deployment.md` env table rows: `EXNESS_API_BASE_URL` (https, on the host confirmed for this account), `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY`, `EXNESS_SECRET_KEY` (the 128-hex secret exactly as Key Management shows it: 32-byte seed then 32-byte public key; PEM is rejected and the CI `.env` guard fails on multi-line values), `EXNESS_LIVE_TRADING` (default `false`; only a go-live plan changes it), `EXNESS_DAILY_LOSS_CAP` and `EXNESS_MAX_LOTS` (unset means the minimum lot); then one note under the table that the per-account access point is not an env var: `ExnessClient` resolves it from `GET /v1/trading/access-point` once per process, in memory, for trading calls. Add the runbook section with the `docker exec pocketquant-app python scripts/backfill/policy_bars.py --symbol <CODE>:<EXCHANGE> --interval <tf> --days <n> --rate-fraction 0.5` command from Phase 08 T8.4, and the `:OKX` migration script usage (`--inventory`, `--apply --approved`, backup first).
-  2. `scripts/README.md`: one line each for `exness_spike.py` (read-only diagnostics), `backfill/policy_bars.py` (deep backfill for any policy), `code_metrics.py` (ratchet) and `migrate_okx_market_data.py`.
-  3. `README.md` line 3: mention Exness (signed REST/WS market data and quotes) next to Binance. Line 11: add `exness` to the `core/` adapter list.
-  4. `docs/project-overview-pdr.md:260`: replace `Max 200 LOC per file (exceptions documented)` with `File ~400 LOC soft guidance, functions ≲60 lines (xem code-standards.md)`.
-  5. `docs/README.md:12` code-standards row: replace `file-size rules` with `rules of thumb, sync policy pattern, metric ratchet`.
-  6. `docs/project-overview-pdr.md:340`: the link `code-standards.md#routes--services` never resolved; point it at `code-standards.md#routes-và-services`.
-  7. `CLAUDE.md:21`: the code-standards pointer still lists "schema" and "perf", which the Phase 05 standard no longer has; replace the list with the real section topics (principles, naming, routes/services, DI, repositories, sync policy, composite symbol, async, comment policy, testing, quality gate).
+  1. `deployment.md` env table rows: `EXNESS_API_BASE_URL` (https on `api.exness.com`; serves `getAccessPoint` only), `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY`, `EXNESS_SECRET_KEY` (the 128-hex secret exactly as Key Management shows it: 32-byte seed then 32-byte public key; PEM is rejected and the CI `.env` guard fails on multi-line values), `EXNESS_LIVE_TRADING` (default `false`; only a go-live plan changes it), `EXNESS_RATE_FRACTION` (default `1.0`), `EXNESS_DAILY_LOSS_CAP` and `EXNESS_MAX_LOTS` (unset means the minimum lot). Under the table, one note: the per-account access point is not an env var; `ExnessClient` resolves it from `getAccessPoint` once per process, in memory, as a full https URL. All values live in `pocketquant-config`.
+  2. The new subsection: `docker exec pocketquant-app python scripts/seed_exness_symbols.py` (dry-run) and `--apply`, then `docker exec pocketquant-app python scripts/backfill/provider_bars.py --symbol <CODE>:<PROVIDER> --interval <tf> --days <n> --rate-fraction 0.5` (refuses while `EXNESS_LIVE_TRADING` is true; Exness M1 history reaches back one year), and that `DELETE /api/v1/market-data/tracked-symbols/{symbol}` removes an Exness symbol with all its data.
+  3. `scripts/README.md`: one line for `exness_spike.py` (read-only diagnostics against the Exness API; writes fixtures and a summary, places no order).
+  4. `README.md` line 3: mention Exness (signed REST/WS market data and quotes for CFDs) and TradingView next to Binance. Line 11: add `exness` and `tradingview` to the `core/` adapter list.
+  5. `docs/project-overview-pdr.md:260`: replace `Max 200 LOC per file (exceptions documented)` with `File and function size: see code-standards.md "File and Function Size"`; the same in `docs/vi/project-overview-pdr.md:260`.
+  6. `docs/codebase-summary.md`: add Exness REST/WS to the infrastructure list (:12), `exness/` to the tree (:36) and the Exness ticks WS to inbound streaming (:152-153).
+  7. Apply steps 1, 2 and 6 to the `docs/vi` mirrors.
 - **Success criteria:** No stale claims remain and the links are valid.
 - **Verify:**
-  - `grep -cE "EXNESS_LIVE_TRADING|EXNESS_DAILY_LOSS_CAP" docs/deployment.md` is ≥ 2.
-  - `grep -c "policy_bars.py" docs/deployment.md` is ≥ 1.
-  - `grep -c "200 LOC" docs/project-overview-pdr.md` prints `0`.
+  - `grep -cE "EXNESS_LIVE_TRADING|EXNESS_DAILY_LOSS_CAP" docs/deployment.md docs/vi/deployment.md` is ≥ 2 for each file.
+  - `grep -c "provider_bars.py" docs/deployment.md` is ≥ 1.
+  - `grep -c "200 LOC" docs/project-overview-pdr.md docs/vi/project-overview-pdr.md` prints `0` for each file.
   - `grep -c "Exness" README.md` is ≥ 1.
-  - `grep -cE "code_metrics.py|policy_bars.py|migrate_okx_market_data.py|exness_spike.py" scripts/README.md` prints `4`.
+  - `grep -cE "exness_spike.py|seed_exness_symbols.py|provider_bars.py" scripts/README.md` prints `3`.
 
-<!-- Updated: Validation Session 1 - code-standards §8 gets the real add-a-provider touchpoint list; §14 gets the EXNESS_* rule -->
+<!-- Updated: 2026-10-13 develop reshape - touchpoints extend Composite Symbol Format; 15 H2 stay 15 -->
 ### T9.3 `code-standards.md` provider touchpoints and secrets rule
-- **Goal:** The standard lists the real places a new provider touches, now that Exness exists, and states the Exness secrets rule.
-- **Target files and symbols:** `docs/code-standards.md` §8 `## Sync policy pattern` and §14 `## Configuration & Secrets`
+- **Goal:** The standard lists the real places a new data provider touches, now that Exness exists, and states the Exness secrets rule.
+- **Target files and symbols:** `docs/code-standards.md` "Composite Symbol Format" (:134-144) and "Configuration & Secrets" (:292), and `docs/vi/code-standards.md`
 - **Steps:**
-  1. Append to §8 a checklist "Thêm một provider" with exactly these touchpoints, as they exist in the code:
-     1. adapter package `src/pocketquant/core/infra/<venue>/` (data provider for `IDataProvider`, quote provider for `IRealtimeQuoteProvider`, optional broker for `IBroker`);
+  1. Add `XAUUSD:EXNESS` to the format examples (:136).
+  2. Replace the sentence "registering a provider means adding it to both routing adapters in `app/di/` and to that table" (:141) with a checklist "Adding a data provider", exactly these touchpoints as they exist in the code:
+     1. adapter package `src/pocketquant/core/infra/<provider>/` (`IDataProviderPort`, optional `IRealtimeQuoteProviderPort`);
      2. `Settings` fields in `src/pocketquant/core/config.py`;
-     3. a policy factory in `src/pocketquant/engine/market_data/sync_policy.py` (intervals, cascade, `poll_time_cap_s`, `history_days`, calendars from recorded `trade_sessions`);
-     4. one entry in `build_sync_policies` in `src/pocketquant/app/di/adapters.py`;
-     5. optionally one `BrokerFactory` branch;
-     6. instrument names and sessions taken from a read-only spike's fixtures;
-     7. env rows in `docs/deployment.md`;
-     8. adapter tests under `tests/core_test/infra/<venue>/` against recorded fixtures.
-  2. Add to §14: `EXNESS_*` keys live only in `pocketquant-config`, `EXNESS_SECRET_KEY` is a single-line 128-hex secret key, `.env` values are single-line `KEY=VALUE`, secrets are never logged, and `EXNESS_LIVE_TRADING` stays false outside a go-live plan.
-  3. Keep the H2 count at 14 and add no banner or history.
-- **Success criteria:** §8 and §14 match the code.
-- **Verify:** `grep -c "build_sync_policies" docs/code-standards.md` is ≥ 1. `grep -c "EXNESS_LIVE_TRADING" docs/code-standards.md` is ≥ 1. `grep -c "^## " docs/code-standards.md` prints `14`. `grep -cE "Current Status|Last Updated|Version:" docs/code-standards.md` prints `0`.
+     3. one `DATA_PROVIDER_DEFAULTS` entry (`core/domain/market_data/provider_routing_domain_service.py`) and one entry in each router in `app/di/adapters.py` (`get_data_provider`, `get_realtime_quote_provider`); `tests/app_test/unit/test_data_provider_registration.py` enforces that the three match;
+     4. a calendar registered in `TradingCalendarFactory` (`core/infra/calendars/trading_calendar_factory.py`) when no existing one fits, built from recorded sessions;
+     5. a `ContractSpec` per symbol, written by a seed script modelled on `scripts/seed_index_futures.py` (`symbols` and `tracked_symbols`);
+     6. the provider in the `/health` provider map (`register_health_checks`, `app/main_extensions.py`);
+     7. any new symbol-keyed collection or Redis key joins the symbol-removal cascade (`TrackedSymbolsService`);
+     8. a broker is optional and separate: a `BrokerFactory` branch, with the broker's own instrument table keyed by the full composite symbol;
+     9. env rows in `docs/deployment.md`, and adapter tests under `tests/core_test/infra/<provider>/` against recorded fixtures.
+  3. Add to "Configuration & Secrets": `EXNESS_*` keys live only in `pocketquant-config`, `EXNESS_SECRET_KEY` is a single-line 128-hex secret key, `.env` values are single-line `KEY=VALUE`, secrets are never logged, and `EXNESS_LIVE_TRADING` stays false outside a go-live plan.
+  4. Apply the same changes to `docs/vi/code-standards.md`. Add no H2, banner or history.
+- **Success criteria:** The checklist matches the code, and the H2 count is unchanged.
+- **Verify:** `grep -c "test_data_provider_registration" docs/code-standards.md docs/vi/code-standards.md` is ≥ 1 for each file. `grep -c "EXNESS_LIVE_TRADING" docs/code-standards.md` is ≥ 1. `grep -c "^## " docs/code-standards.md docs/vi/code-standards.md` prints `15` for each file. `grep -cE "Current Status|Last Updated|Version:" docs/code-standards.md` prints `0`.
 
-<!-- Updated: Validation Session 1 - code-standards included in the docs commit -->
+<!-- Updated: 2026-10-13 develop reshape - push develop-sync to develop; CI skips docs-only pushes -->
 ### T9.4 Ship
-- **Goal:** The docs are merged. CI `paths-ignore` skips the deploy for docs-only changes.
+- **Goal:** The docs are on develop. CI `paths-ignore` skips the build and deploy for docs-only changes.
 - **Target files and symbols:** git
 - **Steps:**
   1. `git add docs README.md scripts/README.md plans/261009-0858-exness-venue-lean-sync-refactor` (this also commits the Phase 08 reports written after T8.3)
-  2. `git commit -m "docs: describe exness adapters, sync policy registry and mt5 future provider"`
-  3. Ask the user for approval, then `git switch master && git merge --ff-only docs/exness-architecture && git push origin master`.
-- **Success criteria:** The commit is on master.
-- **Verify:** `git log origin/master -1 --format=%s` prints `docs: describe exness adapters, sync policy registry and mt5 future provider`.
+  2. `git diff --cached --name-only | grep -vE '^(docs/|plans/|README.md$|scripts/README.md$)'` must print nothing.
+  3. `git commit -m "docs: describe exness provider, broker switch and mt5 future provider"`
+  4. `git push origin develop-sync:develop`
+- **Success criteria:** The commit is on `origin/develop` and no deploy ran for it.
+- **Verify:** Step 2 prints nothing. `git log origin/develop -1 --format=%s` prints `docs: describe exness provider, broker switch and mt5 future provider`. `gh run list --branch develop --limit 5 --json headSha --jq ".[].headSha" | grep -c $(git rev-parse HEAD)` prints `0`.
 
 ## Verification
 T9.1–T9.3 greps, plus T9.4.
@@ -101,12 +116,14 @@ T9.1–T9.3 greps, plus T9.4.
 ## Stop-and-ask
 - A doc change would describe live Exness trading as enabled, or document a broker selection mechanism that does not exist.
 - A docs edit would require a code change (record it for the user instead).
+- The code after Phases 06–08 differs from a statement this phase prescribes (for example a different calendar id or asset class); describe the code, and ask before changing the plan's wording.
 
 ## Risks
-- **The docs drift into change narrative.** Mitigation: the greps for banned words, and the AS-IS rule in `CLAUDE.md`.
+- **The docs drift into change narrative.** Mitigation: the greps for banned words, and the AS-IS rule in `docs/README.md:3`.
+- **The `docs/vi` mirror drifts from the English doc** (M/L). Mitigation: every task edits both, and the greps run on both.
 
 ## Rollback
-`git revert` the docs commit.
+`git revert` the docs commit and push it with `git push origin develop-sync:develop`.
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.

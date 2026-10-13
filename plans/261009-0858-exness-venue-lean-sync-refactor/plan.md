@@ -32,7 +32,7 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 | 03 | [Sync policy registry, shared runner and suffix routing](./phase-03-sync-policy-shared-runner.md) | 5d | Superseded: suffix routing via resolver swap (integration step 2) |
 | 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | Done on develop (integration step 3) |
 | 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Done on develop (integration step 4) |
-| 06 | [Exness market data, quotes and policy](./phase-06-exness-market-data-and-policy.md) | 7d | Pending |
+| 06 | [Exness market data and quotes](./phase-06-exness-market-data-and-policy.md) | 7d | Pending |
 | 07 | [Exness broker behind the live-trading switch (off)](./phase-07-exness-broker-off-by-default.md) | 6d | Pending |
 | 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | Pending |
 | 09 | [Architecture, deployment, standard and MT5 docs](./phase-09-docs-architecture-deployment-mt5.md) | 1d | Pending |
@@ -85,7 +85,7 @@ A later plan owns going live. Its preconditions are: admin-token auth on every m
 ### Session 1 follow-up (2026-10-10)
 - Async fill wiring is Exness only: `IBroker.fills_async` defaults to `False` and only `ExnessBroker` sets it, so PaperBroker and OKX stay byte-identical with no OKX test change (P07 T7.2, T7.3, T7.4; P09 T9.1).
 - `hitnrun2` resets on every path where a signal never fills (no broker, risk rejection, zero size, below the broker minimum, REJECTED, CANCELLED, and an exception after the signal), with paper tests for the risk-rejection and zero-size paths (P07 T7.3).
-- A 429 is never retried automatically, for any call. Orders become REJECTED and block new orders until a snapshot reconcile; data calls surface the error and the next scheduled run retries. `Retry-After` is not used. Transport-error retries with the same idempotency key stay (P06 T6.6, T6.7, T6.10, T6.11 and Risks; P07 T7.4, T7.6).
+- A 429 is never retried automatically, for any call. Orders become REJECTED and block new orders until a snapshot reconcile; data calls surface the error and the next scheduled run retries. `Retry-After` is not used. Transport-error retries with the same idempotency key stay (P06 T6.6, T6.7, T6.10, T6.11 and Risks; P07 T7.4, T7.6). Superseded by the 2026-10-13 429 decision below.
 - The daily loss cap also counts `dividend` deals and every deal's `commission` (as a cost), still excluding `balance` deposits and withdrawals; the deals-fixture expectations are updated (P07 T7.4, T7.6, Security; P09 T9.1).
 - The 40-second Exness `poll_time_cap_s` stays (P06 T6.14).
 
@@ -119,6 +119,9 @@ A later plan owns going live. Its preconditions are: admin-token auth on every m
 - Remaining hits are intentional: the Session 2 log entry (marked superseded), this session's log, and the Session 3 update markers.
 - `ak plan validate` prints `[OK]`. Unresolved contradictions: 0.
 
+### Develop reshape (2026-10-13)
+- Decision (429, replaces "never retry a 429"): Exness data calls (candles, quotes, history, configuration) retry a 429 at most 3 times with backoff and log each retry; order operations never retry a 429 and are rejected and reconciled (P06 T6.6, T6.7, T6.10, T6.11; P07 T7.4, T7.6). Phases 06–09 were reshaped for develop; see `reports/revise-phases-06-09-for-develop.md`.
+
 ## Red Team Review
 ### Session 2026-10-09/10
 | # | Finding | Severity | Disposition | Applied To |
@@ -128,7 +131,7 @@ A later plan owns going live. Its preconditions are: admin-token auth on every m
 | 3 | Loss cap reads the wrong deals shape | Critical | Applied; follow-up adds `dividend` and `commission` | P01 T1.4, T1.10; P07 T7.4, T7.6 |
 | 4 | Key delivery (PEM leak, `_PATH`, push) | Critical | Applied | plan.md U2; P01 T1.1, T1.3, T1.4, T1.8; P06 T6.2, T6.6, T6.18; P09 T9.2 |
 | 5 | Lost fills, orphans, restarts | High | Applied | P06 T6.6; P07 T7.4–T7.6 |
-| 6 | Shared rate budget | High | Applied, except 429 retry: per follow-up a 429 is surfaced, never retried | P03 T3.7; P06 T6.6, T6.7, T6.10, T6.11, T6.14, T6.16; P07 T7.4, T7.6; P08 T8.4 |
+| 6 | Shared rate budget | High | Applied; per the 2026-10-13 decision a 429 on a data call is retried at most 3 times with backoff and logged, a 429 on an order is rejected and reconciled | P06 T6.6, T6.7, T6.10, T6.11, T6.17; P07 T7.4, T7.6; P08 T8.4, T8.7 |
 | 7 | `hitnrun2` silent after a reject | High | Applied; follow-up extends it to risk rejection and zero size | P07 T7.2, T7.3 |
 | 8 | Weekend-only calendar | High | Applied | P01 T1.11; P03 T3.3, T3.4, T3.6; P06 T6.14 |
 | 9 | Sizer cannot reach the minimum lot | High | Applied (tests and docs only, live off) | P01 T1.4, T1.11; P07 T7.3, T7.4 |
