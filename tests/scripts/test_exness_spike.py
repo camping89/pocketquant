@@ -238,3 +238,30 @@ async def test_session_sends_requests_to_the_access_point_once_resolved() -> Non
         await session.get("/v1/b", {"x": 1})
     assert [u.host for u in seen] == ["api.example.test", "ap-x.exness.com"]
     assert seen[1].raw_path == b"/v1/b?x=1"
+
+
+async def test_session_retries_a_rate_limited_request_and_counts_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = [httpx.Response(429, json={"error_message": "REQUEST_RATE_LIMIT"})]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return responses.pop(0) if responses else httpx.Response(200, json={"ok": True})
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("scripts.exness_spike.asyncio.sleep", no_sleep)
+    cfg = SpikeConfig(
+        base_url="https://api.example.test",
+        account_id="1",
+        api_key="k",
+        private_key=Ed25519PrivateKey.generate(),
+        out=Path("unused"),
+        tick_seconds=1,
+        instruments=["XAUUSD"],
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        session = Session(cfg=cfg, client=client)
+        status, body = await session.get("/v1/a")
+    assert (status, body, session.rate_limited_retries) == (200, {"ok": True}, 1)

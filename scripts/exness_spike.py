@@ -80,6 +80,7 @@ TIMEFRAMES = {
     "D1": Interval.DAY_1,
 }
 WS_SUBPROTOCOL = Subprotocol("exness-ws-protocol")
+RATE_LIMIT_RETRIES = 3
 ENV_KEYS = ("EXNESS_API_BASE_URL", "EXNESS_ACCOUNT_ID", "EXNESS_API_KEY", "EXNESS_SECRET_KEY")
 
 
@@ -276,6 +277,7 @@ class Session:
     clock: ServerClock = field(default_factory=ServerClock)
     min_interval_s: float = 0.0
     ap_base: str | None = None
+    rate_limited_retries: int = 0
     _last_request_at: float = 0.0
 
     def signed(self, method: str, path_with_query: str) -> dict[str, str]:
@@ -292,20 +294,27 @@ class Session:
     async def get(
         self, path: str, params: dict[str, Any] | None = None, base: str | None = None
     ) -> tuple[int, Any]:
-        wait = self._last_request_at + self.min_interval_s - time.monotonic()
-        if wait > 0:
-            await asyncio.sleep(wait)
         target = f"{path}?{urllib.parse.urlencode(params)}" if params else path
-        request = self.client.build_request(
-            "GET", (base or self.ap_base or self.cfg.base_url) + target
-        )
-        request.headers.update(self.signed("GET", request.url.raw_path.decode()))
-        response = await self.client.send(request)
-        self._last_request_at = time.monotonic()
-        if date := response.headers.get("date"):
-            self.clock.update_from_date_header(date)
-        body = _json_or_none(response)
-        return response.status_code, body
+        url = (base or self.ap_base or self.cfg.base_url) + target
+        attempt = 0
+        while True:
+            wait = self._last_request_at + self.min_interval_s - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            request = self.client.build_request("GET", url)
+            request.headers.update(self.signed("GET", request.url.raw_path.decode()))
+            response = await self.client.send(request)
+            self._last_request_at = time.monotonic()
+            if date := response.headers.get("date"):
+                self.clock.update_from_date_header(date)
+            if response.status_code != 429 or attempt == RATE_LIMIT_RETRIES:
+                break
+            # The published limits are cluster-wide, so a 429 can arrive under them.
+            self.rate_limited_retries += 1
+            retry_after = response.headers.get("retry-after", "")
+            await asyncio.sleep(int(retry_after) if retry_after.isdigit() else 2**attempt)
+            attempt += 1
+        return response.status_code, _json_or_none(response)
 
     async def get_ok(
         self, path: str, params: dict[str, Any] | None = None, base: str | None = None
@@ -654,6 +663,7 @@ async def run(cfg: SpikeConfig) -> int:
         sizer_feasibility(summary, last_close, balance)
         await run_ticks(s, summary, ap_base, names)
         await run_events(s, ap_base)
+        summary["rate_limited_retries"] = s.rate_limited_retries
     write_json(cfg, "summary.json", summary)
     print((cfg.out / "summary.json").read_text(encoding="utf-8"))
     return 0
