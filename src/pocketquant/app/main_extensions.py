@@ -412,9 +412,9 @@ async def _list_jobs_from_mongo(
 def register_routes(app: FastAPI, settings) -> None:
     from pocketquant.app.routes.backtest import backtest_router
     from pocketquant.app.routes.market_data import router as market_data_router
+    from pocketquant.app.routes.market_data import tracked_symbols_router
     from pocketquant.app.routes.market_data_quotes import router as quote_router
     from pocketquant.app.routes.strategy import strategy_router, subscription_router
-    from pocketquant.app.routes.tracked_symbols import router as tracked_symbols_router
     from pocketquant.app.routes.trading_orders_positions import trading_router
 
     @app.get("/health")
