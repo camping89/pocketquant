@@ -109,7 +109,7 @@ Strategies exposed by the API:
 just test                    # pytest
 uv run ruff check .          # lint
 uv run pyright               # types
-uv run lint-imports          # 10 import-linter contracts
+uv run lint-imports          # 8 import-linter contracts
 ```
 
 Manual API: Bruno [`tests/http`](./tests/http) · curl [`tests/manual/api-test.http`](./tests/manual/api-test.http).

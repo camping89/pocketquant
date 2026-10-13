@@ -87,7 +87,7 @@ Control plane (desired state)           Data plane (live engine)
 - `desired_state: "running" | "stopped"` — what a handler (or human) intends → written by HTTP start/stop handlers
 - `actual_state: "running" | "stopped"` — live engine's observed state → written by reconcile loop when it detects drift
 
-**Handlers are declarative:** `StartStrategyCommand` and `StopStrategyCommand` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
+**Handlers are declarative:** `StrategyCommandService.start(subscription_id)` and `stop(subscription_id)` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
 
 **Reconcile loop:** `StrategyReconcileAppService` (in `engine` subpackage) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
 1. Iterates `sub_repo.list_all()` (reads from Mongo)
@@ -96,9 +96,9 @@ Control plane (desired state)           Data plane (live engine)
 4. Mirrors observed `actual_state` back to Mongo only on drift (idempotent, no per-tick churn)
 5. Subscription-driven: never enumerates RAM, so injected backtest strategies (synthetic ids) are invisible
 
-**Add new subscription:** `StrategyCommandService.add_symbol(AddSymbolCommand)` persists with `desired_state="stopped"` (opt-in to trading; no auto-start on add) and pre-loads the instance without starting it.
+**Add new subscription:** `StrategyCommandService.add_symbol(strategy_id, symbol, interval)` persists with `desired_state="stopped"` (opt-in to trading; no auto-start on add) and pre-loads the instance without starting it.
 
-**List subscriptions:** `StrategyQueryService.list_symbols(ListSymbolsQuery)` sources run-state from Mongo: returns `desired_state`, `actual_state`, and `is_running` (derived `actual_state == "running"`). No RAM read.
+**List subscriptions:** `StrategyQueryService.list_symbols(strategy_code=None)` sources run-state from Mongo: returns `desired_state`, `actual_state`, and `is_running` (derived `actual_state == "running"`). No RAM read.
 
 **Defensive read on legacy docs:** Subscriptions lacking `desired_state` or `actual_state` fields (legacy docs pre-control-plane) read both as `"stopped"` via `Subscription.from_mongo()` defensive `.get()` defaults. Reconcile loop then converges `actual_state` to match `desired_state`, so no manual re-migration required across deploys.
 
@@ -255,25 +255,25 @@ class StrategyAppService:
 
 **Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to command/query services, return responses.
 
-**Pattern:** Routes use FastAPI's `APIRouter(route_class=DishkaRoute)` and inject service dependencies via `FromDishka[CommandService]` or `FromDishka[QueryService]`. Each route accepts a Pydantic command/query model and returns a DTO.
+**Pattern:** Routes use FastAPI's `APIRouter(route_class=DishkaRoute)` and inject service dependencies via `FromDishka[CommandService]` or `FromDishka[QueryService]`. Each route passes path and query parameters to the service as scalars, passes a Pydantic model only when it is the request body, and returns a DTO.
 
 **Structure:**
-Routes are organized by feature (backtest, strategy, market_data) with APIRouter registering endpoints. Example route calls a command service method directly:
+Routes are organized by feature with APIRouter registering endpoints: `backtest.py`, `strategy.py`, `trading_orders_positions.py`, `system_jobs.py`, `market_data_quotes.py` (`/quotes`) and `market_data.py`, which holds every `/market-data` endpoint (sync, integrity, OHLCV and the bar stream, sync status, data lag, symbols) plus `tracked_symbols_router` for the tracked-symbol CRUD and backfill. Example route calls a command service method directly:
 
 ```python
-# src/pocketquant/app/routes/strategy.py (example)
-router = APIRouter(route_class=DishkaRoute)
+# src/pocketquant/app/routes/strategy.py
+strategy_router = APIRouter(prefix="/strategies", tags=["strategies"], route_class=DishkaRoute)
 
-@router.post("/strategies/{strategy_code}/subscriptions")
-async def add_symbol(
+@strategy_router.post("/{strategy_code}/subscriptions", status_code=201)
+async def create_subscription(
     strategy_code: str,
-    cmd: AddSymbolCommand,
-    strategy_svc: FromDishka[StrategyCommandService]
-) -> SubscriptionDTO:
-    return await strategy_svc.add_symbol(cmd.symbol, cmd.interval)
+    body: CreateSubscriptionBody,
+    cmd_svc: FromDishka[StrategyCommandService],
+) -> dict:
+    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
 ```
 
-**Service 5-Step Pattern** (in all command/query services): 1. Receive Command/Query (Pydantic) 2. Fetch adapters 3. Execute domain 4. Persist 5. Return DTO
+**Service 5-Step Pattern** (in all command/query services): 1. Receive scalars or the request body 2. Fetch adapters 3. Execute domain 4. Persist 5. Return DTO
 
 ### Layer 4: Adapters (External I/O) — src/pocketquant/core/ + other subpackages
 
@@ -508,7 +508,7 @@ src/
 | OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
 | PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
 | APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
-| Dishka DI container (6 providers) | `app/di/` |
+| Dishka DI container (3 providers) | `app/di/` |
 | FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
 | Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
 | Backtest trigger (save started doc) | `engine/backtest/backtest_command_service.py` |
@@ -685,9 +685,9 @@ round-trip chunk).
 
 ## Dependency Injection (Dishka)
 
-6 providers + auto-resolution via type hints. Files: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py` lifespan.
+3 providers + auto-resolution via type hints. Files: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py`. `create_container(settings)` passes the `Settings` instance in as container context (`from_context`) and builds with `STRICT_VALIDATION`, so a type provided twice fails at startup instead of the last registration silently winning.
 
-**Providers:** CoreProvider (Settings, EventBus max_history=50) → PersistenceProvider (Database, Cache, 12 repos) → InfrastructureProvider (BrokerFactory, Binance/OKX WS, JobScheduler, TradingCalendarFactory, and the `IDataProviderPort` as a `RoutingDataProviderAdapter` over `{binance, tradingview}`) → MarketDataProvider (BarAppService, QuoteAppService, the realtime quote port as a `RoutingRealtimeQuoteAdapter`, 8 sync jobs) → ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService, LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService).
+**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, the `IDataProviderPort` as a `RoutingDataProviderAdapter` and the realtime quote port as a `RoutingRealtimeQuoteAdapter`, each over `{binance, tradingview}`, and BrokerFactory) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, and the Command/Query services routes inject).
 
 **Background jobs:** `sync_1m` (every minute at :02 — 1m REST fetch per tracked symbol, then in-process cascade to 5m/15m/1h/4h and, for 24/7 calendars, 1d), `data_lag_check` (every minute at :30 — measures how many trading minutes each symbol's 1m feed runs behind real time, stores the reading in Redis `data_lag:{symbol}` with a 5-minute TTL, and logs only state changes), `sync_verify_cascade` (hourly — REST vs cascade 5m divergence on one sampled symbol), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — the only place missing 1m bars are reported; the cascade itself never logs short buckets), `sync_repair` (every 12h). Catch-up on startup for the daily/12h jobs if their last success is older than the grace window.
 

@@ -327,10 +327,10 @@ src/pocketquant/
 │       └── live_metrics_query_service.py      (on-demand per-subscription metrics)
 │
 └── app/                  # → core, engine — FastAPI runtime + all API routes + SPA
-    ├── routes/           Feature modules: strategy.py, backtest.py, market_data_sync.py, etc.
+    ├── routes/           Feature modules: strategy.py, backtest.py, market_data.py, market_data_quotes.py, etc.
     ├── market_data/      Sync/quotes/ohlcv/status app-services
     ├── middleware/       Admin auth, symbol validation, etc.
-    ├── di/               Dishka container + 6 Provider classes
+    ├── di/               Dishka container + 3 Provider classes (infrastructure, adapters, services)
     └── main.py           FastAPI app + lifespan (indexes, scheduler, WS feed, SPA serve)
 
 web/                                 # React 19 + Vite SPA (separate npm app)

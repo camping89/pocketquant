@@ -79,15 +79,14 @@ src/pocketquant/
     ├── routes/                        # HTTP endpoints (thin routing layer)
     │   ├── strategy.py                # /strategies, /subscriptions (strategy mgmt)
     │   ├── backtest.py                # /backtest (single-run backtester)
-    │   ├── market_data.py             # /market-data (bars, quotes, sync)
+    │   ├── market_data.py             # /market-data (sync, integrity, OHLCV, status, symbols, tracked symbols)
+    │   ├── market_data_quotes.py      # /quotes (latest quote, current bar, SSE)
     │   └── ...
     ├── di/                            # Dependency injection providers
-    │   ├── core.py                    # CoreProvider (Settings, EventBus)
-    │   ├── persistence.py             # PersistenceProvider (DB, repos)
-    │   ├── infrastructure.py          # InfrastructureProvider (brokers, scheduler)
-    │   ├── market_data.py             # MarketDataProvider (bar, quote services)
-    │   ├── execution.py               # ExecutionProvider (orchestrators + live services)
-    │   └── container.py               # Composite container
+    │   ├── __init__.py                # create_container(settings): STRICT_VALIDATION
+    │   ├── infrastructure.py          # InfrastructureProvider (Settings, EventBus, DB, cache, repos, scheduler)
+    │   ├── adapters.py                # AdaptersProvider (routing data/quote adapters, BrokerFactory)
+    │   └── services.py                # ServicesProvider (app services, engine, feature services)
     └── ...
 ```
 
@@ -173,19 +172,17 @@ All `_id` are UUIDv7 (except `apscheduler_jobs`). Join keys: `subscription_id` (
 
 ### Dependency Injection (Dishka)
 
-6 providers initialized in order:
+3 providers, built by `create_container(settings)` with `STRICT_VALIDATION` (a type registered twice fails at startup):
 
 ```
-CoreProvider (Settings, EventBus)
-  ↓
-PersistenceProvider (Database, Cache, 12 repos)
-  ↓
-InfrastructureProvider (BrokerFactory, WS, JobScheduler)
-  ↓
-MarketDataProvider (BarAppService, QuoteAppService, sync jobs)
-  ↓
-ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService,
-                   LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService)
+InfrastructureProvider (Settings via from_context, EventBus, Database, Cache, 12 repos,
+                        SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator)
+AdaptersProvider       (TvDatafeedClient, RoutingDataProviderAdapter, RoutingRealtimeQuoteAdapter,
+                        BrokerFactory)
+ServicesProvider       (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService,
+                        OrderAppService, PositionAppService, StrategyAppService,
+                        StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService,
+                        BacktestExecutionService, and the Command/Query services routes inject)
 ```
 
 All services injected into routes via `FromDishka[ServiceType]` (no `Depends()`).

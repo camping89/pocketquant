@@ -38,7 +38,7 @@ Routes là handler HTTP mỏng. Toàn bộ business logic nằm trong services.
 
 | Component | Location | Trách nhiệm |
 |-----------|----------|---|
-| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → build Command/Query → gọi service → trả DTO |
+| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → gọi service với scalar hoặc request body → trả DTO |
 | **Command Service** | `src/pocketquant/{pkg}/{feature}_command_service.py` | Thay đổi state: validate, persist, publish events |
 | **Query Service** | `src/pocketquant/{pkg}/{feature}_query_service.py` | Chỉ đọc: fetch, serialize, trả DTO |
 
@@ -51,7 +51,7 @@ async def endpoint_name(
     body: RequestBody,
     cmd_svc: FromDishka[SomeCommandService],
 ) -> dict:
-    return await cmd_svc.method(SomeCommand(...))
+    return await cmd_svc.method(body.field, ...)
 ```
 
 **Quy tắc chính:**
@@ -77,7 +77,7 @@ core/infra/persistence/repositories/   # Data access
 
 **Quy tắc chính:**
 1. Routes: parse, inject service, delegate, respond (không business logic)
-2. Services: một method cho mỗi command/query, nhận Pydantic model, trả DTO
+2. Services: một method cho mỗi command/query, nhận scalar (chỉ nhận Pydantic model khi đó là request body hoặc query nhiều field có validate riêng), trả DTO
 3. Dùng `FromDishka[ServiceClass]` cho DI (không bao giờ dùng `Depends()`)
 4. KHÔNG try/catch trong routes/services (propagate tới global handler)
 5. Service method publish domain event cho mọi thay đổi state
@@ -92,7 +92,7 @@ Các service có state, điều phối domain + adapters. Có thể gọi Adapte
 
 ### 3. Dependency Injection (Dishka)
 
-dishka phân giải dependency theo type hint. Routes inject qua `FromDishka[ServiceType]`. Provider trong `src/pocketquant/app/di/` được khởi tạo theo thứ tự: CoreProvider → PersistenceProvider → InfrastructureProvider → Services/AppServices. Setup trong lifespan qua `setup_dishka(app, container)`.
+dishka phân giải dependency theo type hint. Routes inject qua `FromDishka[ServiceType]`. `src/pocketquant/app/di/` có ba provider: `InfrastructureProvider` (Settings, EventBus, Database, Cache, repositories, calendar, scheduler, health), `AdaptersProvider` (routing adapter cho data và quote, `BrokerFactory`) và `ServicesProvider` (app service, execution engine, các feature service mà route inject). `create_container(settings)` đưa `Settings` vào qua `from_context` và build với `STRICT_VALIDATION`, nên một type đăng ký hai lần sẽ lỗi ngay khi khởi động thay vì đăng ký sau âm thầm thắng. `main.py` nối container qua `setup_dishka(container, app)`.
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
@@ -131,7 +131,7 @@ Services KHÔNG bao giờ try/catch; exception propagate tới global handler.
 
 ### 8.5. Command/Query Service Pattern
 
-Một service method cho mỗi command/query. Constructor nhận dependency (dishka tự wire). Method: nhận Pydantic Command/Query → fetch adapters → validate domain → persist → publish events → trả DTO.
+Một service method cho mỗi command/query. Constructor nhận dependency (dishka tự wire). Method nhận scalar trực tiếp; chỉ truyền Pydantic model khi đó là request body (vd. `SyncSymbolCommand`, `AddTrackedSymbolCommand`, `RunBacktestCommand`) hoặc parameter object nhiều field tự validate (vd. `GetOHLCVQuery`, `BackfillTrackedSymbolCommand`). Method: fetch adapters → validate domain → persist → publish events → trả DTO.
 
 **Template:**
 ```python
@@ -139,9 +139,9 @@ class SomeCommandService:
     def __init__(self, repo: SomeRepository):
         self.repo = repo
 
-    async def handle(self, cmd: SomeCommand) -> dict:
+    async def handle(self, some_id: str) -> dict:
         # Fetch + Validate
-        if not await self.repo.exists(cmd.id):
+        if not await self.repo.exists(some_id):
             raise NotFoundError("NOT_FOUND")
         # Persist + Publish
         result = await self.repo.upsert({...})
@@ -159,15 +159,15 @@ async def create_subscription(
     body: CreateSubscriptionBody,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    return await cmd_svc.add_symbol(AddSymbolCommand(...))
+    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
 ```
 
 Service:
 ```python
-async def add_symbol(self, cmd: AddSymbolCommand) -> dict:
-    if not await self.tracked_symbol_repo.exists(cmd.symbol):
+async def add_symbol(self, strategy_id: str, symbol: str, interval: str) -> dict:
+    if not await self.tracked_symbol_repo.exists(symbol):
         raise NotFoundError("SYMBOL_NOT_TRACKED")
-    sub = Subscription(id=generate_id(), strategy_code=cmd.strategy_id, ...)
+    sub = Subscription(id=generate_id(), strategy_code=strategy_id, ...)
     await self.subscription_repo.add(sub)
     return sub.to_dto()
 ```
@@ -373,14 +373,14 @@ Tên class + file tự mã hóa layer/role. Suffix theo bảng dưới. Domain c
 | **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter`, `OKXWebSocketAdapter` |
 | **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (utility pattern; follow naming rule when used) |
 | **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestReportAppService` |
-| Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListOrdersQuery` |
-| Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `StartStrategyCommand` |
+| Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListTradesQuery` |
+| Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `RunBacktestCommand` |
 | CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |
 | DTOs | `{Name}Response` | `Response` | `.py` | `SyncResponse`, `QuoteResponse` |
 | Routes | (functions) | — | `*_routes.py` | `async def sync_symbol(...)` |
 | Middleware | `{Name}Middleware` | `Middleware` | `*_middleware.py` | `RateLimitMiddleware` |
 | Errors | `{Name}Error` | `Error` | `.py` | `AppError`, `NotFoundError`, `DomainError` |
-| DI Providers | `{Domain}Provider` | `Provider` | `*_provider.py` | `CoreProvider`, `ExecutionProvider` |
+| DI Providers | `{Domain}Provider` | `Provider` | `app/di/{domain}.py` | `InfrastructureProvider`, `ServicesProvider` |
 | Configs | `{Name}Config` | `Config` | `*_config.py` | `BacktestConfig`, `RiskConfig` |
 | Background Jobs | (functions) | — | `*_jobs.py` | `sync_1m()`, `sync_integrity()` |
 

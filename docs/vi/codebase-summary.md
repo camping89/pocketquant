@@ -82,12 +82,10 @@ src/pocketquant/
     │   ├── market_data.py             # /market-data (bars, quotes, sync)
     │   └── ...
     ├── di/                            # Dependency injection providers
-    │   ├── core.py                    # CoreProvider (Settings, EventBus)
-    │   ├── persistence.py             # PersistenceProvider (DB, repos)
-    │   ├── infrastructure.py          # InfrastructureProvider (brokers, scheduler)
-    │   ├── market_data.py             # MarketDataProvider (bar, quote services)
-    │   ├── execution.py               # ExecutionProvider (orchestrators + live services)
-    │   └── container.py               # Composite container
+    │   ├── __init__.py                # create_container(settings): STRICT_VALIDATION
+    │   ├── infrastructure.py          # InfrastructureProvider (Settings, EventBus, DB, cache, repos, scheduler)
+    │   ├── adapters.py                # AdaptersProvider (routing data/quote adapters, BrokerFactory)
+    │   └── services.py                # ServicesProvider (app services, engine, feature services)
     └── ...
 ```
 
@@ -173,19 +171,17 @@ Tất cả `_id` đều là UUIDv7 (trừ `apscheduler_jobs`). Join keys: `subsc
 
 ### Dependency Injection (Dishka)
 
-6 provider được khởi tạo theo thứ tự:
+3 provider, được build bởi `create_container(settings)` với `STRICT_VALIDATION` (một type đăng ký hai lần sẽ lỗi khi khởi động):
 
 ```
-CoreProvider (Settings, EventBus)
-  ↓
-PersistenceProvider (Database, Cache, 12 repos)
-  ↓
-InfrastructureProvider (BrokerFactory, WS, JobScheduler)
-  ↓
-MarketDataProvider (BarAppService, QuoteAppService, sync jobs)
-  ↓
-ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService,
-                   LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService)
+InfrastructureProvider (Settings qua from_context, EventBus, Database, Cache, 12 repos,
+                        SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator)
+AdaptersProvider       (TvDatafeedClient, RoutingDataProviderAdapter, RoutingRealtimeQuoteAdapter,
+                        BrokerFactory)
+ServicesProvider       (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService,
+                        OrderAppService, PositionAppService, StrategyAppService,
+                        StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService,
+                        BacktestExecutionService, và các Command/Query service mà route inject)
 ```
 
 Tất cả service được inject vào routes qua `FromDishka[ServiceType]` (không `Depends()`).

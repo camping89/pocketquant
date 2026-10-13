@@ -38,7 +38,7 @@ Routes are thin HTTP handlers. All business logic lives in services.
 
 | Component | Location | Responsibility |
 |-----------|----------|---|
-| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → build Command/Query → call service → return DTO |
+| **Route** | `src/pocketquant/app/routes/{feature}.py` | Parse request → call service with scalars or the request body → return DTO |
 | **Command Service** | `src/pocketquant/{pkg}/{feature}_command_service.py` | Mutate state: validate, persist, publish events |
 | **Query Service** | `src/pocketquant/{pkg}/{feature}_query_service.py` | Read-only: fetch, serialize, return DTO |
 
@@ -51,7 +51,7 @@ async def endpoint_name(
     body: RequestBody,
     cmd_svc: FromDishka[SomeCommandService],
 ) -> dict:
-    return await cmd_svc.method(SomeCommand(...))
+    return await cmd_svc.method(body.field, ...)
 ```
 
 **Key rules:**
@@ -77,7 +77,7 @@ core/infra/persistence/repositories/   # Data access
 
 **Key Rules:**
 1. Routes: parse, inject service, delegate, respond (no business logic)
-2. Services: one method per command/query, accept Pydantic model, return DTO
+2. Services: one method per command/query, take scalars (a Pydantic model only for a request body or a validated multi-field query), return DTO
 3. Use `FromDishka[ServiceClass]` for DI (never `Depends()`)
 4. NO try/catch in routes/services (propagate to global handler)
 5. Service methods publish domain events for all state changes
@@ -92,7 +92,7 @@ Stateful services orchestrating domain + adapters. Can call Adapters (unlike Dom
 
 ### 3. Dependency Injection (Dishka)
 
-dishka resolves dependencies by type hint. Routes inject via `FromDishka[ServiceType]`. Providers in `src/pocketquant/app/di/` initialized in order: CoreProvider → PersistenceProvider → InfrastructureProvider → Services/AppServices. Setup in lifespan via `setup_dishka(app, container)`.
+dishka resolves dependencies by type hint. Routes inject via `FromDishka[ServiceType]`. `src/pocketquant/app/di/` holds three providers: `InfrastructureProvider` (Settings, EventBus, Database, Cache, repositories, calendars, scheduler, health), `AdaptersProvider` (the routing data and quote adapters, `BrokerFactory`) and `ServicesProvider` (app services, the execution engine, the feature services routes inject). `create_container(settings)` passes `Settings` in through `from_context` and builds with `STRICT_VALIDATION`, so a type registered twice fails at startup instead of the last registration silently winning. `main.py` wires it with `setup_dishka(container, app)`.
 
 ### 4. Repository Pattern (Instance-Based Data Access)
 
@@ -131,7 +131,7 @@ Services NEVER try/catch; exceptions propagate to the global handler.
 
 ### 8.5. Command/Query Service Pattern
 
-One service method per command/query. Constructor receives dependencies (dishka auto-wires). Method: receive Pydantic Command/Query → fetch adapters → validate domain → persist → publish events → return DTO.
+One service method per command/query. Constructor receives dependencies (dishka auto-wires). Methods take scalars directly; a Pydantic model is passed only when it is the request body (e.g. `SyncSymbolCommand`, `AddTrackedSymbolCommand`, `RunBacktestCommand`) or a multi-field parameter object that carries its own validation (e.g. `GetOHLCVQuery`, `BackfillTrackedSymbolCommand`). Method: fetch adapters → validate domain → persist → publish events → return DTO.
 
 **Template:**
 ```python
@@ -139,9 +139,9 @@ class SomeCommandService:
     def __init__(self, repo: SomeRepository):
         self.repo = repo
 
-    async def handle(self, cmd: SomeCommand) -> dict:
+    async def handle(self, some_id: str) -> dict:
         # Fetch + Validate
-        if not await self.repo.exists(cmd.id):
+        if not await self.repo.exists(some_id):
             raise NotFoundError("NOT_FOUND")
         # Persist + Publish
         result = await self.repo.upsert({...})
@@ -159,15 +159,15 @@ async def create_subscription(
     body: CreateSubscriptionBody,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    return await cmd_svc.add_symbol(AddSymbolCommand(...))
+    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
 ```
 
 Service:
 ```python
-async def add_symbol(self, cmd: AddSymbolCommand) -> dict:
-    if not await self.tracked_symbol_repo.exists(cmd.symbol):
+async def add_symbol(self, strategy_id: str, symbol: str, interval: str) -> dict:
+    if not await self.tracked_symbol_repo.exists(symbol):
         raise NotFoundError("SYMBOL_NOT_TRACKED")
-    sub = Subscription(id=generate_id(), strategy_code=cmd.strategy_id, ...)
+    sub = Subscription(id=generate_id(), strategy_code=strategy_id, ...)
     await self.subscription_repo.add(sub)
     return sub.to_dto()
 ```
@@ -376,14 +376,14 @@ The class + file name self-encodes layer/role. Suffix per the table below. Domai
 | **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter`, `OKXWebSocketAdapter` |
 | **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (utility pattern; follow naming rule when used) |
 | **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestSandboxAppService`, `WsSubscriptionAppService`, `BacktestReportAppService` |
-| Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListOrdersQuery` |
-| Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `StartStrategyCommand` |
+| Query Models | `{Get\|List}{Entity}Query` | `Query` | `*_query.py` | `GetOHLCVQuery`, `ListTradesQuery` |
+| Command Models | `{Action}{Entity}Command` | `Command` | `*_command.py` | `SyncSymbolCommand`, `RunBacktestCommand` |
 | CQRS Services | `{Domain}{Command\|Query}Service` | `Service` | `*_service.py` | `StrategyCommandService`, `BacktestQueryService` |
 | DTOs | `{Name}Response` | `Response` | `.py` | `SyncResponse`, `QuoteResponse` |
 | Routes | (functions) | — | `*_routes.py` | `async def sync_symbol(...)` |
 | Middleware | `{Name}Middleware` | `Middleware` | `*_middleware.py` | `RateLimitMiddleware` |
 | Errors | `{Name}Error` | `Error` | `.py` | `AppError`, `NotFoundError`, `DomainError` |
-| DI Providers | `{Domain}Provider` | `Provider` | `*_provider.py` | `CoreProvider`, `ExecutionProvider` |
+| DI Providers | `{Domain}Provider` | `Provider` | `app/di/{domain}.py` | `InfrastructureProvider`, `ServicesProvider` |
 | Configs | `{Name}Config` | `Config` | `*_config.py` | `BacktestConfig`, `RiskConfig` |
 | Background Jobs | (functions) | — | `*_jobs.py` | `sync_1m()`, `sync_integrity()` |
 

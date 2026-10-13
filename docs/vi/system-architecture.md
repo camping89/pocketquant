@@ -87,7 +87,7 @@ Control plane (desired state)           Data plane (live engine)
 - `desired_state: "running" | "stopped"` — trạng thái mà một handler (hoặc con người) mong muốn → được ghi bởi handler HTTP start/stop
 - `actual_state: "running" | "stopped"` — trạng thái quan sát được của live engine → được ghi bởi reconcile loop khi phát hiện drift
 
-**Handler mang tính declarative:** `StartStrategyCommand` và `StopStrategyCommand` chỉ ghi `desired_state` (không gọi engine trực tiếp) và trả về trước khi strategy start/stop; reconcile loop hội tụ trong vòng ≤1 interval.
+**Handler mang tính declarative:** `StrategyCommandService.start(subscription_id)` và `stop(subscription_id)` chỉ ghi `desired_state` (không gọi engine trực tiếp) và trả về trước khi strategy start/stop; reconcile loop hội tụ trong vòng ≤1 interval.
 
 **Reconcile loop:** `StrategyReconcileAppService` (trong subpackage `engine`) poll mỗi `Settings.reconcile_interval_seconds` (mặc định 5.0s):
 1. Duyệt `sub_repo.list_all()` (đọc từ Mongo)
@@ -96,9 +96,9 @@ Control plane (desired state)           Data plane (live engine)
 4. Phản chiếu `actual_state` quan sát được về lại Mongo chỉ khi có drift (idempotent, không churn mỗi tick)
 5. Điều khiển theo subscription: không bao giờ enumerate RAM, nên các backtest strategy được inject (synthetic id) là vô hình
 
-**Thêm subscription mới:** `StrategyCommandService.add_symbol(AddSymbolCommand)` lưu với `desired_state="stopped"` (opt-in vào trading; không auto-start khi thêm) và pre-load instance mà không start.
+**Thêm subscription mới:** `StrategyCommandService.add_symbol(strategy_id, symbol, interval)` lưu với `desired_state="stopped"` (opt-in vào trading; không auto-start khi thêm) và pre-load instance mà không start.
 
-**List subscriptions:** `StrategyQueryService.list_symbols(ListSymbolsQuery)` lấy run-state từ Mongo: trả `desired_state`, `actual_state`, và `is_running` (dẫn xuất `actual_state == "running"`). Không đọc RAM.
+**List subscriptions:** `StrategyQueryService.list_symbols(strategy_code=None)` lấy run-state từ Mongo: trả `desired_state`, `actual_state`, và `is_running` (dẫn xuất `actual_state == "running"`). Không đọc RAM.
 
 **Đọc phòng thủ trên legacy docs:** các subscription thiếu trường `desired_state` hoặc `actual_state` (legacy docs trước control-plane) đọc cả hai thành `"stopped"` qua các giá trị mặc định `.get()` phòng thủ trong `Subscription.from_mongo()`. Reconcile loop sau đó hội tụ `actual_state` để khớp `desired_state`, nên không cần re-migration thủ công qua các lần deploy.
 
@@ -255,25 +255,25 @@ class StrategyAppService:
 
 **Purpose:** Layer HTTP routing mỏng. Route nhận request, ủy quyền cho command/query service, trả về response.
 
-**Pattern:** Route dùng `APIRouter(route_class=DishkaRoute)` của FastAPI và inject các service dependency qua `FromDishka[CommandService]` hoặc `FromDishka[QueryService]`. Mỗi route nhận một Pydantic command/query model và trả về một DTO.
+**Pattern:** Route dùng `APIRouter(route_class=DishkaRoute)` của FastAPI và inject các service dependency qua `FromDishka[CommandService]` hoặc `FromDishka[QueryService]`. Mỗi route truyền path và query parameter cho service dưới dạng scalar, chỉ truyền Pydantic model khi đó là request body, và trả về một DTO.
 
 **Structure:**
-Route được tổ chức theo feature (backtest, strategy, market_data) với APIRouter đăng ký endpoint. Ví dụ route gọi trực tiếp một method của command service:
+Route được tổ chức theo feature với APIRouter đăng ký endpoint: `backtest.py`, `strategy.py`, `trading_orders_positions.py`, `system_jobs.py`, `market_data_quotes.py` (`/quotes`) và `market_data.py`, file chứa mọi endpoint `/market-data` (sync, integrity, OHLCV và bar stream, sync status, data lag, symbols) cùng `tracked_symbols_router` cho CRUD và backfill tracked symbol. Ví dụ route gọi trực tiếp một method của command service:
 
 ```python
-# src/pocketquant/app/routes/strategy.py (example)
-router = APIRouter(route_class=DishkaRoute)
+# src/pocketquant/app/routes/strategy.py
+strategy_router = APIRouter(prefix="/strategies", tags=["strategies"], route_class=DishkaRoute)
 
-@router.post("/strategies/{strategy_code}/subscriptions")
-async def add_symbol(
+@strategy_router.post("/{strategy_code}/subscriptions", status_code=201)
+async def create_subscription(
     strategy_code: str,
-    cmd: AddSymbolCommand,
-    strategy_svc: FromDishka[StrategyCommandService]
-) -> SubscriptionDTO:
-    return await strategy_svc.add_symbol(cmd.symbol, cmd.interval)
+    body: CreateSubscriptionBody,
+    cmd_svc: FromDishka[StrategyCommandService],
+) -> dict:
+    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
 ```
 
-**Service 5-Step Pattern** (trong tất cả command/query service): 1. Nhận Command/Query (Pydantic) 2. Lấy adapter 3. Thực thi domain 4. Persist 5. Trả về DTO
+**Service 5-Step Pattern** (trong tất cả command/query service): 1. Nhận scalar hoặc request body 2. Lấy adapter 3. Thực thi domain 4. Persist 5. Trả về DTO
 
 ### Layer 4: Adapters (External I/O) — src/pocketquant/core/ + other subpackages
 
@@ -496,7 +496,7 @@ src/
 | OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
 | PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
 | APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
-| Dishka DI container (6 providers) | `app/di/` |
+| Dishka DI container (3 providers) | `app/di/` |
 | FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
 | Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
 | Backtest trigger (save started doc) | `engine/backtest/backtest_command_service.py` |
@@ -669,9 +669,9 @@ chunk round-trip).
 
 ## Dependency Injection (Dishka)
 
-6 provider + auto-resolution qua type hint. File: `src/pocketquant/app/di/`, lifespan `src/pocketquant/app/main.py`.
+3 provider + auto-resolution qua type hint. File: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py`. `create_container(settings)` đưa instance `Settings` vào làm container context (`from_context`) và build với `STRICT_VALIDATION`, nên một type được cung cấp hai lần sẽ lỗi khi khởi động thay vì đăng ký sau âm thầm thắng.
 
-**Providers:** CoreProvider (Settings, EventBus max_history=50) → PersistenceProvider (Database, Cache, 12 repos) → InfrastructureProvider (BrokerFactory, Binance/OKX WS, JobScheduler) → MarketDataProvider (BarAppService, QuoteAppService, 8 sync jobs) → ExecutionProvider (OrderAppService, PositionAppService, StrategyAppService, LiveTradeCollector, LiveMetricsQueryService, StrategyReconcileAppService).
+**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, `IDataProviderPort` dưới dạng `RoutingDataProviderAdapter` và realtime quote port dưới dạng `RoutingRealtimeQuoteAdapter`, mỗi cái trên `{binance, tradingview}`, và BrokerFactory) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, và các Command/Query service mà route inject).
 
 **Background jobs:** `sync_1m` (mỗi phút ở giây :02 — fetch REST 1m cho mỗi symbol được theo dõi, rồi cascade in-process lên 5m/15m/1h/4h và, với lịch 24/7, cả 1d), `data_lag_check` (mỗi phút ở giây :30 — đo feed 1m của mỗi symbol chậm bao nhiêu phút giao dịch so với thời gian thực, lưu kết quả vào Redis `data_lag:{symbol}` với TTL 5 phút, và chỉ log khi trạng thái đổi), `sync_verify_cascade` (mỗi giờ — so sánh 5m REST với 5m cascade trên một symbol mẫu), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — nơi duy nhất báo thiếu bar 1m; bản thân cascade không bao giờ log bucket thiếu bar), `sync_repair` (mỗi 12h). Catch-up lúc startup cho các job hằng ngày/12h nếu lần thành công gần nhất cũ hơn grace window.
 
