@@ -174,3 +174,7 @@ forbidden_modules = ["tvDatafeed"]
 # reaches the adapter through DI wiring, and that transitive chain is the
 # architecture working rather than a violation.
 allow_indirect_imports = true
+
+[tool.code-metrics]
+max_tiny_share = 0.48
+max_delegations = 77

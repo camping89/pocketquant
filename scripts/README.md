@@ -1,6 +1,6 @@
 # scripts/
 
-> **Scope:** Data-ops scripts (audit, backfill). NOT deployment.
+> **Scope:** Data-ops scripts (audit, backfill) and the code metric gate. NOT deployment.
 > For deployment, see `.github/workflows/cicd.yml` (CI/CD pipeline) + `deploy/vps/` (VPS-side scripts called by the pipeline).
 
 Operational scripts. Run from repository root.
@@ -14,6 +14,7 @@ Operational scripts. Run from repository root.
   contract's multiplier/tick size. Dry-run by default; `--apply` writes. Idempotent. Run it
   before the first sync reaches these symbols: an unseeded symbol takes its provider's
   defaults (index future, CME calendar) but a linear contract spec.
+- `code_metrics.py` — CI gate, no writes. Measures tiny functions and pure delegations over `src/pocketquant`; `--ratchet` fails when either is above the ceiling in `[tool.code-metrics]` of `pyproject.toml`. Tests: `tests/scripts/test_code_metrics.py`.
 - `backfill/binance_bars.py` — fetch OHLCV bars from Binance klines. Targeted (`--symbol` + explicit `--start/--end` window, insert-only gap-fill) or bulk (all tracked symbols, rolling `--days` window, optional `--replace` delete + cascade-rebuild, resumable via checkpoint). Test beside it (`backfill/test_binance_bars.py`) runs via `pytest scripts/backfill/`, excluded from the default suite.
 
 ## Conventions
