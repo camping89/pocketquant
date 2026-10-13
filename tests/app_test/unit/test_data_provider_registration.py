@@ -13,8 +13,7 @@ from unittest.mock import MagicMock
 
 from dishka import Provider, Scope, make_async_container, provide
 
-from pocketquant.app.di.infrastructure import InfrastructureProvider
-from pocketquant.app.di.market_data import MarketDataProvider
+from pocketquant.app.di.adapters import AdaptersProvider
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.market_data.provider_routing_domain_service import (
@@ -46,9 +45,7 @@ class _Stubs(Provider):
 
 
 async def _registered() -> tuple[set[str], set[str]]:
-    container = make_async_container(
-        InfrastructureProvider(), MarketDataProvider(), _Stubs(), skip_validation=True
-    )
+    container = make_async_container(AdaptersProvider(), _Stubs(), skip_validation=True)
     try:
         rest = await container.get(IDataProviderPort)
         realtime = await container.get(IRealtimeQuoteProviderPort)

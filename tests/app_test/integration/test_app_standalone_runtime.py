@@ -15,15 +15,8 @@ from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
-from dishka import make_async_container
 
-from pocketquant.app.di import (
-    BacktestWorkerProvider,
-    ExecutionProvider,
-    InfrastructureProvider,
-    MarketDataProvider,
-    PersistenceProvider,
-)
+from pocketquant.app.di import create_container
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.backtest import BacktestResult
@@ -43,8 +36,6 @@ from pocketquant.engine.live.strategy_reconcile_app_service import (
 )
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
-from .app_factory import TestCoreProvider
-
 pytestmark = pytest.mark.asyncio
 
 _STRATEGY = "hitnrun2"
@@ -53,15 +44,8 @@ _SYMBOL = "BTCUSDT:BINANCE"
 
 @pytest_asyncio.fixture
 async def app_container(settings: Settings):
-    """Full app DI graph — every runtime provider."""
-    c = make_async_container(
-        TestCoreProvider(settings),
-        PersistenceProvider(),
-        InfrastructureProvider(),
-        ExecutionProvider(),
-        MarketDataProvider(),
-        BacktestWorkerProvider(),
-    )
+    """Full app DI graph — the production container."""
+    c = create_container(settings)
     yield c
     await c.close()
 
@@ -138,8 +122,13 @@ async def test_app_backtest_execution_runs_without_http(app_container) -> None:
     # guard, execute_and_persist's outer guard flips the doc to failed — proving
     # the run→persist path runs end-to-end inside the app graph.
     run_id = generate_id()
-    config = {"strategy_code": "does-not-exist", "symbol": _SYMBOL, "interval": "1m",
-              "start_date": "2026-01-01", "end_date": "2026-01-02"}
+    config = {
+        "strategy_code": "does-not-exist",
+        "symbol": _SYMBOL,
+        "interval": "1m",
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-02",
+    }
     await backtest_repo.save(BacktestResult.started(str(run_id), config))
 
     await execution.execute_and_persist(str(run_id), config)
