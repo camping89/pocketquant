@@ -48,11 +48,7 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
-from pocketquant.engine.strategy.strategy_command_service import (
-    RemoveSymbolCommand,
-    StopStrategyCommand,
-    StrategyCommandService,
-)
+from pocketquant.engine.strategy.strategy_command_service import StrategyCommandService
 
 logger = get_logger(__name__)
 
@@ -74,23 +70,6 @@ class AddTrackedSymbolCommand(BaseModel):
         if not COMPOSITE_SYMBOL_PATTERN.match(v):
             raise ValueError("Must be composite {CODE}:{EXCHANGE} format")
         return v
-
-
-class UpdateTrackedSymbolCommand(BaseModel):
-    """Update metadata on an existing composite symbol. Future-proof placeholder."""
-
-    symbol: str = Field(..., description="Composite symbol to update, e.g. BTCUSDT:BINANCE")
-    # Extensible: add metadata fields here as requirements evolve (e.g. alias, tags)
-
-
-class RemoveTrackedSymbolCommand(BaseModel):
-    """Remove a composite symbol and every piece of data that references it."""
-
-    symbol: str = Field(..., description="Composite symbol to remove, e.g. BTCUSDT:BINANCE")
-
-
-class ListTrackedSymbolsQuery(BaseModel):
-    pass
 
 
 class TrackedSymbolService:
@@ -147,20 +126,19 @@ class TrackedSymbolService:
             "seeded_from": ts.seeded_from,
         }
 
-    async def update(self, request: UpdateTrackedSymbolCommand) -> dict:
+    async def update(self, symbol: str) -> dict:
         # Currently no mutable metadata beyond the composite symbol itself —
         # update is a no-op placeholder that validates existence.
-        # Extend fields in command when needed.
-        found = await self._repo.update(request.symbol, {})
+        found = await self._repo.update(symbol, {})
         if not found:
             raise NotFoundError(
-                f"Tracked symbol '{request.symbol}' not found",
+                f"Tracked symbol '{symbol}' not found",
                 error_code="TRACKED_SYMBOL_NOT_FOUND",
             )
-        logger.info("tracked_symbols.updated", symbol=request.symbol)
-        return {"symbol": request.symbol, "status": "updated"}
+        logger.info("tracked_symbols.updated", symbol=symbol)
+        return {"symbol": symbol, "status": "updated"}
 
-    async def remove(self, request: RemoveTrackedSymbolCommand) -> dict:
+    async def remove(self, symbol: str) -> dict:
         """Delete the symbol and every document and cache key that references it.
 
         Idempotent: each step deletes whatever is left, so a retry after a
@@ -170,15 +148,12 @@ class TrackedSymbolService:
         subscription is stopped, then removed through the strategy command path.
         Returns per-collection deleted counts under ``deleted``.
         """
-        symbol = request.symbol
         deleted = {"tracked_symbols": await self._repo.delete_by_symbol(symbol)}
         deleted["subscriptions"] = 0
         for sub in await self._sub_repo.list_by_symbol(symbol):
             sub_id = str(sub.id)
-            await self._strategy_commands.stop(StopStrategyCommand(subscription_id=sub_id))
-            deleted["subscriptions"] += await self._strategy_commands.remove_symbol(
-                RemoveSymbolCommand(sub_id=sub_id)
-            )
+            await self._strategy_commands.stop(sub_id)
+            deleted["subscriptions"] += await self._strategy_commands.remove_symbol(sub_id)
         for name, repo in self._symbol_data.items():
             deleted[name] = await repo.delete_by_symbol(symbol)
         deleted["job_history_runs"] = await self._job_history_repo.remove_symbol_details(symbol)
@@ -194,7 +169,7 @@ class TrackedSymbolService:
         logger.info("tracked_symbols.removed", symbol=symbol, deleted=deleted)
         return {"symbol": symbol, "status": "removed", "deleted": deleted}
 
-    async def list_all(self, request: ListTrackedSymbolsQuery) -> list[dict]:
+    async def list_all(self) -> list[dict]:
         """Return all tracked composite symbols."""
         symbols = await self._repo.list_all()
         return [

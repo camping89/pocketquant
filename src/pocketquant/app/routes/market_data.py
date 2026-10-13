@@ -31,34 +31,23 @@ from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
 )
-from pocketquant.engine.market_data.data_lag_service import (
-    DataLagQueryService,
-    DataLagResponse,
-    GetDataLagQuery,
-)
+from pocketquant.engine.market_data.data_lag_service import DataLagQueryService, DataLagResponse
 from pocketquant.engine.market_data.ohlcv_service import GetOHLCVQuery, OhlcvService
-from pocketquant.engine.market_data.symbols_service import ListSymbolsQuery, SymbolQueryService
+from pocketquant.engine.market_data.symbols_service import SymbolQueryService
 from pocketquant.engine.market_data.sync_service import (
     BulkSyncCommand,
     SyncResponse,
     SyncService,
     SyncSymbolCommand,
 )
-from pocketquant.engine.market_data.sync_status_service import (
-    GetSymbolSyncStatusQuery,
-    GetSyncStatusQuery,
-    SyncStatusQueryService,
-)
+from pocketquant.engine.market_data.sync_status_service import SyncStatusQueryService
 from pocketquant.engine.market_data.tracked_symbols_backfill import (
     BackfillTrackedSymbolCommand,
     TrackedSymbolBackfillService,
 )
 from pocketquant.engine.market_data.tracked_symbols_service import (
     AddTrackedSymbolCommand,
-    ListTrackedSymbolsQuery,
-    RemoveTrackedSymbolCommand,
     TrackedSymbolService,
-    UpdateTrackedSymbolCommand,
 )
 
 logger = get_logger(__name__)
@@ -304,8 +293,7 @@ async def stream_bars(
 async def get_sync_statuses(
     sync_status_service: FromDishka[SyncStatusQueryService],
 ) -> list[dict]:
-    query = GetSyncStatusQuery()
-    statuses = await sync_status_service.get_sync_status(query)
+    statuses = await sync_status_service.get_sync_status()
 
     return [
         {
@@ -333,8 +321,7 @@ async def get_symbol_sync_status(
     interval: Interval = Query(default=Interval.DAY_1),
 ) -> dict:
     symbol = validate_composite_symbol(symbol)
-    query = GetSymbolSyncStatusQuery(symbol=symbol, interval=interval.value)
-    status = await sync_status_service.get_symbol_sync_status(query)
+    status = await sync_status_service.get_symbol_sync_status(symbol, interval.value)
 
     return {
         "symbol": status.symbol,
@@ -358,7 +345,7 @@ async def get_data_lag(
 ) -> DataLagResponse:
     """How far this symbol's data runs behind real time, as the minute check last saw it."""
     symbol = validate_composite_symbol(symbol)
-    return await data_lag_service.get_data_lag(GetDataLagQuery(symbol=symbol))
+    return await data_lag_service.get_data_lag(symbol)
 
 
 # Symbols
@@ -368,8 +355,7 @@ async def get_data_lag(
 async def list_symbols(
     symbol_service: FromDishka[SymbolQueryService],
 ) -> list[dict]:
-    query = ListSymbolsQuery()
-    return await symbol_service.list_symbols(query)
+    return await symbol_service.list_symbols()
 
 
 # Tracked symbols
@@ -377,7 +363,7 @@ async def list_symbols(
 
 @tracked_symbols_router.get("/tracked-symbols", response_model=list[dict])
 async def list_tracked_symbols(service: FromDishka[TrackedSymbolService]) -> list[dict]:
-    return await service.list_all(ListTrackedSymbolsQuery())
+    return await service.list_all()
 
 
 @tracked_symbols_router.post(
@@ -406,8 +392,7 @@ async def update_tracked_symbol(
     (e.g. ``BTCUSDT%3ABINANCE``).
     """
     symbol = validate_composite_symbol(symbol)
-    cmd = UpdateTrackedSymbolCommand(symbol=symbol)
-    return await service.update(cmd)
+    return await service.update(symbol)
 
 
 @tracked_symbols_router.delete(
@@ -428,8 +413,7 @@ async def remove_tracked_symbol(
     ``{code}:{exchange}`` (e.g. ``BTCUSDT%3ABINANCE``).
     """
     symbol = validate_composite_symbol(symbol)
-    cmd = RemoveTrackedSymbolCommand(symbol=symbol)
-    return await service.remove(cmd)
+    return await service.remove(symbol)
 
 
 @tracked_symbols_router.post(

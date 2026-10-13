@@ -45,24 +45,6 @@ class RunBacktestCommand(BaseModel):
         return coerce_utc(v)  # type: ignore[return-value]
 
 
-class SetVerdictCommand(BaseModel):
-    """Command to set (or clear) the human-readable verdict on a finished run."""
-
-    run_id: str = Field(..., description="Backtest run id")
-    verdict: str | None = Field(
-        default=None, max_length=2000, description="Conclusion text; null clears it"
-    )
-
-
-class SetNameCommand(BaseModel):
-    """Command to set (or clear) the human-readable label on a run."""
-
-    run_id: str = Field(..., description="Backtest run id")
-    name: str | None = Field(
-        default=None, max_length=200, description="Run label; null clears it"
-    )
-
-
 class BacktestCommandService:
     def __init__(self, backtest_repository: BacktestRepository) -> None:
         self._backtest_repo = backtest_repository
@@ -90,14 +72,14 @@ class BacktestCommandService:
         await self._backtest_repo.save(BacktestResult.started(run_id, config))
         return run_id, config
 
-    async def set_verdict(self, cmd: SetVerdictCommand) -> None:
+    async def set_verdict(self, run_id: str, verdict: str | None) -> None:
         """Set the run's verdict; raise NotFoundError if the run does not exist."""
-        matched = await self._backtest_repo.set_verdict(cmd.run_id, cmd.verdict)
+        matched = await self._backtest_repo.set_verdict(run_id, verdict)
         if not matched:
-            raise NotFoundError(f"Backtest not found: {cmd.run_id}")
+            raise NotFoundError(f"Backtest not found: {run_id}")
 
-    async def set_name(self, cmd: SetNameCommand) -> None:
+    async def set_name(self, run_id: str, name: str | None) -> None:
         """Set the run's label; raise NotFoundError if the run does not exist."""
-        matched = await self._backtest_repo.set_name(cmd.run_id, cmd.name)
+        matched = await self._backtest_repo.set_name(run_id, name)
         if not matched:
-            raise NotFoundError(f"Backtest not found: {cmd.run_id}")
+            raise NotFoundError(f"Backtest not found: {run_id}")

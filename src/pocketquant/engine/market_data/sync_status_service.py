@@ -44,19 +44,6 @@ _BEHIND = frozenset({FeedState.DELAYED, FeedState.STUCK})
 
 
 @dataclass
-class GetSyncStatusQuery:
-    pass
-
-
-@dataclass
-class GetSymbolSyncStatusQuery:
-    """Query to get sync status for a specific composite symbol."""
-
-    symbol: str
-    interval: str = "1d"
-
-
-@dataclass
 class SyncStatusResult:
     """Result of a sync status query. ``symbol`` is composite ``{code}:{exchange}``."""
 
@@ -141,7 +128,7 @@ class SyncStatusQueryService:
         self._bar_repo = bar_repository
         self._calendar_factory = calendar_factory
 
-    async def get_sync_status(self, request: GetSyncStatusQuery) -> list[SyncStatusResult]:
+    async def get_sync_status(self) -> list[SyncStatusResult]:
         statuses = await self._sync_status_repo.find_all()
         if not statuses:
             return []
@@ -218,22 +205,22 @@ class SyncStatusQueryService:
             feeds[sym] = _Feed(lag, state)
         return feeds
 
-    async def get_symbol_sync_status(self, request: GetSymbolSyncStatusQuery) -> SyncStatusResult:
+    async def get_symbol_sync_status(self, symbol: str, interval: str = "1d") -> SyncStatusResult:
         """Return sync status for a single composite symbol. 404 if not found."""
-        interval = Interval(request.interval)
+        tf = Interval(interval)
 
-        status = await self._sync_status_repo.find_one(request.symbol, interval)
+        status = await self._sync_status_repo.find_one(symbol, tf)
         if not status:
-            raise NotFoundError(f"No sync status found for {request.symbol}")
+            raise NotFoundError(f"No sync status found for {symbol}")
 
-        latest_bar = await self._bar_repo.get_latest(status.symbol, interval)
-        bar_count = await self._bar_repo.count(status.symbol, interval)
+        latest_bar = await self._bar_repo.get_latest(status.symbol, tf)
+        bar_count = await self._bar_repo.count(status.symbol, tf)
         latest_dt = latest_bar.datetime if latest_bar else None
         calendar = await self._calendar_factory.for_symbol(status.symbol)
         now = datetime.now(UTC)
         status_1m = (
             status
-            if interval is Interval.MINUTE_1
+            if tf is Interval.MINUTE_1
             else await self._sync_status_repo.find_one(status.symbol, Interval.MINUTE_1)
         )
         by_symbol = {status.symbol: status_1m} if status_1m else {}

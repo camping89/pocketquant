@@ -21,7 +21,6 @@ from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlob
 from pocketquant.engine.market_data.data_lag_service import FeedState
 from pocketquant.engine.market_data.sync_internals.anomaly_log import emit_no_progress
 from pocketquant.engine.market_data.sync_status_service import (
-    GetSyncStatusQuery,
     SyncStatusQueryService,
     _Feed,
     _is_stuck,
@@ -129,8 +128,8 @@ async def test_status_reports_whether_the_market_is_open() -> None:
     open_factory.for_symbol = AsyncMock(return_value=CALENDAR)
     open_service = SyncStatusQueryService(sync_status_repo, bar_repo, open_factory)
 
-    closed = await closed_service.get_sync_status(GetSyncStatusQuery())
-    opened = await open_service.get_sync_status(GetSyncStatusQuery())
+    closed = await closed_service.get_sync_status()
+    opened = await open_service.get_sync_status()
 
     assert closed[0].is_market_open is False
     assert opened[0].is_market_open is True

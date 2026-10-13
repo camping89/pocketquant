@@ -16,14 +16,11 @@ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.engine.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
-    SetNameCommand,
-    SetVerdictCommand,
 )
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.engine.backtest.backtest_query_service import (
     BacktestQueryService,
     EnqueueBacktestResponse,
-    GetBacktestQuery,
     ListBacktestsQuery,
 )
 from pocketquant.engine.backtest.backtest_stats_service import (
@@ -44,9 +41,7 @@ class SetVerdictBody(BaseModel):
 
 
 class SetNameBody(BaseModel):
-    name: str | None = Field(
-        default=None, max_length=200, description="Run label; null clears it"
-    )
+    name: str | None = Field(default=None, max_length=200, description="Run label; null clears it")
 
 
 @backtest_router.get("/strategies")
@@ -81,7 +76,7 @@ async def get_backtest(
     run_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
+    result = await query_svc.get_result(run_id)
     return result.to_dict()
 
 
@@ -92,7 +87,7 @@ async def set_backtest_verdict(
     cmd_svc: FromDishka[BacktestCommandService],
 ) -> dict:
     """Set (or clear) the human-readable verdict on a run. 404 if run unknown."""
-    await cmd_svc.set_verdict(SetVerdictCommand(run_id=run_id, verdict=body.verdict))
+    await cmd_svc.set_verdict(run_id, body.verdict)
     return {"run_id": run_id, "verdict": body.verdict}
 
 
@@ -103,7 +98,7 @@ async def set_backtest_name(
     cmd_svc: FromDishka[BacktestCommandService],
 ) -> dict:
     """Set (or clear) the human-readable label on a run. 404 if run unknown."""
-    await cmd_svc.set_name(SetNameCommand(run_id=run_id, name=body.name))
+    await cmd_svc.set_name(run_id, body.name)
     return {"run_id": run_id, "name": body.name}
 
 
@@ -112,7 +107,7 @@ async def get_backtest_equity(
     run_id: str,
     query_svc: FromDishka[BacktestQueryService],
 ) -> dict:
-    result = await query_svc.get_result(GetBacktestQuery(run_id=run_id))
+    result = await query_svc.get_result(run_id)
     return {
         "run_id": str(result.id),
         "equity_curve": [

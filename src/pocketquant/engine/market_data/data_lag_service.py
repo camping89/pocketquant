@@ -175,10 +175,6 @@ async def compute_data_lag(
     )
 
 
-class GetDataLagQuery(BaseModel):
-    symbol: str
-
-
 class DataLagResponse(BaseModel):
     """``state`` is one of ``FeedState``; ``unknown`` when no check has run."""
 
@@ -196,8 +192,8 @@ class DataLagQueryService:
     def __init__(self, cache: Cache) -> None:
         self._cache = cache
 
-    async def get_data_lag(self, request: GetDataLagQuery) -> DataLagResponse:
-        sym = request.symbol.upper()
+    async def get_data_lag(self, symbol: str) -> DataLagResponse:
+        sym = symbol.upper()
         data = await self._cache.get(CACHE_KEY_DATA_LAG.format(symbol=sym))
         if not data:
             return DataLagResponse(symbol=sym, state=FeedState.UNKNOWN)

@@ -14,8 +14,6 @@ from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continu
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
 from pocketquant.engine.market_data.sync_status_service import (
-    GetSymbolSyncStatusQuery,
-    GetSyncStatusQuery,
     SyncStatusQueryService,
 )
 
@@ -104,7 +102,7 @@ async def test_cascade_fresh_bars_show_not_stuck(handler, sync_status_repo, bar_
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_5)
     bar_repo.count.return_value = 150
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert len(result) == 1
     assert result[0].is_stuck is False
@@ -118,7 +116,7 @@ async def test_all_stuck_when_bars_old(handler, sync_status_repo, bar_repo) -> N
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=2000), Interval.MINUTE_5)
     bar_repo.count.return_value = 10
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     # 5m cadence = 300s; 3× = 900s; bar age 2000s > 900s → stuck
     assert result[0].is_stuck is True
@@ -131,7 +129,7 @@ async def test_no_bars_yet_returns_not_stuck(handler, sync_status_repo, bar_repo
     bar_repo.get_latest.return_value = None
     bar_repo.count.return_value = 0
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert result[0].is_stuck is False
     assert result[0].bar_count == 0
@@ -145,7 +143,7 @@ async def test_count_overrides_status_count(handler, sync_status_repo, bar_repo)
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.HOUR_1)
     bar_repo.count.return_value = 5907
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert result[0].bar_count == 5907
 
@@ -177,7 +175,7 @@ async def test_per_row_exception_isolated_with_fallback(
     bar_repo.get_latest.side_effect = get_latest_side_effect
     bar_repo.count.side_effect = count_side_effect
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert len(result) == 2
     # Row 0 (5m) failed → fell back to sync_status
@@ -191,7 +189,7 @@ async def test_per_row_exception_isolated_with_fallback(
 @pytest.mark.asyncio
 async def test_empty_status_list_returns_empty(handler, sync_status_repo, bar_repo) -> None:
     sync_status_repo.find_all.return_value = []
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
     assert result == []
     bar_repo.get_latest.assert_not_called()
     bar_repo.count.assert_not_called()
@@ -207,7 +205,7 @@ async def test_last_sync_at_still_from_sync_status(handler, sync_status_repo, ba
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.MINUTE_5)
     bar_repo.count.return_value = 100
 
-    result = await handler.get_sync_status(GetSyncStatusQuery())
+    result = await handler.get_sync_status()
 
     assert result[0].last_sync_at == to_utc_iso(sync_dt)
 
@@ -224,7 +222,8 @@ async def test_returns_is_stuck_field_populated(handler, sync_status_repo, bar_r
     bar_repo.count.return_value = 100
 
     result = await handler.get_symbol_sync_status(
-        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+        SYMBOL,
+        "5m",
     )
 
     # 5m cadence 300s × 3 = 900s; bar age 2000s > 900s → stuck
@@ -240,7 +239,8 @@ async def test_uses_bars_for_count_and_last_bar(handler, sync_status_repo, bar_r
     bar_repo.count.return_value = 5907
 
     result = await handler.get_symbol_sync_status(
-        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="1h"),
+        SYMBOL,
+        "1h",
     )
 
     assert result.bar_count == 5907  # ← bars
@@ -255,7 +255,8 @@ async def test_not_found_raises(handler, sync_status_repo, bar_repo) -> None:
 
     with pytest.raises(NotFoundError):
         await handler.get_symbol_sync_status(
-            GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+            SYMBOL,
+            "5m",
         )
 
     bar_repo.get_latest.assert_not_called()
@@ -273,7 +274,8 @@ async def test_no_bars_yet_returns_not_stuck_single_symbol(
     bar_repo.count.return_value = 0
 
     result = await handler.get_symbol_sync_status(
-        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+        SYMBOL,
+        "5m",
     )
 
     assert result.is_stuck is False
@@ -292,7 +294,8 @@ async def test_status_and_error_from_sync_status(handler, sync_status_repo, bar_
     bar_repo.count.return_value = 100
 
     result = await handler.get_symbol_sync_status(
-        GetSymbolSyncStatusQuery(symbol=SYMBOL, interval="5m"),
+        SYMBOL,
+        "5m",
     )
 
     assert result.status == "error"

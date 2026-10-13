@@ -22,13 +22,11 @@ from pocketquant.engine.market_data.data_lag_service import (
     STUCK_AFTER_SYNC_AGE_SECONDS,
     DataLagQueryService,
     FeedState,
-    GetDataLagQuery,
     classify_feed,
     compute_data_lag,
     feed_lag_seconds,
 )
 from pocketquant.engine.market_data.sync_status_service import (
-    GetSyncStatusQuery,
     SyncStatusQueryService,
 )
 
@@ -163,9 +161,7 @@ class TestDataLagQueryService:
         cache = AsyncMock()
         cache.get = AsyncMock(return_value=None)
 
-        result = await DataLagQueryService(cache).get_data_lag(
-            GetDataLagQuery(symbol="es1!:tradingview")
-        )
+        result = await DataLagQueryService(cache).get_data_lag("es1!:tradingview")
 
         cache.get.assert_awaited_once_with(CACHE_KEY_DATA_LAG.format(symbol=ES))
         assert result.state is FeedState.UNKNOWN
@@ -183,7 +179,7 @@ class TestDataLagQueryService:
         cache = AsyncMock()
         cache.get = AsyncMock(return_value=snapshot.to_cache_dict())
 
-        result = await DataLagQueryService(cache).get_data_lag(GetDataLagQuery(symbol=ES))
+        result = await DataLagQueryService(cache).get_data_lag(ES)
 
         assert result.state is FeedState.DELAYED
         assert result.lag_seconds == 720
@@ -250,7 +246,7 @@ class TestSyncStatusCarriesTheFeedLag:
             [_status(ES, Interval.MINUTE_1), _status(ES, Interval.MINUTE_5)], latest
         )
 
-        rows = {r.interval: r for r in await service.get_sync_status(GetSyncStatusQuery())}
+        rows = {r.interval: r for r in await service.get_sync_status()}
 
         for row in rows.values():
             assert row.is_delayed is True
@@ -265,7 +261,7 @@ class TestSyncStatusCarriesTheFeedLag:
             [_status(ES, Interval.MINUTE_1, empty_syncs=STUCK_AFTER_EMPTY_SYNCS)], latest
         )
 
-        [row] = await service.get_sync_status(GetSyncStatusQuery())
+        [row] = await service.get_sync_status()
 
         assert row.is_delayed is True
         assert row.is_stuck is True
@@ -283,7 +279,7 @@ class TestSyncStatusCarriesTheFeedLag:
             [_status(btc, Interval.MINUTE_1), _status(btc, Interval.MINUTE_5)], latest
         )
 
-        rows = {r.interval: r for r in await service.get_sync_status(GetSyncStatusQuery())}
+        rows = {r.interval: r for r in await service.get_sync_status()}
 
         assert rows["1m"].is_stuck is True
         assert rows["5m"].is_stuck is True
@@ -303,6 +299,6 @@ class TestSyncStatusCarriesTheFeedLag:
             latest,
         )
 
-        rows = {r.interval: r for r in await service.get_sync_status(GetSyncStatusQuery())}
+        rows = {r.interval: r for r in await service.get_sync_status()}
 
         assert rows["5m"].is_stuck is True

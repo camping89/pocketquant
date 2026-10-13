@@ -12,14 +12,7 @@ from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
 from pocketquant.engine.market_data.tracked_symbols_service import (
     AddTrackedSymbolCommand,
-    ListTrackedSymbolsQuery,
-    RemoveTrackedSymbolCommand,
     TrackedSymbolService,
-    UpdateTrackedSymbolCommand,
-)
-from pocketquant.engine.strategy.strategy_command_service import (
-    RemoveSymbolCommand,
-    StopStrategyCommand,
 )
 
 _SCOPED = (
@@ -79,13 +72,13 @@ class FakeStrategyCommands:
         self._sub_repo = sub_repo
         self.calls: list[tuple[str, str]] = []
 
-    async def stop(self, cmd: StopStrategyCommand) -> bool:
-        self.calls.append(("stop", cmd.subscription_id))
+    async def stop(self, subscription_id: str) -> bool:
+        self.calls.append(("stop", subscription_id))
         return True
 
-    async def remove_symbol(self, cmd: RemoveSymbolCommand) -> int:
-        self.calls.append(("remove", cmd.sub_id))
-        return int(self._sub_repo.subs.pop(cmd.sub_id, None) is not None)
+    async def remove_symbol(self, sub_id: str) -> int:
+        self.calls.append(("remove", sub_id))
+        return int(self._sub_repo.subs.pop(sub_id, None) is not None)
 
 
 class FakeJobHistoryRepo:
@@ -158,16 +151,14 @@ async def test_add_upserts_and_returns_state():
 @pytest.mark.asyncio
 async def test_update_validates_existence():
     svc = _service(FakeTrackedSymbolRepo([_ts("BTCUSDT:BINANCE")]))
-    result = await svc.update(UpdateTrackedSymbolCommand(symbol="BTCUSDT:BINANCE"))
+    result = await svc.update("BTCUSDT:BINANCE")
     assert result == {"symbol": "BTCUSDT:BINANCE", "status": "updated"}
 
 
 @pytest.mark.asyncio
 async def test_update_missing_raises_not_found():
     with pytest.raises(NotFoundError):
-        await _service(FakeTrackedSymbolRepo()).update(
-            UpdateTrackedSymbolCommand(symbol="NOPE:BINANCE")
-        )
+        await _service(FakeTrackedSymbolRepo()).update("NOPE:BINANCE")
 
 
 @pytest.mark.asyncio
@@ -201,7 +192,7 @@ async def test_remove_cascades_every_collection_and_spares_other_symbols():
         **scoped,
     )
 
-    result = await svc.remove(RemoveTrackedSymbolCommand(symbol=gone))
+    result = await svc.remove(gone)
 
     assert result["symbol"] == gone
     assert result["status"] == "removed"
@@ -240,8 +231,8 @@ async def test_remove_is_idempotent_and_finishes_partial_prior_state():
     bars = FakeScopedRepo([symbol] * 3)
     svc = _service(FakeTrackedSymbolRepo(), bar_repository=bars)
 
-    first = await svc.remove(RemoveTrackedSymbolCommand(symbol=symbol))
-    second = await svc.remove(RemoveTrackedSymbolCommand(symbol=symbol))
+    first = await svc.remove(symbol)
+    second = await svc.remove(symbol)
 
     assert first["deleted"]["tracked_symbols"] == 0
     assert first["deleted"]["bars"] == 3
@@ -252,6 +243,6 @@ async def test_remove_is_idempotent_and_finishes_partial_prior_state():
 @pytest.mark.asyncio
 async def test_list_serializes_all():
     repo = FakeTrackedSymbolRepo([_ts("BTCUSDT:BINANCE"), _ts("ETHUSDT:BINANCE")])
-    result = await _service(repo).list_all(ListTrackedSymbolsQuery())
+    result = await _service(repo).list_all()
     assert {r["symbol"] for r in result} == {"BTCUSDT:BINANCE", "ETHUSDT:BINANCE"}
     assert all(set(r) == {"symbol", "created_at", "seeded_from"} for r in result)

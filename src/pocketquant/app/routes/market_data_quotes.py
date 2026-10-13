@@ -15,11 +15,7 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
-from pocketquant.engine.market_data.quotes_service import (
-    GetLatestQuoteQuery,
-    QuoteQueryService,
-    QuoteResponse,
-)
+from pocketquant.engine.market_data.quotes_service import QuoteQueryService, QuoteResponse
 
 router = APIRouter(prefix="/quotes", tags=["Real-time Quotes"], route_class=DishkaRoute)
 logger = get_logger(__name__)
@@ -34,8 +30,7 @@ async def get_latest_quote(
     quote_service: FromDishka[QuoteQueryService],
 ) -> QuoteResponse:
     symbol = validate_composite_symbol(symbol)
-    query = GetLatestQuoteQuery(symbol=symbol)
-    result = await quote_service.get_latest(query)
+    result = await quote_service.get_latest(symbol)
 
     if result is None:
         raise NotFoundError(f"No quote found for {symbol}. Make sure you're subscribed.")

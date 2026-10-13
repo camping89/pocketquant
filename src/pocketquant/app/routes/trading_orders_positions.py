@@ -8,32 +8,26 @@ only work in the process that runs the execution engine.
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter
 
-from pocketquant.engine.execution.orders_positions_service import (
-    GetOrderQuery,
-    GetPositionQuery,
-    ListOrdersQuery,
-    ListPositionsQuery,
-    OrderPositionQueryService,
-)
+from pocketquant.engine.execution.orders_positions_service import OrderPositionQueryService
 
 trading_router = APIRouter(prefix="/trading", tags=["trading"], route_class=DishkaRoute)
 
 
 @trading_router.get("/orders")
 async def list_orders(svc: FromDishka[OrderPositionQueryService]) -> list[dict]:
-    return await svc.list_orders(ListOrdersQuery())
+    return await svc.list_orders()
 
 
 @trading_router.get("/orders/{order_id}")
 async def get_order(order_id: str, svc: FromDishka[OrderPositionQueryService]) -> dict:
-    return await svc.get_order(GetOrderQuery(order_id=order_id))
+    return await svc.get_order(order_id)
 
 
 @trading_router.get("/positions")
 async def list_positions(svc: FromDishka[OrderPositionQueryService]) -> list[dict]:
-    return await svc.list_positions(ListPositionsQuery())
+    return await svc.list_positions()
 
 
 @trading_router.get("/positions/{strategy_id}")
 async def get_position(strategy_id: str, svc: FromDishka[OrderPositionQueryService]) -> dict:
-    return await svc.get_position(GetPositionQuery(strategy_id=strategy_id))
+    return await svc.get_position(strategy_id)
