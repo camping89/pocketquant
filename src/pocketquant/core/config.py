@@ -122,6 +122,10 @@ class Settings(BaseSettings):
     # Share of the published request rate one process may use; the deep
     # backfill lowers it so it can run beside the app.
     exness_rate_fraction: float = Field(default=1.0, gt=0, le=1)
+    # Live-order risk caps for the Exness broker; unset means the broker
+    # refuses every order (no loss cap) or sends at most the minimum lot.
+    exness_daily_loss_cap: float | None = None
+    exness_max_lots: float | None = None
 
     # Admin API (v1 token auth — set in production; unset = dev mode, skip auth)
     # SecretStr prevents accidental logging/serialisation of the token value.

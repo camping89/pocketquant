@@ -18,6 +18,10 @@ class IBrokerPort(ABC):
     - OKXBrokerAdapter: Live trading via OKX exchange API
     """
 
+    # True when fills arrive later through subscribe_order_updates rather than
+    # in the submit_order result; the engine then routes them to the order service.
+    fills_async: bool = False
+
     @property
     @abstractmethod
     def name(self) -> str: ...
@@ -31,6 +35,10 @@ class IBrokerPort(ABC):
 
     @abstractmethod
     async def disconnect(self) -> None: ...
+
+    async def normalize_quantity(self, symbol: str, quantity: float) -> float | None:
+        """Round a strategy size to what the broker can fill; None when it cannot."""
+        return quantity
 
     @abstractmethod
     async def submit_order(self, order: OrderAggregate) -> OrderResult:

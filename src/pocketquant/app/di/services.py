@@ -163,6 +163,8 @@ class ServicesProvider(Provider):
                 "api_secret": settings.okx_api_secret,
                 "passphrase": settings.okx_passphrase,
                 "demo": settings.okx_demo_mode,
+                "exness_daily_loss_cap": settings.exness_daily_loss_cap,
+                "exness_max_lots": settings.exness_max_lots,
             },
         )
         await engine.start()

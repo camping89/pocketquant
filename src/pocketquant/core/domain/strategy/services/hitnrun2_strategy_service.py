@@ -127,6 +127,10 @@ class HitNRun2StrategyService(IStrategyService):
         elif self._open_direction == Direction.SHORT and side == OrderSide.BUY:
             self._open_direction = None
 
+    async def on_order_rejected(self, reason: str) -> None:
+        """Re-arm entries when the signalled order never filled."""
+        self._open_direction = None
+
     def _mk_signal(
         self,
         direction: Direction,

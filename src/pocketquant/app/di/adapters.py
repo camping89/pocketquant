@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
@@ -32,13 +33,29 @@ from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
 from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import (
     RoutingRealtimeQuoteAdapter,
 )
+from pocketquant.core.infra.persistence.repositories.position_repository import (
+    PositionRepository,
+)
 from pocketquant.core.infra.tradingview.tradingview_adapter import TradingViewAdapter
 from pocketquant.core.infra.tradingview.tradingview_quote_adapter import TradingViewQuoteAdapter
 from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
 
 
 class AdaptersProvider(Provider):
-    broker_factory = provide(BrokerFactory, scope=Scope.APP)
+    @provide(scope=Scope.APP)
+    def get_broker_factory(
+        self,
+        event_bus: EventBus,
+        settings: Settings,
+        exness_client: ExnessClient,
+        position_repository: PositionRepository,
+    ) -> BrokerFactory:
+        return BrokerFactory(
+            event_bus,
+            exness_client=exness_client,
+            position_repository=position_repository,
+            exness_live_trading=settings.exness_live_trading,
+        )
 
     @provide(scope=Scope.APP)
     def get_tradingview_client(self, settings: Settings) -> TvDatafeedClient:

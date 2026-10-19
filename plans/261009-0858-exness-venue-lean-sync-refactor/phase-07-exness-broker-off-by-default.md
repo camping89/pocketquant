@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Exness broker behind the live-trading switch (off)"
-status: pending
+status: completed
 priority: P1
 effort: 6d
 dependencies: [6]
@@ -14,6 +14,22 @@ dependencies: [6]
 - Base branch: `develop` (`develop-sync` tracking `origin/develop` in `D:/w/_me/algotrading/pq-develop`); ship with `git push origin develop-sync:develop`. Deploys are approved; there is no `master` step.
 - On develop the engine lives in `engine/strategy/` and `engine/execution/`, the broker port is `IBrokerPort` and requires a trade subscription (`subscribe_trades`), `BrokerFactory` lives in `core/infra/brokers/broker_factory.py`, and the live strategy picks its broker from `StrategyConfig.broker` (default `"paper"`). The broker is a strategy setting, independent of the symbol suffix.
 - Phase 06 delivered `ExnessClient` (`core/infra/exness/exness_client.py`), the mappers and `ExnessStream`; this phase reuses them.
+
+## Completion (2026-10-19)
+- T7.1–T7.11 pass. The worktree branch is `develop` tracking `origin/develop`, so the push is `git push origin develop`.
+- `just test`: 1132 passed; the only failures are the 4 Windows `time.tzset` tests. lint-imports keeps 8 contracts; ruff and pyright are clean on `src` and the touched tests.
+- Ratchet: delegations rose from 87 to 93. Four are `IBrokerPort` members (`subscribe_/unsubscribe_order_updates`, `subscribe_/unsubscribe_trades`); `_reconcile_snapshot` and `_publish_close_fill` are the other two. The coordinator approved `max_delegations = 93`, which supersedes "never a higher ceiling" here and in T7.11 (precedent `3f6c6e6`). `max_tiny_share` moved down to the measured 0.4867. Because of that approval, the T7.11 Verify one-liner (written against 77) is replaced by: measured values ≤ ceiling, and `max_tiny_share` is the lower of 0.4877 and the measurement.
+- Deviations from the task text, taken on kongming counsel:
+  - the stop-loss rule and the daily loss cap apply to opens only, because blocking an exit would keep the risk open;
+  - a close is rejected unless its quantity equals the held units, since `OrderAggregate.fill` raises on a mismatch;
+  - `_on_snapshot` keeps positions it already mapped from its own fills, and a deferred reconcile runs once the last in-flight request settles;
+  - a broker-side partial close reduces the held position;
+  - a trade is emitted after a fill delivered through the pre-ACK stash;
+  - a fill for a dropped request id marks the instrument unmapped.
+- Go-live blockers (kongming review; live trading is off, so none blocks this commit):
+  - a request left in `_inflight` (unresolved operation, or a recovered fill with no deal) keeps the snapshot gate closed until restart. A lost ACK or 429 also sets `_needs_snapshot`, and nothing schedules the reconcile;
+  - `_on_snapshot` replaces `_positions` after awaits, so a fill applied concurrently can be lost;
+  - a fill that arrives during an ACK call that then fails with TRANSPORT is delivered after the order was already rejected, so the engine never records the position.
 
 ## Context Links
 - Spike journal `docs/journals/2026-10-13-exness-api-spike.md` (recorded fixtures in `tests/core_test/infra/exness/fixtures/`, written `fixtures/` below): account currency USD; the recorded conditions (`fixtures/conditions_{XAUUSD,EURUSD,BTCUSD}.json`: `contract_size`, `volume_min`, `volume_step`, `volume_max`, `point_digits`); the deals envelope `{items: [{event_time, deal}], has_more, range}` (`fixtures/deals.json`, only `balance` deals recorded, so tests fill `close` deals from the spec schema inside that envelope); the snapshot shape `{account_state: {balance, equity, used_margin, leverage}, orders, positions}` (`fixtures/snapshot.json`); the events WS acknowledgement `{"id": "spike-tx", "code": "200"}` (`fixtures/events_snapshot.json`); the deals window must stay inside `history_age_days` (use `ExnessClient.deals_window_days()`); the sizer cannot reach one minimum lot on the current balance.

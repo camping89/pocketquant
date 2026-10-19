@@ -86,5 +86,9 @@ class IStrategyService(ABC):
         """
         pass
 
+    async def on_order_rejected(self, reason: str) -> None:
+        """Called when an entry signal ends without a fill (risk, size, minimum, broker reject)."""
+        return None
+
     def get_parameter(self, key: str, default: object = None) -> object:
         return self.config.parameters.get(key, default)

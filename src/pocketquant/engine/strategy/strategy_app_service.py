@@ -14,6 +14,7 @@ from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPo
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import (
     OrderAggregate,
+    OrderCancelledEvent,
     OrderFilledEvent,
     OrderSide,
     OrderType,
@@ -238,6 +239,7 @@ class StrategyAppService:
         strategies = self._find_strategies(event.symbol, event.interval, trigger="bar")
 
         for strategy in strategies:
+            signal = None
             try:
                 bar = {
                     "symbol": event.symbol,
@@ -261,6 +263,8 @@ class StrategyAppService:
                     strategy_id=strategy.id,
                     error=str(e),
                 )
+                if signal:
+                    await self._notify_rejected(strategy, str(e))
 
     @event_handler(QuoteReceivedEvent)
     async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
@@ -280,7 +284,9 @@ class StrategyAppService:
                 if order:
                     broker = self._brokers.get(strategy.id)
                     if broker:
-                        await self._order_app_service.submit(order, broker)
+                        result = await self._order_app_service.submit(order, broker)
+                        if not result.is_success:
+                            await strategy.on_order_rejected(result.error_message or "rejected")
 
             except Exception as e:
                 logger.error(
@@ -311,6 +317,24 @@ class StrategyAppService:
                 error=str(e),
             )
 
+    @event_handler(OrderCancelledEvent)
+    async def _on_order_cancelled(self, event: OrderCancelledEvent) -> None:
+        """Tell the owning strategy that a broker cancelled its submitted order."""
+        strategy = self._strategies.get(event.subscription_id)
+        if strategy is None or not strategy.is_running:
+            return
+        await self._notify_rejected(strategy, event.reason)
+
+    async def _notify_rejected(self, strategy: IStrategyService, reason: str) -> None:
+        try:
+            await strategy.on_order_rejected(reason)
+        except Exception as e:
+            logger.error(
+                "strategy_on_order_rejected_error",
+                strategy_id=strategy.id,
+                error=str(e),
+            )
+
     def _find_strategies(
         self,
         symbol: str,
@@ -337,6 +361,7 @@ class StrategyAppService:
         broker = self._brokers.get(strategy.id)
         if not broker:
             logger.warning("no_broker_for_strategy", strategy_id=strategy.id)
+            await strategy.on_order_rejected("no broker")
             return
 
         balance = await broker.get_balance()
@@ -355,6 +380,7 @@ class StrategyAppService:
                 strategy_id=strategy.id,
                 reason=reason,
             )
+            await strategy.on_order_rejected(reason)
             return
 
         stop_loss = signal.stop_loss_price or (
@@ -374,11 +400,21 @@ class StrategyAppService:
 
         if size <= 0:
             logger.info("zero_position_size", strategy_id=strategy.id)
+            await strategy.on_order_rejected("zero position size")
             return
+
+        normalized = await broker.normalize_quantity(signal.symbol, size)
+        if normalized is None:
+            logger.info("order_quantity_below_broker_minimum", strategy_id=strategy.id)
+            await strategy.on_order_rejected("quantity below broker minimum")
+            return
+        size = normalized
 
         order = self._create_order(strategy, signal, size, current_price)
 
         result = await self._order_app_service.submit(order, broker)
+        if not result.is_success:
+            await strategy.on_order_rejected(result.error_message or "rejected")
 
         logger.info(
             "signal_processed",
@@ -439,6 +475,8 @@ class StrategyAppService:
         # pool hit above returns already-wired brokers, so N subscriptions
         # sharing one broker get exactly one forward, not one per subscription.
         await broker.subscribe_trades(self._forward_trade_to_bus)
+        if broker.fills_async:
+            await broker.subscribe_order_updates(self._order_app_service.on_order_update)
         self._broker_pool[key] = broker
         return broker
 

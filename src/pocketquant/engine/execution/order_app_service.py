@@ -7,7 +7,12 @@ import structlog
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.brokers.value_objects import OrderResult
-from pocketquant.core.domain.order import OrderAggregate, OrderFilledEvent, OrderStatus
+from pocketquant.core.domain.order import (
+    OrderAggregate,
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderStatus,
+)
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 
 logger = structlog.get_logger(__name__)
@@ -203,6 +208,14 @@ class OrderAppService:
                 order.cancel()
                 await self._order_repo.save(order)
                 self._pending.pop(result.order_id, None)
+
+                await self._event_bus.publish(
+                    OrderCancelledEvent(
+                        order_id=result.order_id,
+                        subscription_id=order.subscription_id,
+                        reason=result.error_message or "",
+                    )
+                )
 
     async def load_pending_orders(self) -> None:
         pending = await self._order_repo.find_pending()
