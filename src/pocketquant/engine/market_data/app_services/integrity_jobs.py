@@ -98,8 +98,12 @@ async def check_integrity(
             "skipped_reason": "weekly_convention",
         }
 
+    # The UTC cutoff above is not the calendar's: a session's bar in progress
+    # (today's daily bar, a CME 4h bar opened at 02:00) can still start before it.
+    in_progress = calendar.bar_start(now, interval)
+    expected = {i for i in _expected_instants(interval, start, end, calendar) if i < in_progress}
     step = timedelta(seconds=INTERVAL_SECONDS[interval])
-    missing = sorted(_expected_instants(interval, start, end, calendar) - aligned_times)
+    missing = sorted(expected - aligned_times)
     gap_ranges = _group_gaps(missing, step)
 
     return {

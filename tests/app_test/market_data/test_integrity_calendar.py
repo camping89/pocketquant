@@ -8,7 +8,8 @@ weekly bars are declined rather than guessed at.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,6 +18,7 @@ from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
+from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
 from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
@@ -58,6 +60,27 @@ async def test_daily_grid_is_session_opens_not_utc_midnights() -> None:
     # Five sessions in a week, not seven days.
     assert session["missing_count"] <= 6
     assert session["missing_count"] >= 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("calendar", [CALENDAR, CME, *EXNESS_CALENDARS])
+@pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
+async def test_every_closed_bar_stored_is_no_gap(calendar: Any, interval: Interval) -> None:
+    """The bar still in progress cannot be stored yet, so it is not missing."""
+    now = datetime.now(UTC)
+    in_progress = calendar.bar_start(now, interval)
+    # Every 15th trading minute still lands in every bar (none is that short),
+    # and keeps the CME calendar's per-instant lookups fast.
+    minutes = calendar.trading_minutes(now - timedelta(days=9), now)[::15]
+    closed = {calendar.bar_start(minute, interval) for minute in minutes} - {in_progress}
+    repo = _empty_bar_repo()
+    repo.find_datetimes = AsyncMock(
+        return_value=[{"_id": str(i), "datetime": instant} for i, instant in enumerate(closed)]
+    )
+
+    report = await check_integrity("X:Y", interval, repo, calendar, 7)
+
+    assert report["missing_count"] == 0, report["gap_ranges"]
 
 
 @pytest.mark.asyncio
