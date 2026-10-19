@@ -2,12 +2,20 @@
 
 CI/CD: `git push` → GitHub Actions builds images → Docker Hub → SSH to VPS. One workflow (`.github/workflows/cicd.yml`), fully automatic. Production-only; for local dev see [README](../README.md).
 
+## Branches
+
+- `develop` holds all new development. A push there runs `tests` only.
+- `master` is production: it receives only releases and hotfixes, and every push to it deploys.
+- `master` must always be an ancestor of `develop`: same history, `develop` further ahead.
+  - Release: `git push origin develop:master` (fast-forward; fails if `master` has diverged).
+  - Hotfix: commit on `master`, push (deploys), then `git checkout develop && git merge master && git push` to restore the ancestry.
+
 ## Deploy
 
-**`git push origin develop` (or `master`) is the entire deploy.** There is no `.sh` to run by hand — the runner SSHes into the VPS and runs the deploy scripts for you.
+**`git push origin master` is the entire deploy.** A push to `develop` runs `tests` only and never touches Docker Hub or the VPS. There is no `.sh` to run by hand — the runner SSHes into the VPS and runs the deploy scripts for you.
 
 ```
-git push origin develop
+git push origin master
   │
   └─ .github/workflows/cicd.yml   (5 jobs, GH-hosted ubuntu-latest)
        tests ──► build-app ─┐
@@ -19,10 +27,10 @@ git push origin develop
 ```
 
 - `tests` gates the build. It runs once per host timezone (`UTC`, `Asia/Ho_Chi_Minh`, `America/Chicago`): `uv sync --frozen` → host-zone check → `lint-imports` (import-linter contracts) → `scripts/code_metrics.py --ratchet` (code metric ratchet, see [code-standards.md](./code-standards.md#quality-gate)) → `pytest tests/ -q`. `build-app`/`build-web` need every leg green.
-- Images tagged `:latest` + `:sha-<short>`. `deploy` runs on `develop`/`master`/`workflow_dispatch`.
-- **Concurrency `deploy`, `cancel-in-progress`** — a new push cancels an in-flight deploy; newest wins.
+- Images tagged `:latest` + `:sha-<short>`. `build-app`, `build-web`, `cleanup-tags` and `deploy` run only on `master` (push or `workflow_dispatch`); on any other ref they are skipped.
+- **Concurrency per workflow and ref, `cancel-in-progress`** — a new `master` push cancels an in-flight `master` deploy; newest wins. A `develop` push never cancels a `master` run.
 
-Manual trigger (no code change): `gh workflow run cicd.yml --ref develop`.
+Manual trigger (no code change): `gh workflow run cicd.yml --ref master`.
 
 ## Verify
 
@@ -31,7 +39,7 @@ Manual trigger (no code change): `gh workflow run cicd.yml --ref develop`.
 Watch a run:
 
 ```bash
-RUN_ID=$(gh run list --branch develop --limit 1 --json databaseId -q '.[0].databaseId')
+RUN_ID=$(gh run list --branch master --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch "$RUN_ID" --exit-status   # non-zero = a job failed → gh run view "$RUN_ID" --log-failed
 ```
 
@@ -117,7 +125,7 @@ That is the only secret this repo needs. First deploy = push (or `gh workflow ru
 Standard — revert + push (CI/CD redeploys from reverted HEAD, ~5-8 min):
 
 ```bash
-git revert <bad-sha> && git push origin develop   # or master
+git revert <bad-sha> && git push origin master
 ```
 
 Emergency — pin a known-good SHA directly on the VPS (CI tags every push `:sha-<commit>`):
@@ -149,7 +157,7 @@ Nuke + redeploy (**DESTROYS DATABASE**):
 
 ```bash
 ssh <VPS> "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env down -v"
-git commit --allow-empty -m "redeploy" && git push origin develop
+git commit --allow-empty -m "redeploy" && git push origin master
 ```
 
 ## Local access (from your machine)

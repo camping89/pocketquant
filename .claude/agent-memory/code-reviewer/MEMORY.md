@@ -45,7 +45,7 @@ web/       # Node SPA at repo root
 - [project_dishka_di.md](project_dishka_di.md) -- dishka providers per process, DishkaRoute gotcha, silent duplicate-provider override
 
 ### Deploy Pipeline
-- [project_deploy_pipeline.md](project_deploy_pipeline.md) -- develop push = prod deploy (no staging); verify never probes /api; rollback = IMAGE_TAG re-deploy
+- [project_deploy_pipeline.md](project_deploy_pipeline.md) -- master push = prod deploy, develop push = tests only (no staging); verify never probes /api; rollback = IMAGE_TAG re-deploy
 
 ### Review Reports
 - `plans/reports/code-review-260214-persistence-layer.md` - Persistence layer extraction review

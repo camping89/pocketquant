@@ -2,12 +2,20 @@
 
 CI/CD: `git push` → GitHub Actions build images → Docker Hub → SSH vào VPS. Một workflow duy nhất (`.github/workflows/cicd.yml`), hoàn toàn tự động. Chỉ dành cho production; muốn dev cục bộ xem [README](../../README.md).
 
+## Branches
+
+- `develop` chứa mọi phát triển mới. Push vào đó chỉ chạy `tests`.
+- `master` là production: chỉ nhận release và hotfix, mỗi lần push vào đó đều deploy.
+- `master` luôn phải là ancestor của `develop`: cùng lịch sử, `develop` đi trước.
+  - Release: `git push origin develop:master` (fast-forward; thất bại nếu `master` đã rẽ nhánh).
+  - Hotfix: commit trên `master`, push (deploy), rồi `git checkout develop && git merge master && git push` để khôi phục quan hệ ancestor.
+
 ## Deploy
 
-**`git push origin develop` (hoặc `master`) chính là toàn bộ quy trình deploy.** Không có `.sh` nào phải chạy bằng tay — runner tự SSH vào VPS và chạy các script deploy hộ bạn.
+**`git push origin master` chính là toàn bộ quy trình deploy.** Push vào `develop` chỉ chạy `tests`, không bao giờ đụng tới Docker Hub hay VPS. Không có `.sh` nào phải chạy bằng tay — runner tự SSH vào VPS và chạy các script deploy hộ bạn.
 
 ```
-git push origin develop
+git push origin master
   │
   └─ .github/workflows/cicd.yml   (5 jobs, GH-hosted ubuntu-latest)
        tests ──► build-app ─┐
@@ -19,10 +27,10 @@ git push origin develop
 ```
 
 - `tests` là cửa chặn cho phần build. Nó chạy một lần cho mỗi timezone của host (`UTC`, `Asia/Ho_Chi_Minh`, `America/Chicago`): `uv sync --frozen` → kiểm tra host zone → `lint-imports` (import-linter contracts) → `scripts/code_metrics.py --ratchet` (code metric ratchet, xem [code-standards.md](./code-standards.md#quality-gate)) → `pytest tests/ -q`. `build-app`/`build-web` cần mọi leg xanh mới chạy.
-- Images gắn tag `:latest` + `:sha-<short>`. `deploy` chạy trên `develop`/`master`/`workflow_dispatch`.
-- **Concurrency `deploy`, `cancel-in-progress`** — một push mới hủy deploy đang chạy dở; bản mới nhất thắng.
+- Images gắn tag `:latest` + `:sha-<short>`. `build-app`, `build-web`, `cleanup-tags` và `deploy` chỉ chạy trên `master` (push hoặc `workflow_dispatch`); trên ref khác chúng bị skip.
+- **Concurrency theo workflow và ref, `cancel-in-progress`** — một push `master` mới hủy deploy `master` đang chạy dở; bản mới nhất thắng. Push `develop` không bao giờ hủy run của `master`.
 
-Trigger thủ công (không đổi code): `gh workflow run cicd.yml --ref develop`.
+Trigger thủ công (không đổi code): `gh workflow run cicd.yml --ref master`.
 
 ## Verify
 
@@ -31,7 +39,7 @@ Trigger thủ công (không đổi code): `gh workflow run cicd.yml --ref develo
 Theo dõi một lần chạy:
 
 ```bash
-RUN_ID=$(gh run list --branch develop --limit 1 --json databaseId -q '.[0].databaseId')
+RUN_ID=$(gh run list --branch master --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch "$RUN_ID" --exit-status   # non-zero = a job failed → gh run view "$RUN_ID" --log-failed
 ```
 
@@ -114,7 +122,7 @@ cd ../pocketquant-config && bash one-time/bootstrap-gh.sh
 Chuẩn — revert + push (CI/CD redeploy từ HEAD đã revert, ~5-8 phút):
 
 ```bash
-git revert <bad-sha> && git push origin develop   # or master
+git revert <bad-sha> && git push origin master
 ```
 
 Khẩn cấp — pin một SHA đã biết là tốt trực tiếp trên VPS (CI tag mỗi push `:sha-<commit>`):
@@ -146,7 +154,7 @@ Nuke + redeploy (**HỦY TOÀN BỘ DATABASE**):
 
 ```bash
 ssh <VPS> "cd /opt/pocketquant && docker compose -f deploy/compose.prod.yml --env-file deploy/.env down -v"
-git commit --allow-empty -m "redeploy" && git push origin develop
+git commit --allow-empty -m "redeploy" && git push origin master
 ```
 
 ## Local access (from your machine)
