@@ -107,6 +107,9 @@ class ExnessBrokerAdapter(IBrokerPort):
         self._order_callbacks: list[OrderCallback] = []
         self._trade_callbacks: list[TradeCallback] = []
         self._positions: dict[str, _Held] = {}
+        # A snapshot rebuild replaces ``_positions`` across awaits; fills and broker
+        # closes that land meanwhile must wait for it rather than write the old dict.
+        self._state_lock = asyncio.Lock()
         self._held_unmapped: set[str] = set()
         self._inflight: dict[str, _Inflight] = {}
         self._pending_ack: set[str] = set()
@@ -398,7 +401,8 @@ class ExnessBrokerAdapter(IBrokerPort):
             if kind is None and "id" in frame and "code" in frame:
                 logger.debug("exness.events_ack", id=frame["id"], code=frame["code"])
             elif kind == "trading_state_snapshot":
-                await self._on_snapshot(frame.get("payload") or {})
+                async with self._state_lock:
+                    await self._on_snapshot(frame.get("payload") or {})
             elif kind == "transaction_event":
                 await self._on_transaction(frame)
             elif kind in ("hmr_snapshot", "hmr_update"):
@@ -407,6 +411,7 @@ class ExnessBrokerAdapter(IBrokerPort):
             logger.error("exness.event_handler_failed", error=str(e), exc_info=True)
 
     async def _on_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Rebuild the held positions from a venue snapshot; the caller holds ``_state_lock``."""
         repo_open = [
             p for p in await self._position_repository.find_open() if p.symbol.endswith(":EXNESS")
         ]
@@ -490,22 +495,25 @@ class ExnessBrokerAdapter(IBrokerPort):
             self._needs_snapshot = True
             logger.error("exness.unknown_request_fill", order_id=rid)
         for deal in deals:
-            if deal.get("type") == "close" and str(deal.get("position_id")) in self._positions:
+            if deal.get("type") == "close":
                 await self._on_broker_close(deal, _close_reason(event, deal))
 
     async def _on_broker_close(self, deal: dict[str, Any], reason: str | None) -> None:
         """A close nobody here requested (SL, TP, stop-out); a partial close reduces the hold."""
         pid = str(deal["position_id"])
-        held = self._positions[pid]
-        name = instrument_name(held.symbol) or ""
-        cond = await self._client.conditions(name)
-        lots = Decimal(deal["volume"])
-        units = min(lots_to_units(lots, Decimal(cond["contract_size"])), held.units)
-        await self._publish_close_fill(held, units, deal)
-        await self._emit_trade((held, deal, units))
-        held.units -= units
-        if held.units <= 0:
-            self._positions.pop(pid, None)
+        async with self._state_lock:
+            held = self._positions.get(pid)
+            if held is None:
+                return
+            name = instrument_name(held.symbol) or ""
+            cond = await self._client.conditions(name)
+            lots = Decimal(deal["volume"])
+            units = min(lots_to_units(lots, Decimal(cond["contract_size"])), held.units)
+            await self._publish_close_fill(held, units, deal)
+            await self._emit_trade((held, deal, units))
+            held.units -= units
+            if held.units <= 0:
+                self._positions.pop(pid, None)
         logger.info("exness.position_closed_by_broker", reason=reason, remaining=held.units)
 
     async def _apply_success(
@@ -516,18 +524,19 @@ class ExnessBrokerAdapter(IBrokerPort):
         cond = await self._client.conditions(inflight.instrument)
         units = lots_to_units(Decimal(deal["volume"]), Decimal(cond["contract_size"]))
         pid = str(deal["position_id"])
-        held = self._positions.pop(pid, None) if inflight.kind == "close" else None
-        if inflight.kind == "open":
-            self._positions[pid] = _Held(
-                subscription_id=order.subscription_id,
-                symbol=order.symbol,
-                side=_position_side(order.side),
-                units=units,
-                open_price=float(deal["price"]),
-                opened_at=_parse_time(deal.get("create_time")),
-                sl_price=order.sl_price,
-                tp_price=order.tp_price,
-            )
+        async with self._state_lock:
+            held = self._positions.pop(pid, None) if inflight.kind == "close" else None
+            if inflight.kind == "open":
+                self._positions[pid] = _Held(
+                    subscription_id=order.subscription_id,
+                    symbol=order.symbol,
+                    side=_position_side(order.side),
+                    units=units,
+                    open_price=float(deal["price"]),
+                    opened_at=_parse_time(deal.get("create_time")),
+                    sl_price=order.sl_price,
+                    tp_price=order.tp_price,
+                )
         result = OrderResult(
             order_id=rid,
             broker_order_id=operation_id or order.broker_order_id or "",
@@ -610,7 +619,10 @@ class ExnessBrokerAdapter(IBrokerPort):
                 logger.warning("exness.callback_failed", order_id=result.order_id, error=str(e))
 
     async def _reconcile_snapshot(self) -> None:
-        await self._on_snapshot(await self._client.call("getTradingStateSnapshot"))
+        # The read sits inside the lock too: a fill applied between the read and the
+        # rebuild would be missing from the snapshot and dropped as gone.
+        async with self._state_lock:
+            await self._on_snapshot(await self._client.call("getTradingStateSnapshot"))
 
     def _spawn(self, coro: Any) -> None:
         task = asyncio.create_task(coro)

@@ -106,8 +106,12 @@ class _FakeClient:
 class _Repo:
     def __init__(self, positions: list[PositionAggregate] | None = None) -> None:
         self.positions = positions or []
+        # Set to park a snapshot rebuild inside its first await.
+        self.gate: asyncio.Event | None = None
 
     async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
+        if self.gate is not None:
+            await self.gate.wait()
         return self.positions
 
 
@@ -585,6 +589,55 @@ async def test_lost_ack_blocks_orders_until_snapshot(error: ExnessApiError) -> N
     assert blocked.error_message == "awaiting trading snapshot reconciliation"
     await h.broker._reconcile_snapshot()
     assert (await h.broker.submit_order(_order())).status == OrderStatus.SUBMITTED
+
+
+async def _park_snapshot_rebuild(h: _Harness, repo: _Repo) -> asyncio.Task[None]:
+    """Start a snapshot rebuild and leave it suspended inside ``find_open``."""
+    repo.gate = asyncio.Event()
+    rebuild = asyncio.create_task(h.broker._reconcile_snapshot())
+    await _drain()
+    return rebuild
+
+
+async def test_fill_during_snapshot_rebuild_is_kept() -> None:
+    repo = _Repo()
+    h = await _Harness(repo=repo).start()
+    order = _order()
+    await h.broker.submit_order(order)
+    rebuild = await _park_snapshot_rebuild(h, repo)
+
+    fill = asyncio.create_task(h.entry_fill(order))
+    await _drain()
+    assert repo.gate is not None
+    repo.gate.set()
+    await asyncio.gather(rebuild, fill)
+
+    assert "p1" in h.broker._positions
+    assert [r.status for r in h.results] == [OrderStatus.FILLED]
+
+
+async def test_broker_close_during_snapshot_rebuild_stays_closed() -> None:
+    repo = _Repo()
+    h = await _Harness(repo=repo).start()
+    order = _order()
+    await h.broker.submit_order(order)
+    await h.entry_fill(order)
+    # The position service saved the row; the venue snapshot is read before the stop loss hits.
+    repo.positions = [_repo_position()]
+    h.client.snapshot["positions"] = [_snapshot_position(position_id="p1")]
+    rebuild = await _park_snapshot_rebuild(h, repo)
+
+    stop = _deal("close", volume="0.01", price="2341.600", position_id="p1")
+    close = asyncio.create_task(
+        h.event("transaction_event", status="success", payload={"deals": [stop]})
+    )
+    await _drain()
+    assert repo.gate is not None
+    repo.gate.set()
+    await asyncio.gather(rebuild, close)
+
+    assert "p1" not in h.broker._positions
+    assert len(h.trades) == 1
 
 
 def _repo_position(
