@@ -301,13 +301,26 @@ core/
 │       ├── job_history_repository.py
 │       └── trade_repository.py         # Live trading: subscription_id FK
 ├── brokers/
-│   └── paper/               # PaperBrokerAdapter (in-memory simulation)
-│       └── paper_broker_adapter.py
+│   ├── paper/               # PaperBrokerAdapter (in-memory simulation)
+│   │   └── paper_broker_adapter.py
+│   └── exness/              # ExnessBrokerAdapter (built, live trading off by default)
+│       └── exness_broker_adapter.py
+├── calendars/
+│   ├── trading_calendar_factory.py         # TradingCalendarFactory (calendar per symbol)
+│   ├── cme_globex_calendar_adapter.py      # CME Globex equity sessions
+│   └── exness_session_calendar_adapter.py  # Exness CFD sessions (recorded trade_sessions, UTC)
 ├── market_data/
 │   └── binance/             # Binance REST + WS integration
 │       ├── binance_adapter.py            # BinanceAdapter (implements core.domain IDataProviderPort)
 │       ├── binance_websocket_adapter.py  # BinanceWebSocketAdapter (@aggTrade stream)
 │       └── binance_mappers.py           # Binance-specific mapping
+├── exness/                  # Exness signed REST + WS integration (CFDs)
+│   ├── exness_signer.py                 # Ed25519 secret-key loading + request signing
+│   ├── exness_client.py                 # ExnessClient (signed REST, access point, pacing, 429 rule, live gate)
+│   ├── exness_mappers.py                # Instrument map, lot/unit conversion, tick mapping
+│   ├── exness_stream.py                 # ExnessStream (signed WS, reconnect backoff + breaker)
+│   ├── exness_adapter.py                # ExnessAdapter (implements IDataProviderPort)
+│   └── exness_quote_adapter.py          # ExnessQuoteAdapter (implements IRealtimeQuoteProviderPort)
 ├── scheduling/
 │   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
 ├── http_client/
@@ -332,6 +345,10 @@ core/
 | **OKXBrokerAdapter** | Live trading, HMAC auth, reconnection với exponential backoff |
 | **BinanceAdapter** | Hiện thực IDataProviderPort; public REST API (không auth). Trả về bar với delta volume mỗi tick (BarBuilderDomainService yêu cầu). Rate limit: 1200 weight/min. |
 | **BinanceWebSocketAdapter** | Stream @aggTrade cho real-time quote ingestion. Hiện thực IRealtimeQuoteProviderPort. |
+| **ExnessClient** | REST có ký (Ed25519). `EXNESS_API_BASE_URL` chỉ phục vụ `getAccessPoint`; mọi call sau đó đi tới access point riêng của account, được resolve một lần mỗi process và giữ trong memory. Request được giãn theo limit chặt nhất mà `getLimits` công bố, cộng 20% headroom (interval chia cho `EXNESS_RATE_FRACTION`). 429 trên data call được retry tối đa 3 lần (`Retry-After`, nếu không có thì exponential backoff) và được log; 429 trên order call không bao giờ retry. Order operation bị từ chối khi `EXNESS_LIVE_TRADING` là false. |
+| **ExnessAdapter** | Hiện thực IDataProviderPort trên bid candle gốc của Exness (`price_type=bid`), phân trang lùi theo `max_candles_per_request` được công bố; candle đang chạy bị bỏ. |
+| **ExnessQuoteAdapter** | Hiện thực IRealtimeQuoteProviderPort trên ticks WS của Exness; bid được publish làm `last_price`. |
+| **ExnessSessionCalendarAdapter** | Hiện thực ITradingCalendarPort từ `trade_sessions` Exness đã ghi lại (giữ theo giờ New York, trả ra UTC). Ba calendar: `EXNESS_FX`, `EXNESS_XAUUSD` (giờ nghỉ hằng ngày của vàng) và `EXNESS_CRYPTO` (24/7, tuần mở vào Chủ nhật). |
 | **JobScheduler** | Wrapper APScheduler, chạy job bất đồng bộ, hỗ trợ tham số `second` cho cron offset (né bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
@@ -493,7 +510,10 @@ src/
 | Redis connection | `core/infra/persistence/redis.py` |
 | All repositories | `core/infra/persistence/repositories/` |
 | Binance REST + WS clients | `core/infra/binance/` |
+| Exness client, mappers, data and quote adapters | `core/infra/exness/` |
+| Exness session calendars | `core/infra/calendars/exness_session_calendar_adapter.py` |
 | OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
+| Exness broker (live trading off) | `core/infra/brokers/exness/` |
 | PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
 | APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
 | Dishka DI container (3 providers) | `app/di/` |
@@ -617,12 +637,14 @@ chunk round-trip).
 **Inbound (WebSocket):**
 1. **Binance `@aggTrade`** — singleton, phạm vi toàn app. `BinanceWebSocketAdapter` (reconnect backoff 1s→60s). `WsSubscriptionAppService` mỗi 5s diff `tracked_symbols` Mongo vs subscription hiện tại, gọi `subscribe()/unsubscribe()` (throttle 20ms, cap 50/s). Frame → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
 2. **OKX private channels** — instance per-broker. `OKXWebSocketAdapter` + HMAC-SHA256 login, heartbeat tùy chỉnh (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min sau 10 lần fail liên tiếp. Reconnect: re-subscribe channel, REST `get_orders_history(limit=100)` refresh dedupe set (ngăn re-process fill trong downtime). Route: **orders** → `OkxOrderMapper.to_order_result` → dedupe trạng thái terminal → notify callback → broker publish `OrderFilledEvent` (route qua `StrategyAppService._on_order_filled` tới strategy); **positions** → chỉ log (TODO: emit PositionUpdatedEvent).
+3. **Exness ticks** — singleton, phạm vi toàn app. `ExnessQuoteAdapter` nằm dưới `RoutingRealtimeQuoteAdapter`, được cùng diff của `WsSubscriptionAppService` điều khiển cho các symbol `:EXNESS`. `ExnessStream` kết nối tới access point riêng của account với subprotocol `exness-ws-protocol`; mỗi frame `subscribe` (`event: ticks`) cộng thêm instrument vào các lần trước, nên khi reconnect thì gửi lại tất cả, còn `unsubscribe()` chỉ xử lý local. Reconnect backoff 1s→30s, circuit breaker: pause 5min sau 10 lần fail liên tiếp. Instrument mà account không liệt kê chỉ bị warn một lần và không được lưu. Nếu client chưa được cấu hình thì feed đứng yên.
+4. **Exness events** — instance per-broker. `ExnessBrokerAdapter.connect()` mở events WS của account và subscribe `transactions`: transaction event hoàn tất order đang chờ, các lệnh đóng không do ta yêu cầu (SL, TP, stop-out) đóng hoặc giảm vị thế đang giữ, và frame `trading_state_snapshot` reconcile vị thế mở với repository (vị thế bị đóng khi mất kết nối được đóng theo close deal của nó). Mỗi lần (re)connect đánh dấu snapshot là cũ, và order phải chờ tới khi một snapshot được áp dụng.
 
 **Outbound (SSE):**
 - **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit nếu `bar_start` đổi hoặc volume/price tăng. Trường: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Ngưỡng stale frontend: 30s.
 - **Quotes:** `GET /api/v1/quotes/stream/{symbol}`. Poll Redis 0.5s, emit nếu `last_price` hoặc `volume` đổi. Trường: `symbol, last_price, bid, ask, volume, change, change_percent, ts`. TTL ~60s. Ngưỡng stale frontend: 10s, fallback về REST.
 
-**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forward một `TradeClosedEvent` cho mỗi lần position reduce/close (average-cost). `PaperBrokerAdapter` fire trade callback ngay sau fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` là no-op (OKX live trade thu thập qua pipeline R8).
+**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forward một `TradeClosedEvent` cho mỗi lần position reduce/close (average-cost). `PaperBrokerAdapter` fire trade callback ngay sau fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` là no-op (OKX live trade thu thập qua pipeline R8). `ExnessBrokerAdapter` forward một `TradeClosedEvent` cho mỗi close deal, sau khi publish fill của deal đó.
 
 **Live trade pipeline (R8):** Khi có `TradeClosedEvent` (paper hoặc bất kỳ reduce nào trong engine), `StrategyAppService._forward_trade_to_bus` publish lên EventBus. `LiveTradeCollector` (EventBus subscriber, chỉ live) nhận event → stamp `run_id=subscription_id` + `strategy_code` → persist Trade vào collection `trades` (TradeRepository). Backtest bypass qua `inject_prepared_strategy` (synthetic id, không double-count). Metrics được query live qua `LiveMetricsQueryService.get_metrics(sub_id)` — tính M1 (Sharpe, Sortino, win_rate, v.v.) từ bảng `trades`, trả qua `GET /api/v1/subscriptions/{sub_id}/metrics`.
 
@@ -638,7 +660,16 @@ chunk round-trip).
 
 ## Broker & Middleware
 
-**Brokers:** `PaperBrokerAdapter` (mô phỏng, slippage/delay), `OKXBrokerAdapter` (live, HMAC auth, backoff 1s→30s, circuit breaker 10-fail pause 5m).
+**Brokers:** `PaperBrokerAdapter` (mô phỏng, slippage/delay), `OKXBrokerAdapter` (live, HMAC auth, backoff 1s→30s, circuit breaker 10-fail pause 5m), `ExnessBrokerAdapter` (đã build, live trading tắt mặc định).
+
+**Quy tắc Exness broker:**
+- **Tắt mặc định.** `EXNESS_LIVE_TRADING` mặc định false. Khi còn false, `BrokerFactory` từ chối `exness` và `ExnessClient` từ chối mọi order operation trước khi gọi mạng. Không có API nào chọn broker theo subscription: `StrategyConfig.broker` mặc định `paper`, và không route nào set nó.
+- **Order:** chỉ market order; bắt buộc có stop loss (take profit tùy chọn); lệnh close phải đóng toàn bộ vị thế đang giữ. Quantity được `normalize_quantity` chuẩn hóa theo lot grid trước khi tạo order, giới hạn ở min lot trừ khi set `EXNESS_MAX_LOTS`; quantity dưới min lot thì không tạo order.
+- **Daily loss cap (`EXNESS_DAILY_LOSS_CAP`):** không set thì mọi order bị reject. Kết quả realized trong ngày lấy từ deal thật: profit của deal `close`, `swap_fee`, `admin_fee` và `dividend`, trừ commission của mọi deal trừ deal `balance` (nạp/rút). Lỗi Exness API trong lúc kiểm tra sẽ reject order (fail closed).
+- **Cổng reconcile:** order bị reject cho tới khi trading snapshot đã được reconcile, và khi có vị thế unmapped trên instrument đó. 429 trên order được trả về là rejected và đánh dấu snapshot cũ; không bao giờ retry.
+- **Async fill:** fill của Exness tới qua events WS sau khi order call trả về. `StrategyAppService` chỉ nối order update cho broker có `fills_async` (chỉ Exness), và chỉ trong live broker pool.
+
+**Backtest spread:** `PaperBrokerAdapter` nhận một `spread` cố định (field `spread` của backtest API, mặc định 0) và coi bar là giá bid: ask = bid + spread. Fill BUY (vào long và thoát short) trả giá ask, và SL/TP của SHORT được so với ask high và ask low của bar. Chỉ backtest truyền giá trị này; live paper broker chạy không có spread.
 
 ### PaperBrokerAdapter accounting model (futures/margin, 1× leverage)
 
@@ -671,9 +702,11 @@ chunk round-trip).
 
 3 provider + auto-resolution qua type hint. File: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py`. `create_container(settings)` đưa instance `Settings` vào làm container context (`from_context`) và build với `STRICT_VALIDATION`, nên một type được cung cấp hai lần sẽ lỗi khi khởi động thay vì đăng ký sau âm thầm thắng.
 
-**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, `IDataProviderPort` dưới dạng `RoutingDataProviderAdapter` và realtime quote port dưới dạng `RoutingRealtimeQuoteAdapter`, mỗi cái trên `{binance, tradingview}`, và BrokerFactory) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, và các Command/Query service mà route inject).
+**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, ExnessClient, `IDataProviderPort` dưới dạng `RoutingDataProviderAdapter` và realtime quote port dưới dạng `RoutingRealtimeQuoteAdapter`, mỗi cái trên `{binance, tradingview, exness}`, và BrokerFactory, build với ExnessClient và `EXNESS_LIVE_TRADING`) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, và các Command/Query service mà route inject).
 
-**Background jobs:** `sync_1m` (mỗi phút ở giây :02 — fetch REST 1m cho mỗi symbol được theo dõi, rồi cascade in-process lên 5m/15m/1h/4h và, với lịch 24/7, cả 1d), `data_lag_check` (mỗi phút ở giây :30 — đo feed 1m của mỗi symbol chậm bao nhiêu phút giao dịch so với thời gian thực, lưu kết quả vào Redis `data_lag:{symbol}` với TTL 5 phút, và chỉ log khi trạng thái đổi), `sync_verify_cascade` (mỗi giờ — so sánh 5m REST với 5m cascade trên một symbol mẫu), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — nơi duy nhất báo thiếu bar 1m; bản thân cascade không bao giờ log bucket thiếu bar), `sync_repair` (mỗi 12h). Catch-up lúc startup cho các job hằng ngày/12h nếu lần thành công gần nhất cũ hơn grace window.
+**Background jobs:** `sync_1m` (mỗi phút ở giây :02 — fetch REST 1m cho mỗi symbol được theo dõi, rồi cascade in-process lên 5m/15m/1h/4h và, với lịch 24/7, cả 1d), `data_lag_check` (mỗi phút ở giây :30 — đo feed 1m của mỗi symbol chậm bao nhiêu phút giao dịch so với thời gian thực, lưu kết quả vào Redis `data_lag:{symbol}` với TTL 5 phút, và chỉ log khi trạng thái đổi), `sync_verify_cascade` (mỗi giờ — so sánh 5m REST với 5m cascade trên một symbol mẫu), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — nơi duy nhất báo thiếu bar 1m; bản thân cascade không bao giờ log bucket thiếu bar), `sync_repair` (mỗi 12h). Symbol `:EXNESS` đi qua cùng các job và cùng data port đã route; mỗi symbol bị chặn theo calendar riêng của nó. Catch-up lúc startup cho các job hằng ngày/12h nếu lần thành công gần nhất cũ hơn grace window.
+
+**Market-data routing:** suffix của composite symbol là id của data provider tạo ra bar của nó, viết hoa toàn bộ (`BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`, `XAUUSD:EXNESS` → `exness`). Cả hai routing adapter gửi symbol tới đúng provider đó — không fallback — và suffix không có provider đăng ký sẽ raise `UnknownDataProviderError`. Symbol chưa seed lấy `asset_class` và `calendar_id` mặc định của provider từ `DATA_PROVIDER_DEFAULTS` (`binance` → crypto spot, 24/7; `tradingview` → index future, CME Globex; `exness` → CFD, Exness FX calendar). Execution broker là setting riêng theo strategy (`StrategyConfig.broker`) và không tham gia routing.
 
 **Data lag:** feed bị trễ (gói TradingView miễn phí chậm ~10-15 phút so với CME) được gắn cờ chứ không bị coi là hỏng. Độ trễ đếm theo phút giao dịch tính từ bar 1m mới nhất, nên cuối tuần và giờ nghỉ không bị tính là trễ, và không có code nào rẽ nhánh theo provider. Trạng thái: `ok`, `delayed` (chậm > 3 phút, vẫn đang nhận bar), `stuck` (chậm và thêm một trong ba: 10+ lần sync 1m liên tiếp không có bar mới, chậm quá 30 phút giao dịch, hoặc 5 phút không có lần sync 1m nào), `closed` (bất cứ khi nào thị trường đóng cửa, dù độ trễ bao nhiêu), `unknown` (chưa có số đo — không bao giờ coi là ổn). `GET /api/v1/market-data/data-lag/{symbol}` trả số đo cho badge trên SPA; các dòng `/sync-status` có thêm `lag_seconds` và `is_delayed`, và một dòng không phải 1m chỉ bị coi là stuck khi nó trễ hơn feed bị delay cộng 3× cadence của chính nó.
 
@@ -774,11 +807,15 @@ core ◁ engine ◁ app
 
 ## Configuration
 
-Env var (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true). Xem [deployment.md](./deployment.md) cho chi tiết per-env.
+Env var (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true). Exness: `EXNESS_API_BASE_URL`, `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY`, `EXNESS_SECRET_KEY`, `EXNESS_LIVE_TRADING` (mặc định false), `EXNESS_RATE_FRACTION` (mặc định 1.0), `EXNESS_DAILY_LOSS_CAP` và `EXNESS_MAX_LOTS` (đều optional; thiếu bốn biến đầu thì provider ở trạng thái chưa cấu hình). Xem [deployment.md](./deployment.md) cho chi tiết per-env.
 
 ## Dependencies
 
 FastAPI, Pydantic (settings + command/query model), PyMongo (native async, KHÔNG phải Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pytest, ruff (lint), pyright (type check).
+
+## MT5 (future provider, not built)
+
+MetaTrader 5 là một provider có thể làm sau; chưa có code nào cho nó. Nó sẽ cắm vào cùng các port: `IDataProviderPort` cho bar (`copy_rates_from`), `IRealtimeQuoteProviderPort` cho quote (`copy_ticks_from`), và tùy chọn `IBrokerPort` cho order (`order_send`). Symbol của nó sẽ mang suffix `:MT5`, mà routing test đã ghim là chưa đăng ký (`UnknownDataProviderError`). Package Python `MetaTrader5` cần một MT5 terminal chạy trên Windows, nên deploy cần một Windows host hoặc một Wine bridge (`mt5linux`, `mt5-remote`) cạnh app Linux. API key của Exness áp dụng cho account trên Exness platform, không cho account MT5, nên account MT5 không dùng lại được Exness client.
 
 ## Known Limitations
 
@@ -793,7 +830,7 @@ FastAPI, Pydantic (settings + command/query model), PyMongo (native async, KHÔN
 
 **Two Repositories (secret boundary):** `pocketquant` (code, không secret) ← `pocketquant-config` (prod .env, cred). CI/CD secret: `POCKETQUANT_CONFIG_DEPLOY_KEY` (git key read-only).
 
-**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), Docker Hub, GitHub Actions.
+**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), Exness (REST + WS có ký cho market data và quote của CFD; trading đã build nhưng tắt), Docker Hub, GitHub Actions.
 
 **Deployment:** Entry công khai `pocketquant.xyz` qua Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare chỉ proxy HTTP/HTTPS — SSH + published DB port truy cập VPS trực tiếp qua IP. Config flow: `pocketquant-config/.env` → CI đọc lúc deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler phối hợp qua collection `apscheduler_jobs` Mongo; ai claim `next_run_time` trước thì thắng. Dev mode remote-DB phải set `ENABLE_JOBS=false` (nếu không sẽ double-schedule).
 

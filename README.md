@@ -1,6 +1,6 @@
 # PocketQuant
 
-Algorithmic trading platform: Binance market-data sync (REST/WS, no auth), live quote ingestion + bar aggregation, single-run backtesting, strategy/broker orchestration, and a React chart UI.
+Algorithmic trading platform: market-data sync from Binance (REST/WS, no auth), TradingView (index futures) and Exness (signed REST/WS market data and quotes for CFDs), live quote ingestion + bar aggregation, single-run backtesting, strategy/broker orchestration, and a React chart UI.
 
 One Python package (`pocketquant`) with import-linter-enforced subpackage boundaries + a separate Vite SPA.
 
@@ -8,7 +8,7 @@ One Python package (`pocketquant`) with import-linter-enforced subpackage bounda
 
 ```text
 src/pocketquant/
-├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, scheduler, http)
+├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, tradingview, exness, scheduler, http)
 ├── engine/     # framework-free orchestration, 5 feature areas: strategy/ execution/ market_data/ backtest/ live/
 └── app/        # FastAPI backend: routes, SPA serving, scheduler, WS feed, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI

@@ -257,7 +257,7 @@ PocketQuant là một nền tảng algorithmic trading cung cấp đồng bộ d
 ### NF5: Maintainability
 
 **Code Quality:**
-- Tối đa 200 LOC mỗi file (ngoại lệ được ghi tài liệu)
+- Kích thước file và function: xem code-standards.md "File and Function Size"
 - Type hint trên tất cả public API
 - 80%+ test coverage
 - Structured comment (WHY, không phải WHAT)

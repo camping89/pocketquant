@@ -9,7 +9,7 @@ PocketQuant is a unified trading platform combining **live trading** (OKX/Paper)
 **Stack:**
 - Backend: Python 3.12, FastAPI, Pydantic, PyMongo, redis-py, APScheduler
 - Frontend: React 19 + Vite + TypeScript
-- Infrastructure: MongoDB, Redis, Binance REST/WS, OKX REST/WS, Docker Compose, Nginx
+- Infrastructure: MongoDB, Redis, Binance REST/WS, OKX REST/WS, Exness REST/WS (signed), Docker Compose, Nginx
 
 ## Codebase Structure
 
@@ -32,8 +32,9 @@ src/pocketquant/
 │   │   └── shared/                    # Cross-cutting (Interval, DomainEvent)
 │   │
 │   ├── infra/                         # External integrations (adapters)
-│   │   ├── brokers/                   # Broker implementations (paper, OKX) + broker_factory.py
+│   │   ├── brokers/                   # Broker implementations (paper, OKX, Exness) + broker_factory.py
 │   │   ├── binance/                   # Binance REST + WebSocket market-data adapters
+│   │   ├── exness/                    # Exness signed REST + WS client, data and quote adapters (CFDs)
 │   │   ├── persistence/               # MongoDB/Redis access
 │   │   │   ├── repositories/          # 12 repository classes (instance methods via DI)
 │   │   │   ├── mongodb.py             # PyMongo singleton
@@ -151,6 +152,7 @@ All `_id` are UUIDv7 (except `apscheduler_jobs`). Join keys: `subscription_id` (
 **Inbound (WebSocket):**
 - **Binance `@aggTrade`:** Singleton per app → `QuoteAppService` → Redis `quote:latest:{symbol}`
 - **OKX private:** Per-broker instance → orders/positions/fills via event callbacks
+- **Exness ticks:** Singleton per app (`ExnessQuoteAdapter` under `RoutingRealtimeQuoteAdapter`) → `QuoteAppService` → Redis `quote:latest:{symbol}`
 
 **Outbound (SSE):**
 - **Bars:** Poll Redis 1s, emit on bar_start change

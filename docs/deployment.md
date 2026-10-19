@@ -103,6 +103,16 @@ Key prod env vars (full set in `vps/default/.env`):
 | `TRADINGVIEW_PLAN` | No | `free` (default) or `cme_non_pro`. The single index-futures entitlement knob; derives bar cap, poll floor and real-time. |
 | `TRADINGVIEW_AUTH_TOKEN` | No | Supplies a session token directly and wins over username/password. |
 | `TRADINGVIEW_USERNAME` / `_PASSWORD` | No | Optional login; the scraper falls back to anonymous (delayed, limited) without it. |
+| `EXNESS_API_BASE_URL` | No | `https://api.exness.com` exactly (any other host or scheme leaves Exness unconfigured). Serves `getAccessPoint` only. |
+| `EXNESS_ACCOUNT_ID` | No | Exness account id. |
+| `EXNESS_API_KEY` | No | Exness API key id. |
+| `EXNESS_SECRET_KEY` | No | The 128-hex secret exactly as Key Management shows it: 32-byte seed, then 32-byte public key. PEM is rejected, and the CI `.env` guard fails on multi-line values. |
+| `EXNESS_LIVE_TRADING` | No | Default `false`; only a go-live plan changes it. While false, the `exness` broker and every order call are refused. |
+| `EXNESS_RATE_FRACTION` | No | Share of the published Exness request rate the process uses; default `1.0`. |
+| `EXNESS_DAILY_LOSS_CAP` | No | Daily realized-loss limit for the Exness broker; unset rejects every Exness order. |
+| `EXNESS_MAX_LOTS` | No | Upper bound on an Exness order's lots; unset means the minimum lot. |
+
+The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
 
 Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `$MONGO_PORT`→27017 · Redis `$REDIS_PORT`→6379 · Portainer `$PORTAINER_PORT`→9000.
 
@@ -223,6 +233,18 @@ ssh <VPS> "docker exec pocketquant-app python scripts/backfill/binance_bars.py -
 ssh <VPS> "docker exec pocketquant-app python scripts/backfill/binance_bars.py --days 730 --replace"
 ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-post.md"
 ```
+
+### Exness symbols and deep history
+
+Seed the Exness CFDs (`XAUUSD:EXNESS`, `EURUSD:EXNESS`, `BTCUSD:EXNESS`) before the first `sync_1m` reaches them, then backfill history beyond the 5000-bar request cap. The backfill uses half the Exness request rate by default because the running app shares it, and it refuses to run (exit 3) while `EXNESS_LIVE_TRADING` is true.
+
+```bash
+ssh <VPS> "docker exec pocketquant-app python scripts/seed_exness_symbols.py"            # dry-run
+ssh <VPS> "docker exec pocketquant-app python scripts/seed_exness_symbols.py --apply"
+ssh <VPS> "docker exec pocketquant-app python scripts/backfill/provider_bars.py --symbol <CODE>:<PROVIDER> --interval <tf> --days <n> --rate-fraction 0.5"
+```
+
+A window older than the history Exness keeps fails with the Exness error code (for example `REQUEST_INVALID_TIME_RANGE`) and exit 1. `DELETE /api/v1/market-data/tracked-symbols/{symbol}` removes an Exness symbol together with all its data.
 
 ## Sync Gap Repair
 

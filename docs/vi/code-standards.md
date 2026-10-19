@@ -133,15 +133,27 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 
 ## Composite Symbol Format
 
-**Format:** `{CODE}:{PROVIDER}` (vd `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`)
+**Format:** `{CODE}:{PROVIDER}` (vd `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`, `XAUUSD:EXNESS`)
 
 - Một field bất biến `symbol: str` thay cho cặp `(code, exchange)` trên mọi entity: Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol.
 - Suffix là id của data provider sinh ra bar của symbol, viết đầy đủ dạng `provider_id.upper()` — `BINANCE`, `TRADINGVIEW`, không bao giờ là mã rút gọn và không bao giờ là sàn. Routing đọc nó ở đúng một chỗ, `provider_id_for()` trong `core/domain/market_data/provider_routing_domain_service.py`; mọi chỗ khác coi `symbol` là mờ.
 - Suffix không trỏ tới provider nào đã đăng ký thì fail rõ ràng (`UnknownDataProviderError`, một `ValueError`) — không bao giờ đoán hay route theo asset class.
-- Symbol chưa seed nhận default của provider (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`); đăng ký một provider nghĩa là thêm nó vào cả hai routing adapter trong `app/di/` và vào bảng đó.
-- Execution broker (paper, OKX) là setting của strategy (`StrategyConfig.broker`), không thuộc symbol. Tên instrument riêng của broker là việc của broker adapter: nó map từ composite symbol đầy đủ trong bảng riêng (`TRADINGVIEW_EXCHANGE_BY_CODE` trong `tradingview_mappers.py`; OKX ghép `instId` trong `okx_mapper.py`).
+- Symbol chưa seed nhận default của provider (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`).
+- Execution broker (paper, OKX, Exness) là setting của strategy (`StrategyConfig.broker`), không thuộc symbol. Tên instrument riêng của broker là việc của broker adapter: nó map từ composite symbol đầy đủ trong bảng riêng (`TRADINGVIEW_EXCHANGE_BY_CODE` trong `tradingview_mappers.py`; OKX ghép `instId` trong `okx_mapper.py`; Exness map trong `EXNESS_INSTRUMENTS` ở `exness_mappers.py`).
 - Validation: `COMPOSITE_SYMBOL_RE` cho dữ liệu nội bộ, `COMPOSITE_SYMBOL_PATTERN` cho input HTTP (`core/domain/symbol/entities.py`).
 - URL: `:` được encode thành `%3A` trong path segment (`/api/v1/bar/BTCUSDT%3ABINANCE`). JSON và database giữ nguyên `:`. Cache key dùng symbol nguyên vẹn: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`.
+
+**Thêm một data provider** chạm đúng các chỗ sau:
+
+1. Một adapter package `src/pocketquant/core/infra/<provider>/` hiện thực `IDataProviderPort` và, tùy chọn, `IRealtimeQuoteProviderPort`.
+2. Các field `Settings` trong `src/pocketquant/core/config.py`.
+3. Một entry `DATA_PROVIDER_DEFAULTS` (`core/domain/market_data/provider_routing_domain_service.py`) và một entry trong mỗi router ở `app/di/adapters.py` (`get_data_provider`, `get_realtime_quote_provider`); `tests/app_test/unit/test_data_provider_registration.py` bắt buộc ba chỗ này khớp nhau.
+4. Một calendar đăng ký trong `TradingCalendarFactory` (`core/infra/calendars/trading_calendar_factory.py`) khi không có calendar nào sẵn có phù hợp, dựng từ các session đã ghi lại.
+5. Một `ContractSpec` cho mỗi symbol, ghi bởi một seed script theo mẫu `scripts/seed_index_futures.py` (`symbols` và `tracked_symbols`).
+6. Provider trong provider map của `/health` (`register_health_checks`, `app/main_extensions.py`).
+7. Mọi collection hoặc Redis key mới có khóa theo symbol phải tham gia cascade xóa symbol (`TrackedSymbolsService`).
+8. Broker là tùy chọn và tách riêng: một nhánh `BrokerFactory`, với bảng instrument riêng của broker có khóa là composite symbol đầy đủ.
+9. Các dòng env trong `docs/deployment.md`, và adapter test dưới `tests/core_test/infra/<provider>/` chạy trên recorded fixture.
 
 ## Strategy IDs
 
@@ -292,3 +304,5 @@ Một thay đổi chỉ xong khi tất cả các check dưới đây pass. Ruff 
 ## Configuration & Secrets
 
 Không bao giờ hardcode. Dùng `.env` (local) và biến môi trường (prod). Không bao giờ commit `.env` hay secret. Định nghĩa trong `src/pocketquant/core/config.py::Settings` bằng Pydantic.
+
+- Các key `EXNESS_*` chỉ nằm trong `pocketquant-config`. `EXNESS_SECRET_KEY` là secret key 128-hex trên một dòng; mọi giá trị `.env` là `KEY=VALUE` một dòng. Secret không bao giờ được log, và `EXNESS_LIVE_TRADING` giữ false ngoài một go-live plan.

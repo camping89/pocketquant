@@ -100,6 +100,16 @@ Các env var prod chính (đầy đủ trong `vps/default/.env`):
 | `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host-published ports (use obscure values) |
 | `OKX_API_KEY` / `_SECRET` / `_PASSPHRASE` | No | OKX live trading only |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
+| `EXNESS_API_BASE_URL` | No | `https://api.exness.com` exactly (any other host or scheme leaves Exness unconfigured). Serves `getAccessPoint` only. |
+| `EXNESS_ACCOUNT_ID` | No | Exness account id. |
+| `EXNESS_API_KEY` | No | Exness API key id. |
+| `EXNESS_SECRET_KEY` | No | The 128-hex secret exactly as Key Management shows it: 32-byte seed, then 32-byte public key. PEM is rejected, and the CI `.env` guard fails on multi-line values. |
+| `EXNESS_LIVE_TRADING` | No | Default `false`; only a go-live plan changes it. While false, the `exness` broker and every order call are refused. |
+| `EXNESS_RATE_FRACTION` | No | Share of the published Exness request rate the process uses; default `1.0`. |
+| `EXNESS_DAILY_LOSS_CAP` | No | Daily realized-loss limit for the Exness broker; unset rejects every Exness order. |
+| `EXNESS_MAX_LOTS` | No | Upper bound on an Exness order's lots; unset means the minimum lot. |
+
+Access point riêng của account Exness không phải env var: `ExnessClient` resolve nó từ `getAccessPoint` một lần mỗi process, giữ trong memory và dùng như một URL https đầy đủ. Mọi giá trị Exness nằm trong `pocketquant-config`; thiếu bốn biến đầu thì app vẫn boot với Exness ở trạng thái chưa cấu hình.
 
 Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `$MONGO_PORT`→27017 · Redis `$REDIS_PORT`→6379 · Portainer `$PORTAINER_PORT`→9000.
 
@@ -220,6 +230,18 @@ ssh <VPS> "docker exec pocketquant-app python scripts/backfill/binance_bars.py -
 ssh <VPS> "docker exec pocketquant-app python scripts/backfill/binance_bars.py --days 730 --replace"
 ssh <VPS> "docker exec pocketquant-app python scripts/audit_bar_quality.py --days 730 --output /app/audit-post.md"
 ```
+
+### Exness symbols and deep history
+
+Seed các CFD Exness (`XAUUSD:EXNESS`, `EURUSD:EXNESS`, `BTCUSD:EXNESS`) trước khi `sync_1m` đầu tiên chạm tới chúng, rồi backfill lịch sử vượt giới hạn 5000 bar mỗi request. Backfill mặc định dùng một nửa request rate của Exness vì app đang chạy dùng chung rate đó, và nó từ chối chạy (exit 3) khi `EXNESS_LIVE_TRADING` là true.
+
+```bash
+ssh <VPS> "docker exec pocketquant-app python scripts/seed_exness_symbols.py"            # dry-run
+ssh <VPS> "docker exec pocketquant-app python scripts/seed_exness_symbols.py --apply"
+ssh <VPS> "docker exec pocketquant-app python scripts/backfill/provider_bars.py --symbol <CODE>:<PROVIDER> --interval <tf> --days <n> --rate-fraction 0.5"
+```
+
+Cửa sổ cũ hơn lịch sử mà Exness còn giữ sẽ fail với error code của Exness (ví dụ `REQUEST_INVALID_TIME_RANGE`) và exit 1. `DELETE /api/v1/market-data/tracked-symbols/{symbol}` xóa một symbol Exness cùng toàn bộ dữ liệu của nó.
 
 ## Sync Gap Repair
 

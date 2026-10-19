@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Architecture, deployment, standard and MT5 docs"
-status: pending
+status: completed
 priority: P2
 effort: 1d
 dependencies: [8]
@@ -136,3 +136,11 @@ Spawn the `kongming` subagent for next-step counsel and pass:
 Apply kongming's guidance, then re-run the Verify step.
 If `kongming` cannot be spawned in this environment, STOP and report the same
 failure evidence to the user. Never continue by self-reasoning.
+
+## Completion notes (2026-10-19)
+All T9.1-T9.3 Verify commands met their pass conditions. Three statements prescribed above differ from the code. Following Stop-and-ask, the docs describe the code, and the task wording above is unchanged pending the user's decision:
+- T9.1 step 5, "`subscribe` mode `add`": the ticks subscribe frame has no mode field (`exness_quote_adapter.py` `_send_subscribe`). A later subscribe adds to the earlier ones, and that is what the docs say.
+- T9.2 step 2, "Exness M1 history reaches back one year": no source in code, fixtures or the spike journal (`history_age_days` = 30 applies to deals and orders history). The docs say that a window older than the history Exness keeps fails with the Exness error code and exit 1 (`provider_bars.py`).
+- T9.1 step 6, commissions counted only for `close`/`swap_fee`/`admin_fee`/`dividend`: the code subtracts the commission of every deal except `balance` (`exness_broker_adapter.py` `_realized_today`). The docs describe the code.
+- Added from the code: an unset `EXNESS_DAILY_LOSS_CAP` rejects every Exness order, and the WS breaker pauses for 5 minutes.
+- Already out of date in `docs/vi` before this phase and left as it was: the vi "Where Does X Live?" has no TradingView rows, and the vi "Dependencies" omits `pandas_market_calendars` and `tvdatafeed`. `docs/system-architecture.md` is 876 lines; it was already 841.

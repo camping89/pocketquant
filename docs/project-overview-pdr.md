@@ -257,7 +257,7 @@ PocketQuant is an algorithmic trading platform providing real-time market data s
 ### NF5: Maintainability
 
 **Code Quality:**
-- Max 200 LOC per file (exceptions documented)
+- File and function size: see code-standards.md "File and Function Size"
 - Type hints on all public APIs
 - 80%+ test coverage
 - Structured comments (WHY, not WHAT)

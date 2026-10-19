@@ -133,15 +133,27 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 
 ## Composite Symbol Format
 
-**Format:** `{CODE}:{PROVIDER}` (e.g., `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`)
+**Format:** `{CODE}:{PROVIDER}` (e.g., `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`, `XAUUSD:EXNESS`)
 
 - One immutable `symbol: str` field replaces `(code, exchange)` pairs on every entity: Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol.
 - The suffix is the id of the data provider that produces the symbol's bars, written as `provider_id.upper()` in full — `BINANCE`, `TRADINGVIEW`, never a short code and never the exchange. Routing reads it in one place, `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py`; everything else treats `symbol` as opaque.
 - A suffix that names no registered provider fails loudly (`UnknownDataProviderError`, a `ValueError`) — it is never guessed or routed by asset class.
-- An unseeded symbol takes its provider's defaults (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`); registering a provider means adding it to both routing adapters in `app/di/` and to that table.
-- The execution broker (paper, OKX) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (`TRADINGVIEW_EXCHANGE_BY_CODE` in `tradingview_mappers.py`; OKX composes `instId` in `okx_mapper.py`).
+- An unseeded symbol takes its provider's defaults (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`).
+- The execution broker (paper, OKX, Exness) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (`TRADINGVIEW_EXCHANGE_BY_CODE` in `tradingview_mappers.py`; OKX composes `instId` in `okx_mapper.py`; Exness maps it in `EXNESS_INSTRUMENTS` in `exness_mappers.py`).
 - Validation: `COMPOSITE_SYMBOL_RE` for internal data, `COMPOSITE_SYMBOL_PATTERN` for HTTP input (`core/domain/symbol/entities.py`).
 - URL: `:` is encoded as `%3A` in path segments (`/api/v1/bar/BTCUSDT%3ABINANCE`). JSON and the database keep the raw `:`. Cache keys use the whole symbol: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`.
+
+**Adding a data provider** touches exactly these places:
+
+1. An adapter package `src/pocketquant/core/infra/<provider>/` implementing `IDataProviderPort` and, optionally, `IRealtimeQuoteProviderPort`.
+2. `Settings` fields in `src/pocketquant/core/config.py`.
+3. One `DATA_PROVIDER_DEFAULTS` entry (`core/domain/market_data/provider_routing_domain_service.py`) and one entry in each router in `app/di/adapters.py` (`get_data_provider`, `get_realtime_quote_provider`); `tests/app_test/unit/test_data_provider_registration.py` enforces that the three match.
+4. A calendar registered in `TradingCalendarFactory` (`core/infra/calendars/trading_calendar_factory.py`) when no existing one fits, built from recorded sessions.
+5. A `ContractSpec` per symbol, written by a seed script modelled on `scripts/seed_index_futures.py` (`symbols` and `tracked_symbols`).
+6. The provider in the `/health` provider map (`register_health_checks`, `app/main_extensions.py`).
+7. Any new symbol-keyed collection or Redis key joins the symbol-removal cascade (`TrackedSymbolsService`).
+8. A broker is optional and separate: a `BrokerFactory` branch, with the broker's own instrument table keyed by the full composite symbol.
+9. Env rows in `docs/deployment.md`, and adapter tests under `tests/core_test/infra/<provider>/` against recorded fixtures.
 
 ## Strategy IDs
 
@@ -292,3 +304,5 @@ A change is done when all of these pass. Ruff and Pyright must report 0 errors i
 ## Configuration & Secrets
 
 Never hardcode. Use `.env` (local) and environment variables (prod). Never commit `.env` or secrets. Define in `src/pocketquant/core/config.py::Settings` with Pydantic.
+
+- `EXNESS_*` keys live only in `pocketquant-config`. `EXNESS_SECRET_KEY` is a single-line 128-hex secret key; every `.env` value is a single-line `KEY=VALUE`. Secrets are never logged, and `EXNESS_LIVE_TRADING` stays false outside a go-live plan.

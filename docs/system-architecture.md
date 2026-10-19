@@ -301,8 +301,14 @@ core/
 │       ├── job_history_repository.py
 │       └── trade_repository.py         # Live trading: subscription_id FK
 ├── brokers/
-│   └── paper/               # PaperBrokerAdapter (in-memory simulation)
-│       └── paper_broker_adapter.py
+│   ├── paper/               # PaperBrokerAdapter (in-memory simulation)
+│   │   └── paper_broker_adapter.py
+│   └── exness/              # ExnessBrokerAdapter (built, live trading off by default)
+│       └── exness_broker_adapter.py
+├── calendars/
+│   ├── trading_calendar_factory.py         # TradingCalendarFactory (calendar per symbol)
+│   ├── cme_globex_calendar_adapter.py      # CME Globex equity sessions
+│   └── exness_session_calendar_adapter.py  # Exness CFD sessions (recorded trade_sessions, UTC)
 ├── market_data/
 │   └── binance/             # Binance REST + WS integration
 │       ├── binance_adapter.py            # BinanceAdapter (implements core.domain IDataProviderPort)
@@ -313,6 +319,13 @@ core/
 │   ├── tvdatafeed_client.py             # TvDatafeedClient (lock-serialised, epoch recovery)
 │   ├── tradingview_adapter.py           # TradingViewAdapter (implements IDataProviderPort)
 │   └── tradingview_mappers.py           # Symbol/interval/bar mapping
+├── exness/                  # Exness signed REST + WS integration (CFDs)
+│   ├── exness_signer.py                 # Ed25519 secret-key loading + request signing
+│   ├── exness_client.py                 # ExnessClient (signed REST, access point, pacing, 429 rule, live gate)
+│   ├── exness_mappers.py                # Instrument map, lot/unit conversion, tick mapping
+│   ├── exness_stream.py                 # ExnessStream (signed WS, reconnect backoff + breaker)
+│   ├── exness_adapter.py                # ExnessAdapter (implements IDataProviderPort)
+│   └── exness_quote_adapter.py          # ExnessQuoteAdapter (implements IRealtimeQuoteProviderPort)
 ├── scheduling/
 │   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
 ├── http_client/
@@ -339,6 +352,10 @@ core/
 | **BinanceWebSocketAdapter** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
 | **TradingViewAdapter** | Implements IDataProviderPort for index futures (ES/NQ/YM). Clamps the request to the plan's entitlement and drops the in-progress bar using the symbol's own calendar. Symbol search is not supported — routing sends search to its named default provider, `binance`. The suffix names the provider, so the exchange the scraper needs comes from `TRADINGVIEW_EXCHANGE_BY_CODE` (`ES1!`/`NQ1!` → `CME_MINI`, `YM1!` → `CBOT_MINI`); a code missing from it raises. |
 | **TvDatafeedClient** | Wraps the unofficial `tvDatafeed` scraper behind ITradingViewClient. Serialises every call with an asyncio.Lock: the library assigns `self.ws` per call and shares one chart session, so concurrent calls would return one symbol's series for another. Recovers the true epoch from the library's naive host-local index. |
+| **ExnessClient** | Signed REST (Ed25519). `EXNESS_API_BASE_URL` serves only `getAccessPoint`; every later call goes to the per-account access point, resolved once per process and held in memory. Requests are paced by the strictest limit `getLimits` publishes, with 20% headroom (the interval is divided by `EXNESS_RATE_FRACTION`). A 429 on a data call is retried at most 3 times (`Retry-After`, else exponential backoff) and logged; a 429 on an order call is never retried. Order operations are refused while `EXNESS_LIVE_TRADING` is false. |
+| **ExnessAdapter** | Implements IDataProviderPort over native Exness bid candles (`price_type=bid`), paged backwards by the published `max_candles_per_request`; the in-progress candle is dropped. |
+| **ExnessQuoteAdapter** | Implements IRealtimeQuoteProviderPort over the Exness ticks WS; the bid is published as `last_price`. |
+| **ExnessSessionCalendarAdapter** | Implements ITradingCalendarPort from the recorded Exness `trade_sessions` (held in New York time, served in UTC). Three calendars: `EXNESS_FX`, `EXNESS_XAUUSD` (gold's daily break) and `EXNESS_CRYPTO` (24/7, weeks open on Sunday). |
 | **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
 
 ### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
@@ -502,10 +519,13 @@ src/
 | Binance REST + WS clients | `core/infra/binance/` |
 | Trading calendar port + 24/7 implementation | `core/domain/market_data/trading_calendar_port.py`, `core/domain/market_data/continuous_24x7_calendar.py` |
 | CME Globex equity calendar | `core/infra/calendars/cme_globex_calendar_adapter.py` |
+| Exness session calendars | `core/infra/calendars/exness_session_calendar_adapter.py` |
 | Provider routing adapters | `core/infra/market_data/` |
 | TradingView client, mappers, adapters | `core/infra/tradingview/` |
+| Exness client, mappers, data and quote adapters | `core/infra/exness/` |
 | Asset class + contract spec | `core/domain/shared/enums.py`, `core/domain/symbol/value_objects.py` |
 | OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
+| Exness broker (live trading off) | `core/infra/brokers/exness/` |
 | PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
 | APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
 | Dishka DI container (3 providers) | `app/di/` |
@@ -633,12 +653,14 @@ round-trip chunk).
 **Inbound (WebSocket):**
 1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketAdapter` (reconnect 1s→60s backoff). `WsSubscriptionAppService` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
 2. **OKX private channels** — per-broker instance. `OKXWebSocketAdapter` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
+3. **Exness ticks** — singleton, app-wide. `ExnessQuoteAdapter` under `RoutingRealtimeQuoteAdapter`, driven by the same `WsSubscriptionAppService` diff for `:EXNESS` symbols. `ExnessStream` connects to the per-account access point with subprotocol `exness-ws-protocol`; each `subscribe` frame (`event: ticks`) adds instruments to the earlier ones, so a reconnect re-sends all of them and `unsubscribe()` is local only. Reconnect 1s→30s backoff, circuit breaker: pause 5min after 10 consecutive failures. An instrument the account does not list is warned once and not stored. If the client is not configured the feed stays idle.
+4. **Exness events** — per broker instance. `ExnessBrokerAdapter.connect()` opens the account events WS and subscribes to `transactions`: transaction events complete pending orders, closes nobody here requested (SL, TP, stop-out) close or reduce the held position, and a `trading_state_snapshot` frame reconciles open positions against the repository (a position closed while away is closed from its close deal). Each (re)connect marks the snapshot stale, and orders wait until one has been applied.
 
 **Outbound (SSE):**
 - **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit if `bar_start` changed or volume/price increased. Fields: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Frontend stale threshold: 30s.
 - **Quotes:** `GET /api/v1/quotes/stream/{symbol}`. Poll Redis 0.5s, emit if `last_price` or `volume` changed. Fields: `symbol, last_price, bid, ask, volume, change, change_percent, ts`. TTL ~60s. Frontend stale threshold: 10s, fallback to REST.
 
-**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forwards a `TradeClosedEvent` for each position reduce/close (average-cost). `PaperBrokerAdapter` fires the trade callback right after the fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` is a no-op (OKX live trades collected via R8 pipeline).
+**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forwards a `TradeClosedEvent` for each position reduce/close (average-cost). `PaperBrokerAdapter` fires the trade callback right after the fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` is a no-op (OKX live trades collected via R8 pipeline). `ExnessBrokerAdapter` forwards one `TradeClosedEvent` per close deal, after publishing that deal's fill.
 
 **Live trade pipeline (R8):** On `TradeClosedEvent` (paper or any reduce in engine), `StrategyAppService._forward_trade_to_bus` publishes to EventBus. `LiveTradeCollector` (EventBus subscriber, live-only) receives event → stamps `run_id=subscription_id` + `strategy_code` → persists Trade to `trades` collection (TradeRepository). Backtest bypasses via `inject_prepared_strategy` (synthetic ids, no double-count). Metrics queried live via `LiveMetricsQueryService.get_metrics(sub_id)` — calculates M1 (Sharpe, Sortino, win_rate, etc.) from `trades` table, returns via `GET /api/v1/subscriptions/{sub_id}/metrics`.
 
@@ -654,7 +676,16 @@ round-trip chunk).
 
 ## Broker & Middleware
 
-**Brokers:** `PaperBrokerAdapter` (simulation, slippage/delays), `OKXBrokerAdapter` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause).
+**Brokers:** `PaperBrokerAdapter` (simulation, slippage/delays), `OKXBrokerAdapter` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause), `ExnessBrokerAdapter` (built, live trading off by default).
+
+**Exness broker rules:**
+- **Switched off by default.** `EXNESS_LIVE_TRADING` defaults to false. While it is false, `BrokerFactory` refuses `exness` and `ExnessClient` refuses every order operation before any network call. No API selects a broker per subscription: `StrategyConfig.broker` defaults to `paper`, and no route sets it.
+- **Orders:** market orders only; a stop loss is required (take profit optional); a close must cover the whole held position. Quantity is normalized to the lot grid by `normalize_quantity` before the order is created, capped at the minimum lot unless `EXNESS_MAX_LOTS` is set; a quantity below the minimum lot creates no order.
+- **Daily loss cap (`EXNESS_DAILY_LOSS_CAP`):** without it every order is rejected. Today's realized result comes from the real deals: the profit of `close`, `swap_fee`, `admin_fee` and `dividend` deals, minus the commission of every deal except `balance` deposits and withdrawals. An Exness API error during the check rejects the order (fails closed).
+- **Reconciliation gate:** orders are rejected until the trading snapshot has been reconciled, and while a position on the instrument is unmapped. A 429 on an order is returned as rejected and marks the snapshot stale; it is never retried.
+- **Async fills:** an Exness fill arrives on the events WS after the order call returns. `StrategyAppService` wires order updates only for brokers with `fills_async` (only Exness), and only in the live broker pool.
+
+**Backtest spread:** `PaperBrokerAdapter` takes a constant `spread` (backtest API field `spread`, default 0) and treats bars as bid prices: ask = bid + spread. BUY fills (long entries and short exits) pay the ask, and a SHORT's SL and TP are checked against the bar's ask high and ask low. Only the backtest passes it; the live paper broker runs with none.
 
 ### PaperBrokerAdapter accounting model (futures/margin, 1× leverage)
 
@@ -687,11 +718,11 @@ round-trip chunk).
 
 3 providers + auto-resolution via type hints. Files: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py`. `create_container(settings)` passes the `Settings` instance in as container context (`from_context`) and builds with `STRICT_VALIDATION`, so a type provided twice fails at startup instead of the last registration silently winning.
 
-**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, the `IDataProviderPort` as a `RoutingDataProviderAdapter` and the realtime quote port as a `RoutingRealtimeQuoteAdapter`, each over `{binance, tradingview}`, and BrokerFactory) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, and the Command/Query services routes inject).
+**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, ExnessClient, the `IDataProviderPort` as a `RoutingDataProviderAdapter` and the realtime quote port as a `RoutingRealtimeQuoteAdapter`, each over `{binance, tradingview, exness}`, and BrokerFactory, built with the ExnessClient and `EXNESS_LIVE_TRADING`) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, and the Command/Query services routes inject).
 
-**Background jobs:** `sync_1m` (every minute at :02 — 1m REST fetch per tracked symbol, then in-process cascade to 5m/15m/1h/4h and, for 24/7 calendars, 1d), `data_lag_check` (every minute at :30 — measures how many trading minutes each symbol's 1m feed runs behind real time, stores the reading in Redis `data_lag:{symbol}` with a 5-minute TTL, and logs only state changes), `sync_verify_cascade` (hourly — REST vs cascade 5m divergence on one sampled symbol), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — the only place missing 1m bars are reported; the cascade itself never logs short buckets), `sync_repair` (every 12h). Catch-up on startup for the daily/12h jobs if their last success is older than the grace window.
+**Background jobs:** `sync_1m` (every minute at :02 — 1m REST fetch per tracked symbol, then in-process cascade to 5m/15m/1h/4h and, for 24/7 calendars, 1d), `data_lag_check` (every minute at :30 — measures how many trading minutes each symbol's 1m feed runs behind real time, stores the reading in Redis `data_lag:{symbol}` with a 5-minute TTL, and logs only state changes), `sync_verify_cascade` (hourly — REST vs cascade 5m divergence on one sampled symbol), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — the only place missing 1m bars are reported; the cascade itself never logs short buckets), `sync_repair` (every 12h). `:EXNESS` symbols go through the same jobs and the same routed data port; each symbol is gated by its own calendar. Catch-up on startup for the daily/12h jobs if their last success is older than the grace window.
 
-**Market-data routing:** a composite symbol's suffix is the id of the data provider that produces its bars, upper-cased in full (`BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`). Both routing adapters send a symbol to exactly that provider — no fallback, since another provider's bars for the same code would be a different instrument — and a suffix with no registered provider raises `UnknownDataProviderError`. An unseeded symbol takes its provider's default `asset_class` and `calendar_id` from `DATA_PROVIDER_DEFAULTS` (`binance` → crypto spot, 24/7; `tradingview` → index future, CME Globex), both in `SymbolRepository.touch` and in `TradingCalendarFactory.for_symbol`. The execution broker is a separate per-strategy setting (`StrategyConfig.broker`) and plays no part in routing.
+**Market-data routing:** a composite symbol's suffix is the id of the data provider that produces its bars, upper-cased in full (`BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`, `XAUUSD:EXNESS` → `exness`). Both routing adapters send a symbol to exactly that provider — no fallback, since another provider's bars for the same code would be a different instrument — and a suffix with no registered provider raises `UnknownDataProviderError`. An unseeded symbol takes its provider's default `asset_class` and `calendar_id` from `DATA_PROVIDER_DEFAULTS` (`binance` → crypto spot, 24/7; `tradingview` → index future, CME Globex; `exness` → CFD, Exness FX calendar), both in `SymbolRepository.touch` and in `TradingCalendarFactory.for_symbol`. The execution broker is a separate per-strategy setting (`StrategyConfig.broker`) and plays no part in routing.
 
 **Data lag:** a delayed feed (the free TradingView plan runs ~10-15 min behind CME) is flagged, not treated as broken. Lag is counted in trading minutes from the newest 1m bar, so weekends and halts are not lag, and no code branches on the provider. States: `ok`, `delayed` (> 3 min behind, still inserting), `stuck` (behind and either 10+ consecutive empty 1m syncs, more than 30 trading minutes behind, or no 1m sync for 5 minutes), `closed` (whenever the market is shut, whatever the lag), `unknown` (no reading — never read as healthy). `GET /api/v1/market-data/data-lag/{symbol}` serves the stored reading to the SPA badge; `/sync-status` rows carry `lag_seconds` and `is_delayed`, and a non-1m row counts as stuck only when it is later than a delayed feed plus 3× its own cadence.
 
@@ -792,11 +823,15 @@ core ◁ engine ◁ app
 
 ## Configuration
 
-Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), Market-data routing has no env var: the symbol suffix names the provider. TradingView (index futures): `TRADINGVIEW_PLAN` (`free` | `cme_non_pro`) is the single entitlement knob and derives the bar cap, the poll floor and whether the feed is real-time; `TRADINGVIEW_USERNAME`/`TRADINGVIEW_PASSWORD` and `TRADINGVIEW_AUTH_TOKEN` (which wins over them) are optional; `TRADINGVIEW_MAX_BARS` and `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than the plan allows. `TZ` must be `UTC`: `assert_utc_runtime()` refuses to start on any other process zone. See [deployment.md](./deployment.md) for per-env details.
+Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), Market-data routing has no env var: the symbol suffix names the provider. TradingView (index futures): `TRADINGVIEW_PLAN` (`free` | `cme_non_pro`) is the single entitlement knob and derives the bar cap, the poll floor and whether the feed is real-time; `TRADINGVIEW_USERNAME`/`TRADINGVIEW_PASSWORD` and `TRADINGVIEW_AUTH_TOKEN` (which wins over them) are optional; `TRADINGVIEW_MAX_BARS` and `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than the plan allows. Exness: `EXNESS_API_BASE_URL`, `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY`, `EXNESS_SECRET_KEY`, `EXNESS_LIVE_TRADING` (default false), `EXNESS_RATE_FRACTION` (default 1.0), `EXNESS_DAILY_LOSS_CAP` and `EXNESS_MAX_LOTS` (all optional; without the first four the provider stays unconfigured). `TZ` must be `UTC`: `assert_utc_runtime()` refuses to start on any other process zone. See [deployment.md](./deployment.md) for per-env details.
 
 ## Dependencies
 
 FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pandas_market_calendars (CME session calendar, confined to `core.infra.calendars`), tvdatafeed (TradingView scraper, installed from a pinned git commit, confined to `core.infra.tradingview`), pytest, ruff (lint), pyright (type check).
+
+## MT5 (future provider, not built)
+
+MetaTrader 5 is a possible later provider; no code for it exists. It would plug into the same ports: `IDataProviderPort` for bars (`copy_rates_from`), `IRealtimeQuoteProviderPort` for quotes (`copy_ticks_from`), and optionally `IBrokerPort` for orders (`order_send`). Its symbols would carry the suffix `:MT5`, which the routing tests already pin as unregistered (`UnknownDataProviderError`). The `MetaTrader5` Python package needs a running MT5 terminal on Windows, so deployment needs a Windows host or a Wine bridge (`mt5linux`, `mt5-remote`) next to the Linux app. Exness API keys apply to Exness-platform accounts, not MT5 accounts, so an MT5 account cannot reuse the Exness client.
 
 ## Known Limitations
 
@@ -811,7 +846,7 @@ FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT 
 
 **Two Repositories (secret boundary):** `pocketquant` (code, no secrets) ← `pocketquant-config` (prod .env, creds). CI/CD secret: `POCKETQUANT_CONFIG_DEPLOY_KEY` (read-only git key).
 
-**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), TradingView (index-futures history and polled quotes; an unofficial scraper with no stability promise — `/health` → `market_data_providers` reports its session state), Docker Hub, GitHub Actions.
+**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), TradingView (index-futures history and polled quotes; an unofficial scraper with no stability promise — `/health` → `market_data_providers` reports its session state), Exness (signed REST + WS market data and quotes for CFDs; trading built but switched off), Docker Hub, GitHub Actions.
 
 **Deployment:** Public entry `pocketquant.xyz` via Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare proxies HTTP/HTTPS only — SSH + published DB ports reach the VPS by IP directly. Config flow: `pocketquant-config/.env` → CI reads at deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler coordinates via `apscheduler_jobs` Mongo collection; first to claim `next_run_time` wins. Remote-DB dev mode must set `ENABLE_JOBS=false` (else double-schedule).
 
