@@ -2,10 +2,11 @@
 
 Every live-money rule is enforced before any HTTP call: market orders only, a
 stop loss on every open, at most the minimum lot unless ``max_lots`` is raised,
-a daily loss cap computed from real deals, and no order until the trading
-snapshot is reconciled. ``openPosition`` and ``closePosition`` are acknowledged
-asynchronously; the fill arrives on the events stream, or is recovered from the
-operation status and the deals history when the stream missed it.
+a daily loss cap computed from real deals, and no new position until the trading
+snapshot is reconciled. An exit only has to be a market order for the whole held
+position. ``openPosition`` and ``closePosition`` are acknowledged asynchronously;
+the fill arrives on the events stream, or is recovered from the operation status
+and the deals history when the stream missed it.
 
 Order calls are additionally refused by the client while ``EXNESS_LIVE_TRADING``
 is false, and ``BrokerFactory`` refuses to build this adapter in that case.
@@ -194,16 +195,16 @@ class ExnessBrokerAdapter(IBrokerPort):
         )
 
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
-        reason = self._presubmit_reason(order)
-        if reason:
-            return _rejected(order, reason)
+        if order.order_type != OrderType.MARKET:
+            return _rejected(order, "exness adapter supports market orders only")
         held = self._held_for(order.subscription_id)
         if held is None:
             return await self._submit_open(order)
         pid, position = held
         if position.side == _position_side(order.side):
             return _rejected(order, "position already open for subscription")
-        # An exit skips the stop-loss and loss-cap rules: blocking it would keep the risk open.
+        # An exit skips the snapshot gate and the open rules: blocking it would keep the risk
+        # open. Closing by position id is safe on stale state; the venue rejects a gone id.
         if order.quantity != position.units:
             return _rejected(order, "close quantity must equal the held position")
         return await self._send_tracked(
@@ -211,6 +212,9 @@ class ExnessBrokerAdapter(IBrokerPort):
         )
 
     async def _submit_open(self, order: OrderAggregate) -> OrderResult:
+        reason = self._presubmit_reason(order)
+        if reason:
+            return _rejected(order, reason)
         if order.sl_price is None:
             return _rejected(order, "stop loss required")
         reason = await self._loss_cap_reason()
@@ -237,8 +241,6 @@ class ExnessBrokerAdapter(IBrokerPort):
         return await self._send_tracked("openPosition", order, kind="open", json_body=body)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
-        if order.order_type != OrderType.MARKET:
-            return "exness adapter supports market orders only"
         if self._daily_loss_cap is None:
             return "EXNESS_DAILY_LOSS_CAP not set"
         if not self._snapshot_ready or self._needs_snapshot:
@@ -322,8 +324,8 @@ class ExnessBrokerAdapter(IBrokerPort):
         except ExnessApiError as e:
             if rid not in self._early:
                 if e.code in ("TRANSPORT", "REQUEST_RATE_LIMIT"):
-                    # The request may have reached the venue: wait for a snapshot reconcile.
-                    self._needs_snapshot = True
+                    # The request may have reached the venue: reconcile before the next open.
+                    self._reconcile_later(rid)
                 self._inflight.pop(rid, None)
                 logger.warning("exness.order_rejected", order_id=rid, code=e.code)
                 return _rejected(order, f"{e.code}: {e.message}")
@@ -376,10 +378,10 @@ class ExnessBrokerAdapter(IBrokerPort):
                 await asyncio.sleep(_FILL_TIMEOUT_S)
             if rid not in self._seen_terminal:
                 logger.error("exness.operation_unresolved", order_id=rid, operation_id=operation_id)
-                self._needs_snapshot = True
+                self._reconcile_later(rid)
         except Exception as e:
             logger.error("exness.watch_failed", order_id=rid, error=str(e))
-            self._needs_snapshot = True
+            self._reconcile_later(rid)
 
     async def _recover_fill(self, rid: str) -> None:
         inflight = self._inflight.get(rid)
@@ -391,6 +393,8 @@ class ExnessBrokerAdapter(IBrokerPort):
                 break
         else:
             logger.error("exness.recovered_fill_missing_deal", order_id=rid)
+            self._reconcile_later(rid)
+            return
         await self._reconcile_snapshot()
 
     # ── events path ─────────────────────────────────────────────────────────
@@ -492,7 +496,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         if rid and opened is not None:
             # The request was dropped after a lost ACK, yet it opened a position.
             self._held_unmapped.add(str(opened.get("instrument")))
-            self._needs_snapshot = True
+            self._reconcile_later(rid)
             logger.error("exness.unknown_request_fill", order_id=rid)
         for deal in deals:
             if deal.get("type") == "close":
@@ -566,10 +570,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         if trade is not None:
             await self._emit_trade(trade)
         if not self._inflight and (self._needs_snapshot or not self._snapshot_ready):
-            try:
-                await self._reconcile_snapshot()
-            except Exception as e:
-                logger.error("exness.reconcile_failed", error=str(e))
+            await self._reconcile_snapshot()
 
     async def _publish_close_fill(self, held: _Held, units: float, deal: dict[str, Any]) -> None:
         await self._event_bus.publish(
@@ -622,7 +623,17 @@ class ExnessBrokerAdapter(IBrokerPort):
         # The read sits inside the lock too: a fill applied between the read and the
         # rebuild would be missing from the snapshot and dropped as gone.
         async with self._state_lock:
-            await self._on_snapshot(await self._client.call("getTradingStateSnapshot"))
+            try:
+                await self._on_snapshot(await self._client.call("getTradingStateSnapshot"))
+            except Exception as e:
+                logger.error("exness.reconcile_failed", error=str(e))
+
+    def _reconcile_later(self, rid: str) -> None:
+        """Stop tracking ``rid`` and hold new positions until a snapshot shows what it did."""
+        # ``_on_snapshot`` reopens the gate only once nothing is in flight.
+        self._inflight.pop(rid, None)
+        self._needs_snapshot = True
+        self._spawn(self._reconcile_snapshot())
 
     def _spawn(self, coro: Any) -> None:
         task = asyncio.create_task(coro)

@@ -30,7 +30,9 @@ from pocketquant.core.domain.order import (
 from pocketquant.core.domain.position import PositionAggregate, PositionSide, TradeClosedEvent
 from pocketquant.core.infra.brokers.exness import exness_broker_adapter as adapter_module
 from pocketquant.core.infra.brokers.exness.exness_broker_adapter import ExnessBrokerAdapter
+from pocketquant.core.infra.exness import exness_stream
 from pocketquant.core.infra.exness.exness_client import ExnessApiError
+from tests.core_test.infra.exness.test_exness_stream import _FakeSocket
 
 FIXTURES = Path(__file__).parents[2] / "exness" / "fixtures"
 SYMBOL = "XAUUSD:EXNESS"
@@ -76,6 +78,12 @@ class _FakeClient:
 
     async def deals_window_days(self) -> int:
         return 29
+
+    async def ws_url(self, path: str) -> str:
+        return f"wss://ap-x.exness.com{path}"
+
+    def sign_ws_headers(self, path: str) -> dict[str, str]:
+        return {}
 
     async def call(self, op: str, **kwargs: Any) -> dict[str, Any]:
         self.calls.append((op, kwargs))
@@ -476,6 +484,16 @@ async def test_exit_skips_stop_loss_and_loss_cap() -> None:
     assert len(h.client.ops("closePosition")) == 1
 
 
+async def test_exit_is_sent_while_the_snapshot_gate_is_closed() -> None:
+    h, _ = await _holding_p1()
+    h.broker._needs_snapshot = True
+
+    result = await h.broker.submit_order(_order(side=OrderSide.SELL))
+
+    assert result.status == OrderStatus.SUBMITTED
+    assert len(h.client.ops("closePosition")) == 1
+
+
 async def test_exit_must_close_the_whole_position() -> None:
     h, _ = await _holding_p1()
 
@@ -575,7 +593,9 @@ async def test_missed_fill_recovered_from_operation_status_and_deals(
     "error",
     [ExnessApiError(0, "TRANSPORT", "x"), ExnessApiError(429, "REQUEST_RATE_LIMIT", "x")],
 )
-async def test_lost_ack_blocks_orders_until_snapshot(error: ExnessApiError) -> None:
+async def test_lost_ack_blocks_opens_until_the_snapshot_it_schedules(
+    error: ExnessApiError,
+) -> None:
     h = await _Harness().start()
     h.client.order_error = error
 
@@ -583,12 +603,30 @@ async def test_lost_ack_blocks_orders_until_snapshot(error: ExnessApiError) -> N
 
     assert result.status == OrderStatus.REJECTED
     assert len(h.client.ops("openPosition")) == 1
-    assert h.broker._needs_snapshot
     h.client.order_error = None
     blocked = await h.broker.submit_order(_order())
     assert blocked.error_message == "awaiting trading snapshot reconciliation"
-    await h.broker._reconcile_snapshot()
+    await _drain()
+    assert len(h.client.ops("getTradingStateSnapshot")) == 1
     assert (await h.broker.submit_order(_order())).status == OrderStatus.SUBMITTED
+
+
+async def test_unresolved_operation_reopens_the_gate_after_a_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(adapter_module, "_FILL_TIMEOUT_S", 0)
+    monkeypatch.setattr(adapter_module, "_STATUS_POLLS", 1)
+    h = await _Harness().start()
+    order = _order()
+    await h.broker.submit_order(order)
+
+    await _drain()
+
+    assert len(h.client.ops("getOperationStatus")) == 1
+    assert str(order.id) not in h.broker._inflight
+    assert len(h.client.ops("getTradingStateSnapshot")) == 1
+    second = await h.broker.submit_order(_order(subscription_id="sub2"))
+    assert second.status == OrderStatus.SUBMITTED
 
 
 async def _park_snapshot_rebuild(h: _Harness, repo: _Repo) -> asyncio.Task[None]:
@@ -715,6 +753,53 @@ async def test_restart_closes_repo_position_missing_from_snapshot() -> None:
     assert h.fills[0].filled_price == 2340.0
     assert len(h.trades) == 1
     assert h.trades[0].pnl == -5.1
+
+
+async def test_replayed_reconnect_delivers_the_fill_of_an_inflight_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recorded frames through ``ExnessStream``: snapshot, order, reconnect, snapshot, fill."""
+    monkeypatch.setattr(exness_stream, "_BACKOFF_INITIAL_S", 0)
+    ack = json.dumps(_fixture("events_snapshot"))
+    snapshot = {"event_type": "trading_state_snapshot", "payload": _fixture("snapshot")}
+    scripts: list[list[str]] = [[ack, json.dumps(snapshot)], []]
+    resume = asyncio.Event()
+
+    async def connect(url: str, **kwargs: Any) -> _FakeSocket:
+        if len(scripts) == 1:
+            await resume.wait()
+        if not scripts:
+            await asyncio.Event().wait()
+        return _FakeSocket(scripts.pop(0))
+
+    monkeypatch.setattr(exness_stream.websockets, "connect", connect)
+    h = await _Harness().start(snapshot=False)
+    await h.broker.connect()
+    await _drain()
+    assert h.broker._snapshot_ready
+    order = _order()
+    assert (await h.broker.submit_order(order)).status == OrderStatus.SUBMITTED
+
+    # The venue filled the order while the stream was down; its snapshot already holds p1.
+    h.client.snapshot["positions"] = [_snapshot_position(position_id="p1")]
+    fill = {
+        "event_type": "transaction_event",
+        "operation_id": "op1",
+        "client_request_id": str(order.id),
+        "status": "success",
+        "payload": {"deals": [_open_deal()]},
+    }
+    snapshot["payload"] = h.client.snapshot
+    scripts[0] += [ack, json.dumps(snapshot), json.dumps(fill)]
+    resume.set()
+    await _drain()
+    await h.broker.disconnect()
+
+    assert [r.status for r in h.results] == [OrderStatus.FILLED]
+    assert h.broker._positions["p1"].subscription_id == "sub1"
+    assert h.broker._held_unmapped == set()
+    assert h.broker._snapshot_ready
+    assert not h.broker._needs_snapshot
 
 
 # ── listener robustness and secrets ─────────────────────────────────────────
