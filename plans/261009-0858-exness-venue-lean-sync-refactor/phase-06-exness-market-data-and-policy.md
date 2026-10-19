@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Exness market data and quotes"
-status: in-progress
+status: completed
 priority: P1
 effort: 7d
 dependencies: [5]
@@ -43,6 +43,13 @@ dependencies: [5]
 - Shipped `fb4f2de`, `c92c077`, `3f6c6e6` to develop (CI green) and fast-forwarded master (deploy verdict HEALTHY 20/20). Steps 3, 4 and 6 passed: `True False`; backups `/opt/pocketquant/backups/pre-exness-seed-{symbols,tracked_symbols}-20261019.archive`; seeded 3; the bar stream printed `1`.
 - Step 5 failed (`completed 999`): the first candle page ended at "now", so it carried the in-progress candle. Fixed in `494d3ca`, which returns exactly `n_bars`.
 - Step 7 failed (`0`) for every provider: `RequestLoggingMiddleware` buffered every response body except the bars stream's, so the quote SSE sent nothing until the client disconnected. Exness ticks were already in Redis (`quote:latest:*:EXNESS`). Fixed in its own commit by checking the `text/event-stream` content type.
+- Re-released `7c3ca77` (develop CI green, master deploy verdict HEALTHY 20/20). The T6.19 re-run passed:
+  - step 3: `True False`;
+  - an in-container `len(fetch_ohlcv("XAUUSD:EXNESS", 1m, 1000))` returned 1000 unique bars;
+  - step 5: `completed 1022 True`;
+  - steps 6 and 7: `1` each (the Binance quote stream prints `1` too);
+  - step 8: both sync-status bodies are `completed`, and the `/health` check printed `True`.
+- No `exness.rate_limited*` events appeared after the deploy. D1 holds. Journal: `docs/journals/2026-10-19-exness-market-data-in-prod.md`.
 
 ## Context Links
 - Spike journal `docs/journals/2026-10-13-exness-api-spike.md`: `rest_host: access_point`, `ws_subprotocol: exness-ws-protocol`, `ticks_subscribe_mode: add`, `instrument_names: XAUUSD=XAUUSD, EURUSD=EURUSD, BTCUSD=BTCUSD`, the limits table, the session table, and the 429-below-published-rate finding. `fixtures/summary.json` holds the same keys (`rest_host`, `ws_host`, `ws_subprotocol`, `ticks_subscribe_mode`, `instrument_names`, `history_age_days`, `max_candles_per_request`).
