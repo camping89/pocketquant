@@ -1,5 +1,5 @@
 """ExnessClient: signing, access-point routing, errors, secret hygiene, live gate,
-pacing, transport retries and the 429 rule."""
+pacing, transport retries, the 429 rule and the URL and limits helpers."""
 
 from __future__ import annotations
 
@@ -25,6 +25,11 @@ from pocketquant.core.infra.exness.exness_client import (
     ExnessApiError,
     ExnessClient,
     _RequestPacer,
+    allowed_access_point,
+    history_age_days,
+    min_request_interval,
+    validate_base_url,
+    ws_url,
 )
 from pocketquant.core.infra.exness.exness_signer import body_hash
 from tests.core_test.infra.market_data.conftest import build_settings
@@ -393,3 +398,85 @@ async def test_the_deals_window_stays_inside_the_history_age(
     client = _client(_Exness(), monkeypatch)
 
     assert await client.deals_window_days() == 29
+
+
+def test_validate_base_url_accepts_https_on_confirmed_host() -> None:
+    assert validate_base_url("https://api.example.test/", "api.example.test") == (
+        "https://api.example.test"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://api.example.test",
+        "https://evil.test",
+        "https://u:p@api.example.test",
+        "https://api.example.test/?x=1",
+    ],
+)
+def test_validate_base_url_rejects_unsafe_urls(url: str) -> None:
+    with pytest.raises(ValueError):
+        validate_base_url(url, "api.example.test")
+
+
+def test_ws_url_switches_scheme_and_appends_path() -> None:
+    assert ws_url("https://api.example.test", "/v1/x") == "wss://api.example.test/v1/x"
+
+
+def test_allowed_access_point_accepts_exness_subdomain() -> None:
+    assert allowed_access_point("ap-x.trading.exness.com") == "ap-x.trading.exness.com"
+
+
+@pytest.mark.parametrize("url", ["https://ap-x.exness.com", "https://ap-x.exness.com/"])
+def test_allowed_access_point_accepts_plain_https_url(url: str) -> None:
+    assert allowed_access_point(url) == "ap-x.exness.com"
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "exness.com.evil.test",
+        "evil.test",
+        "http://ap-x.exness.com",
+        "https://ap-x.exness.com.evil.test",
+        "https://u:p@ap-x.exness.com",
+        "https://ap-x.exness.com:8443",
+        "https://ap-x.exness.com/v1",
+    ],
+)
+def test_allowed_access_point_rejects_foreign_hosts(host: str) -> None:
+    with pytest.raises(ValueError):
+        allowed_access_point(host)
+
+
+def _limits(deals_limits: dict[str, int] | None = None) -> dict[str, object]:
+    deals: dict[str, object] = {
+        "api_operation_id": "getDealsHistory",
+        "rate_limit": {"limit": 2, "window_seconds": 1},
+    }
+    if deals_limits is not None:
+        deals["limits"] = deals_limits
+    return {
+        "limits": {
+            "rest": {
+                "global_account_rate": {"limit": 10, "window_seconds": 1},
+                "methods": [
+                    {
+                        "api_operation_id": "getLimits",
+                        "rate_limit": {"limit": 4, "window_seconds": 1},
+                    },
+                    deals,
+                ],
+            }
+        }
+    }
+
+
+def test_min_request_interval_follows_the_strictest_rate_with_headroom() -> None:
+    assert min_request_interval(_limits()) == pytest.approx(0.6)
+
+
+def test_history_age_days_reads_deals_limit_with_default() -> None:
+    assert history_age_days(_limits({"history_age_days": 14})) == 14
+    assert history_age_days(_limits()) == 30
