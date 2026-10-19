@@ -1,0 +1,49 @@
+"""RequestLoggingMiddleware passes server-sent event streams through unread."""
+
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+from starlette.requests import Request
+from starlette.responses import StreamingResponse
+
+from pocketquant.core.common.tracing.request_logging import RequestLoggingMiddleware
+
+
+def _request(path: str) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 1234),
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_endless_event_stream_is_returned_without_reading_it() -> None:
+    """Any SSE route, not only the bars stream: the quote stream was once held back."""
+    chunks_read = 0
+
+    async def endless():
+        nonlocal chunks_read
+        chunks_read += 1
+        yield b"data: {}\n\n"
+        await asyncio.Event().wait()
+
+    stream = StreamingResponse(endless(), media_type="text/event-stream")
+
+    async def call_next(_: Request) -> StreamingResponse:
+        return stream
+
+    middleware = RequestLoggingMiddleware(app=None)  # pyright: ignore[reportArgumentType]
+    response = await asyncio.wait_for(
+        middleware.dispatch(_request("/api/v1/quotes/stream/XAUUSD:EXNESS"), call_next), 1.0
+    )
+
+    assert response is stream
+    assert chunks_read == 0

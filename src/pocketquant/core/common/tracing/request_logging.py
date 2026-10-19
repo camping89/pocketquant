@@ -10,8 +10,6 @@ from pocketquant.core.common.logging import get_logger
 logger = get_logger(__name__)
 
 SKIP_PATHS = {"/health", "/favicon.ico"}
-# SSE endpoints must not have their body_iterator consumed — skip logging body for these
-SKIP_BODY_PREFIXES = ("/api/v1/market-data/bars/stream",)
 MAX_BODY_LOG_SIZE = 10_000
 
 
@@ -44,8 +42,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start_time) * 1000
 
-        # SSE and other streaming responses must not have body_iterator consumed
-        is_streaming = path.startswith(SKIP_BODY_PREFIXES)
+        # An SSE body never ends: reading it here would hold the whole response
+        # back until the client disconnects. Judged by the response, not a route
+        # list, so a new stream route cannot be missed.
+        is_streaming = response.headers.get("content-type", "").startswith("text/event-stream")
 
         response_body = None
         if not is_streaming:
