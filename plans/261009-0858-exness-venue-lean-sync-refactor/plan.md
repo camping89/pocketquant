@@ -1,11 +1,11 @@
 ---
 title: "Exness venue behind existing ports + lean sync refactor"
-description: "Refactor market-data sync into a per-exchange SyncPolicy registry plus one shared runner (Binance first, pinned by characterization tests), freeze a metric ratchet, then add Exness data and quotes, build the Exness broker switched off, and validate on paper."
+description: "On develop: add Exness market data and quotes through suffix routing (XAUUSD:EXNESS), build the Exness broker switched off, and validate on paper, after collapsing DI, routes and wrappers and adding a code-metric ratchet."
 status: pending
 priority: P1
 effort: 7w
-branch: master
-tags: [exness, market-data, sync-policy, refactor, broker, standards]
+branch: develop
+tags: [exness, market-data, suffix-routing, refactor, broker, standards]
 blockedBy: []
 blocks: []
 created: 2026-10-09
@@ -15,15 +15,15 @@ created: 2026-10-09
 
 <!-- Updated: Validation Session 1 - broker off, suffix routing, ratchet, paper validation -->
 ## Overview
-The ports `IDataProvider`, `IRealtimeQuoteProvider`, `IBroker` and `IStrategy` stay the seams. A read-only Exness spike runs first, entirely in `scripts/`. The sync pipeline is then refactored with Binance as the proving provider, pinned by characterization tests: one `SyncPolicy` per exchange carries its own data and quote provider, a `SyncPolicies` registry resolves symbols strictly by exchange suffix, and one shared runner executes every job. `:OKX` market-data symbols are migrated to `:BINANCE` under backup and approval. DI, routes and scalar wrappers are collapsed, the coding standard is rewritten, and the code metric is frozen as a CI ratchet. Exness then becomes policy #2 for data and quotes. The Exness broker is built and tested with recorded fixtures but stays off behind `EXNESS_LIVE_TRADING=false`; no live order is placed. Validation uses a PaperBroker spread, backtests and a paper week across a weekend. Binance, OKX, PaperBroker, `hitnrun2` and `engulfing` stay. MT5 is only documented, nothing is built for MCP, and the deployment topology does not change.
+The ports `IDataProviderPort`, `IRealtimeQuoteProviderPort`, `IBrokerPort` and `IStrategyService` stay the seams. A read-only Exness spike runs first, entirely in `scripts/`. The composite-symbol suffix names the data provider (`BTCUSDT:BINANCE`, `XAUUSD:EXNESS`, `ES1!:TRADINGVIEW`), and develop's `RoutingDataProviderAdapter` and `RoutingRealtimeQuoteAdapter` route by it; develop's sync jobs, trading calendar port and data lag stay. DI, routes and scalar wrappers are collapsed, the coding standard is rewritten, and the code metric becomes a CI ratchet. Exness then plugs in as one more suffix-routed provider for data and quotes. The broker stays a per-strategy setting (`config.broker`). The Exness broker is built and tested with recorded fixtures but stays off behind `EXNESS_LIVE_TRADING=false`; no live order is placed. Validation uses a `PaperBrokerAdapter` spread, backtests and a paper week across a weekend. Binance, OKX, the paper broker, `hitnrun2` and `engulfing` stay. MT5 is only documented, nothing is built for MCP, and the deployment topology does not change.
 
 ## Goals
 - G1: Exness is a venue next to Binance and OKX for market data and quotes, with the same strategies, risk checks and position tracking and no SPA change. The Exness broker is built and tested but switched off until a later go-live plan.
-- G2: Adding a provider means one adapter package, one policy factory and one registry entry. Routing is strictly by exchange suffix with no router layer, and every sync flow reads in ≤3 files plus leaf calls.
-- G3: The team follows a lean standard enforced by ruff, 3 import-linter contracts and a metric ratchet frozen after the refactor.
+- G2: Adding a provider means one adapter package, one `DATA_PROVIDER_DEFAULTS` entry, one entry in each DI router (`app/di/adapters.py`), a calendar registered in `TradingCalendarFactory`, and seeded `symbols`. Routing is strictly by the data-provider suffix; an unknown suffix raises `UnknownDataProviderError`.
+- G3: The team follows a lean standard enforced by ruff, 8 import-linter contracts and a code-metric ratchet (`[tool.code-metrics]`).
 
 ## Phases
-Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-20261012`). `develop` has a different market-data design (provider routing, trading calendar port), so every phase is pending until the plan is re-validated against `develop`.
+Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-20261012`). `develop` has a different market-data design (provider routing, trading calendar port), so Phases 02–05 were redone on develop as integration steps 1–4 and Phases 06–09 were rewritten for develop (`reports/revise-phases-06-09-for-develop.md`).
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
@@ -32,41 +32,40 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 | 03 | [Sync policy registry, shared runner and suffix routing](./phase-03-sync-policy-shared-runner.md) | 5d | Superseded: suffix routing via resolver swap (integration step 2) |
 | 04 | [Collapse DI, routes and scalar wrappers](./phase-04-collapse-di-routes-wrappers.md) | 3d | Done on develop (integration step 3) |
 | 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Done on develop (integration step 4) |
-| 06 | [Exness market data and quotes](./phase-06-exness-market-data-and-policy.md) | 7d | Pending |
+| 06 | [Exness market data and quotes](./phase-06-exness-market-data-and-policy.md) | 7d | In progress (T6.1–T6.17 in the working tree) |
 | 07 | [Exness broker behind the live-trading switch (off)](./phase-07-exness-broker-off-by-default.md) | 6d | Pending |
 | 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | Pending |
 | 09 | [Architecture, deployment, standard and MT5 docs](./phase-09-docs-architecture-deployment-mt5.md) | 1d | Pending |
 
 ## Dependencies
 - Phases run strictly in order, 01 → 09; no two phases run in parallel, so no file has two concurrent owners.
-- Phase 01 waits on U1 and U2. Its fixture commit stays local and ships with the Phase 02 push.
-- Phase 03 ships only after the `:OKX` migration is backed up and approved (or the inventory is empty). Phase 08's paper week needs the user's approval and a no-deploy week.
-- Each phase works on its own branch. A push to `master` deploys to prod through `.github/workflows/cicd.yml`, so every merge-and-push needs the user's approval.
+- Phase 01 waits on U1 and U2. OKX had no market data to migrate (`reports/user-preconditions.md`). Phase 08's paper week needs the user's approval and a no-deploy week.
+- Work happens on `develop-sync` in `D:/w/_me/algotrading/pq-develop` and ships with `git push origin develop-sync:develop`. A push to `develop` runs tests only; `.github/workflows/cicd.yml` builds and deploys to prod only from `master` (branch model in `docs/deployment.md`). Deploys are approved.
 
 <!-- Updated: Validation Session 1 - D2, D4, D6 and the week metric rewritten -->
 ## Success criteria (D1–D7)
 - D1: `POST /api/v1/market-data/sync` with `{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000,"source":"rest_backfill"}` returns `total_bars >= 1000`. The SSE bars stream for `XAUUSD%3AEXNESS` emits `"is_in_progress": true` within 60 s during market hours, the quote stream emits `"bid"`, and `BTCUSDT:BINANCE` keeps syncing.
-- D2: `ExnessBroker` passes fixture-based tests for: open with SL and rejection without SL; a clamped quantity normalized before order creation so fill → `OrderAppService` → `PositionAppService` opens a position; async fill and reject; reconciliation after a missed fill and after a restart; a daily loss cap computed from the recorded deals fixture. With `EXNESS_LIVE_TRADING=false` the app boots, `BrokerFactory` refuses `exness`, and no Exness order endpoint is ever called (mock-transport assertion plus grep, Phase 07 T7.9).
-- D3: `hitnrun2` and `engulfing` backtests on Exness bars reach `finished` in `backtest_runs` with a non-empty trades list, with the spread modelled (`PaperBroker.spread`: ask = bid + spread).
-- D4: `engine/market_data/sync_internals/` is gone, `app/di` has 3 provider modules, and market-data routes live in 2 files. `scripts/code_metrics.py --ratchet` passes against the ceiling frozen at the end of Phase 05 (`[tool.code-metrics]`), and the end-of-Exness re-measure shows no regression.
-- D5: `docs/code-standards.md` is rewritten with no stale status claims, and `uv run lint-imports` prints `Contracts: 3 kept, 0 broken.`.
-- D6: Binance, OKX and PaperBroker tests keep the Phase 02 venue pass count (`BrokerFactory` is pinned by T2.5; no phase edits OKX code). `just test`, ruff, pyright, lint-imports and the ratchet are green, and every CI deploy's `11-verify.sh` verdict reports `0 failures`.
-- D7: `docs/system-architecture.md` shows the Exness adapters, the policy registry and MT5 as a future provider, and `docs/code-standards.md` §8 lists the real add-a-provider touchpoints.
-- Paper week: both strategies run on PaperBroker on `:EXNESS` symbols for 7 days across a weekend close and reopen, with 0 `exness_ws.circuit_breaker_open` in log windows of proven coverage and 0 missing or misaligned bars from `integrity/check` for `XAUUSD:EXNESS` and `EURUSD:EXNESS`.
+- D2: `ExnessBrokerAdapter` passes fixture-based tests for: open with SL and rejection without SL; a clamped quantity normalized before order creation so fill → `OrderAppService` → `PositionAppService` opens a position; async fill and reject; reconciliation after a missed fill and after a restart; a daily loss cap computed from the recorded deals fixture. With `EXNESS_LIVE_TRADING=false` the app boots, `BrokerFactory` refuses `exness`, and no Exness order endpoint is ever called (mock-transport assertion plus grep, Phase 07 T7.9).
+- D3: `hitnrun2` and `engulfing` backtests on Exness bars reach `finished` in `backtest_runs` with a non-empty trades list, with the spread modelled in `PaperBrokerAdapter` (ask = bid + spread).
+- D4: `app/di` has 3 provider modules (`infrastructure.py`, `adapters.py`, `services.py`), and market-data routes live in 2 files (`routes/market_data.py`, `routes/market_data_quotes.py`). `scripts/code_metrics.py --ratchet` passes against `[tool.code-metrics]`; when necessary new code exceeds the ceiling, the ceiling is raised to the measured values in its own commit and reported, never met by padding code.
+- D5: `docs/code-standards.md` is rewritten with no stale status claims, and `uv run lint-imports` prints `Contracts: 8 kept, 0 broken.`.
+- D6: Binance, OKX and paper-broker tests keep passing with no OKX code edits, and the 4 existing `BrokerFactory(event_bus)` call sites stay unchanged. `just test`, ruff, pyright, lint-imports and the ratchet are green, and every CI deploy's `11-verify.sh` verdict reports `0 failures`.
+- D7: `docs/system-architecture.md` shows the Exness adapters, suffix routing and MT5 as a future provider, and the "Composite Symbol Format" section of `docs/code-standards.md` lists the real add-a-provider touchpoints.
+- Paper week: both strategies run on the paper broker on `:EXNESS` symbols for 7 days across a weekend close and reopen, with 0 `exness_ws.circuit_breaker_open` in log windows of proven coverage and 0 missing or misaligned bars from `integrity/check` for `XAUUSD:EXNESS` and `EURUSD:EXNESS`.
 
 ## Test matrix
 | Level | Covers | Where |
 |---|---|---|
-| Unit | spike signer and redaction, mappers, lot math, session calendar, policy registry, client gate/budget/transport retry/429 surfacing, broker state machine and recovery, metric script, migration script | `tests/core_test/infra/exness/`, `tests/engine_test/`, `tests/scripts/` |
-| Characterization | sync jobs, cascade, DI graph and `BrokerFactory`, OpenAPI and route snapshots | `tests/app_test/integration/`, `tests/baseline/` |
+| Unit | spike signer and redaction, mappers, lot math, session calendar, provider registration and suffix routing, client gate/budget/transport retry/429 retry (data) and rejection (orders), broker state machine and recovery, metric script, seed and backfill scripts | `tests/core_test/infra/exness/`, `tests/engine_test/`, `tests/scripts/` |
+| Characterization | suffix routing swap, sync jobs, cascade, `BrokerFactory`, request-schema diff | `tests/app_test/integration/`, `tests/core_test/` |
 | Integration | runner on real Mongo/Redis (testcontainers), clamp → fill → position, async fill wiring, live-off boot | `tests/app_test/integration/`, `tests/engine_test/` |
-| End-to-end | prod sync, SSE and quotes, `:OKX` migration counts, backtests, paper week | Phases 03, 06 and 08 (VPS) |
+| End-to-end | prod sync, SSE and quotes, backtests, paper week | Phases 06 and 08 (VPS) |
 
 <!-- Updated: Validation Session 1 - U2 rewritten; U3 moved to the go-live plan -->
 ## User preconditions (the plan gates on these and never performs them)
 - U1: The Developer Portal link inside the Exness Personal Area resolves to `exness-api.com`.
 - U2: A scoped API key exists (one account; no IP allowlist, by user decision). `EXNESS_API_BASE_URL`, `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY` and `EXNESS_SECRET_KEY` (the 128-hex secret exactly as Key Management shows it, never PEM) are in `pocketquant-config/vps/default/.env`, committed and pushed to `pocketquant-config` master. The user states the API host, which becomes the URL allowlist.
-- Stop and ask the user if: a change would enable live Exness trading, set `EXNESS_LIVE_TRADING=true` or send an Exness order request; the `:OKX` → `:BINANCE` prod data migration would run without a backup and the user's approval; a change would delete Binance or OKX code; the deployment topology would change; Exness limits make policy A-v infeasible; the metric ratchet ceiling would rise; a test failure stays unexplained; U1 fails.
+- Stop and ask the user if: a change would enable live Exness trading, set `EXNESS_LIVE_TRADING=true` or send an Exness order request; the `:OKX` → `:BINANCE` prod data migration would run without a backup and the user's approval; a change would delete Binance or OKX code; the deployment topology would change; Exness limits make policy A-v infeasible; a test failure stays unexplained; U1 fails.
 
 <!-- Updated: Validation Session 1 - new section per decision 3 -->
 ## Out of scope: go-live plan
