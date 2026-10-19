@@ -1,45 +1,33 @@
 # PocketQuant Docs
 
-Canonical documentation for the current code layout and workflow. Docs are **AS-IS only** — no changelog, no version banner, no change narrative (git keeps the history). See the Documentation Policy in the project's `CLAUDE.md`.
+Docs describe the code as it is (AS-IS): no changelog, no version banner, no history. Git keeps the history. Docs are short, plain English only; the rule is in the project `CLAUDE.md`. When a doc and the code disagree, the code wins: fix the doc.
 
-## Reading Order (orient → run → understand → operate)
+## Reading Order
 
-| # | Doc                                                 | Description                                                                                                                                                                                                                                                              |
-|---|-----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0 | [Root README](../README.md)                         | Entry point + local workflow: install deps, run Mongo/Redis, run the API, sync data, run the UI, smoke-test. **Read this first.**                                                                                                                                        |
-| 1 | [Project Overview / PDR](./project-overview-pdr.md) | Product vision, scope, functional requirements (F1…F10), non-functional (NF1…NF6). The "why" and "what".                                                                                                                                                                 |
-| 2 | [System Architecture](./system-architecture.md)     | The single design reference: layers (Clean Architecture + DDD + CQRS), request flows, "Where Does X Live?", MongoDB ERD, real-time streaming (WS/SSE), strategy lifecycle, DI graph, ops context (CI/CD, config flow), bounded contexts, ubiquitous language, limitations. |
-| 3 | [Code Standards](./code-standards.md)               | Lean rules of thumb: principles, helper extraction, file/function size, naming, route/service/DI/repository conventions, composite symbols, async-suspension patterns, comment policy, testing, quality gate (incl. the code metric ratchet). |
-| 4 | [Deployment](./deployment.md)                       | Production deploy: GitHub Actions → Docker Hub → SSH to Vultr VPS. Env vars, rollback, operator runbook, port map.                                                                                                                                                       |
+| # | Doc | Read it for |
+|---|---|---|
+| 0 | [Root README](../README.md) | Install, run locally, smoke test, test gates. Read first. |
+| 1 | [Project Overview](./project-overview-pdr.md) | Vision, goals, functional and non-functional requirements. |
+| 2 | [System Architecture](./system-architecture.md) | Design decisions, layers, startup, control plane, backtest, market data, streaming, brokers, persistence. |
+| 3 | [Codebase Summary](./codebase-summary.md) | Where things live. |
+| 4 | [Code Standards](./code-standards.md) | How to write code here: naming, routes, DI, async rules, comments, tests, quality gate. |
+| 5 | [Deployment](./deployment.md) | CI/CD, prod config, rollback, operator runbooks. |
 
-### Topic docs
+## Topic Docs
 
-| Doc                                                             | Description                                                                                                                                         |
-|-----------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| [Engine scale-out limitation](./engine-scale-out-limitation.md) | Why the engine settles one entry → one TP → closes the whole position; four limitation layers that block scale-out / multi-TP / partial close.     |
-| [Swing pivot & key-level](./swing-pivot-key-level.md)           | Key-level for take-profit: max/min proxy over an N-bar window, TP = max(RR 1:1, key-level), and why the chart's "show all patterns" differs from the strategy's signal set. |
-| [Backtest rubric methodology](./backtest-rubric/methodology.md) | Offline scorecard grading finished runs on Performance/Robustness/Design-integrity (A–F, weakest-axis). Threshold bands, formulas, PSR + sequencing bootstrap, MAE/MFE, AST audit. Tool: `scripts/rubric/`, generated artifacts in `scripts/rubric/output/`. |
+| Doc | Read it for |
+|---|---|
+| [Engine scale-out limitation](./engine-scale-out-limitation.md) | Why one entry settles with one TP and a full close; what blocks scale-out and partial close. |
+| [Swing pivot and key level](./swing-pivot-key-level.md) | How the take-profit key level is found, and why the chart's pattern view differs from the strategy's signals. |
+| [Backtest rubric methodology](./backtest-rubric/methodology.md) | The offline scorecard for finished runs. Tool: `scripts/rubric/`. |
 
-## Current Repo Shape
+## Records (not authority)
 
-One Python package (`pocketquant`) at repo-root `src/`; subpackage boundaries enforced by import-linter contracts in `pyproject.toml` (for the canonical layout see [Root README](../README.md)).
+- `journals/`: dated session notes. They age; do not treat them as current behavior.
+- `todo/`: open research and roadmap notes.
 
-```text
-src/pocketquant/
-├── core/       # 0 deps — domain, common, config, ports/DTOs, persisted entities + infra adapters
-├── engine/     # → core — shared engine with 5 feature areas (strategy, execution, market_data, backtest, live)
-└── app/        # → core + engine — FastAPI routes, scheduler, WS feed, strategy lifecycle, reconcile, backtest tasks, SPA serve
-web/        # React 19 + Vite SPA (separate npm app)
-```
+## Checking Facts
 
-Dependency direction: `core ◁ engine ◁ app`, `web → app` (HTTP only). Backtest and live are two drivers on one shared engine. `fastapi` is imported only by `app`.
-
-Single process: app (FastAPI port 41921, serves all `/api/*` routes + SPA fallback). Scheduler, WS feed, broker, strategy engine run in the same process; single-worker constraint (`--workers 1`).
-
-## Maintenance Note
-
-When documentation conflicts with the code:
-
-- trust `README.md`
-- verify routes via FastAPI OpenAPI at `http://localhost:41921/api/v1/docs`
-- fold duplicate content into the canonical doc, delete the duplicate, fix inbound links
+- Routes: the OpenAPI page at `http://localhost:41921/api/v1/docs`.
+- Env vars: `src/pocketquant/core/config.py`.
+- Import contracts and the metric ceiling: `pyproject.toml`.

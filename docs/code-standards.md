@@ -1,10 +1,10 @@
 # Code Standards
 
-These are rules of thumb, not mandates: apply them when they make the code easier to read, and break them when they make it worse. Run and test commands live in the [README](../README.md); the overall design lives in [system-architecture.md](./system-architecture.md).
+The hard limits (language, code size, layering, logging) are in the project `CLAUDE.md` under "Rules that change decisions"; they always apply. This file explains how to meet them, and its other guidance is rules of thumb: break one when it makes the code worse. Run and test commands live in the [README](../README.md); the design lives in [system-architecture.md](./system-architecture.md).
 
 ## Principles
 
-- **KISS:** pick the simplest solution that is still correct. No layer, interface or config for a need that does not exist yet.
+- **KISS:** the countable limits are the code rule in `CLAUDE.md`. This file does not restate them.
 - **DRY:** one concept has one definition. Repeating something twice is fine; the third time, consolidate.
 - **Balance:** no god-function that owns a whole flow, and no micro-helper that only wraps one call. A function does one job that has a clear name.
 - **Dependency direction is fixed:** `core ◁ engine ◁ app`. `core.domain` never imports `core.infra` and does no I/O (no pymongo, redis or aiohttp; Pydantic is allowed). Only `app` imports `fastapi`. import-linter enforces these (see [Quality Gate](#quality-gate)); `tests/core_test/unit/domain/test_domain_purity.py` also checks domain purity.
@@ -151,7 +151,7 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 4. A calendar registered in `TradingCalendarFactory` (`core/infra/calendars/trading_calendar_factory.py`) when no existing one fits, built from recorded sessions.
 5. A `ContractSpec` per symbol, written by a seed script modelled on `scripts/seed_index_futures.py` (`symbols` and `tracked_symbols`).
 6. The provider in the `/health` provider map (`register_health_checks`, `app/main_extensions.py`).
-7. Any new symbol-keyed collection or Redis key joins the symbol-removal cascade (`TrackedSymbolsService`).
+7. Any new symbol-keyed collection or Redis key joins the symbol-removal cascade (`TrackedSymbolService.remove`).
 8. A broker is optional and separate: a `BrokerFactory` branch, with the broker's own instrument table keyed by the full composite symbol.
 9. Env rows in `docs/deployment.md`, and adapter tests under `tests/core_test/infra/<provider>/` against recorded fixtures.
 
@@ -232,7 +232,7 @@ async def my_service(self) -> AsyncIterator[Service]:
 
 ## Comment Policy — Explain WHY, Not WHAT
 
-Comments cost LOC and rot out of sync with code. Default: no comment. Add one only when the code cannot speak for itself. Applies to Python (`#`, `"""`) and TS/JS (`//`, `/** */`) alike.
+Comments are short, plain English only. They cost LOC and rot out of sync with code. Default: no comment. Add one only when the code cannot speak for itself. Applies to Python (`#`, `"""`) and TS/JS (`//`, `/** */`) alike.
 
 ### REMOVE / never write
 

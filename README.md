@@ -91,24 +91,21 @@ The UI needs at least one synced symbol/interval.
 
 ```bash
 curl -X POST :41921/api/v1/market-data/sync -H 'Content-Type: application/json' \
-  -d '{"symbol":"BTCUSDT","exchange":"BINANCE","interval":"1d","n_bars":200}'
+  -d '{"symbol":"BTCUSDT:BINANCE","interval":"1d","n_bars":200,"source":"rest_backfill"}'
 curl ':41921/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE?interval=1d'   # → bar_count > 0
 curl ':41921/api/v1/market-data/ohlcv/BTCUSDT%3ABINANCE/1d?limit=20'        # → non-empty data
 ```
 
-Then open `:5173`, load `BINANCE:BTCUSDT`, run a backtest strategy, confirm markers/overlays render.
+Then open `:5173`, load `BTCUSDT:BINANCE`, run a backtest, and check that markers and overlays render.
 
-Strategies exposed by the API:
-
-- `hitnrun2` — 1m breakdown/breakup, capped technical SL/TP (entry 4h, SL 8h @ 1% account cap, TP 1h @ 2% account min)
-- `engulfing` — full-candle engulfing (body+range over prior) with rejection-wick filter; SL at pattern extreme, TP = max(RR, key level)
+Strategies: `GET /api/v1/strategies`, registered in `STRATEGY_REGISTRY` (`src/pocketquant/core/domain/strategy/services/__init__.py`).
 
 ## Tests & Gates
 
 ```bash
 just test                    # pytest
-uv run ruff check .          # lint
-uv run pyright               # types
+uv run ruff check src        # lint (also every touched file)
+uv run pyright src           # types (also every touched file)
 uv run lint-imports          # 8 import-linter contracts
 uv run python scripts/code_metrics.py --ratchet   # code metric ratchet (ceiling in pyproject.toml)
 ```
@@ -119,7 +116,7 @@ Shutdown: `Ctrl+C` the servers, then `just down` (`just reset` also drops volume
 
 ## Docs
 
-[Index](./docs/README.md) · [Architecture](./docs/system-architecture.md) · [Deployment](./docs/deployment.md)
+[Index](./docs/README.md) · [Architecture](./docs/system-architecture.md) · [Code standards](./docs/code-standards.md) · [Deployment](./docs/deployment.md)
 
 ## License
 

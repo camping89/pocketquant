@@ -23,7 +23,7 @@ git push origin master
                                 deploy ──► get-vps-config  (clone pocketquant-config via deploy key)
                                            rsync compose.prod.yml + .env + deploy/vps/ → VPS
                                            ssh → 10-deploy.sh   (pull, up, ≤60s health gate, prune)
-                                           ssh → 11-verify.sh   (19 checks → report artifact)
+                                           ssh → 11-verify.sh   (health checks → report artifact)
 ```
 
 - `tests` gates the build. It runs once per host timezone (`UTC`, `Asia/Ho_Chi_Minh`, `America/Chicago`): `uv sync --frozen` → host-zone check → `lint-imports` (import-linter contracts) → `scripts/code_metrics.py --ratchet` (code metric ratchet, see [code-standards.md](./code-standards.md#quality-gate)) → `pytest tests/ -q`. `build-app`/`build-web` need every leg green.
@@ -34,7 +34,7 @@ Manual trigger (no code change): `gh workflow run cicd.yml --ref master`.
 
 ## Verify
 
-`deploy` runs `11-verify.sh` (19 checks) in-pipeline and uploads the `verify-report` artifact (3-day retention). That is the deploy's own health gate — a normal green run needs nothing extra.
+`deploy` runs `11-verify.sh` in-pipeline and uploads the `verify-report` artifact (3-day retention). That is the deploy's own health gate — a normal green run needs nothing extra.
 
 Watch a run:
 
@@ -218,11 +218,13 @@ VPS is disposable. To move:
 2. Update `pocketquant-config/vps/default/host` (+ `id_rsa`/`.pub` if regenerated), `git push` there.
 3. Push (or `gh workflow run cicd.yml`) — CI/CD does the first deploy.
 
-DB starts fresh — re-sync via the procedure below.
+DB starts fresh. Re-sync with the [data runbooks](#data-runbooks).
 
-## 2-Year Bar Re-Sync
+## Data Runbooks
 
-Refresh historical bars after data-source changes. Scripts ship in the app image (`/app/scripts`), run via `docker exec`.
+### Two-year bar re-sync
+
+Refresh historical bars after a data-source change. Scripts ship in the app image (`/app/scripts`), run via `docker exec`.
 
 ```bash
 # Backup
@@ -246,7 +248,7 @@ ssh <VPS> "docker exec pocketquant-app python scripts/backfill/provider_bars.py 
 
 A window older than the history Exness keeps fails with the Exness error code (for example `REQUEST_INVALID_TIME_RANGE`) and exit 1. `DELETE /api/v1/market-data/tracked-symbols/{symbol}` removes an Exness symbol together with all its data.
 
-## Sync Gap Repair
+### Sync gap repair
 
 When `job_history` shows `missed` events for `sync_backfill` (or after deploy windows overlapping 03:00-04:00 UTC), check + repair bar-data gaps. The `sync_1m` cascade self-heals 100 min of missed 1m data per tick, so most windows leave no residual gap — but verify first.
 

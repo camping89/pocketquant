@@ -1,876 +1,225 @@
 # System Architecture
 
-DDD + Clean Architecture + Dishka. Single Python package `src/pocketquant/` (core, engine, app) + Node SPA `web/`. Dependency: `core ◁ engine ◁ app`, `web → app`. Backtest and live are two drivers on one shared engine. Binance public REST/WS (@aggTrade), OKX live trading, single FastAPI process on :41921 with scheduler, WS feed, strategy lifecycle, reconcile loop.
-
-For local run/test steps and canonical routes, use [README](../README.md).
-
-## High-Level Architecture
-
-PocketQuant uses **Clean Architecture + DDD** with strict unidirectional dependency flow: Routes → Services → Domain, Adapters → Domain. Command/Query services orchestrate domain logic. A modern React 19 SPA frontend consumes the REST API.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Client Layer (Browser)                       │
-│  pocketquant-web: React 19 + Vite + Lightweight Charts         │
-│  Candlestick chart, 5 indicators, symbol/interval selectors     │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ HTTP/REST (proxy to :41921 app)
-                       ▼
-          ┌──────────────────────────────────────────────┐
-          │  pocketquant-app (FastAPI + runtime)         │
-          │  :41921 (all /api/v1/* routes)               │
-          │  Scheduler, WS feed, strategy lifecycle,     │
-          │  reconcile loop, backtest tasks              │
-          └──────┬───────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│   External Services & Infrastructure                             │
-│  Binance REST+WS | OKX REST+WS | MongoDB | Redis | APScheduler │
-└─────────────────────────────────────────────────────────────────┘
-                         │
-            ┌────────────┴────────────┐
-            │                         │
-            ▼                         ▼
-┌──────────────────────────┐   ┌──────────────────────────┐
-│  Application Layer       │   │   Domain Layer           │
-│  (Orchestrators)         │◄──┤   (Pure Logic)           │
-│  ├─ StrategyAppService       │   │   ├─ Aggregates         │
-│  ├─ BacktestAppService       │   │   ├─ Value Objects      │
-│  ├─ BarAppService           │   │   ├─ Domain Events      │
-│  ├─ OrderAppService         │   │   ├─ Interfaces         │
-│  └─ PositionAppService      │   │   └─ Domain Services    │
-└──────────┬───────────────┘   └──────────────────────────┘
-           │                            │
-           │    ┌───────────────────────┘
-           │    │
-           ▼    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Infrastructure Layer (External I/O)                 │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │ Brokers  │  │Providers │  │Persistence│  │ Scheduling  │   │
-│  │ (OKX,   │  │(Binance  │  │(MongoDB,  │  │  (APScheduler)  │
-│  │ Paper)  │  │ REST/WS) │  │ Redis)    │  │              │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-        │              │               │            │
-        ▼              ▼               ▼            ▼
-    ┌────────┐  ┌──────────┐  ┌──────────────┐  ┌──────────┐
-    │  OKX   │  │ Binance  │  │  MongoDB     │  │ Redis /  │
-    │ Live   │  │  Public  │  │  (Bars,     │  │BackgroundJobs
-    │Trading │  │  REST/WS │  │  Orders,    │  │          │
-    │        │  │          │  │  Positions) │  │          │
-    └────────┘  └──────────┘  └──────────────┘  └──────────┘
-```
-
-**Dependency Direction:** Features ← Application ← Domain, Adapters ← Domain (no reverse dependencies)
-
-**Real-Time Streaming:** Inbound WebSocket: Binance `@aggTrade` (singleton, market data), OKX private (per-broker, order/position). Outbound SSE: `/api/v1/market-data/bars/stream/{symbol}?interval={interval}` (1s poll, emit on change), `/api/v1/quotes/stream/{symbol}` (0.5s poll). Redis intermediary: WS writes, SSE reads. Frontend EventSource with staleness detection (30s bar, 10s quote); fallback to REST.
-
-## Strategy Declarative Control Plane (SP1)
-
-**Architecture:** Kubernetes-style control-plane/data-plane split.
-
-```
-Control plane (desired state)           Data plane (live engine)
- Mongo: subscription.desired_state       RAM: StrategyAppService instances
-      ▲                 │                    ▲           │
- API  │                 │ read desired       │ start/stop
-      │                 ▼                    │           ▼
- [handlers]  ┌──────────────────┐           │    [market events]
-             │  reconcile loop  │───────────┴────────────
-             │  5s poll         │ write actual_state → Mongo
-             └──────────────────┘
-```
-
-**Control-plane sources of truth:** `Subscription` entity persists two state fields:
-- `desired_state: "running" | "stopped"` — what a handler (or human) intends → written by HTTP start/stop handlers
-- `actual_state: "running" | "stopped"` — live engine's observed state → written by reconcile loop when it detects drift
-
-**Handlers are declarative:** `StrategyCommandService.start(subscription_id)` and `stop(subscription_id)` write `desired_state` only (no direct engine call) and return before the strategy starts/stops; the reconcile loop converges within ≤1 interval.
-
-**Reconcile loop:** `StrategyReconcileAppService` (in `engine` subpackage) polls every `Settings.reconcile_interval_seconds` (default 5.0s):
-1. Iterates `sub_repo.list_all()` (reads from Mongo)
-2. For each subscription, compares `desired_state` to live `StrategyAppService` instance's run-state
-3. Calls `start_strategy()` or `stop_strategy()` to converge
-4. Mirrors observed `actual_state` back to Mongo only on drift (idempotent, no per-tick churn)
-5. Subscription-driven: never enumerates RAM, so injected backtest strategies (synthetic ids) are invisible
-
-**Add new subscription:** `StrategyCommandService.add_symbol(strategy_id, symbol, interval)` persists with `desired_state="stopped"` (opt-in to trading; no auto-start on add) and pre-loads the instance without starting it.
-
-**List subscriptions:** `StrategyQueryService.list_symbols(strategy_code=None)` sources run-state from Mongo: returns `desired_state`, `actual_state`, and `is_running` (derived `actual_state == "running"`). No RAM read.
-
-**Defensive read on legacy docs:** Subscriptions lacking `desired_state` or `actual_state` fields (legacy docs pre-control-plane) read both as `"stopped"` via `Subscription.from_mongo()` defensive `.get()` defaults. Reconcile loop then converges `actual_state` to match `desired_state`, so no manual re-migration required across deploys.
-
-## Clean Architecture Layer Breakdown
-
-### Layer 1: Domain (Pure Business Logic) — src/pocketquant/core/domain/
-
-**Purpose:** Core business rules with ZERO external dependencies. Reusable domain concepts.
-
-**Rules:**
-- No I/O imports (no pymongo, redis, aiohttp, http)
-- Immutable value objects (frozen dataclasses, enums)
-- Domain events for state changes (HistoricalDataSyncedEvent, OrderFilledEvent, etc.)
-- Validation via __post_init__
-- Enforced via `test_domain_purity.py` (AST check)
-
-**Structure:**
-```
-domain/
-├── backtest/               # Backtesting domain
-│   ├── entities.py         # BacktestResult
-│   ├── value_objects.py    # OpenLot
-│   └── config.py           # BacktestConfig
-├── bar/                    # TOP-LEVEL: Market bars (renamed from ohlcv/)
-│   ├── entities.py         # Bar entity with to_mongo/from_mongo
-│   ├── events.py           # BarCompletedEvent, HistoricalDataSyncedEvent
-│   ├── value_objects.py    # OHLCV, BarRange
-│   └── services/bar_builder_domain_service.py  # BarBuilderDomainService service
-├── order/                  # TOP-LEVEL: Order lifecycle
-│   ├── entities.py         # OrderAggregate with to_mongo/from_mongo
-│   ├── enums.py            # OrderType, OrderSide, OrderStatus
-│   ├── events.py           # Order events
-│   └── records.py          # OrderRecord (audit trail, separate from live aggregate)
-├── position/               # TOP-LEVEL: Position tracking
-│   ├── entities.py         # PositionAggregate with to_mongo/from_mongo
-│   ├── enums.py            # PositionSide
-│   ├── events.py           # Position events
-│   └── value_objects.py    # PnL
-├── symbol/                 # TOP-LEVEL: Tradeable instruments
-│   └── entities.py         # Symbol (flattened from SymbolAggregate)
-├── sync_status/            # TOP-LEVEL: Sync tracking
-│   └── entities.py         # SyncStatus
-├── trading/                # Universal trading contracts (source-agnostic)
-│   ├── value_objects.py    # Trade, Fill, EquityPoint, PerformanceMetrics
-│   ├── performance_calculator_domain_service.py  # PerformanceCalculatorDomainService with static .build()
-│   └── trade_stats.py      # trade_stats functions (histogram, streaks, profit_factor, drawdowns)
-├── quote/                  # NON-PERSISTED: real-time quote logic
-│   ├── events.py           # QuoteReceivedEvent, QuoteUpdatedEvent
-│   └── value_objects.py    # Price, QuoteTick
-├── risk/                   # NON-PERSISTED: position sizing / risk
-│   ├── enums.py            # RiskModel enum
-│   ├── value_objects.py    # RiskConfig
-│   ├── position_calculation.py  # PositionCalculation VO (calc result)
-│   └── services/position_calculator_domain_service.py  # PositionCalculatorDomainService (pure calc)
-├── strategy/               # NON-PERSISTED: strategy contracts + impls
-│   ├── enums.py            # Direction enum
-│   ├── events.py           # SignalGeneratedEvent
-│   ├── strategy_service_interface.py   # IStrategyService ABC
-│   ├── value_objects.py    # Signal, StrategyConfig, OrderConfig, StopLossConfig, TakeProfitConfig
-│   ├── patterns/engulfing_detector.py  # Engulfing pattern detector (pure)
-│   └── services/           # HitNRun2StrategyService, EngulfingStrategyService, EngulfingPullback30TouchStrategyService
-└── shared/                 # Cross-cutting
-    ├── enums.py            # Interval enum
-    ├── events.py           # DomainEvent base (was domain_event.py)
-    └── value_objects.py    # INTERVAL_SECONDS mapping
-```
-
-**Example - Bar Entity with MongoDB Persistence:**
-All domain entities use Pydantic BaseModel with built-in `to_mongo()` / `from_mongo()` for persistence.
-
-**Example - Symbol Entity (Flattened from SymbolAggregate):**
-Symbol is now a simple flat entity with `code`, `exchange`, `name`, `asset_class`, `calendar_id`, `contract_spec`, `is_active` fields and standard `to_mongo()`/`from_mongo()` methods.
-
-**Composite Symbol Format:**
-Exchange encapsulation replaces standalone `exchange` field across domain entities (Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol). Symbol identifier format is now composite: `{CODE}:{EXCHANGE}` (e.g., `BTCUSDT:BINANCE`). Single immutable `symbol: str` field replaces `(code, exchange)` pairs. Business logic never decomposes—exchange is opaque postfix.
-
-**Example - Domain Service (Pure Logic):**
-BarBuilderDomainService and PositionCalculatorDomainService are pure domain services with zero I/O, implementing domain business rules.
-
-### Layer 2: Application (Orchestrators) — `engine` and `app` packages
-
-**Purpose:** Orchestrate domain logic + adapter I/O to fulfill business use cases. Stateful services and engines that coordinate between layers. Backtest and live are two **drivers** on one shared engine in `engine` subpackage.
-
-**Structure:**
-```
-src/pocketquant/engine/                     # SHARED engine (used by backtest + live)
-├── strategy/                                # Strategy feature area
-│   ├── strategy_app_service.py
-│   ├── strategy_command_service.py         # StrategyCommandService (dispatch, signal handling)
-│   └── strategy_query_service.py           # StrategyQueryService (read strategies, subscriptions)
-├── execution/                               # Order/Position feature area
-│   ├── order_app_service.py
-│   ├── position_app_service.py
-│   ├── orders_positions_service.py         # OrdersPositionsService (combined query service)
-│   └── risk_check.py                       # RiskCheckHandler (validation)
-├── market_data/                             # Market data feature area
-│   ├── sync_service.py, ohlcv_service.py, quotes_service.py, symbols_service.py
-│   └── app_services/                        # BarAppService, QuoteAppService, WsSubscriptionAppService, sync/integrity jobs
-├── backtest/                                # Backtest driver (isolated per run)
-│   ├── backtest_app_service.py
-│   ├── backtest_sandbox_app_service.py
-│   ├── backtest_execution_service.py       # AsyncTask body: run + persist
-│   ├── backtest_command_service.py         # BacktestCommandService
-│   ├── backtest_query_service.py           # BacktestQueryService
-│   ├── backtest_stats_service.py           # Stats + keyset pagination
-│   ├── backtest_report_app_service.py      # Report collection (Trade+equity → metrics)
-│   ├── historical_replay_app_service.py    # Historical replay
-│   ├── collected_results.py                # Result aggregation
-│   └── backtest_dispatch.py                # Worker dispatch
-└── live/                                    # Live trading driver
-    ├── strategy_reconcile_app_service.py  # Reconcile loop (5s poll) + bootstrap()
-    ├── live_trade_collector.py            # EventBus subscriber → persist live Trade (run_id=sub_id)
-    └── live_metrics_query_service.py      # On-demand per-subscription metrics (M1)
-
-src/pocketquant/core/domain/trading/        # Trading contracts (universal, source-agnostic)
-├── value_objects.py                        # Trade, Fill, EquityPoint, PerformanceMetrics
-├── commission_model.py                     # CommissionModel (Protocol) + PercentageCommissionModel(bps)
-├── performance_calculator_domain_service.py  # PerformanceCalculatorDomainService (NumPy metrics)
-└── trade_stats.py                          # Pure functions: histogram, streaks, profit_factor, drawdowns
-
-src/pocketquant/core/domain/bar/services/    # Domain service layer (top-level)
-├── bar_builder_domain_service.py           # BarBuilderDomainService (OHLCV aggregation)
-
-src/pocketquant/core/domain/risk/services/   # Domain service layer
-├── position_calculator_domain_service.py   # PositionCalculatorDomainService (risk calculations)
-```
-
-**Example - Application Service:**
-```python
-# StrategyAppService - orchestrates domain + adapter I/O
-class StrategyAppService:
-    def __init__(self, broker: IBrokerPort, event_bus: EventBus):
-        self.broker = broker
-        self.event_bus = event_bus
-        self.strategy: Optional[IStrategyService] = None
-
-    async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        """Called when bar completes."""
-        # 1. Domain: Get strategy signal
-        signal = await self.strategy.on_bar_completed(event.bar)
-
-        # 2. Adapter: Check risk
-        approved = await risk_check(signal)
-
-        # 3. Adapter: Execute via broker
-        if approved:
-            order = await self.broker.submit_order(approved.order)
-
-        # 4. Adapter: Publish event
-        await self.event_bus.publish(SignalGeneratedEvent(...))
-```
-
-### Layer 3: Routes (API Layer) — `app/routes/`
-
-**Purpose:** Thin HTTP routing layer. Routes receive requests, delegate to command/query services, return responses.
-
-**Pattern:** Routes use FastAPI's `APIRouter(route_class=DishkaRoute)` and inject service dependencies via `FromDishka[CommandService]` or `FromDishka[QueryService]`. Each route passes path and query parameters to the service as scalars, passes a Pydantic model only when it is the request body, and returns a DTO.
-
-**Structure:**
-Routes are organized by feature with APIRouter registering endpoints: `backtest.py`, `strategy.py`, `trading_orders_positions.py`, `system_jobs.py`, `market_data_quotes.py` (`/quotes`) and `market_data.py`, which holds every `/market-data` endpoint (sync, integrity, OHLCV and the bar stream, sync status, data lag, symbols) plus `tracked_symbols_router` for the tracked-symbol CRUD and backfill. Example route calls a command service method directly:
-
-```python
-# src/pocketquant/app/routes/strategy.py
-strategy_router = APIRouter(prefix="/strategies", tags=["strategies"], route_class=DishkaRoute)
-
-@strategy_router.post("/{strategy_code}/subscriptions", status_code=201)
-async def create_subscription(
-    strategy_code: str,
-    body: CreateSubscriptionBody,
-    cmd_svc: FromDishka[StrategyCommandService],
-) -> dict:
-    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
-```
-
-**Service 5-Step Pattern** (in all command/query services): 1. Receive scalars or the request body 2. Fetch adapters 3. Execute domain 4. Persist 5. Return DTO
-
-### Layer 4: Adapters (External I/O) — src/pocketquant/core/ + other subpackages
-
-**Purpose:** All external integrations: databases, brokers, data providers, scheduling, HTTP. Concrete adapters live in `core/infra/` and `core/common/`. Abstractions (ports/DTOs) live in `core/domain/{brokers,market_data}` so engine/backtest/trading depend on contracts, not implementations (DIP). Domain purity enforced: `core/domain/` imports zero I/O.
-
-**Structure:**
-```
-core/
-├── persistence/                       # Data access (MongoDB, Redis, repositories)
-│   ├── mongodb.py           # Database async singleton (PyMongo)
-│   ├── redis.py             # Cache async singleton (redis-py)
-│   ├── base_repository.py   # BaseRepository mixin (_collection() helper)
-│   ├── health_checks.py     # check_database / check_redis
-│   └── repositories/        # All 12 repos (instance methods via DI)
-│       ├── bar_repository.py
-│       ├── order_repository.py
-│       ├── position_repository.py
-│       ├── subscription_repository.py
-│       ├── backtest_repository.py
-│       ├── backtest_order_repository.py
-│       ├── backtest_trade_repository.py
-│       ├── symbol_repository.py
-│       ├── tracked_symbol_repository.py
-│       ├── sync_status_repository.py
-│       ├── job_history_repository.py
-│       └── trade_repository.py         # Live trading: subscription_id FK
-├── brokers/
-│   ├── paper/               # PaperBrokerAdapter (in-memory simulation)
-│   │   └── paper_broker_adapter.py
-│   └── exness/              # ExnessBrokerAdapter (built, live trading off by default)
-│       └── exness_broker_adapter.py
-├── calendars/
-│   ├── trading_calendar_factory.py         # TradingCalendarFactory (calendar per symbol)
-│   ├── cme_globex_calendar_adapter.py      # CME Globex equity sessions
-│   └── exness_session_calendar_adapter.py  # Exness CFD sessions (recorded trade_sessions, UTC)
-├── market_data/
-│   └── binance/             # Binance REST + WS integration
-│       ├── binance_adapter.py            # BinanceAdapter (implements core.domain IDataProviderPort)
-│       ├── binance_websocket_adapter.py  # BinanceWebSocketAdapter (@aggTrade stream)
-│       └── binance_mappers.py           # Binance-specific mapping
-├── tradingview/             # TradingView scraper integration (index futures)
-│   ├── tradingview_client_interface.py  # ITradingViewClient + RawBar (the swap seam)
-│   ├── tvdatafeed_client.py             # TvDatafeedClient (lock-serialised, epoch recovery)
-│   ├── tradingview_adapter.py           # TradingViewAdapter (implements IDataProviderPort)
-│   └── tradingview_mappers.py           # Symbol/interval/bar mapping
-├── exness/                  # Exness signed REST + WS integration (CFDs)
-│   ├── exness_signer.py                 # Ed25519 secret-key loading + request signing
-│   ├── exness_client.py                 # ExnessClient (signed REST, access point, pacing, 429 rule, live gate)
-│   ├── exness_mappers.py                # Instrument map, lot/unit conversion, tick mapping
-│   ├── exness_stream.py                 # ExnessStream (signed WS, reconnect backoff + breaker)
-│   ├── exness_adapter.py                # ExnessAdapter (implements IDataProviderPort)
-│   └── exness_quote_adapter.py          # ExnessQuoteAdapter (implements IRealtimeQuoteProviderPort)
-├── scheduling/
-│   └── scheduler.py         # JobScheduler (APScheduler + MongoDBJobStore)
-├── http_client/
-│   └── client.py            # ResilientHttpClient (retry/backoff)
-└── domain/                           # Domain (pure business logic, zero I/O)
-    ├── brokers/            # Ports: IBrokerPort, IBrokerFactoryPort + DTOs
-    └── market_data/        # Ports: IDataProviderPort, IRealtimeQuoteProviderPort + DTOs
-```
-
-**Notes:**
-- OKX live broker (OKXBrokerAdapter + websocket) lives in `src/pocketquant/core/infra/brokers/okx/` (next to `paper/`).
-- Ports + DTOs (IBrokerPort, IBrokerFactoryPort, OrderResult, AccountBalance, OrderEvent, IDataProviderPort, IRealtimeQuoteProviderPort) live in `core.domain.{brokers,market_data}`.
-- No schemas/ — persistence lives in domain entities via `to_mongo()`/`from_mongo()` methods.
-
-**Key Services:**
-
-| Service | Purpose |
-|---------|---------|
-| **MongoDBConnection** | Async collection access, pooling (5-50 connections) |
-| **RedisConnection** | JSON serialization, pattern deletion, TTL support |
-| **PaperBrokerAdapter** | In-memory simulation, configurable slippage/delay |
-| **OKXBrokerAdapter** | Live trading, HMAC auth, exponential backoff reconnection |
-| **BinanceAdapter** | Implements IDataProviderPort; public REST API (no auth). Returns bars with delta volume per tick (required by BarBuilderDomainService). Rate limit: 1200 weight/min. |
-| **BinanceWebSocketAdapter** | @aggTrade stream for real-time quote ingestion. Implements IRealtimeQuoteProviderPort. |
-| **TradingViewAdapter** | Implements IDataProviderPort for index futures (ES/NQ/YM). Clamps the request to the plan's entitlement and drops the in-progress bar using the symbol's own calendar. Symbol search is not supported — routing sends search to its named default provider, `binance`. The suffix names the provider, so the exchange the scraper needs comes from `TRADINGVIEW_EXCHANGE_BY_CODE` (`ES1!`/`NQ1!` → `CME_MINI`, `YM1!` → `CBOT_MINI`); a code missing from it raises. |
-| **TvDatafeedClient** | Wraps the unofficial `tvDatafeed` scraper behind ITradingViewClient. Serialises every call with an asyncio.Lock: the library assigns `self.ws` per call and shares one chart session, so concurrent calls would return one symbol's series for another. Recovers the true epoch from the library's naive host-local index. |
-| **ExnessClient** | Signed REST (Ed25519). `EXNESS_API_BASE_URL` serves only `getAccessPoint`; every later call goes to the per-account access point, resolved once per process and held in memory. Requests are paced by the strictest limit `getLimits` publishes, with 20% headroom (the interval is divided by `EXNESS_RATE_FRACTION`). A 429 on a data call is retried at most 3 times (`Retry-After`, else exponential backoff) and logged; a 429 on an order call is never retried. Order operations are refused while `EXNESS_LIVE_TRADING` is false. |
-| **ExnessAdapter** | Implements IDataProviderPort over native Exness bid candles (`price_type=bid`), paged backwards by the published `max_candles_per_request`; the in-progress candle is dropped. |
-| **ExnessQuoteAdapter** | Implements IRealtimeQuoteProviderPort over the Exness ticks WS; the bid is published as `last_price`. |
-| **ExnessSessionCalendarAdapter** | Implements ITradingCalendarPort from the recorded Exness `trade_sessions` (held in New York time, served in UTC). Three calendars: `EXNESS_FX`, `EXNESS_XAUUSD` (gold's daily break) and `EXNESS_CRYPTO` (24/7, weeks open on Sunday). |
-| **JobScheduler** | APScheduler wrapper, async job execution, supports `second` param for cron offset (dodge bar-close race) |
-
-### Layer 5: Common (Cross-Cutting) — src/pocketquant/core/common/
-
-**Purpose:** Shared utilities: event bus, middleware, tracing, health checks, logging, UUID generation.
-
-**Structure:**
-```
-common/
-├── messaging/
-│   ├── event_bus.py          # EventBus (in-memory, FIFO, 50-event history)
-│   ├── event_handler.py      # EventHandler base class
-│   ├── event_registry.py     # @event_handler decorator + auto-discovery
-│   └── ...
-├── middleware/
-│   ├── correlation_id.py     # CorrelationIdMiddleware (request tracking)
-│   ├── request_logging.py    # RequestLoggingMiddleware
-│   ├── idempotency.py        # IdempotencyMiddleware (24h TTL)
-│   └── rate_limit.py         # RateLimitMiddleware (200 req/10s per IP)
-├── tracing/
-│   ├── correlation.py        # CorrelationID context management
-│   └── context.py            # ContextVar storage
-├── health/
-│   ├── coordinator.py        # HealthCoordinator (parallel checks)
-│   └── checks.py             # Database, cache, jobs health probes
-├── database.py               # Database singleton (MongoDB)
-├── cache.py                  # Cache singleton (Redis)
-├── jobs.py                   # JobScheduler singleton (APScheduler)
-├── uuid.py                   # UUID7 generation (time-ordered IDs)
-├── logging.py                # Structured logging (structlog)
-├── constants.py              # Cache keys, TTLs, limits, headers
-└── __init__.py
-```
-
-**Key Components:**
-
-| Component | Purpose |
-|-----------|---------|
-| **EventBus** | Publish domain events, subscribe handlers via @event_handler |
-| **CorrelationIdMiddleware** | Inject request ID for distributed tracing |
-| **RateLimitMiddleware** | Token bucket per IP (200 req/10s) |
-| **IdempotencyMiddleware** | Cache POST responses by idempotency_key header |
-| **Database** | MongoDB async singleton |
-| **Cache** | Redis async singleton |
-| **JobScheduler** | APScheduler async wrapper |
-
-### Layer 6: Presentation (Web UI) — web (React SPA)
-
-**Purpose:** TradingView-like charting interface for real-time market visualization, indicator analysis, strategy management, and backtesting.
-
-**Tech Stack:**
-- **Vite 8** - Build tool with HMR
-- **React 19** - UI framework with Hooks
-- **TypeScript 5.9** - Type safety
-- **TanStack Router** - File-based routing (layout routes via `__root.tsx`)
-- **Lightweight Charts 5.1** - High-performance candlestick rendering
-- **TanStack Query 5.x** - Server state management, real-time polling
-
-**Structure:**
-```
-src/
-├── api/                  # REST client layer
-│   ├── api-client.ts    # HTTP fetch wrapper (proxy to :41921 app)
-│   ├── market-data-api.ts   # Market data queries
-│   ├── backtest-api.ts      # Backtest run + poll
-│   └── strategy-api.ts      # Strategy subscription queries
-├── components/
-│   ├── chart/           # Charting components
-│   │   ├── trading-chart.tsx  # Candlestick + volume + indicators
-│   │   ├── use-chart.ts       # Lightweight Charts initialization
-│   │   └── indicator-series.ts  # SMA, EMA, RSI, MACD, Bollinger
-│   ├── controls/        # User controls
-│   │   ├── symbol-selector.tsx   # Symbol dropdown
-│   │   ├── interval-selector.tsx  # Timeframe picker (1m-1w)
-│   │   └── indicator-toggles.tsx  # Show/hide indicators
-│   ├── backtest/        # Backtest run components
-│   │   └── backtest-form.tsx  # Strategy/symbol/dates + timezone, trigger run
-│   └── layout/
-│       ├── app-header.tsx       # Symbol + interval + indicators
-│       ├── theme-toggle.tsx     # Dark/light mode switcher
-│       ├── timezone-switcher.tsx # Timezone picker
-│       └── live-clock.tsx       # Realtime clock in app-nav
-├── hooks/               # React custom hooks
-│   ├── use-ohlcv.ts     # Fetch historical bars
-│   ├── use-realtime-bar.ts  # Real-time polling (TanStack Query)
-│   ├── use-symbols.ts   # Fetch symbol list
-│   ├── use-indicators.ts  # Indicator calculation
-│   ├── use-run-backtest.ts  # Start single backtest run
-│   └── use-timezone.ts  # Timezone context consumer
-├── lib/
-│   ├── theme-context.tsx  # Dark/light mode state + localStorage persist
-│   ├── theme-colors.ts    # Read CSS tokens for chart colors
-│   ├── timezone-context.tsx # Timezone picker state
-│   └── indicators/      # Pure indicator algorithms
-│       ├── moving-average.ts  # SMA, EMA
-│       ├── rsi.ts             # Relative Strength Index
-│       ├── macd.ts            # MACD + signal line
-│       └── bollinger-bands.ts # Upper, middle, lower bands
-├── routes/              # TanStack Router file-based routes
-│   ├── __root.tsx       # Root layout: nav + theme toggle + timezone + clock
-│   ├── index.tsx        # Charts page
-│   ├── strategies.tsx   # Strategy dashboard
-│   ├── backtest.tsx     # Backtest runner
-│   └── monitor.tsx      # System monitoring
-├── main.tsx             # App entry: QueryClient + Providers + Router
-└── index.css            # Global styles + theme tokens (data-theme: dark|light)
-```
-
-**Routes:**
-- `/` — Charts: TradingChart + SymbolSelector + IntervalSelector + StrategySelector + IndicatorToggles + AppHeader
-- `/strategies` — Operator Dashboard: 3-pane layout (list/start/stop strategies, config+chart embed with indicator toggles, positions/metrics)
-- `/backtest` — Ad-hoc Backtest Runner: form with symbol/interval/strategy/date range (datetime-local inputs with timezone dropdown), run job, poll + display results
-- `/monitor` — System Monitoring: HealthBanner + DataHealthTable (sync/integrity, expandable rows, check/repair) + BackgroundJobsList (auto-poll 30s)
-
-**Key Features:**
-- **Candlestick Chart:** Real-time OHLCV visualization via Lightweight Charts with theme-aware colors
-- **Volume Overlay:** Trading volume as histogram below price
-- **5 Indicators:** SMA (20/50), EMA (12/26), RSI (14), MACD (12,26,9), Bollinger Bands (20,2) with show/hide toggles (reusable on strategies page)
-- **Symbol/Interval Selectors:** Switch data without page reload
-- **Theme Toggle:** Dark/light mode switcher in top-right; persists to `localStorage:pq.theme.mode`, applies `data-theme` attribute to `<html>`, chart re-reads colors on flip
-- **Timezone Picker:** Select timezone for backtest date inputs; displayed as `datetime-local` UI for minute-precision selection
-- **Live Clock:** Realtime wall-clock in app-nav
-- **Real-time Polling:** TanStack Query refetches bar data every 5-10s (configurable)
-- **API Proxy:** Vite dev server proxies `/api/*` to `http://localhost:41921` (app)
-
-**Custom Hooks:**
-
-| Hook | Purpose | Interval |
-|------|---------|----------|
-| `useOHLCV()` | Fetch historical bars (TanStack Query + cache) | on-demand |
-| `useRunBacktest()` / `useBacktestRun()` | Start a single backtest + poll the run to terminal | poll 1.5s while `started` |
-| `useSymbols()` | List available symbols | on-demand |
-| `useAvailableIntervals()` | Get compatible timeframes from sync status | on-demand |
-| `useRealtimeBar()` / `useRealtimeQuote()` | Poll API for latest bar/quote | 5–10s |
-| `useIndicators()` | Calculate SMA/EMA/RSI/MACD/BB from bars | derived |
-| `useSyncStatus()` | Poll sync status | 30s |
-| `useIntegrityRepair()` | Data integrity mutation | manual |
-| `useBackgroundJobs()` / `useJobRuns()` / `useJobStats()` | Poll background job list/runs/stats | 30s |
-| `useSubscriptions()` | Poll strategy subscription list | polling |
-
-**API Layer:** `apiFetch()` / `apiPost()` wrappers in `src/api/api-client.ts`; modules: `market-data-api.ts`, `backtest-api.ts`, `strategy-api.ts`, `system-jobs-api.ts`, `monitor-api.ts`.
-
-**Deployment:** Vite `dist/` served as static assets behind FastAPI (no separate server).
-
-## Where Does X Live?
-
-| Topic | Location |
-|-------|----------|
-| Domain entities (Bar, Order, Position, Symbol) | `core/domain/{bar,order,position,symbol}/entities.py` |
-| Value objects (OHLCV, Signal, PnL, QuoteTick) | `core/domain/{bar,strategy,position,quote}/value_objects.py` |
-| Trading value objects (Trade, Fill, EquityPoint, PerformanceMetrics) | `core/domain/trading/value_objects.py` |
-| OrderRecord (audit trail) | `core/domain/order/records.py` |
-| BacktestConfig | `core/domain/backtest/config.py` |
-| Domain events (11 events) | `core/domain/{bar,order,position,quote,strategy}/events.py` |
-| Enums (OrderStatus, Interval, Direction, etc.) | `core/domain/{bar,order,position,shared}/enums.py` |
-| Event bus + @event_handler decorator | `core/common/messaging/` |
-| Middleware (correlation, rate limit, idempotency) | `core/common/middleware/` |
-| MongoDB connection | `core/infra/persistence/mongodb.py` |
-| Redis connection | `core/infra/persistence/redis.py` |
-| All repositories | `core/infra/persistence/repositories/` |
-| Binance REST + WS clients | `core/infra/binance/` |
-| Trading calendar port + 24/7 implementation | `core/domain/market_data/trading_calendar_port.py`, `core/domain/market_data/continuous_24x7_calendar.py` |
-| CME Globex equity calendar | `core/infra/calendars/cme_globex_calendar_adapter.py` |
-| Exness session calendars | `core/infra/calendars/exness_session_calendar_adapter.py` |
-| Provider routing adapters | `core/infra/market_data/` |
-| TradingView client, mappers, adapters | `core/infra/tradingview/` |
-| Exness client, mappers, data and quote adapters | `core/infra/exness/` |
-| Asset class + contract spec | `core/domain/shared/enums.py`, `core/domain/symbol/value_objects.py` |
-| OKX broker + WS + reconnection | `core/infra/brokers/okx/` |
-| Exness broker (live trading off) | `core/infra/brokers/exness/` |
-| PaperBrokerAdapter (simulation) | `core/infra/brokers/paper/` |
-| APScheduler wrapper | `core/infra/scheduling/scheduler.py` |
-| Dishka DI container (3 providers) | `app/di/` |
-| FastAPI app + middleware wiring | `app/main.py`, `app/main_extensions.py` |
-| Command/Query services | `engine/`, `backtest/`, `app/` (subpackage service classes) |
-| Backtest trigger (save started doc) | `engine/backtest/backtest_command_service.py` |
-| Backtest task body (run + persist) | `engine/backtest/backtest_execution_service.py` |
-| Backtest stats + paged trades + markers | `engine/backtest/backtest_stats_service.py` (orchest) + `core/domain/trading/trade_stats.py` (domain) |
-| Backtest engine setup + replay | `engine/backtest/backtest_dispatch.py`, `engine/backtest/backtest_app_service.py` |
-| Strategy runtime dispatch | `engine/strategy/strategy_command_service.py`, `engine/strategy/strategy_query_service.py` |
-| Order state machine | `engine/execution/order_app_service.py` |
-| Position tracking + P&L | `engine/execution/orders_positions_service.py` |
-| HitNRun2 strategy (hitnrun2) | `core/domain/strategy/services/hitnrun2_strategy_service.py` |
-| Background sync job registration | `app/main_extensions.py` → `register_sync_jobs()` |
-| UUID7 generation | `core/common/uuid.py` |
-| Cache keys, TTLs, constants | `core/common/constants.py` |
-| Frontend API client layer | `web/src/api/` |
-| Frontend custom hooks | `web/src/hooks/` |
-| Chart + indicator components | `web/src/components/chart/` |
-| Theme context + toggle + colors | `web/src/lib/theme-context.tsx`, `web/src/components/layout/theme-toggle.tsx`, `web/src/lib/theme-colors.ts` |
-| Timezone context + picker | `web/src/lib/timezone-context.tsx`, `web/src/components/layout/timezone-switcher.tsx` |
-| Live clock | `web/src/components/layout/live-clock.tsx` |
-| Theme CSS tokens + data-theme attribute | `web/src/index.css` (`:root[data-theme="dark|light"]` with token definitions) |
-| Backtest form (datetime-local + timezone) | `web/src/components/backtest/backtest-form.tsx` |
-| Domain purity test (AST check) | `tests/core_test/unit/domain/test_domain_purity.py` |
-| BacktestSandboxAppService | Backtest engine isolated instance | `engine/backtest/backtest_sandbox_app_service.py` |
-| StrategyReconcileAppService | Reconciliation loop + `bootstrap()` (boot instance load) | `engine/live/strategy_reconcile_app_service.py` |
-| LiveTradeCollector | EventBus subscriber → persist live `Trade` (`run_id`=sub_id) | `engine/live/live_trade_collector.py` |
-| LiveMetricsQueryService | On-demand per-subscription performance metrics (M1) | `engine/live/live_metrics_query_service.py` |
-| WsSubscriptionAppService | WebSocket subscription mgmt | `engine/market_data/app_services/ws_subscription_app_service.py` |
-| QuoteAppService | WS feed + tick→bar processing | `engine/market_data/app_services/quote_app_service.py` |
-| BrokerFactory | Concrete broker construction (paper/OKX) | `core/infra/brokers/broker_factory.py` |
-| PerformanceCalculatorDomainService | NumPy metrics calculator | `core/domain/trading/performance_calculator_domain_service.py` |
-| SyncProgressTrackerDomainService | Sync status tracking | `core/domain/sync_status/services/sync_progress_tracker_domain_service.py` |
-| BacktestReportAppService | Backtest report: collect Trade+equity, build metrics | `engine/backtest/backtest_report_app_service.py` |
-| EngulfingStrategyService | Engulfing strategy impl | `core/domain/strategy/services/engulfing_strategy_service.py` |
-| EngulfingPullback30TouchStrategyService | Engulfing variant (`engulfing_pullback30_touch`): arm on pattern, enter at next bar close on a 30% intrabar pullback | `core/domain/strategy/services/engulfing_pullback30_touch_strategy_service.py` |
+PocketQuant is one Python package, `src/pocketquant/` (subpackages `core`, `engine`, `app`), plus a React SPA in `web/`. Everything runs in one FastAPI process on port 41921. For run and test steps, see the [README](../README.md). For the directory map, see [codebase-summary.md](./codebase-summary.md).
+
+## Decisions
+
+- **One process, one worker.** The API, the scheduler, the WebSocket feeds, the strategy engine, the reconcile loop and backtest tasks share one process. They are in-process singletons, so `--workers N` would duplicate the reconcile loop and the live broker connection.
+- **Dependency direction is fixed:** `core ◁ engine ◁ app`, and `web → app` over HTTP only. import-linter contracts in `pyproject.toml` enforce it.
+- **Backtest and live are two drivers on one engine.** `engine.backtest` and `engine.live` never import each other. The shared parts (`engine.strategy`, `engine.execution`, `engine.market_data`) import neither.
+- **The domain does no I/O.** `core/domain/` imports no pymongo, redis or aiohttp. `tests/core_test/unit/domain/test_domain_purity.py` checks this.
+- **Strategies are declarative.** The API writes the desired state; a loop converges the engine to it (see [Strategy control plane](#strategy-control-plane)).
+- **A symbol's suffix names its data provider** (see [Market-data routing](#market-data-routing)). The execution broker is a separate per-strategy setting.
+- **All times are UTC.** `assert_utc_runtime()` (`app/main_extensions.py`) refuses to start when the process zone is not UTC.
+
+## Layers
+
+| Layer | Location | Holds |
+|---|---|---|
+| Domain | `core/domain/` | Entities, value objects, events, domain services, strategies, ports and DTOs. No I/O. |
+| Adapters | `core/infra/`, `core/common/` | MongoDB, Redis, repositories, brokers, data providers, calendars, scheduler, middleware, event bus. |
+| Engine | `engine/` | Orchestration shared by live and backtest: `strategy/`, `execution/`, `market_data/`, `backtest/`, `live/`. |
+| App | `app/` | FastAPI routes, DI container, lifespan, SPA serving. The only package that imports `fastapi`. |
+| Web | `web/` | React 19 + Vite SPA. Talks to the app over `/api/*`. |
+
+Ports live in the domain so the engine depends on contracts, not implementations: `IBrokerPort` and `IBrokerFactoryPort` in `core/domain/brokers/`; `IDataProviderPort`, `IRealtimeQuoteProviderPort` and `ITradingCalendarPort` in `core/domain/market_data/`.
 
 ## Request Flow
 
-**Command (POST):** Middleware (correlation, rate-limit, idempotency) → Route (parse command) → Service (1. fetch adapter, 2. validate domain, 3. persist, 4. invalidate cache, 5. publish event) → Response DTO.
+- Middleware, outermost first (`configure_middleware` in `app/main_extensions.py`): `CorrelationIDMiddleware` → `IdempotencyMiddleware` (caches POST responses for 24 h) → `RateLimitMiddleware` (token bucket per client IP in Redis: 200 tokens, 20 per second refill) → `RequestLoggingMiddleware` → CORS.
+- Routes in `app/routes/` inject a command or query service with `FromDishka[...]`, call one method and return its DTO. Exceptions go to the global handlers (`core/common/exceptions.py`).
+- `app/main_extensions.py` (`register_routes`) mounts every router under `/api/v1`. The live route list is the OpenAPI page at `/api/v1/docs`.
 
-**Query (GET):** Middleware → Route → Service (1. fetch/cache, 2. validate, 3. cache result, 4. return DTO) → Response.
+## Dependency Injection
 
-## MongoDB & Repositories
+`app/di/` holds three Dishka providers. `create_container(settings)` passes `Settings` in through `from_context` and builds with `STRICT_VALIDATION`, so a type provided twice fails at startup.
 
-13 collections. All `_id` are UUIDv7 except `apscheduler_jobs` (job name, APScheduler-managed). Join keys: **`subscription_id`** (uuid7 string) links live trading records to subscription; **`run_id`** links backtest records to run; composite **`symbol`** (`BTCUSDT:BINANCE`) shared across market-data + trading. Unique index on `(strategy_code, symbol, interval)` dedup subscriptions. All repositories in `core/infra/persistence/repositories/`, inherit `BaseRepository`, injected with `Database`, zero direct collection calls outside persistence layer.
+| Provider | File | Provides |
+|---|---|---|
+| `InfrastructureProvider` | `infrastructure.py` | Settings, EventBus, Database, Cache, repositories, calendars, JobScheduler, health. |
+| `AdaptersProvider` | `adapters.py` | TradingView and Exness clients, the routed data and quote ports, `BrokerFactory`. |
+| `ServicesProvider` | `services.py` | App services, the strategy engine, the command and query services routes inject. |
 
-| Collection | `_id` | Repository | Purpose |
-|---|---|---|---|
-| `symbols` | uuid7 | SymbolRepository | Symbol metadata |
-| `bars` | uuid7 | BarRepository | Historical OHLCV |
-| `sync_status` | uuid7 | SyncStatusRepository | Market-data sync progress |
-| `tracked_symbols` | uuid7 | TrackedSymbolRepository | Symbols to sync |
-| `subscriptions` | uuid7 | SubscriptionRepository | Strategy subscriptions + control plane (desired_state, actual_state) |
-| `orders` | uuid7 | OrderRepository | Live orders, subscription_id FK |
-| `positions` | uuid7 | PositionRepository | Live positions, subscription_id FK |
-| `trades` | uuid7 | TradeRepository | Live trades (avg-cost round-trips), subscription_id FK, run_id=subscription_id for live |
-| `backtest_runs` | uuid7 | BacktestRepository | Single-run backtest results, keyed by run_id |
-| `backtest_orders` | uuid7 | BacktestOrderRepository | Backtest order fills |
-| `backtest_trades` | uuid7 | BacktestTradeRepository | Backtest round-trip trades |
-| `job_history` | uuid7 | JobHistoryRepository | APScheduler job execution history |
-| `apscheduler_jobs` | job name | (APScheduler) | Serialized scheduled jobs |
+## Startup and Shutdown
 
-### Symbol removal
+The order lives in `lifespan()` in `app/main.py`. The parts that matter:
 
-`DELETE /api/v1/market-data/tracked-symbols/{symbol}` (`TrackedSymbolService.remove`) deletes the symbol and every piece of data that references it: `tracked_symbols` first (sync jobs and the WS feed stop picking it up), then each subscription (stopped, then removed via `StrategyCommandService`), then `symbols`, `bars` (plus the in-process bar write cache), `sync_status`, `backtest_orders`/`backtest_trades`/`backtest_runs`, live `orders`/`positions`/`trades`, the symbol's `job_history.details[]` entries, and the Redis keys `quote:latest:{symbol}`, `bar:current:{symbol}:*`, `ohlcv:{symbol}:*`, `data_lag:{symbol}`. Repositories holding a `symbol` field extend `SymbolScopedRepository.delete_by_symbol`. The call is idempotent (always 200) and returns per-collection counts under `deleted`.
+1. `set_sync_container(container)` runs before the first `await`. APScheduler keeps `next_run_time` in Mongo, so a persisted job can fire during an early `container.get(...)` and would otherwise hit an unset global. See "Async Suspension Points" in [code-standards.md](./code-standards.md#async-suspension-points--await-is-preemption).
+2. Indexes, then recovery sweeps: a backtest left `started` by a killed process is marked `failed`; a `job_history` row stuck at `running` is marked `failed`.
+3. Tracked symbols are seeded and one strategy instance per subscription is loaded (`bootstrap_live_instances`). This runs even when jobs are off.
+4. Health checks, background jobs, the quote feed, the live trade collector, and last the reconcile loop.
 
-### Strategy Lifecycle (User POV)
+`ENABLE_JOBS=false` skips the background jobs, the live trade collector and the reconcile loop. The quote feed still runs: it writes only ephemeral Redis keys (`quote:latest`, `bar:current`) and in-process events. The `sync_1m` job and its cascade are the only writers of Mongo `bars`, so a local process with jobs off never persists bars.
 
-**Create subscription:** `POST /api/v1/strategies/{strategy_code}/subscriptions` with `{symbol, interval}`. Validates symbol is tracked, looks up strategy in `STRATEGY_REGISTRY`, computes deterministic `sub_id = sha256(strategy_code|symbol|interval)[:16]`, instantiates `IStrategyService` via `StrategyAppService.load_strategy()`, persists `Subscription` to MongoDB with `desired_state="stopped"` (opt-in to trading, no auto-start). Returns `{id, strategy_code, symbol, interval, created_at, is_running}`.
+Shutdown drains in-flight backtests, stops the reconcile loop and the quote feed, then `container.close()` stops the strategy engine, the scheduler, Redis and MongoDB in reverse order.
 
-**Start/Stop:** `POST /subscriptions/{sub_id}/start`, `POST /subscriptions/{sub_id}/stop` write `desired_state` to Mongo. Reconcile loop (5s poll) converges engine state within one interval.
+## Strategy Control Plane
 
-**Reconcile loop:** `StrategyReconcileAppService` (background task, started at boot) every 5s: (1) fetch all subscriptions from Mongo, (2) compare `desired_state` vs live `is_running` (RAM), (3) call `start_strategy()` or `stop_strategy()` on drift, (4) mirror `actual_state` back to Mongo (idempotent, no churn unless drift).
+Kubernetes-style split: Mongo holds the desired state, the engine holds the running instances.
 
-**Delete:** `DELETE /subscriptions/{sub_id}` deletes the subscription; the reconcile orphan-unload tears down the in-memory instance out of band. Subscriptions hold no backtest state — forward-testing only.
+- `Subscription` has `desired_state` and `actual_state` (`"running"` or `"stopped"`).
+- The start and stop routes write `desired_state` only and return at once.
+- `StrategyReconcileAppService` (`engine/live/`) polls every `RECONCILE_INTERVAL_SECONDS` (default 5 s). It reads every subscription from Mongo, starts or stops instances to match `desired_state`, and writes `actual_state` back only on drift. It never enumerates RAM, so backtest strategies stay invisible to it.
+- A new subscription is stored with `desired_state="stopped"` and a UUIDv7 id. The route never touches the engine; the reconcile loop loads the instance. The unique index on `(strategy_code, symbol, interval)` rejects duplicates.
+- A subscription document without the state fields reads both as `"stopped"`.
+- Deleting a subscription removes its document; the reconcile loop unloads the orphan instance.
 
-### Backtest (ad-hoc single run)
+### Signal flow
 
-Backtest is fully decoupled from subscriptions. `POST /api/v1/backtest/run` (free-form `{strategy_id, symbol, interval, start_date, end_date, parameters}`) runs one ad-hoc backtest. `start_date` and `end_date` are `datetime` with minute precision (format: ISO 8601, e.g. `2024-01-15T09:30:00`); date-only strings are accepted and parsed as 00:00:00 UTC for backward compatibility.
+`StrategyAppService` (`engine/strategy/`) routes `BarCompletedEvent` and `QuoteReceivedEvent` to the strategies bound to that symbol and interval. A returned `Signal` goes through balance read, position lookup, `RiskCheckHandler`, `PositionCalculatorDomainService`, order creation and `OrderAppService.submit()`. Fills route back to the owning strategy by `subscription_id`. Subscriptions on the same broker share one broker connection.
 
-1. The route allocates a `run_id`, persists a `started` `BacktestResult` doc immediately, then spawns `BacktestExecutionService.execute_and_persist` as an in-process `asyncio.create_task` (no queue) and returns `202 {request_id: <run_id>}`.
-2. The engine runs in a per-run `BacktestSandboxAppService` (isolated EventBus + StrategyAppService + throwaway trackers via a local EventRegistry). Trades are collected via broker-emitted `TradeClosedEvent` (published after each `PositionAggregate.reduce()` or `close()`), persisted orders → trades → run, and flips the doc to `finished` (or `failed` + `error_message`).
-3. FE polls `GET /backtest/{run_id}` until terminal; `GET /backtest/{run_id}/equity`, `GET /backtest/{run_id}/trades` (keyset paged), `GET /backtest/{run_id}/trade-markers`, `GET /backtest/{run_id}/stats`, and `GET /backtest/{run_id}/orders` (orders with embedded `fills[]` + lifecycle `events[]`, DTO keyed by `order_id`) serve the result detail.
+### Live trades
 
-**Trade emission flow:**
-```
-PositionAggregate.reduce_quantity/close()
-  ↓ emits
-TradeClosedEvent (avg-cost, quantity, direction)
-  ↓ forwarded via
-IBrokerPort.subscribe_trades(callback)
-  ├─ PaperBrokerAdapter: fires the trade callback AFTER the fill OrderResult
-  └─ OKXBrokerAdapter: no-op (defers live-trade collection to R8)
-  ↓
-BacktestReportAppService.on_trade(event)
-  ├─ Build Trade (stamp run_id, strategy_code) + credit pnl
-  └─ Back-link exit OrderRecord.resulting_trade_id
-```
+A broker emits a `TradeClosedEvent` on each position reduce or close (average cost). `StrategyAppService._forward_trade_to_bus` publishes it; `LiveTradeCollector` stamps `run_id=subscription_id` and stores it in `trades`. `LiveMetricsQueryService` computes metrics from `trades` on demand (`GET /api/v1/subscriptions/{sub_id}/metrics`). `OKXBrokerAdapter.subscribe_trades()` is a no-op, so OKX trades are not collected.
 
-Dispatch order (fill `OrderResult` before `TradeClosedEvent`) lets `on_trade` back-link the
-exit order. Commission: per-fill debit in `on_fill`; `on_trade` credits pnl only (no
-double-count). `entry_time` = first open; each reduce = 1 Trade record (partial closes =
-round-trip chunk).
+## Backtest
 
-**Equity-curve granularity:** realized-equity points come only from `on_trade` (one per close, open fills add none), while the persisted curve is the per-bar `_mtm_curve` (broker `total_equity`), so `total_return`/`cagr` depend on closing equity and are independent of intra-bar fill timing.
+A backtest is an ad-hoc single run, independent of subscriptions.
 
-**Trades endpoint (keyset pagination):** `GET /backtest/{run_id}/trades` returns paginated trades via keyset cursor, server-side filtered (all/wins/losses) and sorted. Query params: `limit` (default 50), `cursor` (opaque base64 token), `sort_key` (9 keys: entry_time, pnl, quantity, duration_seconds, entry_price, exit_price, commission, direction, status), `sort_dir` (asc/desc), `filter` (all/wins/losses). Footer `total` and `total_pnl` computed once per run (first page, `cursor is None`). Response: `{items, next_cursor, has_more, total, total_pnl}`.
+1. `POST /api/v1/backtest/run` allocates a `run_id`, stores a `started` `BacktestResult`, starts `BacktestExecutionService.execute_and_persist` with `asyncio.create_task` (no queue) and returns 202.
+2. The run uses its own `BacktestSandboxAppService`: its own EventBus, strategy engine and trackers. Live subscriptions never see replayed bars or synthetic fills, and concurrent runs do not cross-talk.
+3. The task stores orders, then trades, then the run, and sets `finished`, or `failed` with `error_message`.
+4. The SPA polls `GET /api/v1/backtest/{run_id}` and reads equity, trades (keyset paged), markers, stats and orders from sub-routes.
 
-**Markers endpoint (lite chart arrows):** `GET /backtest/{run_id}/trade-markers` returns list of `{trade_id, entry_time, exit_time, direction}` for the chart's BUY/SELL arrows (1 per trade, no paging).
+- The `run_id` is the run document `_id` and the `run_id` of every `backtest_orders` and `backtest_trades` row.
+- There is no concurrency cap. Runs share the Mongo pool.
+- In-flight tasks live in `app.state.backtest_tasks` and are awaited on shutdown.
+- The broker publishes the fill `OrderResult` before the `TradeClosedEvent`, so `BacktestReportAppService.on_trade` can back-link the exit order. Commission is debited per fill; `on_trade` credits pnl only.
+- The stored equity curve is the per-bar mark-to-market curve. `BacktestAppService._mtm_on_bar` subscribes after the broker handler, so it reads equity already marked to the bar close.
 
-**Stats endpoint (analytics):** `GET /backtest/{run_id}/stats` returns `{pnl_histogram, duration_histogram, streaks (max_win_streak, max_loss_streak), profit_factor_by_direction, drawdowns (top 5), profit_factor_all}` — all computed from trades via domain calculator, cached in app memory during route lifetime.
+### Paper broker accounting
 
-**History scope:** `GET /backtest/strategy/{strategy_id}` lists a strategy's runs, optionally narrowed by `?symbol=&interval=`. `symbol` is composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`) — a bare code never matches. `BacktestResult` denormalizes `symbol`/`interval` top-level (from `config_snapshot`, uppercased) so the scope filter hits an index; pre-denormalization docs fall back to the snapshot in `from_mongo`.
+`PaperBrokerAdapter` (`core/infra/brokers/paper/`) uses futures/margin accounting at 1x leverage, not spot, because the live domain is OKX perpetual SWAP.
 
-**Run-id invariant:** the route-allocated `run_id` is the run doc `_id` and every `backtest_orders.run_id` / `backtest_trades.run_id`.
+| | Spot | Paper broker |
+|---|---|---|
+| Open or add | `cash -= notional` | `_balance` unchanged |
+| Close or reduce | `cash += proceeds` | `_balance += realized delta` |
+| `total_equity` | `cash + Σ market value` | `_balance + Σ unrealized pnl` |
+| `available_balance` | `cash` | `_balance` |
 
-**Isolation:** the sandbox owns its own bus, so live subscriptions never see replayed bars or synthetic fills, and concurrent runs don't cross-talk. No concurrency cap — runs share the live Mongo pool (`MONGODB_MAX_POOL_SIZE`); the operator owns traffic.
+- Why: an all-in spot open drops equity to about zero, which zeroes Sharpe and fakes a -100% drawdown. `_balance + unrealized` is also correct for shorts without signed market value.
+- `_reduce_and_credit` credits the realized delta of each reduce, not the cumulative value, so partial closes count once.
+- `_can_afford` gates only a BUY that opens or adds. A BUY that covers a short is never rejected, or a losing short could not close.
+- `available_balance` stays `_balance`, so a strategy that pyramids sizes against the full balance. No current strategy pyramids.
+- Spread: the backtest `spread` field (default 0) treats bars as bid prices, so ask = bid + spread. BUY fills pay the ask; a SHORT's SL and TP check the bar's ask high and ask low. The live paper broker runs without spread.
 
-**Resilience:** in-flight tasks are held in `app.state.backtest_tasks`, drained (awaited) on shutdown; a boot sweep flips any orphan `started` run (killed mid-run) to `failed`. Status vocabulary is `started`/`finished`/`failed`.
+## Market Data
+
+### Market-data routing
+
+- A composite symbol is `{CODE}:{PROVIDER}`. The suffix, lower-cased, is the provider id: `BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`, `XAUUSD:EXNESS` → `exness`. `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py` is the only parser.
+- `RoutingDataProviderAdapter` and `RoutingRealtimeQuoteAdapter` (`core/infra/market_data/`) send a symbol to exactly that provider. There is no fallback, because another provider's bars for the same code are a different instrument. An unknown suffix raises `UnknownDataProviderError`.
+- An unseeded symbol takes its provider's `asset_class` and `calendar_id` from `DATA_PROVIDER_DEFAULTS`.
+- How to add a provider: "Adding a data provider" in [code-standards.md](./code-standards.md#composite-symbol-format).
+
+### Providers
+
+| Provider | Adapter package | Notes |
+|---|---|---|
+| Binance | `core/infra/binance/` | Public REST, no auth. `@aggTrade` WS for quotes. |
+| TradingView | `core/infra/tradingview/` | Index futures through the unofficial `tvDatafeed` scraper, with no stability promise. `TvDatafeedClient` serialises every call with a lock, because the library shares one chart session and parallel calls return one symbol's bars for another. `TRADINGVIEW_EXCHANGE_BY_CODE` maps codes to the scraper's exchange. |
+| Exness | `core/infra/exness/` | Signed REST and WS (Ed25519) for CFDs. See below. |
+
+**Exness client.** `EXNESS_API_BASE_URL` serves only `getAccessPoint`. Every later call goes to the per-account access point, resolved once per process and held in memory. Requests are paced by the strictest published limit with 20% headroom, scaled by `EXNESS_RATE_FRACTION`. A 429 on a data call is retried at most 3 times; a 429 on an order call is never retried. Order calls are refused while `EXNESS_LIVE_TRADING` is false.
+
+**Exness data.** `ExnessAdapter` reads bid candles, paged backwards by the published `max_candles_per_request`, and drops the in-progress candle. `ExnessSessionCalendarAdapter` serves three calendars (`EXNESS_FX`, `EXNESS_XAUUSD`, `EXNESS_CRYPTO`) from recorded `trade_sessions`, held in `America/New_York` time so US daylight saving moves them.
+
+### Background jobs
+
+Registered in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.py`). All triggers are UTC.
+
+| Job | Schedule | Does |
+|---|---|---|
+| `sync_1m` | every minute at :02 | Fetches 1m bars per tracked symbol, then cascades in-process to higher intervals. A 100-minute lookback heals missed ticks. |
+| `data_lag_check` | every minute at :30 | Stores each symbol's feed lag in Redis `data_lag:{symbol}`; logs state changes only. |
+| `sync_verify_cascade` | hourly | Compares REST and cascade bars on one sampled symbol. |
+| `sync_backfill` | 03:00 | Full backfill. |
+| `sync_integrity` | 04:00 | The only place missing 1m bars are reported. |
+| `sync_repair` | every 12 h | Deletes misaligned bars and re-syncs gaps. |
+
+Each symbol is gated by its own calendar. At boot, `enqueue_missed_catchups` enqueues a `<job_id>_catchup` run when a daily or 12 h job's last success is too old.
+
+### Data lag
+
+A delayed feed (the free TradingView plan runs about 10 to 15 minutes behind CME) is flagged, not treated as broken. Lag is counted in trading minutes from the newest 1m bar, so weekends and halts are not lag. Thresholds are constants at the top of `engine/market_data/data_lag_service.py`.
+
+| State | Meaning |
+|---|---|
+| `ok` | Current. |
+| `delayed` | More than 3 minutes behind, still inserting. |
+| `stuck` | Behind and one of: 10 empty 1m syncs in a row, more than 30 trading minutes behind, or no 1m sync for 5 minutes. |
+| `closed` | The market is shut, whatever the lag. |
+| `unknown` | No reading. Never read as healthy. |
+
+`GET /api/v1/market-data/data-lag/{symbol}` serves the reading to the SPA badge.
 
 ## Real-Time Streaming
 
-**Inbound (WebSocket):**
-1. **Binance `@aggTrade`** — singleton, app-wide. `BinanceWebSocketAdapter` (reconnect 1s→60s backoff). `WsSubscriptionAppService` every 5s diffs `tracked_symbols` Mongo vs current subscriptions, calls `subscribe()/unsubscribe()` (20ms throttle, 50/s cap). Frames → `aggtrade_to_quote_dict` → `QuoteAppService.on_quote_update` → Redis `quote:latest:{symbol}` (TTL 60s).
-2. **OKX private channels** — per-broker instance. `OKXWebSocketAdapter` + HMAC-SHA256 login, custom heartbeat (25s PING_INTERVAL, OKX timeout 30s). Exponential backoff 1s→30s, circuit breaker: pause 5min after 10 consecutive failures. Reconnect: re-subscribe channels, REST `get_orders_history(limit=100)` refresh dedupe set (prevent re-processing fills during downtime). Routes: **orders** → `OkxOrderMapper.to_order_result` → dedupe terminal states → notify callbacks → broker publishes `OrderFilledEvent` (routed via `StrategyAppService._on_order_filled` to the strategy); **positions** → logged only (TODO: emit PositionUpdatedEvent).
-3. **Exness ticks** — singleton, app-wide. `ExnessQuoteAdapter` under `RoutingRealtimeQuoteAdapter`, driven by the same `WsSubscriptionAppService` diff for `:EXNESS` symbols. `ExnessStream` connects to the per-account access point with subprotocol `exness-ws-protocol`; each `subscribe` frame (`event: ticks`) adds instruments to the earlier ones, so a reconnect re-sends all of them and `unsubscribe()` is local only. Reconnect 1s→30s backoff, circuit breaker: pause 5min after 10 consecutive failures. An instrument the account does not list is warned once and not stored. If the client is not configured the feed stays idle.
-4. **Exness events** — per broker instance. `ExnessBrokerAdapter.connect()` opens the account events WS and subscribes to `transactions`: transaction events complete pending orders, closes nobody here requested (SL, TP, stop-out) close or reduce the held position, and a `trading_state_snapshot` frame reconciles open positions against the repository (a position closed while away is closed from its close deal). Each (re)connect marks the snapshot stale, and orders wait until one has been applied.
+Inbound WebSockets:
 
-**Outbound (SSE):**
-- **Bars:** `GET /api/v1/market-data/bars/stream/{symbol}?interval={interval}`. Poll Redis 1s, emit if `bar_start` changed or volume/price increased. Fields: `symbol, interval, bar_start, open, high, low, close, volume, tick_count, is_in_progress, staleness_ms`. Merge Redis in-progress + MongoDB fallback. TTL: `max(300, interval_seconds*2)`. Frontend stale threshold: 30s.
-- **Quotes:** `GET /api/v1/quotes/stream/{symbol}`. Poll Redis 0.5s, emit if `last_price` or `volume` changed. Fields: `symbol, last_price, bid, ask, volume, change, change_percent, ts`. TTL ~60s. Frontend stale threshold: 10s, fallback to REST.
+- **Binance `@aggTrade`**, one per app. `WsSubscriptionAppService` diffs `tracked_symbols` against current subscriptions every 5 s, spacing subscribe calls 20 ms apart. Reconnect backoff 1 s to 60 s. Unsubscribe is local; the stream changes on the next reconnect.
+- **Exness ticks**, one per app, driven by the same diff for `:EXNESS` symbols. Subprotocol `exness-ws-protocol`. A `subscribe` frame was observed to add instruments to earlier ones, so a reconnect re-sends all of them and `unsubscribe()` is local only. Backoff 1 s to 30 s; after 10 failures in a row the breaker pauses 5 minutes. The bid is published as `last_price`.
+- **OKX private channels**, one per broker instance. HMAC login, ping every 25 s (OKX times out at 30 s), backoff 1 s to 30 s, breaker pause 5 minutes after 10 failures.
+- **Exness account events**, one per broker instance (see [Exness broker](#exness-broker)).
 
-**Trade emission (backtest & live):** `IBrokerPort.subscribe_trades(callback)` — broker forwards a `TradeClosedEvent` for each position reduce/close (average-cost). `PaperBrokerAdapter` fires the trade callback right after the fill `OrderResult`. `OKXBrokerAdapter.subscribe_trades()` is a no-op (OKX live trades collected via R8 pipeline). `ExnessBrokerAdapter` forwards one `TradeClosedEvent` per close deal, after publishing that deal's fill.
+Ticks become quotes in Redis `quote:latest:{symbol}` (60 s TTL) and in-progress bars in `bar:current:{symbol}:{interval}`.
 
-**Live trade pipeline (R8):** On `TradeClosedEvent` (paper or any reduce in engine), `StrategyAppService._forward_trade_to_bus` publishes to EventBus. `LiveTradeCollector` (EventBus subscriber, live-only) receives event → stamps `run_id=subscription_id` + `strategy_code` → persists Trade to `trades` collection (TradeRepository). Backtest bypasses via `inject_prepared_strategy` (synthetic ids, no double-count). Metrics queried live via `LiveMetricsQueryService.get_metrics(sub_id)` — calculates M1 (Sharpe, Sortino, win_rate, etc.) from `trades` table, returns via `GET /api/v1/subscriptions/{sub_id}/metrics`.
+Outbound SSE (Redis is the hand-off; the WS writes, SSE reads):
 
-**Known issues:** (1) OKX heartbeat races with message iterator, non-pong frames dropped under load; (2) OKX position updates logged only, no EventBus; (3) Binance unsubscribe defers reconnect (new URL built only on next drop); (4) SSE poll latency 0.5–1.2s vs WebSocket trade-off (acceptable for bar intervals ≥1m).
+- `GET /api/v1/market-data/bars/stream/{symbol}?interval=` polls Redis every 1 s and emits on change.
+- `GET /api/v1/quotes/stream/{symbol}` polls every 0.5 s and emits on change.
 
-## In-Memory Runtime State
+The SPA loads the first quote over REST and marks a stream stale when updates stop. The SSE delay (under about 1.2 s) is acceptable for bar intervals of 1 minute and up.
 
-`StrategyAppService` (per-process, NOT shared): `_strategies[sub_id] = IStrategyService`, `_brokers[sub_id] = IBrokerPort`, `_configs[sub_id] = StrategyConfig`. Broker reuse: multiple subscriptions on same broker share one connection (name match). Event handlers auto-registered on `start()`: `_on_bar_completed(event)` → `BarCompletedEvent`, `_on_quote_received(event)` → `QuoteReceivedEvent`, `_on_order_filled(event)` → `OrderFilledEvent`.
+## Brokers
 
-**Signal flow:** Event (bar/quote) → `_find_strategies(symbol, interval, trigger)` → `strategy.on_bar_completed(bar)` / `strategy.on_quote_received(tick)` → Signal? → `_process_signal` (1. broker.get_balance() 2. position_app_service.get() 3. RiskCheckHandler.validate() 4. PositionCalculatorDomainService.calculate() 5. OrderAggregate creation 6. OrderAppService.submit()).
-
-**Order/Position state:** `OrderRepository.load_pending_orders()` on startup restore in-memory state + broker_order_id mapping. `PositionRepository.find_open()` restore open positions. `OrderFilledEvent` → `PositionAppService._on_order_filled` → position state update. Fills route via `StrategyAppService._on_order_filled` to the owning strategy by `subscription_id` → calls `strategy.on_order_filled(order, fill_price)`.
-
-## Broker & Middleware
-
-**Brokers:** `PaperBrokerAdapter` (simulation, slippage/delays), `OKXBrokerAdapter` (live, HMAC auth, 1s→30s backoff, 10-fail circuit breaker 5m pause), `ExnessBrokerAdapter` (built, live trading off by default).
-
-**Exness broker rules:**
-- **Switched off by default.** `EXNESS_LIVE_TRADING` defaults to false. While it is false, `BrokerFactory` refuses `exness` and `ExnessClient` refuses every order operation before any network call. No API selects a broker per subscription: `StrategyConfig.broker` defaults to `paper`, and no route sets it.
-- **Orders:** market orders only; a stop loss is required (take profit optional); a close must cover the whole held position. Quantity is normalized to the lot grid by `normalize_quantity` before the order is created, capped at the minimum lot unless `EXNESS_MAX_LOTS` is set; a quantity below the minimum lot creates no order.
-- **Daily loss cap (`EXNESS_DAILY_LOSS_CAP`):** without it every order is rejected. Today's realized result comes from the real deals: the profit of `close`, `swap_fee`, `admin_fee` and `dividend` deals, minus the commission of every deal except `balance` deposits and withdrawals. An Exness API error during the check rejects the order (fails closed).
-- **Reconciliation gate:** orders are rejected until the trading snapshot has been reconciled, and while a position on the instrument is unmapped. A 429 on an order is returned as rejected and marks the snapshot stale; it is never retried.
-- **Async fills:** an Exness fill arrives on the events WS after the order call returns. `StrategyAppService` wires order updates only for brokers with `fills_async` (only Exness), and only in the live broker pool.
-
-**Backtest spread:** `PaperBrokerAdapter` takes a constant `spread` (backtest API field `spread`, default 0) and treats bars as bid prices: ask = bid + spread. BUY fills (long entries and short exits) pay the ask, and a SHORT's SL and TP are checked against the bar's ask high and ask low. Only the backtest passes it; the live paper broker runs with none.
-
-### PaperBrokerAdapter accounting model (futures/margin, 1× leverage)
-
-`PaperBrokerAdapter` uses **futures/margin accounting**, not spot. The domain is OKX perpetual SWAP (`okx_broker_adapter.py` instType `SWAP`), so opening a position does not consume cash — only realized pnl touches `_balance`.
-
-| | Spot | Futures/margin (PaperBrokerAdapter) |
+| Broker | Location | State |
 |---|---|---|
-| Open / add | `cash -= notional` | `_balance` unchanged |
-| Close / reduce | `cash += proceeds` | `_balance += Δrealized` (delta of this reduce) |
-| `total_equity` | `cash + Σ market_value` | `_balance + Σ unrealized_pnl` (mark per-bar) |
-| `available_balance` | `cash` | `= _balance` |
+| `PaperBrokerAdapter` | `core/infra/brokers/paper/` | Simulation; the default (`DEFAULT_BROKER=paper`). |
+| `OKXBrokerAdapter` | `core/infra/brokers/okx/` | Live, HMAC auth. |
+| `ExnessBrokerAdapter` | `core/infra/brokers/exness/` | Built, live trading off by default. |
 
-**Why futures:** (1) avoids the `total_equity ≈ 0` point when opening all-in (notional ≈ balance) — that zero point used to force Sharpe/Sortino to 0 and fabricate a −100% drawdown; (2) `_balance + unrealized` is correct for both long and short without needing signed market value; (3) matches the OKX SWAP domain. Fixed 1× leverage (no margin call).
+`BrokerFactory` (`core/infra/brokers/broker_factory.py`) builds them.
 
-**Delta-realized (not cumulative):** `PositionAggregate.reduce_quantity` accumulates into `position.realized_pnl`. The broker credits the delta since the previous reduce (`_reduce_and_credit`), not the cumulative value — crediting cumulative would make a second partial-close add back the whole amount → multi-count. Result: final `_balance` = `initial + Σ realized`, counted exactly once.
+### Exness broker
 
-**Price propagation:** mark-to-market runs at the end of `_on_bar_completed` (after the SL/TP loop), setting `current_price = event.close` for open positions. `get_balance` is a pure read (no side-effect in the getter). `BacktestSandboxAppService._mtm_on_bar` subscribes to `BarCompletedEvent` AFTER the broker handler, so it reads already-marked equity → the equity curve tracks price per-bar, not flat between fills.
+- **Off by default.** While `EXNESS_LIVE_TRADING` is false, `BrokerFactory` refuses `exness` and `ExnessClient` refuses every order call before any network call. No route sets a broker per subscription: `StrategyConfig.broker` defaults to `paper`.
+- **Orders:** market only. A stop loss is required; take profit is optional. A close must cover the whole position. `normalize_quantity` rounds to the lot grid and caps at the minimum lot unless `EXNESS_MAX_LOTS` is set; below the minimum lot no order is created.
+- **Daily loss cap (`EXNESS_DAILY_LOSS_CAP`):** unset rejects every order. Today's result comes from real deals (`_realized_today`): profit of `close`, `swap_fee`, `admin_fee` and `dividend` deals, minus the commission of every deal except `balance` deposits and withdrawals. An API error during the check rejects the order.
+- **Reconciliation gate:** orders are rejected until the trading snapshot is reconciled, and while a position on the instrument is unmapped. A 429 on an order returns rejected and marks the snapshot stale.
+- **Async fills:** fills arrive on the account events WS after the order call returns. `StrategyAppService` wires order updates only for brokers with `fills_async` (Exness) in the live broker pool. The events WS also closes positions closed by the venue (SL, TP, stop-out) and reconciles open positions from `trading_state_snapshot` frames.
 
-**`available_balance = _balance` (known semantics):** the field keeps its formula, not switched to free-margin. Consequence: while a position is open, since futures does not deduct notional from `_balance`, `available_balance` is higher than in the spot model. For a strategy that round-trips one position (close before opening a new one — engulfing, hitnrun2), sizing is **unchanged**. Pyramiding / multi-symbol (stacking entry size while positioned) will size against the full balance — correct for futures (margin does not consume cash) but a behavior change versus spot; no current strategy pyramids, so the real forward impact = 0.
+## Persistence
 
-**Affordability gate:** `_can_afford` only gates a BUY that opens/increases a position (`notional <= _balance`). A BUY that covers/reduces an open SHORT consumes no margin, so it is not gated — otherwise a losing short whose cover notional exceeds balance would be REJECTED and the position stuck.
+All repositories live in `core/infra/persistence/repositories/`, extend `BaseRepository` and receive `Database` by constructor. Every `_id` is a UUIDv7 except `apscheduler_jobs`, which APScheduler writes. Join keys: `subscription_id` for live records, `run_id` for backtest records, the composite `symbol` across market data and trading.
 
-**Live vs paper:** `OKXBrokerAdapter` reads balance directly from the exchange (`map_okx_balance_to_domain`), NOT via `_execute_fill`. OKX defines `availBal`/`eq` specifically for the SWAP account (external) — `PaperBrokerAdapter` makes no claim to match `availBal`; the table above only describes the `PaperBrokerAdapter` model.
+| Collection | Holds |
+|---|---|
+| `symbols` | Symbol metadata and contract spec. |
+| `tracked_symbols` | Symbols to sync and stream. |
+| `bars` | OHLCV bars. |
+| `sync_status` | Sync progress per symbol and interval. |
+| `subscriptions` | Strategy bindings and their control-plane state. |
+| `orders`, `positions`, `trades` | Live trading records, keyed by `subscription_id`. |
+| `backtest_runs`, `backtest_orders`, `backtest_trades` | Backtest records, keyed by `run_id`. |
+| `job_history` | Job run history. |
+| `apscheduler_jobs` | APScheduler's job store; processes sharing a database coordinate through it. |
 
-**Middleware:** CorrelationIdMiddleware (tracing) → RateLimitMiddleware (200 req/10s token bucket per IP) → IdempotencyMiddleware (24h TTL POST cache) → Route.
+### Symbol removal
 
-**Event Bus:** In-memory, FIFO, 50-event max history, sync + async handlers, no persistence (lost on crash).
+`DELETE /api/v1/market-data/tracked-symbols/{symbol}` (`TrackedSymbolService.remove`) deletes the symbol and all data that references it: `tracked_symbols` first (so sync and the WS feed stop), then each subscription, then `symbols`, `bars`, `sync_status`, the backtest collections, live `orders`, `positions` and `trades`, the symbol's `job_history` details, and its Redis keys. Repositories with a `symbol` field extend `SymbolScopedRepository.delete_by_symbol`. The call is idempotent and returns per-collection counts.
 
-## Dependency Injection (Dishka)
+## Deployment Shape
 
-3 providers + auto-resolution via type hints. Files: `src/pocketquant/app/di/`, `src/pocketquant/app/main.py`. `create_container(settings)` passes the `Settings` instance in as container context (`from_context`) and builds with `STRICT_VALIDATION`, so a type provided twice fails at startup instead of the last registration silently winning.
+Compose on one VPS: `web` (nginx) reverse-proxies `/api/*` to `app` on 41921; `app` has no published port. Cloudflare proxies the public domain to `web`. Secrets live in the separate `pocketquant-config` repo. Details: [deployment.md](./deployment.md).
 
-**Providers:** InfrastructureProvider (Settings, EventBus max_history=100, Database, Cache, 12 repos, SymbolLookupHelper, TradingCalendarFactory, JobScheduler, HealthCoordinator) → AdaptersProvider (TvDatafeedClient, ExnessClient, the `IDataProviderPort` as a `RoutingDataProviderAdapter` and the realtime quote port as a `RoutingRealtimeQuoteAdapter`, each over `{binance, tradingview, exness}`, and BrokerFactory, built with the ExnessClient and `EXNESS_LIVE_TRADING`) → ServicesProvider (SyncService, BarAppService, QuoteAppService, WsSubscriptionAppService, OrderAppService, PositionAppService, StrategyAppService, StrategyReconcileAppService, LiveTradeCollector, LiveMetricsQueryService, BacktestExecutionService, and the Command/Query services routes inject).
+## Limitations
 
-**Background jobs:** `sync_1m` (every minute at :02 — 1m REST fetch per tracked symbol, then in-process cascade to 5m/15m/1h/4h and, for 24/7 calendars, 1d), `data_lag_check` (every minute at :30 — measures how many trading minutes each symbol's 1m feed runs behind real time, stores the reading in Redis `data_lag:{symbol}` with a 5-minute TTL, and logs only state changes), `sync_verify_cascade` (hourly — REST vs cascade 5m divergence on one sampled symbol), `sync_backfill` (03:00 UTC), `sync_integrity` (04:00 UTC — the only place missing 1m bars are reported; the cascade itself never logs short buckets), `sync_repair` (every 12h). `:EXNESS` symbols go through the same jobs and the same routed data port; each symbol is gated by its own calendar. Catch-up on startup for the daily/12h jobs if their last success is older than the grace window.
-
-**Market-data routing:** a composite symbol's suffix is the id of the data provider that produces its bars, upper-cased in full (`BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`, `XAUUSD:EXNESS` → `exness`). Both routing adapters send a symbol to exactly that provider — no fallback, since another provider's bars for the same code would be a different instrument — and a suffix with no registered provider raises `UnknownDataProviderError`. An unseeded symbol takes its provider's default `asset_class` and `calendar_id` from `DATA_PROVIDER_DEFAULTS` (`binance` → crypto spot, 24/7; `tradingview` → index future, CME Globex; `exness` → CFD, Exness FX calendar), both in `SymbolRepository.touch` and in `TradingCalendarFactory.for_symbol`. The execution broker is a separate per-strategy setting (`StrategyConfig.broker`) and plays no part in routing.
-
-**Data lag:** a delayed feed (the free TradingView plan runs ~10-15 min behind CME) is flagged, not treated as broken. Lag is counted in trading minutes from the newest 1m bar, so weekends and halts are not lag, and no code branches on the provider. States: `ok`, `delayed` (> 3 min behind, still inserting), `stuck` (behind and either 10+ consecutive empty 1m syncs, more than 30 trading minutes behind, or no 1m sync for 5 minutes), `closed` (whenever the market is shut, whatever the lag), `unknown` (no reading — never read as healthy). `GET /api/v1/market-data/data-lag/{symbol}` serves the stored reading to the SPA badge; `/sync-status` rows carry `lag_seconds` and `is_delayed`, and a non-1m row counts as stuck only when it is later than a delayed feed plus 3× its own cadence.
-
-## Resource Lifecycle
-
-### Startup Sequence
-
-1. FastAPI lifespan async context manager started
-2. Load settings from .env via pydantic-settings
-3. Setup structured logging (structlog)
-4. Create dishka AsyncContainer with providers (initialization order: Core → Persistence → Infrastructure → MarketData → Execution → Services)
-5. Register command/query services with container
-6. `ensure_all_indexes()` creates MongoDB indexes
-7. `register_health_checks()` registers DB/Redis probes and `market_data_providers` (per-provider session state, per-tracked-symbol provider (from its suffix) and market-open flag, or `provider: null` plus an `error` for a suffix with no registered provider; a provider configured with credentials that holds no session reports `degraded`, which keeps the overall status healthy; an anonymous-by-configuration scraper is not degraded)
-8. `recover_stale_backtests()` marks backtests stuck >10min in `running` state as `failed`
-9. `recover_orphan_jobs()` detects and resets scheduler jobs stuck in `running` state (crash recovery)
-10. `seed_tracked_symbols()` ensures at least one symbol in registry
-11. `start_background_jobs()` registers APScheduler sync jobs (with per-job `misfire_grace_time` tuning)
-12. `setup_dishka(container, app)` integrates dishka with FastAPI routes
-13. Server ready: app on port 41921 (serves `/api/*` + SPA) — single process only
-
-> ⚠ **Adding new persistent jobs or async workers?** See `code-standards.md` → "Async Suspension Points — Await Is Preemption" before wiring. The rule: wire every dependency (globals, container handles, registrations) BEFORE the call that starts the worker. APScheduler replays `next_run_time` on startup; first tick fires within `misfire_grace_time` seconds of `start()`. Per-job grace time configured in `register_sync_jobs()`; adjust based on job criticality.
-
-### Graceful Shutdown (container.close() in finally)
-
-1. Stop accepting new requests
-2. `container.close()` runs all provider cleanups in reverse order:
-   - StrategyAppService.stop() — stop strategy engine
-   - JobScheduler.shutdown(wait=True) — stop background jobs
-   - Cache.disconnect() — close Redis
-   - Database.disconnect() — close MongoDB
-
-## SP3: Single-Process Backend Architecture
-
-**Goal:** Unified backend combining all routes, scheduler, WS feed, and strategy lifecycle in one FastAPI process on port 41921.
-
-**Single command:**
-
-```mermaid
-graph LR
-    web["pocketquant-web<br/>(nginx)<br/>:80"]
-    app["pocketquant-app<br/>(FastAPI + runtime)<br/>:41921"]
-    mongo["MongoDB<br/>:27017"]
-    redis["Redis<br/>:6379"]
-    
-    web -->|/api/*| app
-    app -->|read/write state| mongo
-    app -->|cache| redis
-    app -->|scheduler/strategy| mongo
-    app -->|quotes/reconcile| redis
-    
-    style app fill:#dfd
-    style web fill:#ddf
-```
-
-**app (Single Process):**
-- Container-internal port 41921, serves all `/api/v1/*` routes + SPA fallback
-- Owns: scheduler, WS feed (Binance/OKX), strategy lifecycle, reconcile loop, backtest tasks, all API routes
-- Lifespan runs `ensure_all_indexes()` + recovery/seeding steps before yielding
-- Single-worker-only constraint: scheduler/WS/broker are in-process singletons; `--workers N` duplicates reconcile loop and live broker connection
-- `ENABLE_JOBS` gates `start_background_jobs` (scheduler + `sync_1m`/cascade) and `start_reconcile_loop` only. `start_quote_feed` is **ungated** — the WS feed runs even when jobs are off, writing ephemeral `quote:latest` / `bar:current` to Redis + publishing in-process `BarCompletedEvent`. It never upserts `bars`; the gated `sync_1m` + cascade cron is the sole Mongo `bars` writer (`bar_app_service.py` keeps no `upsert_bar`). Remote-DB dev (`ENABLE_JOBS=false`) therefore streams the live chart without persisting any bar to prod.
-- Command: `uvicorn pocketquant.app.main:app --host 0.0.0.0 --port 41921`
-
-**Dependency Graph (top tier only):**
-
-```
-core ◁ engine ◁ app
- └─ app imports core + engine only (verified by import-linter contracts)
-```
-
-**Engine Internal Independence (enforced):**
-- `engine.backtest` ⟂ `engine.live` (two drivers, no cross-imports)
-- `engine.{strategy,execution,market_data}` cannot import `engine.{backtest,live}` (shared machinery stays independent)
-
-**Local Dev Ports:**
-- app: `http://localhost:41921/api/v1/docs` (Swagger)
-- app: `http://localhost:41921/` (SPA root)
-- Vite proxy: `/api/*` → `http://localhost:41921` (app)
-
-**Container Network (compose.prod.yml):**
-- web + app + mongo + redis + portainer on same bridge network (`pocketquant-prod`)
-- No published port for app — nginx in web container reverse-proxies `/api/*` to app service name (`http://app:41921`)
-- External clients reach the public domain `pocketquant.xyz` via Cloudflare (orange-cloud proxy, terminates browser TLS) → web origin on `WEB_PORT`; nginx (`server_name _`) routes `/api/*` internally to app on :41921. SPA is host-agnostic (calls `window.location.origin + /api/...`)
-
-## Integration & Performance
-
-**Binance:** REST (no auth, 1200 weight/min limit) + `@aggTrade` WS. Bars must include per-tick delta volume.
-
-**OKX:** REST + WS with HMAC-SHA256 auth, 1s-30s backoff, 10-fail circuit breaker.
-
-**Data stores:** PyMongo (5-50 pool), redis-py (60s quotes, 300s bars, 86400s idempotency).
-
-**Transient errors:** Exponential backoff 0/3/8s (15s budget), auto-reconnect. Permanent: log + continue.
-
-**Perf:** Sync 1-5s per 5k bars, Quote <100ms, Bar aggregation <1ms/tick, Quote throughput 1000+/sec.
-
-**Security:** Env-var credentials only, Rate 200 req/10s per IP, Idempotency 24h TTL, MongoDB/Redis auth via DSN.
-
-## Configuration
-
-Env vars (`.env`): `MONGODB_URL`, `REDIS_URL`, `LOG_FORMAT` (json/console), `LOG_LEVEL`, `ENVIRONMENT` (dev/prod), `APP_PORT` (host; container :41921), `ENABLE_JOBS` (bool), `OKX_API_KEY/SECRET/PASSPHRASE` (optional), `OKX_DEMO_MODE` (true), Market-data routing has no env var: the symbol suffix names the provider. TradingView (index futures): `TRADINGVIEW_PLAN` (`free` | `cme_non_pro`) is the single entitlement knob and derives the bar cap, the poll floor and whether the feed is real-time; `TRADINGVIEW_USERNAME`/`TRADINGVIEW_PASSWORD` and `TRADINGVIEW_AUTH_TOKEN` (which wins over them) are optional; `TRADINGVIEW_MAX_BARS` and `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than the plan allows. Exness: `EXNESS_API_BASE_URL`, `EXNESS_ACCOUNT_ID`, `EXNESS_API_KEY`, `EXNESS_SECRET_KEY`, `EXNESS_LIVE_TRADING` (default false), `EXNESS_RATE_FRACTION` (default 1.0), `EXNESS_DAILY_LOSS_CAP` and `EXNESS_MAX_LOTS` (all optional; without the first four the provider stays unconfigured). `TZ` must be `UTC`: `assert_utc_runtime()` refuses to start on any other process zone. See [deployment.md](./deployment.md) for per-env details.
-
-## Dependencies
-
-FastAPI, Pydantic (settings + command/query models), PyMongo (native async, NOT Motor), redis-py (async), structlog (logging), APScheduler (cron/interval/one-off), aiohttp (Binance REST/WS), dishka (DI), pandas_market_calendars (CME session calendar, confined to `core.infra.calendars`), tvdatafeed (TradingView scraper, installed from a pinned git commit, confined to `core.infra.tradingview`), pytest, ruff (lint), pyright (type check).
+- The EventBus is in memory: events are lost on a crash, and there is no outbox.
+- Rate-limit buckets live in Redis and reset when Redis restarts.
+- OKX trades are not collected (`subscribe_trades` is a no-op).
 
 ## MT5 (future provider, not built)
 
-MetaTrader 5 is a possible later provider; no code for it exists. It would plug into the same ports: `IDataProviderPort` for bars (`copy_rates_from`), `IRealtimeQuoteProviderPort` for quotes (`copy_ticks_from`), and optionally `IBrokerPort` for orders (`order_send`). Its symbols would carry the suffix `:MT5`, which the routing tests already pin as unregistered (`UnknownDataProviderError`). The `MetaTrader5` Python package needs a running MT5 terminal on Windows, so deployment needs a Windows host or a Wine bridge (`mt5linux`, `mt5-remote`) next to the Linux app. Exness API keys apply to Exness-platform accounts, not MT5 accounts, so an MT5 account cannot reuse the Exness client.
-
-## Known Limitations
-
-- EventBus in-memory: events lost on crash (acceptable for non-critical events)
-- APScheduler in-memory: jobs reschedule on startup; persistent history in `job_history` Mongo collection
-- No outbox pattern: async event delivery not guaranteed after crash
-- Rate limit state lost on Redis restart: acceptable for burst protection
-- Single-process-only strategy execution: reconcile loop + WS feed + broker singletons; `--workers N` duplicates all
-- Domain purity via AST: I/O imports forbidden in `core/domain/`
-
-## Ops Context
-
-**Two Repositories (secret boundary):** `pocketquant` (code, no secrets) ← `pocketquant-config` (prod .env, creds). CI/CD secret: `POCKETQUANT_CONFIG_DEPLOY_KEY` (read-only git key).
-
-**External Services:** Binance (REST + `@aggTrade` WS, public), OKX (REST + WS, API key optional), TradingView (index-futures history and polled quotes; an unofficial scraper with no stability promise — `/health` → `market_data_providers` reports its session state), Exness (signed REST + WS market data and quotes for CFDs; trading built but switched off), Docker Hub, GitHub Actions.
-
-**Deployment:** Public entry `pocketquant.xyz` via Cloudflare proxy → Compose 4-service bridge: `web` (nginx :80 → app:41921), `app` (FastAPI :41921, single process), `mongodb` (:27017), `redis` (:6379). Cloudflare proxies HTTP/HTTPS only — SSH + published DB ports reach the VPS by IP directly. Config flow: `pocketquant-config/.env` → CI reads at deploy → rsync → VPS:/opt/pocketquant/deploy/.env → compose env_file. APScheduler coordinates via `apscheduler_jobs` Mongo collection; first to claim `next_run_time` wins. Remote-DB dev mode must set `ENABLE_JOBS=false` (else double-schedule).
-
-See [deployment.md](./deployment.md) for CI/CD runbook, `.github/workflows/cicd.yml` for build→ship→run.
-
-## Bounded Contexts
-
-| Context | Responsibility | Events |
-|---|---|---|
-| **Market Data** | Bar/quote ingestion, storage, real-time streaming | `BarCompletedEvent`, `QuoteReceivedEvent` |
-| **Strategy** | Signal generation, subscription lifecycle | `SignalGeneratedEvent` |
-| **Trading** | Order execution, position lifecycle | `OrderFilledEvent`, `PositionOpenedEvent` |
-| **Risk** | Position sizing, pre-trade validation | — |
-| **Backtest** | Historical replay, performance metrics | — |
-
-## Ubiquitous Language
-
-| Term | Meaning | Notes |
-|---|---|---|
-| **Symbol** | Composite `CODE:EXCHANGE` (e.g. `BTCUSDT:BINANCE`), immutable | shared key across market-data + trading |
-| **Bar** | Time-bucketed OHLCV record | "candle" only in UI; domain: "bar" |
-| **Quote** | Latest tick (price, size, ts), cached in Redis 60s | ephemeral, not persisted |
-| **Subscription** | Strategy binding: `(strategy_code, symbol, interval)` + control plane state | `desired_state` / `actual_state` (reconcile loop) |
-| **Sync** | Update Bar storage from Binance to present | cron jobs: 5m, 15m, hourly, swing, daily, backfill, integrity, repair |
-| **Strategy** | IStrategyService plugin, registered by code name (e.g. `hitnrun2`) | instantiated per subscription |
-| **Aggregate** | Entity with invariants + lifecycle + events | OrderAggregate, PositionAggregate only |
-| **Deterministic ID** | `sha256(strategy_code|symbol|interval)[:16]` for subscription | idempotent dedup |
+MetaTrader 5 is a possible later provider; no code exists. It would plug into `IDataProviderPort` (`copy_rates_from`), `IRealtimeQuoteProviderPort` (`copy_ticks_from`) and optionally `IBrokerPort` (`order_send`), with the suffix `:MT5`, which the routing tests pin as unregistered. The `MetaTrader5` package needs a running MT5 terminal on Windows, so it needs a Windows host or a Wine bridge next to the Linux app. Exness API keys work only for Exness-platform accounts, so an MT5 account cannot reuse the Exness client.
