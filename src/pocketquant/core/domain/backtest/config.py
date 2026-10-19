@@ -20,6 +20,7 @@ class BacktestConfig:
         initial_capital: Starting capital for the backtest.
         slippage_bps: Slippage in basis points (1 = 0.01%).
         commission_bps: Commission in basis points (3 = 0.03%).
+        spread: Constant spread in price units; bars are bid, ask = bid + spread.
         replay_speed: Replay speed multiplier (0 = max speed).
         parameters: Strategy-specific parameters for optimization.
         name: Optional human-readable label for the run.
@@ -34,6 +35,7 @@ class BacktestConfig:
     initial_capital: float = 10_000.0
     slippage_bps: float = 0.5  # 0.5 bp = 0.005% default
     commission_bps: float = 3.0  # 3 bps default
+    spread: float = 0.0
     replay_speed: float = 0.0  # 0 = max speed, 1 = real-time, 10 = 10x
     parameters: dict[str, Any] = field(default_factory=dict)
     name: str | None = None

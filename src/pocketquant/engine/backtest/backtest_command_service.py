@@ -34,6 +34,14 @@ class RunBacktestCommand(BaseModel):
     initial_capital: float = Field(default=10_000.0, ge=100, description="Starting capital")
     slippage_bps: float = Field(default=0.5, ge=0, description="Slippage in basis points")
     commission_bps: float = Field(default=3.0, ge=0, description="Commission in basis points")
+    spread: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Constant spread in price units; ask = bid + spread, "
+            "so BUY entries and SHORT exits fill at ask"
+        ),
+    )
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")
     name: str | None = Field(default=None, max_length=200, description="Optional run label")
 
@@ -66,6 +74,7 @@ class BacktestCommandService:
             "initial_capital": cmd.initial_capital,
             "slippage_bps": cmd.slippage_bps,
             "commission_bps": cmd.commission_bps,
+            "spread": cmd.spread,
             "parameters": cmd.parameters or {},
             "name": cmd.name,
         }

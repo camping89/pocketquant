@@ -411,6 +411,7 @@ class BacktestReportAppService:
             "initial_capital": self._config.initial_capital,
             "slippage_bps": self._config.slippage_bps,
             "commission_bps": self._config.commission_bps,
+            "spread": self._config.spread,
             "parameters": self._config.parameters,
             "name": self._config.name,
         }

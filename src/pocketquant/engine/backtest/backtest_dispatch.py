@@ -54,6 +54,7 @@ def _config_from_dict(payload: dict[str, Any], contract_spec: ContractSpec) -> B
         initial_capital=payload.get("initial_capital", 10_000.0),
         slippage_bps=payload.get("slippage_bps", 0.5),
         commission_bps=payload.get("commission_bps", 3.0),
+        spread=payload.get("spread", 0.0),
         parameters=payload.get("parameters") or {},
         name=payload.get("name"),
         contract_spec=contract_spec,
@@ -102,6 +103,7 @@ async def run_single(
             slippage_percent=config.slippage_percent,
             commission_bps=config.commission_bps,
             contract_spec=config.contract_spec,
+            spread=config.spread,
         )
         strategy_instance = strategy_class(strategy_cfg)
         await sandbox.strategy_app_service.inject_prepared_strategy(

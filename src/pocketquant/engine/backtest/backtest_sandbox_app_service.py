@@ -117,6 +117,7 @@ class BacktestSandboxAppService:
         currency: str = "USD",
         commission_bps: float = 0.0,
         contract_spec: ContractSpec = LINEAR_SPEC,
+        spread: float = 0.0,
     ) -> PaperBrokerAdapter:
         broker = PaperBrokerAdapter(
             initial_balance=initial_balance,
@@ -128,6 +129,7 @@ class BacktestSandboxAppService:
                 contract_spec.commission_per_contract, commission_bps
             ),
             contract_spec=contract_spec,
+            spread=spread,
         )
         self._broker = broker
         # Late-bind the broker into the factory so any (unexpected) factory

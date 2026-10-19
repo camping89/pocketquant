@@ -115,6 +115,7 @@ class PaperBrokerAdapter(IBrokerPort):
         event_bus: EventBus | None = None,
         commission_model: CommissionModel | None = None,
         contract_spec: ContractSpec = LINEAR_SPEC,
+        spread: float = 0.0,
     ) -> None:
         self._initial_balance = initial_balance
         self._balance = initial_balance
@@ -127,6 +128,8 @@ class PaperBrokerAdapter(IBrokerPort):
         self._commission_model = commission_model or PercentageCommissionModel(bps=0.0)
         # Positions opened here realize PnL in account currency via this multiplier.
         self._contract_spec = contract_spec
+        # Bars are bid prices; ask = bid + spread for BUY fills and SHORT SL/TP triggers.
+        self._spread = spread
 
         self._positions: dict[str, PositionAggregate] = {}
         # _orders holds every OrderAggregate observed by submit_order, including
@@ -224,7 +227,8 @@ class PaperBrokerAdapter(IBrokerPort):
                     [],
                 )
 
-            fill_price = self._apply_slippage(base_price, order.side)
+            ask_offset = self._spread if order.side == OrderSide.BUY else 0.0
+            fill_price = self._apply_slippage(base_price + ask_offset, order.side)
             if not self._can_afford(order, fill_price):
                 return (
                     OrderResult(
@@ -781,9 +785,9 @@ class PaperBrokerAdapter(IBrokerPort):
             if tp is not None and bar_high >= tp:
                 return (tp, OrderSide.SELL, REASON_AUTO_TP)
         else:  # SHORT
-            if sl is not None and bar_high >= sl:
+            if sl is not None and bar_high + self._spread >= sl:
                 return (sl, OrderSide.BUY, REASON_AUTO_SL)
-            if tp is not None and bar_low <= tp:
+            if tp is not None and bar_low + self._spread <= tp:
                 return (tp, OrderSide.BUY, REASON_AUTO_TP)
         return None
 
