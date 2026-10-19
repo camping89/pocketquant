@@ -6,6 +6,7 @@ import pytest
 
 from pocketquant.core.domain.market_data.provider_routing_domain_service import (
     DATA_PROVIDER_DEFAULTS,
+    DataProviderDefaults,
     UnknownDataProviderError,
     provider_defaults_for,
     provider_id_for,
@@ -54,8 +55,14 @@ def test_tradingview_defaults_to_an_index_future_on_the_cme_calendar() -> None:
 
 def test_an_unregistered_provider_has_no_defaults_rather_than_crypto_ones() -> None:
     """A gold symbol must never be assumed to trade 24/7 like crypto."""
-    with pytest.raises(UnknownDataProviderError, match="'exness'"):
-        provider_defaults_for("XAUUSD:EXNESS")
+    with pytest.raises(UnknownDataProviderError, match="'mt5'"):
+        provider_defaults_for("XAUUSD:MT5")
+
+
+def test_exness_defaults_to_a_cfd_on_the_exness_fx_calendar() -> None:
+    assert provider_defaults_for("XAUUSD:EXNESS") == DataProviderDefaults(
+        AssetClass.CFD, "EXNESS_FX"
+    )
 
 
 def test_an_unseeded_symbol_is_described_by_its_provider() -> None:
@@ -68,4 +75,4 @@ def test_an_unseeded_symbol_is_described_by_its_provider() -> None:
 
 
 def test_exactly_the_registered_providers_have_defaults() -> None:
-    assert set(DATA_PROVIDER_DEFAULTS) == {"binance", "tradingview"}
+    assert set(DATA_PROVIDER_DEFAULTS) == {"binance", "tradingview", "exness"}

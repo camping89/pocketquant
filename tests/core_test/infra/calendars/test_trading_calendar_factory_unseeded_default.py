@@ -46,8 +46,8 @@ async def test_an_unseeded_tradingview_symbol_gets_the_cme_calendar() -> None:
 @pytest.mark.asyncio
 async def test_an_unseeded_symbol_of_an_unregistered_provider_is_refused() -> None:
     """Better an error than a gold symbol silently trading 24/7."""
-    with pytest.raises(UnknownDataProviderError, match="'exness'"):
-        await _factory(None).for_symbol("XAUUSD:EXNESS")
+    with pytest.raises(UnknownDataProviderError, match="'mt5'"):
+        await _factory(None).for_symbol("XAUUSD:MT5")
 
 
 @pytest.mark.asyncio

@@ -18,13 +18,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import contextlib
-import email.utils
-import hashlib
 import json
 import os
-import re
 import statistics
 import sys
 import time
@@ -45,6 +41,19 @@ from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continu
 from pocketquant.core.domain.risk.value_objects import RiskConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
+from pocketquant.core.infra.exness.exness_client import (
+    allowed_access_point,
+    history_age_days,
+    max_candles,
+    min_request_interval,
+    validate_base_url,
+    ws_url,
+)
+from pocketquant.core.infra.exness.exness_signer import (
+    ServerClock,
+    load_secret_key,
+    sign_headers,
+)
 
 IDENTITY_KEYS = frozenset(
     {
@@ -89,111 +98,6 @@ class ApiError(Exception):
         super().__init__(error_message)
         self.status = status
         self.error_message = error_message
-
-
-def _b64url_nopad(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
-
-
-def load_secret_key(material: str) -> Ed25519PrivateKey:
-    text = material.strip()
-    if "BEGIN" in text:
-        raise ValueError(
-            "EXNESS_SECRET_KEY must be the 128-hex secret from Key Management, not PEM"
-        )
-    if not re.fullmatch(r"[0-9a-fA-F]{128}", text):
-        raise ValueError("unsupported Ed25519 key format")
-    raw = bytes.fromhex(text)
-    key = Ed25519PrivateKey.from_private_bytes(raw[:32])
-    if key.public_key().public_bytes_raw() != raw[32:]:
-        raise ValueError("unsupported Ed25519 key format")
-    return key
-
-
-def body_hash(body: bytes) -> str:
-    return _b64url_nopad(hashlib.sha256(body).digest())
-
-
-def sign_headers(
-    *,
-    api_key: str,
-    private_key: Ed25519PrivateKey,
-    method: str,
-    path_with_query: str,
-    body: bytes,
-    idempotency_key: str,
-    timestamp_ms: int,
-) -> dict[str, str]:
-    payload = {
-        "api_key": api_key,
-        "idempotency_key": idempotency_key,
-        "timestamp": timestamp_ms,
-        "sign_version": 1,
-        "method": method.upper(),
-        "path": path_with_query,
-        "body_hash": body_hash(body),
-    }
-    data_bytes = json.dumps(payload, separators=(",", ":")).encode()
-    return {
-        "EXN-API-KEY": api_key,
-        "EXN-IDEMPOTENCY-KEY": idempotency_key,
-        "EXN-TIMESTAMP": str(timestamp_ms),
-        "EXN-SIGN-VERSION": "1",
-        "EXN-DATA": _b64url_nopad(data_bytes),
-        "EXN-SIGN": _b64url_nopad(private_key.sign(data_bytes)),
-    }
-
-
-@dataclass
-class ServerClock:
-    offset_ms: int = 0
-
-    def update_from_date_header(self, value: str) -> None:
-        server_ms = int(email.utils.parsedate_to_datetime(value).timestamp() * 1000)
-        self.offset_ms = server_ms - int(time.time() * 1000)
-
-    def now_ms(self) -> int:
-        return int(time.time() * 1000) + self.offset_ms
-
-
-def validate_base_url(url: str, api_host: str) -> str:
-    parts = urllib.parse.urlsplit(url)
-    if (
-        parts.scheme != "https"
-        or parts.hostname != api_host
-        or parts.username
-        or parts.password
-        or parts.query
-        or parts.fragment
-    ):
-        raise ValueError("EXNESS_API_BASE_URL must be https on the confirmed host")
-    return url.rstrip("/")
-
-
-def allowed_access_point(value: str) -> str:
-    host = value.strip().lower()
-    if "://" in host:
-        parts = urllib.parse.urlsplit(host)
-        if (
-            parts.scheme != "https"
-            or not parts.hostname
-            or parts.port is not None
-            or parts.username
-            or parts.password
-            or parts.query
-            or parts.fragment
-            or parts.path not in ("", "/")
-        ):
-            raise ValueError("access point must be a plain https URL or host")
-        host = parts.hostname
-    if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)*\.(exness\.com|exness-api\.com)", host):
-        raise ValueError("access point host is not an Exness host")
-    return host
-
-
-def ws_url(base_url: str, path: str) -> str:
-    parts = urllib.parse.urlsplit(base_url)
-    return urllib.parse.urlunsplit(("wss", parts.netloc, parts.path.rstrip("/") + path, "", ""))
 
 
 def redact(obj: Any) -> Any:
@@ -368,27 +272,6 @@ def rate_limits(limits: dict[str, Any]) -> dict[str, Any]:
     out["global_account_rate"] = rest["global_account_rate"]
     out["websocket"] = limits["limits"]["websocket"]
     return out
-
-
-def min_request_interval(limits: dict[str, Any]) -> float:
-    rest = limits["limits"]["rest"]
-    rates = [rest["global_account_rate"]] + [m["rate_limit"] for m in rest["methods"]]
-    # 20% headroom so a sliding window never sees two requests inside one slot.
-    return max(r["window_seconds"] / r["limit"] for r in rates) * 1.2
-
-
-def history_age_days(limits: dict[str, Any]) -> int:
-    for method in limits["limits"]["rest"]["methods"]:
-        if method["api_operation_id"] == "getDealsHistory":
-            return int(method.get("limits", {}).get("history_age_days", 30))
-    return 30
-
-
-def max_candles(limits: dict[str, Any]) -> int:
-    for method in limits["limits"]["rest"]["methods"]:
-        if method["api_operation_id"] == "getCandleHistory":
-            return int(method.get("limits", {}).get("max_candles_per_request", 1000))
-    return 1000
 
 
 def candle_stats(candles: list[dict[str, Any]], tf: str, fetched_at: datetime) -> dict[str, Any]:

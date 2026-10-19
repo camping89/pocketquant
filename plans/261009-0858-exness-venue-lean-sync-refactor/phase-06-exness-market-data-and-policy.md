@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Exness market data and quotes"
-status: pending
+status: in-progress
 priority: P1
 effort: 7d
 dependencies: [5]
@@ -11,9 +11,35 @@ dependencies: [5]
 
 <!-- Updated: 2026-10-13 develop reshape - suffix routing, calendar port, sync jobs, spike facts, new 429 rule -->
 ## Develop status
-- Base branch: `develop` (worktree `D:/w/_me/algotrading/pq-develop`, local branch `develop-sync` tracking `origin/develop`). Work is committed on `develop-sync` and shipped with `git push origin develop-sync:develop`; deploys to the VPS are approved. There is no `master` step.
+- Base branch: `develop` (worktree `D:/w/_me/algotrading/pq-develop`; the local branch `develop-sync` is renamed `develop` at the phase commit and tracks `origin/develop`). Work ships with `git push origin develop`, which runs tests only. Since `9b547ca` only a `master` push builds and deploys, so prod is reached by the fast-forward release `git push origin develop:master` (branch model in `docs/deployment.md`). The release and its deploy are approved (coordinator, 2026-10-19).
 - Develop's design wins over the old master plan: there is no `sync_policy.py`, `sync_runner.py`, `SyncPolicy`, `MarketCalendar` or `tests/baseline/`. Exness plugs into the existing pieces: a suffix (`:EXNESS`) routed by `RoutingDataProviderAdapter` and `RoutingRealtimeQuoteAdapter`, a calendar behind `ITradingCalendarPort`, and the unchanged sync jobs in `engine/market_data/app_services/sync_jobs.py` (1m REST every minute plus cascade, 1d/1w by REST in `sync_backfill`, integrity, repair, data lag).
 - The spike is done (`docs/journals/2026-10-13-exness-api-spike.md`, fixtures in `tests/core_test/infra/exness/fixtures/`). Its facts are inputs here and replace every earlier assumption about hosts, names, limits and the WS.
+
+## Progress 2026-10-16 (stopped at stop-and-ask, nothing committed)
+- T6.1–T6.17 are implemented and their Verify steps pass in the working tree of `develop-sync` (base `7b68c82`). T6.18 steps 1–4 pass: lint-imports keeps 8 contracts, ruff check and pyright report 0 errors, and `just test` fails only the 4 known Windows `time.tzset` tests.
+- Deviations: `ExnessSessionCalendarAdapter.session_open(d)` is UTC midnight (the D1 candle open; the first open instant would make integrity expect a Sunday 22:01:30 bar that never exists), and `sessions()` counts a date only when it has an open second inside `[start, end]`. The T6.7 grep now uses `--include='*.py'` because pytest writes matching `.pyc` files. `test_provider_routing.py::test_exactly_the_registered_providers_have_defaults` also pins the provider set and now includes `exness`.
+- Decisions that were escalated on 2026-10-16:
+  - T6.18 step 5 fails: `tiny_share 0.4876 > 0.48`, `delegations 85 > 77`. The base sat exactly at the ceiling, and most new tiny functions are plan-mandated API or port members, so it cannot pass without padding.
+  - W1 is verified Sunday-aligned: a read-only prod call returned W1 candles at Sunday 00:00Z for XAUUSD, EURUSD and BTCUSD.
+  - DST: a review cites Exness docs saying sessions shift one hour when US DST ends on 2026-11-01 (unverified; the page returned HTTP 403).
+- Review follow-ups: quiet the `websockets` logger in `core/common/logging/setup.py` (it logs the handshake headers, including the API key, at DEBUG); reject an empty idempotency key on order ops (Phase 07); EURUSD tickless rollover minutes will show as integrity misses.
+
+## User decisions 2026-10-19 (binding; resume from here)
+- Ratchet: the user said "we can be flexible for this, no need hard rule, also keep in mind we need to be KISS and clean". Do not pad or contort code to pass the counter. Keep the code KISS and clean, then raise `[tool.code-metrics]` to the measured values in its own commit and state the new ceiling in the phase report.
+- W1: build Sunday-aligned weeks now, in this phase (option b): a Sunday-aligned 1w `bar_start` in `ExnessSessionCalendarAdapter`, a Sunday-aligned W1 cutoff in `ExnessAdapter`, and an Exness-specific 24/7 calendar for `BTCUSD:EXNESS` so it no longer uses the shared Monday-grid `CRYPTO_24_7` calendar. Exness 1w bars must store and pass integrity.
+- DST: model the Exness sessions in `America/New_York` time now, so the UTC session hours follow the US DST change (2026-11-01) without a code change. Cover both sides of the change in tests.
+- Key in logs: apply the `websockets` logger fix in `core/common/logging/setup.py` in this phase.
+- After these, finish T6.18 and T6.19 as written.
+- 2026-10-19 (coordinator): fix the pre-existing `check_integrity` in-progress-bar bug in this phase in its own commit, and release to prod by fast-forwarding `master` after green develop CI.
+
+## Progress 2026-10-19
+- Rebased onto `origin/develop` (`9b547ca`, master-only deploys); the code base for diffs is now `bc3cd69` (`.cache/phase06-base`).
+- W1: `exness_bar_start` (UTC grid, weeks open Sunday 00:00Z) backs `ExnessSessionCalendarAdapter.bar_start` and the `ExnessAdapter` in-progress cutoff. `CALENDAR_EXNESS_CRYPTO` (`EXNESS_CRYPTO`, built from `conditions_BTCUSD.json` `trade_sessions`) replaces `CRYPTO_24_7` for `BTCUSD:EXNESS` in the seed. Its 1d is REST-only (from `sync_backfill`), as the Goal says, because `cascade_tfs` cascades 1d for `CRYPTO_24_7` alone.
+- DST: the recorded UTC tables are shifted by the EDT offset at the recording date into New York wall-clock weeks and converted back to UTC per week, so 2026-11-01 moves every edge one hour later in UTC. Tests cover both sides of 2026-11-01 and of 2027-03-14.
+- `periods_per_year` now counts bar opens in a Sunday-to-Sunday reference week × 52 (FX and XAU 1d 312, 1w 52; crypto 1d 364). The old open-seconds division gave about 260 and 37.
+- `websockets` logger set to WARNING in `core/common/logging/setup.py`, with a test that fails without it.
+- `check_integrity` (shared engine) dropped expected instants at or after the calendar's in-progress bar: before, every calendar (CME, `CRYPTO_24_7`, Exness) reported today's unfinished D1 bar, and CME's 02:00 4h bar, as missing on every run.
+- Gate: lint-imports 8 kept; ruff and pyright 0 errors; `just test` shows only the 4 Windows `time.tzset` tests red (Docker Desktop had to be started first). The ratchet measures `tiny_share 0.4877` and `delegations 87`; the ceiling is raised to those values in its own commit per the user's decision (this overrides the T6.18 "never raise the ceiling" remedy).
 
 ## Context Links
 - Spike journal `docs/journals/2026-10-13-exness-api-spike.md`: `rest_host: access_point`, `ws_subprotocol: exness-ws-protocol`, `ticks_subscribe_mode: add`, `instrument_names: XAUUSD=XAUUSD, EURUSD=EURUSD, BTCUSD=BTCUSD`, the limits table, the session table, and the 429-below-published-rate finding. `fixtures/summary.json` holds the same keys (`rest_host`, `ws_host`, `ws_subprotocol`, `ticks_subscribe_mode`, `instrument_names`, `history_age_days`, `max_candles_per_request`).
@@ -151,7 +177,7 @@ dependencies: [5]
   11. Pacer: with a fake clock and `min_interval_s=0.6`, three waits record start times at least 0.6 s apart; with one non-priority waiter queued, a priority waiter that arrives later goes first. With `exness_rate_fraction=0.5` the client's pacer interval is `1.2` for the recorded limits.
   12. `deals_window_days()` returns `29` for the recorded limits.
 - **Success criteria:** All tests pass.
-- **Verify:** `uv run python -m pytest tests/core_test/infra/exness/test_exness_client.py -q` exits 0. `grep -rn "trading/accounts/{account_id}/positions" src | wc -l` prints `2` (the two `_ENDPOINTS` entries, nowhere else).
+- **Verify:** `uv run python -m pytest tests/core_test/infra/exness/test_exness_client.py -q` exits 0. `grep -rn --include='*.py' "trading/accounts/{account_id}/positions" src | wc -l` prints `2` (the two `_ENDPOINTS` entries, nowhere else).
 
 ### T6.8 `exness_stream.py`
 - **Goal:** One reconnecting signed WS stream on the access point, shaped like `BinanceWebSocketAdapter`: backoff 1 s → 30 s and a circuit breaker after 10 consecutive failures that pauses for 300 s. A handler exception never kills the stream.
@@ -243,7 +269,7 @@ dependencies: [5]
   - `src/pocketquant/core/infra/calendars/exness_session_calendar_adapter.py` → `class ExnessSessionCalendarAdapter(ITradingCalendarPort)` with `__init__(calendar_id: str, week_sessions: list[dict[str, str]])`, module constants `_EURUSD_SESSIONS`, `_XAUUSD_SESSIONS` and `EXNESS_CALENDARS: tuple[ExnessSessionCalendarAdapter, ...]`
   - `TradingCalendarFactory.__init__` (`trading_calendar_factory.py:27`)
 - **Steps:**
-  1. `_EURUSD_SESSIONS` and `_XAUUSD_SESSIONS` hold the `trade_sessions` lists copied verbatim from `tests/core_test/infra/exness/fixtures/conditions_EURUSD.json` and `conditions_XAUUSD.json`, with a comment giving the recording date (2026-10-13). `EXNESS_CALENDARS = (ExnessSessionCalendarAdapter(CALENDAR_EXNESS_FX, _EURUSD_SESSIONS), ExnessSessionCalendarAdapter(CALENDAR_EXNESS_XAUUSD, _XAUUSD_SESSIONS))`. BTCUSD trades 24x7 (spike session table) and uses `CALENDAR_CRYPTO_24_7`.
+  1. `_EURUSD_SESSIONS` and `_XAUUSD_SESSIONS` hold the `trade_sessions` lists copied verbatim from `tests/core_test/infra/exness/fixtures/conditions_EURUSD.json` and `conditions_XAUUSD.json`, with a comment giving the recording date (2026-10-13). `EXNESS_CALENDARS` holds those two plus `ExnessSessionCalendarAdapter(CALENDAR_EXNESS_CRYPTO, _BTCUSD_SESSIONS)` (24x7, from `conditions_BTCUSD.json`; Exness weeks open on Sunday, so BTCUSD does not share `CALENDAR_CRYPTO_24_7`). Sessions are held in `America/New_York` (2026-10-19 decision).
   2. The constructor parses each `week_start_time`/`week_end_time` (`"Mon, 20:57:59"`, UTC) into seconds from Monday 00:00, keeps only `enabled` entries, and merges adjacent ones (an end of `…:59` followed by a start at the next second is one segment; the spike showed 22:01:59/22:02:00 and 22:04:59/22:05:00 are split points, not gaps). `trading_disabled` entries are closures.
   3. Port members, all in UTC (`tz` is `ZoneInfo("UTC")`):
      - `is_open(instant)`: the instant's week offset falls inside a merged segment (end inclusive to the second);
@@ -287,7 +313,7 @@ dependencies: [5]
   1. Copy the structure of `scripts/seed_index_futures.py` (dry run by default, `--apply`, `SymbolRepository.upsert` then `TrackedSymbolRepository.upsert` with `seeded_from="script"`, exit codes 0/1/2). `SEEDS`:
      - `XAUUSD:EXNESS`, "Gold vs US Dollar (Exness CFD)", `CALENDAR_EXNESS_XAUUSD`, `ContractSpec(multiplier=1.0, tick_size=0.001, lot_step=None, currency="USD")`
      - `EURUSD:EXNESS`, "Euro vs US Dollar (Exness CFD)", `CALENDAR_EXNESS_FX`, `ContractSpec(multiplier=1.0, tick_size=0.00001, lot_step=None, currency="USD")`
-     - `BTCUSD:EXNESS`, "Bitcoin vs US Dollar (Exness CFD)", `CALENDAR_CRYPTO_24_7`, `ContractSpec(multiplier=1.0, tick_size=0.01, lot_step=None, currency="USD")`
+     - `BTCUSD:EXNESS`, "Bitcoin vs US Dollar (Exness CFD)", `CALENDAR_EXNESS_CRYPTO`, `ContractSpec(multiplier=1.0, tick_size=0.01, lot_step=None, currency="USD")`
      `_build` calls `Symbol.create(symbol=..., name=..., asset_class=AssetClass.CFD, calendar_id=..., contract_spec=...)`. Tick sizes are `10 ** -point_digits` from the recorded conditions (3, 5 and 2). Quantity is in units of the instrument (ounces, euros, bitcoin); `lot_step` stays None so `PositionCalculatorDomainService` (`core/domain/risk/services/position_calculator_domain_service.py:47-56`) keeps fractional sizes. With the recorded grid (0.01 lot = 1 oz, 1000 EUR, 0.01 BTC) and a 10 000 USD paper or backtest account, the exposure cap (`balance × 0.10 / price`) is about 0.24 oz of gold and about 894 EUR, both below one grid step, so a grid `lot_step` would size every XAUUSD and EURUSD signal to zero (arithmetic from the spike's prices; see its sizer section). The Exness broker owns the lot grid (Phase 07).
   2. The module docstring states the run order: `--apply` before the first `sync_1m` reaches these symbols, and no `POST /tracked-symbols` call is needed because the script writes `tracked_symbols` too.
   3. `tests/scripts/test_seed_exness_symbols.py`: each built `Symbol` has `asset_class == AssetClass.CFD` and the calendar above; the symbols are exactly the three keys of `EXNESS_INSTRUMENTS`; `seed(apply=False)` with `Database` patched writes nothing.
@@ -325,7 +351,7 @@ dependencies: [5]
   - Step 1 prints `Contracts: 8 kept, 0 broken.`
   - Steps 2 and 3 report 0 errors in `src/` and in every touched file (pre-existing debt in untouched test files is accepted).
   - Step 4 shows no new failure: the only failures are the 4 pre-existing Windows `time.tzset` tests in `test_utc_runtime_guard.py` and `test_cron_trigger_timezone.py`.
-  - Step 5 exits 0. If it fails, follow the Failure Protocol; the remedy is to restructure (for example inline a thin wrapper), never to raise the ceiling.
+  - Step 5 exits 0. If it fails, follow the Failure Protocol; the remedy is to restructure (for example inline a thin wrapper), never to raise the ceiling (superseded on 2026-10-19: raise it to the measured values in its own commit).
   - `uv run python -c "import json;d=json.load(open('.cache/metrics-phase06.json'));print([f for f in d['functions_over_60'] if 'exness' in f])"` prints `[]`.
 
 <!-- Updated: 2026-10-13 develop reshape - push develop-sync to develop; seed before tracking; D1 checks -->
@@ -334,7 +360,7 @@ dependencies: [5]
 - **Target files and symbols:** git, VPS, API
 - **Steps:**
   1. `git add -A src tests scripts plans/261009-0858-exness-venue-lean-sync-refactor && git commit -m "feat(exness): add exness market data and quotes behind suffix routing"`
-  2. `git push origin develop-sync:develop`. Wait for the CI run whose `headSha` equals `git rev-parse HEAD` (`gh run list --branch develop --limit 1 --json databaseId,headSha`), then `gh run watch <databaseId> --exit-status`.
+  2. `git branch -m develop-sync develop && git branch -u origin/develop`, then `git push origin develop` (tests only). Wait for the CI run whose `headSha` equals `git rev-parse HEAD` (`gh run list --branch develop --limit 1 --json databaseId,headSha`) and `gh run watch <databaseId> --exit-status`. Then release with `git push origin develop:master` (fast-forward; builds and deploys) and watch the master run the same way.
   3. From the repo root set `KEY=../pocketquant-config/vps/default/id_rsa` and `HOST="$(cat ../pocketquant-config/vps/default/host)"`. Boolean-only configuration check: `ssh -i "$KEY" "$HOST" "docker exec pocketquant-app python -c \"from pocketquant.core.config import get_settings;from pocketquant.core.infra.exness.exness_client import ExnessClient;s=get_settings();print(ExnessClient(s).is_configured, s.exness_live_trading)\""`.
   4. Seed: `ssh -i "$KEY" "$HOST" "docker exec pocketquant-app python scripts/seed_exness_symbols.py"` (dry run), then the same with `--apply`. Back up `symbols` and `tracked_symbols` first, as integration step 2 did for the futures seed (`mongodump --archive` into `/opt/pocketquant/backups/pre-exness-seed-<collection>-<date>.archive`).
   5. Manual sync (remote pattern `ssh -i "$KEY" "$HOST" 'docker exec -i pocketquant-app sh -s' <<'EOF' … EOF`): `curl -s -X POST http://localhost:41921/api/v1/market-data/sync -H "Content-Type: application/json" -d '{"symbol":"XAUUSD:EXNESS","interval":"1m","n_bars":1000,"source":"rest_backfill"}'`.
@@ -365,7 +391,7 @@ T6.3–T6.17 (unit, script and routing tests), T6.18 (develop gate and ratchet) 
 - **429 below the published rate** (M/M): the spike hit one at 0.6 s spacing. Mitigation: the pacer spaces requests by the strictest published rate plus 20 % headroom, data calls retry a 429 up to 3 times with 1/2/4 s backoff and log every retry, and order calls never retry. The deep backfill runs in a second process at `--rate-fraction 0.5`; the two processes do not share a pacer, so their combined rate can exceed the limit and the retries absorb it (inference).
 - **A slow Exness delays other symbols in `sync_1m`** (M/M): develop syncs tracked symbols one after another and has no per-provider time cap. One Exness fetch is one paced request (≤ 10 s HTTP timeout) plus at most 7 s of 429 backoff. If `sync_1m` overruns its minute, APScheduler skips a run (`max_instances=1`) and the next run's 100-bar fetch heals the gap; data lag reports `stuck` only after 5 minutes without a 1m sync.
 - **Session drift** (M/M): the calendars are constants recorded on 2026-10-13. Whether Exness shifts `trade_sessions` at the US daylight-saving change is unverified. A drift shows up as integrity misses at the session edges (Phase 08 T8.8) and as a mismatch in the Phase 08 session re-read.
-- **W1 alignment unverified**: the spike recorded M1–D1 only. `bar_start` for 1w uses the Monday-aligned UTC grid; if `sync_integrity` reports misaligned `1w` bars for `:EXNESS`, STOP and ask.
+- **W1 alignment**: verified Sunday 00:00Z by a read-only prod call (2026-10-16); every Exness calendar uses Sunday-aligned 1w bars. If `sync_integrity` still reports misaligned `1w` bars for `:EXNESS`, STOP and ask.
 - **Closed-market noise**: `sync_1m` skips a closed symbol, integrity uses the calendar, and data lag reports `closed`. Weekend `sync-status` rows may look stale; that flag is display-only.
 - **No topology change**: the Exness WS runs inside the existing single process.
 - **Symbol deletion**: `DELETE /api/v1/market-data/tracked-symbols/{symbol}` already removes the `symbols` document, bars, sync status and every other symbol-keyed collection and cache key (`tracked_symbols_service.py:102-112`, :160-164). This phase adds no collection or Redis key keyed by symbol (the access point lives in memory); any later one must join that cascade.
@@ -374,7 +400,7 @@ T6.3–T6.17 (unit, script and routing tests), T6.18 (develop gate and ratchet) 
 Key material is read from `Settings` only and is a single-line 128-hex secret key. `EXNESS_API_BASE_URL` must be https on `api.exness.com`, a discovered access point must pass `allowed_access_point` (an `exness.com` or `exness-api.com` subdomain, plain https, no port, path or query) before it is stored or used, and `is_configured` fails closed. The client never logs headers, keys or signed bodies (T6.7). Order operations are refused in the client while `EXNESS_LIVE_TRADING` is false, before any network use, and T6.7 proves no request leaves.
 
 ## Rollback
-First remove the Exness symbols with `DELETE /api/v1/market-data/tracked-symbols/XAUUSD%3AEXNESS` (and the same for EURUSD and BTCUSD) with `X-Admin-Token: $ADMIN_TOKEN`; the cascade deletes their `symbols` documents, bars and cache keys. Then `git revert` the phase commit and push it with `git push origin develop-sync:develop`. Restore the T6.19 backups only if the seed itself has to be undone without the cascade.
+First remove the Exness symbols with `DELETE /api/v1/market-data/tracked-symbols/XAUUSD%3AEXNESS` (and the same for EURUSD and BTCUSD) with `X-Admin-Token: $ADMIN_TOKEN`; the cascade deletes their `symbols` documents, bars and cache keys. Then `git revert` the phase commits on `develop`, push, and fast-forward `master` again to deploy the revert. Restore the T6.19 backups only if the seed itself has to be undone without the cascade.
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.

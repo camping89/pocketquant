@@ -31,6 +31,7 @@ from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.core.infra.exness.exness_client import ExnessClient
 from pocketquant.core.infra.market_data.provider_health_check import check_market_data_providers
 from pocketquant.core.infra.persistence.health_checks import check_database, check_redis
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -314,12 +315,20 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
 
     settings = await container.get(Settings)
     tradingview_client = await container.get(TvDatafeedClient)
+    exness_client = await container.get(ExnessClient)
+    credentialed = {"tradingview"} if _tradingview_credentialed(settings) else set()
+    if exness_client.is_configured:
+        credentialed.add("exness")
     hc.register(
         "market_data_providers",
         partial(
             check_market_data_providers,
-            {"binance": lambda: True, "tradingview": tradingview_client.is_authenticated},
-            {"tradingview"} if _tradingview_credentialed(settings) else set(),
+            {
+                "binance": lambda: True,
+                "tradingview": tradingview_client.is_authenticated,
+                "exness": lambda: exness_client.is_configured,
+            },
+            credentialed,
             await container.get(TradingCalendarFactory),
             await container.get(TrackedSymbolRepository),
         ),

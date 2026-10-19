@@ -71,6 +71,8 @@ def setup_logging(settings: Settings) -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("pymongo").setLevel(logging.WARNING)
+    # Its DEBUG handshake log prints the request headers, Exness API key included.
+    logging.getLogger("websockets").setLevel(logging.WARNING)
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

@@ -112,6 +112,17 @@ class Settings(BaseSettings):
     okx_passphrase: str | None = None
     okx_demo_mode: bool = True
 
+    # Exness Trader API (optional). Every order call is refused while
+    # exness_live_trading is false, which is the default.
+    exness_api_base_url: str | None = None
+    exness_account_id: str | None = None
+    exness_api_key: SecretStr | None = None
+    exness_secret_key: SecretStr | None = None
+    exness_live_trading: bool = False
+    # Share of the published request rate one process may use; the deep
+    # backfill lowers it so it can run beside the app.
+    exness_rate_fraction: float = Field(default=1.0, gt=0, le=1)
+
     # Admin API (v1 token auth — set in production; unset = dev mode, skip auth)
     # SecretStr prevents accidental logging/serialisation of the token value.
     admin_token: SecretStr | None = None

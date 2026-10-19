@@ -84,6 +84,6 @@ async def test_touch_refuses_a_symbol_whose_provider_is_not_registered(
     repo: SymbolRepository,
 ) -> None:
     with pytest.raises(UnknownDataProviderError):
-        await repo.touch("XAUUSD:EXNESS")
+        await repo.touch("XAUUSD:MT5")
 
-    assert await repo.find_by_symbol("XAUUSD:EXNESS") is None
+    assert await repo.find_by_symbol("XAUUSD:MT5") is None

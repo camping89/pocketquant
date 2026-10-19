@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import httpx
+import pytest
 from dishka import Provider, Scope, make_async_container, provide
 
 from pocketquant.app.di.adapters import AdaptersProvider
@@ -23,6 +25,8 @@ from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.core.infra.exness import exness_client
+from pocketquant.core.infra.exness.exness_client import ExnessClient
 from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
     RoutingDataProviderAdapter,
 )
@@ -61,3 +65,24 @@ async def test_both_routers_register_exactly_the_providers_with_defaults() -> No
 
     assert rest == set(DATA_PROVIDER_DEFAULTS)
     assert realtime == set(DATA_PROVIDER_DEFAULTS)
+
+
+async def test_without_exness_settings_the_client_is_off_and_sends_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[httpx.Request] = []
+    transport = httpx.MockTransport(lambda r: requests.append(r) or httpx.Response(500))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        exness_client.httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw)
+    )
+    container = make_async_container(AdaptersProvider(), _Stubs(), skip_validation=True)
+    try:
+        await container.get(IDataProviderPort)
+        await container.get(IRealtimeQuoteProviderPort)
+        client = await container.get(ExnessClient)
+    finally:
+        await container.close()
+
+    assert client.is_configured is False
+    assert requests == []

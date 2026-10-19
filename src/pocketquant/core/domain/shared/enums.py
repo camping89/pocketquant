@@ -56,6 +56,7 @@ class AssetClass(str, Enum):
     CRYPTO_SPOT = "crypto_spot"
     CRYPTO_PERP = "crypto_perp"
     INDEX_FUTURE = "index_future"
+    CFD = "cfd"
 
 
 class TradingViewPlan(str, Enum):

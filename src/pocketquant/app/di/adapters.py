@@ -1,11 +1,14 @@
 """Adapters provider: the venue adapters behind the ports.
 
 Each routing adapter maps a provider id to its venue adapter. The key is the
-provider id a symbol's suffix names (BTCUSDT:BINANCE -> "binance"). Adding a
+provider id a symbol's suffix names (BTCUSDT:BINANCE -> "binance",
+ES1!:TRADINGVIEW -> "tradingview", XAUUSD:EXNESS -> "exness"). Adding a
 provider is one entry in each router here and one in DATA_PROVIDER_DEFAULTS;
 the routing adapters implement the same ports, so every consumer above them is
 unchanged. ``BrokerFactory`` builds the broker adapters.
 """
+
+from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 
@@ -20,6 +23,9 @@ from pocketquant.core.infra.binance.binance_websocket_adapter import (
 )
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.core.infra.exness.exness_adapter import ExnessAdapter
+from pocketquant.core.infra.exness.exness_client import ExnessClient
+from pocketquant.core.infra.exness.exness_quote_adapter import ExnessQuoteAdapter
 from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
     RoutingDataProviderAdapter,
 )
@@ -41,11 +47,19 @@ class AdaptersProvider(Provider):
         return TvDatafeedClient(settings=settings)
 
     @provide(scope=Scope.APP)
+    async def get_exness_client(self, settings: Settings) -> AsyncIterator[ExnessClient]:
+        """One signed client for history and quotes; it sends nothing until used."""
+        client = ExnessClient(settings)
+        yield client
+        await client.close()
+
+    @provide(scope=Scope.APP)
     def get_data_provider(
         self,
         settings: Settings,
         calendar_factory: TradingCalendarFactory,
         tradingview_client: TvDatafeedClient,
+        exness_client: ExnessClient,
     ) -> IDataProviderPort:
         return RoutingDataProviderAdapter(
             providers={
@@ -55,6 +69,7 @@ class AdaptersProvider(Provider):
                     settings=settings,
                     calendar_factory=calendar_factory,
                 ),
+                "exness": ExnessAdapter(exness_client),
             },
         )
 
@@ -64,6 +79,7 @@ class AdaptersProvider(Provider):
         settings: Settings,
         calendar_factory: TradingCalendarFactory,
         tradingview_client: TvDatafeedClient,
+        exness_client: ExnessClient,
     ) -> IRealtimeQuoteProviderPort:
         return RoutingRealtimeQuoteAdapter(
             providers={
@@ -73,5 +89,6 @@ class AdaptersProvider(Provider):
                     settings=settings,
                     calendar_factory=calendar_factory,
                 ),
+                "exness": ExnessQuoteAdapter(exness_client),
             },
         )
