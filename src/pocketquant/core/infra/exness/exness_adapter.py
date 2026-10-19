@@ -9,7 +9,7 @@ fetches again.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
@@ -24,6 +24,8 @@ from pocketquant.core.infra.exness.exness_mappers import (
 )
 
 logger = get_logger(__name__)
+
+_SECOND = timedelta(seconds=1)
 
 
 class ExnessAdapter(IDataProviderPort):
@@ -44,11 +46,12 @@ class ExnessAdapter(IDataProviderPort):
             logger.warning("exness.unknown_instrument", symbol=symbol)
             return []
         page = max_candles(await self._client.limits())
-        now = datetime.now(UTC)
-        cutoff = exness_bar_start(now, interval)
-        cursor = now.replace(microsecond=0).isoformat()
+        cutoff = exness_bar_start(datetime.now(UTC), interval)
+        # ``from`` is inclusive, so each page ends one second before the bar in
+        # progress, then before the oldest bar already fetched: no candle is
+        # requested twice or dropped after counting.
+        cursor = cutoff - _SECOND
         bars: list[Bar] = []
-        seen: set[datetime] = set()
         remaining = n_bars
         while remaining > 0:
             count = min(remaining, page)
@@ -58,20 +61,17 @@ class ExnessAdapter(IDataProviderPort):
                     "instrument": name,
                     "timeframe": INTERVAL_TO_EXNESS[interval],
                     "price_type": "bid",
-                    "from": cursor,
+                    "from": cursor.isoformat(),
                     "count": -count,
                 },
             )
             candles = body.get("candles", [])
             chunk = [candle_to_bar(c, symbol, interval) for c in candles]
-            closed = [b for b in chunk if b.datetime is not None and b.datetime < cutoff]
-            fresh = [b for b in closed if b.datetime not in seen]
-            seen.update(b.datetime for b in fresh if b.datetime is not None)
-            bars = fresh + bars
-            remaining -= count
+            bars = [b for b in chunk if b.datetime is not None and b.datetime < cutoff] + bars
+            remaining -= len(candles)
             if len(candles) < count:
                 break
-            cursor = min(b.datetime for b in chunk if b.datetime).isoformat()
+            cursor = min(b.datetime for b in chunk if b.datetime) - _SECOND
         logger.debug("exness.fetch_completed", symbol=symbol, bars_fetched=len(bars))
         return bars[-n_bars:] if n_bars > 0 else []
 

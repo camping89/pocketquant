@@ -211,11 +211,11 @@ dependencies: [5]
   1. `name = instrument_name(symbol)`; when None, log a warning `exness.unknown_instrument` with `symbol` and return `[]`.
   2. `page = max_candles(await client.limits())` (1000 recorded).
   3. Loop while `remaining > 0`:
-     - `await client.call("getCandleHistory", params={"instrument": name, "timeframe": INTERVAL_TO_EXNESS[interval], "price_type": "bid", "from": cursor, "count": -min(remaining, page)})`, where `cursor` starts at the current UTC time in ISO seconds precision;
+     - `await client.call("getCandleHistory", params={"instrument": name, "timeframe": INTERVAL_TO_EXNESS[interval], "price_type": "bid", "from": cursor, "count": -min(remaining, page)})`, where `cursor` starts one second before the in-progress bar (Updated 2026-10-19: starting at "now" put the in-progress candle in the page, so `n_bars=1000` stored 999 in prod);
      - map each candle with `candle_to_bar`;
      - drop bars whose datetime is `>= get_bar_start(now, interval)` (the in-progress bar; the spike showed every series on the UTC grid, so the same cutoff as `BinanceAdapter` applies);
-     - drop bars whose datetime is already collected, and prepend the rest;
-     - stop when the page returned fewer candles than requested; otherwise move `cursor` to the oldest returned candle time.
+     - prepend the rest and subtract the number of candles returned from `remaining`;
+     - stop when the page returned fewer candles than requested; otherwise move `cursor` to one second before the oldest returned candle (`from` is inclusive, so no candle repeats and no dedupe set is needed).
   4. Log `exness.fetch_completed` at DEBUG with `symbol` and `bars_fetched` (a per-minute event). Return the bars ascending, trimmed to the last `n_bars`.
   5. Do not catch `ExnessApiError`. The client already retried a 429; anything it raises propagates, `SyncService.sync_one` reports it as an `error`, and the next scheduled run fetches again.
 - **Success criteria:** Same contract as `BinanceAdapter.fetch_ohlcv`.

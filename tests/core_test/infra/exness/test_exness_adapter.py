@@ -54,6 +54,7 @@ async def test_fetch_pages_backwards_by_the_published_page_size() -> None:
     assert [p["count"] for p in params] == [-100, -100, -50]
     assert all(p["instrument"] == "XAUUSD" and p["price_type"] == "bid" for p in params)
     times = [b.datetime for b in bars if b.datetime is not None]
+    assert len(bars) == 250
     assert len(times) == len(bars)
     assert times == sorted(times)
     assert len(times) == len(set(times))
@@ -64,10 +65,12 @@ async def test_the_in_progress_candle_is_excluded() -> None:
     cutoff = get_bar_start(datetime.now(UTC), Interval.MINUTE_1)
     in_progress = copy.deepcopy(CANDLES[-1])
     in_progress["time"] = cutoff.isoformat()
-    client = _client([*CANDLES[-5:], in_progress])
+    client = _client([*CANDLES[-6:], in_progress])
 
-    bars = await ExnessAdapter(client).fetch_ohlcv("XAUUSD:EXNESS", Interval.MINUTE_1, 10)
+    bars = await ExnessAdapter(client).fetch_ohlcv("XAUUSD:EXNESS", Interval.MINUTE_1, 5)
 
+    first_from = client.call.await_args_list[0].kwargs["params"]["from"]
+    assert datetime.fromisoformat(first_from) == cutoff - timedelta(seconds=1)
     assert cutoff not in [b.datetime for b in bars]
     assert len(bars) == 5
 
