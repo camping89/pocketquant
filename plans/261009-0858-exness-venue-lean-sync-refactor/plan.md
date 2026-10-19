@@ -34,7 +34,7 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 | 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Done on develop (integration step 4) |
 | 06 | [Exness market data and quotes](./phase-06-exness-market-data-and-policy.md) | 7d | Completed 2026-10-19 (prod on master `7c3ca77`, D1 holds) |
 | 07 | [Exness broker behind the live-trading switch (off)](./phase-07-exness-broker-off-by-default.md) | 6d | Completed 2026-10-19 on develop (live trading off; go-live blockers listed in the phase) |
-| 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | Pending |
+| 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | In progress 2026-10-19 (spread in prod `83fcd9d`, D3 holds; paper week awaits user approval) |
 | 09 | [Architecture, deployment, standard and MT5 docs](./phase-09-docs-architecture-deployment-mt5.md) | 1d | Pending |
 
 ## Dependencies

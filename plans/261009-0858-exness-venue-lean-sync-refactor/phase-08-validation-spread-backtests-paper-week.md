@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Validation: spread, backtests, paper week"
-status: pending
+status: in-progress
 priority: P1
 effort: 7d + weekend
 dependencies: [7]
@@ -14,6 +14,14 @@ dependencies: [7]
 - Base branch: `develop` (`develop-sync` tracking `origin/develop`); ship with `git push origin develop-sync:develop`. There is no feature branch, no merge step and no `master` step.
 - Develop has no `tests/baseline` (no OpenAPI snapshot and no venue command). The OpenAPI check in T8.2 compares the request model schema, and the gate is develop's gate.
 - Remote pattern used below: `ssh -i "$KEY" "$HOST" "docker exec pocketquant-app <command>"` (`KEY` and `HOST` as in Phase 06 T6.19). The app listens on `41921` inside the container (`deploy/compose.prod.yml:38`), and every route is under `/api/v1` (`Settings.api_prefix`, `core/config.py:51`).
+
+## Progress 2026-10-19
+- T8.1–T8.3 done. `PaperBrokerAdapter(spread=...)`, the backtest plumbing and `tests/core_test/infra/brokers/test_paper_broker_spread.py` shipped as `83fcd9d`. The finished-run `config_snapshot` (`engine/backtest/backtest_report_app_service.py`) also stores `spread`, on kongming's review, so a stored run says which spread produced it; the plan's file list missed this.
+- Gate: broker tests 101 passed; the request schema minus `spread` is unchanged (`True`); no file under `src/pocketquant/app` changed; lint-imports `8 kept, 0 broken`; ruff and pyright 0 errors; `just test` shows only the 4 Windows `time.tzset` tests red; the ratchet exits 0 with no ceiling change.
+- Released with the coordinator's approval: develop CI green, then `master` fast-forwarded to `83fcd9d` (this also deployed Phase 07's broker code, live trading off). Deploy verdict `HEALTHY (20/20 passed, 0 warnings, 0 failures)`.
+- T8.4 done: every backfill call fetched bars; 1m `total_bars` about 129610 and 1h 17521 per symbol, above every minimum.
+- T8.5 done: all 6 runs `finished`, each with trades (48 to 215). D3 holds. Results: `reports/exness-backtest-results.md`.
+- T8.6–T8.8 pending. The coordinator stopped the phase after T8.5: the user has not approved the paper week, and it must start on a Tuesday, Wednesday or Thursday with 7 days of daily checks.
 
 ## Context Links
 - Advice §2.8 and §3 (bid-only backtests flatter shorts).
