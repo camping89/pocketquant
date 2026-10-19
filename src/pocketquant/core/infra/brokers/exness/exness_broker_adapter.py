@@ -317,37 +317,41 @@ class ExnessBrokerAdapter(IBrokerPort):
                 op, path_params=path_params, json_body=json_body, idempotency_key=rid
             )
         except ExnessApiError as e:
-            if e.code in ("TRANSPORT", "REQUEST_RATE_LIMIT"):
-                # The request may have reached the venue: wait for a snapshot reconcile.
-                self._needs_snapshot = True
-            self._inflight.pop(rid, None)
-            logger.warning("exness.order_rejected", order_id=rid, code=e.code)
-            return _rejected(order, f"{e.code}: {e.message}")
-        else:
-            self._acked_at[rid] = time.monotonic()
-            logger.info(
-                "exness.order_submitted",
-                order_id=rid,
-                operation_id=ack.get("operation_id"),
-                instrument=name,
-                kind=kind,
-                volume=(json_body or {}).get("volume"),
-            )
-            self._spawn(self._watch_operation(rid, str(ack.get("operation_id", ""))))
-            return OrderResult(
-                order_id=rid,
-                broker_order_id=str(ack.get("operation_id", "")),
-                status=OrderStatus.SUBMITTED,
-                submitted_at=datetime.now(UTC),
-                sl_price=order.sl_price,
-                tp_price=order.tp_price,
-                side=order.side,
-            )
+            if rid not in self._early:
+                if e.code in ("TRANSPORT", "REQUEST_RATE_LIMIT"):
+                    # The request may have reached the venue: wait for a snapshot reconcile.
+                    self._needs_snapshot = True
+                self._inflight.pop(rid, None)
+                logger.warning("exness.order_rejected", order_id=rid, code=e.code)
+                return _rejected(order, f"{e.code}: {e.message}")
+            # Its outcome already arrived on the stream, so the venue took the request:
+            # report SUBMITTED and let the hand-off below deliver that outcome.
+            logger.warning("exness.order_ack_lost_after_outcome", order_id=rid, code=e.code)
+            ack = {"operation_id": self._early[rid][0].broker_order_id}
         finally:
             self._pending_ack.discard(rid)
             if rid in self._early:
                 # Hand off after OrderAppService.submit has recorded SUBMITTED.
                 self._spawn(self._complete(*self._early.pop(rid)))
+        self._acked_at[rid] = time.monotonic()
+        logger.info(
+            "exness.order_submitted",
+            order_id=rid,
+            operation_id=ack.get("operation_id"),
+            instrument=name,
+            kind=kind,
+            volume=(json_body or {}).get("volume"),
+        )
+        self._spawn(self._watch_operation(rid, str(ack.get("operation_id", ""))))
+        return OrderResult(
+            order_id=rid,
+            broker_order_id=str(ack.get("operation_id", "")),
+            status=OrderStatus.SUBMITTED,
+            submitted_at=datetime.now(UTC),
+            sl_price=order.sl_price,
+            tp_price=order.tp_price,
+            side=order.side,
+        )
 
     async def _watch_operation(self, rid: str, operation_id: str) -> None:
         """Resolve an acknowledged request whose outcome the stream did not deliver."""

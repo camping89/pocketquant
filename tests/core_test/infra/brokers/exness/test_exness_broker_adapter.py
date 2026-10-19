@@ -332,7 +332,16 @@ async def test_entry_fill_delivered_once() -> None:
     assert fill.filled_price == 2345.1
 
 
-async def test_fill_before_ack_is_delivered_once_after_submit_returns() -> None:
+# The fill reaches the stream while the order call runs; the call then succeeds or fails.
+ACK_OUTCOMES = pytest.mark.parametrize(
+    "ack_error", [None, ExnessApiError(0, "TRANSPORT", "x")], ids=["ack", "ack_lost"]
+)
+
+
+@ACK_OUTCOMES
+async def test_fill_before_ack_is_delivered_once_after_submit_returns(
+    ack_error: ExnessApiError | None,
+) -> None:
     h = await _Harness().start()
     order = _order()
 
@@ -341,12 +350,15 @@ async def test_fill_before_ack_is_delivered_once_after_submit_returns() -> None:
         await h.entry_fill(order)
 
     h.client.on_order_call = fill_during_call
+    h.client.order_error = ack_error
     result = await h.broker.submit_order(order)
 
     assert result.status == OrderStatus.SUBMITTED
     assert h.results == []
     await _drain()
     assert [r.status for r in h.results] == [OrderStatus.FILLED]
+    assert "p1" in h.broker._positions
+    assert not h.broker._needs_snapshot
 
 
 async def test_async_rejection_maps_to_cancelled() -> None:
@@ -503,7 +515,10 @@ async def test_fill_for_dropped_request_blocks_the_instrument() -> None:
     assert h.results == []
 
 
-async def test_close_filled_before_ack_emits_trade_after_fill() -> None:
+@ACK_OUTCOMES
+async def test_close_filled_before_ack_emits_trade_after_fill(
+    ack_error: ExnessApiError | None,
+) -> None:
     h, _ = await _holding_p1()
     close = _order(side=OrderSide.SELL)
     seen: list[str] = []
@@ -520,8 +535,10 @@ async def test_close_filled_before_ack_emits_trade_after_fill() -> None:
         )
 
     h.client.on_order_call = fill_during_call
-    await h.broker.submit_order(close)
+    h.client.order_error = ack_error
+    result = await h.broker.submit_order(close)
 
+    assert result.status == OrderStatus.SUBMITTED
     assert seen == []
     await _drain()
     assert seen == ["fill", "trade"]
