@@ -40,7 +40,7 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 ## Dependencies
 - Phases run strictly in order, 01 → 09; no two phases run in parallel, so no file has two concurrent owners.
 - Phase 01 waits on U1 and U2. OKX had no market data to migrate (`reports/user-preconditions.md`). Phase 08's paper week needs the user's approval and a no-deploy week.
-- Work happens on `develop` in `D:/w/_me/algotrading/pq-develop` and ships with `git push origin develop`. A push to `develop` runs tests only; `.github/workflows/cicd.yml` builds and deploys to prod only from `master` (branch model in `docs/deployment.md`). Deploys are approved.
+- Work happens on `develop` in `D:/w/_me/algotrading/pocketquant` and ships with `git push origin develop`. A push to `develop` runs tests only; `.github/workflows/cicd.yml` builds and deploys to prod only from `master` (branch model in `docs/deployment.md`). Deploys are approved.
 
 <!-- Updated: Validation Session 1 - D2, D4, D6 and the week metric rewritten -->
 ## Success criteria (D1–D7)

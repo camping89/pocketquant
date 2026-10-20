@@ -1,6 +1,6 @@
 # Red team: Assumption Destroyer / Scope Auditor
 
-Date: 2026-10-20. Scope: `plan.md` and `phase-01` to `phase-12`. Binding user decisions (pause resets on restart, 0.10 risk, 25 USD cap, one strategy per Phase 11 run, deploy ASAP) are treated as constraints, not findings. Evidence was checked with grep/read in `D:/w/_me/algotrading/pq-develop` and `gh api`. No secret values were read or printed.
+Date: 2026-10-20. Scope: `plan.md` and `phase-01` to `phase-12`. Binding user decisions (pause resets on restart, 0.10 risk, 25 USD cap, one strategy per Phase 11 run, deploy ASAP) are treated as constraints, not findings. Evidence was checked with grep/read in `D:/w/_me/algotrading/pocketquant` and `gh api`. No secret values were read or printed.
 
 ## Finding 1: Every `git push origin develop` hits the account that cannot push
 - **Severity:** High

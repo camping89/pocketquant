@@ -30,7 +30,7 @@ Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending
 ```
 Status: BLOCKED
 NOT_YET: <reason>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 12 after <UTC time>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 12 after <UTC time>
 ```
 - `grep -c "round_trip: DONE" plans/261019-1957-exness-go-live/reports/round-trip.md` prints ≥ 1 (else `NOT_YET: no live round trip recorded yet; run --from 11 --to 11`).
 - `grep -c "^## Live run" plans/261019-1957-exness-go-live/reports/round-trip.md` equals the `round_trip: DONE` count (else `NOT_YET: a Phase 11 run is in progress; finish it with --from 11 --to 11`).

@@ -24,7 +24,7 @@ Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending
 ```
 Status: BLOCKED
 NOT_YET: <reason>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 01 after <UTC time>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 01 after <UTC time>
 ```
 - `docker ps` exits 0. If not, start `"/c/Program Files/Docker/Docker/Docker Desktop.exe"` in the background, wait 10 s, retry once. Still failing → `NOT_YET: Docker Desktop is not running`.
 - `git status --porcelain -- src web deploy tests scripts docs` prints nothing (else `NOT_YET: uncommitted code changes`).

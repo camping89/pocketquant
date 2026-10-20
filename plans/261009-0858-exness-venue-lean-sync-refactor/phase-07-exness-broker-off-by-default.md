@@ -11,7 +11,7 @@ dependencies: [6]
 
 <!-- Updated: 2026-10-13 develop reshape - develop paths, trade subscription, BrokerFactory in core/infra, new 429 rule -->
 ## Develop status
-- Base branch: `develop` (`develop-sync` tracking `origin/develop` in `D:/w/_me/algotrading/pq-develop`); ship with `git push origin develop-sync:develop`. Deploys are approved; there is no `master` step.
+- Base branch: `develop` (`develop-sync` tracking `origin/develop` in `D:/w/_me/algotrading/pocketquant`); ship with `git push origin develop-sync:develop`. Deploys are approved; there is no `master` step.
 - On develop the engine lives in `engine/strategy/` and `engine/execution/`, the broker port is `IBrokerPort` and requires a trade subscription (`subscribe_trades`), `BrokerFactory` lives in `core/infra/brokers/broker_factory.py`, and the live strategy picks its broker from `StrategyConfig.broker` (default `"paper"`). The broker is a strategy setting, independent of the symbol suffix.
 - Phase 06 delivered `ExnessClient` (`core/infra/exness/exness_client.py`), the mappers and `ExnessStream`; this phase reuses them.
 

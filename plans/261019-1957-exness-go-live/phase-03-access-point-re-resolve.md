@@ -23,7 +23,7 @@ Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending
 ```
 Status: BLOCKED
 NOT_YET: <reason>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 03 after <UTC time>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 03 after <UTC time>
 ```
 - `docker ps` exits 0 (start Docker Desktop and retry once after 10 s; still failing → `NOT_YET: Docker Desktop is not running`).
 - `git status --porcelain -- src web deploy tests scripts docs` prints nothing (else `NOT_YET: uncommitted code changes`).

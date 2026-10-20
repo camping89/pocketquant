@@ -25,7 +25,7 @@ Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending
 ```
 Status: BLOCKED
 NOT_YET: <reason>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 10 after <UTC time>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 10 after <UTC time>
 ```
 - `grep -c "^Deploy B:" plans/261019-1957-exness-go-live/reports/ship-log.md` prints `1` and `grep -c "^Break-glass drill:" plans/261019-1957-exness-go-live/reports/ship-log.md` prints `1`.
 - `curl -s -o /dev/null -w "%{http_code}" https://pocketquant.xyz/api/v1/admin/safeguards` prints `200`.

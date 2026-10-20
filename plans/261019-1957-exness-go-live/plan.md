@@ -21,7 +21,7 @@ Sources: `plans/261019-1957-exness-go-live/reports/kongming-261020-1924-debate-s
 Live orders need the flag true, because `ExnessClient.call` refuses `openPosition`/`closePosition` while it is false (`core/infra/exness/exness_client.py:265-266`), and `BrokerFactory.create("exness")` refuses too (`core/infra/brokers/broker_factory.py:87-88`). Arming pauses entries, then turns the flag on. No `exness` subscription exists until Phase 11, so arming sends no order.
 
 ## Conventions (every phase file repeats the short form)
-- **Entry gate** runs first. A miss is not a failed verification: edit nothing, spawn no `kongming`, leave the phase pending, and end with exactly three lines: `Status: BLOCKED` / `NOT_YET: <reason>` / `Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from NN after <UTC time>`. Phase 11 resumes and re-runs with `--from 11 --to 11` (the runner supports `--to`, `~/.claude/skills/eve-cook-plan/SKILL.md:18,37`). The runner stops on a non-succeeded worker (`SKILL.md:130-136`); the user re-runs. Do not pass `--retry-once` for phases 10-12.
+- **Entry gate** runs first. A miss is not a failed verification: edit nothing, spawn no `kongming`, leave the phase pending, and end with exactly three lines: `Status: BLOCKED` / `NOT_YET: <reason>` / `Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from NN after <UTC time>`. Phase 11 resumes and re-runs with `--from 11 --to 11` (the runner supports `--to`, `~/.claude/skills/eve-cook-plan/SKILL.md:18,37`). The runner stops on a non-succeeded worker (`SKILL.md:130-136`); the user re-runs. Do not pass `--retry-once` for phases 10-12.
 - Every entry gate checks `git status --porcelain -- src web deploy tests scripts docs` prints nothing. A gate that needs earlier code reads `git show origin/develop:<path>`, never the working tree.
 - **[ASK]** = stop-and-ask approval; the question states the facts the phase lists; only an explicit yes counts. A "no" or "wait" ends the phase with the `NOT_YET` block. **[USER]** = the user acts and replies with a stated token. No approval carries forward to a later gate (U2).
 - **Failure Protocol**: each phase file carries the literal block. A failed Verify stops the phase and goes to `kongming`; a `NOT_YET` exit does not.
@@ -31,7 +31,7 @@ Live orders need the flag true, because `ExnessClient.call` refuses `openPositio
 - Each ops phase (08-12) deletes `.cache/ssh/vps_key` at its end and before any `NOT_YET` exit.
 
 ## Ops recipe (phases 08-12; each phase inlines what it needs)
-- Working dir `D:/w/_me/algotrading/pq-develop`. The shell keeps no variables between commands, so every command sets `HOST` (and `RUN_ID`) itself.
+- Working dir `D:/w/_me/algotrading/pocketquant`. The shell keeps no variables between commands, so every command sets `HOST` (and `RUN_ID`) itself.
 - SSH: `mkdir -p .cache/ssh && tr -d '\r' < ../pocketquant-config/vps/default/id_rsa > .cache/ssh/vps_key && chmod 600 .cache/ssh/vps_key`; then `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" '<cmd>'` (the key has CRLF endings). Remove the copy with `rm -f .cache/ssh/vps_key`.
 - Admin call without printing the token (the `app` container has `env_file: .env`, `deploy/compose.prod.yml:43-44`):
   ```bash

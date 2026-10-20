@@ -11,7 +11,7 @@ dependencies: []
 
 <!-- Updated: 2026-10-13 develop re-base - T1.1-T1.7 done on develop; resume at T1.8 -->
 ## Develop status
-- The base branch is `develop` (worktree `D:/w/_me/algotrading/pq-develop`, local branch `develop-sync` tracking `origin/develop`). Every `master` in this file means `develop`; push with `git push origin develop-sync:develop`. Deploys to the VPS are approved.
+- The base branch is `develop` (worktree `D:/w/_me/algotrading/pocketquant`, local branch `develop-sync` tracking `origin/develop`). Every `master` in this file means `develop`; push with `git push origin develop-sync:develop`. Deploys to the VPS are approved.
 - T1.1 is done: `reports/user-preconditions.md` holds U1 and U2 confirmed and host `api.exness.com`.
 - T1.2–T1.5 and T1.7 are done: the spike script, its tests, `cryptography>=46` and the `.env` guard reached develop and prod in CI run 38362717425 (verdict HEALTHY). Evidence: `reports/integrate-develop-step1-ports.md`. On develop the spike checks candle alignment with `is_bar_aligned(..., Continuous24x7Calendar())` from `bar_builder_domain_service`.
 - Start at T1.8. T1.6 is the gate for the T1.12 commit only.

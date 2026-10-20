@@ -1,6 +1,6 @@
 # Revalidation of Phases 08 and 09 against develop 4b3a77a
 
-Read-only check in D:/w/_me/algotrading/pq-develop. Everything below was read from the worktree unless marked (inference).
+Read-only check in D:/w/_me/algotrading/pocketquant. Everything below was read from the worktree unless marked (inference).
 
 ## Verdicts
 

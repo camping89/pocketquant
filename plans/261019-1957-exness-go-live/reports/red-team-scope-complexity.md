@@ -1,6 +1,6 @@
 # Red team: scope and complexity critic, with contract verification
 
-Date: 2026-10-20. Reviewer stance: hostile. Every claim below was checked with grep or a file read in `D:/w/_me/algotrading/pq-develop` at `a4ae323`. [V] = verified in source. [I] = inference.
+Date: 2026-10-20. Reviewer stance: hostile. Every claim below was checked with grep or a file read in `D:/w/_me/algotrading/pocketquant` at `a4ae323`. [V] = verified in source. [I] = inference.
 
 Checked and consistent, so not raised as findings: 17 mutation routes (`app/routes/*.py`, and tracked_symbols is mounted only once now, `main_extensions.py:452-459`); 8 import-linter contracts (`pyproject.toml:89-160`); every log event name the plan greps exists (`exness.broker_connected` `exness_broker_adapter.py:146`, `exness.snapshot_reconciled` `:459`, `exness.order_rejected_async` `:491`, `exness.daily_loss_cap_reached` `:262`, `exness_ws.circuit_breaker_open` `exness_stream.py:115`, `exness_ws.reconnecting` `:119`, `data_lag.state_changed` `sync_jobs.py:745`); Mongo collections and fields `orders.status/created_at/subscription_id`, `positions.is_closed/opened_at/closed_at/sl_price`, and `trades.run_id` = subscription id (`live_trade_collector.py:58-63`); `workflow_dispatch` exists (`cicd.yml:11`); `provider_bars.py` flags (`:57-61`) and the `fetched=` line (`:100`); the dead SPA files have no importer outside the deleted set.
 

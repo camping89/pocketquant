@@ -26,7 +26,7 @@ Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending
 ```
 Status: BLOCKED
 NOT_YET: <reason>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 08 after <UTC time>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 08 after <UTC time>
 ```
 - `git status --porcelain -- src web deploy tests scripts docs` prints nothing; after `git fetch origin`, `test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo same` prints `same`.
 - Each prints ≥ 1: `git show origin/develop:src/pocketquant/app/main_extensions.py | grep -c verify_admin_token`; `git show origin/develop:src/pocketquant/core/infra/exness/exness_client.py | grep -c access_point_reset`; `git show origin/develop:src/pocketquant/engine/market_data/app_services/integrity_jobs.py | grep -c unexpected_count`; `git show origin/develop:src/pocketquant/core/infra/persistence/repositories/safeguards_repository.py | grep -c save_entries_paused`; `git show origin/develop:web/src/components/strategies/strategies-page-layout.tsx | grep -c ExnessStrip`; `git show origin/develop:deploy/compose.prod.yml | grep -c "127.0.0.1:"`; `git show origin/develop:web/nginx.conf | grep -c "limit_conn sse"`; `git show origin/develop:justfile | grep -c "^tunnel:"`.

@@ -10,7 +10,7 @@ dependencies: [10]
 # Phase 11: Take one strategy live (re-runnable)
 
 ## Context
-- User decision 2026-10-20 19:35: ONE strategy the user picks goes live per run of this phase. Its paper subscription is deleted [ASK], its `exness` subscription is created [ASK] while entries are paused, the first paused rejection proves sizing and the pause gate at zero money, then Resume [ASK]. The round trip is the strategy's first natural trade (D3 = A). A second strategy goes live only by re-running this phase alone: `/eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 11 --to 11` (the runner supports `--to`, `~/.claude/skills/eve-cook-plan/SKILL.md:18,37`).
+- User decision 2026-10-20 19:35: ONE strategy the user picks goes live per run of this phase. Its paper subscription is deleted [ASK], its `exness` subscription is created [ASK] while entries are paused, the first paused rejection proves sizing and the pause gate at zero money, then Resume [ASK]. The round trip is the strategy's first natural trade (D3 = A). A second strategy goes live only by re-running this phase alone: `/eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 11 --to 11` (the runner supports `--to`, `~/.claude/skills/eve-cook-plan/SKILL.md:18,37`).
 - User decision 2026-10-20 20:20: the pause is stored and survives a restart (Phase 05). A restart still resets strategy warmup and the open direction.
 - The unique index on `(strategy_code, symbol, interval)` (`core/infra/persistence/repositories/subscription_repository.py:102-106`) forces the paper subscription off the triple first. `remove_symbol` deletes only the subscription document; its orders, positions and trades stay (`engine/strategy/strategy_command_service.py:99-107`); the DELETE route returns 204 whatever happens (`app/routes/strategy.py:141-147`). Deleting a validation subscription makes E2's `running 2` read 1 from then on (accepted: E2 is optional).
 - Zero-money proof: `normalize_quantity` runs before `submit_order` (`engine/strategy/strategy_app_service.py:405-415`); a size below the lot grid never creates an order and logs `order_quantity_below_broker_minimum` with `strategy_id=<subscription id>` (`:407-409`); a zero size logs `zero_position_size` (`:401-404`). While paused, `_presubmit_reason` rejects first and logs `exness.order_rejected_presubmit reason=entries_paused subscription_id=<id>` (Phase 05). The `orders` document stores no rejection reason, so the proof reads that log line. An order that reached the venue logs `exness.order_submitted` or `exness.order_rejected` with `order_id` = the `orders._id` (`exness_broker_adapter.py:316,330,342-349`). `below_min_lot` carries no subscription id; every `exness` subscription is live, so it is counted unscoped.
@@ -46,7 +46,7 @@ Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending
 ```
 Status: BLOCKED
 NOT_YET: <reason>
-Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 11 --to 11 after <UTC time>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 11 --to 11 after <UTC time>
 ```
 - `grep -c "^Deploy C (armed):" plans/261019-1957-exness-go-live/reports/ship-log.md` prints `1` (else `NOT_YET: live trading is not armed; run --from 10`).
 - `git status --porcelain -- src web deploy tests scripts docs` prints nothing.
