@@ -366,13 +366,19 @@ async def _run_integrity(name: str) -> None:
             calendar = await calendar_factory.for_symbol(ts.symbol)
             for interval in SYNC_INTERVALS:
                 report = await check_integrity(ts.symbol, interval, bar_repo, calendar)
-                if report["misaligned_count"] or report["missing_count"]:
+                if (
+                    report["misaligned_count"]
+                    or report["missing_count"]
+                    or report.get("unexpected_count")
+                ):
                     logger.warning(
                         "integrity.issues_found",
                         symbol=ts.symbol,
                         interval=interval.value,
                         misaligned=report["misaligned_count"],
                         missing=report["missing_count"],
+                        unexpected=report.get("unexpected_count", 0),
+                        unexpected_ranges=report.get("unexpected_ranges", [])[:5],
                     )
         if doc_id:
             await history_repo.record_finish(

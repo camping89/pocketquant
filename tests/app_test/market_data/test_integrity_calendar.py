@@ -129,3 +129,43 @@ async def test_misalignment_is_judged_against_the_symbols_calendar() -> None:
     assert continuous["misaligned_count"] == 0
     assert session["misaligned_count"] == 1
     assert session["misaligned_ids"] == ["abc"]
+
+
+XAUUSD = EXNESS_CALENDARS[1]
+
+
+def _first_minute(calendar: Any, *, trading: bool) -> datetime:
+    """The first 1m instant in the last few days that trades, or that does not."""
+    start = datetime.now(UTC).replace(second=0, microsecond=0) - timedelta(days=6)
+    open_minutes = set(calendar.trading_minutes(start, start + timedelta(days=5)))
+    for i in range(5 * 24 * 60):
+        minute = start + timedelta(minutes=i)
+        if (minute in open_minutes) == trading:
+            return minute
+    raise AssertionError("no such minute in five days")
+
+
+@pytest.mark.asyncio
+async def test_a_1m_bar_stored_at_a_closed_minute_is_unexpected() -> None:
+    closed = _first_minute(XAUUSD, trading=False)
+    repo = _empty_bar_repo()
+    repo.find_datetimes = AsyncMock(return_value=[{"_id": "a", "datetime": closed}])
+
+    report = await check_integrity("XAUUSD:EXNESS", Interval.MINUTE_1, repo, XAUUSD, 7)
+
+    assert report["misaligned_count"] == 0
+    assert report["unexpected_count"] == 1
+    assert report["unexpected_ranges"] == [(closed.isoformat(), closed.isoformat())]
+
+
+@pytest.mark.asyncio
+async def test_a_1m_bar_stored_at_an_open_minute_is_expected() -> None:
+    repo = _empty_bar_repo()
+    repo.find_datetimes = AsyncMock(
+        return_value=[{"_id": "a", "datetime": _first_minute(XAUUSD, trading=True)}]
+    )
+
+    report = await check_integrity("XAUUSD:EXNESS", Interval.MINUTE_1, repo, XAUUSD, 7)
+
+    assert report["unexpected_count"] == 0
+    assert report["unexpected_ranges"] == []

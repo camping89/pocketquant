@@ -105,11 +105,21 @@ async def check_integrity(
     step = timedelta(seconds=INTERVAL_SECONDS[interval])
     missing = sorted(expected - aligned_times)
     gap_ranges = _group_gaps(missing, step)
+    # Only 1m: a 1m bar is expected exactly when its minute trades.
+    unexpected = (
+        sorted(t for t in aligned_times if t < in_progress and t not in expected)
+        if interval == Interval.MINUTE_1
+        else []
+    )
 
     return {
         **base,
         "missing_count": len(missing),
         "gap_ranges": [(s.isoformat(), e.isoformat()) for s, e in gap_ranges],
+        "unexpected_count": len(unexpected),
+        "unexpected_ranges": [
+            (s.isoformat(), e.isoformat()) for s, e in _group_gaps(unexpected, step)
+        ],
     }
 
 

@@ -135,7 +135,7 @@ Registered in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.p
 | `data_lag_check` | every minute at :30 | Stores each symbol's feed lag in Redis `data_lag:{symbol}`; logs state changes only. |
 | `sync_verify_cascade` | hourly | Compares REST and cascade bars on one sampled symbol. |
 | `sync_backfill` | 03:00 | Full backfill. |
-| `sync_integrity` | 04:00 | The only place missing 1m bars are reported. |
+| `sync_integrity` | 04:00 | The only place missing 1m bars are reported (`integrity.issues_found`). On 1m it also logs `unexpected`, stored bars at minutes the calendar marks closed, with up to five `unexpected_ranges`. |
 | `sync_repair` | every 12 h | Deletes misaligned bars and re-syncs gaps. |
 
 Each symbol is gated by its own calendar. At boot, `enqueue_missed_catchups` enqueues a `<job_id>_catchup` run when a daily or 12 h job's last success is too old.
