@@ -86,6 +86,7 @@ okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separ
 
 - Routes live in `src/pocketquant/app/routes/`, use `route_class=DishkaRoute` and inject services with `FromDishka[...]`. Never `Depends()` for a service.
 - A route is thin: parse the request, call one service method, return the result. Business logic lives in the service.
+- Mutations are guarded once, on the `api` router; do not add per-route auth.
 - Service methods take scalars. A Pydantic model is passed only when it is a real request body (`SyncSymbolCommand`, `AddTrackedSymbolCommand`, `RunBacktestCommand`) or a multi-field parameter object that carries its own validation (`GetOHLCVQuery`, `BackfillTrackedSymbolCommand`). Do not wrap path or query scalars in a model.
 - No try/except in routes or services to turn an exception into a response. Exceptions propagate to the global handlers registered by `register_exception_handlers` (`core/common/exceptions.py`, wired in `app/main_extensions.py`): `NotFoundError` → 404, `DomainError` → 400, `AppError` → 500, body `{error: {code, message}}`. Catch a specific exception only where the code genuinely recovers (a job, an adapter retry); never a bare `except:`.
 - State changes publish domain events. Handlers are methods marked `@event_handler(...)` and registered with `registry.register_instance(service, event_bus)`.

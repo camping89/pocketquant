@@ -17,9 +17,10 @@ from zoneinfo import ZoneInfoNotFoundError
 import tzlocal
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import DishkaRoute, FromDishka, inject
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pocketquant.app.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.idempotency import IdempotencyMiddleware
@@ -436,7 +437,11 @@ def register_routes(app: FastAPI, settings) -> None:
         result["environment"] = settings.environment
         return result
 
-    api = APIRouter(prefix=settings.api_prefix, route_class=DishkaRoute)
+    api = APIRouter(
+        prefix=settings.api_prefix,
+        route_class=DishkaRoute,
+        dependencies=[Depends(verify_admin_token)],
+    )
 
     @api.get("/system/jobs")
     async def list_jobs(

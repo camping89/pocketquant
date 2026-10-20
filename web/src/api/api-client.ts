@@ -32,24 +32,50 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.statusText || `API ${res.status}`, res.status)
 }
 
+const TOKEN_KEY = 'pq.adminToken'
+
+// Mutations carry X-Admin-Token from localStorage. The token is never baked in
+// at build time: a VITE_* value would ship in the bundle. A 401 prompts once,
+// stores the answer and retries once.
+async function send(path: string, init: RequestInit): Promise<Response> {
+  const attempt = () => {
+    const headers = new Headers(init.headers)
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (token) headers.set('X-Admin-Token', token)
+    return fetch(new URL(path, window.location.origin), { ...init, headers })
+  }
+  let res = await attempt()
+  if (res.status === 401) {
+    const answer = window.prompt('Admin token')
+    if (answer) {
+      localStorage.setItem(TOKEN_KEY, answer)
+      res = await attempt()
+    }
+  }
+  if (!res.ok) throw await toApiError(res)
+  return res
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(new URL(path, window.location.origin), {
+  const res = await send(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw await toApiError(res)
   return res.json()
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(new URL(path, window.location.origin), {
+  const res = await send(path, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw await toApiError(res)
   return res.json()
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  await send(path, { method: 'DELETE' })
 }
 
 export async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {

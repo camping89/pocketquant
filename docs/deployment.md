@@ -96,6 +96,7 @@ Key prod env vars (full set in `vps/default/.env`):
 | `IMAGE_TAG` | No | Tag to pull; default `latest` |
 | `MONGO_USER` / `MONGO_PASSWORD` | Yes | Mongo root creds |
 | `REDIS_PASSWORD` | Yes | Redis auth (empty → deploy refuses; would silently disable auth) |
+| `ADMIN_TOKEN` | Yes | Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`. |
 | `WEB_PORT` | Yes | Public SPA entry (`80`, or `443` for TLS) |
 | `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host-published ports (use obscure values) |
 | `OKX_API_KEY` / `_SECRET` / `_PASSPHRASE` | No | OKX live trading only |

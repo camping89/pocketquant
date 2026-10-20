@@ -1,4 +1,4 @@
-import { apiFetch, apiPost, ApiError } from './api-client'
+import { apiDelete, apiFetch, apiPost } from './api-client'
 
 export { ApiError } from './api-client'
 
@@ -33,15 +33,9 @@ export async function addSymbol(
 }
 
 export async function removeSubscription(subId: string): Promise<void> {
-  const res = await fetch(`/api/v1/subscriptions/${subId}`, {
-    method: 'DELETE',
-  })
-  if (!res.ok) throw new ApiError(`DELETE subscription failed: ${res.status}`, res.status)
+  return apiDelete(`/api/v1/subscriptions/${subId}`)
 }
 
 export async function deleteStrategy(strategyCode: string): Promise<void> {
-  const res = await fetch(`/api/v1/strategies/${strategyCode}`, {
-    method: 'DELETE',
-  })
-  if (!res.ok) throw new ApiError(`DELETE strategy failed: ${res.status}`, res.status)
+  return apiDelete(`/api/v1/strategies/${strategyCode}`)
 }

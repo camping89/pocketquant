@@ -14,12 +14,11 @@ from datetime import datetime
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from pocketquant.app.common.symbol_validation import validate_composite_symbol
-from pocketquant.app.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.common.constants import LIMIT_OHLCV_QUERY_MAX
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_REST_REPAIR
@@ -366,9 +365,7 @@ async def list_tracked_symbols(service: FromDishka[TrackedSymbolService]) -> lis
     return await service.list_all()
 
 
-@tracked_symbols_router.post(
-    "/tracked-symbols", response_model=dict, dependencies=[Depends(verify_admin_token)]
-)
+@tracked_symbols_router.post("/tracked-symbols", response_model=dict)
 async def add_tracked_symbol(
     cmd: AddTrackedSymbolCommand,
     service: FromDishka[TrackedSymbolService],
@@ -377,11 +374,7 @@ async def add_tracked_symbol(
     return await service.add(cmd)
 
 
-@tracked_symbols_router.put(
-    "/tracked-symbols/{symbol}",
-    response_model=dict,
-    dependencies=[Depends(verify_admin_token)],
-)
+@tracked_symbols_router.put("/tracked-symbols/{symbol}", response_model=dict)
 async def update_tracked_symbol(
     symbol: str,
     service: FromDishka[TrackedSymbolService],
@@ -395,11 +388,7 @@ async def update_tracked_symbol(
     return await service.update(symbol)
 
 
-@tracked_symbols_router.delete(
-    "/tracked-symbols/{symbol}",
-    response_model=dict,
-    dependencies=[Depends(verify_admin_token)],
-)
+@tracked_symbols_router.delete("/tracked-symbols/{symbol}", response_model=dict)
 async def remove_tracked_symbol(
     symbol: str,
     service: FromDishka[TrackedSymbolService],
@@ -426,7 +415,6 @@ async def backfill_tracked_symbol(
     interval: Interval = Query(default=Interval.MINUTE_1, description="Timeframe to backfill"),
     n: int = Query(default=100, ge=1, le=5000, description="Number of bars"),
     mode: str = Query(default="auto", description="cascade | direct | auto"),
-    _admin: None = Depends(verify_admin_token),
 ) -> dict:
     """Backfill historical bars for one tracked symbol. Requires X-Admin-Token.
 
