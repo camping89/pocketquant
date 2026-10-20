@@ -6,6 +6,8 @@ Two top-level routers:
 * ``subscription_router``  (prefix ``/subscriptions``) — subscription-instance operations
 """
 
+from typing import Literal
+
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
@@ -24,6 +26,7 @@ class CreateSubscriptionBody(BaseModel):
 
     symbol: str
     interval: str
+    broker: Literal["paper", "exness"] = "paper"
 
 
 # strategy_router  — /strategies prefix
@@ -63,7 +66,7 @@ async def create_subscription(
 
     ``symbol`` must be composite ``{code}:{exchange}``.
     """
-    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval)
+    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval, body.broker)
 
 
 @strategy_router.delete("/{strategy_code}", status_code=204)

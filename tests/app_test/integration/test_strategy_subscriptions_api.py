@@ -41,6 +41,16 @@ async def load_strategy(app_client):
 
 
 @pytest.mark.asyncio
+async def test_create_refuses_an_unknown_broker(app_client):
+    r = await app_client.post(
+        f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions",
+        json={"symbol": "BTC-USDT:BINANCE", "interval": "1h", "broker": "okx"},
+    )
+
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
 async def test_delete_strategy_clears_all_subscriptions(app_client):
     await app_client.post(
         f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions",

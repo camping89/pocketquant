@@ -170,6 +170,7 @@ class StrategyReconcileAppService:
                         symbol=sub.symbol,
                         interval=sub.interval.value,
                         contract_spec=contract_spec,
+                        broker=sub.broker,
                     ),
                     strategy_class=strategy_class,
                 )

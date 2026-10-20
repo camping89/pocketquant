@@ -99,7 +99,3 @@ class BrokerFactory:
 
         else:
             raise ValueError(f"Unknown broker type: {broker_type}")
-
-    @staticmethod
-    def get_available_types() -> list[str]:
-        return ["paper", "okx"]

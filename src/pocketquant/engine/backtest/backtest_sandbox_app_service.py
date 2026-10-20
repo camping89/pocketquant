@@ -90,10 +90,6 @@ class _SingleBrokerFactory:
     def create(self, broker_type: str, config: dict) -> IBrokerPort:
         return self._broker
 
-    @staticmethod
-    def get_available_types() -> list[str]:
-        return ["paper"]
-
 
 @dataclass
 class BacktestSandboxAppService:

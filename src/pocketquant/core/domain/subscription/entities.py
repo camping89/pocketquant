@@ -11,6 +11,7 @@ from pocketquant.core.domain.shared.enums import Interval
 # Control-plane run-state: desired = what a human/handler wants, actual = the
 # reconcile loop's mirror of RAM truth. Two values only (YAGNI); widen later.
 RunState = Literal["running", "stopped"]
+BROKERS = ("paper", "exness")
 
 
 class SubscriptionAlreadyExistsError(DomainError):
@@ -46,6 +47,7 @@ class Subscription:
     created_at: datetime
     desired_state: RunState = "stopped"
     actual_state: RunState = "stopped"
+    broker: str = "paper"
 
     def to_mongo(self) -> dict:
         return {
@@ -56,12 +58,18 @@ class Subscription:
             "created_at": self.created_at,
             "desired_state": self.desired_state,
             "actual_state": self.actual_state,
+            "broker": self.broker,
         }
 
     @classmethod
     def from_mongo(cls, doc: dict) -> Subscription:
         # .get default tolerates docs lacking the control-plane state fields;
         # a missing state reads as "stopped" rather than crashing the load.
+        # A missing broker reads as paper; any other stored value fails the load,
+        # so a hand-written document can never select an unknown broker.
+        broker = doc.get("broker", "paper")
+        if broker not in BROKERS:
+            raise ValueError(f"unknown broker {broker!r}")
         return cls(
             id=UUID(str(doc["_id"])),
             strategy_code=doc["strategy_code"],
@@ -70,4 +78,5 @@ class Subscription:
             created_at=doc["created_at"],
             desired_state=doc.get("desired_state", "stopped"),
             actual_state=doc.get("actual_state", "stopped"),
+            broker=broker,
         )

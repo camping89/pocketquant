@@ -63,6 +63,7 @@ class StrategyQueryService:
                 "desired_state": sub.desired_state,
                 "actual_state": sub.actual_state,
                 "is_running": sub.actual_state == "running",
+                "broker": sub.broker,
             }
             for sub in subs
         ]

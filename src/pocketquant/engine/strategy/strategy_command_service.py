@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.exceptions import DomainError, NotFoundError
 from pocketquant.core.common.uuid import generate_id
+from pocketquant.core.config import Settings
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.subscription import Subscription
@@ -32,10 +33,12 @@ class StrategyCommandService:
         subscription_repository: SubscriptionRepository,
         backtest_repository: BacktestRepository,
         tracked_symbol_repository: TrackedSymbolRepository,
+        settings: Settings,
     ) -> None:
         self._sub_repo = subscription_repository
         self._bt_repo = backtest_repository
         self._tracked_repo = tracked_symbol_repository
+        self._settings = settings
 
     async def start(self, subscription_id: str) -> bool:
         """Set desired_state=running; reconcile converges actual within one tick.
@@ -57,7 +60,9 @@ class StrategyCommandService:
             raise NotFoundError(f"Subscription '{subscription_id}' not found.")
         return True
 
-    async def add_symbol(self, strategy_id: str, symbol: str, interval: str) -> dict:
+    async def add_symbol(
+        self, strategy_id: str, symbol: str, interval: str, broker: str = "paper"
+    ) -> dict:
         """Persist a new subscription — no RAM instance load.
 
         ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
@@ -75,6 +80,12 @@ class StrategyCommandService:
         if strategy_id not in STRATEGY_REGISTRY:
             raise NotFoundError(f"Strategy template '{strategy_id}' not found in registry.")
 
+        if broker == "exness" and not self._settings.exness_live_trading:
+            raise DomainError(
+                "exness broker is disabled: EXNESS_LIVE_TRADING is false",
+                error_code="BROKER_DISABLED",
+            )
+
         # desired_state="stopped" — no surprise auto-trading on add.
         # The user starts it explicitly via the start endpoint.
         # Duplicate triples are rejected by the repo's compound unique index.
@@ -86,6 +97,7 @@ class StrategyCommandService:
             created_at=datetime.now(UTC),
             desired_state="stopped",
             actual_state="stopped",
+            broker=broker,
         )
         await self._sub_repo.add(sub)
         return {
@@ -94,6 +106,7 @@ class StrategyCommandService:
             "symbol": sub.symbol,
             "interval": sub.interval.value,
             "created_at": sub.created_at.isoformat(),
+            "broker": sub.broker,
         }
 
     async def remove_symbol(self, sub_id: str) -> int:

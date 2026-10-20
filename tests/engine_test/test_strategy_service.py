@@ -19,7 +19,7 @@ from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
-from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.common.exceptions import DomainError, NotFoundError
 from pocketquant.core.common.uuid import UUID
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
@@ -48,6 +48,7 @@ def _cmd_svc(
         subscription_repository=sub_repo,
         backtest_repository=bt_repo,
         tracked_symbol_repository=tracked_repo,
+        settings=MagicMock(exness_live_trading=False),
     )
 
 
@@ -160,6 +161,31 @@ async def test_add_symbol_persists_stopped_state() -> None:
     assert persisted.desired_state == "stopped"
     assert persisted.actual_state == "stopped"
     assert result["id"] == str(persisted.id)
+
+
+@pytest.mark.asyncio
+async def test_add_symbol_accepts_exness_only_while_live_trading_is_on() -> None:
+    sub_repo = MagicMock()
+    sub_repo.add = AsyncMock()
+    tracked_repo = MagicMock()
+    tracked_repo.exists = AsyncMock(return_value=True)
+
+    def svc(live_trading: bool) -> StrategyCommandService:
+        return StrategyCommandService(
+            subscription_repository=sub_repo,
+            backtest_repository=MagicMock(),
+            tracked_symbol_repository=tracked_repo,
+            settings=MagicMock(exness_live_trading=live_trading),
+        )
+
+    with pytest.raises(DomainError) as exc:
+        await svc(False).add_symbol("hitnrun2", "XAUUSD:EXNESS", "5m", broker="exness")
+    assert exc.value.error_code == "BROKER_DISABLED"
+    sub_repo.add.assert_not_called()
+
+    result = await svc(True).add_symbol("hitnrun2", "XAUUSD:EXNESS", "5m", broker="exness")
+    assert sub_repo.add.await_args.args[0].broker == "exness"
+    assert result["broker"] == "exness"
 
 
 @pytest.mark.asyncio

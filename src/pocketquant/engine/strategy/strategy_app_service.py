@@ -59,9 +59,10 @@ class StrategyAppService:
 
         self._strategies: dict[str, IStrategyService] = {}
         self._brokers: dict[str, IBrokerPort] = {}
-        # One broker per (type, contract units): a broker prices every fill with a
-        # single spec, so an ES subscription cannot share the crypto paper account.
-        self._broker_pool: dict[tuple[str, ContractSpec], IBrokerPort] = {}
+        # Paper pools per contract spec (it prices every fill with one spec, so an
+        # ES subscription cannot share the crypto paper account); a venue broker
+        # pools per type, with no spec in its key.
+        self._broker_pool: dict[tuple[str, ContractSpec | None], IBrokerPort] = {}
         self._configs: dict[str, StrategyConfig] = {}
         self._running = False
         self._lock = asyncio.Lock()
@@ -462,11 +463,13 @@ class StrategyAppService:
     async def _get_or_create_broker(
         self, broker_type: str, contract_spec: ContractSpec
     ) -> IBrokerPort:
-        key = (broker_type, contract_spec)
+        key = (broker_type, contract_spec if broker_type == "paper" else None)
         broker = self._broker_pool.get(key)
-        # Reuse only while a loaded strategy still holds the broker, so unloading
-        # the last subscription retires its account exactly as before pooling.
-        if broker is not None and any(b is broker for b in self._brokers.values()):
+        # Only paper prices fills by contract spec and retires with its last holder.
+        # A venue broker is one account, so one instance and one event stream per process.
+        if broker is not None and (
+            broker_type != "paper" or any(b is broker for b in self._brokers.values())
+        ):
             return broker
 
         config = {**self._default_broker_config, "contract_spec": contract_spec}

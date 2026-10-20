@@ -161,7 +161,7 @@ Inbound WebSockets:
 - **Binance `@aggTrade`**, one per app. `WsSubscriptionAppService` diffs `tracked_symbols` against current subscriptions every 5 s, spacing subscribe calls 20 ms apart. Reconnect backoff 1 s to 60 s. Unsubscribe is local; the stream changes on the next reconnect.
 - **Exness ticks**, one per app, driven by the same diff for `:EXNESS` symbols. Subprotocol `exness-ws-protocol`. A `subscribe` frame was observed to add instruments to earlier ones, so a reconnect re-sends all of them and `unsubscribe()` is local only. Backoff 1 s to 30 s; after 10 failures in a row the breaker pauses 5 minutes. The bid is published as `last_price`.
 - **OKX private channels**, one per broker instance. HMAC login, ping every 25 s (OKX times out at 30 s), backoff 1 s to 30 s, breaker pause 5 minutes after 10 failures.
-- **Exness account events**, one per broker instance (see [Exness broker](#exness-broker)).
+- **Exness account events**, one per process (one pooled adapter; see [Exness broker](#exness-broker)).
 
 Ticks become quotes in Redis `quote:latest:{symbol}` (60 s TTL) and in-progress bars in `bar:current:{symbol}:{interval}`.
 
@@ -176,7 +176,7 @@ The SPA loads the first quote over REST and marks a stream stale when updates st
 
 | Broker | Location | State |
 |---|---|---|
-| `PaperBrokerAdapter` | `core/infra/brokers/paper/` | Simulation; the default (`DEFAULT_BROKER=paper`). |
+| `PaperBrokerAdapter` | `core/infra/brokers/paper/` | Simulation; the default broker of a subscription. |
 | `OKXBrokerAdapter` | `core/infra/brokers/okx/` | Live, HMAC auth. |
 | `ExnessBrokerAdapter` | `core/infra/brokers/exness/` | Built, live trading off by default. |
 
@@ -184,7 +184,7 @@ The SPA loads the first quote over REST and marks a stream stale when updates st
 
 ### Exness broker
 
-- **Off by default.** While `EXNESS_LIVE_TRADING` is false, `BrokerFactory` refuses `exness` and `ExnessClient` refuses every order call before any network call. No route sets a broker per subscription: `StrategyConfig.broker` defaults to `paper`.
+- **Off by default.** While `EXNESS_LIVE_TRADING` is false, `BrokerFactory` refuses `exness` and `ExnessClient` refuses every order call before any network call. `POST /strategies/{code}/subscriptions` takes `broker` (`paper` default, `exness` only while live trading is on).
 - **Orders:** market only. A stop loss is required; take profit is optional. A close must cover the whole position. `normalize_quantity` rounds to the lot grid and caps at the minimum lot unless `EXNESS_MAX_LOTS` is set; below the minimum lot no order is created.
 - **Daily loss cap (`EXNESS_DAILY_LOSS_CAP`):** unset rejects every order. Today's result comes from real deals (`_realized_today`): profit of `close`, `swap_fee`, `admin_fee` and `dividend` deals, minus the commission of every deal except `balance` deposits and withdrawals. An API error during the check rejects the order.
 - **Reconciliation gate:** orders are rejected until the trading snapshot is reconciled, and while a position on the instrument is unmapped. A 429 on an order returns rejected and marks the snapshot stale.

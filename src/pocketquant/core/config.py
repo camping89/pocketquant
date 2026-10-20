@@ -132,7 +132,6 @@ class Settings(BaseSettings):
     admin_token: SecretStr | None = None
 
     # Strategy Engine
-    default_broker: Literal["paper", "okx"] = "paper"
     paper_initial_balance: float = 10_000.0
     paper_slippage_bps: float = 0.5  # 0.5 bp = 0.005%
     paper_commission_bps: float = 3.0  # 3 bps

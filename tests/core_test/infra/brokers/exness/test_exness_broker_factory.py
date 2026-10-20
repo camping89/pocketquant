@@ -35,7 +35,3 @@ def test_exness_built_when_live_and_configured() -> None:
     broker = factory.create("exness", {"exness_daily_loss_cap": 50.0})
 
     assert isinstance(broker, ExnessBrokerAdapter)
-
-
-def test_exness_is_not_an_available_type() -> None:
-    assert BrokerFactory.get_available_types() == ["paper", "okx"]
