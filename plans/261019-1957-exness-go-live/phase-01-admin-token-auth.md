@@ -11,45 +11,128 @@ dependencies: []
 
 ## Context
 - `verify_admin_token` (`src/pocketquant/app/middleware/admin_auth_middleware.py:18-36`) compares `X-Admin-Token` with `Settings.admin_token` (`core/config.py:132`) and skips the check when the token is unset (`:28-31`).
-- There are 17 mutation routes. 4 are guarded, all on `tracked_symbols_router`: `routes/market_data.py:369-370`, `:380-383`, `:398-401` and `:419-429`. 13 are open: `routes/market_data.py:65,79,93,112,123`, `routes/strategy.py:56,69,93,102,141` and `routes/backtest.py:52,83,94`.
-- Every API router is included into one `api` router (`app/main_extensions.py:439-461`). A dependency on that router covers every current and future route. It must skip safe methods, because `EventSource` cannot send headers (`web/src/hooks/use-realtime-bar.ts:48`, `use-realtime-quote.ts:80`) and GET routes stay public.
-- Prod `.env` has `ENVIRONMENT=production` and no `ADMIN_TOKEN` (key counted, value not read). `environment` is `Literal["development","staging","production"]` (`core/config.py:49`). Tests run with `development` (`tests/conftest.py:38`, `tests/app_test/conftest.py:28`), so existing API tests keep passing.
-- SPA mutations go through `apiPost`/`apiPatch` (`web/src/api/api-client.ts:35-53`), plus two raw `fetch` DELETEs (`web/src/api/strategy-api.ts:35-46`). Callers: `backtest-api.ts:226,358,364`, `monitor-api.ts:9,21`, `strategy-api.ts:32`, `hooks/use-strategy-mutations.ts:13,17`. nginx forwards request headers to the app (`web/nginx.conf`, `location /api/`).
+- 17 mutation routes exist. 4 are guarded, all on `tracked_symbols_router` (`routes/market_data.py:369-370`, `:380-383`, `:398-401`, `:419-429`). 13 are open: `routes/market_data.py:65,79,93,112,123`, `routes/strategy.py:56,69,93,102,141`, `routes/backtest.py:52,83,94`.
+- Every API router is included into one `api` router (`app/main_extensions.py:439`, includes up to `:461`). A dependency there covers every route. It must skip safe methods, because `EventSource` cannot send headers (`web/src/hooks/use-realtime-bar.ts:48`, `use-realtime-quote.ts:80`).
+- Prod has `ENVIRONMENT=production` and no `ADMIN_TOKEN`. Tests run with `development` (`tests/conftest.py:38`, `tests/app_test/conftest.py:28`).
+- SPA mutations use `apiPost`/`apiPatch` (`web/src/api/api-client.ts:35-53`) plus two raw `fetch` DELETEs (`web/src/api/strategy-api.ts:35-46`). nginx forwards request headers (`web/nginx.conf`, `location /api/`).
 
-## Files
-- Modify: `src/pocketquant/app/middleware/admin_auth_middleware.py`, `src/pocketquant/app/main_extensions.py`, `src/pocketquant/app/routes/market_data.py`, `web/src/api/api-client.ts`, `web/src/api/strategy-api.ts`, `docs/deployment.md` (env table), `docs/code-standards.md` ("Routes & Services")
-- Create: `tests/app_test/integration/test_admin_token_guard.py`, `web/src/api/api-client.test.ts`
+## Gates in this phase
+None. The `develop` push (Task 1.9) is authorized by the plan (tests only, no deploy).
 
-## Steps
-1. `verify_admin_token(request: Request, x_admin_token: str | None = Header(default=None))`:
-   - return at once for `GET`, `HEAD` and `OPTIONS`;
-   - when the token is unset and `settings.environment == "production"`, raise `HTTPException(503, "ADMIN_TOKEN not configured")`, so mutations fail closed while market data keeps running;
-   - when the token is unset in any other environment, keep the current warning and allow the request;
-   - leave the `hmac.compare_digest` check unchanged, and update the module docstring.
-2. `main_extensions.py:439`: `APIRouter(prefix=..., route_class=DishkaRoute, dependencies=[Depends(verify_admin_token)])`. `/health` stays on `app` and is not covered.
-3. `routes/market_data.py`: remove the 4 per-route uses (DRY) and the now-unused `Depends` and `verify_admin_token` imports. Drop "Requires X-Admin-Token" from those docstrings only if it now reads wrong; the header is still required.
-4. `api-client.ts`: add one private `send(path, init)` that adds `X-Admin-Token` from `localStorage['pq.adminToken']` when set. On a 401 it asks once with `window.prompt('Admin token')`, stores the answer and retries once; any other non-OK response throws `toApiError`. `apiPost` and `apiPatch` use it, and a new `apiDelete(path): Promise<void>` uses it too. Never inject the token at build time: a `VITE_*` value would be published in the bundle.
-5. `strategy-api.ts`: `removeSubscription` and `deleteStrategy` call `apiDelete`.
-6. Tests in `test_admin_token_guard.py` use `app_factory` and monkeypatch `get_settings` in the middleware module:
-   - structural: every `APIRoute` under `/api/v1` whose methods include POST, PUT, PATCH or DELETE has `verify_admin_token` among its dependencies (the test prints the count, expected 17);
-   - with a token set: a POST without the header and one with a wrong header return 401, a POST with the right header does not, and a GET without the header returns 200;
-   - in production with no token: a POST returns 503 and a GET returns 200;
-   - in development with no token: a POST passes the guard.
-7. `api-client.test.ts` (vitest runs in the `node` environment, so stub `fetch`, `localStorage` and `window` with `vi.stubGlobal`): the header is sent when stored; a 401 prompts once and retries once with the new token; a second 401 throws `ApiError` with status 401.
-8. Docs: add an `ADMIN_TOKEN` row to the `docs/deployment.md` env table ("Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`."), and add one bullet under "Routes & Services" in `docs/code-standards.md`: "Mutations are guarded once, on the `api` router; do not add per-route auth."
+## Entry gate
+Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending, and end with:
+```
+Status: BLOCKED
+NOT_YET: <reason>
+Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from 01 after <UTC time>
+```
+- `docker ps` exits 0. If not, start `"/c/Program Files/Docker/Docker/Docker Desktop.exe"` in the background, wait 10 s, retry once. Still failing → `NOT_YET: Docker Desktop is not running`.
+- `git status --porcelain -- src web deploy tests scripts docs` prints nothing (else `NOT_YET: uncommitted code changes`).
 
-## Validation
-- `uv run python -m pytest tests/app_test/integration/test_admin_token_guard.py tests/app_test/integration -q` exits 0 (Docker running).
-- `npm --prefix web test` and `npm --prefix web run build` exit 0.
-- `uv run ruff check src tests/app_test/integration/test_admin_token_guard.py`, `uv run pyright src tests/app_test/integration/test_admin_token_guard.py` and `uv run lint-imports` (`Contracts: 8 kept, 0 broken.`) pass.
-- `uv run python scripts/code_metrics.py --ratchet` exits 0. No new `src` function is added, so the ceiling is not expected to move.
-- `grep -c "verify_admin_token" src/pocketquant/app/routes/market_data.py` prints `0`.
-- Ship: `git push origin develop` (tests only; no deploy).
+## Tasks
+
+### Task 1.1 — Fail-closed guard that skips safe methods
+- Goal: mutations need the token; GET/HEAD/OPTIONS never do; production without a token returns 503.
+- Target files and symbols: `src/pocketquant/app/middleware/admin_auth_middleware.py` → `verify_admin_token`.
+- Steps:
+  1. Signature: `verify_admin_token(request: Request, x_admin_token: str | None = Header(default=None))`.
+  2. Return at once when `request.method` is `GET`, `HEAD` or `OPTIONS`.
+  3. Token unset and `settings.environment == "production"` → `raise HTTPException(503, "ADMIN_TOKEN not configured")`.
+  4. Token unset in any other environment → keep the current warning and allow.
+  5. Keep the `hmac.compare_digest` check. Update the module docstring to say the guard sits on the `api` router.
+- Success criteria: the function has the three branches above.
+- Verify: no verification needed (Task 1.6 tests it).
+
+### Task 1.2 — One router-level dependency
+- Goal: every route under `/api/v1` carries the guard.
+- Target files and symbols: `src/pocketquant/app/main_extensions.py:439` (`api = APIRouter(...)`).
+- Steps:
+  1. Change to `APIRouter(prefix=settings.api_prefix, route_class=DishkaRoute, dependencies=[Depends(verify_admin_token)])` and import both names.
+  2. Leave `/health` on `app` (not covered).
+- Success criteria: the `api` router has the dependency.
+- Verify: no verification needed (Task 1.6 structural test).
+
+### Task 1.3 — Remove the per-route uses
+- Goal: one guard, no duplicates.
+- Target files and symbols: `src/pocketquant/app/routes/market_data.py` (4 uses at `:369-429`).
+- Steps:
+  1. Delete the 4 per-route `Depends(verify_admin_token)` uses and the now-unused `Depends`/`verify_admin_token` imports.
+  2. Keep "Requires X-Admin-Token" in docstrings; the header is still required.
+- Success criteria: no reference left in that file.
+- Verify: `grep -c "verify_admin_token" src/pocketquant/app/routes/market_data.py` prints `0`.
+
+### Task 1.4 — SPA client sends the token and re-prompts on 401
+- Goal: SPA mutations carry `X-Admin-Token`; a 401 prompts once and retries once.
+- Target files and symbols: `web/src/api/api-client.ts` → new private `send(path, init)`, `apiPost`, `apiPatch`, new `apiDelete(path): Promise<void>`.
+- Steps:
+  1. `send` adds `X-Admin-Token` from `localStorage['pq.adminToken']` when set.
+  2. On 401: `window.prompt('Admin token')`, store the answer, retry once. A second non-OK throws `toApiError`.
+  3. `apiPost`, `apiPatch` and `apiDelete` use `send`. Never inject the token at build time (a `VITE_*` value ships in the bundle).
+- Success criteria: three exported functions route through `send`.
+- Verify: no verification needed (Task 1.7).
+
+### Task 1.5 — Raw DELETEs use `apiDelete`
+- Goal: deletes carry the token.
+- Target files and symbols: `web/src/api/strategy-api.ts` → `removeSubscription`, `deleteStrategy`.
+- Steps: replace the raw `fetch` calls with `apiDelete`.
+- Success criteria: no raw `fetch(` DELETE remains in that file.
+- Verify: `grep -c "method: 'DELETE'\|method: \"DELETE\"" web/src/api/strategy-api.ts` prints `0`.
+
+### Task 1.6 — Backend tests
+- Goal: the guard is proven per route and per environment.
+- Target files and symbols: create `tests/app_test/integration/test_admin_token_guard.py` (use `app_factory`; monkeypatch `get_settings` in the middleware module).
+- Steps:
+  1. Structural: collect every `APIRoute` under `/api/v1` whose methods include POST, PUT, PATCH or DELETE; assert each has `verify_admin_token` among its dependencies; `assert len(routes) == 17`.
+  2. Token set: POST without the header → 401; wrong header → 401; right header → not 401; GET without header → 200.
+  3. Production, no token: POST → 503; GET → 200.
+  4. Development, no token: POST passes the guard.
+- Success criteria: four test groups exist with behaviour names.
+- Verify: `docker ps` exits 0, then `uv run python -m pytest tests/app_test/integration -q` exits 0.
+
+### Task 1.7 — Web test
+- Goal: the client header and retry are pinned.
+- Target files and symbols: create `web/src/api/api-client.test.ts` (vitest runs in `node`; stub `fetch`, `localStorage`, `window` with `vi.stubGlobal`).
+- Steps: cases: header sent when stored; a 401 prompts once and retries once with the new token; a second 401 throws `ApiError` with status 401.
+- Success criteria: three cases.
+- Verify: `npm --prefix web test` exits 0 and `npm --prefix web run build` exits 0.
+
+### Task 1.8 — Docs
+- Goal: the env table and route rule describe the guard.
+- Target files and symbols: `docs/deployment.md` env table; `docs/code-standards.md` "Routes & Services".
+- Steps:
+  1. Add an `ADMIN_TOKEN` row: "Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`."
+  2. Add one bullet: "Mutations are guarded once, on the `api` router; do not add per-route auth."
+- Success criteria: both lines present.
+- Verify: `grep -c "ADMIN_TOKEN" docs/deployment.md` prints a number ≥ 1 and `grep -c "guarded once, on the" docs/code-standards.md` prints `1`.
+
+### Task 1.9 — Quality gates and push
+- Goal: the phase is on `origin/develop` with green gates.
+- Target files and symbols: whole repo.
+- Steps:
+  1. `uv run ruff check src tests/app_test/integration/test_admin_token_guard.py`.
+  2. `uv run pyright src tests/app_test/integration/test_admin_token_guard.py`.
+  3. `uv run lint-imports`.
+  4. `uv run python scripts/code_metrics.py --ratchet`.
+  5. Commit (conventional message, no plan or phase ids), then push with the `camping89` token (the active gh account cannot push; never print the token): `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop && git fetch origin`.
+- Success criteria: all four gates pass and the push succeeds.
+- Verify: ruff prints `All checks passed!`; pyright prints `0 errors`; lint-imports prints `Contracts: 8 kept, 0 broken.`; the ratchet exits 0; `test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo pushed` prints `pushed`.
 
 ## Risk
-- Prod mutations return 503 if Phase 04 deploys before `ADMIN_TOKEN` is set (M/L). The failure is closed and data jobs are unaffected; Phase 04 sets the token first.
-- The token travels over plain HTTP on port 80 (see D5), and a script on the SPA origin can read it from `localStorage` (L/M). The SPA loads no third-party scripts [inference, not audited].
-- A router-level dependency may not apply as expected with `DishkaRoute` (L/H). The structural test in step 6 proves it per route.
+- Prod mutations return 503 if deploy A runs before `ADMIN_TOKEN` is set (M/L). Phase 08 sets it first; the failure is closed and data jobs run on.
+- A router dependency may not apply under `DishkaRoute` (L/H). The structural test proves it per route.
+- The token sits in `localStorage` (L/M). The bundle ships npm code (echarts, lightweight-charts, @tanstack/*) and nginx sends no CSP; a CSP and a masked input were rejected for scope (`plan.md` "Red Team Review"). Phase 09 rotates the token in deploy B.
 
 ## Rollback
-Revert the commit. No data or config shape changes. `ADMIN_TOKEN` in prod is harmless under the old code.
+Revert the commit. No data or config shape changes.
+
+## Failure Protocol
+If any Verify step does not meet its stated pass condition, STOP this phase.
+Do not improvise a fix, retry blindly, or reason around the failure.
+Spawn the `kongming` subagent for next-step counsel and pass:
+- the phase and task id,
+- what you attempted (the steps you ran),
+- the exact command and its full output,
+- the pass condition it failed to meet.
+Apply kongming's guidance, then re-run the Verify step.
+If `kongming` cannot be spawned in this environment, STOP and report the same
+failure evidence to the user. Never continue by self-reasoning.

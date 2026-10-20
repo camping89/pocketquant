@@ -1,11 +1,11 @@
 ---
 title: "Exness go-live with real money"
-description: "Close the remaining go-live blockers on develop (admin auth, broker per subscription, one Exness adapter per process, access-point re-resolve), ship with live trading off, then run gated live minimum-lot round trips, a short observation and the 2026-11-02 DST check before declaring Exness live."
+description: "Close the go-live blockers on develop, harden the edge, ship with live off, cut over to Cloudflare Tunnel, arm live with every subscription on paper and entries paused (stored across restarts), then take one user-chosen strategy live at a time with a zero-money proof, a round trip and a five-day observation."
 status: pending
 priority: P1
-effort: 1.5d code + calendar to 2026-11-02
+effort: 3d code + 3 deploys + calendar (go-live about 1-2 weeks after arming)
 branch: develop
-tags: [exness, go-live, auth, broker, live-trading]
+tags: [exness, go-live, auth, broker, live-trading, safeguards, cloudflare-tunnel]
 blockedBy: []
 blocks: []
 created: 2026-10-19
@@ -14,98 +14,227 @@ created: 2026-10-19
 # Exness go-live
 
 ## Overview
-The Exness broker exists and is switched off (`EXNESS_LIVE_TRADING`, `core/config.py:121`). This plan closes the remaining go-live blockers with the smallest change each, ships them with live trading still off, and then turns on real money in user-gated steps. Sources: `D:/w/_me/algotrading/plans/reports/kongming-261019-1957-exness-session-wrap-up-advice.md` §2–§4 and "Out of scope: go-live plan" in `plans/261009-0858-exness-venue-lean-sync-refactor/plan.md`.
+The Exness broker exists and is switched off (`EXNESS_LIVE_TRADING`, `core/config.py:121`). This plan closes the go-live blockers with the smallest change each, hardens the public edge, ships with live off, moves the site onto a Cloudflare Tunnel, arms live trading with every subscription still on paper, and then takes one user-chosen strategy live at a time.
 
-The flag must be true for any live order, because `ExnessClient.call` refuses `openPosition`/`closePosition` while it is false (`core/infra/exness/exness_client.py:265-266`). The round trip in Phase 05 therefore turns the flag on. In this plan, "go live" (Phase 06) means that Exness subscriptions run unattended after the round trip, the observation and the DST check have passed. D4 covers whether the flag stays on between those steps.
+Sources: `plans/261019-1957-exness-go-live/reports/kongming-261020-1924-debate-synthesis.md` (structure and corrections), `plans/261019-1957-exness-go-live/reports/debate-evidence-packet.md` (binding decisions), `plans/261019-1957-exness-go-live/reports/researcher-261020-1906-cloudflare-tunnel-facts.md`, the four `plans/261019-1957-exness-go-live/reports/red-team-*.md` reviews, and the user decisions of 2026-10-20 19:35 and 20:20 below.
 
-## Prerequisites (not planned here)
-- **E1: adapter races B1–B3 fixed.** The fix is in progress on branch `fix/exness-broker-races` in `D:/w/_me/algotrading/pq-broker-fix` and must be merged to `develop` with its replay test before Phase 04. This plan never edits `core/infra/brokers/exness/exness_broker_adapter.py` or its tests, so it cannot conflict with that branch.
-- **E2: paper validation closed in prod.** Use the phase-08 T8.7 schedule of the exness venue plan; its last check is Mon 2026-11-02 (after the US DST change, C5 prints `3600 True`): `CB==0`, for `XAUUSD:EXNESS` and `EURUSD:EXNESS` misaligned 0 and every gap venue-empty (C3 `PASS`; a `FAIL` gets one `integrity/repair` and a re-run, still `FAIL` fails), `sync_1m` p95 < 60 s, and both paper subscriptions running.
+Live orders need the flag true, because `ExnessClient.call` refuses `openPosition`/`closePosition` while it is false (`core/infra/exness/exness_client.py:265-266`), and `BrokerFactory.create("exness")` refuses too (`core/infra/brokers/broker_factory.py:87-88`). Arming pauses entries, then turns the flag on. No `exness` subscription exists until Phase 11, so arming sends no order.
+
+## Conventions (every phase file repeats the short form)
+- **Entry gate** runs first. A miss is not a failed verification: edit nothing, spawn no `kongming`, leave the phase pending, and end with exactly three lines: `Status: BLOCKED` / `NOT_YET: <reason>` / `Resume: /eve:cook-plan D:/w/_me/algotrading/pq-develop/plans/261019-1957-exness-go-live --from NN after <UTC time>`. Phase 11 resumes and re-runs with `--from 11 --to 11` (the runner supports `--to`, `~/.claude/skills/eve-cook-plan/SKILL.md:18,37`). The runner stops on a non-succeeded worker (`SKILL.md:130-136`); the user re-runs. Do not pass `--retry-once` for phases 10-12.
+- Every entry gate checks `git status --porcelain -- src web deploy tests scripts docs` prints nothing. A gate that needs earlier code reads `git show origin/develop:<path>`, never the working tree.
+- **[ASK]** = stop-and-ask approval; the question states the facts the phase lists; only an explicit yes counts. A "no" or "wait" ends the phase with the `NOT_YET` block. **[USER]** = the user acts and replies with a stated token. No approval carries forward to a later gate (U2).
+- **Failure Protocol**: each phase file carries the literal block. A failed Verify stops the phase and goes to `kongming`; a `NOT_YET` exit does not.
+- Report paths are always written from the repo root as `plans/261019-1957-exness-go-live/reports/<file>`. Every Verify is one self-contained command.
+- **Pause and restarts**: the pause is stored and survives a restart; an unpaused running strategy restarts and continues as usual (user decision 2026-10-20 20:20). Strategy state (warmup, open direction) does not survive. From Phase 10 on, every planned restart (a `master` push, a config dispatch, a rollback) follows the "Restart while live" runbook in `docs/deployment.md` (written in Phase 09). The plan schedules no restart after Phase 10.
+- A local backend against prod Mongo/Redis (through `just tunnel`) runs only with `ENABLE_JOBS=false` (`enable_jobs`, `core/config.py:64`; the default in `remote-db.env`). That flag gates the reconcile loop (`app/main_extensions.py:256-258`), the scheduler (`app/di/infrastructure.py:96-100`), background jobs (`main_extensions.py:184-186`) and the live collector (`:238-240`), so no second reconcile loop runs and no live broker connects (a broker connects only on start, `engine/strategy/strategy_app_service.py:150-152`, which only the loop calls). `bootstrap_live_instances` still loads every subscription (`main_extensions.py:160-171`); an `exness` one fails to load locally while the local `EXNESS_LIVE_TRADING` is false (`core/infra/brokers/broker_factory.py:87-88`). Its mutation routes need no token (no `ADMIN_TOKEN` in `remote-db.env`) and write prod Mongo, the stored pause flag included, which prod reads at its next start. Local debugging is not blocked otherwise (user decision 2026-10-20 20:50).
+- Each ops phase (08-12) deletes `.cache/ssh/vps_key` at its end and before any `NOT_YET` exit.
+
+## Ops recipe (phases 08-12; each phase inlines what it needs)
+- Working dir `D:/w/_me/algotrading/pq-develop`. The shell keeps no variables between commands, so every command sets `HOST` (and `RUN_ID`) itself.
+- SSH: `mkdir -p .cache/ssh && tr -d '\r' < ../pocketquant-config/vps/default/id_rsa > .cache/ssh/vps_key && chmod 600 .cache/ssh/vps_key`; then `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" '<cmd>'` (the key has CRLF endings). Remove the copy with `rm -f .cache/ssh/vps_key`.
+- Admin call without printing the token (the `app` container has `env_file: .env`, `deploy/compose.prod.yml:43-44`):
+  ```bash
+  HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r')
+  ssh -i .cache/ssh/vps_key "$HOST" 'docker exec -i pocketquant-app sh -s' <<'EOF'
+  curl -s -X POST -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:41921/api/v1/admin/safeguards/pause
+  EOF
+  ```
+- Push (the active gh account `vunguyen-ai` cannot push to `camping89/pocketquant`): `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop && git fetch origin` (for a release, `develop:master`). A push to a URL does not move `origin/*`, hence the fetch. Check: `test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo pushed`.
+- Every `gh` call carries `GH_TOKEN=$(gh auth token --user camping89)`. Wait `sleep 15` before looking up a run id. Config-only redeploy: `GH_TOKEN=$(gh auth token --user camping89) gh workflow run cicd.yml --ref master` (untested; Phase 08 probes auth read-only; fallback: the user dispatches from the GitHub UI). Never print a token.
+- `pocketquant-config` push: `git -C ../pocketquant-config push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant-config.git" HEAD` (branch `master`); check it with `git ls-remote` on the same URL against `git rev-parse HEAD`. Commit only `vps/default/.env` (Task 8.3 also commits `local/remote-db.env` and `local/remote-db-local-redis.env`).
+- Tests: run `docker ps` first; if it fails, start Docker Desktop (`"/c/Program Files/Docker/Docker/Docker Desktop.exe"` in the background) and retry after 10 s. The expected local red on Windows is exactly `4 failed, 4 errors`, all in `tests/core_test/unit/common/test_utc_runtime_guard.py` and `tests/core_test/infra/scheduling/test_cron_trigger_timezone.py`. Any other red is a failure. About 109 setup errors mean Docker is down, not a code fault. If `just test` cannot start, run `uv run python -m pytest tests/ -q`.
+- CI runs `lint-imports`, the ratchet and pytest (`.github/workflows/cicd.yml:48-54`); ruff, pyright and the web checks are local gates.
+- `deploy/vps/11-verify.sh` never exits non-zero: read `gh run view <id> --log | grep "=== Verdict:" | grep -c ", 0 failures)"`, which must print a number ≥ 1.
 
 ## Phases
+The runner executes `phase-NN` files in strict numeric order; file order is execution order.
+
 | # | Phase | Effort | Depends on | Status |
 |---|---|---|---|---|
 | 01 | [Admin-token auth on every mutation route (B5)](./phase-01-admin-token-auth.md) | 0.5d | — | Pending |
 | 02 | [Broker per subscription, one Exness adapter per process (B6, B9)](./phase-02-subscription-broker-selection.md) | 0.5d | — | Pending |
 | 03 | [Re-resolve the access point on transport failure or 421 (B8)](./phase-03-access-point-re-resolve.md) | 2h | — | Pending |
-| 04 | [Ship with live off; set `ADMIN_TOKEN` and the loss cap (B7)](./phase-04-ship-with-live-off.md) | 2h + CI | 01–03, E1, E2, D1, D2, D5 | Pending |
-| 05 | [Live minimum-lot round trip per strategy](./phase-05-live-round-trip.md) | ~2h attention, 1–5d calendar | 04, D3, D4 | Pending |
-| 06 | [Live observation, DST check, go-live](./phase-06-observation-dst-go-live.md) | ~1h attention, to ≥ 2026-11-02 | 05 | Pending |
+| 04 | [Count unexpected 1m bars on the integrity WARNING](./phase-04-integrity-unexpected-bars.md) | 1h | — | Pending |
+| 05 | [Safeguards object, stored entry pause, leverage-aware sizing (B4, B11)](./phase-05-safeguards-pause-and-sizing.md) | 0.75d | 01, 02 | Pending |
+| 06 | [SPA: PAPER/LIVE badge, state pill, Exness strip, real-money hints (B11)](./phase-06-spa-mode-pause-and-hints.md) | 0.5d | 01, 02, 05 | Pending |
+| 07 | [Cloudflare Tunnel service and edge hardening (B10, B12, B13)](./phase-07-cloudflare-tunnel-service.md) | 3h + user 5 min | — | Pending |
+| 08 | [Ship with live off: deploy A (B7, B12)](./phase-08-ship-with-live-off.md) | 2.5h + CI | 01-07 | Pending |
+| 09 | [Tunnel cutover: deploy B (B10, B13)](./phase-09-tunnel-cutover.md) | 1.5h + CI + user 20 min | 08 | Pending |
+| 10 | [Arm live: entries paused, then deploy C with the flag on](./phase-10-arm-live-all-paper.md) | 1h + CI | 09 | Pending |
+| 11 | [Take one strategy live (re-runnable)](./phase-11-go-live-one-strategy.md) | ~1h attention, days of calendar | 10 | Pending |
+| 12 | [Observation and go-live (re-runnable daily)](./phase-12-observation-and-go-live.md) | ~15 min per day | 11 | Pending |
 
 ## Dependencies
-- Phases 01–03 are code on `develop` in `D:/w/_me/algotrading/pq-develop`. Each one ships with `git push origin develop`, which runs tests and does not deploy. Their files do not overlap except `docs/deployment.md` (01 and 03), so run them in order 01 → 02 → 03.
-- Phase 04 contains the plan's only code push to `master`, and a push to `master` deploys prod (`docs/deployment.md`). That push also carries E1.
-- Phases 05 and 06 change no code. They consist of prod config changes, prod API calls and observation.
+- 01-07 are code on `develop`; each ends with a `develop` push through the `camping89` token URL (tests only, no deploy). 01-04 are independent; 05 needs the guard (01) and `broker` (02); 06 needs 01, 02 and 05; 07 touches `deploy/`, `web/nginx.conf`, `justfile`, the rate-limit middleware and docs.
+- File ownership: `exness_broker_adapter.py` is edited only by 05. `docs/deployment.md` is edited by 01, 03, 05, 07 and 09, in that order. `test_admin_token_guard.py` is created by 01 (asserts 17) and edited by 05 (asserts 19). `test_exness_broker_factory.py` is edited by 02 then 05. `deploy/compose.prod.yml` and `deploy/vps/11-verify.sh` are edited by 07 then 09. `web/nginx.conf`, `justfile` and `core/common/rate_limit/middleware.py` only by 07; `pocketquant-config/local/remote-db*.env` only by 08; `safeguards_repository.py` and `core/common/constants.py` only by 05.
+- Three deploys: A (08, `master` push), B (09, `master` push), C (10, config dispatch). Each push or dispatch is an [ASK] at the time. Deploys run as soon as the code phases are done, on any day.
+- E2 (paper validation, `plans/261009-0858-exness-venue-lean-sync-refactor/phase-08-validation-spread-backtests-paper-week.md` T8.7) keeps running on its own reminders. No phase waits on it. Phase 08 states the next E2 row time; phases 10, 11 and 12.6 state the latest E2 row as a fact. A deploy shortens that row's C1 log window and resets paper warmup (hitnrun2 about 8 open-market hours, engulfing about 21). Deleting a paper subscription in Phase 11 makes E2's `running 2` read 1 from then on; that is accepted (E2 is optional for live).
 
 ## Blocker map
-| Id | Blocker | Where it is closed |
+| Id | Blocker | Closed in |
 |---|---|---|
-| B4 | Account size versus `max_exposure_percent`: one minimum lot needs about 41.8k / 11.2k / 8.3k USD at the default 10% (XAUUSD / EURUSD / BTCUSD; spike prices, `docs/journals/2026-10-13-exness-api-spike.md:80`), or about 4.2k / 1.1k / 0.83k at 100% | User decision D1 |
-| B5 | `verify_admin_token` guards 4 of 17 mutation routes and is skipped when the token is unset; prod has `ENVIRONMENT=production` and no `ADMIN_TOKEN` | Phase 01, Phase 04 |
-| B6 | No way to choose `exness`: `StrategyConfig.broker` defaults to `"paper"` (`core/domain/strategy/value_objects.py:84`), and reconcile never sets it (`engine/live/strategy_reconcile_app_service.py:167-173`). `Settings.default_broker` (`core/config.py:135`) has no reader in `src`, and `BrokerFactory.get_available_types` (`core/infra/brokers/broker_factory.py:103-105`) has only a test caller. Both are dead code and are deleted under the CLAUDE.md rule | Phase 02 |
-| B7 | `EXNESS_DAILY_LOSS_CAP` is unset in prod, so every order is rejected (`exness_broker_adapter.py:239-240`). The minimum-lot rule is already in code: with `EXNESS_MAX_LOTS` unset, the cap is `volume_min` (`core/infra/exness/exness_mappers.py:93`) | Phase 04 (config only) |
-| B8 | The access point is resolved once per process and never cleared (`exness_client.py:238-246`) | Phase 03 |
-| B9 | **New, found while planning.** The broker pool is keyed by `(broker_type, contract_spec)` (`engine/strategy/strategy_app_service.py:465`), and the seeded Exness symbols have different specs (`scripts/seed_exness_symbols.py:57,63,69`), so each instrument gets its own `ExnessBrokerAdapter` with its own events WS. Every instance maps every account position (`exness_broker_adapter.py:405-446`), so one venue close is published once per instance (`:488-490`, duplicate `OrderFilledEvent` and `TradeClosedEvent`), and an open placed by one instance is flagged `exness.unknown_request_fill` by the others, which blocks that instrument (`:482-487`) | Phase 02 |
+| B4 | At 250 USD one minimum lot does not fit the sizer (exposure cap without leverage; risk leg `balance × risk / stop`, `position_calculator_domain_service.py:43-45`) | 05 |
+| B5 | `verify_admin_token` guards 4 of 17 mutation routes and skips when the token is unset | 01, 08 |
+| B6 | No way to choose `exness` per subscription (`value_objects.py:84`, reconcile `:167-173`) | 02 |
+| B7 | `EXNESS_DAILY_LOSS_CAP` unset in prod, so every Exness order is rejected | 08 |
+| B8 | The access point is resolved once per process (`exness_client.py:238-246`) | 03 |
+| B9 | One adapter per `(broker_type, contract_spec)` duplicates venue events per instrument, and a deleted last holder leaves its adapter connected | 02 |
+| B10 | The admin token crosses Cloudflare→origin in plain HTTP; origin answers by IP on `:80` | 07, 09 |
+| B11 | No entry pause without a cold restart; the SPA does not show paper versus live | 05, 06 |
+| B12 | Mongo, Redis and Portainer publish public host ports; the Mongo tag floats (`compose.prod.yml:67-71,95-96,112-118`) | 07, 08 |
+| B13 | The rate limiter puts all public traffic in one bucket, so a flood blocks Pause (`rate_limit/middleware.py:37-38`, `compose.prod.yml:38`) | 07, 09 |
 
-## User decisions
-Each decision is needed before the phase named in the "Before" column. The plan does not pick an option.
-
-| Id | Before | Question | Options |
-|---|---|---|---|
-| D1 (B4) | P04 | How does one minimum lot fit under the sizer? The sizer caps notional at `balance × max_exposure_percent` (`core/domain/risk/services/position_calculator_domain_service.py:43-45`). Live subscriptions always use the default `RiskConfig()` at 10% (`strategy_reconcile_app_service.py:167-173`), and the floor scales with price | **A** Fund the account above the 10% floor for each live instrument; no code. **B** Add an optional per-subscription `max_exposure_percent` on the same create body as `broker` (Phase 02, conditional step 7), which brings the floor to about 4.2k / 1.1k / 0.83k at 1.0. Size stays capped at one minimum lot either way. **C** Go live first only on the cheapest instrument (BTCUSD, then EURUSD), with A or B; the paper-validated pairs are XAUUSD for `hitnrun2` and EURUSD for `engulfing`. **D** Raise the global default `MAX_EXPOSURE_PERCENT`; this also changes every paper subscription and backtest |
-| D2 (B7) | P04 | `EXNESS_DAILY_LOSS_CAP` value, in account currency (USD) | Any positive number. The cap counts realized profit of `close/swap_fee/admin_fee/dividend` deals minus every deal's commission, and its day starts at UTC midnight (07:00 Bangkok), not at the Exness rollover (`exness_broker_adapter.py:261-272`). A cap below one minimum-lot stop-loss loss halts opens for the rest of the UTC day after the first full loss. Exits are never blocked |
-| D3 | P05 | How is "a live round trip per strategy" produced? | **A** Each strategy's first natural live trade is the round trip; no code, but the timing is not controlled (`engulfing` on 1h may take days; the paper run's trade count is the estimate). **B** A one-off operator script opens one minimum lot with SL and closes it through `ExnessBrokerAdapter`. It is new code in `scripts/`, it does not exercise the strategy path, and it must run while no `exness` subscription exists, or the app's own adapter flags the fill as unknown and blocks that instrument |
-| D4 | P05 | Flag between the round trip and go-live | **A** The flag stays true; `exness` subscriptions are stopped between steps (`desired_state=stopped`; the adapter stays connected, so venue SL/TP closes are still recorded). **B** The flag goes back to false. Every `exness` subscription then fails to load every 5 s (`reconcile.load_failed` at ERROR, `strategy_reconcile_app_service.py:138-181`, `reconcile_interval_seconds` 5.0) unless it is deleted, so delete them (deleting keeps their orders, positions and trades rows; `strategy_command_service.py:99-107`) and recreate them later |
-| D5 | P04 | The SPA is served on `WEB_PORT=80` (prod `.env`); no TLS terminator is visible in `deploy/compose.prod.yml` | **A** Accept that the token travels in clear for now. **B** Put TLS in front before go-live; that is a topology change and is outside this plan. If TLS already terminates outside the VPS, D5 does not apply |
+## User decisions (binding)
+- Capital ≤ 250 USD; 0.01 lot; leverage 1000 (`EXNESS_LEVERAGE=1000`); `EXNESS_DAILY_LOSS_CAP=25` USD realized per UTC day; `EXNESS_MAX_LOTS=0.01`; `EXNESS_RISK_PER_TRADE=0.10`.
+- Pause blocks entries only and is global. `GET /admin/safeguards` is public; pause and resume need the token. Exits are never gated. Keep the flag on and use pause (D4).
+- TLS via Cloudflare Tunnel in three rounds with no downtime. SPA per the approved mockup and grouping (badge, pill, strip, LIVE Start confirm, Delete in footer, one `.btn-danger`, `moneyHint` titles, dead files deleted). Light log: `unexpected_count`/`unexpected_ranges` on the 1m `integrity.issues_found` WARNING.
+- 2026-10-20 19:35: (1) arm live as soon as possible; E2 row 4 (2026-11-02) is optional and gates nothing. (2) Deploys A and B run as soon as code is done, any day; each `master` push is still an [ASK]. (3) Arming = deploy C: flag true, entries paused, safeguard values set, every subscription stays paper, no `exness` subscription created. (4) Going live is Phase 11 for ONE strategy the user picks: delete its paper subscription [ASK], create its `exness` subscription [ASK] with entries paused, prove sizing and the pause gate at zero money from the first paused rejection, then Resume [ASK]; the round trip is the first natural trade (D3 = A). A second strategy goes live only by re-running Phase 11. (5) Observation and go-live: re-runnable daily, five trading-day rows.
+- 2026-10-20 20:20: (1) Apply the accepted red-team findings (table below). (2) Remember pause across restart: paused entries stay paused after a restart; an unpaused running strategy restarts and continues as usual. Only the `entries_paused` flag is stored (one document, `core.infra.persistence.repositories`), loaded at startup before reconcile starts strategies, written on pause and resume; GET shows it. This replaces "pause in memory, resets on restart". (3) The unexpected-bar count and the DST reopen check are record only in observation rows. (4) Delete the early stop-distance check and the duplicate SSE checks; keep one SSE check in Phase 09; drop the E2 column from observation rows. (5) Rotate `ADMIN_TOKEN` in the deploy-B config commit (replaces "no rotation" from the synthesis).
+- 2026-10-20 20:50 and 21:32 (validation answers): (1) Mongo, Redis and Portainer bind 127.0.0.1 in deploy A (21:32 replaces the 20:50 "keep Mongo/Redis open"); local debugging goes through a new `just tunnel` recipe; `pocketquant-config/local/remote-db.env` points at localhost (edited in deploy A's config commit, an [ASK]); docs say "run `just tunnel` first". (2) A local backend against prod Mongo/Redis runs only with `ENABLE_JOBS=false`; local debugging is not blocked otherwise. (3) Add: `just be` on 127.0.0.1; nginx `limit_conn` on SSE streams; one Cloudflare rate-limit rule [USER]; Cloudflare 2FA [USER]; a "signals / orders" column in Phase 12. Not added: guard fail-closed outside production (it would block local debugging against the remote DB). (4) Drop the step that rewrote the Vietnamese comments in `compose.prod.yml`.
+- Decided in the synthesis, not asked: `RiskConfig` into reconcile; integrity in its own phase; asymmetric AC6 with a balance-deal guard.
 
 ## Acceptance criteria
-- AC1: In prod, every POST/PUT/PATCH/DELETE under `/api/v1` returns 401 without a valid `X-Admin-Token`; every GET, including both SSE streams, works without it; and with the token unset under `ENVIRONMENT=production`, mutations return 503. The SPA's start, stop, add, delete, backtest, verdict, rename and integrity actions work after the token is entered once.
-- AC2: `POST /api/v1/strategies/{code}/subscriptions` accepts `"broker": "exness"` only while `EXNESS_LIVE_TRADING` is true (otherwise 400 `BROKER_DISABLED`). `GET /api/v1/subscriptions/` shows `broker` for every subscription, and existing subscriptions read as `paper`.
-- AC3: Two `exness` subscriptions on different instruments share one `ExnessBrokerAdapter` (unit test); in prod, `exness.broker_connected` appears once per process start.
-- AC4: After a 421 or a transport failure, the next Exness call resolves the access point again (unit test).
-- AC5: Prod runs with `ADMIN_TOKEN` and `EXNESS_DAILY_LOSS_CAP` set and `EXNESS_MAX_LOTS` unset, and the CI verdict reports `0 failures`.
-- AC6: For each live strategy, one minimum-lot entry with SL and its exit are recorded once each in `orders`, `positions` and `trades`. The account balance delta equals what `_realized_today()` computes for those deals within 0.01, which settles whether a close deal's `profit` is gross of commission.
-- AC7: On Mon 2026-11-02 the DST check passes (Phase 06), and the user declares go-live.
+- AC1: In prod every POST/PUT/PATCH/DELETE under `/api/v1` returns 401 without a valid `X-Admin-Token`; every GET, both SSE streams included, works without it; with the token unset under `ENVIRONMENT=production`, mutations return 503.
+- AC2: `POST /api/v1/strategies/{code}/subscriptions` accepts `"broker": "exness"` only while the flag is true (else 400 `BROKER_DISABLED`); `GET /api/v1/subscriptions/` shows `broker`, and old documents read `paper`; a stored `broker` other than `paper`/`exness` fails the load (unit test).
+- AC3: Two `exness` subscriptions on different instruments share one adapter, and a load after the last `exness` unload reuses it (unit tests); in prod `exness.broker_connected` appears at most once per process start.
+- AC4: After a 421 or a transport failure the next Exness call resolves the access point again (unit test).
+- AC5: After Phase 10, `GET /api/v1/admin/safeguards` shows `live_trading` true, `daily_loss_cap` 25.0, `max_lots` 0.01, `leverage` 1000.0, `risk_per_trade` 0.1, `entries_paused` true after deploy C's restart, and every subscription is `paper`.
+- AC6: For each live strategy, its first 0.01-lot entry with SL and its exit are recorded once each in `orders`, `positions` and `trades`; with no `balance` deal and no clamped window, `balance_after − balance_before ≥ P − C − 0.01` (else the user accepts the run without AC6).
+- AC7: For each live strategy, before Resume and within one app process: at least one `exness.order_rejected_presubmit reason=entries_paused` line for its `exness` subscription; zero `exness.order_submitted`/`exness.order_rejected` lines for its orders; zero of its orders with a status other than `rejected`; zero `order_quantity_below_broker_minimum`/`zero_position_size` lines for it and zero `below_min_lot` lines.
+- AC8: At 250 USD, leverage 1000, risk 0.10, the sizer yields ≥ one minimum lot for XAUUSD (stop ≤ 25 USD/oz) and EURUSD; paper and backtest sizing unchanged; while paused an open is rejected and a close is sent; after a pause a fresh app starts paused, and after a resume it starts unpaused (tests).
+- AC9: The Strategies page shows PAPER/LIVE, one state pill per row, the Exness strip with Pause/Resume, and a non-empty `title` on every mutating button; `grep -rn "live execution" web/src` prints nothing.
+- AC10: After Phase 08, the Mongo, Redis and Portainer ports on the VPS IP are closed (curl exit 7 or 28), Mongo runs 7.0.N with N ≥ 28, `just tunnel` with the edited `remote-db.env` reaches Mongo and Redis, and nginx caps open SSE streams at 10 per client IP. After Phase 09, `:80` is closed too, `https://pocketquant.xyz` returns 200 through a tunnel with exactly two routes, the user confirms Cloudflare 2FA and one rate-limit rule that exempts `/api/v1/admin/safeguards*`, Pause over SSH is proven, and Pause over the tunnel returns 200 right after a 300-request burst.
+- AC11: Five observation rows on distinct Mon-Fri UTC days are clean (signals / orders, unexpected bars and the DST check are recorded, never judged), and the user declares go-live; a journal entry exists.
 
 ## User preconditions
-- U1: The account is funded per D1, and the user states the balance before Phase 05.
-- U2: The user approves each stop-and-ask gate below at the time it is reached. An approval given in advance for a later gate does not count.
+- U1: The account holds at most 250 USD; Phase 11 reads the venue balance and the user confirms it at the strategy [ASK].
+- U2: Every gate is approved at the time it is reached.
+- U3: The user does the Cloudflare steps marked [USER] (no Cloudflare API token exists for an agent).
 
 ## Stop-and-ask gates
-Stop and ask the user before any of these:
-- editing `pocketquant-config` (`ADMIN_TOKEN`, `EXNESS_DAILY_LOSS_CAP`, `EXNESS_LIVE_TRADING`) or redeploying prod;
-- pushing to `master`;
-- setting `EXNESS_LIVE_TRADING=true`, setting `EXNESS_MAX_LOTS`, or raising the loss cap;
-- creating, starting or deleting an `exness` subscription, deleting a paper validation subscription, or placing any live order (including a D3-B script run);
-- holding open `exness` positions over a weekend (Phase 06 step 2);
-- declaring go-live.
+- Editing `pocketquant-config` (including the token rotation) or redeploying prod; pushing `master`.
+- Setting `EXNESS_LIVE_TRADING=true`; raising `EXNESS_MAX_LOTS`, `EXNESS_LEVERAGE`, `EXNESS_RISK_PER_TRADE` or the loss cap.
+- Choosing the strategy to take live; deleting a paper subscription; creating, starting or deleting an `exness` subscription; resuming entries; accepting a run without AC6.
+- Holding an open `exness` position over a weekend; declaring go-live.
+- Running the deep backfill while armed (it needs the flag off; see below).
 
-Stop and report (no improvised fix) when:
-- AC6's commission equality fails;
-- any of `exness.position_unmapped`, `exness.unknown_request_fill`, `exness.operation_unresolved`, `exness.position_missing_close_deal` or `exness.event_handler_failed` appears;
-- a `trades` row is duplicated or missing against the venue's deals;
-- the ratchet would need a higher ceiling;
-- a test failure stays unexplained;
-- a change would touch `exness_broker_adapter.py` (E1 owns it).
+Pause is the safe direction and needs no gate.
+
+## Stop and report (no improvised fix)
+- AC6 under-count (`delta < P − C − 0.01`). An over-count is recorded as a follow-up adapter fix, not a stop.
+- Any of `exness.position_unmapped`, `exness.unknown_request_fill`, `exness.operation_unresolved`, `exness.position_missing_close_deal`, `exness.event_handler_failed`.
+- Any `below_min_lot` line, an `order_quantity_below_broker_minimum` line for a live subscription, or an `exness.order_rejected` line (Phases 11 and 12).
+- An order of a pending `exness` subscription that left the pause gate (Phase 11 proof).
+- A `trades` row duplicated or missing against the venue's close deals.
+- An unplanned restart while an `exness` position is open (the strategy state is not restored; follow-up).
+- The ratchet needs a higher ceiling; a test failure outside the expected `4 failed, 4 errors`; a change outside Phase 05 would touch `exness_broker_adapter.py`.
+
+## Deep backfill while armed
+- Verified: `scripts/backfill/provider_bars.py:76-78` prints `refusing: EXNESS_LIVE_TRADING is true` and exits 3 while the flag is true (pinned by `tests/scripts/test_provider_bars.py`). The flag is read only there, in `BrokerFactory` and in `ExnessClient.call` (grep of `src` and `scripts`).
+- Not blocked: the in-app sync jobs and `POST /api/v1/market-data/integrity/repair`, which resyncs gaps through `SyncService` (`engine/market_data/app_services/integrity_jobs.py:116-130`). Paper subscriptions do not preload history, so they are unaffected.
+- Blocked while armed: loading history beyond the 5000-bar request cap for a new or existing symbol (new symbols, longer backtests, holes older than the repair window).
+- Mitigation: Phase 10 lists stored bar counts and asks whether any deep backfill should run before the flag goes on. After arming, a backfill needs the flag off: no `exness` subscription and a flat account first, then two config dispatches. That is an [ASK].
 
 ## Test matrix
 | Level | Covers | Where |
 |---|---|---|
-| Unit | method-aware guard and fail-closed branch; SPA client header and 401 retry; subscription `broker` round trip and the old-document default; create-time flag check; one pooled adapter for non-paper types; access-point reset on 421 and transport failure | `tests/app_test/integration/test_admin_token_guard.py`, `web/src/api/api-client.test.ts`, `tests/engine_test/test_strategy_service.py`, `tests/engine_test/test_subscription_broker_selection.py`, `tests/core_test/infra/exness/test_exness_client.py` |
-| Integration | every mutation route carries the guard; create with `broker`; existing API tests stay green under `ENVIRONMENT=development` | `tests/app_test/integration/` |
-| End-to-end (prod) | 401/503/GET checks; live round trip; commission equality; observation; DST check | Phases 04–06 |
+| Unit | admin guard; SPA header + 401 retry; subscription `broker` and unknown-broker refusal; one pooled adapter, reused after the last unload; access-point reset; 1m unexpected bars; leverage sizing; pause gate; fail-closed cap and max lots; exness `RiskConfig` in reconcile; `moneyHint`; rate-limit exemption for safeguards | phases 01-07 test files |
+| Integration | guard on every mutation route (17, then 19); create with `broker`; safeguards GET/pause/resume; stored pause across a fresh app (paused stays paused, resumed stays resumed) | `tests/app_test/integration/` |
+| Config | compose parses; nginx config (real IP, SSE `limit_conn`) passes `nginx -t`; verify script parses; `just --dry-run tunnel`; `just be` on 127.0.0.1 | Phases 07, 09 |
+| Manual | SPA strip, pill, badges, dialogs, footer Delete, 375 px | Phase 06 `[USER] ui ok` |
+| End-to-end (prod) | 401/503/GET; data ports closed; Mongo and Redis through `just tunnel`; tunnel and two routes; Cloudflare 2FA and rate rule (user); Pause after a burst with the rule live; origin closed; break-glass; Pause under a request flood; pause survives deploy C; zero-money proof; round trip; AC6; observation | phases 08-12 |
 
 ## Rollback
-- Code (01–03): revert the commit on `develop` and fast-forward it to `master` (gated). Before reverting Phase 02 in prod, stop every `exness` subscription and flatten its positions, because the old code reads every subscription as `paper` and would stop tracking the venue position.
-- Live (05–06), from softest to hardest:
-  1. `POST /subscriptions/{id}/stop` with the token. The strategy stops signalling, and the adapter stays connected, so a venue SL/TP close is still recorded.
-  2. Close the position in the Exness terminal. The adapter records the close as a broker-side close (`exness_broker_adapter.py:488-505`).
-  3. Set `EXNESS_LIVE_TRADING=false` and redeploy. Order calls are refused, with the D4-B side effects.
+- Code (01-07, 09): revert the commit on `develop`, then fast-forward `master` [ASK]. From Phase 10 on, every such deploy follows the "Restart while live" runbook in `docs/deployment.md`: pause → stop the live subscriptions → confirm flat (or accept the venue SL) → deploy → verify `entries_paused` true (stored) → start the subscriptions; Resume needs a fresh approval. Phase 09 rolls back port first, then DNS, and rotates the token again.
+- Live, softest first:
+  1. Pause (SPA, or the admin call in the ops recipe). Opens stop; strategies stay warm; the pause survives a restart.
+  1b. Pause over SSH via the container env (works without the tunnel; Phase 09 drill).
+  2. `POST /api/v1/subscriptions/{id}/stop` with the token. The adapter stays connected, so a venue SL/TP close is still recorded.
+  3. Close the position in the Exness app; the adapter records a broker-side close.
+  4. Set `EXNESS_LIVE_TRADING=false` and redeploy (runbook), only with a flat account and after deleting every `exness` subscription (with the flag off no adapter is built, so a venue close is not recorded, and reconcile fails to load an `exness` subscription every 5 s).
 
-## Failure protocol
-If a Validation step misses its pass condition, stop the phase. Spawn `kongming` with the phase, the steps run, the exact command and output, and the failed condition. Apply its advice and re-run. If `kongming` cannot be spawned, stop and report to the user.
+## Out of scope (flagged)
+- SSE has no heartbeat; quiet streams are cut after about 125 s (today too).
+- Stuck `_open_direction` after a restart while positioned; counting open SL risk in the daily cap (worst day with two live positions is about 75 USD).
+- Red-team items not applied are listed in the Red Team Review below.
+
+## Red Team Review
+
+### Session 2026-10-20
+Sources: `plans/261019-1957-exness-go-live/reports/red-team-security.md` (SEC), `plans/261019-1957-exness-go-live/reports/red-team-failure-modes.md` (FM), `plans/261019-1957-exness-go-live/reports/red-team-assumptions.md` (AS), `plans/261019-1957-exness-go-live/reports/red-team-scope-complexity.md` (SC). Dispositions follow the user decisions of 2026-10-20 20:20 and the validation answers of 20:50 and 21:32. Each applied fix was checked against the code first.
+
+| # | Finding | Severity | Disposition | Applied to |
+|---|---|---|---|---|
+| 1 | A restart clears the in-memory pause, so a crash during the proof wait or before Resume trades without approval (FM-1) | Critical | Accepted. User decision: the pause flag is stored, loaded before reconcile starts strategies (DI order: `bootstrap_live_instances` resolves reconcile, whose provider takes `Safeguards`) | 05 Tasks 5.2-5.4, 5.7-5.10; 10 Tasks 10.4-10.6; 11; 12; AC5, AC8; Conventions; Rollback |
+| 2 | Mongo, Redis and Portainer publish public ports; Mongo tag floats; a raw Mongo document can carry any broker (SEC-1) | Critical | Accepted (user 2026-10-20 21:32, after a 20:50 answer that kept Mongo/Redis open): loopback binds for all three, shipped in deploy A; local debugging via `just tunnel` (new recipe; `remote-db.env` and `remote-db-local-redis.env` moved to localhost in deploy A's config commit [ASK]; docs say "run `just tunnel` first"); Mongo pinned to the newest 7.0 patch (7.0.45 on 2026-10-20; MongoBleed is pre-auth); probes in AC10; `from_mongo` refuses brokers other than `paper`/`exness` | 02 Task 2.1; 07 Tasks 7.4, 7.6, 7.8; 08 Tasks 8.3, 8.7; 09 Tasks 9.7, 9.10; AC2, AC10; B12 |
+| 3 | Every `develop` push uses the gh account without push rights (AS-1) | High | Accepted: token URL on every push; never printed | 01-07 push tasks; 08.10, 09.8, 09.14, 10.7, 11.12, 12.5, 12.6; Ops recipe |
+| 4 | The verify-script edit deletes the `source .env` the Redis check needs; the password sits in `ps` (SEC-7, AS-2) | High | Accepted: `source .env` moved to the top, only `WEB_PORT_VAL` and section 8 deleted, `REDISCLI_AUTH` | 09 Task 9.6 |
+| 5 | The zero-money proof counts any rejected order (FM-2, AS-3) | High | Accepted: counts `reason=entries_paused` lines for the id, requires zero `exness.order_submitted`/`exness.order_rejected` for its orders, voids on a StartedAt change, writes counts at every `NOT_YET` | 11 Task 11.7; AC7 |
+| 6 | Phase 12 can resume a strategy whose Phase 11 run is pending (FM-3, AS-4) | High | Accepted: Phase 12 entry gate exits while any run lacks `round_trip: DONE`; 12.6 re-checks and never resumes then; Phase 11 re-runs with `--from 11 --to 11` | 11 Context, entry gate; 12 Context, entry gate, Task 12.6 |
+| 7 | Deleting the last `exness` subscription leaves its adapter connected, and the next one builds a second (FM-4, AS-9, SC-3) | High | Accepted: a pooled venue broker is reused regardless of holders (one condition); load→unload→load test; flat account before deleting an `exness` subscription | 02 Tasks 2.4, 2.6; 11 Rollback; AC3 |
+| 8 | Phase 11 state machine: re-baseline loop, exact trade count, write-after-side-effect create (FM-8, AS-6, SC-2) | High | Accepted: first trade after `resumed_at`, more allowed; "accept without AC6 or stop"; `exness_create_requested` intent line and adoption on re-run; Phase 12 live ids from GET; 11.8 reuses the 11.4 snapshot | 11 State record, Tasks 11.5, 11.6, 11.8-11.11; 12 Context, Task 12.2 |
+| 9 | Embedded Exness scripts run at full rate, skip the history clamp, and duplicate `realized_today` (AS-5, SC-4) | High | Accepted: `model_copy(update={"exness_rate_fraction": 0.2})` (field verified, `core/config.py:124`), clamp with `deals_window_days()`, Phase 12 keeps only `close_deals` | 11 Tasks 11.2, 11.4, 11.11; 12 Task 12.2 |
+| 10 | One rate-limit bucket for all public traffic, so a flood blocks Pause (SEC-2) | High | Accepted: nginx `real_ip` from `CF-Connecting-IP`, uvicorn `--forwarded-allow-ips` for Docker ranges, `/api/v1/admin/safeguards*` exempt, 300-GET burst check. Added 20:50: nginx `limit_conn` (10 open SSE streams per client IP) and one Cloudflare rate-limit rule [USER] (200 requests per 10 s per IP on `/api/*`, safeguards exempt) | 07 Task 7.5; 09 Tasks 9.3, 9.12; AC10; B13 |
+| 11 | `cloudflared` shares the backend network, its tag is mutable, routes live in the dashboard (SEC-3) | High | Accepted: `edge`/`backend` networks, `tag@sha256` of a release ≥ 7 days old, user confirms exactly two routes. Added 20:50: Cloudflare account 2FA [USER] | 07 Tasks 7.2-7.4; 09 Tasks 9.2, 9.3 |
+| 12 | Monitoring omits the plan's below-minimum and venue-rejection stops (FM-5, AS-8) | Medium | Accepted: `below_min_lot`, `order_quantity_below_broker_minimum` (live ids) and `exness.order_rejected` counted; any hit stops. Added 20:50: a record-only `signals / orders` column | 11 Task 11.9; 12 Context, Tasks 12.1-12.3, 12.6; AC11; Stop and report |
+| 13 | No procedure for a planned restart while live (FM-6) | Medium | Accepted: one "Restart while live" runbook, referenced by every rollback | 09 Task 9.7; Rollback here and in 02, 05, 07, 09-12 |
+| 14 | Mechanical: bare `reports/` paths, shell variables across commands, missing `GH_TOKEN`, no wait before run-id lookup, working-tree entry gates, half-deleted test, unscoped log greps (SC-1, SC-5, SC-8, AS-7, FM-7) | High | Accepted: full paths, one-command Verify, `GH_TOKEN` on every `gh` call, `sleep 15`, `git status --porcelain` and `git show origin/develop:`, whole test function deleted, `--since` on every log check, 0 new connect lines allowed when the adapter is held | all phase files |
+| 15 | Hygiene: the token is never rotated; a local backend is an open path into prod; the root key copy stays on disk (SEC-4, SEC-5, SEC-6) | Medium | Accepted in part: rotate `ADMIN_TOKEN` in the deploy-B config commit and in the Phase 09 rollback; plan rule (user 20:50) "a local backend against prod Mongo/Redis runs only with `ENABLE_JOBS=false`" (verified gate, see Conventions); `just be --host 127.0.0.1` (added 20:50); delete `.cache/ssh/vps_key` at each phase end. Guard fail-closed outside production: see R3 | 07 Tasks 7.6, 7.8; 09 Task 9.8, Rollback; Conventions; 10-12 Context; 08-12 Exit rule |
+| 16 | Phase 04 says Phase 12 records unexpected bars, Phase 12 fails rows on them and on the DST check (SC-6) | Medium | User decision: record only; Phase 04 Context corrected (Phases 08/12 call `POST /integrity/check`) | 04 Context, Risk; 12 Tasks 12.2, 12.3; AC11 |
+| 17 | Unrequested duplicate checks: stop-distance preflight 8.8, SSE checked three times, E2 column (SC-7) | Medium | User decision: delete old 8.8, the 8.7 SSE check and old 10.7; keep the SSE check in 9.10; drop the E2 column (12.6 still states E2) | 08 (renumbered 8.7-8.10), 09 Task 9.10, 10 (renumbered), 12 Task 12.1 |
+| R1 | Every GET is public, so live positions and ids are readable (SEC-8) | Medium | Rejected: Phase 01 design; EventSource SSE needs open GETs; #15 removes the mutation path that used the ids | — |
+| R2 | Masked token input, CSP header, restricted break-glass key (SEC-4, SEC-5 parts) | Medium | Rejected: scope; the native prompt is the Phase 01 design | — |
+| R3 | The admin guard skips the check whenever the token is unset outside production (SEC-6) | Medium | Rejected by the user (2026-10-20 20:50): failing closed would block local debugging against the remote DB. Residual: a local backend's mutations need no token and write prod Mongo; `just be` on 127.0.0.1 limits that to the workstation | — |
+| N1 | Found while applying: a push to a token URL does not move `origin/*`, so the old "no `ahead`" Verify fails after every push | High | Fixed: `&& git fetch origin` after each push; config pushes checked with `git ls-remote` | all push tasks; Ops recipe |
+| N2 | Found while applying: loopback data ports break the documented direct DataGrip, RedisInsight and Portainer access and `remote-db.env` | Medium | Resolved by the user (21:32): `just tunnel` forwards Mongo to local 27017 and Redis to 6379 (52017/53679 stay free for local compose); both remote-DB env files move to localhost in Task 8.3; docs say "run `just tunnel` first"; Task 8.7 proves it | 07 Tasks 7.6, 7.8, Risk; 08 Tasks 8.3, 8.7 |
+| N3 | Found while applying: the stored pause lets Phase 10 pause before deploy C, removing the unpaused window and proving persistence in prod | — | Applied | 10 Tasks 10.4-10.6 |
+| N4 | Found while applying: `exness.order_submitted`/`exness.order_rejected` log `order_id`, not the subscription; `below_min_lot` logs no id | — | The proof maps order ids through Mongo; `below_min_lot` is counted unscoped (every `exness` subscription is live) | 11 Tasks 11.7, 11.9; 12 Task 12.2 |
+| N5 | Found while applying the 20:50 answers: with `ENABLE_JOBS=false`, `bootstrap_live_instances` still loads every subscription (`app/main_extensions.py:160-171`), but nothing starts or connects a broker | — | Recorded in Conventions; an `exness` subscription fails to load locally while the local flag is false (`broker_factory.py:87-88`) | Conventions |
+| N6 | Found while applying the 20:50 answers: a local Pause/Resume writes the stored prod flag (Phase 05 store), which prod reads at its next start | Low | Recorded, not blocked (user: do not block local debugging). The runbook checks `entries_paused` after every restart, and Phase 12 re-pauses when intended | Conventions; 07 Task 7.8 doc bullet |
+
+### Whole-Plan Consistency Sweep
+Decision delta (2026-10-20 20:20) and where each landed:
+- Pause stored across restarts (was: in memory, resets on restart) → Phase 05 store and tests; Phase 09 docs ("survives a restart", runbook); Phase 10 pauses before deploy C and proves it after; Phases 11-12 treat an unpaused-while-intended state as an anomaly to re-pause and record; AC5, AC8; Conventions.
+- Unexpected bars and DST check record only → Phase 04 Context/Risk; Phase 12 header, Tasks 12.2, 12.3, 12.6; AC11.
+- Old Task 8.8 and Task 10.7 deleted; the 8.7 SSE check deleted; one SSE check in 9.10; E2 column dropped → Phases 08, 09, 10, 12.
+- Token rotation in deploy B (was: no rotation) → Phase 09 Tasks 9.8, 9.13, Rollback; Phase 01 Risk; Phase 08 Context.
+- Red-team fixes 2-15 → table above.
+
+Decision delta (2026-10-20 20:50 and 21:32 validation answers) and where each landed:
+- Data ports loopback with local debugging via `just tunnel` (20:50 "keep Mongo/Redis open" replaced at 21:32) → Phase 07 Context, Tasks 7.4, 7.6, 7.8, Risk, Rollback; Phase 08 Context, entry gate, Tasks 8.3 (config [ASK] now includes the two `local/remote-db*.env` files), 8.4, 8.7 (tunnel proof), 8.9, Risk, Rollback; Phase 09 Task 9.7 traffic line; Ops recipe; AC10; file ownership.
+- Local backend against prod only with `ENABLE_JOBS=false` (was: no local backend from Phase 10 on) → Conventions (gate verified at `app/main_extensions.py:256-258`); Phases 10, 11, 12 Context; Phase 07 Task 7.8 doc bullet.
+- Five hardening items → `just be` on 127.0.0.1 (07 Task 7.6); SSE `limit_conn` (07 Task 7.5, 08 entry gate); Cloudflare rate rule and 2FA (new 09 Task 9.3; old 9.3-9.13 renumbered 9.4-9.14; 9.12 flood check now runs with the rule live); `signals / orders` column (12 Context, Tasks 12.1-12.3, 12.6, Risk). Guard fail-closed outside production not added (R3).
+- Vietnamese-comment rewrite step removed from Task 7.4.
+
+Stale-term grep over `plan.md` and `phase-*.md` (run after the edits; matches in this review section are the decision record itself and are excluded):
+
+| Term | Result |
+|---|---|
+| `resets on restart`, `in memory`, `clears the pause`, `restart clears`, `never stored` | 0 outside the 20:20 decision line and this section; `in-memory` remains only for the GET read (06), paper positions (08) and the store-failure risk (05), all still true |
+| `git push origin` | 0 |
+| bare `reports/`, bare `round-trip.md`/`live-observation.md`/`ship-log.md` paths | 0 (one quoted mention inside the 12.6 question text) |
+| `## Preflight` heading in `round-trip.md`, `SSE retry`, `SSE deferred` outside 9.10 | 0 (Task 11.2 keeps its own name "Preflight per candidate") |
+| `realized_today`, `E2 latest` | 0 |
+| `re-baseline`, `Re-baseline` | 0 |
+| `exactly 1 position`, `exactly 1 trade` | 0 |
+| Out-of-scope Mongo/Redis/Portainer line | removed |
+| `get_available_types` target `:41` alone | 0 |
+| `Task 8.8`, `Task 8.11`, `Task 10.8` references to removed or renumbered tasks | 0 stale (8.8 is now the SPA check; references updated) |
+| (20:50/21:32 pass) `no local backend`, `No local backend` | 0 outside this section's decision delta |
+| `Vietnam` | 0 outside this section and the 20:50 decision line |
+| `stay public`, `keep their public`, `partially rejected`, `ssh -L only`, `SSH tunnel (required` | 0 |
+| `remote-db.env` "left to the user" / "unchanged (question below)" | 0 |
+| AC10 text vs probes | AC10, Task 8.7 and Task 9.10 all probe Mongo, Redis and Portainer as closed (plus `:80` in 9.10) |
+| Phase 09 task numbers after inserting 9.3 | 0 stale in `plan.md` and `phase-09`; no other phase cites a Phase 09 task |
+| Phase 07 task numbers after inserting 7.6 | 0 stale (gate cites 7.9; risk cites 7.6 and 7.8) |
+
+Reconciled: AC2, AC3, AC5, AC7, AC8, AC10, AC11; blocker map (B12, B13); dependencies and file ownership; test matrix (unit, integration, config, e2e rows); phase efforts (05 0.75d, 07 3h, 08 2.5h, 09 1.5h + 20 min user; total still about 3d of code). Contradictions left: none known; open questions are listed below.
 
 ## Unresolved questions
-- Should the SPA get a broker selector? This plan keeps selection API-only (curl with the token), and the subscriptions list only gains the `broker` field.
-- The SL is not part of the snapshot position shape the adapter reads (`{position_id, direction, instrument, volume, open_price}`, per phase-07 of the previous plan). Phase 05 confirms the SL in the Exness terminal, which is a user step.
-- Kongming counted 5 guarded and 12 open mutation routes. A re-count on `2613dc9` finds 4 guarded and 13 open: `routes/market_data.py:65,79,93,112,123`, `routes/strategy.py:56,69,93,102,141` and `routes/backtest.py:52,83,94`. Phase 01 guards all of them, so the difference does not change the work.
+- Which strategy goes live first is asked in Phase 11 (by decision). It is not needed before cooking.
+- Deep backfill: does the user want any history loaded before arming? Phase 10 asks with the bar counts.
+- The `camping89` dispatch recipe for `gh workflow run` is untested; Phase 08 probes it, and the fallback is a UI dispatch by the user.
+- The runner's handling of a `Status: BLOCKED` worker is inferred from `eve-cook-plan/SKILL.md`; the first `NOT_YET` exit shows it. If the runner dispatches the next phase anyway, stop and tell the user. Phase 12's entry gate now blocks a run that would follow a pending Phase 11.
+- Task 8.3 also moves `local/remote-db-local-redis.env` (its `MONGODB_URL` names the VPS IP too) to `localhost:27017`; the answer named only `remote-db.env`. Without the edit that documented mode breaks at deploy A. The [ASK] in Task 8.3 lists it, so the user can decline it there.
+- The Cloudflare Free plan documents no limit on the `wildcard` operator, but nobody has saved the Task 9.3 expression yet; if the dashboard rejects it, the user replies with the error and the phase stops for counsel.
