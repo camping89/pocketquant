@@ -20,7 +20,7 @@ The flag must be true for any live order, because `ExnessClient.call` refuses `o
 
 ## Prerequisites (not planned here)
 - **E1: adapter races B1–B3 fixed.** The fix is in progress on branch `fix/exness-broker-races` in `D:/w/_me/algotrading/pq-broker-fix` and must be merged to `develop` with its replay test before Phase 04. This plan never edits `core/infra/brokers/exness/exness_broker_adapter.py` or its tests, so it cannot conflict with that branch.
-- **E2: paper validation closed in prod.** Use kongming §3's schedule; its last check is Mon 2026-10-26: `CB==0`, for `XAUUSD:EXNESS` and `EURUSD:EXNESS` misaligned 0 and every gap venue-empty (C3 `PASS`; a `FAIL` gets one `integrity/repair` and a re-run, still `FAIL` fails), `sync_1m` p95 < 60 s, and both paper subscriptions running.
+- **E2: paper validation closed in prod.** Use the phase-08 T8.7 schedule of the exness venue plan; its last check is Mon 2026-11-02 (after the US DST change, C5 prints `3600 True`): `CB==0`, for `XAUUSD:EXNESS` and `EURUSD:EXNESS` misaligned 0 and every gap venue-empty (C3 `PASS`; a `FAIL` gets one `integrity/repair` and a re-run, still `FAIL` fails), `sync_1m` p95 < 60 s, and both paper subscriptions running.
 
 ## Phases
 | # | Phase | Effort | Depends on | Status |
