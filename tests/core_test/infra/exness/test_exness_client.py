@@ -147,6 +147,40 @@ async def test_every_call_after_discovery_goes_to_the_access_point(
     assert candles.headers["EXN-IDEMPOTENCY-KEY"] == ""
 
 
+async def test_a_421_clears_the_access_point_and_the_next_call_resolves_it_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exness = _Exness([httpx.Response(421)])
+    client = _client(exness, monkeypatch)
+
+    with structlog.testing.capture_logs() as logs, pytest.raises(ExnessApiError) as exc:
+        await client.call("getCandleHistory", params=CANDLES)
+    exness.access_point = httpx.Response(200, json={"access_point": "https://ap-2.exness.com"})
+    await client.call("getCandleHistory", params=CANDLES)
+
+    assert exc.value.status == 421
+    assert len(exness.discoveries()) == 2
+    assert [r.url.host for r in exness.other()] == ["ap-1.exness.com", "ap-2.exness.com"]
+    assert [(e["event"], e["reason"]) for e in logs if e["event"].endswith("_reset")] == [
+        ("exness.access_point_reset", "421")
+    ]
+
+
+async def test_a_transport_failure_clears_the_access_point(
+    monkeypatch: pytest.MonkeyPatch, sleeps: AsyncMock
+) -> None:
+    exness = _Exness([httpx.ConnectError("boom")] * 3)
+    client = _client(exness, monkeypatch)
+
+    with pytest.raises(ExnessApiError) as exc:
+        await client.call("getCandleHistory", params=CANDLES)
+    await client.call("getCandleHistory", params=CANDLES)
+
+    assert exc.value.code == "TRANSPORT"
+    assert len(exness.discoveries()) == 2
+    assert len(exness.other()) == 4
+
+
 async def test_a_foreign_access_point_is_refused_and_not_stored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

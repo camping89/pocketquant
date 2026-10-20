@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Re-resolve the access point on transport failure or 421 (B8)"
-status: pending
+status: completed
 priority: P2
 effort: 2h
 dependencies: []

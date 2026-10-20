@@ -113,7 +113,7 @@ Key prod env vars (full set in `vps/default/.env`):
 | `EXNESS_DAILY_LOSS_CAP` | No | Daily realized-loss limit for the Exness broker; unset rejects every Exness order. |
 | `EXNESS_MAX_LOTS` | No | Upper bound on an Exness order's lots; unset means the minimum lot. |
 
-The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
+The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. A transport failure or a 421 clears it; the next call resolves it again. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
 
 Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `$MONGO_PORT`→27017 · Redis `$REDIS_PORT`→6379 · Portainer `$PORTAINER_PORT`→9000.
 

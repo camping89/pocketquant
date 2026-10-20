@@ -1,11 +1,11 @@
 """Signed REST client for the Exness Trader API — the only path to Exness endpoints.
 
 Every call except the access-point discovery goes to the per-account access
-point, which is discovered once per process: the base host answers account
-routes with a bare 404. Requests are spaced by the strictest published rate
-with headroom; a 429 on a data call is retried a bounded number of times, a 429
-on an order call never is. Order calls are refused while ``EXNESS_LIVE_TRADING``
-is false, before any network use.
+point, which is discovered once and again after a transport failure or a 421:
+the base host answers account routes with a bare 404. Requests are spaced by
+the strictest published rate with headroom; a 429 on a data call is retried a
+bounded number of times, a 429 on an order call never is. Order calls are
+refused while ``EXNESS_LIVE_TRADING`` is false, before any network use.
 
 Headers, keys and signed bodies are never logged.
 """
@@ -236,7 +236,7 @@ class ExnessClient:
         return self._account_id
 
     async def access_point(self) -> str:
-        """The account's access-point host, discovered once per process."""
+        """The account's access-point host, discovered again after a transport failure or 421."""
         if self._access_point is not None:
             return self._access_point
         async with self._access_point_lock:
@@ -272,9 +272,18 @@ class ExnessClient:
         path = template.format(account_id=self._account_id, **(path_params or {}))
         target = f"{path}?{urllib.parse.urlencode(params)}" if params else path
         body = b"" if json_body is None else json.dumps(json_body, separators=(",", ":")).encode()
-        response = await self._send_paced(op, method, base + target, body, idempotency_key)
+        try:
+            response = await self._send_paced(op, method, base + target, body, idempotency_key)
+        except ExnessApiError as e:
+            if e.code == "TRANSPORT":
+                self._access_point = None
+                logger.warning("exness.access_point_reset", reason="transport", op=op)
+            raise
         if response.is_success:
             return response.json() if response.content else {}
+        if response.status_code == 421:
+            self._access_point = None
+            logger.warning("exness.access_point_reset", reason="421", op=op)
         raise _api_error(response)
 
     async def _send_paced(
