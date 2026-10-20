@@ -28,7 +28,7 @@ dependencies: [5]
 2. **[Stop-and-ask]** Before Fri 2026-10-30 20:30Z, ask whether `exness` subscriptions and any open position stay on over the weekend that holds the DST change. If not, stop them; an open position keeps its SL at the venue.
 3. Mon 2026-11-02 ~10:00 Bangkok, the DST check:
    - re-read `trade_sessions` for XAUUSD and EURUSD (inline snippet, as in the previous plan's T8.6) and compare with the constants shifted +1 h. Pass: equal;
-   - `POST /api/v1/market-data/integrity/check` (with the token) for `(XAUUSD:EXNESS,1m,2)` and `(EURUSD:EXNESS,1m,2)`. Pass: `missing_count == 0` and `misaligned_count == 0` for both;
+   - the previous plan's phase-08 C3 (add the token header) with `CHECKS='XAUUSD:EXNESS/1m/2 EURUSD:EXNESS/1m/2'`. Pass: `PASS` on both lines (misaligned 0, every gap venue-empty). On a `FAIL`, run `integrity/repair` once and re-run; still `FAIL` fails;
    - at least one XAUUSD quote frame or 1m bar exists after Sun 2026-11-01 23:01:30Z, and none exists in 22:00–23:00Z of that Sunday;
    - if subscriptions ran: no order rejected for a closed market.
 4. **[Stop-and-ask]** Go-live: the user confirms. The `exness` subscriptions run unattended (`desired_state=running`), and the flag stays true. Write the journal entry: the date, the D1–D5 answers, the AC6 numbers and the link to `reports/`.

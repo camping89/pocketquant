@@ -3,7 +3,7 @@ phase: 8
 title: "Validation: spread, backtests, paper week"
 status: in-progress
 priority: P1
-effort: 7d + weekend
+effort: 5 short checks (2026-10-19 to 2026-11-02)
 dependencies: [7]
 ---
 
@@ -21,7 +21,8 @@ dependencies: [7]
 - Released with the coordinator's approval: develop CI green, then `master` fast-forwarded to `83fcd9d` (this also deployed Phase 07's broker code, live trading off). Deploy verdict `HEALTHY (20/20 passed, 0 warnings, 0 failures)`.
 - T8.4 done: every backfill call fetched bars; 1m `total_bars` about 129610 and 1h 17521 per symbol, above every minimum.
 - T8.5 done: all 6 runs `finished`, each with trades (48 to 215). D3 holds. Results: `reports/exness-backtest-results.md`.
-- T8.6–T8.8 pending. The coordinator stopped the phase after T8.5: the user has not approved the paper week, and it must start on a Tuesday, Wednesday or Thursday with 7 days of daily checks.
+- 2026-10-19: the user replaced the 7-day week and its no-deploy freeze with five short checks (T8.7) and approved the two paper subscriptions. Row 0 ran and FAILED on integrity (EURUSD 1m rollover minutes, XAUUSD 1h US-holiday hours, both absent at the venue too); the subscriptions were not started. T8.6–T8.8 wait for the user's decision on those gaps.
+- 2026-10-20: the user accepted venue-empty gaps (no `src/` change); C3 checks each gap against Exness. Row 0 re-ran and passed; T8.6 started both subscriptions at 2026-10-20T03:21:46Z.
 
 ## Context Links
 - Advice §2.8 and §3 (bid-only backtests flatter shorts).
@@ -40,12 +41,12 @@ dependencies: [7]
 
 <!-- Updated: Validation Session 1 - paper-only validation; no live order, no U3 -->
 ## Goal
-Make D3 true and validate Exness end to end without live money: CFD backtests model the spread (ask = bid + spread), and both strategies run on the paper broker on `:EXNESS` symbols for one market week that includes a weekend close and reopen. No live order is placed in this phase; the Exness broker stays off.
+Make D3 true and validate Exness end to end without live money: CFD backtests model the spread (ask = bid + spread), and both strategies run on the paper broker on `:EXNESS` symbols across a live XAUUSD daily break, a weekend close and reopen, and the 2026-11-01 US DST change (T8.7 schedule). No live order is placed in this phase; the Exness broker stays off.
 
 ## Files to Create or Modify
 - Modify: `src/pocketquant/core/infra/brokers/paper/paper_broker_adapter.py`, `src/pocketquant/engine/backtest/backtest_command_service.py`, `src/pocketquant/engine/backtest/backtest_dispatch.py`, `src/pocketquant/core/domain/backtest/config.py`, `src/pocketquant/engine/backtest/backtest_sandbox_app_service.py`.
 - Create: `tests/core_test/infra/brokers/test_paper_broker_spread.py`.
-- Create reports: `plans/261009-0858-exness-venue-lean-sync-refactor/reports/exness-backtest-results.md` and `.../reports/exness-paper-week.md`.
+- Create reports: `plans/261009-0858-exness-venue-lean-sync-refactor/reports/exness-backtest-results.md`. Paper-run results live in the T8.7 results table.
 
 ## Tasks
 
@@ -130,87 +131,180 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
 - **Success criteria:** All 6 runs are `finished`, and each strategy has at least one run with trades.
 - **Verify:** Each `GET /api/v1/backtest/{id}` contains `"status":"finished"`. For each strategy, at least one `GET .../trades?limit=1` piped to `python -c "import json,sys;print(json.load(sys.stdin)['total']>0)"` prints `True`.
 
-<!-- Updated: 2026-10-13 develop reshape - live paper broker from config.broker default; develop-only deploy trigger; session re-check -->
-### T8.6 Start the paper week
-- **Goal:** Both strategies run on the paper broker on `:EXNESS` symbols, starting on a Tuesday, Wednesday or Thursday so the 7 days include a weekend close and reopen, with no deploy during the week.
-- **Target files and symbols:** `POST /api/v1/strategies/{code}/subscriptions`, `POST /api/v1/subscriptions/{id}/start`, `GET /api/v1/subscriptions/`, `reports/user-preconditions.md`, `reports/exness-paper-week.md`
+<!-- Updated: 2026-10-19 short paper schedule (user decision) - five check dates instead of a 7-day week, no no-deploy freeze, each row records StartedAt; post-DST session check expects +1 h -->
+### T8.6 Start the paper run
+- **Goal:** Both strategies run on the paper broker on `:EXNESS` symbols and are checked on the five dates in T8.7. There is no no-deploy freeze: each row records the container `StartedAt`; a restart only shortens that row's log window and is not a failure. Integrity is judged from stored bars, so restarts do not affect it.
+- **Approval:** recorded 2026-10-19 in `reports/user-preconditions.md` (`paper week: approved (short schedule), no freeze, ...`).
+- **Setup (every check, repo root):** the key file has CRLF line endings, so use a normalized copy.
+  ```bash
+  mkdir -p .cache/ssh && tr -d '\r' < ../pocketquant-config/vps/default/id_rsa > .cache/ssh/vps_key && chmod 600 .cache/ssh/vps_key
+  KEY=.cache/ssh/vps_key; HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r')
+  ```
 - **Steps:**
-  1. Ask the user verbatim: "May I start a 7-day paper observation on XAUUSD:EXNESS (hitnrun2, 1m) and EURUSD:EXNESS (engulfing, 1h), and do you confirm there will be no push to develop or master and no manual workflow run during those 7 days?" Append `paper week: approved, no-deploy until <start + 7 days, ISO>` or `paper week: declined` to `user-preconditions.md`. On `declined`, STOP.
-  2. Re-read the instrument sessions and compare them with the Exness calendar constants (Phase 06 T6.14):
+  1. Run C5 (T8.7); it must print `0 True` before 2026-11-01.
+  2. Create the subscriptions (no broker field exists; the engine uses the paper broker), then start each returned `id`:
      ```bash
-     ssh -i "$KEY" "$HOST" 'docker exec -i pocketquant-app python -' <<'EOF'
-     import asyncio
-     from pocketquant.core.config import get_settings
-     from pocketquant.core.infra.exness.exness_client import ExnessClient
-     from pocketquant.core.infra.calendars.exness_session_calendar_adapter import _EURUSD_SESSIONS, _XAUUSD_SESSIONS
-     async def main():
-         c = ExnessClient(get_settings())
-         try:
-             return [(await c.conditions(n))["trade_sessions"] for n in ("XAUUSD", "EURUSD")]
-         finally:
-             await c.close()
-     print(asyncio.run(main()) == [_XAUUSD_SESSIONS, _EURUSD_SESSIONS])
+     ssh -i "$KEY" "$HOST" 'sh -s' <<'EOF'
+     q() { docker exec pocketquant-app curl -s "$@"; }
+     q -X POST http://localhost:41921/api/v1/strategies/hitnrun2/subscriptions -H 'Content-Type: application/json' -d '{"symbol":"XAUUSD:EXNESS","interval":"1m"}'; echo
+     q -X POST http://localhost:41921/api/v1/strategies/engulfing/subscriptions -H 'Content-Type: application/json' -d '{"symbol":"EURUSD:EXNESS","interval":"1h"}'; echo
      EOF
+     ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -X POST http://localhost:41921/api/v1/subscriptions/<id>/start"
      ```
-     It must print `True`. If the week spans the 2026-11-01 US DST change, run it again on the Monday after the change. `False` is a STOP.
-  3. Using the remote pattern, create the two subscriptions (no broker field exists; the engine uses the paper broker):
-     ```bash
-     curl -s -X POST http://localhost:41921/api/v1/strategies/hitnrun2/subscriptions -H "Content-Type: application/json" -d '{"symbol":"XAUUSD:EXNESS","interval":"1m"}'
-     curl -s -X POST http://localhost:41921/api/v1/strategies/engulfing/subscriptions -H "Content-Type: application/json" -d '{"symbol":"EURUSD:EXNESS","interval":"1h"}'
-     ```
-     Record the returned `id`s, then `POST /api/v1/subscriptions/<id>/start` for each.
-  4. Record the container start: `ssh -i "$KEY" "$HOST" "docker inspect -f '{{.State.StartedAt}}' pocketquant-app"`. Write `week_start_utc: <now ISO>`, `container_started_at: <value>` and both subscription ids at the top of `exness-paper-week.md`.
-  5. Do not change how the live paper broker is built. It comes from `default_broker_config` without `spread`, so paper fills carry no spread (ask = bid); the week validates data, calendar and quotes, not P&L. Plumbing `spread` into the live broker is out of scope for this plan.
-- **Success criteria:** Both subscriptions run, and the week's baseline is recorded.
-- **Verify:** `grep -c "paper week: approved" plans/261009-0858-exness-venue-lean-sync-refactor/reports/user-preconditions.md` prints `1`. After 30 s, `curl -s http://localhost:41921/api/v1/subscriptions/` (remote pattern) piped to `python -c "import json,sys;d=json.load(sys.stdin);ids={'<id1>','<id2>'};print(sum(1 for s in d if s['id'] in ids and s['actual_state']=='running'))"` prints `2`.
+  3. Write both ids and the start time (UTC ISO) into row 0 of the T8.7 results table, and replace `not started` with `started <ISO>` in `user-preconditions.md`.
+  4. The live paper broker stays as built (`default_broker_config`, no `spread`): the run validates data, calendar and quotes, not P&L.
+- **Verify:** `grep -c "paper week: approved" plans/261009-0858-exness-venue-lean-sync-refactor/reports/user-preconditions.md` prints `1`. After 30 s, C2 with `CHECKS=''` and `IDS='<id1> <id2>'` prints `running 2`.
 
-<!-- Updated: Validation Session 1 - daily checks with proven log coverage instead of one week-long log count -->
-### T8.7 Daily observation with proven log coverage
-- **Goal:** Each day's counters are trustworthy: the container was not restarted and the logs reach back the full window.
-- **Target files and symbols:** container logs, `reports/exness-paper-week.md`
-- **Steps:**
-  1. Once per day for 7 days (at least one run on the Monday after the weekend reopen), run:
-     ```bash
-     ssh -i "$KEY" "$HOST" 'S=$(docker inspect -f "{{.State.StartedAt}}" pocketquant-app); F=$(docker logs --timestamps --since 25h pocketquant-app 2>&1 | head -1 | cut -d" " -f1); CB=$(docker logs --since 25h pocketquant-app 2>&1 | grep -c exness_ws.circuit_breaker_open); RC=$(docker logs --since 25h pocketquant-app 2>&1 | grep -c exness_ws.reconnecting); RL=$(docker logs --since 25h pocketquant-app 2>&1 | grep -c exness.rate_limited_retry); echo "$S $F $CB $RC $RL"'
-     ```
-  2. Append one row `| <date UTC> | <S> | <F> | <CB> | <RC> | <RL> |` to the daily table in `exness-paper-week.md`.
-  3. If `S` differs from `container_started_at`, or the first log line `F` is later than 24 hours ago, the day has no coverage: STOP and report to the user (a deploy or restart happened, or logs rotated away).
-- **Success criteria:** Seven rows, each with unchanged `S` and full 24-hour coverage.
-- **Verify:** For each run, `uv run python -c "import sys,datetime as d;f=d.datetime.fromisoformat(sys.argv[2][:19]).replace(tzinfo=d.UTC);print(sys.argv[1]==sys.argv[3] and f<=d.datetime.now(d.UTC)-d.timedelta(hours=24))" <S> <F> <container_started_at>` prints `True`. `RC` and `RL` (429 data-call retries) have no pass condition; record them only.
+### T8.7 Check schedule
+- **Goal:** Cover what the week was for: a live XAUUSD daily break, a weekend close and reopen, and the 2026-11-01 US DST change.
+<!-- Updated: 2026-10-20 venue-empty gaps pass (user decision) - C3 checks each gap at Exness; missing counts are recorded only -->
+- **Commands** (after the T8.6 setup; C1, C2 and C5 tested in prod 2026-10-19, C3 on 2026-10-20):
+  - **C1 log counters** since the previous row's check time. Prints `S= F= CB= RC= RL=`. If `S` is later than `SINCE`, the counters start at the restart; if `F` is later than both, logs rotated. Record either case; neither is a failure.
+    ```bash
+    SINCE=<previous row's "checked at", UTC ISO>
+    ssh -i "$KEY" "$HOST" "SINCE=$SINCE sh -s" <<'EOF'
+    L=$(docker logs --timestamps --since "$SINCE" pocketquant-app 2>&1)
+    echo "S=$(docker inspect -f '{{.State.StartedAt}}' pocketquant-app) F=$(echo "$L" | head -1 | cut -d' ' -f1) CB=$(echo "$L" | grep -c exness_ws.circuit_breaker_open) RC=$(echo "$L" | grep -c exness_ws.reconnecting) RL=$(echo "$L" | grep -c exness.rate_limited_retry)"
+    EOF
+    ```
+  - **C2 integrity, `sync_1m` and subscriptions.** `CHECKS` is a space-separated list of `SYMBOL/INTERVAL/DAYS_BACK`.
+    ```bash
+    CHECKS='<per row>'; WINDOW=<24h|7d>; IDS='<id1> <id2>'
+    ssh -i "$KEY" "$HOST" "CHECKS='$CHECKS' WINDOW=$WINDOW IDS='$IDS' sh -s" <<'EOF'
+    q() { docker exec pocketquant-app curl -s "$@"; }
+    py() { docker exec -i pocketquant-app python -c "$1"; }
+    for c in $CHECKS; do
+      set -- $(echo "$c" | tr / ' ')
+      q -X POST http://localhost:41921/api/v1/market-data/integrity/check -H 'Content-Type: application/json' -d "{\"symbol\":\"$1\",\"interval\":\"$2\",\"days_back\":$3}" \
+        | py "import json,sys;d=json.load(sys.stdin);print('$1 $2 $3d missing', d['missing_count'], 'misaligned', d['misaligned_count'], d['gap_ranges'][:5])"
+    done
+    q "http://localhost:41921/api/v1/system/jobs/sync_1m/stats?window=$WINDOW" | py "import json,sys;d=json.load(sys.stdin);print('sync_1m p95_ms', d['p95_ms'], d['by_status'])"
+    q http://localhost:41921/api/v1/subscriptions/ | py "import json,sys;ids=set('$IDS'.split());print('running', sum(1 for s in json.load(sys.stdin) if s['id'] in ids and s['actual_state']=='running'))"
+    EOF
+    ```
+  - **C3 integrity with a venue check.** Runs the integrity check for each `CHECKS` item, then reads each `gap_ranges` entry forward from Exness (`getCandleHistory`, positive `count` reads forward from `from` inclusive; candle field `time`). A range is venue-empty when no candle has `time <= range_end`. Prints `PASS` when `misaligned 0` and every range is venue-empty. C3 replaces C2's integrity loop, so run C2 with `CHECKS=''`. Once the go-live admin token is deployed, add the `X-Admin-Token` header to `check()`.
+    ```bash
+    CHECKS='<per row>'
+    ssh -i "$KEY" "$HOST" "CHECKS='$CHECKS' docker exec -i -e CHECKS pocketquant-app python -" <<'EOF'
+    import asyncio, json, os, urllib.request, datetime as d
+    from pocketquant.core.config import get_settings
+    from pocketquant.core.infra.exness.exness_client import ExnessClient
+    TF = {"1m": "M1", "5m": "M5", "15m": "M15", "1h": "H1", "4h": "H4", "1d": "D1"}
+    SEC = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
+    def check(sym, iv, days):
+        req = urllib.request.Request("http://localhost:41921/api/v1/market-data/integrity/check",
+            data=json.dumps({"symbol": sym, "interval": iv, "days_back": days}).encode(),
+            headers={"Content-Type": "application/json"})
+        return json.load(urllib.request.urlopen(req))
+    async def main():
+        c = ExnessClient(get_settings())
+        try:
+            for item in os.environ["CHECKS"].split():
+                sym, iv, days = item.split("/")
+                r = check(sym, iv, int(days))
+                out = []
+                for start, end in r["gap_ranges"]:
+                    s, e = d.datetime.fromisoformat(start), d.datetime.fromisoformat(end)
+                    n = min(1000, int((e - s).total_seconds() // SEC[iv]) + 1)
+                    body = await c.call("getCandleHistory", params={"instrument": sym.split(":")[0],
+                        "timeframe": TF[iv], "price_type": "bid", "from": s.isoformat(), "count": n})
+                    have = [k["time"] for k in body.get("candles", []) if d.datetime.fromisoformat(k["time"]) <= e]
+                    out.append((start[:16], end[:16], "venue_empty" if not have else "VENUE_HAS " + str(have[:3])))
+                ok = r["misaligned_count"] == 0 and all(o[2] == "venue_empty" for o in out)
+                print(sym, iv, days + "d", "missing", r["missing_count"], "misaligned", r["misaligned_count"],
+                      "PASS" if ok else "FAIL", out[:8])
+        finally:
+            await c.close()
+    asyncio.run(main())
+    EOF
+    ```
+  - **C5 sessions.** Compares the live `trade_sessions` with the calendar constants as merged UTC open segments. The constants were recorded under EDT and the adapter holds them in `America/New_York`, so from 2026-11-01 the expectation is the constants shifted +1 h (checked against `ExnessSessionCalendarAdapter.is_open` for the weeks of 2026-10-19 and 2026-11-02: unshifted matches before DST, +1 h matches after, unshifted fails after). Prints `<shift> <bool>`; it must print `0 True` before 2026-11-01 and `3600 True` from then on.
+    ```bash
+    ssh -i "$KEY" "$HOST" 'docker exec -i pocketquant-app python -' <<'EOF'
+    import asyncio
+    import datetime as d
+    from pocketquant.core.config import get_settings
+    from pocketquant.core.infra.exness.exness_client import ExnessClient
+    from pocketquant.core.infra.calendars.exness_session_calendar_adapter import _EURUSD_SESSIONS, _XAUUSD_SESSIONS, _shifted, _week_offset
+    def spans(sessions, shift):  # merged open [start, end) seconds from Monday 00:00 UTC
+        pieces = sorted(p for s in sessions if s["trade_mode"] == "enabled"
+                        for p in _shifted(_week_offset(s["week_start_time"]), _week_offset(s["week_end_time"]) + 1, shift))
+        merged = []
+        for a, b in pieces:
+            if merged and a <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+            else:
+                merged.append((a, b))
+        return merged
+    async def main():
+        c = ExnessClient(get_settings())
+        try:
+            return [(await c.conditions(n))["trade_sessions"] for n in ("XAUUSD", "EURUSD")]
+        finally:
+            await c.close()
+    shift = 3600 if d.datetime.now(d.UTC).date() >= d.date(2026, 11, 1) else 0  # EDT-recorded constants move 1 h later under EST
+    live = asyncio.run(main())
+    print(shift, [spans(t, 0) for t in live] == [spans(c, shift) for c in (_XAUUSD_SESSIONS, _EURUSD_SESSIONS)])
+    EOF
+    ```
+- **Pass (every row):**
+  1. `misaligned 0` on every C3 line.
+  2. Every `gap_ranges` entry is venue-empty: C3 prints `PASS` on every line.
+  3. On a C3 `FAIL`, run `POST /api/v1/market-data/integrity/repair` once for that symbol and interval, then re-run C3. Still `FAIL` → the row fails.
+  4. `sync_1m p95_ms < 60000`, `CB=0`, `running 2` (from the row where T8.6 ran), and on row 4 C5 prints `3600 True`.
+  5. Recorded only: `missing` counts, the venue-empty ranges, `RC`, `RL` and `by_status`.
+- **Schedule** (Bangkok = UTC+7):
 
-<!-- Updated: 2026-10-13 develop reshape - sync_1m duration check from job stats -->
-### T8.8 Close the paper week
-- **Goal:** Calendar and staleness behaved correctly across the weekend: zero circuit-breaker trips, zero integrity issues for the FX symbols, and Exness did not slow the shared 1m sync job.
-- **Target files and symbols:** `POST /api/v1/market-data/integrity/check`, `GET /api/v1/system/jobs/sync_1m/stats`, `reports/exness-paper-week.md`
+| # | When (Bangkok / UTC) | Why | Run |
+|---|---|---|---|
+| 0 | Mon 2026-10-19 21:10 / 14:10Z | backfilled weekends, baseline | C3 `XAUUSD:EXNESS/1m/7 EURUSD:EXNESS/1m/7 XAUUSD:EXNESS/1h/90 EURUSD:EXNESS/1h/90`; C2 `CHECKS=''`, `WINDOW=24h`; C1 with `SINCE` 24 h earlier; C5; then T8.6 |
+| 1 | Tue 2026-10-20 05:30 / Mon 22:30Z | after the XAUUSD break (20:58:00–22:00:29Z) | C1; C3 `XAUUSD:EXNESS/1m/1 EURUSD:EXNESS/1m/1`; C2 `CHECKS=''`, `WINDOW=24h` |
+| 2 | Sat 2026-10-24 10:00 / 03:00Z | Friday close; ticks WS idle | C1; C3 `XAUUSD:EXNESS/1m/4 EURUSD:EXNESS/1m/4`; C2 `CHECKS=''`, `WINDOW=7d` |
+| 3 | Mon 2026-10-26 10:00 / 03:00Z | Sunday reopen (EUR 21:05Z, XAU 22:01:30Z) | C1; C3 `XAUUSD:EXNESS/1m/3 EURUSD:EXNESS/1m/3 XAUUSD:EXNESS/1h/7 EURUSD:EXNESS/1h/7`; C2 `CHECKS=''`, `WINDOW=7d` |
+| 4 | Mon 2026-11-02 10:00 / 03:00Z | after US DST ends 2026-11-01 (reopen expected EUR 22:05Z, XAU 23:01:30Z) | C5; C1; C3 `XAUUSD:EXNESS/1m/2 EURUSD:EXNESS/1m/2 XAUUSD:EXNESS/1h/7 EURUSD:EXNESS/1h/7`; C2 `CHECKS=''`, `WINDOW=7d` |
+
+- **Results:**
+
+| # | Checked at (UTC) | `S` (StartedAt) | `F` | CB | RC | RL | Integrity missing/misaligned | `sync_1m` p95 ms (by_status) | Running | C5 | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 2026-10-19T14:08Z | 2026-10-19T02:17:57Z | 2026-10-19T02:18:10Z | 0 | 8 | 41 | XAU 1m 7d 0/0; **EUR 1m 7d 12/0**; **XAU 1h 90d 2/0**; EUR 1h 90d 0/0 | 11728 (completed 1382, failed 2) | not started | `0 True` | **FAIL** |
+| 0 re-run | 2026-10-20T03:20Z | 2026-10-19T02:17:57Z | 2026-10-19T16:30:09Z (rotated) | 0 | 11 | 30 | C3 all `PASS`, misaligned 0; missing XAU 1m 7d 0, EUR 1m 7d 13 (5 venue-empty ranges), XAU 1h 90d 2 (1 venue-empty range), EUR 1h 90d 0 | 12297 (completed 1382) | `running 2` at 03:22:33Z: hitnrun2 XAUUSD 1m `01a15754-39ed-73e3-921e-df085eb4a786`, engulfing EURUSD 1h `01a15754-3ab5-7258-b46b-ad98e1f3471f`, started 03:21:46Z | `0 True` | **PASS** |
+
+- **Row 0 failure (2026-10-19), evidence:**
+  - EURUSD 1m gaps: 2026-10-12 21:00 and 21:03, 2026-10-13 21:00–21:03, 2026-10-14 21:00–21:04, 2026-10-15 21:00 (12 minutes). Exness `getCandleHistory` (M1, bid) has no candle there either: 2026-10-14 goes 20:59 → 21:05; 2026-10-12 has 21:01, 21:02 and 21:04 but not 21:00 or 21:03. `_EURUSD_SESSIONS` marks Mon–Thu open all day, so the calendar expects these minutes.
+  - XAUUSD 1h gap: 2026-09-07 19:00–20:00Z. Exness H1 has no candle there either (18:00 → 22:00); the next Monday, 2026-09-14, has 19:00 and 20:00. 2026-09-07 was the US Labor Day holiday; the calendar has no holidays.
+  - Inference, not verified: EURUSD trades thinly or not at all in the 21:00–21:04Z rollover, and XAUUSD closed early for the holiday. The stored bars match the venue, so this is a calendar or pass-criterion question, not lost data.
+  - `sync_1m` `failed 2`: two runs at 2026-10-19 00:18–00:22Z with `mongodb:27017: timed out`, before the 02:17:57Z restart. Recorded only.
+  - Not done because of the failure: T8.6 step 2 (subscriptions not started) and rows 1–4. The user decides between a calendar change (code, outside this phase) and accepting known venue gaps in the integrity criterion; then row 0 is re-run.
+  - Re-run 2026-10-20 under the venue-empty rule. EUR 1m venue-empty ranges: 10-13 21:00–21:03, 10-14 21:00–21:04, 10-15 21:00, 10-19 21:00–21:01 and 21:03Z. XAU 1h: 09-07 19:00–20:00Z. The safety check printed `True False` (configured, live trading off).
+- **Rule:** a failing row is recorded with its output and the schedule stops; no code fix inside this phase.
+
+### T8.8 Close the paper run
+- **Goal:** All five rows pass.
 - **Steps:**
-  1. After the seventh daily row, run with the remote pattern for each `(S, I)` in `(XAUUSD:EXNESS, 1m)`, `(XAUUSD:EXNESS, 1h)`, `(EURUSD:EXNESS, 1m)` and `(EURUSD:EXNESS, 1h)`:
-     ```bash
-     curl -s -X POST http://localhost:41921/api/v1/market-data/integrity/check -H "Content-Type: application/json" -d '{"symbol":"S","interval":"I","days_back":7}'
-     ```
-  2. `curl -s "http://localhost:41921/api/v1/system/jobs/sync_1m/stats?window=7d"` (remote pattern).
-  3. Re-run the T8.6 subscriptions check.
-  4. Write the four integrity results, the `sync_1m` `p95_ms`, the sums of the daily `CB`, `RC` and `RL` values, and the `exness-backtest-results.md` summary to `exness-paper-week.md`.
-  5. Ask the user whether to keep the two paper subscriptions running or stop them. Run `POST /api/v1/subscriptions/<id>/stop` if they say stop.
-- **Success criteria:** Zero circuit-breaker trips, zero FX integrity issues, a `sync_1m` p95 under one minute, and both strategies still running.
-- **Verify:** Each step 1 response piped to `python -c "import json,sys;d=json.load(sys.stdin);print(d['missing_count']==0 and d['misaligned_count']==0)"` prints `True`. Step 2 piped to `python -c "import json,sys;print(json.load(sys.stdin)['p95_ms']<60000)"` prints `True`. The sum of the daily `CB` column is `0`. Step 3 prints `2`.
+  1. After row 4, add a one-line summary under the results table: rows passed, sums of `CB`, `RC` and `RL`, the highest `sync_1m` p95, and a pointer to `reports/exness-backtest-results.md`.
+  2. Ask the user whether to keep the two paper subscriptions running or stop them; on stop, `POST /api/v1/subscriptions/<id>/stop` for each.
+- **Success criteria:** Every row's verdict is PASS.
+- **Verify:** The results table has a `PASS` row for each of rows 0–4.
 
 ## Verification
-T8.1 and T8.2 (spread and the request schema diff), T8.4 and T8.5 (D3), T8.6–T8.8 (paper week across a weekend).
+T8.1 and T8.2 (spread and the request schema diff), T8.4 and T8.5 (D3), T8.6–T8.8 (short paper schedule, all five rows PASS).
 
 <!-- Updated: Validation Session 1 - stop-and-ask list for this phase -->
 ## Stop-and-ask
 - Any step that would place a live order, set `config.broker = "exness"`, or set `EXNESS_LIVE_TRADING=true`.
-- A deploy or restart during the observation week (T8.7 step 3).
-- The instrument sessions differ from the calendar constants (T8.6 step 2).
-- The paper week is declined, or a test failure stays unexplained.
+- A failing row in the T8.7 schedule.
+- C5 prints `False` (the instrument sessions differ from the expected calendar).
+- A test failure stays unexplained.
 
 ## Risks
 - **Swap costs are not modelled** (known, accepted in the advice). They are noted in the results report and not built.
 - **Paper week fills ignore the spread** (known, accepted): the live paper broker is built from `default_broker_config` without `spread`; D3 covers spread through backtests.
 - **No paper trade happens during the week** (M/L). That is not a failure; D3 covers trading behaviour through backtests, and the week validates data, calendar and quotes.
-- **Log rotation hides events** (M/M). Mitigation: daily windows with a coverage proof, and integrity is checked from stored bars, not from logs.
+- **Log rotation or a restart hides events** (M/M). No freeze: each row records `S` and `F`, so a short window is visible; integrity is checked from stored bars, not from logs.
 - **Exness answers 429 below the published rate** (M/M). Data calls retry up to 3 times and log `exness.rate_limited_retry`; the deep backfill runs at half the request rate. The daily `RL` column shows how often it happens.
-- **Exness session times shift at the 2026-11-01 US DST change** (M/M, unverified). T8.6 step 2 re-reads the sessions; a difference stops the week.
+- **Exness session times shift at the 2026-11-01 US DST change** (M/M, unverified). The adapter expects UTC edges 1 h later from then; row 4 runs C5 with the +1 h expectation, and `False` stops the run.
+- **The calendar does not model venue gaps** (H/M, seen 2026-10-19): Exness emits no candle for a minute without ticks. EURUSD M1 misses random parts of 21:00–21:17Z on weekdays, and XAUUSD H1 has no 2026-09-07 19:00–20:00Z. Integrity counts them as missing. Rule: a gap passes when C3 confirms the venue has no candle there; a gap the venue can fill fails the row.
 
 ## Security
 No credentials are printed. Paper subscriptions never touch the Exness order endpoints, and the client refuses them anyway while live trading is off.
