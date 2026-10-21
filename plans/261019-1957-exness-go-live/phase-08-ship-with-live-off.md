@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Ship with live off: deploy A (B7, B12)"
-status: pending
+status: completed
 priority: P1
 effort: 2.5h + CI
 dependencies: [1, 2, 3, 4, 5, 6, 7]
@@ -158,3 +158,12 @@ Spawn the `kongming` subagent for next-step counsel and pass:
 Apply kongming's guidance, then re-run the Verify step.
 If `kongming` cannot be spawned in this environment, STOP and report the same
 failure evidence to the user. Never continue by self-reasoning.
+
+## Outcome (2026-10-21)
+- Deploy A: `develop:master` pushed at 2026-10-21T13:48:45Z (`f0179f2`, 32 commits); run `39611273334` verdict `DEGRADED (21/22 passed, 1 warnings, 0 failures)`. The warning was `cloudflared health: WARN - still starting`; Task 8.6 then showed it `(healthy)` with 4 registered connections.
+- Task 8.3: the `.env` diff was not empty as Context expected; it held the uncommitted `TUNNEL_TOKEN` line from Phase 07, which this commit carried (disclosed in the [ASK]). Config commit pushed to `pocketquant-config` `master`.
+- Task 8.2: 4 failed + 4 errors only in the two tzset test files, 1184 passed; web 67 tests passed.
+- Task 8.4 facts: the engulfing EURUSD subscription had 1 open paper position, lost on restart (accepted); hitnrun2 had 0.
+- Task 8.7: Mongo `v7.0.45`; `just tunnel` left its `ssh.exe` listening after the background task stopped, so the PID netstat showed was stopped by hand (netstat then printed `0`).
+- Task 8.8: `spa ok` came through the coordinator, which ran the read-only check for the user in a headless browser at 14:27Z (4 rows PAPER, one RUNNING pill each; strip OFF, 25 USD, 0.01, Pause; nothing clicked).
+- Phase 07 watch item: a request through `tunnel-test` shows the workstation's public IP in `pocketquant-web` logs, not `172.x`.
