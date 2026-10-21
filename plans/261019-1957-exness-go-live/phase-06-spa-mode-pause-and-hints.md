@@ -30,6 +30,7 @@ NOT_YET: <reason>
 Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 06 after <UTC time>
 ```
 - `docker ps` exits 0 (start Docker Desktop and retry once after 10 s).
+- `npm --version` exits 0 (else `NOT_YET: npm blocked by NVM; see plans/261019-1957-exness-go-live/reports/kongming-261021-0010-answers-reanalysis.md`).
 - `git status --porcelain -- src web deploy tests scripts docs` prints nothing.
 - After `git fetch origin`, `git show origin/develop:src/pocketquant/app/routes/safeguards.py | grep -c "admin/safeguards"` prints ≥ 1 (Phases 01, 02 and 05 are pushed).
 

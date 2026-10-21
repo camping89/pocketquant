@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Safeguards object, stored entry pause, leverage-aware sizing (B4, B11)"
-status: pending
+status: completed
 priority: P1
 effort: 0.75d
 dependencies: [1, 2]
@@ -22,7 +22,7 @@ dependencies: [1, 2]
 - After Phase 01 the `api` router carries the guard: POST needs the token, GET is public. Integration tests build a fresh app with `make_test_app(settings)` (`tests/app_test/integration/app_factory.py:36`); two apps on the same test database stand in for a restart.
 
 ## Gates in this phase
-- [ASK] only if `scripts/code_metrics.py --ratchet` fails: state the metric, its value and the ceiling; ask whether to raise the ceiling (KISS wins over padding). Otherwise none; the `develop` push is authorized.
+- [ASK] only if `scripts/code_metrics.py --ratchet` fails: state the metric, its value and the ceiling; ask whether to raise the ceiling, leading with `Recommended: raise the ceiling` (KISS wins over padding). Otherwise none; the `develop` push is authorized.
 
 ## Entry gate
 Run first. On a miss: edit nothing, spawn no `kongming`, leave the phase pending, and end with:

@@ -12,6 +12,8 @@ dependencies: [10]
 ## Context
 - User decision 2026-10-20 19:35: ONE strategy the user picks goes live per run of this phase. Its paper subscription is deleted [ASK], its `exness` subscription is created [ASK] while entries are paused, the first paused rejection proves sizing and the pause gate at zero money, then Resume [ASK]. The round trip is the strategy's first natural trade (D3 = A). A second strategy goes live only by re-running this phase alone: `/eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness-go-live --from 11 --to 11` (the runner supports `--to`, `~/.claude/skills/eve-cook-plan/SKILL.md:18,37`).
 - User decision 2026-10-20 20:20: the pause is stored and survives a restart (Phase 05). A restart still resets strategy warmup and the open direction.
+- User decision 2026-10-21 00:21: the agent recommends the strategy from the Task 11.2 preflight and the user confirms it and the balance at the 11.3 [ASK]. Each run is a single-order run: after Resume, entries are paused again as soon as the first `exness` position opens (Task 11.9 step 0, Task 11.1 step 4); pause needs no gate and exits are never gated. The trade closes by the strategy's own SL/TP (set at signal time and held at the venue, `exness_broker_adapter.py:239-240`) or its exit rule. D3 = A stays: no hand-placed order and no hand-set TP/SL (no manual order route exists).
+- User decision 2026-10-21 00:43: the unwatched single-order risk is accepted (see Risk); there is no in-app "pause after first fill". The Task 11.9 step 0 watch runs about 4 h. Task 11.12 recommends `keep on` when the round trip was clean, else `pause`.
 - The unique index on `(strategy_code, symbol, interval)` (`core/infra/persistence/repositories/subscription_repository.py:102-106`) forces the paper subscription off the triple first. `remove_symbol` deletes only the subscription document; its orders, positions and trades stay (`engine/strategy/strategy_command_service.py:99-107`); the DELETE route returns 204 whatever happens (`app/routes/strategy.py:141-147`). Deleting a validation subscription makes E2's `running 2` read 1 from then on (accepted: E2 is optional).
 - Zero-money proof: `normalize_quantity` runs before `submit_order` (`engine/strategy/strategy_app_service.py:405-415`); a size below the lot grid never creates an order and logs `order_quantity_below_broker_minimum` with `strategy_id=<subscription id>` (`:407-409`); a zero size logs `zero_position_size` (`:401-404`). While paused, `_presubmit_reason` rejects first and logs `exness.order_rejected_presubmit reason=entries_paused subscription_id=<id>` (Phase 05). The `orders` document stores no rejection reason, so the proof reads that log line. An order that reached the venue logs `exness.order_submitted` or `exness.order_rejected` with `order_id` = the `orders._id` (`exness_broker_adapter.py:316,330,342-349`). `below_min_lot` carries no subscription id; every `exness` subscription is live, so it is counted unscoped.
 - hitnrun2 re-arms on rejection (`core/domain/strategy/services/hitnrun2_strategy_service.py:130-132`) and re-signals each 1m bar while its condition holds: expect one paused rejection per bar (bounded). Warmup after a create or a restart: hitnrun2 XAUUSD 1m about 8 open-market hours (`:92-93`), engulfing EURUSD 1h about 21 open hours.
@@ -34,11 +36,11 @@ dependencies: [10]
 - resumed_at: <UTC ISO>, app StartedAt <value>
 - round_trip: DONE <UTC>
 ```
-The current run is the last `## Live run` section without a `round_trip: DONE` line. Its last key line decides the next task: no current run → 11.2; `paper_sub_id` → 11.4; `baseline` → 11.5; `paper_deleted` or `exness_create_requested` → 11.6; `exness_sub_id` → 11.7; `zero_money_proof` → 11.8; `resumed_at` → 11.9. Note lines (`restart seen`, `proof_window`, `proof_check`, `AC6`, `pause while open`, `after round trip`) are not keys. Tasks before the chosen one are skipped.
+The current run is the last `## Live run` section without a `round_trip: DONE` line. Its last key line decides the next task: no current run → 11.2; `paper_sub_id` → 11.4; `baseline` → 11.5; `paper_deleted` or `exness_create_requested` → 11.6; `exness_sub_id` → 11.7; `zero_money_proof` → 11.8; `resumed_at` → 11.9. Note lines (`restart seen`, `proof_window`, `proof_check`, `paused after first entry`, `AC6`, `pause while open`, `after round trip`) are not keys. Tasks before the chosen one are skipped.
 
 ## Gates in this phase
-[ASK] = stop and ask; state the listed facts; only an explicit yes counts; "no" or "wait" ends the phase with the NOT_YET block. [USER] = the user acts and replies with the stated token. No earlier approval counts.
-- [ASK] 11.3 which strategy. [ASK] 11.5 delete the paper subscription. [ASK] 11.6 create and start the `exness` subscription. [ASK] 11.8 Resume. [USER] 11.10 `sl seen`. [ASK] 11.11 only on a void AC6. [ASK] 11.12 D4.
+[ASK] = stop and ask; lead with the recommended reply and its reason, then state the listed facts; only an explicit yes counts; "no" or "wait" ends the phase with the NOT_YET block. [USER] = the user acts and replies with the stated token. No earlier approval counts.
+- [ASK] 11.3 which strategy. [ASK] 11.5 delete the paper subscription. [ASK] 11.6 create and start the `exness` subscription. [ASK] 11.8 Resume (a single-order run; the pause after the first entry needs no gate). [USER] 11.10 `sl seen`. [ASK] 11.11 only on a void AC6. [ASK] 11.12 D4.
 - Calendar waits end the worker with `NOT_YET` (11.7, 11.9). They are not failures: no `kongming`.
 
 ## Entry gate
@@ -55,15 +57,16 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness
 Code blocks below are indented for Markdown. Before running one, remove only the common leading indentation of the block (keep the Python indentation inside it), so each closing `EOF` starts at column 0. The shell keeps no variables between commands: every command sets `HOST` itself. `<GET safeguards>` means `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "docker exec pocketquant-app curl -s http://localhost:41921/api/v1/admin/safeguards"`. An admin call is `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'docker exec -i pocketquant-app sh -s'` with a heredoc on stdin holding `curl -s -X POST -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:41921/api/v1/<path>` (the token stays in the container).
 
 ### Task 11.1 — SSH setup, state and pause check
-- Goal: the worker knows the current state; entries are paused whenever a run is not yet resumed.
+- Goal: the worker knows the current state; entries are paused whenever a run is not yet resumed or its first live position has opened.
 - Target files and symbols: `.cache/ssh/vps_key` (deleted at every exit); `plans/261019-1957-exness-go-live/reports/round-trip.md`; prod app.
 - Steps:
   1. `mkdir -p .cache/ssh && tr -d '\r' < ../pocketquant-config/vps/default/id_rsa > .cache/ssh/vps_key && chmod 600 .cache/ssh/vps_key`.
   2. Read the current run (State record). Read `docker inspect -f '{{.State.StartedAt}}' pocketquant-app` over SSH and `<GET safeguards>`.
-  3. A current run without `resumed_at` means intended paused. If `entries_paused` is false then: pause now (admin call) and append `- restart seen: StartedAt <value>, found unpaused, re-paused <UTC>` (the pause is stored, so someone resumed it or the store failed; Task 11.7 counts any order sent meanwhile).
-  4. If the current run has `resumed_at` and StartedAt differs from the last StartedAt recorded in the section: `GET /api/v1/subscriptions/<exness_sub_id>/positions`. Non-empty → stop and report (an unplanned restart while an `exness` position is open). Empty → append `- restart seen: StartedAt <value>` and continue.
+  3. A current run without `resumed_at`, or with a `paused after first entry` line, means intended paused. If `entries_paused` is false then: pause now (admin call) and append `- restart seen: StartedAt <value>, found unpaused, re-paused <UTC>` (the pause is stored, so someone resumed it or the store failed; Task 11.7 counts any order sent meanwhile).
+  4. If the current run has `resumed_at` and no `paused after first entry` line: run the Task 11.9 step 0 command once with `TRIES=1`. `first_entry <opened_at>` → admin call `pause` now and append `- paused after first entry: <UTC>, position opened <opened_at>`; continue.
+  5. If the current run has `resumed_at` and StartedAt differs from the last StartedAt recorded in the section: `GET /api/v1/subscriptions/<exness_sub_id>/positions`. Non-empty → stop and report (an unplanned restart while an `exness` position is open). Empty → append `- restart seen: StartedAt <value>` and continue.
 - Success criteria: the next task is known.
-- Verify: `<GET safeguards>` contains `"live_trading":true`, and after step 3 contains `"entries_paused":true`.
+- Verify: `<GET safeguards>` contains `"live_trading":true`, and after step 3 or a step 4 pause contains `"entries_paused":true`.
 
 ### Task 11.2 — Preflight per candidate (read-only)
 - Goal: stop distances and margin for every strategy that could go live.
@@ -109,13 +112,13 @@ Code blocks below are indented for Markdown. Before running one, remove only the
 - Verify: the first line starts with `balance`.
 
 ### Task 11.3 — [ASK] Which strategy goes live
-- Goal: the user picks one candidate, or not now.
+- Goal: the agent recommends one candidate; the user confirms it (or picks another, or not now).
 - Target files and symbols: `plans/261019-1957-exness-go-live/reports/round-trip.md`.
 - Steps:
-  1. Offer only candidates with `margin_ok True`. If none, stop and report the Task 11.2 output.
-  2. Ask: "Which strategy goes live now? Candidates: <one line each: code symbol interval, stops count/median/max, above-limit count, margin>. Balance <x> USD (must be ≤ 250; confirm). Already live: <n>. Facts: the pause is global, so entries of any live strategy stay paused until you approve Resume; deleting the paper subscription ends its E2 `running` count (latest E2 row: <`grep -E '^\| [0-4]( re-run)? \| 2026' plans/261009-0858-exness-venue-lean-sync-refactor/phase-08-validation-spread-backtests-paper-week.md | tail -1`>); warmup after create: hitnrun2 about 8 open-market hours, engulfing about 21; a candidate with above-limit stops will see those entries rejected below the minimum lot, which stops this phase. Reply with the subscription id, or `not now`."
+  1. Offer only candidates with `margin_ok True`. If none, stop and report the Task 11.2 output. Recommend by this rule: zero above-limit stops, then the lowest median stop; on a tie hitnrun2 XAUUSD 1m (1m signals shorten the proof and the round-trip wait; warmup about 8 h versus about 21 h).
+  2. Ask: "Recommended: <code symbol interval> (<why: zero above-limit stops / lowest median stop / 1m signals>). Candidates: <one line each: code symbol interval, stops count/median/max, above-limit count, margin>. Balance <x> USD (must be ≤ 250; confirm). Already live: <n>. Facts: the pause is global, so entries of any live strategy stay paused until you approve Resume; deleting the paper subscription ends its E2 `running` count (latest E2 row: <`grep -E '^\| [0-4]( re-run)? \| 2026' plans/261009-0858-exness-venue-lean-sync-refactor/phase-08-validation-spread-backtests-paper-week.md | tail -1`>); warmup after create: hitnrun2 about 8 open-market hours, engulfing about 21; a candidate with above-limit stops will see those entries rejected below the minimum lot, which stops this phase. This is a single-order run: entries pause again once the first position opens, and its SL/TP come from the strategy's rule, not from hand-chosen levels. Reply `yes`, another subscription id, or `not now`."
   3. `not now` → end with `NOT_YET: the user deferred go-live`, resume time = now.
-  4. Otherwise append the section header, the `chosen_at` line (with the candidate's Task 11.2 line) and `paper_sub_id`.
+  4. Otherwise (`yes` = the recommended candidate) append the section header, the `chosen_at` line (with the candidate's Task 11.2 line) and `paper_sub_id`.
 - Success criteria: a new section.
 - Verify: `grep -c "^## Live run" plans/261019-1957-exness-go-live/reports/round-trip.md` increased by 1, and the user confirmed balance ≤ 250.
 
@@ -151,7 +154,7 @@ Code blocks below are indented for Markdown. Before running one, remove only the
 - Target files and symbols: `POST /api/v1/subscriptions/{id}/stop`, `DELETE /api/v1/subscriptions/{id}`.
 - Steps:
   1. If `paper_sub_id` no longer appears in `GET /api/v1/subscriptions/` (an interrupted earlier run deleted it), append `- paper_deleted: <UTC>` and go to Task 11.6 without asking.
-  2. Facts: its id and triple; `GET /api/v1/subscriptions/<id>/positions` item count; "its orders, positions and trades rows stay". Ask: "Stop and delete paper subscription <id> (<triple>)?"
+  2. Facts: its id and triple; `GET /api/v1/subscriptions/<id>/positions` item count; "its orders, positions and trades rows stay". Ask: "Recommended: yes (the unique triple index requires it before the exness create). Stop and delete paper subscription <id> (<triple>)?"
   3. On yes: admin calls `POST .../<id>/stop`; poll `GET /api/v1/subscriptions/` every 5 s, at most 12 times, until its `actual_state` is not `running`; then `curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:41921/api/v1/subscriptions/<id>`.
   4. Append `- paper_deleted: <UTC>`.
 - Success criteria: the id is gone.
@@ -162,7 +165,7 @@ Code blocks below are indented for Markdown. Before running one, remove only the
 - Target files and symbols: `POST /api/v1/strategies/{strategy_code}/subscriptions`, `POST /api/v1/subscriptions/{id}/start`.
 - Steps:
   1. Re-run case (the section has `exness_create_requested`): look up `GET /api/v1/subscriptions/` for the triple with `"broker":"exness"`. Found → adopt its id; `POST .../<id>/start` if its `desired_state` is not `running` (the earlier [ASK] covered create and start); go to step 4. Not found → continue at step 2.
-  2. Facts: `<GET safeguards>` (`live_trading` true, `entries_paused` true); the triple; the number of `exness` subscriptions in GET now; "no order can go out while paused; the first paused signal is the zero-money proof". Ask: "Create and start the Exness subscription for <triple>?"
+  2. Facts: `<GET safeguards>` (`live_trading` true, `entries_paused` true); the triple; the number of `exness` subscriptions in GET now; "no order can go out while paused; the first paused signal is the zero-money proof". Ask: "Recommended: yes (entries are paused, so no order can go out). Create and start the Exness subscription for <triple>?"
   3. On yes: append `- exness_create_requested: <UTC>` first; then admin calls `curl -s -X POST -H "X-Admin-Token: $ADMIN_TOKEN" -H 'Content-Type: application/json' -d '{"symbol":"<symbol>","interval":"<interval>","broker":"exness"}' http://localhost:41921/api/v1/strategies/<strategy_code>/subscriptions` (note the returned `id`), then `POST .../subscriptions/<id>/start`.
   4. Wait 30 s. Append `- exness_sub_id: <id>, created <ISO of the create, or now when adopted>, app StartedAt <value>`.
 - Success criteria: running, paused, one adapter.
@@ -195,16 +198,30 @@ Code blocks below are indented for Markdown. Before running one, remove only the
 - Goal: real-money entries are allowed.
 - Target files and symbols: `POST /api/v1/admin/safeguards/resume`.
 - Steps:
-  1. Facts: the proof line; hours since create; current free margin from re-running the Task 11.4 step 2 snippet (read-only, append nothing) against `margin` in the `chosen_at` preflight; other live strategies that Resume also unpauses; worst day ≈ 25 + 25 × open positions USD; "the SPA row shows LIVE; Pause in the strip stops new entries at any time and stays on across a restart". Ask: "Resume real-money entries now?"
+  1. Facts: the proof line; hours since create; current free margin from re-running the Task 11.4 step 2 snippet (read-only, append nothing) against `margin` in the `chosen_at` preflight; other live strategies that Resume also unpauses; worst day ≈ 25 + 25 × open positions USD; "the SPA row shows LIVE; Pause in the strip stops new entries at any time and stays on across a restart"; "this is a single-order run: entries are paused again as soon as the first position opens while the watch runs (about 4 h); after an unwatched window, more trades can open one at a time under the 25 USD daily cap (accepted 2026-10-21 00:43); the trade then closes by the strategy's SL/TP (hitnrun2: SL ≤ 1% from entry, TP ≥ 2%; engulfing: SL at the pattern extreme ± 0.1%, TP ≥ 1R) or its exit rule; you can press Pause in the SPA at any time". Ask: "Recommended: yes (the zero-money proof passed). Resume real-money entries now for one order?"
   2. `wait` → end with `NOT_YET: the user deferred Resume`, resume after the time the user names (default now + 4 h).
   3. On yes: admin call `POST .../resume`; append `- resumed_at: <ISO>, app StartedAt <value>`.
 - Success criteria: unpaused.
 - Verify: `<GET safeguards>` contains `"entries_paused":false`.
 
 ### Task 11.9 — First natural round trip (calendar wait)
-- Goal: one closed live trade exists, with no stop condition.
-- Target files and symbols: app logs; Mongo `trades` (`run_id` = subscription id, `engine/live/live_trade_collector.py:58-63`).
+- Goal: one closed live trade exists, with no stop condition; entries are paused again once the first position opens (single-order run).
+- Target files and symbols: app logs; Mongo `positions` (`subscription_id`, `opened_at`; open and closed rows); Mongo `trades` (`run_id` = subscription id, `engine/live/live_trade_collector.py:58-63`).
 - Steps:
+  0. Single-order watch, only if the section has no `paused after first entry` line. Start this with the harness's background-run facility (up to about 4 h) and wait for its exit; it checks every 60 s for a position of the `exness` subscription opened since `resumed_at`, open or already closed:
+     ```bash
+     HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r')
+     ssh -i .cache/ssh/vps_key "$HOST" 'bash -s' <<'EOF'
+     ID=<exness_sub_id>; R=<resumed_at ISO>; TRIES=240
+     for i in $(seq "$TRIES"); do
+       P=$(docker exec pocketquant-app python -c "from datetime import datetime; from pymongo import MongoClient; from pocketquant.core.config import get_settings as g; s=g(); db=MongoClient(str(s.mongodb_url))[s.mongodb_database]; p=db.positions.find_one({'subscription_id': '$ID', 'opened_at': {'\$gte': datetime.fromisoformat('$R')}}, sort=[('opened_at', 1)]); print(p['opened_at'].isoformat() if p else '')")
+       if [ -n "$P" ]; then echo "first_entry $P"; exit 0; fi
+       [ "$i" -lt "$TRIES" ] && sleep 60
+     done
+     echo "no_entry $(date -u +%FT%TZ)"
+     EOF
+     ```
+     `first_entry <opened_at>` → admin call `pause` (no gate), check `<GET safeguards>` shows `"entries_paused":true`, append `- paused after first entry: <UTC>, position opened <opened_at>`, then continue at step 1. `no_entry` → continue at step 1 (it ends with the `NOT_YET` exit of step 3 as before).
   1. Logs since `resumed_at` (`R`), scoped to the live ids:
      ```bash
      HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r')
@@ -218,9 +235,9 @@ Code blocks below are indented for Markdown. Before running one, remove only the
      EOF
      ```
   2. First trade: `db.trades.find_one({"run_id": "<id>", "entry_time": {"$gte": <R>}}, sort=[("exit_time", 1)])` (snippet style of Task 11.7); print its `entry_order_id`, `exit_order_id`, `entry_time`, `exit_time`, `quantity`, `pnl`, `commission`, `sl_price`, or `None`.
-  3. Any count in step 1 > 0 → stop and report. Step 2 `None` → end with `NOT_YET: no closed live trade yet for <code>`, resume after now + 24 h. More trades after the first are allowed.
+  3. Any count in step 1 > 0 → stop and report. Step 2 `None` → end with `NOT_YET: no closed live trade yet for <code>`, resume after now + 24 h. More trades after the first are allowed (they can open only while no worker watches; see Risk).
 - Success criteria: the first trade is known.
-- Verify: step 1 prints `stop_events 0`, `below_min 0 0`, `order_rejected 0`; step 2 prints a trade.
+- Verify: after a step 0 `first_entry`, `grep -c "paused after first entry" plans/261019-1957-exness-go-live/reports/round-trip.md` increased by 1; step 1 prints `stop_events 0`, `below_min 0 0`, `order_rejected 0`; step 2 prints a trade.
 
 ### Task 11.10 — Per-trade checks and [USER] SL
 - Goal: the first trade's entry and exit are recorded once each.
@@ -268,7 +285,7 @@ Code blocks below are indented for Markdown. Before running one, remove only the
      asyncio.run(main())
      EOF
      ```
-  2. `balance_deals` > 0 or `clamped True` → [ASK]: "AC6 is void for this run (<a deposit or withdrawal is in the window | the baseline is older than the deal history window>). Accept without AC6, or stop?" Accept → append `- AC6: void (<reason>), accepted <UTC>` and go to step 4. Stop → stop and report.
+  2. `balance_deals` > 0 or `clamped True` → [ASK]: "Recommended: <`accept` (only the deal history window is clamped) | `stop` (a deposit or withdrawal is in the window and needs an explanation first)>. AC6 is void for this run (<a deposit or withdrawal is in the window | the baseline is older than the deal history window>). Reply `accept` (without AC6) or `stop`." Use `accept` as the recommendation only when `clamped True` and `balance_deals 0`; otherwise `stop`. Accept → append `- AC6: void (<reason>), accepted <UTC>` and go to step 4. Stop → stop and report.
   3. `delta < code − 0.01` → stop and report (the cap under-counts losses). `delta > code + 0.01` → record `AC6 over-count: follow-up adapter fix` (safe; the cap trips early).
   4. Pause-while-open (record only): `docker logs --since <R> pocketquant-app 2>&1 | grep -E "exness.safeguards.entries_(paused|resumed)"` timestamps against the first position's `opened_at`/`closed_at`; record `pause while open: yes|no`.
   5. Append the step 1 line and the step 3-4 notes to the section.
@@ -279,8 +296,8 @@ Code blocks below are indented for Markdown. Before running one, remove only the
 - Goal: the user sets the post-round-trip state; the run is done.
 - Target files and symbols: safeguards; `plans/261019-1957-exness-go-live/reports/round-trip.md`; `.cache/ssh/vps_key`.
 - Steps:
-  1. Ask: "Round trip for <code> is recorded (AC6 <line>). Keep entries on (Phase 12 observes), or pause entries? Reply `keep on` or `pause`."
-  2. `pause` → admin call `pause`; `<GET safeguards>` shows true. Phase 12 rows then expect paused.
+  1. The round trip is clean when Tasks 11.9-11.11 passed (no stop event, `sl seen`) and the section has an AC6 line or an accepted `AC6: void` line. Ask: "Recommended: <`keep on` (clean round trip; Phase 12 then observes real trading under the 25 USD daily cap) | `pause` (<what was not clean>)>. Round trip for <code> is recorded (AC6 <line>); entries are now <GET safeguards entries_paused> (paused since the first entry). `keep on` resumes entries and starts the five-day observation of a trading system; `pause` keeps entries paused, and Phase 12 rows then record a paused system (`new_trades 0`). Reply `keep on` or `pause`."
+  2. `pause` → if not paused, admin call `pause`; `<GET safeguards>` shows true. Phase 12 rows then expect paused. `keep on` → if paused, admin call `resume`; `<GET safeguards>` shows `"entries_paused":false`.
   3. Append `- after round trip: <keep on|paused>` and `- round_trip: DONE <UTC>`. Commit `docs(plans): record a live round trip`; `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop && git fetch origin` (never print the token); `rm -f .cache/ssh/vps_key`.
 - Success criteria: the section is closed.
 - Verify: `grep -c "round_trip: DONE" plans/261019-1957-exness-go-live/reports/round-trip.md` increased by 1; `test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo pushed` prints `pushed`.
@@ -295,6 +312,7 @@ Before any `NOT_YET` exit or a stop after Task 11.1, run `rm -f .cache/ssh/vps_k
 - A restart while positioned (L/M): the strategy state is lost; Task 11.1 stops and reports.
 - Margin rejection (`TRADING_RULE_INSUFFICIENT_MARGIN` → CANCELLED) (M/L): Task 11.2 checks margin.
 - Script calls compete with the app for the account rate (L/M): every script runs at rate fraction 0.2.
+- More than one order in a single-order run (M/L): the watch pauses only while a worker runs (step 0 watches about 4 h; Task 11.1 step 4 checks at each re-run). When the watch ends with `no_entry`, entries stay on until the next run (up to 24 h later), so a first trade can open and close unwatched and more can follow; each is 0.01 lot with a venue SL. Bound: one open position at a time per subscription (`submit_order` opens only when the subscription holds no position, `core/infra/brokers/exness/exness_broker_adapter.py:200-205`), and the 25 USD daily loss cap rejects an open once realized PnL for the UTC day is at or below -25 USD (`:261-263`). Worst case is about 50 USD per UTC day, about 100 USD if an unwatched window straddles midnight UTC, plus gap slippage (audit Q1). Accepted by the user 2026-10-21 00:43; no in-app feature.
 
 ## Rollback
 Softest first (`plan.md` "Rollback"): Pause; Pause over SSH; stop the subscription; close in the Exness app; flag off only with a flat account and after deleting every `exness` subscription. Planned restarts follow the "Restart while live" runbook (`docs/deployment.md`). To return a strategy to paper: pause, stop its `exness` subscription, confirm the account is flat (`GET /api/v1/subscriptions/<id>/positions` empty and no open position in the Exness app), then delete it [ASK], then create a paper subscription on the triple [ASK]. The venue adapter stays connected (Phase 02), so a later run reuses it.

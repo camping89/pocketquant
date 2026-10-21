@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Broker per subscription, one Exness adapter per process (B6, B9)"
-status: pending
+status: completed
 priority: P1
 effort: 0.5d
 dependencies: []
@@ -113,6 +113,8 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261019-1957-exness
 - A venue adapter stays connected after its last subscription is deleted (L/L): it is the one account stream, so a venue SL close is still recorded.
 - OKX instances pool per type (L/L). No OKX subscription exists; OKX ignores `contract_spec` (`broker_factory.py:68-83`).
 - `DEFAULT_BROKER=paper` stays in prod `.env`; harmless (`extra="ignore"`, `docs/deployment.md:76`).
+- Found while cooking (follow-up, L/L): `StrategyAppService.stop()` disconnects only brokers in `_brokers`, so an unheld pooled venue adapter is not disconnected at engine stop. Fix later by disconnecting the pool and `_brokers`, deduped by identity.
+- Found while cooking: a bad stored `broker` makes `SubscriptionRepository.list_all` raise, so the app does not start if the document exists at boot, and the subscription list and delete by id fail too, not only reconcile. Fails closed; the fix is a direct Mongo edit.
 
 ## Rollback
 Revert the commit. Documents that gained `broker` keep it; old code ignores it. In prod, deploy the revert only through the "Restart while live" runbook (`docs/deployment.md`).

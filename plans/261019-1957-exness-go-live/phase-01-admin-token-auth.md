@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Admin-token auth on every mutation route (B5)"
-status: pending
+status: completed
 priority: P1
 effort: 0.5d
 dependencies: []

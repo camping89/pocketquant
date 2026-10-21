@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Count unexpected 1m bars on the integrity WARNING"
-status: pending
+status: completed
 priority: P2
 effort: 1h
 dependencies: []
