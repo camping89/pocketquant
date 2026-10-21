@@ -1,9 +1,11 @@
 /**
  * 3-pane CSS Grid wrapper for the strategies operator dashboard.
+ * The Exness strip sits above the panes on every width.
  * Desktop: 240px sidebar | 1fr main | 360px dashboard
  * Mobile <768px: tab-controlled single pane view.
  */
 import { useState, useMemo } from 'react'
+import { ExnessStrip } from './exness-strip'
 import { StrategyListSidebar } from './strategy-list-sidebar'
 import { StrategyConfigCard } from './strategy-config-card'
 import { DashboardColumn } from './dashboard-column'
@@ -121,7 +123,9 @@ export function StrategiesPageLayout() {
   )
 
   return (
-    <>
+    <div className="strategies-page">
+      <ExnessStrip />
+
       <div className="strategies-layout">
         <div className="strategies-sidebar">
           <StrategyListSidebar
@@ -228,6 +232,6 @@ export function StrategiesPageLayout() {
           )}
         </div>
       </div>
-    </>
+    </div>
   )
 }

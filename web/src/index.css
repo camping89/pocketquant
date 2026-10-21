@@ -642,6 +642,110 @@ input, select {
   color: #ffb74d;
   border-color: #ffa726;
 }
+.btn-danger {
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.4);
+}
+.btn-danger:hover:not(:disabled) {
+  color: #ef5350;
+  border-color: #ef5350;
+}
+
+/* Money chip beside an action button: always visible, so it works on touch. */
+.risk {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  cursor: help;
+}
+.risk-real { background: rgba(239, 83, 80, 0.15); color: #ef5350; border: 1px solid rgba(239, 83, 80, 0.4); }
+.risk-paper { background: rgba(139, 139, 154, 0.15); color: var(--text-secondary); border: 1px solid transparent; }
+
+/* Broker badge on a strategy row: PAPER or LIVE. */
+.mode {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+.mode-paper { background: rgba(139, 139, 154, 0.15); color: var(--text-secondary); }
+.mode-live { background: rgba(239, 83, 80, 0.15); color: #ef5350; border: 1px solid rgba(239, 83, 80, 0.4); }
+
+/* Run state on a strategy row: RUNNING, STARTING or STOPPED. */
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.state-pill--running::before,
+.state-pill--starting::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: status-pulse 1.4s ease infinite;
+}
+.state-pill--running { background: rgba(38, 166, 154, 0.15); color: #26a69a; }
+.state-pill--starting { background: rgba(255, 167, 38, 0.15); color: #ffa726; }
+.state-pill--stopped { background: rgba(139, 139, 154, 0.12); color: #8b8b9a; }
+
+/* Exness strip above the strategies page: account caps and the entry pause. */
+.exness-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 7px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+.exness-strip__key { color: var(--text-secondary); }
+.exness-strip__value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.exness-strip__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.exness-strip__chip--off { background: rgba(139, 139, 154, 0.15); color: var(--text-secondary); }
+.exness-strip__chip--on { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
+.exness-strip__chip--paused {
+  background: rgba(255, 167, 38, 0.15);
+  color: #ffa726;
+  border: 1px solid rgba(255, 167, 38, 0.45);
+  padding: 2px 8px;
+}
+.exness-strip__chip--paused::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffa726;
+  animation: status-pulse 1.4s ease infinite;
+}
+.exness-strip__actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.exness-strip__actions .btn,
+.exness-strip__actions .btn-sm { min-height: 28px; padding: 4px 14px; font-size: 12px; }
 
 .actions {
   display: flex;
@@ -1506,10 +1610,18 @@ input, select {
 
 /* ===== Strategies Page ===== */
 
+/* Strip + panes share one column so the strip never pushes the panes off-screen. */
+.strategies-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 41px); /* subtract app-nav height */
+}
+
 /* Desktop 3-pane grid — always visible on md+ */
 .strategies-layout {
   display: none;
-  height: calc(100vh - 41px); /* subtract app-nav height */
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1517,7 +1629,8 @@ input, select {
 .strategies-mobile {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 41px);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1976,7 +2089,7 @@ input, select {
   color: var(--down-color);
 }
 
-/* Status dot pulse animation (used by StatusDot component) */
+/* Pulse animation used by state pills and status badges */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(0.85); }

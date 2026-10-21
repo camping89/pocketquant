@@ -1,8 +1,8 @@
 /**
  * Single row in the strategy list sidebar.
- * Shows status dot + symbol code + exchange badge + timeframe.
+ * Line 1: symbol code + exchange badge + PAPER/LIVE badge.
+ * Line 2: timeframe · strategy code + one run-state pill.
  */
-import { StatusDot, type StrategyStatus } from './status-dot'
 import { parseSymbol } from '../../lib/symbol-format'
 import type { Subscription } from '../../api/strategy-api'
 
@@ -12,16 +12,19 @@ interface StrategyCardProps {
   onClick: () => void
 }
 
-/** Map forward run-state → strategy display status. */
-function toStrategyStatus(sub: Subscription): StrategyStatus {
+type RowState = 'running' | 'starting' | 'stopped'
+
+/** Map forward run-state → the row's state pill. */
+function toRowState(sub: Subscription): RowState {
   if (sub.actual_state === 'running') return 'running'
   if (sub.desired_state === 'running') return 'starting'  // converging
-  return 'idle'
+  return 'stopped'
 }
 
 export function StrategyCard({ sub, selected, onClick }: StrategyCardProps) {
   const { code, exchange } = parseSymbol(sub.symbol)
-  const status = toStrategyStatus(sub)
+  const state = toRowState(sub)
+  const live = sub.broker === 'exness'
 
   return (
     <button type="button"
@@ -41,10 +44,8 @@ export function StrategyCard({ sub, selected, onClick }: StrategyCardProps) {
         transition: 'background 0.12s',
       }}
     >
-      <StatusDot status={status} />
-
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
             {code}
           </span>
@@ -64,9 +65,23 @@ export function StrategyCard({ sub, selected, onClick }: StrategyCardProps) {
               {exchange}
             </span>
           )}
+          <span className={`mode ${live ? 'mode-live' : 'mode-paper'}`} title={`broker: ${sub.broker}`}>
+            {live ? 'LIVE' : 'PAPER'}
+          </span>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            marginTop: 1,
+          }}
+        >
           {sub.interval} · {sub.strategy_code}
+          <span className={`state-pill state-pill--${state}`}>{state.toUpperCase()}</span>
         </div>
       </div>
     </button>

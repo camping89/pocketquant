@@ -63,6 +63,7 @@ export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSid
         <button type="button"
           className="btn-sm"
           onClick={() => setShowDialog(true)}
+          title="Creates a paper subscription"
           style={{ padding: '2px 10px', fontSize: 11 }}
         >
           + New

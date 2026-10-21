@@ -1,8 +1,10 @@
 /**
  * Center bottom panel showing symbol/interval/template params for the
- * selected subscription. Read-only when running, editable when idle.
+ * selected subscription. Start/Stop sits in the header; Delete sits alone
+ * in the footer so no two red buttons share a group.
  */
 import { parseSymbol } from '../../lib/symbol-format'
+import { moneyHint } from '../../lib/money-hint'
 import { StartStopButton } from './start-stop-button'
 import {
   useStartStrategy,
@@ -41,6 +43,8 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
   const deleteMut = useDeleteSubscription(sub.strategy_code)
 
   const isLoading = startMut.isPending || stopMut.isPending || deleteMut.isPending
+  const runHint = moneyHint(sub.broker, isRunning ? 'stop' : 'start')
+  const deleteHint = moneyHint(sub.broker, 'delete')
 
   function handleDelete() {
     if (isRunning) return
@@ -68,26 +72,17 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
           Subscription Config
         </span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span className={`risk ${runHint.real ? 'risk-real' : 'risk-paper'}`} title={runHint.title}>
+            {runHint.chip}
+          </span>
           <StartStopButton
             isRunning={isRunning}
             isLoading={isLoading}
             onStart={() => startMut.mutate(sub.id)}
             onStop={() => stopMut.mutate(sub.id)}
+            broker={sub.broker}
+            label={`${code} · ${sub.interval}`}
           />
-          <button
-            type="button"
-            className="btn-sm"
-            onClick={handleDelete}
-            disabled={isLoading || isRunning}
-            title={isRunning ? 'Stop the strategy before deleting' : 'Delete subscription'}
-            style={{
-              color: '#ef5350',
-              borderColor: 'rgba(239,83,80,0.35)',
-              background: 'rgba(239,83,80,0.08)',
-            }}
-          >
-            {deleteMut.isPending ? 'Deleting…' : 'Delete'}
-          </button>
         </div>
       </div>
 
@@ -141,6 +136,31 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
         >
           {sub.id}
         </span>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: 6,
+          paddingTop: 10,
+          marginTop: 4,
+          borderTop: '1px solid var(--border-color)',
+        }}
+      >
+        <span className={`risk ${deleteHint.real ? 'risk-real' : 'risk-paper'}`} title={deleteHint.title}>
+          {deleteHint.chip}
+        </span>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={handleDelete}
+          disabled={isLoading || isRunning}
+          title={isRunning ? 'Stop the strategy before deleting' : deleteHint.title}
+        >
+          {deleteMut.isPending ? 'Deleting…' : 'Delete'}
+        </button>
       </div>
 
       {(startMut.isError || stopMut.isError || deleteMut.isError) && (

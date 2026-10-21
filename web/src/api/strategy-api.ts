@@ -18,6 +18,8 @@ export interface Subscription {
   actual_state: RunState
   /** Derived: actual_state === 'running'. Kept for back-compat. */
   is_running: boolean
+  /** Set at create time; `exness` sends real orders. */
+  broker: 'paper' | 'exness'
 }
 
 export async function listSubscriptions(strategyCode?: string): Promise<Subscription[]> {
