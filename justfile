@@ -36,7 +36,24 @@ reset:
 # Route iteration tip: ENABLE_JOBS=false just be — skips the trading runtime so --reload restarts stay light.
 be:
     # The app asserts a UTC process timezone at startup, so pin it here too.
-    TZ=UTC {{python}} -m uvicorn pocketquant.app.main:app --reload --host 0.0.0.0 --port 41921
+    TZ=UTC {{python}} -m uvicorn pocketquant.app.main:app --reload --host 127.0.0.1 --port 41921
+
+# Forward prod Mongo -> localhost:27017, Redis -> localhost:6379, Portainer -> localhost:$PORTAINER_PORT.
+# Prod binds them to 127.0.0.1. Keep this running while debugging; Ctrl+C closes it.
+tunnel:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cfg=../pocketquant-config/vps/default
+    port() { grep "^$1=" "$cfg/.env" | cut -d= -f2 | tr -d '\r '; }
+    mkdir -p .cache/ssh
+    tr -d '\r' < "$cfg/id_rsa" > .cache/ssh/tunnel_key
+    chmod 600 .cache/ssh/tunnel_key
+    trap 'rm -f .cache/ssh/tunnel_key' EXIT
+    ssh -i .cache/ssh/tunnel_key -N -o ExitOnForwardFailure=yes \
+      -L "27017:localhost:$(port MONGO_PORT)" \
+      -L "6379:localhost:$(port REDIS_PORT)" \
+      -L "$(port PORTAINER_PORT):localhost:$(port PORTAINER_PORT)" \
+      "$(head -1 "$cfg/host" | tr -d '\r')"
 
 # Start frontend dev server (vite proxies /api → app on 41921)
 [working-directory: 'web']

@@ -63,7 +63,7 @@ EOF
 
 # ─── 1. Container running checks ───────────────────────────
 
-CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-portainer"
+CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-portainer pocketquant-cloudflared"
 for c in $CONTAINERS; do
   running=$(container_running "$c")
   if [ "$running" = "true" ]; then
@@ -75,7 +75,7 @@ done
 
 # ─── 2. Docker health status ───────────────────────────────
 
-HEALTH_CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis"
+HEALTH_CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-cloudflared"
 for c in $HEALTH_CONTAINERS; do
   health=$(container_health "$c")
   if [ "$health" = "healthy" ]; then

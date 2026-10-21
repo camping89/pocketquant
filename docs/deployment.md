@@ -55,17 +55,19 @@ ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -o /dev/null -w 'HTTP
 
 ## Platform & URLs
 
-**Vultr VPS** (Ubuntu), self-managed Docker Compose. 5 containers: app (FastAPI + routes + SPA, internal :41921), web (nginx reverse proxy), MongoDB, Redis, Portainer. Images built by Actions, pushed to Docker Hub, pulled on the VPS.
+**Vultr VPS** (Ubuntu), self-managed Docker Compose. 6 containers: app (FastAPI + routes + SPA, internal :41921), web (nginx reverse proxy), cloudflared (Cloudflare Tunnel, outbound only), MongoDB, Redis, Portainer. Networks: `edge` (cloudflared, web) and `backend` (web, app, MongoDB, Redis). Images built by Actions, pushed to Docker Hub, pulled on the VPS.
 
 | Surface | URL |
 |---|---|
 | Public SPA | `https://pocketquant.xyz/` |
 | API (Swagger) | `https://pocketquant.xyz/api/v1/docs` |
 | App health | container-internal: `docker exec pocketquant-app curl http://localhost:41921/health` |
-| Portainer | `http://<vps-ip>:$PORTAINER_PORT` (direct, not via Cloudflare) |
+| Portainer | `http://localhost:$PORTAINER_PORT` (through `just tunnel`, not via Cloudflare) |
 | Docker Hub | `https://hub.docker.com/r/<DOCKERHUB_USERNAME>/pocketquant` |
 
-Traffic enters via **Cloudflare** (orange-cloud proxy) → `web` container (nginx, `$WEB_PORT`) → app (internal :41921). Cloudflare terminates browser TLS. DNS: `A @ → <vps-ip>` + `CNAME www → pocketquant.xyz`, both proxied. The SPA is domain-agnostic (calls `window.location.origin + /api/...`), so no rebuild on domain change. SSH (22) and DB ports (`$MONGO_PORT`/`$REDIS_PORT`) reach the VPS by IP directly, not through Cloudflare.
+Traffic enters via **Cloudflare** (orange-cloud proxy) → `web` container (nginx, `$WEB_PORT`) → app (internal :41921). Cloudflare terminates browser TLS. DNS: `A @ → <vps-ip>` + `CNAME www → pocketquant.xyz`, both proxied. The SPA is domain-agnostic (calls `window.location.origin + /api/...`), so no rebuild on domain change. SSH (22) reaches the VPS by IP; Mongo, Redis and Portainer bind 127.0.0.1 (use `just tunnel`).
+
+nginx allows at most 10 open SSE streams per client IP (429 beyond).
 
 ## Environment & Credentials
 
@@ -73,7 +75,7 @@ Prod config (host, SSH key, `.env`, Docker Hub + Portainer creds) lives in the s
 
 **Change a prod value:** edit the file in `pocketquant-config/` → `git push` there → push any commit to `pocketquant` (or `gh workflow run cicd.yml`) to redeploy.
 
-`app` consumes `.env` via `env_file:` in `compose.prod.yml` — no `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` use internal docker service names (`mongodb:27017`, `redis:6379`); `MONGO_PORT`/`REDIS_PORT` are host-published ports for external tools. App reads keys via Pydantic (`extra="ignore"`), so unused keys are harmless; a genuinely missing value surfaces as a container that fails to boot, caught by `11-verify.sh`.
+`app` consumes `.env` via `env_file:` in `compose.prod.yml` — no `environment:` block to keep in sync. `MONGODB_URL`/`REDIS_URL` use internal docker service names (`mongodb:27017`, `redis:6379`); `MONGO_PORT`/`REDIS_PORT` are loopback host ports that external tools reach through `just tunnel`. App reads keys via Pydantic (`extra="ignore"`), so unused keys are harmless; a genuinely missing value surfaces as a container that fails to boot, caught by `11-verify.sh`.
 
 Config files under `pocketquant-config/`:
 
@@ -98,7 +100,8 @@ Key prod env vars (full set in `vps/default/.env`):
 | `REDIS_PASSWORD` | Yes | Redis auth (empty → deploy refuses; would silently disable auth) |
 | `ADMIN_TOKEN` | Yes | Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`. |
 | `WEB_PORT` | Yes | Public SPA entry (`80`, or `443` for TLS) |
-| `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host-published ports (use obscure values) |
+| `TUNNEL_TOKEN` | Yes | Token of the Cloudflare Tunnel run by `cloudflared`. Routes are set in the Cloudflare dashboard (Networking > Tunnels), not here. |
+| `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host ports, bound to 127.0.0.1 (use obscure values) |
 | `OKX_API_KEY` / `_SECRET` / `_PASSPHRASE` | No | OKX live trading only |
 | `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
 | `TRADINGVIEW_PLAN` | No | `free` (default) or `cme_non_pro`. The single index-futures entitlement knob; derives bar cap, poll floor and real-time. |
@@ -117,7 +120,7 @@ Key prod env vars (full set in `vps/default/.env`):
 
 The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. A transport failure or a 421 clears it; the next call resolves it again. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
 
-Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `$MONGO_PORT`→27017 · Redis `$REDIS_PORT`→6379 · Portainer `$PORTAINER_PORT`→9000.
+Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `127.0.0.1:$MONGO_PORT`→27017 · Redis `127.0.0.1:$REDIS_PORT`→6379 · Portainer `127.0.0.1:$PORTAINER_PORT`→9000.
 
 ## Prerequisites (one-time)
 
@@ -127,7 +130,7 @@ Bootstrap the deploy key — generates an ed25519 read-only key on `pocketquant-
 cd ../pocketquant-config && bash one-time/bootstrap-gh.sh
 ```
 
-That is the only secret this repo needs. First deploy = push (or `gh workflow run cicd.yml`); the `deploy` job installs Docker if missing, pulls images, starts all 5 containers, and health-gates the app. For a brand-new VPS, see [VPS Migration](#vps-migration).
+That is the only secret this repo needs. First deploy = push (or `gh workflow run cicd.yml`); the `deploy` job installs Docker if missing, pulls images, starts every container, and health-gates the app. For a brand-new VPS, see [VPS Migration](#vps-migration).
 
 ---
 
@@ -175,30 +178,27 @@ git commit --allow-empty -m "redeploy" && git push origin master
 
 ## Local access (from your machine)
 
+Run `just tunnel` first and keep it open (Ctrl+C closes it). It forwards prod Mongo to `localhost:27017`, Redis to `localhost:6379` and Portainer to `localhost:$PORTAINER_PORT`; local 52017/53679 stay free for `just up`/`just redis`.
+
 | Tool | Connection |
 |---|---|
 | Swagger | `https://pocketquant.xyz/api/v1/docs` (via Cloudflare) |
-| DataGrip | `mongodb://pocketquant:PASSWORD@<vps-ip>:$MONGO_PORT/pocketquant?authSource=admin` (direct) |
-| RedisInsight | `<vps-ip>:$REDIS_PORT` (direct) |
-| Portainer | `http://<vps-ip>:$PORTAINER_PORT` (direct) |
-
-SSH tunnel if DB ports are firewalled:
-
-```bash
-ssh -i pocketquant-config/vps/default/id_rsa -L 52017:localhost:52017 -L 53679:localhost:53679 "$(cat pocketquant-config/vps/default/host)"
-```
+| DataGrip | `mongodb://pocketquant:PASSWORD@localhost:27017/pocketquant?authSource=admin` |
+| RedisInsight | `localhost:6379` (password from `.env`) |
+| Portainer | `http://localhost:$PORTAINER_PORT` |
 
 **Run FE + BE locally against the prod VPS DB** (one source of truth for live debugging):
 
 ```bash
 cp .env .env.local-only.bak                          # back up local config first
-cp ../pocketquant-config/local/remote-db.env .env    # MONGODB_URL/REDIS_URL already point at VPS IP + creds
+cp ../pocketquant-config/local/remote-db.env .env    # MONGODB_URL/REDIS_URL point at localhost through `just tunnel`
+just tunnel   # in another terminal, first
 just be   # app on :41921
 just fe   # Vite on :5173
 ```
 
 - Local writes hit the **production** DB — treat destructive scripts with VPS-level care.
-- Keep `ENABLE_JOBS=false` (default in `remote-db.env`). The scheduler runs on PROD only; enabling it locally double-runs jobs against shared prod state. Multiple processes coordinate via the shared `apscheduler_jobs` collection — see `system-architecture.md`.
+- Keep `ENABLE_JOBS=false` (default in `remote-db.env`). The scheduler runs on PROD only; enabling it locally double-runs jobs against shared prod state. Multiple processes coordinate via the shared `apscheduler_jobs` collection — see `system-architecture.md`. With it off no reconcile loop or live collector starts, so no live broker connects. Its mutation routes need no token and write prod Mongo, which prod's reconcile then acts on.
 - `ENABLE_JOBS=false` does **not** stop the WS quote feed — `start_quote_feed` is ungated, so the realtime chart still streams locally. The feed writes only ephemeral `quote:latest` / `bar:current` keys to Redis; the gated `sync_1m` + cascade cron is the sole Mongo `bars` writer, so local persists **no bars** to prod Mongo.
 - To keep the local feed's in-progress bar/quote off prod's shared Redis, use `remote-db-local-redis.env` (`REDIS_URL` → local, `MONGODB_URL` → prod for history + closed bars). Start the local cache with `just redis` (only the redis service, not `just up`) **before** `just be` — Redis is a hard startup dependency, so the app crashes on boot if it is down.
 - To exercise the bar-building writer itself, go fully local (`all-local.env` + `just up`) with `ENABLE_JOBS=true` so `sync_1m` + cascade write bars to your own Mongo.
@@ -208,10 +208,10 @@ just fe   # Vite on :5173
 ## Firewall
 
 ```bash
-sudo ufw allow 22 && sudo ufw allow <PORTAINER_PORT>
-sudo ufw deny <MONGO_PORT> && sudo ufw deny <REDIS_PORT>
-sudo ufw enable
+sudo ufw allow 22 && sudo ufw enable
 ```
+
+Mongo, Redis and Portainer bind 127.0.0.1, so they need no ufw rule (Docker-published ports bypass ufw anyway).
 
 ## VPS Migration
 

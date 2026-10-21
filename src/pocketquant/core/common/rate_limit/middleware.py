@@ -4,6 +4,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+_UNLIMITED_PREFIX = "/api/v1/admin/safeguards"
+
 
 class TokenBucket:
     def __init__(self, capacity: int = 100, refill_rate: float = 10.0):
@@ -33,6 +35,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.refill_rate = refill_rate
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        # Pause must work while the API is flooded.
+        if request.url.path.startswith(_UNLIMITED_PREFIX):
+            return await call_next(request)
         cache = request.app.state.cache
         client_ip = request.client.host if request.client else "unknown"
         bucket_key = f"rate_limit:{client_ip}"
