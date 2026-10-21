@@ -346,6 +346,19 @@ input, select {
   color: var(--text-primary);
   border-bottom-color: var(--accent);
 }
+.app-nav__tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 4px;
+}
+/* Phone width: links on row 1, clock and settings on row 2. Pages below the
+   nav take the remaining height with flex, so a taller nav needs no change there. */
+@media (max-width: 767.98px) {
+  .app-nav { flex-wrap: wrap; padding: 0 8px; }
+  .app-nav a { padding: 8px 10px; }
+  .app-nav__tools { width: 100%; justify-content: flex-end; padding: 4px 0; }
+}
 
 /* ── Monitor Page ── */
 .monitor-page {
@@ -1614,7 +1627,8 @@ input, select {
 .strategies-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 41px); /* subtract app-nav height */
+  flex: 1;
+  min-height: 0;
 }
 
 /* Desktop 3-pane grid — always visible on md+ */
@@ -1707,14 +1721,16 @@ input, select {
 .backtest-layout {
   display: none;
   position: relative;
-  height: calc(100vh - 41px); /* subtract app-nav height */
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
 .backtest-mobile {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 41px);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

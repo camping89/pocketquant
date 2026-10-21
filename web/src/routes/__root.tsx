@@ -34,7 +34,7 @@ function RootLayout() {
           Monitor
         </Link>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingRight: 4 }}>
+        <div className="app-nav__tools">
           <LiveClock />
           <ThemeToggle />
           <TimezoneSwitcher />
