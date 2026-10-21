@@ -1,29 +1,22 @@
 /**
  * Left pane of the strategies dashboard.
- * Lists all subscriptions across all loaded strategies with filter + New button.
+ * Lists the subscriptions the page polls, with filter + New button.
  */
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { StrategyCard } from './strategy-card'
 import { NewSubscriptionDialog } from './new-subscription-dialog'
-import { listSubscriptions } from '../../api/strategy-api'
 import type { Subscription } from '../../api/strategy-api'
 
 interface StrategyListSidebarProps {
+  subs: Subscription[]
+  isLoading: boolean
   selectedSubId: string | null
   onSelect: (sub: Subscription) => void
 }
 
-export function StrategyListSidebar({ selectedSubId, onSelect }: StrategyListSidebarProps) {
+export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }: StrategyListSidebarProps) {
   const [showDialog, setShowDialog] = useState(false)
   const [filter, setFilter] = useState('')
-
-  const { data: subs = [], isLoading } = useQuery({
-    queryKey: ['subscriptions'],
-    queryFn: () => listSubscriptions(),
-    staleTime: 10_000,
-    refetchInterval: 5_000,
-  })
 
   const filtered = useMemo(() => {
     if (!filter) return subs

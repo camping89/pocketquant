@@ -5,6 +5,7 @@
  * Mobile <768px: tab-controlled single pane view.
  */
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ExnessStrip } from './exness-strip'
 import { StrategyListSidebar } from './strategy-list-sidebar'
 import { StrategyConfigCard } from './strategy-config-card'
@@ -13,7 +14,7 @@ import { StrategyChart } from './strategy-chart'
 import { IndicatorToggles } from '../controls/indicator-toggles'
 import { useStrategyTrades } from '../../hooks/use-strategy-trades'
 import { useOpenPosition } from '../../hooks/use-open-position'
-import type { Subscription } from '../../api/strategy-api'
+import { listSubscriptions, type Subscription } from '../../api/strategy-api'
 import type { Interval, IndicatorConfig } from '../../types/market-data'
 import type { Trade, OpenPosition as ChartOpenPosition } from '../../types/strategy'
 
@@ -45,7 +46,16 @@ function readStoredIndicators(): IndicatorConfig {
 }
 
 export function StrategiesPageLayout() {
-  const [selectedSub, setSelectedSub] = useState<Subscription | null>(null)
+  // Keep only the id: the selected row is read from the polled list on every
+  // render, so the config card follows Start/Stop without re-selecting.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { data: subs = [], isLoading: subsLoading } = useQuery({
+    queryKey: ['subscriptions'],
+    queryFn: () => listSubscriptions(),
+    staleTime: 10_000,
+    refetchInterval: 5_000,
+  })
+  const selectedSub = subs.find((s) => s.id === selectedId) ?? null
   const [mobileTab, setMobileTab] = useState<MobileTab>('list')
   const [indicators, setIndicators] = useState<IndicatorConfig>(readStoredIndicators)
 
@@ -103,7 +113,7 @@ export function StrategiesPageLayout() {
   }, [apiPosition])
 
   function handleSelectSub(sub: Subscription) {
-    setSelectedSub((prev) => (prev?.id === sub.id ? null : sub))
+    setSelectedId((prev) => (prev === sub.id ? null : sub.id))
     setMobileTab('config')
   }
 
@@ -129,7 +139,9 @@ export function StrategiesPageLayout() {
       <div className="strategies-layout">
         <div className="strategies-sidebar">
           <StrategyListSidebar
-            selectedSubId={selectedSub?.id ?? null}
+            subs={subs}
+            isLoading={subsLoading}
+            selectedSubId={selectedId}
             onSelect={handleSelectSub}
           />
         </div>
@@ -151,7 +163,7 @@ export function StrategiesPageLayout() {
                 />
               </div>
               <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
-                <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedSub(null)} />
+                <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedId(null)} />
               </div>
             </div>
           ) : (
@@ -196,7 +208,9 @@ export function StrategiesPageLayout() {
         <div className="strategies-mobile__pane">
           {mobileTab === 'list' && (
             <StrategyListSidebar
-              selectedSubId={selectedSub?.id ?? null}
+              subs={subs}
+              isLoading={subsLoading}
+              selectedSubId={selectedId}
               onSelect={handleSelectSub}
             />
           )}
@@ -216,7 +230,7 @@ export function StrategiesPageLayout() {
                   />
                 </div>
                 <div style={{ padding: 16 }}>
-                  <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedSub(null)} />
+                  <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedId(null)} />
                 </div>
               </div>
             ) : emptyCenter
