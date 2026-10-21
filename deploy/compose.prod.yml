@@ -5,8 +5,7 @@ services:
     image: ${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}
     container_name: pocketquant-web
     restart: unless-stopped
-    ports:
-      - "${WEB_PORT:-80}:80"
+    # No host port: Cloudflare Tunnel (cloudflared) is the only public entry.
     networks: [edge, backend]
     # nginx proxies /api → app (the single backend). Wait for app readiness so
     # the SPA never hits a dead upstream on first paint.

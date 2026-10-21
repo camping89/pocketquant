@@ -10,6 +10,7 @@ set -uo pipefail
 
 # cd to deploy/ (one level up from vps/) so .env, reports/ resolve relatively
 cd "$(dirname "$0")/.."
+source .env 2>/dev/null || true
 
 REPORT_DIR="./reports"
 mkdir -p "$REPORT_DIR"
@@ -115,10 +116,8 @@ fi
 
 # ─── 3b. Web container: SPA routes ─────────────────────────
 
-source .env 2>/dev/null || true
-WEB_PORT_VAL="${WEB_PORT:-80}"
 for path in "/" "/strategies" "/monitor"; do
-  http=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${WEB_PORT_VAL}${path}" || echo "000")
+  http=$(docker exec pocketquant-app curl -s -o /dev/null -w "%{http_code}" "http://web:80${path}" || echo "000")
   if [ "$http" = "200" ]; then
     check "Web ${path}" "$PASS" "HTTP 200"
   else
@@ -137,7 +136,7 @@ fi
 
 # ─── 5. Redis direct check ─────────────────────────────────
 
-redis_ok=$(docker exec pocketquant-redis redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning PING 2>/dev/null || echo "")
+redis_ok=$(REDISCLI_AUTH="${REDIS_PASSWORD:-}" docker exec -e REDISCLI_AUTH pocketquant-redis redis-cli PING 2>/dev/null || echo "")
 if [ "$redis_ok" = "PONG" ]; then
   check "Redis ping" "$PASS" "PONG"
 else
@@ -166,22 +165,6 @@ elif [ "$mem_pct" -lt 90 ]; then
   check "Memory" "$WARN" "${mem_used}MB/${mem_total}MB (${mem_pct}%)"
 else
   check "Memory" "$FAIL" "${mem_used}MB/${mem_total}MB (${mem_pct}%) — critical"
-fi
-
-# ─── 8. Port listening ─────────────────────────────────────
-# app is container-internal (no host-published port); the only public
-# listener is web (nginx). Verify that.
-
-if command -v ss &>/dev/null; then
-  source .env 2>/dev/null || true
-  web_port="${WEB_PORT:-80}"
-  if ss -tlnp | grep -q ":${web_port} "; then
-    check "Port $web_port" "$PASS" "listening"
-  else
-    check "Port $web_port" "$FAIL" "not listening"
-  fi
-else
-  check "Port check" "$WARN" "ss not available"
 fi
 
 # ─── 9. Image tag ──────────────────────────────────────────

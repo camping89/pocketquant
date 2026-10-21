@@ -55,7 +55,7 @@ ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -o /dev/null -w 'HTTP
 
 ## Platform & URLs
 
-**Vultr VPS** (Ubuntu), self-managed Docker Compose. 6 containers: app (FastAPI + routes + SPA, internal :41921), web (nginx reverse proxy), cloudflared (Cloudflare Tunnel, outbound only), MongoDB, Redis, Portainer. Networks: `edge` (cloudflared, web) and `backend` (web, app, MongoDB, Redis). Images built by Actions, pushed to Docker Hub, pulled on the VPS.
+**Vultr VPS** (Ubuntu), self-managed Docker Compose. 6 containers: app (FastAPI + routes + SPA, internal :41921), web (nginx reverse proxy, internal), cloudflared (Cloudflare Tunnel, outbound only), MongoDB, Redis, Portainer. Networks: `edge` (cloudflared, web) and `backend` (web, app, MongoDB, Redis). Images built by Actions, pushed to Docker Hub, pulled on the VPS.
 
 | Surface | URL |
 |---|---|
@@ -65,7 +65,7 @@ ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -o /dev/null -w 'HTTP
 | Portainer | `http://localhost:$PORTAINER_PORT` (through `just tunnel`, not via Cloudflare) |
 | Docker Hub | `https://hub.docker.com/r/<DOCKERHUB_USERNAME>/pocketquant` |
 
-Traffic enters via **Cloudflare** (orange-cloud proxy) → `web` container (nginx, `$WEB_PORT`) → app (internal :41921). Cloudflare terminates browser TLS. DNS: `A @ → <vps-ip>` + `CNAME www → pocketquant.xyz`, both proxied. The SPA is domain-agnostic (calls `window.location.origin + /api/...`), so no rebuild on domain change. SSH (22) reaches the VPS by IP; Mongo, Redis and Portainer bind 127.0.0.1 (use `just tunnel`).
+Traffic enters via Cloudflare → Cloudflare Tunnel (`cloudflared`, outbound only) → `web` (nginx :80, no host port) → app (internal :41921). Cloudflare terminates browser TLS. DNS: the tunnel's routes `pocketquant.xyz` and `www`; no A record points at the VPS. The SPA is domain-agnostic (calls `window.location.origin + /api/...`), so no rebuild on domain change. SSH (22) is the only public port on the VPS; Mongo, Redis and Portainer bind 127.0.0.1 (use `just tunnel`).
 
 nginx allows at most 10 open SSE streams per client IP (429 beyond).
 
@@ -99,7 +99,6 @@ Key prod env vars (full set in `vps/default/.env`):
 | `MONGO_USER` / `MONGO_PASSWORD` | Yes | Mongo root creds |
 | `REDIS_PASSWORD` | Yes | Redis auth (empty → deploy refuses; would silently disable auth) |
 | `ADMIN_TOKEN` | Yes | Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`. |
-| `WEB_PORT` | Yes | Public SPA entry (`80`, or `443` for TLS) |
 | `TUNNEL_TOKEN` | Yes | Token of the Cloudflare Tunnel run by `cloudflared`. Routes are set in the Cloudflare dashboard (Networking > Tunnels), not here. |
 | `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host ports, bound to 127.0.0.1 (use obscure values) |
 | `OKX_API_KEY` / `_SECRET` / `_PASSPHRASE` | No | OKX live trading only |
@@ -120,7 +119,7 @@ Key prod env vars (full set in `vps/default/.env`):
 
 The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. A transport failure or a 421 clears it; the next call resolves it again. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
 
-Port map: app `41921` (internal, no host port) · web `$WEB_PORT` (public) · Mongo `127.0.0.1:$MONGO_PORT`→27017 · Redis `127.0.0.1:$REDIS_PORT`→6379 · Portainer `127.0.0.1:$PORTAINER_PORT`→9000.
+Port map: app `41921` (internal, no host port) · web `80` (internal, no host port) · Mongo `127.0.0.1:$MONGO_PORT`→27017 · Redis `127.0.0.1:$REDIS_PORT`→6379 · Portainer `127.0.0.1:$PORTAINER_PORT`→9000.
 
 ## Prerequisites (one-time)
 
@@ -135,6 +134,27 @@ That is the only secret this repo needs. First deploy = push (or `gh workflow ru
 ---
 
 **Operator Runbook — break-glass. Needed only when a deploy fails or for ops tasks.**
+
+## Stop real-money entries when the site is down
+The tunnel is the only public path to the SPA. Pause entries over SSH; the token stays inside the container:
+
+```bash
+ssh -i <key> <host> 'docker exec -i pocketquant-app sh -s' <<'EOF'
+curl -s -X POST -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:41921/api/v1/admin/safeguards/pause
+EOF
+```
+
+Then close any open position in the Exness app. The pause is stored and survives a restart.
+
+## Restart while live
+Use this for every planned restart (deploy, rollback, config dispatch) while an `exness` subscription exists. The pause survives a restart; strategy state (warmup, open direction) does not.
+1. Pause entries (Exness strip, or the SSH command above).
+2. Stop each `exness` subscription: `POST /api/v1/subscriptions/{id}/stop` with the token.
+3. Confirm the account is flat (`GET /api/v1/subscriptions/{id}/positions` is empty for each), or accept that the venue SL/TP protects the open position.
+4. Deploy.
+5. After the health check, `GET /api/v1/admin/safeguards` shows `"entries_paused":true`.
+6. Start each `exness` subscription again.
+7. Resume entries only with a fresh approval.
 
 ## Rollback
 
