@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "SPA: PAPER/LIVE badge, state pill, Exness strip with Pause/Resume, real-money hints (B11)"
-status: pending
+status: completed
 priority: P1
 effort: 0.5d
 dependencies: [1, 2, 5]
@@ -160,3 +160,11 @@ Spawn the `kongming` subagent for next-step counsel and pass:
 Apply kongming's guidance, then re-run the Verify step.
 If `kongming` cannot be spawned in this environment, STOP and report the same
 failure evidence to the user. Never continue by self-reasoning.
+
+## Outcome (2026-10-21)
+- Commit `e9d4e87` on `origin/develop`. `npm --prefix web test` 67 pass; build exit 0; lint 0 errors in touched files.
+- Task 6.11: the user delegated the check ("you test it for me"). The agent drove a headless browser against the local stack and checked items 1-6 against backend state. The user's earlier "UI ok" predated a working subscription (3 browser Pause POSTs were 401), so it is not counted.
+- Local run differences: Binance WS was unreachable, so the test subscription was written to local Mongo and its run state set by hand; Redis moved to port 46379 in the throwaway `.env` (53679 is in a Windows reserved range); `just be` fails under the PowerShell shell (`TZ=UTC`), so uvicorn ran directly.
+- Accepted deviation: the LIVE Start heading names `<code> · <interval>`, not only `<code>`.
+- Follow-up fixes found in the UI check, pushed to `develop`: `58d0bf5` (the config card read a row copy taken at click time, so Start/Stop stayed stale until re-select; the page now keeps the id and reads the polled list) and `906d6bb` (the app nav overflowed to 610 px at 375 px; it wraps to two rows below 768 px and the strategies/backtest pages fill with flex instead of a hard-coded 41px). Checked in the browser: no horizontal or vertical page overflow on `/`, `/strategies`, `/backtest`, `/monitor` at 375 px and 1440 px.
+- `71ad8e7`: delete and create invalidated `['subscriptions', code]`, which does not match the list key `['subscriptions']`, so the list waited for the next 5 s poll; every mutation now invalidates `['subscriptions']` (browser check: the row left the list 20 ms after the DELETE returned).

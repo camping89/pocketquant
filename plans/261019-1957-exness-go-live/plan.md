@@ -61,7 +61,7 @@ The runner executes `phase-NN` files in strict numeric order; file order is exec
 | 03  | [Re-resolve the access point on transport failure or 421 (B8)](./phase-03-access-point-re-resolve.md)               | 2h                               | —          | Completed |
 | 04  | [Count unexpected 1m bars on the integrity WARNING](./phase-04-integrity-unexpected-bars.md)                        | 1h                               | —          | Completed |
 | 05  | [Safeguards object, stored entry pause, leverage-aware sizing (B4, B11)](./phase-05-safeguards-pause-and-sizing.md) | 0.75d                            | 01, 02     | Completed |
-| 06  | [SPA: PAPER/LIVE badge, state pill, Exness strip, real-money hints (B11)](./phase-06-spa-mode-pause-and-hints.md)   | 0.5d                             | 01, 02, 05 | Pending |
+| 06  | [SPA: PAPER/LIVE badge, state pill, Exness strip, real-money hints (B11)](./phase-06-spa-mode-pause-and-hints.md)   | 0.5d                             | 01, 02, 05 | Completed |
 | 07  | [Cloudflare Tunnel service and edge hardening (B10, B12, B13)](./phase-07-cloudflare-tunnel-service.md)             | 3h + user 5 min                  | —          | Pending |
 | 08  | [Ship with live off: deploy A (B7, B12)](./phase-08-ship-with-live-off.md)                                          | 2.5h + CI                        | 01-07      | Pending |
 | 09  | [Tunnel cutover: deploy B (B10, B13)](./phase-09-tunnel-cutover.md)                                                 | 1.5h + CI + user 20 min          | 08         | Pending |
