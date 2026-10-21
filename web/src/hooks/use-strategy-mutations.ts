@@ -4,6 +4,9 @@
  * Routes are split:
  *   /strategies/{strategy_code}/...     template-scoped
  *   /subscriptions/{sub_id}/...         instance-scoped
+ *
+ * Every mutation invalidates ['subscriptions'], the key of the one list query.
+ * A longer key such as ['subscriptions', code] would not match it.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { addSymbol, removeSubscription, deleteStrategy } from '../api/strategy-api'
@@ -37,12 +40,12 @@ export function useStopStrategy() {
   })
 }
 
-export function useDeleteSubscription(strategyCode: string | null) {
+export function useDeleteSubscription() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (subId: string) => removeSubscription(subId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
+      qc.invalidateQueries({ queryKey: ['subscriptions'] })
     },
   })
 }
@@ -51,8 +54,8 @@ export function useDeleteStrategyById() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (strategyCode: string) => deleteStrategy(strategyCode),
-    onSuccess: (_, strategyCode) => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscriptions'] })
       qc.invalidateQueries({ queryKey: ['strategies'] })
     },
   })
@@ -64,7 +67,7 @@ export function useCreateSubscription(strategyCode: string | null) {
     mutationFn: (body: { symbol: string; interval: string }) =>
       addSymbol(strategyCode!, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions', strategyCode] })
+      qc.invalidateQueries({ queryKey: ['subscriptions'] })
     },
   })
 }

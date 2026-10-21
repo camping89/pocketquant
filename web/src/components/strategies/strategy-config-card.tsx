@@ -40,7 +40,7 @@ export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) 
 
   const startMut = useStartStrategy()
   const stopMut = useStopStrategy()
-  const deleteMut = useDeleteSubscription(sub.strategy_code)
+  const deleteMut = useDeleteSubscription()
 
   const isLoading = startMut.isPending || stopMut.isPending || deleteMut.isPending
   const runHint = moneyHint(sub.broker, isRunning ? 'stop' : 'start')
