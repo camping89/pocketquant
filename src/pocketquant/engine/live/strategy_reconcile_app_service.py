@@ -27,6 +27,7 @@ import asyncio
 import re
 
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.subscription import RunState, Subscription
@@ -54,6 +55,9 @@ class StrategyReconcileAppService:
         interval_s: Seconds between reconcile ticks (default 5.0).
         symbol_lookup: Resolves each subscription's contract units; without it
             every instance loads linear, which is only right for crypto.
+        exness_risk: Risk config for ``exness`` subscriptions (leverage and risk
+            per trade from the safeguards); every other subscription keeps
+            ``RiskConfig()``.
     """
 
     def __init__(
@@ -62,11 +66,13 @@ class StrategyReconcileAppService:
         strategy_service: StrategyAppService,
         interval_s: float = 5.0,
         symbol_lookup: SymbolLookupHelper | None = None,
+        exness_risk: RiskConfig | None = None,
     ) -> None:
         self._sub_repo = sub_repo
         self._strategy_service = strategy_service
         self._interval_s = interval_s
         self._symbol_lookup = symbol_lookup
+        self._exness_risk = exness_risk
 
     async def bootstrap(self) -> None:
         """Load one RAM instance per persisted subscription, once at startup.
@@ -171,6 +177,11 @@ class StrategyReconcileAppService:
                         interval=sub.interval.value,
                         contract_spec=contract_spec,
                         broker=sub.broker,
+                        risk=(
+                            self._exness_risk
+                            if sub.broker == "exness" and self._exness_risk
+                            else RiskConfig()
+                        ),
                     ),
                     strategy_class=strategy_class,
                 )

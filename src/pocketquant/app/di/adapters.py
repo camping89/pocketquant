@@ -23,6 +23,7 @@ from pocketquant.core.infra.binance.binance_websocket_adapter import (
     BinanceWebSocketAdapter,
 )
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.exness.exness_adapter import ExnessAdapter
 from pocketquant.core.infra.exness.exness_client import ExnessClient
@@ -36,6 +37,9 @@ from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import (
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
+)
 from pocketquant.core.infra.tradingview.tradingview_adapter import TradingViewAdapter
 from pocketquant.core.infra.tradingview.tradingview_quote_adapter import TradingViewQuoteAdapter
 from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
@@ -43,10 +47,22 @@ from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClien
 
 class AdaptersProvider(Provider):
     @provide(scope=Scope.APP)
+    async def get_safeguards(self, settings: Settings, repo: SafeguardsRepository) -> Safeguards:
+        """The env caps plus the stored entry pause, loaded before any strategy starts."""
+        return Safeguards(
+            live_trading=settings.exness_live_trading,
+            daily_loss_cap=settings.exness_daily_loss_cap,
+            max_lots=settings.exness_max_lots,
+            leverage=settings.exness_leverage,
+            risk_per_trade=settings.exness_risk_per_trade,
+            entries_paused=await repo.load_entries_paused(),
+        )
+
+    @provide(scope=Scope.APP)
     def get_broker_factory(
         self,
         event_bus: EventBus,
-        settings: Settings,
+        safeguards: Safeguards,
         exness_client: ExnessClient,
         position_repository: PositionRepository,
     ) -> BrokerFactory:
@@ -54,7 +70,7 @@ class AdaptersProvider(Provider):
             event_bus,
             exness_client=exness_client,
             position_repository=position_repository,
-            exness_live_trading=settings.exness_live_trading,
+            safeguards=safeguards,
         )
 
     @provide(scope=Scope.APP)

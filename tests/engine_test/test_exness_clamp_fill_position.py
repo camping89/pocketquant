@@ -14,6 +14,7 @@ import pytest
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
 from pocketquant.core.infra.brokers.exness.exness_broker_adapter import ExnessBrokerAdapter
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -47,8 +48,9 @@ async def test_clamped_size_fills_into_a_matching_position(db: Database) -> None
         _FakeClient(),  # type: ignore[arg-type]
         bus,
         PositionRepository(db),
-        daily_loss_cap=50.0,
-        max_lots=None,
+        Safeguards(
+            live_trading=True, daily_loss_cap=50.0, max_lots=None, leverage=1.0, risk_per_trade=0.02
+        ),
     )
     await broker._on_event({"event_type": "trading_state_snapshot", "payload": {"positions": []}})
     await broker.subscribe_order_updates(orders.on_order_update)

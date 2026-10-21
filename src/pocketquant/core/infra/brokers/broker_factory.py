@@ -3,6 +3,7 @@ from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.domain.trading import commission_model_for
 from pocketquant.core.infra.brokers.exness.exness_broker_adapter import ExnessBrokerAdapter
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.exness.exness_client import ExnessClient
@@ -25,12 +26,12 @@ class BrokerFactory:
         *,
         exness_client: ExnessClient | None = None,
         position_repository: PositionRepository | None = None,
-        exness_live_trading: bool = False,
+        safeguards: Safeguards | None = None,
     ) -> None:
         self._event_bus = event_bus
         self._exness_client = exness_client
         self._position_repository = position_repository
-        self._exness_live_trading = exness_live_trading
+        self._safeguards = safeguards
 
     def create(self, broker_type: str, config: dict) -> IBrokerPort:
         """Create broker instance from type and config.
@@ -84,7 +85,8 @@ class BrokerFactory:
 
         elif broker_type == "exness":
             # The first of two locks: the client also refuses order calls while off.
-            if not self._exness_live_trading:
+            safeguards = self._safeguards
+            if safeguards is None or not safeguards.live_trading:
                 raise ValueError("exness broker is disabled: EXNESS_LIVE_TRADING is false")
             client = self._exness_client
             if client is None or not client.is_configured or self._position_repository is None:
@@ -93,8 +95,7 @@ class BrokerFactory:
                 client,
                 self._event_bus,
                 self._position_repository,
-                daily_loss_cap=config.get("exness_daily_loss_cap"),
-                max_lots=config.get("exness_max_lots"),
+                safeguards,
             )
 
         else:

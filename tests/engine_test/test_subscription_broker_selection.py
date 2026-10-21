@@ -14,6 +14,7 @@ import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id
+from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.subscription import Subscription
@@ -56,22 +57,41 @@ def test_document_with_unknown_broker_fails_the_load() -> None:
         Subscription.from_mongo(doc)
 
 
+class _RecordingEngine:
+    def __init__(self) -> None:
+        self.loaded: list[StrategyConfig] = []
+
+    def get_strategy(self, sub_id: str) -> None:
+        return None
+
+    async def load_strategy(self, config: StrategyConfig, strategy_class=None) -> str:
+        self.loaded.append(config)
+        return config.id
+
+
 @pytest.mark.asyncio
 async def test_reconcile_loads_an_exness_subscription_with_the_exness_broker() -> None:
-    loaded: list[StrategyConfig] = []
-
-    class _Engine:
-        def get_strategy(self, sub_id: str) -> None:
-            return None
-
-        async def load_strategy(self, config: StrategyConfig, strategy_class=None) -> str:
-            loaded.append(config)
-            return config.id
-
-    recon = StrategyReconcileAppService(None, _Engine())  # type: ignore[arg-type]
+    engine = _RecordingEngine()
+    recon = StrategyReconcileAppService(None, engine)  # type: ignore[arg-type]
     await recon._ensure_instances([_sub("exness"), _sub("paper")])
 
-    assert [c.broker for c in loaded] == ["exness", "paper"]
+    assert [c.broker for c in engine.loaded] == ["exness", "paper"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_gives_exness_subscriptions_the_exness_risk() -> None:
+    engine = _RecordingEngine()
+    exness_risk = RiskConfig(leverage=1000, risk_per_trade=0.10)
+    recon = StrategyReconcileAppService(
+        None,  # type: ignore[arg-type]
+        engine,  # type: ignore[arg-type]
+        exness_risk=exness_risk,
+    )
+    await recon._ensure_instances([_sub("exness"), _sub("paper")])
+
+    exness, paper = engine.loaded
+    assert (exness.risk.leverage, exness.risk.risk_per_trade) == (1000, 0.10)
+    assert paper.risk == RiskConfig()
 
 
 def _engine() -> tuple[StrategyAppService, MagicMock]:

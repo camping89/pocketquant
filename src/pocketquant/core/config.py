@@ -124,8 +124,12 @@ class Settings(BaseSettings):
     exness_rate_fraction: float = Field(default=1.0, gt=0, le=1)
     # Live-order risk caps for the Exness broker; unset means the broker
     # refuses every order (no loss cap) or sends at most the minimum lot.
+    # exness_leverage and exness_risk_per_trade size Exness entries only; the
+    # defaults keep the paper sizing.
     exness_daily_loss_cap: float | None = None
     exness_max_lots: float | None = None
+    exness_leverage: float = Field(default=1.0, ge=1)
+    exness_risk_per_trade: float = Field(default=0.02, gt=0, le=0.10)
 
     # Admin API (v1 token auth — set in production; unset = dev mode, skip auth)
     # SecretStr prevents accidental logging/serialisation of the token value.

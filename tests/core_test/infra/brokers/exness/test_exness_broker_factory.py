@@ -9,15 +9,27 @@ import pytest
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.brokers.exness.exness_broker_adapter import ExnessBrokerAdapter
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 
 
-def test_exness_refused_while_live_trading_is_off() -> None:
+def _safeguards(live_trading: bool = True) -> Safeguards:
+    return Safeguards(
+        live_trading=live_trading,
+        daily_loss_cap=50.0,
+        max_lots=None,
+        leverage=1.0,
+        risk_per_trade=0.02,
+    )
+
+
+@pytest.mark.parametrize("safeguards", [None, _safeguards(live_trading=False)])
+def test_exness_refused_while_live_trading_is_off(safeguards: Safeguards | None) -> None:
     with pytest.raises(ValueError, match="EXNESS_LIVE_TRADING is false"):
-        BrokerFactory(EventBus()).create("exness", {})
+        BrokerFactory(EventBus(), safeguards=safeguards).create("exness", {})
 
 
 def test_exness_requires_a_configured_client() -> None:
-    factory = BrokerFactory(EventBus(), exness_live_trading=True)
+    factory = BrokerFactory(EventBus(), safeguards=_safeguards())
 
     with pytest.raises(ValueError, match="requires EXNESS_\\* settings"):
         factory.create("exness", {})
@@ -29,9 +41,9 @@ def test_exness_built_when_live_and_configured() -> None:
         EventBus(),
         exness_client=client,
         position_repository=MagicMock(),
-        exness_live_trading=True,
+        safeguards=_safeguards(),
     )
 
-    broker = factory.create("exness", {"exness_daily_loss_cap": 50.0})
+    broker = factory.create("exness", {})
 
     assert isinstance(broker, ExnessBrokerAdapter)

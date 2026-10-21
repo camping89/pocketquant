@@ -15,7 +15,9 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
+from pocketquant.core.domain.risk import RiskConfig
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
@@ -163,8 +165,6 @@ class ServicesProvider(Provider):
                 "api_secret": settings.okx_api_secret,
                 "passphrase": settings.okx_passphrase,
                 "demo": settings.okx_demo_mode,
-                "exness_daily_loss_cap": settings.exness_daily_loss_cap,
-                "exness_max_lots": settings.exness_max_lots,
             },
         )
         await engine.start()
@@ -178,12 +178,17 @@ class ServicesProvider(Provider):
         strategy_app_service: StrategyAppService,
         settings: Settings,
         symbol_lookup: SymbolLookupHelper,
+        safeguards: Safeguards,
     ) -> StrategyReconcileAppService:
+        # Taking the safeguards also loads the stored entry pause before bootstrap.
         return StrategyReconcileAppService(
             subscription_repository,
             strategy_app_service,
             interval_s=settings.reconcile_interval_seconds,
             symbol_lookup=symbol_lookup,
+            exness_risk=RiskConfig(
+                leverage=safeguards.leverage, risk_per_trade=safeguards.risk_per_trade
+            ),
         )
 
     @provide(scope=Scope.APP)

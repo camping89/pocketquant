@@ -18,6 +18,7 @@ COLLECTION_BACKTEST_ORDERS = "backtest_orders"
 COLLECTION_BACKTEST_TRADES = "backtest_trades"
 COLLECTION_JOB_HISTORY = "job_history"
 COLLECTION_TRACKED_SYMBOLS = "tracked_symbols"
+COLLECTION_SAFEGUARDS = "safeguards"
 
 # Redis key patterns (use .format() for interpolation)
 # Symbol values are composite "{code}:{exchange}" - templates kept generic.

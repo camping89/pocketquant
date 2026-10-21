@@ -12,9 +12,9 @@ if TYPE_CHECKING:
 
 
 class PositionCalculatorDomainService:
-    RISK_PER_TRADE = 0.02  # phần vốn rủi ro mỗi lệnh, đo trên khoảng entry→SL
-    MAX_EXPOSURE_PERCENT = 0.10  # trần notional theo phần vốn (cap gần như luôn thắng)
-    DEFAULT_SL_RISK_PERCENT = 0.01  # price-risk dự phòng khi lệnh không có SL
+    RISK_PER_TRADE = 0.02  # share of balance risked per trade, measured over entry→SL
+    MAX_EXPOSURE_PERCENT = 0.10  # notional cap as a share of balance, times leverage
+    DEFAULT_SL_RISK_PERCENT = 0.01  # fallback price risk when the order has no SL
 
     @staticmethod
     def calculate(
@@ -32,6 +32,7 @@ class PositionCalculatorDomainService:
 
         risk_per_trade = risk_config.risk_per_trade if risk_config else cls.RISK_PER_TRADE
         max_exposure = risk_config.max_exposure_percent if risk_config else cls.MAX_EXPOSURE_PERCENT
+        leverage = risk_config.leverage if risk_config else 1.0
 
         if stop_loss_price is None:
             price_risk = entry_price * cls.DEFAULT_SL_RISK_PERCENT
@@ -41,7 +42,7 @@ class PositionCalculatorDomainService:
             return PositionCalculation(0.0, 0.0, 0.0, 0.0)
 
         risk_amount = account_balance * risk_per_trade
-        cap = (account_balance * max_exposure) / entry_price
+        cap = (account_balance * max_exposure * leverage) / entry_price
         size = min(risk_amount / price_risk, cap)
         # Dividing by the multiplier turns "index points of exposure" into contracts.
         if contract_spec is not None and contract_spec.multiplier != 1.0:

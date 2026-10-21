@@ -49,7 +49,7 @@ def test_every_mutation_route_carries_the_guard(settings: Settings) -> None:
     for route in routes:
         calls = [d.call for d in route.dependant.dependencies]
         assert verify_admin_token in calls, f"{route.methods} {route.path} is unguarded"
-    assert len(routes) == 17
+    assert len(routes) == 19
 
 
 @pytest.mark.asyncio

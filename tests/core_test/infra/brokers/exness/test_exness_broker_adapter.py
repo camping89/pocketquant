@@ -30,6 +30,7 @@ from pocketquant.core.domain.order import (
 from pocketquant.core.domain.position import PositionAggregate, PositionSide, TradeClosedEvent
 from pocketquant.core.infra.brokers.exness import exness_broker_adapter as adapter_module
 from pocketquant.core.infra.brokers.exness.exness_broker_adapter import ExnessBrokerAdapter
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.exness import exness_stream
 from pocketquant.core.infra.exness.exness_client import ExnessApiError
 from tests.core_test.infra.exness.test_exness_stream import _FakeSocket
@@ -124,17 +125,25 @@ class _Repo:
 
 
 class _Harness:
-    def __init__(self, cap: float | None = 50.0, repo: _Repo | None = None) -> None:
+    def __init__(
+        self, cap: float | None = 50.0, repo: _Repo | None = None, max_lots: float | None = None
+    ) -> None:
         self.client = _FakeClient()
         self.bus = EventBus()
         self.fills: list[OrderFilledEvent] = []
         self.bus.subscribe(OrderFilledEvent, lambda e: self.fills.append(e))
+        self.safeguards = Safeguards(
+            live_trading=True,
+            daily_loss_cap=cap,
+            max_lots=max_lots,
+            leverage=1.0,
+            risk_per_trade=0.02,
+        )
         self.broker = ExnessBrokerAdapter(
             self.client,  # type: ignore[arg-type]
             self.bus,
             repo or _Repo(),  # type: ignore[arg-type]
-            daily_loss_cap=cap,
-            max_lots=None,
+            self.safeguards,
         )
         self.results: list[OrderResult] = []
         self.trades: list[TradeClosedEvent] = []
@@ -312,6 +321,20 @@ async def test_normalize_quantity_clamps_and_rejects_below_minimum() -> None:
     assert "exness.order_rejected_presubmit" in events
 
 
+@pytest.mark.parametrize(
+    ("max_lots", "units", "volume"), [(None, 1.0, "0.01"), (0.05, 5.0, "0.05")]
+)
+async def test_safeguards_max_lots_clamps_and_unset_sends_the_minimum_lot(
+    max_lots: float | None, units: float, volume: str
+) -> None:
+    h = await _Harness(max_lots=max_lots).start()
+
+    assert await h.broker.normalize_quantity(SYMBOL, 500.0) == units
+    await h.broker.submit_order(_order(quantity=units))
+
+    assert h.client.ops("openPosition")[0]["json_body"]["volume"] == volume
+
+
 async def test_open_request_formats_stop_loss_to_point_digits() -> None:
     h = await _Harness().start()
 
@@ -324,6 +347,45 @@ async def test_open_request_formats_stop_loss_to_point_digits() -> None:
         "volume": "0.01",
         "stop_loss_price": "2300.123",
     }
+
+
+# ── entry pause ─────────────────────────────────────────────────────────────
+
+
+async def test_paused_open_is_rejected_before_any_venue_call() -> None:
+    h = await _Harness().start()
+    h.safeguards.set_entries_paused(True)
+
+    with structlog.testing.capture_logs() as logs:
+        result = await h.broker.submit_order(_order())
+
+    assert result.status == OrderStatus.REJECTED
+    assert result.error_message == "entries paused"
+    assert h.client.calls == []
+    paused = [e for e in logs if e.get("reason") == "entries_paused"]
+    assert paused[0]["subscription_id"] == "sub1"
+    assert paused[0]["symbol"] == SYMBOL
+
+
+async def test_paused_close_of_a_held_position_is_sent() -> None:
+    h, _ = await _holding_p1()
+    h.safeguards.set_entries_paused(True)
+
+    result = await h.broker.submit_order(_order(side=OrderSide.SELL))
+
+    assert result.status == OrderStatus.SUBMITTED
+    assert len(h.client.ops("closePosition")) == 1
+
+
+async def test_resumed_open_is_sent() -> None:
+    h = await _Harness().start()
+    h.safeguards.set_entries_paused(True)
+    h.safeguards.set_entries_paused(False)
+
+    result = await h.broker.submit_order(_order())
+
+    assert result.status == OrderStatus.SUBMITTED
+    assert len(h.client.ops("openPosition")) == 1
 
 
 # ── events ──────────────────────────────────────────────────────────────────

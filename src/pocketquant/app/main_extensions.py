@@ -452,12 +452,14 @@ def register_routes(app: FastAPI, settings) -> None:
         # and the route works identically when enable_jobs=false.
         return await _list_jobs_from_mongo(database, history_repo)
 
+    from pocketquant.app.routes.safeguards import router as safeguards_router
     from pocketquant.app.routes.system_jobs import router as system_jobs_router
 
     api.include_router(market_data_router)
     api.include_router(tracked_symbols_router, prefix="/market-data")
     api.include_router(quote_router)
     api.include_router(system_jobs_router)
+    api.include_router(safeguards_router)
     api.include_router(strategy_router)
     api.include_router(subscription_router)
     api.include_router(trading_router)

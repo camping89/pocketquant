@@ -110,8 +110,10 @@ Key prod env vars (full set in `vps/default/.env`):
 | `EXNESS_SECRET_KEY` | No | The 128-hex secret exactly as Key Management shows it: 32-byte seed, then 32-byte public key. PEM is rejected, and the CI `.env` guard fails on multi-line values. |
 | `EXNESS_LIVE_TRADING` | No | Default `false`; only a go-live plan changes it. While false, the `exness` broker and every order call are refused. |
 | `EXNESS_RATE_FRACTION` | No | Share of the published Exness request rate the process uses; default `1.0`. |
-| `EXNESS_DAILY_LOSS_CAP` | No | Daily realized-loss limit for the Exness broker; unset rejects every Exness order. |
+| `EXNESS_DAILY_LOSS_CAP` | No | Daily realized-loss limit in account currency, per UTC day; unset rejects every Exness order. |
 | `EXNESS_MAX_LOTS` | No | Upper bound on an Exness order's lots; unset means the minimum lot. |
+| `EXNESS_LEVERAGE` | No | Account leverage ratio, used only to size Exness entries; default 1. |
+| `EXNESS_RISK_PER_TRADE` | No | Share of balance risked per Exness entry, 0-0.10; default 0.02. |
 
 The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. A transport failure or a 421 clears it; the next call resolves it again. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
 

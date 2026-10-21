@@ -9,7 +9,9 @@ the fill arrives on the events stream, or is recovered from the operation status
 and the deals history when the stream missed it.
 
 Order calls are additionally refused by the client while ``EXNESS_LIVE_TRADING``
-is false, and ``BrokerFactory`` refuses to build this adapter in that case.
+is false, and ``BrokerFactory`` refuses to build this adapter in that case. The
+caps and the entry pause are read from the shared ``Safeguards`` on every order;
+while entries are paused every open is rejected before any venue call.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.domain.position import PositionAggregate, PositionSide, TradeClosedEvent
+from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.exness.exness_client import ExnessApiError, ExnessClient
 from pocketquant.core.infra.exness.exness_mappers import (
     composite_for,
@@ -97,14 +100,12 @@ class ExnessBrokerAdapter(IBrokerPort):
         client: ExnessClient,
         event_bus: EventBus,
         position_repository: PositionRepository,
-        daily_loss_cap: float | None,
-        max_lots: float | None,
+        safeguards: Safeguards,
     ) -> None:
         self._client = client
         self._event_bus = event_bus
         self._position_repository = position_repository
-        self._daily_loss_cap = daily_loss_cap
-        self._max_lots = Decimal(str(max_lots)) if max_lots else None
+        self._safeguards = safeguards
         self._order_callbacks: list[OrderCallback] = []
         self._trade_callbacks: list[TradeCallback] = []
         self._positions: dict[str, _Held] = {}
@@ -185,13 +186,14 @@ class ExnessBrokerAdapter(IBrokerPort):
         return lots_to_units(lots, contract_size)
 
     def _lots(self, quantity: float, cond: dict[str, Any]) -> Decimal | None:
+        max_lots = self._safeguards.max_lots
         return units_to_lots(
             Decimal(str(quantity)),
             contract_size=Decimal(cond["contract_size"]),
             volume_min=Decimal(cond["volume_min"]),
             volume_step=Decimal(cond["volume_step"]),
             volume_max=Decimal(cond["volume_max"]),
-            max_lots=self._max_lots,
+            max_lots=Decimal(str(max_lots)) if max_lots else None,
         )
 
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
@@ -241,7 +243,15 @@ class ExnessBrokerAdapter(IBrokerPort):
         return await self._send_tracked("openPosition", order, kind="open", json_body=body)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
-        if self._daily_loss_cap is None:
+        if self._safeguards.entries_paused:
+            logger.warning(
+                "exness.order_rejected_presubmit",
+                reason="entries_paused",
+                subscription_id=order.subscription_id,
+                symbol=order.symbol,
+            )
+            return "entries paused"
+        if self._safeguards.daily_loss_cap is None:
             return "EXNESS_DAILY_LOSS_CAP not set"
         if not self._snapshot_ready or self._needs_snapshot:
             return "awaiting trading snapshot reconciliation"
@@ -253,12 +263,13 @@ class ExnessBrokerAdapter(IBrokerPort):
         return None
 
     async def _loss_cap_reason(self) -> str | None:
-        assert self._daily_loss_cap is not None
+        cap = self._safeguards.daily_loss_cap
+        assert cap is not None
         try:
             realized = await self._realized_today()
         except ExnessApiError as e:
             return f"daily loss check failed: {e.code}"
-        if realized <= -self._daily_loss_cap:
+        if realized <= -cap:
             logger.warning("exness.daily_loss_cap_reached", realized=realized)
             return "daily loss cap reached"
         return None
