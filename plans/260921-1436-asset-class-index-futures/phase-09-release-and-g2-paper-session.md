@@ -61,6 +61,15 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
 - Task 3 pending. Row 11: 24 runs from 16:00Z, measurable after 2026-10-23T15:05Z. G2: the
   session 2026-10-22T22:00Z to 2026-10-23T21:00Z, measurable after 21:05Z. Do not deploy before.
 
+- 2026-10-22 23:45 +07, moving `sync_verify_cascade` off :00 checked (7 days of `job_history`,
+  read-only, no change made). The :00 `sync_1m` finishes its futures 13-20 s later (ES 17.0 s,
+  NQ 26.3 s, YM 17.9 s vs 3.8 / 6.4 / 8.8 s at other minutes), because the verify holds the
+  scraper lock. Zero-insert syncs are fewer at :00 and more at :01 (ES 8.2 % vs 3.5 %, NQ 5.0 %
+  vs 1.1 %, YM 18 % vs 11.4 %, n of about 100 per symbol at :01): the bar shifts one minute, it
+  is not lost. Separate finding: every day at 04:00Z, when `sync_integrity` also starts, the
+  verify takes 147-284 s and `sync_1m` runs once in six minutes for every symbol, crypto
+  included. Which job holds it is not yet traced.
+
 ## Success criteria
 
 - Row 11 has 24 runs with ES `divergence_count=0` in every comparing run, or a diagnosed miss.
@@ -73,4 +82,4 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
   (`git push --force-with-lease origin <prev>:master` after confirmation) and remove the two
   `.env` keys.
 - The paper subscription trades no real money. Remove it with the subscription DELETE route
-  once G2 is recorded, unless the user wants it kept.
+  once G2 is recorded (user decision 2026-10-22: delete).
