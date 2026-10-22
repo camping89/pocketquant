@@ -68,7 +68,17 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
   vs 1.1 %, YM 18 % vs 11.4 %, n of about 100 per symbol at :01): the bar shifts one minute, it
   is not lost. Separate finding: every day at 04:00Z, when `sync_integrity` also starts, the
   verify takes 147-284 s and `sync_1m` runs once in six minutes for every symbol, crypto
-  included. Which job holds it is not yet traced.
+  included.
+- 2026-10-22 23:55 +07, the 04:00Z stall traced (read-only; no change made). `sync_integrity`
+  runs 04:00:00 to ~04:07 (418-429 s on 10-20/21/22). In that window `data_lag_check`, which
+  only reads Redis and Mongo, takes 94 s instead of 0.1 s, and `sync_1m` starts at 04:00:48
+  and takes 378 s: the event loop is starved, not the scraper lock. Cause: the integrity check
+  is synchronous CPU work. For CME symbols it calls `CmeGlobexCalendarAdapter.bar_start`
+  ~91,000 times per symbol, and each call goes `session_date` -> `_window_rows`, which runs
+  pandas `iterrows()` over the window again (`cme_globex_calendar_adapter.py:112,170,216`).
+  Local profile: ~45 s per CME symbol; 24/7 and Exness calendars take 0.02-0.03 s. Caching
+  `_window_rows` per date alone cut it to ~17 s locally (an experiment, not a fix). Fix after
+  Phase 9 measurements, so no deploy resets them.
 
 ## Success criteria
 
