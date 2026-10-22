@@ -44,7 +44,9 @@ registered provider before TradingView enters.
 | 5 | TradingView History Adapter, Seeding and Backfill | [phase-05-tradingview-history-and-backfill.md](./phase-05-tradingview-history-and-backfill.md) | 1.5d | 3, 4 |
 | 6 | Polling Quote Adapter and Contract-Aware Trading Math | [phase-06-quote-adapter-and-contract-math.md](./phase-06-quote-adapter-and-contract-math.md) | 1.5d | 5 |
 | 7 | UI, Docs and Success-Metric Run-Through | [phase-07-ui-docs-and-metrics.md](./phase-07-ui-docs-and-metrics.md) | 1d | 6 |
-| 8 | Close Open Metrics and Archive | [phase-08-close-open-metrics.md](./phase-08-close-open-metrics.md) | 0.5d | 7 |
+| 8 | Verify-Cascade Race Fix and Futures Paper Sizing | [phase-08-verify-race-and-futures-paper-sizing.md](./phase-08-verify-race-and-futures-paper-sizing.md) | 0.5d | 7 |
+| 9 | Release, Re-measure Verify and Run the G2 Paper Session | [phase-09-release-and-g2-paper-session.md](./phase-09-release-and-g2-paper-session.md) | 2d elapsed | 8 |
+| 10 | Close Open Metrics and Archive | [phase-10-close-open-metrics.md](./phase-10-close-open-metrics.md) | 0.5d | 9 |
 
 ## Goals
 

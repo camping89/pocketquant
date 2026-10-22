@@ -1,10 +1,10 @@
 ---
-phase: 8
+phase: 10
 title: "Close Open Metrics and Archive"
 status: pending
 priority: P3
 effort: "0.5d"
-dependencies: [7]
+dependencies: [9]
 ---
 
 ## Context
@@ -18,6 +18,29 @@ The 2026-09-24 run-through (`completion-report.md`) left five rows open: 4, 5, 1
 - Row 13: G2 needs a sizing decision. Recommended default: defer, since no strategy is profitable and no futures strategy is pursued (`plans/261019-1957-exness-go-live/plan.md`, decision 2026-10-22 08:55).
 
 This phase changes no code. Its one possible prod write is the Task 3 repair, behind an [ASK].
+
+**Measured 2026-10-22 ~10:40-10:50 UTC (Tasks 1-5, read-only).** Counsel on the misses:
+`plans/reports/kongming-261022-1745-phase8-row10-row11-failures.md`.
+
+- Task 1: 9 tracked, including the three `:TRADINGVIEW` futures. Pass.
+- Task 2 (row 10): 2,874 `sync_1m` runs in the window; every futures detail `skipped/closed`
+  (2,874 per symbol), zero `completed`. `sync_backfill` 2026-10-17T03:00Z inserted one `1w` bar
+  per symbol: the week opened 2026-10-11T22:00Z (`session_date` 2026-10-12) that closed Friday
+  21:00Z, created 03:00:27Z. The 10-18 run inserted 0. Friday's ES 1d bar was written
+  2026-10-17T00:06Z by `rest_repair`, after the close. Pass in substance; the "no backfill
+  insert" clause was mis-specified (a closed week's bar must land once).
+- Task 3 (row 5): 0 unstamped 1d/1w bars (ES 4993/1500, NQ 4993/1406, YM 4993/1264). Closed.
+- Task 4 (row 11): `StartedAt` 2026-10-22T02:01:48Z, 8 runs. ES 1 ok, 5 alerts (each 1 of 11),
+  2 vendor `symbol_failed`. Cause is the verify/sync race; fix moved to Phase 8, re-measure in
+  Phase 9.
+- Task 5 (row 4): `misaligned_bars_dropped` 7 lines, all from the 03:01Z backfill dropping
+  2000-2012 holiday 1d/1w bars (per symbol from `job_history`: ES 32, NQ 32, YM 35 bars);
+  `integrity.issues_found` 3 per symbol, all 04:00-04:06Z; `no_progress` ES 14, NQ 8, YM 59
+  (ES 7 and NQ 6 at minutes :00/:01, during the verify burst); `stuck_threshold_crossed` 0.
+- Row 13: user chose leverage routing with a futures-only paper balance (Phase 8) and a paper
+  `engulfing` 15m ES session (Phase 9).
+
+Remaining here after Phase 9: Task 6 records and Task 7 archive.
 
 ## Constraints
 
