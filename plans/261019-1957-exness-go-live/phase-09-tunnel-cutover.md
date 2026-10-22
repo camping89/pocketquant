@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Tunnel cutover: deploy B (B10, B13)"
-status: pending
+status: completed
 priority: P1
 effort: 1.5h + CI + ~20 min user
 dependencies: [8]

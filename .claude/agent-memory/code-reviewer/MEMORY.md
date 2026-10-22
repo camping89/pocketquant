@@ -9,7 +9,9 @@
 - **DI**: all providers in `src/pocketquant/app/di/` — `services.py` (ServicesProvider, route-facing), `trading_services.py` (Strategy*/OrderPosition), `market_data.py` (SyncService + runtime). SyncService/StrategyCommandService/StrategyQueryService each registered EXACTLY once (dishka silent last-wins; ServicesProvider docstring documents the exclusion)
 - **Single process**: `pocketquant.app.main` on :41921 — full runtime + ALL API routes + SPA fallback. Single uvicorn worker only (scheduler/WS/broker are in-process singletons)
 - `OrderPositionQueryService` routes (in-RAM engine state) now WORK publicly via nginx (previously 500'd in bff by design) — unauthenticated read of live orders/positions, consistent with overall no-auth API posture
-- Known wart: tracked_symbols router mounted twice (via market_data.py aggregator AND directly with prefix="/market-data") → 5 duplicate entries in route_inventory snapshot; identical handlers, pre-existing from bff
+- (2026-10-20) tracked_symbols router now mounted ONCE (`main_extensions.py` api.include_router prefix="/market-data"); 17 mutation routes; import-linter = 8 contracts; `tests/baseline` gone
+- Broker pool gotcha: `_get_or_create_broker` reuses only while a loaded strategy holds the broker; `unload_strategy` never disconnects → delete-last-then-reload builds a 2nd venue adapter
+- Plan-review gotcha: go-live plans mix bare `reports/x.md` with `plans/<dir>/reports/x.md`; cwd is repo root, so bare paths split state files
 
 ### Layer Structure (post 4-subpackage collapse, 2026-06-11)
 Single package `pocketquant` at root `src/` (PEP 420 namespace). `trading` dissolved (services → engine, OKX → core/infra/brokers/okx, webhooks deleted); `bff` merged into `app`.
@@ -46,6 +48,7 @@ web/       # Node SPA at repo root
 
 ### Deploy Pipeline
 - [project_deploy_pipeline.md](project_deploy_pipeline.md) -- master push = prod deploy, develop push = tests only (no staging); verify never probes /api; rollback = IMAGE_TAG re-deploy
+- Plan-review check: git credential helper is `gh auth git-credential` (active acct vunguyen-ai, push:false on camping89/pocketquant, verified 2026-10-20) -> bare `git push origin <ref>` 403s; plans need the camping89 token URL for ALL pushes
 
 ### Review Reports
 - `plans/reports/code-review-260214-persistence-layer.md` - Persistence layer extraction review

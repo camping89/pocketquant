@@ -171,7 +171,7 @@ cd /Users/admin/workspace/_me/algo-trading/pocketquant
 uv run python plans/260706-2238-engulfing-1m-strategy-research/scripts/pq_prefetch.py
 
 # 2. Chạy phân tích (skills venv có numpy)
-cd plans/260712-0849-engulfing-structure-level-taker-profit/scripts
+cd plans/archive/260712-0849-engulfing-structure-level-taker-profit/scripts
 ~/.claude/skills/.venv/bin/python3 pq_structure_sweep.py      # sweep TF rộng
 ~/.claude/skills/.venv/bin/python3 pq_structure_focus.py      # focus vùng 1h + control
 ~/.claude/skills/.venv/bin/python3 pq_stability_surface.py    # region + random control

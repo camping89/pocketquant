@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Arm live: entries paused, then deploy C with the flag on; every subscription paper"
-status: pending
+status: completed
 priority: P1
 effort: about 3-4h + CI (backfill)
 dependencies: [9]

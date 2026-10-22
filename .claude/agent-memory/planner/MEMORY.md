@@ -46,3 +46,5 @@
 
 ### Memory Files
 - [feedback_dishka_di.md](feedback_dishka_di.md) — replace Services god container with dishka for auto-wiring DI
+- [feedback_single_plan_runner_order.md](feedback_single_plan_runner_order.md) — one plan dir per effort; phase numbers = execution order (runner cooks by number)
+- [project_exness_go_live_decisions.md](project_exness_go_live_decisions.md) — go-live: arm paused, pause STORED, E2 gates nothing; local debug via `just tunnel`, never block it

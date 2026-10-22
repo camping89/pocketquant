@@ -10,3 +10,4 @@ backfill XAUUSD:EXNESS 1m days 246: fetched=354240 inserted=354240 total_bars=35
 backfill EURUSD:EXNESS 1m skipped: user decision 2026-10-22, not needed now
 backfill BTCUSD:EXNESS 1m skipped: user decision 2026-10-22, not needed now
 Deploy C (armed): 2026-10-21T18:49:23Z, app StartedAt 2026-10-21T18:46:57.827862924Z, entries paused across the restart, every subscription paper
+Disarm: 2026-10-22T02:02:17Z, app StartedAt 2026-10-22T02:01:48Z, live trading off (config efb6c90), go-live called off at Task 11.5

@@ -157,6 +157,7 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
 
 ### T8.7 Check schedule
 - **Goal:** Cover what the week was for: a live XAUUSD daily break, a weekend close and reopen, and the 2026-11-01 US DST change.
+<!-- Updated: 2026-10-21 C3 timing - start at second 20+, one 60 s re-check for a just-closed minute (measurement timing only, pass rule unchanged) -->
 <!-- Updated: 2026-10-20 venue-empty gaps pass (user decision) - C3 checks each gap at Exness; missing counts are recorded only -->
 - **Commands** (after the T8.6 setup; C1, C2 and C5 tested in prod 2026-10-19, C3 on 2026-10-20):
   - **C1 log counters** since the previous row's check time. Prints `S= F= CB= RC= RL=`. If `S` is later than `SINCE`, the counters start at the restart; if `F` is later than both, logs rotated. Record either case; neither is a failure.
@@ -182,7 +183,7 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
     q http://localhost:41921/api/v1/subscriptions/ | py "import json,sys;ids=set('$IDS'.split());print('running', sum(1 for s in json.load(sys.stdin) if s['id'] in ids and s['actual_state']=='running'))"
     EOF
     ```
-  - **C3 integrity with a venue check.** Runs the integrity check for each `CHECKS` item, then reads each `gap_ranges` entry forward from Exness (`getCandleHistory`, positive `count` reads forward from `from` inclusive; candle field `time`). A range is venue-empty when no candle has `time <= range_end`. Prints `PASS` when `misaligned 0` and every range is venue-empty. C3 replaces C2's integrity loop, so run C2 with `CHECKS=''`. Once the go-live admin token is deployed, add the `X-Admin-Token` header to `check()`.
+  - **C3 integrity with a venue check.** Runs the integrity check for each `CHECKS` item, then reads each `gap_ranges` entry forward from Exness (`getCandleHistory`, positive `count` reads forward from `from` inclusive; candle field `time`). A range is venue-empty when no candle has `time <= range_end`. Prints `PASS` when `misaligned 0` and every range is venue-empty. C3 replaces C2's integrity loop, so run C2 with `CHECKS=''`. Start C3 at UTC second 20 or later: `sync_1m` fires at second 2 and takes up to about 15 s, so an earlier check can see the just-closed minute as missing. Once the go-live admin token is deployed, add the `X-Admin-Token` header to `check()`.
     ```bash
     CHECKS='<per row>'
     ssh -i "$KEY" "$HOST" "CHECKS='$CHECKS' docker exec -i -e CHECKS pocketquant-app python -" <<'EOF'
@@ -250,7 +251,7 @@ Make D3 true and validate Exness end to end without live money: CFD backtests mo
 - **Pass (every row):**
   1. `misaligned 0` on every C3 line.
   2. Every `gap_ranges` entry is venue-empty: C3 prints `PASS` on every line.
-  3. On a C3 `FAIL`, run `POST /api/v1/market-data/integrity/repair` once for that symbol and interval, then re-run C3. Still `FAIL` → the row fails.
+  3. On a C3 `FAIL` whose only `VENUE_HAS` range ends within 2 minutes of the check, re-run C3 once after 60 s first; a `PASS` then passes. Otherwise, run `POST /api/v1/market-data/integrity/repair` once for that symbol and interval, then re-run C3. Still `FAIL` → the row fails.
   4. `sync_1m p95_ms < 60000`, `CB=0`, `running 2` (from the row where T8.6 ran), and on row 4 C5 prints `3600 True`.
   5. Recorded only: `missing` counts, the venue-empty ranges, `RC`, `RL` and `by_status`.
 - **Schedule** (Bangkok = UTC+7):

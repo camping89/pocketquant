@@ -151,10 +151,10 @@ Script `validate` gốc không in CI per-symbol → tôi viết script phụ (50
 ```bash
 # 1. Prefetch (bắt buộc — /tmp ephemeral)
 cd /Users/admin/workspace/_me/algo-trading/pocketquant
-uv run python plans/260712-0849-engulfing-structure-level-taker-profit/scripts/pq_prefetch_multi.py
+uv run python plans/archive/260712-0849-engulfing-structure-level-taker-profit/scripts/pq_prefetch_multi.py
 
 # 2. Validation + bootstrap (skills venv có numpy)
-cd plans/260712-0849-engulfing-structure-level-taker-profit/scripts
+cd plans/archive/260712-0849-engulfing-structure-level-taker-profit/scripts
 ~/.claude/skills/.venv/bin/python3 pq_multi_symbol_validate.py
 ~/.claude/skills/.venv/bin/python3 pq_multi_symbol_bootstrap.py   # CI per-symbol + pooled
 ```

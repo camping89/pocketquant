@@ -1,6 +1,6 @@
 # Session handoff — việc chưa xong sau research engulfing + setup 3 symbol
 
-> 2026-07-18. Chốt sổ 2 luồng việc: (A) setup BTC/ETH/SOL vào prod, (B) research engulfing+structure 3 vòng + Test B. Câu tiếng Việt, term tiếng Anh giữ nguyên. Context đầy đủ: `plans/260712-0849-engulfing-structure-level-taker-profit/` + memory `engulfing-structure-research-and-3-symbol-setup`.
+> 2026-07-18. Chốt sổ 2 luồng việc: (A) setup BTC/ETH/SOL vào prod, (B) research engulfing+structure 3 vòng + Test B. Câu tiếng Việt, term tiếng Anh giữ nguyên. Context đầy đủ: `plans/archive/260712-0849-engulfing-structure-level-taker-profit/` + memory `engulfing-structure-research-and-3-symbol-setup`.
 
 ## Đã xong (không cần làm gì thêm)
 
@@ -41,7 +41,7 @@ Ba lựa chọn, chưa chốt:
 `.env` hiện = remote-db (MONGODB_URL → prod, `ENABLE_JOBS=false`). Đúng discipline khi đang research trên prod data, nhưng nếu chuyển sang dev local: `cp ../pocketquant-config/local/all-local.env .env`. KHÔNG chạy pytest khi .env còn trỏ prod (conftest tự refuse). Không tự restore trong session này vì user có thể còn dùng prod data cho research tiếp.
 
 ### 4. Research caches ephemeral
-`/tmp/pq_cache_{BTCUSDT,ETHUSDT,SOLUSDT}` mất giữa session. Tái lập: `uv run python plans/260712-0849-engulfing-structure-level-taker-profit/scripts/pq_prefetch_multi.py` (đọc prod read-only). Scripts nhận cache qua `pq_structure_lib.use_cache()`.
+`/tmp/pq_cache_{BTCUSDT,ETHUSDT,SOLUSDT}` mất giữa session. Tái lập: `uv run python plans/archive/260712-0849-engulfing-structure-level-taker-profit/scripts/pq_prefetch_multi.py` (đọc prod read-only). Scripts nhận cache qua `pq_structure_lib.use_cache()`.
 
 ## Câu hỏi mở (logged thay vì hỏi, theo yêu cầu)
 
