@@ -140,10 +140,12 @@ the bar is fetched one minute early rather than lost. No change is proposed for 
 - Prod, the next 04:00 run: `sync_integrity` duration well under a minute, `data_lag_check`
   near 0.1 s, and `sync_1m` running every minute from 04:00 to 04:07.
 
+## Decision
+
+User, 2026-10-23: fix in a separate plan, later. The asset-class plan closes without it.
+
 ## Unresolved questions
 
-- Should the fix go into the asset-class plan as a new phase before close-and-archive, or
-  into a separate plan?
 - `_window_rows` may also make `sync_1m` slower on futures every minute (ES finishes 3.8 s
   after start, NQ 6.4 s, YM 8.8 s). How much of that is calendar CPU and how much is the
   scraper is not measured.
