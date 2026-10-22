@@ -209,3 +209,95 @@ async def test_unloading_the_last_subscription_retires_its_paper_account() -> No
     await engine.load_strategy(_config("eth", "ETHUSDT:BINANCE", LINEAR_SPEC))
 
     assert engine._brokers["eth"] is not first
+
+
+@pytest.mark.asyncio
+async def test_reconcile_gives_futures_paper_subscriptions_the_futures_risk() -> None:
+    loaded: list[StrategyConfig] = []
+
+    class _Engine:
+        def get_strategy(self, sub_id: str) -> None:
+            return None
+
+        async def load_strategy(self, config: StrategyConfig, strategy_class=None) -> str:
+            loaded.append(config)
+            return config.id
+
+    subs = [
+        Subscription(
+            id=generate_id(),
+            strategy_code="engulfing",
+            symbol=symbol,
+            interval=Interval.MINUTE_15,
+            created_at=NOW,
+        )
+        for symbol in (ES_SYMBOL, "BTCUSDT:BINANCE")
+    ]
+    recon = StrategyReconcileAppService(
+        None,  # type: ignore[arg-type]
+        _Engine(),  # type: ignore[arg-type]
+        symbol_lookup=_FakeLookup(),  # type: ignore[arg-type]
+        futures_paper_risk=RiskConfig(leverage=20),
+    )
+    await recon._ensure_instances(subs)
+
+    assert {c.symbol: c.risk for c in loaded} == {
+        ES_SYMBOL: RiskConfig(leverage=20),
+        "BTCUSDT:BINANCE": RiskConfig(),
+    }
+
+
+def _two_balance_engine(futures_balance: float | None, orders=None) -> StrategyAppService:
+    return StrategyAppService(
+        event_bus=EventBus(),
+        broker_factory=BrokerFactory(EventBus()),
+        order_app_service=orders or _RecordingOrderService(),  # type: ignore[arg-type]
+        position_app_service=_NoPositions(),  # type: ignore[arg-type]
+        risk_check_handler=_AllowAll(),  # type: ignore[arg-type]
+        default_broker_config={
+            "initial_balance": 10_000.0,
+            "futures_initial_balance": futures_balance,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("futures_balance", "es_balance"), [(200_000.0, 200_000.0), (None, 10_000.0)]
+)
+@pytest.mark.asyncio
+async def test_futures_paper_account_starts_at_the_futures_balance(
+    futures_balance: float | None, es_balance: float
+) -> None:
+    engine = _two_balance_engine(futures_balance)
+    await engine.load_strategy(_config("btc", "BTCUSDT:BINANCE", LINEAR_SPEC))
+    await engine.load_strategy(_config("es", ES_SYMBOL, ES))
+
+    assert (await engine._brokers["btc"].get_balance()).available_balance == 10_000.0
+    assert (await engine._brokers["es"].get_balance()).available_balance == es_balance
+
+
+@pytest.mark.parametrize(
+    ("futures_balance", "leverage", "contracts"),
+    [(200_000.0, 20.0, 1.0), (None, 1.0, None)],
+)
+@pytest.mark.asyncio
+async def test_futures_paper_settings_let_an_es_signal_open_contracts(
+    futures_balance: float | None, leverage: float, contracts: float | None
+) -> None:
+    # The leveraged cap, 200,000 x 10 % x 20 = 400,000 USD, is 1.03 contracts at
+    # 7800 and binds before the 2 % risk over a 30-point stop (2.67 contracts).
+    # The 10,000 crypto balance sizes the same signal to zero.
+    orders = _RecordingOrderService()
+    engine = _two_balance_engine(futures_balance, orders)
+    await engine.load_strategy(_config("es", ES_SYMBOL, ES, RiskConfig(leverage=leverage)))
+    signal = Signal(
+        symbol=ES_SYMBOL,
+        direction=Direction.LONG,
+        confidence=1.0,
+        timestamp=NOW,
+        subscription_id="es",
+        stop_loss_price=7770.0,
+    )
+    await engine._process_signal(engine._strategies["es"], signal, 7800.0)
+
+    assert [o.quantity for o in orders.orders] == ([contracts] if contracts else [])

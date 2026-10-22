@@ -45,7 +45,7 @@ class PositionCalculatorDomainService:
         cap = (account_balance * max_exposure * leverage) / entry_price
         size = min(risk_amount / price_risk, cap)
         # Dividing by the multiplier turns "index points of exposure" into contracts.
-        if contract_spec is not None and contract_spec.multiplier != 1.0:
+        if contract_spec is not None and contract_spec.is_contract:
             size = size / contract_spec.multiplier
         if contract_spec is not None and contract_spec.lot_step:
             # The epsilon keeps an exact multiple that float division left at

@@ -116,6 +116,8 @@ Key prod env vars (full set in `vps/default/.env`):
 | `EXNESS_MAX_LOTS` | No | Upper bound on an Exness order's lots; unset means the minimum lot. |
 | `EXNESS_LEVERAGE` | No | Account leverage ratio, used only to size Exness entries; default 1. |
 | `EXNESS_RISK_PER_TRADE` | No | Share of balance risked per Exness entry, 0-0.10; default 0.02. |
+| `PAPER_FUTURES_INITIAL_BALANCE` | No | Starting balance of paper accounts for futures (a contract spec with a multiplier); unset uses `PAPER_INITIAL_BALANCE`. |
+| `PAPER_FUTURES_LEVERAGE` | No | Leverage that sizes paper futures entries; default 1. |
 
 The per-account Exness access point is not an env var: `ExnessClient` resolves it from `getAccessPoint` once per process, holds it in memory and uses it as a full https URL. A transport failure or a 421 clears it; the next call resolves it again. All Exness values live in `pocketquant-config`; without the first four the app boots with Exness unconfigured.
 

@@ -56,8 +56,11 @@ class BrokerFactory:
             per_contract = config.get("commission_per_contract")
             if per_contract is None:
                 per_contract = contract_spec.commission_per_contract
+            initial_balance = config.get("initial_balance", 10_000.0)
+            if contract_spec.is_contract and config.get("futures_initial_balance") is not None:
+                initial_balance = config["futures_initial_balance"]
             return PaperBrokerAdapter(
-                initial_balance=config.get("initial_balance", 10_000.0),
+                initial_balance=initial_balance,
                 slippage_percent=slippage_bps / 10_000,
                 fill_delay_ms=config.get("fill_delay_ms", 50),
                 currency=config.get("currency", "USD"),

@@ -159,6 +159,7 @@ class ServicesProvider(Provider):
             risk_check_handler=risk_check_handler,
             default_broker_config={
                 "initial_balance": settings.paper_initial_balance,
+                "futures_initial_balance": settings.paper_futures_initial_balance,
                 "slippage_bps": settings.paper_slippage_bps,
                 "commission_bps": settings.paper_commission_bps,
                 "api_key": settings.okx_api_key,
@@ -189,6 +190,7 @@ class ServicesProvider(Provider):
             exness_risk=RiskConfig(
                 leverage=safeguards.leverage, risk_per_trade=safeguards.risk_per_trade
             ),
+            futures_paper_risk=RiskConfig(leverage=settings.paper_futures_leverage),
         )
 
     @provide(scope=Scope.APP)
@@ -205,8 +207,14 @@ class ServicesProvider(Provider):
         self,
         trade_repository: TradeRepository,
         settings: Settings,
+        symbol_lookup: SymbolLookupHelper,
     ) -> LiveMetricsQueryService:
-        return LiveMetricsQueryService(trade_repository, baseline=settings.paper_initial_balance)
+        return LiveMetricsQueryService(
+            trade_repository,
+            baseline=settings.paper_initial_balance,
+            futures_baseline=settings.paper_futures_initial_balance,
+            symbol_lookup=symbol_lookup,
+        )
 
     # Backtest execution.
     @provide(scope=Scope.APP)

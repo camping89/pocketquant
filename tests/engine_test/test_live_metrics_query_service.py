@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from pocketquant.core.common.uuid import generate_id
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.domain.trading import Trade
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
@@ -33,13 +34,13 @@ async def db(settings):
     await database.disconnect()
 
 
-def _trade(run_id: str, *, pnl: float, hour: int = 0) -> Trade:
+def _trade(run_id: str, *, pnl: float, hour: int = 0, symbol: str = "BTC:BIN") -> Trade:
     entry = T0 + timedelta(hours=hour)
     return Trade(
         trade_id=generate_id(),
         run_id=run_id,
         strategy_code="s1",
-        symbol="BTC:BIN",
+        symbol=symbol,
         direction="LONG",
         entry_order_id="o-entry",
         entry_price=100.0,
@@ -103,3 +104,28 @@ async def test_drawdown_finite_when_first_trade_loses(db: Database) -> None:
     m = await _service(db).get_metrics(sub_id)
     # Positive baseline keeps the relative drawdown finite and in [-1, 0].
     assert -1.0 <= m["max_drawdown"] <= 0.0
+
+
+class _EsLookup:
+    async def contract_spec(self, composite: str) -> ContractSpec:
+        return (
+            ContractSpec(multiplier=50.0, lot_step=1.0) if composite == "ES1!:TV" else LINEAR_SPEC
+        )
+
+
+@pytest.mark.parametrize(("symbol", "drawdown"), [("ES1!:TV", -0.0025), ("BTC:BIN", -0.05)])
+@pytest.mark.asyncio
+async def test_futures_drawdown_is_measured_against_the_futures_balance(
+    db: Database, symbol: str, drawdown: float
+) -> None:
+    sub_id = str(generate_id())
+    await TradeRepository(db).save_many([_trade(sub_id, pnl=-500.0, symbol=symbol)])
+    service = LiveMetricsQueryService(
+        TradeRepository(db),
+        baseline=BASELINE,
+        futures_baseline=200_000.0,
+        symbol_lookup=_EsLookup(),  # type: ignore[arg-type]
+    )
+    m = await service.get_metrics(sub_id)
+
+    assert m["max_drawdown"] == pytest.approx(drawdown)

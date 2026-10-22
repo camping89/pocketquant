@@ -56,8 +56,9 @@ class StrategyReconcileAppService:
         symbol_lookup: Resolves each subscription's contract units; without it
             every instance loads linear, which is only right for crypto.
         exness_risk: Risk config for ``exness`` subscriptions (leverage and risk
-            per trade from the safeguards); every other subscription keeps
-            ``RiskConfig()``.
+            per trade from the safeguards).
+        futures_paper_risk: Risk config for ``paper`` subscriptions on a futures
+            contract spec. Every other subscription keeps ``RiskConfig()``.
     """
 
     def __init__(
@@ -67,12 +68,14 @@ class StrategyReconcileAppService:
         interval_s: float = 5.0,
         symbol_lookup: SymbolLookupHelper | None = None,
         exness_risk: RiskConfig | None = None,
+        futures_paper_risk: RiskConfig | None = None,
     ) -> None:
         self._sub_repo = sub_repo
         self._strategy_service = strategy_service
         self._interval_s = interval_s
         self._symbol_lookup = symbol_lookup
         self._exness_risk = exness_risk
+        self._futures_paper_risk = futures_paper_risk
 
     async def bootstrap(self) -> None:
         """Load one RAM instance per persisted subscription, once at startup.
@@ -169,6 +172,13 @@ class StrategyReconcileAppService:
                     if self._symbol_lookup
                     else LINEAR_SPEC
                 )
+                risk = RiskConfig()
+                if sub.broker == "exness" and self._exness_risk:
+                    risk = self._exness_risk
+                elif (
+                    sub.broker == "paper" and contract_spec.is_contract and self._futures_paper_risk
+                ):
+                    risk = self._futures_paper_risk
                 await self._strategy_service.load_strategy(
                     StrategyConfig(
                         id=sub_id,
@@ -177,11 +187,7 @@ class StrategyReconcileAppService:
                         interval=sub.interval.value,
                         contract_spec=contract_spec,
                         broker=sub.broker,
-                        risk=(
-                            self._exness_risk
-                            if sub.broker == "exness" and self._exness_risk
-                            else RiskConfig()
-                        ),
+                        risk=risk,
                     ),
                     strategy_class=strategy_class,
                 )

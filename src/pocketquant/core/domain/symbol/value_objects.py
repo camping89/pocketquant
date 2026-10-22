@@ -44,6 +44,11 @@ class ContractSpec:
     commission_per_contract: float | None = None
     """None falls back to the percentage commission model."""
 
+    @property
+    def is_contract(self) -> bool:
+        """Whether a size is a count of contracts worth ``multiplier`` each, as futures are."""
+        return self.multiplier != 1.0
+
     def to_mongo(self) -> dict[str, Any]:
         return {
             "multiplier": self.multiplier,
