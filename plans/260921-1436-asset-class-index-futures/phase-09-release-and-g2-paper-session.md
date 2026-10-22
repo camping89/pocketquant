@@ -79,6 +79,7 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
   Local profile: ~45 s per CME symbol; 24/7 and Exness calendars take 0.02-0.03 s. Caching
   `_window_rows` per date alone cut it to ~17 s locally (an experiment, not a fix). Fix after
   Phase 9 measurements, so no deploy resets them.
+  Write-up: `plans/reports/debug-261023-0045-daily-0400-integrity-event-loop-stall.md`.
 
 ## Success criteria
 
