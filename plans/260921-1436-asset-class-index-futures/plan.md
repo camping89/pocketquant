@@ -175,6 +175,24 @@ phase files during validation, on the user's instruction.
 
 ## Validation log
 
+### Session 12 — 2026-10-22 (open metrics: measure, fix, release)
+
+**Measured (read-only, ~10:40 UTC).** Rows 5 and 10 pass (row 10 in substance: the one 1w
+insert per symbol on 2026-10-17 is the closed week's bar). Row 11 failed on substance:
+`sync_verify_cascade` (HH:00:00) read the newest 5m bucket before `sync_1m` (HH:00:02) stored
+its last minute, proven from `created_at` for all 8 runs on ES and BTC. Row 4 counts and the
+details are in Phase 10's context.
+
+**User decisions.** Fix the verify race now and re-measure 24 runs (Phase 8, 9). Run G2 with
+futures-only paper settings, `PAPER_FUTURES_INITIAL_BALANCE=200000` and
+`PAPER_FUTURES_LEVERAGE=25`, on a paper `engulfing` 15m ES subscription. Leverage alone
+cannot size ES at the crypto balance: the 2 % risk term floors it to zero.
+
+**Shipped.** `2be18e00` (verify drops the newest matched bucket), `78d8c205` (futures paper
+balance, leverage and metrics baseline). Released 15:34Z; subscription
+`01a16440-fdc8-745c-8a9e-7c2b6223de0d` running. Measurements continue in Phase 9.
+
+
 ### Session 1 — 2026-09-21
 
 **Verification pass (mechanical, before the interview).**

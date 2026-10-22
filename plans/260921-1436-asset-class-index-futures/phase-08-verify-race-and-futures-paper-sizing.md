@@ -19,7 +19,7 @@ User decisions, 2026-10-22 (Phase 10 measurement, Session 12):
   `plans/reports/kongming-261022-1745-phase8-row10-row11-failures.md`.
 - **G2, route leverage into futures paper sizing, with a futures-only paper balance.** At
   10,000 USD the 2 % risk term alone sizes ES to zero whatever the leverage (200 USD over an
-  engulfing stop of at least ~8 points x 50). Prod will set 200,000 USD and leverage 20.
+  engulfing stop of at least ~8 points x 50). Prod set 200,000 USD and leverage 25 (Phase 9).
 
 "Futures" here means a contract spec with `multiplier != 1.0`, the predicate the position
 calculator already uses. Only the seeded index futures have it.

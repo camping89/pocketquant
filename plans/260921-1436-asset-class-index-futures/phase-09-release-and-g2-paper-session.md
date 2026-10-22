@@ -11,7 +11,9 @@ dependencies: [8]
 
 Phase 8 lands on `develop`. This phase releases it to prod, sets the futures paper values,
 starts one paper ES subscription, and measures rows 11 and 13 of `completion-report.md`.
-User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD, leverage 20.
+User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD, leverage 25
+(raised from 20 at release: at ES 7,719.75 leverage 20 caps at 1.04 contracts, and above
+8,000 every signal sizes to zero; 25 caps at 1.30 and zeroes only above ~10,000).
 
 ## Constraints
 
@@ -26,7 +28,7 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
 
 ### Task 1 — Config and release
 
-- Add `PAPER_FUTURES_INITIAL_BALANCE=200000` and `PAPER_FUTURES_LEVERAGE=20` to the prod
+- Add `PAPER_FUTURES_INITIAL_BALANCE=200000` and `PAPER_FUTURES_LEVERAGE=25` to the prod
   `.env`; commit and push `pocketquant-config`. Print key names only.
 - [ASK] release range, then `git push ... develop:master`; watch CI to green; confirm the
   container is healthy and record its `StartedAt`.
@@ -47,6 +49,17 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
   the subscription closed and check each `pnl == (exit - entry) x 50 x contracts` (sign by
   side) less commission, in USD. If the session closes no trade, record that and extend by one
   session once.
+
+## Progress
+
+- 2026-10-22 Task 1 done: `pocketquant-config` 27c423a5 adds the two keys; `develop:master`
+  fast-forward b30ea30c..1c72ddf0, CI run 39805449134 green, container healthy,
+  `StartedAt` 2026-10-22T15:34:21Z. In-container `Settings`: futures balance 200000.0,
+  leverage 25.0; `paper_initial_balance` stays 100000.0 on prod.
+- 2026-10-22 Task 2 done: subscription `01a16440-fdc8-745c-8a9e-7c2b6223de0d` (engulfing, 15m,
+  paper) created 15:35:43Z, started, `actual_state=running`.
+- Task 3 pending. Row 11: 24 runs from 16:00Z, measurable after 2026-10-23T15:05Z. G2: the
+  session 2026-10-22T22:00Z to 2026-10-23T21:00Z, measurable after 21:05Z. Do not deploy before.
 
 ## Success criteria
 
