@@ -133,7 +133,7 @@ class TestVerifyOneSymbol:
             provider=provider,  # pyright: ignore[reportArgumentType]
             bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
         )
-        assert out["compared"] == 3
+        assert out["compared"] == 2  # the newest bucket is left out
         assert out["divergence_count"] == 0
         assert out["samples"] == []
 
@@ -150,8 +150,28 @@ class TestVerifyOneSymbol:
             provider=provider,  # pyright: ignore[reportArgumentType]
             bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
         )
-        assert out["compared"] == 5
-        assert out["divergence_count"] == 5
+        assert out["compared"] == 4  # the newest bucket is left out
+        assert out["divergence_count"] == 4
         assert len(out["samples"]) == 3  # truncated for log brevity
         for s in out["samples"]:
             assert s["fields"]["open"] is True
+
+    @pytest.mark.asyncio
+    async def test_newest_bucket_short_of_its_last_minute_is_not_compared(self) -> None:
+        # The verify runs seconds before sync_1m stores the newest 1m bar, so the
+        # newest stored bucket lacks a minute of volume. An older bucket that
+        # diverges must still count. Bars arrive newest first, as some providers return.
+        rest = [_bar(dt=_ts(m)) for m in (15, 10, 5, 0)]
+        cascade = [_bar(dt=_ts(0)), _bar(dt=_ts(5), open_=100.5), _bar(dt=_ts(10))]
+        cascade.append(_bar(dt=_ts(15), volume=8.0))
+        provider = SimpleNamespace(fetch_ohlcv=AsyncMock(return_value=rest))
+        bar_repo = SimpleNamespace(find=AsyncMock(return_value=cascade))
+
+        out = await _verify_one_symbol(
+            "BINANCE:BTCUSDT",
+            provider=provider,  # pyright: ignore[reportArgumentType]
+            bar_repo=bar_repo,  # pyright: ignore[reportArgumentType]
+        )
+        assert out["compared"] == 3
+        assert out["divergence_count"] == 1
+        assert out["samples"][0]["datetime"] == _ts(5).isoformat()

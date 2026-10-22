@@ -561,16 +561,23 @@ async def _verify_one_symbol(
         return {"symbol": symbol, "compared": 0, "cascade_empty": True}
 
     cascade_by_dt: dict = {b.datetime: b for b in cascade_bars if b.datetime}
+    pairs = sorted(
+        (
+            (rest_bar, cascade_by_dt[rest_bar.datetime])
+            for rest_bar in rest_bars
+            if rest_bar.datetime in cascade_by_dt
+        ),
+        key=lambda pair: pair[0].datetime,
+    )
+    # This job runs seconds before sync_1m stores the newest 1m bar, so the newest
+    # stored bucket can still be one minute short. Stored 1m bars arrive in order,
+    # so only that bucket can be; it is left out.
+    pairs = pairs[:-1]
 
     compared = 0
     divergence_count = 0
     samples: list[dict] = []
-    for rest_bar in rest_bars:
-        if not rest_bar.datetime:
-            continue
-        cascade_bar = cascade_by_dt.get(rest_bar.datetime)
-        if cascade_bar is None:
-            continue
+    for rest_bar, cascade_bar in pairs:
         compared += 1
         fields_diff = compare_bar_fields(rest_bar, cascade_bar)
         if any(fields_diff.values()):
