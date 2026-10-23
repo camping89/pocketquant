@@ -61,6 +61,16 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
 - Task 3 pending. Row 11: 24 runs from 16:00Z, measurable after 2026-10-23T15:05Z. G2: the
   session 2026-10-22T22:00Z to 2026-10-23T21:00Z, measurable after 21:05Z. Do not deploy before.
 
+- 2026-10-23 22:12 +07, Row 11 measured: **Pass.** Container `StartedAt` unchanged
+  (2026-10-22T15:34:21Z, healthy, 0 restarts). ES1!:TRADINGVIEW `sync_verify_cascade`, the 24
+  runs 2026-10-22T16:00Z to 2026-10-23T15:00Z: 23 compared 10 bars each with
+  `divergence_count=0`; 1 `symbol_failed` at 00:00Z (TradingView "no series", compared
+  nothing); 0 `cascade.divergence_alert`. Before the fix, 5 of 8 runs alerted. Docker keeps
+  about 12 h of logs (`json-file`, 10m x 3), so runs 16:00Z-02:00Z were read in the monitoring
+  checks of 01:25Z and 08:39Z and runs 03:00Z-15:00Z at 15:12Z. Other symbols, runs
+  03:00Z-15:00Z (13 runs each): 0 alerts for NQ, YM, BTCUSDT, ETHUSDT, SOLUSDT, BTCUSD,
+  XAUUSD and EURUSD; YM had 2 `symbol_failed`. Their 16:00Z-02:00Z runs were not captured
+  before rotation.
 - 2026-10-22 23:45 +07, moving `sync_verify_cascade` off :00 checked (7 days of `job_history`,
   read-only, no change made). The :00 `sync_1m` finishes its futures 13-20 s later (ES 17.0 s,
   NQ 26.3 s, YM 17.9 s vs 3.8 / 6.4 / 8.8 s at other minutes), because the verify holds the
