@@ -2,7 +2,7 @@
 title: "Daily 04:00 UTC stall: sync_integrity blocks the event loop"
 date: 2026-10-23
 status: diagnosed, not fixed
-plan: plans/260921-1436-asset-class-index-futures (found during Phase 9)
+plan: plans/archive/260921-1436-asset-class-index-futures (found during Phase 9)
 ---
 
 # Daily 04:00 UTC stall: `sync_integrity` blocks the event loop

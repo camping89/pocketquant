@@ -1,7 +1,7 @@
 ---
 title: "Asset-class index futures (ES/NQ/YM) via TradingView"
 description: "Generalize the 24/7-crypto pipeline into an asset-class + trading-calendar model, add provider routing and a TradingView adapter pair, and bring ES1!/NQ1!/YM1! into charts, paper trading and backtests."
-status: in-progress
+status: completed
 priority: P1
 effort: 11d
 branch: develop
@@ -191,6 +191,16 @@ cannot size ES at the crypto balance: the 2 % risk term floors it to zero.
 **Shipped.** `2be18e00` (verify drops the newest matched bucket), `78d8c205` (futures paper
 balance, leverage and metrics baseline). Released 15:34Z; subscription
 `01a16440-fdc8-745c-8a9e-7c2b6223de0d` running. Measurements continue in Phase 9.
+
+**Final numbers (2026-10-24).** Row 11 passes: 24 runs, ES 23 compared with
+`divergence_count=0`, 1 vendor failure, 0 alerts. G2 passes on its arithmetic: 4 trades, each
+`pnl == (exit - entry) x 50 x 1`. Rows 4 (dropped), 5 (closed) and 10 (pass in substance) are in
+the completion-report addendum.
+
+**Found and deferred to a follow-up plan.** The live paper broker checks SL/TP against every
+interval's bars, so 2 of the 4 G2 exits were spurious (`plans/reports/debug-261024-0423-paper-sl-tp-fires-on-higher-interval-bars.md`). The daily 04:00 `sync_integrity`
+run blocks the event loop for about 7 minutes (`plans/reports/debug-261023-0045-daily-0400-integrity-event-loop-stall.md`). The stopped ES subscription is deleted
+once its open position closes.
 
 
 ### Session 1 — 2026-09-21

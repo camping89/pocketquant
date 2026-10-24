@@ -2,7 +2,7 @@
 title: Phase 8 verification — rows 10 and 11 do not match their literal pass clauses
 date: 2026-10-22
 author: kongming (advisory only; no code, plan file or prod touched)
-plan: pocketquant/plans/260921-1436-asset-class-index-futures/phase-08-close-open-metrics.md
+plan: plans/archive/260921-1436-asset-class-index-futures/phase-10-close-open-metrics.md
 ---
 
 # TL;DR

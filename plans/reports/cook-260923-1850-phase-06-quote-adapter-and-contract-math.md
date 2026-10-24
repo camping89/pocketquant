@@ -1,6 +1,6 @@
 # Phase 6 completion — Polling Quote Adapter and Contract-Aware Trading Math
 
-Plan: `plans/260921-1436-asset-class-index-futures/`
+Plan: `plans/archive/260921-1436-asset-class-index-futures/`
 Phase file: `phase-06-quote-adapter-and-contract-math.md`
 Date: 2026-09-23
 Status: tasks 1-8 complete and deployed (runs `35856304174` and `35857069557`). G3 is

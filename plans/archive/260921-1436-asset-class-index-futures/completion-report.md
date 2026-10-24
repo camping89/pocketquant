@@ -1,7 +1,7 @@
 ---
 title: Success-metric run-through
 date: 2026-09-24
-status: partial — 11 metrics pass, 2 fail, 5 open with a dated measurement
+status: closed — see the 2026-10-24 addendum for rows 4, 5, 10, 11 and 13
 ---
 
 # Success-metric run-through
@@ -253,3 +253,20 @@ comparison runs. That is consistent with every divergence here, but not proven.
 Crypto shows it too, so this plan did not introduce it. If the 2026-09-25 measurement
 confirms the pattern, the fix is to exclude the newest bucket from the comparison, or
 to offset the job past `sync_1m`.
+
+## Addendum 2026-10-24: rows 4, 5, 10, 11 and 13
+
+Measured on prod between 2026-10-22 and 2026-10-24, after the futures were re-seeded as
+`ES1!`, `NQ1!` and `YM1!:TRADINGVIEW` on 2026-10-13. Details are in `plan.md` Session 12 and
+the Phase 9 and Phase 10 files.
+
+| # | Result |
+|---|--------|
+| 4 | **Dropped (re-scoped).** `partial_aggregate` was removed on 2026-09-24. Day count from 2026-10-22T02:01Z: `misaligned_bars_dropped` 7 lines, all from the 03:01Z backfill dropping 2000-2012 holiday 1d/1w bars; `integrity.issues_found` 3 per symbol, all 04:00-04:06Z; `no_progress` ES 14, NQ 8, YM 59; `stuck_threshold_crossed` 0. These are structural on the delayed free feed and covered by the data-lag flag, so the week-long watch is dropped. |
+| 5 | **Closed.** 0 of 1d/1w futures bars lack `session_date` (ES 4993/1500, NQ 4993/1406, YM 4993/1264). |
+| 10 | **Pass in substance.** Weekend 2026-10-16T21:01Z to 10-18T22:00Z: 2,874 `sync_1m` runs, every futures detail `skipped/closed`. The 10-17 backfill inserted one `1w` bar per symbol, the week that closed Friday; a closed week's bar must land once, so the "no backfill insert" clause was mis-specified. |
+| 11 | **Pass** after fix `2be18e00`. The verify read the newest 5m bucket seconds before `sync_1m` stored its last minute; it now leaves that bucket out. 24 runs 2026-10-22T16:00Z to 10-23T15:00Z: ES 23 compared runs with `divergence_count=0`, 1 vendor `symbol_failed`, 0 alerts. 4h anchoring passed on 2026-09-24. |
+| 13 | **Pass, with a defect found.** Futures paper settings `78d8c205` (200,000 USD, leverage 25). Session 2026-10-22T22:00Z to 10-23T21:00Z, paper `engulfing` 15m: 4 closed trades of 1 contract, each `pnl` equal to `(exit - entry) x 50 x 1` signed by side; commission 4.60-4.62 USD per round trip, stored separately. Defect: trades 1 and 4 exited on levels no 1m bar after entry reached, because the live paper broker checks SL/TP on every interval's bar (`plans/reports/debug-261024-0423-paper-sl-tp-fires-on-higher-interval-bars.md`). |
+
+Deferred to a follow-up plan: the paper SL/TP defect above and the daily 04:00 stall
+(`plans/reports/debug-261023-0045-daily-0400-integrity-event-loop-stall.md`).

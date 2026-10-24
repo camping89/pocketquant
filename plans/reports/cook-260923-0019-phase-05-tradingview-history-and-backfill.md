@@ -1,6 +1,6 @@
 # Phase 5 completion — TradingView History Adapter, Seeding and Backfill
 
-Plan: `plans/260921-1436-asset-class-index-futures/`
+Plan: `plans/archive/260921-1436-asset-class-index-futures/`
 Phase file: `phase-05-tradingview-history-and-backfill.md`
 Date: 2026-09-22/23
 Status: tasks 1-11 complete and deployed. Task 9 (`--apply` in production), Task 10's

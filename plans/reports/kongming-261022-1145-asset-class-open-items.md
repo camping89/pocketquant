@@ -2,7 +2,7 @@
 title: Closing the open items of the asset-class index-futures plan
 date: 2026-10-22
 author: kongming (advisory only; no code or prod touched)
-plan: plans/260921-1436-asset-class-index-futures/
+plan: plans/archive/260921-1436-asset-class-index-futures/
 ---
 
 # TL;DR

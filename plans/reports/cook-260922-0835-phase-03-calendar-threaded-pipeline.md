@@ -1,6 +1,6 @@
 # Phase 3 completion — Calendar-Threaded Pipeline on the 24/7 Calendar
 
-Plan: `plans/260921-1436-asset-class-index-futures/`
+Plan: `plans/archive/260921-1436-asset-class-index-futures/`
 Phase file: `phase-03-calendar-threaded-pipeline.md`
 Date: 2026-09-22
 Status: complete. All 11 tasks done; shipped to production and verified on the VPS.

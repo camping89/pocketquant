@@ -1,6 +1,6 @@
 # Phase 4 completion — Provider Routing Adapters and Settings
 
-Plan: `plans/260921-1436-asset-class-index-futures/`
+Plan: `plans/archive/260921-1436-asset-class-index-futures/`
 Phase file: `phase-04-provider-routing-adapters.md`
 Date: 2026-09-22
 Status: complete. All 8 tasks done; shipped to production and verified on the VPS.

@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Release, Re-measure Verify and Run the G2 Paper Session"
-status: pending
+status: completed
 priority: P2
 effort: "2d elapsed, 1h active"
 dependencies: [8]
@@ -61,6 +61,13 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
 - Task 3 pending. Row 11: 24 runs from 16:00Z, measurable after 2026-10-23T15:05Z. G2: the
   session 2026-10-22T22:00Z to 2026-10-23T21:00Z, measurable after 21:05Z. Do not deploy before.
 
+- 2026-10-24 04:12 +07, G2 measured: **Pass, with a defect.** `StartedAt` unchanged. 4 trades
+  closed in the session, 1 contract each, every `pnl == (exit - entry) x 50 x 1` signed by side;
+  commission 4.60-4.62 USD stored separately. Trades 1 (SL, 36 ms after entry) and 4 (TP) were
+  triggered by 4h bars whose range predates the entry; no 1m bar after entry reached those
+  levels. Write-up: `plans/reports/debug-261024-0423-paper-sl-tp-fires-on-higher-interval-bars.md`. A fifth SHORT (opened 18:55:32Z) was open at the close. User
+  decision: subscription stopped about 2026-10-23T21:30Z (`actual_state=stopped`); delete it after that
+  position closes, when CME reopens 2026-10-25T22:00Z.
 - 2026-10-23 22:12 +07, Row 11 measured: **Pass.** Container `StartedAt` unchanged
   (2026-10-22T15:34:21Z, healthy, 0 restarts). ES1!:TRADINGVIEW `sync_verify_cascade`, the 24
   runs 2026-10-22T16:00Z to 2026-10-23T15:00Z: 23 compared 10 bars each with

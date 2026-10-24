@@ -1,6 +1,6 @@
 # Phase 1 completion — UTC Invariant and Live Crypto Bug Fixes
 
-Plan: `plans/260921-1436-asset-class-index-futures/`
+Plan: `plans/archive/260921-1436-asset-class-index-futures/`
 Phase file: `phase-01-utc-invariant-and-crypto-bugs.md`
 Date: 2026-09-22
 Status: complete. All 14 tasks done; shipped to production and verified on the VPS.

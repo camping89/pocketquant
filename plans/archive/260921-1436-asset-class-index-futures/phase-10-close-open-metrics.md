@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Close Open Metrics and Archive"
-status: pending
+status: completed
 priority: P3
 effort: "0.5d"
 dependencies: [9]
