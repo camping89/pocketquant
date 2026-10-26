@@ -61,6 +61,12 @@ User choices (2026-10-22): `engulfing` on 15m, futures paper balance 200,000 USD
 - Task 3 pending. Row 11: 24 runs from 16:00Z, measurable after 2026-10-23T15:05Z. G2: the
   session 2026-10-22T22:00Z to 2026-10-23T21:00Z, measurable after 21:05Z. Do not deploy before.
 
+- 2026-10-26 08:30 +07, subscription cleanup: the fifth SHORT (entry 7665.87, SL 7680.92,
+  TP 7651.25) closed on SL 2026-10-25T22:10:05Z at 7681.31, pnl -772.03 USD, commission 4.60.
+  A real hit, not the interval defect: the CME reopen gapped up and the 22:00Z 1m bar opened at
+  7690 (high 7698.5). The fill is at the SL price, not the gap open. 0 open positions, then
+  `DELETE /api/v1/subscriptions/01a16440-...de0d` returned 204; Mongo has 0 subscription docs,
+  5 trades and 5 positions kept, ES1!:TRADINGVIEW still tracked.
 - 2026-10-24 04:12 +07, G2 measured: **Pass, with a defect.** `StartedAt` unchanged. 4 trades
   closed in the session, 1 contract each, every `pnl == (exit - entry) x 50 x 1` signed by side;
   commission 4.60-4.62 USD stored separately. Trades 1 (SL, 36 ms after entry) and 4 (TP) were
