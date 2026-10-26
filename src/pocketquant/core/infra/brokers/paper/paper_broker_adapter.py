@@ -23,6 +23,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 
+from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.messaging import EventBus, event_handler
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id_str
@@ -98,8 +99,9 @@ class PaperBrokerAdapter(IBrokerPort):
     - Optional SL/TP auto-fill: when an ``event_bus`` is supplied, the broker
       subscribes to ``BarCompletedEvent`` on ``connect()`` and emits synthetic
       exit fills when ``bar.high``/``bar.low`` crosses a tracked position's
-      ``sl_price`` / ``tp_price``. When both SL and TP are hit in the same
-      bar, **SL fires first** (deterministic worst-case contract).
+      ``sl_price`` / ``tp_price``. A level the bar opens past fills at the open
+      (gap); when both SL and TP are hit inside one bar, **SL fires first**
+      (deterministic worst-case contract).
 
     Single-task assumption: callers must not invoke broker methods from
     multiple concurrent tasks. Lock is held only for short state mutations;
@@ -147,6 +149,9 @@ class PaperBrokerAdapter(IBrokerPort):
         self._connected = False
         self._bar_subscribed = False
         self._current_prices: dict[str, float] = {}
+        # Finest interval seen per symbol: a coarser bar's range starts before
+        # entries made inside it, so only the finest stream fills or exits.
+        self._finest_interval_s: dict[str, int] = {}
 
     @property
     def name(self) -> str:
@@ -684,23 +689,31 @@ class PaperBrokerAdapter(IBrokerPort):
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Auto-fill pending LIMITs + SL/TP exits as the bar resolves.
 
-        Order: pending-LIMIT fills first (entries may open the very position
-        that the same bar's SL/TP would then close in extreme moves), then
-        SL/TP scans existing positions. Strategy entry handlers still run
-        before this because the broker subscribes LAST (see ``connect``).
+        Only bars of the finest interval seen for the symbol act. A bar acts
+        only on positions and orders that existed when it was published, so a
+        position a strategy opens on its signal bar is checked from the next
+        bar (strategy handlers run first: the broker subscribes LAST, see
+        ``connect``). Order: pending-LIMIT fills first (a LIMIT filled here may
+        be closed by this bar's SL/TP), then SL/TP scans positions.
         """
+        secs = INTERVAL_SECONDS[event.interval]
+        finest = min(secs, self._finest_interval_s.get(event.symbol, secs))
+        self._finest_interval_s[event.symbol] = finest
+        if secs > finest:
+            return
         self._current_prices[event.symbol.upper()] = event.close
+        fresh = {p.id for p in self._positions.values() if p.opened_at >= event.occurred_at}
 
         await self._fill_pending_on_bar(event)
 
         to_close: list[tuple[PositionAggregate, float, OrderSide, str]] = []
         async with self._lock:
             for pos in self._positions.values():
-                if pos.is_closed or pos.symbol != event.symbol:
+                if pos.is_closed or pos.symbol != event.symbol or pos.id in fresh:
                     continue
                 if pos.sl_price is None and pos.tp_price is None:
                     continue
-                hit = self._check_sl_tp(pos, event.high, event.low)
+                hit = self._check_sl_tp(pos, event)
                 if hit is not None:
                     exit_price, exit_side, reason = hit
                     to_close.append((pos, exit_price, exit_side, reason))
@@ -721,7 +734,10 @@ class PaperBrokerAdapter(IBrokerPort):
         to_fill: list[_PendingOrder] = []
         async with self._lock:
             for pending in list(self._pending_orders.values()):
-                if pending.order.symbol != event.symbol:
+                if (
+                    pending.order.symbol != event.symbol
+                    or pending.submitted_at >= event.occurred_at
+                ):
                     continue
                 if self._limit_crosses_bar(
                     pending.order.side, pending.limit_price, event.high, event.low
@@ -775,19 +791,25 @@ class PaperBrokerAdapter(IBrokerPort):
                 await self._notify_trade_callbacks(trade)
 
     def _check_sl_tp(
-        self, pos: PositionAggregate, bar_high: float, bar_low: float
+        self, pos: PositionAggregate, bar: BarCompletedEvent
     ) -> tuple[float, OrderSide, str] | None:
-        # SL checked before TP so SL wins when a single bar straddles both levels.
+        # The open is the bar's first trade: a level it is already past fills there.
+        # Inside the bar, SL is checked before TP so SL wins when both are crossed.
         sl, tp = pos.sl_price, pos.tp_price
         if pos.side == PositionSide.LONG:
-            if sl is not None and bar_low <= sl:
-                return (sl, OrderSide.SELL, REASON_AUTO_SL)
-            if tp is not None and bar_high >= tp:
+            if tp is not None and bar.open >= tp:
+                return (bar.open, OrderSide.SELL, REASON_AUTO_TP)
+            if sl is not None and bar.low <= sl:
+                return (min(bar.open, sl), OrderSide.SELL, REASON_AUTO_SL)
+            if tp is not None and bar.high >= tp:
                 return (tp, OrderSide.SELL, REASON_AUTO_TP)
-        else:  # SHORT
-            if sl is not None and bar_high + self._spread >= sl:
-                return (sl, OrderSide.BUY, REASON_AUTO_SL)
-            if tp is not None and bar_low + self._spread <= tp:
+        else:  # SHORT exits buy at the ask
+            ask_open = bar.open + self._spread
+            if tp is not None and ask_open <= tp:
+                return (ask_open, OrderSide.BUY, REASON_AUTO_TP)
+            if sl is not None and bar.high + self._spread >= sl:
+                return (max(ask_open, sl), OrderSide.BUY, REASON_AUTO_SL)
+            if tp is not None and bar.low + self._spread <= tp:
                 return (tp, OrderSide.BUY, REASON_AUTO_TP)
         return None
 
@@ -855,3 +877,4 @@ class PaperBrokerAdapter(IBrokerPort):
         self._current_prices.clear()
         self._order_events.clear()
         self._pending_orders.clear()
+        self._finest_interval_s.clear()

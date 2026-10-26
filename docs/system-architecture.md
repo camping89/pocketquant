@@ -103,6 +103,7 @@ A backtest is an ad-hoc single run, independent of subscriptions.
 - `_can_afford` gates only a BUY that opens or adds. A BUY that covers a short is never rejected, or a losing short could not close.
 - `available_balance` stays `_balance`, so a strategy that pyramids sizes against the full balance. No current strategy pyramids.
 - Spread: the backtest `spread` field (default 0) treats bars as bid prices, so ask = bid + spread. BUY fills pay the ask; a SHORT's SL and TP check the bar's ask high and ask low. The live paper broker runs without spread.
+- SL/TP and pending LIMIT fills act only on the finest interval seen per symbol (1m live; the replayed interval in a backtest), because a coarser bar's range starts before entries made inside it. A bar acts only on positions and orders that existed when it was published, so the signal bar never closes the position it opened. A level the bar opens past fills at the open; inside a bar, SL wins over TP.
 
 ## Market Data
 

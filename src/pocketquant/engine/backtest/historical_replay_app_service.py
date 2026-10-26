@@ -80,6 +80,8 @@ class HistoricalReplayAppService:
                 low=bar.low,
                 close=bar.close,
                 volume=bar.volume,
+                # Sim time, so the broker's same-bar rule compares like with like.
+                occurred_at=bar_time,
             )
             await self._event_bus.publish(event)
 

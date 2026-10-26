@@ -33,12 +33,12 @@ def _order(side: OrderSide, *, sl: float | None = None, tp: float | None = None)
     )
 
 
-def _bar(*, high: float, low: float) -> BarCompletedEvent:
+def _bar(*, high: float, low: float, open: float | None = None) -> BarCompletedEvent:
     return BarCompletedEvent(
         symbol=_SYM,
         interval="1m",
         bar_start=_T0,
-        open=(high + low) / 2,
+        open=open if open is not None else (high + low) / 2,
         high=high,
         low=low,
         close=(high + low) / 2,
@@ -125,3 +125,17 @@ def test_config_from_dict_reads_spread() -> None:
     }
     assert _config_from_dict({**payload, "spread": 0.4}, LINEAR_SPEC).spread == 0.4
     assert _config_from_dict(payload, LINEAR_SPEC).spread == 0.0
+
+
+async def test_short_sl_gap_fills_at_ask_open() -> None:
+    b, bus, fills = await _broker(0.4)
+    await b.submit_order(_order(OrderSide.SELL, sl=102.0))
+    await bus.publish(_bar(high=104.0, low=102.5, open=103.0))
+    assert fills[-1].filled_price == pytest.approx(103.4)
+
+
+async def test_short_tp_gap_fills_at_ask_open() -> None:
+    b, bus, fills = await _broker(0.4)
+    await b.submit_order(_order(OrderSide.SELL, tp=96.0))
+    await bus.publish(_bar(high=95.0, low=93.0, open=94.0))
+    assert fills[-1].filled_price == pytest.approx(94.4)

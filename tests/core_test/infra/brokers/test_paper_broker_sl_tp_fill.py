@@ -51,12 +51,14 @@ def _bar_event(
     low: float,
     close: float | None = None,
     symbol: str = _SYM,
+    open: float | None = None,
+    interval: str = "1m",
 ) -> BarCompletedEvent:
     return BarCompletedEvent(
         symbol=symbol,
-        interval="1m",
+        interval=interval,
         bar_start=_T0,
-        open=(high + low) / 2,
+        open=open if open is not None else (high + low) / 2,
         high=high,
         low=low,
         close=close if close is not None else (high + low) / 2,
@@ -355,3 +357,145 @@ async def test_pending_limit_expires_on_expire_call() -> None:
 
     assert expired == 1
     assert any(c.status == OrderStatus.EXPIRED for c in callbacks)
+
+
+async def _fills(b: PaperBrokerAdapter) -> list:
+    fills: list = []
+    await b.subscribe_order_updates(lambda r: fills.append(r))
+    return fills
+
+
+async def test_coarser_bar_does_not_close_but_next_1m_does() -> None:
+    """A 4h bar's range predates an entry made inside it, so only the 1m stream exits."""
+    b, bus = await _broker()
+    assert bus is not None
+    fills = await _fills(b)
+    await bus.publish(_bar_event(high=100.2, low=99.8))
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+
+    await bus.publish(_bar_event(high=105.0, low=97.0, interval="4h"))
+    assert len(await b.get_positions()) == 1
+
+    await bus.publish(_bar_event(high=100.5, low=97.5))
+    assert await b.get_positions() == []
+    assert fills[-1].filled_price == pytest.approx(98.0)
+
+
+async def test_coarser_bar_does_not_fill_pending_limit() -> None:
+    b, bus = await _broker()
+    assert bus is not None
+    fills = await _fills(b)
+    await bus.publish(_bar_event(high=100.2, low=99.8))
+    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
+
+    await bus.publish(_bar_event(high=95.0, low=89.0, interval="4h"))
+    assert await b.get_positions() == []
+
+    await bus.publish(_bar_event(high=95.0, low=89.5))
+    assert len(await b.get_positions()) == 1
+    assert fills[-1].filled_price == pytest.approx(90.0)
+
+
+async def test_finest_interval_is_per_symbol() -> None:
+    """A symbol that only gets 15m bars still exits while another symbol streams 1m."""
+    b, bus = await _broker()
+    assert bus is not None
+    other = "ETHUSDT:BINANCE"
+    await bus.publish(_bar_event(high=100.2, low=99.8))
+    await b.submit_order(
+        OrderAggregate.create(
+            subscription_id="e",
+            symbol=other,
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            quantity=1.0,
+            price=100.0,
+            sl_price=98.0,
+        )
+    )
+    await bus.publish(_bar_event(high=99.0, low=97.0, symbol=other, interval="15m"))
+    assert await b.get_positions() == []
+
+
+async def test_signal_bar_does_not_close_entry_made_by_its_handler() -> None:
+    """The bar that triggered an entry predates it; the next bar checks the position."""
+    b, bus = await _broker()
+    assert bus is not None
+    entered: list[bool] = []
+
+    async def strategy(event: BarCompletedEvent) -> None:
+        if not entered:
+            entered.append(True)
+            await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+
+    # Strategy handlers subscribe before the broker, as in StrategyAppService.
+    await b.disconnect()
+    bus.subscribe(BarCompletedEvent, strategy)
+    await b.connect()
+
+    await bus.publish(_bar_event(high=101.0, low=97.0))
+    assert len(await b.get_positions()) == 1
+
+    await bus.publish(_bar_event(high=101.0, low=97.0))
+    assert await b.get_positions() == []
+
+
+async def test_limit_filled_on_bar_is_still_checked_same_bar() -> None:
+    """A pending LIMIT that existed before the bar fills, then that bar may hit its SL."""
+    b, bus = await _broker()
+    assert bus is not None
+    fills = await _fills(b)
+    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0, sl=85.0))
+    await bus.publish(_bar_event(high=95.0, low=84.0, open=92.0))
+    assert await b.get_positions() == []
+    filled = [f.filled_price for f in fills if f.status == OrderStatus.FILLED]
+    assert filled == pytest.approx([90.0, 85.0])
+
+
+async def test_long_sl_gap_fills_at_open() -> None:
+    b, bus = await _broker(slippage=0.001)
+    assert bus is not None
+    fills = await _fills(b)
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+    await bus.publish(_bar_event(high=97.0, low=95.0, open=96.0))
+    assert fills[-1].filled_price == pytest.approx(96.0 * 0.999)
+
+
+async def test_long_tp_gap_fills_at_open() -> None:
+    b, bus = await _broker()
+    assert bus is not None
+    fills = await _fills(b)
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+    await bus.publish(_bar_event(high=107.0, low=105.0, open=106.0))
+    assert fills[-1].filled_price == pytest.approx(106.0)
+
+
+async def test_open_past_tp_beats_intrabar_sl() -> None:
+    """The open is the first trade; a TP it already passed fills before a later SL touch."""
+    b, bus = await _broker()
+    assert bus is not None
+    fills = await _fills(b)
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+    await bus.publish(_bar_event(high=105.0, low=97.0, open=105.0))
+    sells = [f for f in fills if f.side == OrderSide.SELL]
+    assert len(sells) == 1
+    assert sells[0].filled_price == pytest.approx(105.0)
+
+
+async def test_long_sl_inside_range_fills_at_level() -> None:
+    b, bus = await _broker()
+    assert bus is not None
+    fills = await _fills(b)
+    await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
+    await bus.publish(_bar_event(high=99.5, low=97.0, open=99.0))
+    assert fills[-1].filled_price == pytest.approx(98.0)
+
+
+async def test_short_sl_reopen_gap_matches_prod() -> None:
+    """ES SHORT at the 2026-10-25 CME reopen: the bar opened at 7690, past SL 7680.92."""
+    b, bus = await _broker(slippage=0.00005)
+    assert bus is not None
+    fills = await _fills(b)
+    await b.submit_order(_order(OrderSide.SELL, price=7665.87, sl=7680.92, tp=7651.25))
+    await bus.publish(_bar_event(high=7698.5, low=7690.0, open=7690.0))
+    assert fills[-1].filled_price == pytest.approx(7690.0 * 1.00005)
