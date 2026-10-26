@@ -560,30 +560,23 @@ async def _verify_one_symbol(
     if not cascade_bars:
         return {"symbol": symbol, "compared": 0, "cascade_empty": True}
 
-    cascade_by_dt: dict = {b.datetime: b for b in cascade_bars if b.datetime}
-    pairs = sorted(
-        (
-            (rest_bar, cascade_by_dt[rest_bar.datetime])
-            for rest_bar in rest_bars
-            if rest_bar.datetime in cascade_by_dt
-        ),
-        key=lambda pair: pair[0].datetime,
-    )
+    rest_by_dt = {b.datetime: b for b in rest_bars if b.datetime}
+    cascade_by_dt = {b.datetime: b for b in cascade_bars if b.datetime}
     # This job runs seconds before sync_1m stores the newest 1m bar, so the newest
     # stored bucket can still be one minute short. Stored 1m bars arrive in order,
     # so only that bucket can be; it is left out.
-    pairs = pairs[:-1]
+    compared_dts = sorted(rest_by_dt.keys() & cascade_by_dt.keys())[:-1]
 
     compared = 0
     divergence_count = 0
     samples: list[dict] = []
-    for rest_bar, cascade_bar in pairs:
+    for bar_dt in compared_dts:
         compared += 1
-        fields_diff = compare_bar_fields(rest_bar, cascade_bar)
+        fields_diff = compare_bar_fields(rest_by_dt[bar_dt], cascade_by_dt[bar_dt])
         if any(fields_diff.values()):
             divergence_count += 1
             if len(samples) < 3:
-                samples.append({"datetime": rest_bar.datetime.isoformat(), "fields": fields_diff})
+                samples.append({"datetime": bar_dt.isoformat(), "fields": fields_diff})
 
     return {
         "symbol": symbol,
