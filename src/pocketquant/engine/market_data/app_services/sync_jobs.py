@@ -4,8 +4,8 @@ sync_1m runs every minute: fetches last 100 1m bars per tracked symbol via REST,
 upserts to MongoDB, then cascade-aggregates 1m → 5m/15m/1h/4h/1d (math, no extra
 API calls). Sole MongoDB writer for `bars` collection across all timeframes.
 
-sync_verify_cascade runs hourly: picks one sample tracked symbol round-robin,
-fetches REST 5m bars, compares with cascade-computed 5m, logs divergence alerts.
+sync_verify_cascade runs hourly: for every tracked symbol it fetches REST 5m
+bars, compares them with the cascade-computed 5m, and logs divergence alerts.
 
 data_lag_check runs every minute after sync_1m: measures how far each tracked
 symbol's 1m feed runs behind real time and stores the reading in Redis for the
@@ -21,8 +21,9 @@ resolved at job-execution time from a module-level container reference set by
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pocketquant.core.common.constants import CACHE_KEY_DATA_LAG, TTL_DATA_LAG
 from pocketquant.core.common.logging import get_logger
@@ -145,6 +146,45 @@ def compare_bar_fields(rest_bar, db_bar) -> dict[str, bool]:  # noqa: ANN001
     }
 
 
+async def _tracked(name: str, body: Callable[[str | None], Awaitable[dict | None]]) -> None:
+    """Run one job body and write its job_history document.
+
+    A failed body is recorded here and logged, not re-raised: the scheduler's
+    error hook would record the same run a second time. Only when the start
+    record itself failed does the error reach the scheduler, which records it.
+    A failed history write is logged and never fails the job.
+    """
+    history_repo = await _get_container().get(JobHistoryRepository)
+    started = datetime.now(UTC)
+    doc_id: str | None = None
+    try:
+        doc_id = await history_repo.record_start(name)
+    except Exception:
+        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
+
+    totals: dict = {}
+    error: str | None = None
+    try:
+        totals = await body(doc_id) or {}
+    except Exception as exc:
+        if doc_id is None:
+            raise
+        logger.error(f"market_data.{name}.failed", exc_info=True)
+        error = str(exc)
+    if doc_id is None:
+        return
+    try:
+        await history_repo.record_finish(
+            doc_id,
+            status="failed" if error else "completed",
+            duration_ms=_ms_since(started),
+            error=error,
+            **totals,
+        )
+    except Exception:
+        logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
+
+
 async def _sync_by_intervals(
     intervals: list[Interval],
     n_bars: int,
@@ -155,35 +195,33 @@ async def _sync_by_intervals(
     doc_id: str | None,
     source: str,
     calendar_factory: TradingCalendarFactory,
-) -> tuple[int, int]:
+) -> dict:
     """For each tracked symbol, sync the given intervals via REST provider.
 
-    Returns (total_inserted, total_fetched) rolled up across all sub-syncs.
-    Symbol source is TrackedSymbolRepository (replaces old SyncStatusRepository scan).
-    Each ts.symbol is composite ``{code}:{exchange}``.
+    Returns ``total_inserted`` and ``total_fetched`` across all sub-syncs. Every
+    symbol is tried; the first error is raised at the end.
 
     A symbol whose market is shut is skipped without calling the provider: there
     is nothing to fetch, and asking anyway spends rate limit on an empty answer.
     """
     logger.debug(f"market_data.{job_name}.started")
 
-    tracked = await tracked_symbol_repo.list_all()
-    symbols = [ts.symbol for ts in tracked]
+    async def detail(**fields: Any) -> None:
+        if not doc_id:
+            return
+        try:
+            await history_repo.record_detail(doc_id, **fields)
+        except Exception:
+            logger.warning("job_history.record_detail_failed", job_id=job_name, exc_info=True)
 
+    symbols = [ts.symbol for ts in await tracked_symbol_repo.list_all()]
+    totals = {"total_inserted": 0, "total_fetched": 0}
     if not symbols:
-        logger.warning(
-            f"market_data.{job_name}.skipped",
-            reason="no_tracked_symbols",
-        )
-        return 0, 0
+        logger.warning(f"market_data.{job_name}.skipped", reason="no_tracked_symbols")
+        return totals
 
-    synced = 0
-    errors = 0
-    skipped = 0
+    synced = errors = skipped = 0
     first_error: Exception | None = None
-    total_inserted = 0
-    total_fetched = 0
-
     # One interval of grace after the close, so the session's final bar is still
     # fetched once it has actually closed.
     grace = timedelta(seconds=INTERVAL_SECONDS[max(intervals, key=lambda i: INTERVAL_SECONDS[i])])
@@ -198,61 +236,24 @@ async def _sync_by_intervals(
                 symbol=symbol,
                 calendar_id=calendar.calendar_id,
             )
-            if doc_id:
-                try:
-                    await history_repo.record_detail(
-                        doc_id,
-                        symbol=symbol,
-                        interval=intervals[0].value,
-                        bars_fetched=0,
-                        bars_inserted=0,
-                        filtered_existing=0,
-                        filtered_misaligned=0,
-                        status="skipped",
-                        error="closed",
-                    )
-                except Exception:
-                    logger.warning(
-                        "job_history.record_detail_failed",
-                        job_id=job_name,
-                        exc_info=True,
-                    )
+            await detail(
+                symbol=symbol,
+                interval=intervals[0].value,
+                bars_fetched=0,
+                bars_inserted=0,
+                filtered_existing=0,
+                filtered_misaligned=0,
+                status="skipped",
+                error="closed",
+            )
             continue
 
         for interval in intervals:
+            command = SyncSymbolCommand(
+                symbol=symbol, interval=interval, n_bars=n_bars, source=source
+            )
             try:
-                command = SyncSymbolCommand(
-                    symbol=symbol,
-                    interval=interval,
-                    n_bars=n_bars,
-                    source=source,
-                )
                 result = await sync_service.sync_one(command)
-                total_inserted += result.bars_synced
-                total_fetched += result.bars_fetched
-                if doc_id:
-                    try:
-                        await history_repo.record_detail(
-                            doc_id,
-                            symbol=symbol,
-                            interval=interval.value,
-                            bars_fetched=result.bars_fetched,
-                            bars_inserted=result.bars_synced,
-                            filtered_existing=result.filtered_existing,
-                            filtered_misaligned=result.filtered_misaligned,
-                            status=result.status,
-                            error=result.message,
-                        )
-                    except Exception:
-                        logger.warning(
-                            "job_history.record_detail_failed",
-                            job_id=job_name,
-                            exc_info=True,
-                        )
-                if result.status == "completed":
-                    synced += 1
-                else:
-                    errors += 1
             except Exception as e:
                 logger.error(
                     f"market_data.{job_name}.symbol_failed",
@@ -262,25 +263,33 @@ async def _sync_by_intervals(
                 )
                 errors += 1
                 first_error = first_error or e
-                if doc_id:
-                    try:
-                        await history_repo.record_detail(
-                            doc_id,
-                            symbol=symbol,
-                            interval=interval.value,
-                            bars_fetched=0,
-                            bars_inserted=0,
-                            filtered_existing=0,
-                            filtered_misaligned=0,
-                            status="error",
-                            error=str(e),
-                        )
-                    except Exception:
-                        logger.warning(
-                            "job_history.record_detail_failed",
-                            job_id=job_name,
-                            exc_info=True,
-                        )
+                await detail(
+                    symbol=symbol,
+                    interval=interval.value,
+                    bars_fetched=0,
+                    bars_inserted=0,
+                    filtered_existing=0,
+                    filtered_misaligned=0,
+                    status="error",
+                    error=str(e),
+                )
+                continue
+            totals["total_inserted"] += result.bars_synced
+            totals["total_fetched"] += result.bars_fetched
+            await detail(
+                symbol=symbol,
+                interval=interval.value,
+                bars_fetched=result.bars_fetched,
+                bars_inserted=result.bars_synced,
+                filtered_existing=result.filtered_existing,
+                filtered_misaligned=result.filtered_misaligned,
+                status=result.status,
+                error=result.message,
+            )
+            if result.status == "completed":
+                synced += 1
+            else:
+                errors += 1
 
     logger.debug(
         f"market_data.{job_name}.completed",
@@ -290,243 +299,158 @@ async def _sync_by_intervals(
     )
     if first_error:
         raise first_error
-    return total_inserted, total_fetched
+    return totals
 
 
-async def _run_sync(
-    name: str,
-    intervals: list[Interval],
-    n_bars: int,
-    source: str,
-) -> None:
+async def _rest_sync(
+    name: str, intervals: list[Interval], n_bars: int, source: str, doc_id: str | None
+) -> dict:
     container = _get_container()
-    history_repo = await container.get(JobHistoryRepository)
-    sync_service = await container.get(SyncService)
-    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
-    calendar_factory = await container.get(TradingCalendarFactory)
-
-    started = datetime.now(UTC)
-    doc_id: str | None = None
-    try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
-
-    try:
-        total_inserted, total_fetched = await _sync_by_intervals(
-            intervals,
-            n_bars,
-            name,
-            sync_service,
-            tracked_symbol_repo,
-            history_repo,
-            doc_id,
-            source=source,
-            calendar_factory=calendar_factory,
-        )
-        if doc_id:
-            await history_repo.record_finish(
-                doc_id,
-                status="completed",
-                duration_ms=_ms_since(started),
-                total_inserted=total_inserted,
-                total_fetched=total_fetched,
-            )
-    except Exception as exc:
-        if doc_id:
-            try:
-                await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
-                )
-            except Exception:
-                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
-        raise
-
-
-async def _run_integrity(name: str) -> None:
-    container = _get_container()
-    history_repo = await container.get(JobHistoryRepository)
-    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
-    bar_repo = await container.get(BarRepository)
-    calendar_factory = await container.get(TradingCalendarFactory)
-
-    started = datetime.now(UTC)
-    doc_id: str | None = None
-    try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
-
-    try:
-        tracked = await tracked_symbol_repo.list_all()
-        for ts in tracked:
-            calendar = await calendar_factory.for_symbol(ts.symbol)
-            for interval in SYNC_INTERVALS:
-                report = await check_integrity(ts.symbol, interval, bar_repo, calendar)
-                if (
-                    report["misaligned_count"]
-                    or report["missing_count"]
-                    or report.get("unexpected_count")
-                ):
-                    logger.warning(
-                        "integrity.issues_found",
-                        symbol=ts.symbol,
-                        interval=interval.value,
-                        misaligned=report["misaligned_count"],
-                        missing=report["missing_count"],
-                        unexpected=report.get("unexpected_count", 0),
-                        unexpected_ranges=report.get("unexpected_ranges", [])[:5],
-                    )
-        if doc_id:
-            await history_repo.record_finish(
-                doc_id, status="completed", duration_ms=_ms_since(started)
-            )
-    except Exception as exc:
-        if doc_id:
-            try:
-                await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
-                )
-            except Exception:
-                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
-        raise
-
-
-async def _run_repair(name: str) -> None:
-    container = _get_container()
-    history_repo = await container.get(JobHistoryRepository)
-    sync_service = await container.get(SyncService)
-    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
-    bar_repo = await container.get(BarRepository)
-    calendar_factory = await container.get(TradingCalendarFactory)
-
-    started = datetime.now(UTC)
-    doc_id: str | None = None
-    try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
-
-    try:
-        tracked = await tracked_symbol_repo.list_all()
-        for ts in tracked:
-            calendar = await calendar_factory.for_symbol(ts.symbol)
-            for interval in SYNC_INTERVALS:
-                result = await repair_integrity(
-                    ts.symbol,
-                    interval,
-                    bar_repo,
-                    sync_service,
-                    calendar,
-                    source=SOURCE_REST_REPAIR,
-                )
-                if result["deleted"] or result["gaps_resynced"]:
-                    logger.info(
-                        "integrity.repaired",
-                        symbol=ts.symbol,
-                        interval=interval.value,
-                        deleted=result["deleted"],
-                        gaps_resynced=result["gaps_resynced"],
-                    )
-        if doc_id:
-            await history_repo.record_finish(
-                doc_id, status="completed", duration_ms=_ms_since(started)
-            )
-    except Exception as exc:
-        if doc_id:
-            try:
-                await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
-                )
-            except Exception:
-                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
-        raise
+    return await _sync_by_intervals(
+        intervals,
+        n_bars,
+        name,
+        await container.get(SyncService),
+        await container.get(TrackedSymbolRepository),
+        await container.get(JobHistoryRepository),
+        doc_id,
+        source=source,
+        calendar_factory=await container.get(TradingCalendarFactory),
+    )
 
 
 # APScheduler entrypoints — referenced by text as
 # "pocketquant.engine.market_data.app_services.sync_jobs:<funcname>"
 async def sync_1m() -> None:
+    """Fetch the last 100 1m bars per symbol, then cascade them to 5m-1d.
+
+    The cascade runs even when a REST fetch failed: the symbols that did sync
+    still need their higher timeframes. The failure is recorded afterwards.
+    """
     container = _get_container()
-    history_repo = await container.get(JobHistoryRepository)
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
+
+    async def body(doc_id: str | None) -> dict:
+        try:
+            return await _rest_sync(
+                "sync_1m", [Interval.MINUTE_1], 100, SOURCE_REST_SYNC_1M, doc_id
+            )
+        finally:
+            cascade_total: dict[Interval, int] = {}
+            for ts in await tracked_symbol_repo.list_all():
+                try:
+                    counts = await cascade_for_symbol(
+                        ts.symbol,
+                        lookback_minutes=100,
+                        bar_repo=bar_repo,
+                        calendar=await calendar_factory.for_symbol(ts.symbol),
+                    )
+                except Exception:
+                    logger.error("sync_1m.cascade_failed", symbol=ts.symbol, exc_info=True)
+                    continue
+                for tf, count in counts.items():
+                    cascade_total[tf] = cascade_total.get(tf, 0) + count
+            logger.debug(
+                "sync_1m.cascade_summary",
+                cascade_counts={tf.value: n for tf, n in cascade_total.items()},
+            )
+
+    await _tracked("sync_1m", body)
+
+
+async def sync_backfill() -> None:
+    await _tracked(
+        "sync_backfill",
+        lambda doc_id: _rest_sync(
+            "sync_backfill", SYNC_INTERVALS, 5000, SOURCE_REST_BACKFILL, doc_id
+        ),
+    )
+
+
+async def sync_integrity() -> None:
+    """Log misaligned, missing and unexpected bars per symbol and timeframe.
+
+    Each symbol is checked on its own; the run fails once all are done if any failed.
+    """
+    container = _get_container()
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
+
+    async def body(_: str | None) -> None:
+        tracked = await tracked_symbol_repo.list_all()
+        failed = 0
+        for ts in tracked:
+            try:
+                calendar = await calendar_factory.for_symbol(ts.symbol)
+                for interval in SYNC_INTERVALS:
+                    report = await check_integrity(ts.symbol, interval, bar_repo, calendar)
+                    if (
+                        report["misaligned_count"]
+                        or report["missing_count"]
+                        or report.get("unexpected_count")
+                    ):
+                        logger.warning(
+                            "integrity.issues_found",
+                            symbol=ts.symbol,
+                            interval=interval.value,
+                            misaligned=report["misaligned_count"],
+                            missing=report["missing_count"],
+                            unexpected=report.get("unexpected_count", 0),
+                            unexpected_ranges=report.get("unexpected_ranges", [])[:5],
+                        )
+            except Exception:
+                failed += 1
+                logger.error("integrity.symbol_failed", symbol=ts.symbol, exc_info=True)
+        if failed:
+            raise RuntimeError(f"{failed} of {len(tracked)} symbols failed")
+
+    await _tracked("sync_integrity", body)
+
+
+async def sync_repair() -> None:
+    """Delete misaligned bars and re-sync gaps per symbol and timeframe.
+
+    Each symbol is repaired on its own; the run fails once all are done if any failed.
+    """
+    container = _get_container()
     sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
     calendar_factory = await container.get(TradingCalendarFactory)
 
-    name = "sync_1m"
-    started = datetime.now(UTC)
-    doc_id: str | None = None
-    try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
-
-    try:
-        total_inserted, total_fetched = await _sync_by_intervals(
-            [Interval.MINUTE_1],
-            100,
-            name,
-            sync_service,
-            tracked_symbol_repo,
-            history_repo,
-            doc_id,
-            source=SOURCE_REST_SYNC_1M,
-            calendar_factory=calendar_factory,
-        )
-
+    async def body(_: str | None) -> None:
         tracked = await tracked_symbol_repo.list_all()
-        cascade_total: dict[Interval, int] = {}
+        failed = 0
         for ts in tracked:
             try:
-                counts = await cascade_for_symbol(
-                    ts.symbol,
-                    lookback_minutes=100,
-                    bar_repo=bar_repo,
-                    calendar=await calendar_factory.for_symbol(ts.symbol),
-                )
-                for tf, count in counts.items():
-                    cascade_total[tf] = cascade_total.get(tf, 0) + count
+                calendar = await calendar_factory.for_symbol(ts.symbol)
+                for interval in SYNC_INTERVALS:
+                    result = await repair_integrity(
+                        ts.symbol,
+                        interval,
+                        bar_repo,
+                        sync_service,
+                        calendar,
+                        source=SOURCE_REST_REPAIR,
+                    )
+                    if result["deleted"] or result["gaps_resynced"]:
+                        logger.info(
+                            "integrity.repaired",
+                            symbol=ts.symbol,
+                            interval=interval.value,
+                            deleted=result["deleted"],
+                            gaps_resynced=result["gaps_resynced"],
+                        )
             except Exception:
-                logger.error(
-                    "sync_1m.cascade_failed",
-                    symbol=ts.symbol,
-                    exc_info=True,
-                )
+                failed += 1
+                logger.error("integrity.repair_failed", symbol=ts.symbol, exc_info=True)
+        if failed:
+            raise RuntimeError(f"{failed} of {len(tracked)} symbols failed")
 
-        logger.debug(
-            "sync_1m.cascade_summary",
-            cascade_counts={tf.value: n for tf, n in cascade_total.items()},
-        )
-
-        if doc_id:
-            await history_repo.record_finish(
-                doc_id,
-                status="completed",
-                duration_ms=_ms_since(started),
-                total_inserted=total_inserted,
-                total_fetched=total_fetched,
-            )
-    except Exception as exc:
-        if doc_id:
-            try:
-                await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
-                )
-            except Exception:
-                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
-        raise
+    await _tracked("sync_repair", body)
 
 
 async def _verify_one_symbol(
@@ -589,32 +513,19 @@ async def _verify_one_symbol(
 async def sync_verify_cascade() -> None:
     """Hourly full-fleet sanity check: REST 5m vs cascade 5m, full OHLCV per field.
 
-    Iterates ALL tracked symbols (no round-robin). Each comparison checks O/H/L/C
-    against PRICE_THRESHOLD_PCT and V against VOLUME_THRESHOLD_PCT. Alerts when
+    Iterates every tracked symbol. Each comparison checks O/H/L/C against
+    PRICE_THRESHOLD_PCT and V against VOLUME_THRESHOLD_PCT. Alerts when
     divergence_count/compared > DIVERGENCE_ALERT_FRACTION for that symbol.
     """
     container = _get_container()
-    history_repo = await container.get(JobHistoryRepository)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
     provider = await container.get(IDataProviderPort)
 
-    name = "sync_verify_cascade"
-    started = datetime.now(UTC)
-    doc_id: str | None = None
-    try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
-
-    try:
+    async def body(_: str | None) -> None:
         tracked = await tracked_symbol_repo.list_all()
         if not tracked:
             logger.warning("sync_verify_cascade.skipped", reason="no_tracked_symbols")
-            if doc_id:
-                await history_repo.record_finish(
-                    doc_id, status="completed", duration_ms=_ms_since(started)
-                )
             return
 
         logger.info("sync_verify_cascade.started", symbols=len(tracked))
@@ -622,17 +533,9 @@ async def sync_verify_cascade() -> None:
         for ts in tracked:
             symbol = ts.symbol.upper()
             try:
-                summary = await _verify_one_symbol(
-                    symbol,
-                    provider=provider,
-                    bar_repo=bar_repo,
-                )
+                summary = await _verify_one_symbol(symbol, provider=provider, bar_repo=bar_repo)
             except Exception as exc:
-                logger.error(
-                    "sync_verify_cascade.symbol_failed",
-                    symbol=symbol,
-                    error=str(exc),
-                )
+                logger.error("sync_verify_cascade.symbol_failed", symbol=symbol, error=str(exc))
                 continue
 
             if summary.get("rest_empty"):
@@ -666,71 +569,7 @@ async def sync_verify_cascade() -> None:
                     divergence_count=div,
                 )
 
-        if doc_id:
-            await history_repo.record_finish(
-                doc_id, status="completed", duration_ms=_ms_since(started)
-            )
-    except Exception as exc:
-        if doc_id:
-            try:
-                await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
-                )
-            except Exception:
-                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
-        raise
-
-
-async def _run_data_lag(name: str) -> None:
-    container = _get_container()
-    history_repo = await container.get(JobHistoryRepository)
-    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
-    bar_repo = await container.get(BarRepository)
-    sync_status_repo = await container.get(SyncStatusRepository)
-    calendar_factory = await container.get(TradingCalendarFactory)
-    cache = await container.get(Cache)
-
-    started = datetime.now(UTC)
-    doc_id: str | None = None
-    try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
-
-    try:
-        for ts in await tracked_symbol_repo.list_all():
-            symbol = ts.symbol.upper()
-            try:
-                calendar = await calendar_factory.for_symbol(symbol)
-                snapshot = await compute_data_lag(
-                    symbol, bar_repo, sync_status_repo, calendar, now=started
-                )
-                key = CACHE_KEY_DATA_LAG.format(symbol=symbol)
-                previous = await cache.get(key)
-                await cache.set(key, snapshot.to_cache_dict(), ttl=TTL_DATA_LAG)
-            except Exception:
-                logger.error("data_lag.check_failed", symbol=symbol, exc_info=True)
-                continue
-            _log_feed_transition(previous, snapshot.state, symbol, snapshot.lag_seconds)
-        if doc_id:
-            await history_repo.record_finish(
-                doc_id, status="completed", duration_ms=_ms_since(started)
-            )
-    except Exception as exc:
-        if doc_id:
-            try:
-                await history_repo.record_finish(
-                    doc_id,
-                    status="failed",
-                    duration_ms=_ms_since(started),
-                    error=str(exc),
-                )
-            except Exception:
-                logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
-        raise
+    await _tracked("sync_verify_cascade", body)
 
 
 def _log_feed_transition(
@@ -757,19 +596,31 @@ def _log_feed_transition(
 
 
 async def data_lag_check() -> None:
-    await _run_data_lag("data_lag_check")
+    container = _get_container()
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+    sync_status_repo = await container.get(SyncStatusRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
+    cache = await container.get(Cache)
 
+    async def body(_: str | None) -> None:
+        now = datetime.now(UTC)
+        for ts in await tracked_symbol_repo.list_all():
+            symbol = ts.symbol.upper()
+            try:
+                calendar = await calendar_factory.for_symbol(symbol)
+                snapshot = await compute_data_lag(
+                    symbol, bar_repo, sync_status_repo, calendar, now=now
+                )
+                key = CACHE_KEY_DATA_LAG.format(symbol=symbol)
+                previous = await cache.get(key)
+                await cache.set(key, snapshot.to_cache_dict(), ttl=TTL_DATA_LAG)
+            except Exception:
+                logger.error("data_lag.check_failed", symbol=symbol, exc_info=True)
+                continue
+            _log_feed_transition(previous, snapshot.state, symbol, snapshot.lag_seconds)
 
-async def sync_backfill() -> None:
-    await _run_sync("sync_backfill", SYNC_INTERVALS, 5000, source=SOURCE_REST_BACKFILL)
-
-
-async def sync_integrity() -> None:
-    await _run_integrity("sync_integrity")
-
-
-async def sync_repair() -> None:
-    await _run_repair("sync_repair")
+    await _tracked("data_lag_check", body)
 
 
 async def enqueue_missed_catchups(
@@ -791,7 +642,7 @@ async def enqueue_missed_catchups(
     on the first post-start tick — harmlessly deferred, never dropped.
 
     Note on history-doc naming: the catchup's APScheduler job_id is
-    ``<job_id>_catchup``, but the wrapper inside (``_run_sync`` etc.) writes a
+    ``<job_id>_catchup``, but the wrapper inside (``_tracked``) writes a
     ``job_history`` doc keyed by the ORIGINAL job_id. That's intentional — the
     next boot's ``get_last_successful_started_at(<job_id>)`` then sees the
     recent success and skips re-enqueueing.
@@ -818,14 +669,15 @@ async def register_sync_jobs(
     container: AsyncContainer,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Wire container reference + register 6 sync/integrity/lag jobs as text refs.
+    """Register 6 sync/integrity/lag jobs as text refs.
+
+    The container reference is set at app startup (``set_container``), before
+    any job can run; ``container`` is used here only for the catch-up sweep.
 
     Per-job ``misfire_grace_time`` matches each cadence (tight for high-frequency,
     1h for heavy daily). After registration, scans ``job_history`` for missed
     daily/12h runs and enqueues one-off catch-ups.
     """
-    set_container(container)
-
     # UTC wall-clock anchored — bar-aligned crons eliminate phase drift on restart.
     # Strategy correctness depends on bar-close events arriving on time; lag/gaps
     # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
