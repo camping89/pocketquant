@@ -9,7 +9,7 @@ summary: "Row 11 and G2 measured, plan archived; paper SL/TP interval defect and
 ## What happened
 - Verify-cascade race fixed (`_verify_one_symbol` drops the newest bucket). Row 11 re-measured: Pass, ES 23 compared runs at div=0, 1 vendor fail, 0 alerts.
 - Futures paper sizing: `PAPER_FUTURES_INITIAL_BALANCE=200000`, `PAPER_FUTURES_LEVERAGE=25`, released to prod.
-- G2 ES 15m engulfing paper session: 4 trades, pnl arithmetic exact. 2 of 4 exits were triggered by 4h bars, not by prices after entry. Cause: `PaperBrokerAdapter._on_bar_completed` has no interval filter (`plans/reports/debug-261024-0423-paper-sl-tp-fires-on-higher-interval-bars.md`).
+- G2 ES 15m engulfing paper session: 4 trades, pnl arithmetic exact. 2 of 4 exits were triggered by 4h bars, not by prices after entry. Cause: `PaperBrokerAdapter._on_bar_completed` has no interval filter (`plans/reports/archive/debug-261024-0423-paper-sl-tp-fires-on-higher-interval-bars.md`).
 - Plan archived to `plans/archive/260921-1436-asset-class-index-futures/`, commit `1c6aa54d` on develop. No deploy.
 
 ## Process mistakes
