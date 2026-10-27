@@ -10,7 +10,8 @@
 - **Single process**: `pocketquant.app.main` on :41921 — full runtime + ALL API routes + SPA fallback. Single uvicorn worker only (scheduler/WS/broker are in-process singletons)
 - `OrderPositionQueryService` routes (in-RAM engine state) now WORK publicly via nginx (previously 500'd in bff by design) — unauthenticated read of live orders/positions, consistent with overall no-auth API posture
 - (2026-10-20) tracked_symbols router now mounted ONCE (`main_extensions.py` api.include_router prefix="/market-data"); 17 mutation routes; import-linter = 8 contracts; `tests/baseline` gone
-- Broker pool gotcha: `_get_or_create_broker` reuses only while a loaded strategy holds the broker; `unload_strategy` never disconnects → delete-last-then-reload builds a 2nd venue adapter
+- Broker pool gotcha: `_get_or_create_broker` reuses only while a loaded strategy holds the broker. (2026-10-27) `unload_strategy` now drops paper positions + disconnects an unheld paper broker; venue brokers still never disconnect → delete-last-then-reload builds a 2nd venue adapter
+- (2026-10-27) EventRegistry deleted; handlers subscribe explicitly. EventBus.publish runs ALL handlers on a copied list, then re-raises the first error. PositionAppService boot DELETES open rows of paper subs (closing them made fake trades); every other open row stays for the venue snapshot
 - Plan-review gotcha: go-live plans mix bare `reports/x.md` with `plans/<dir>/reports/x.md`; cwd is repo root, so bare paths split state files
 
 ### Layer Structure (post 4-subpackage collapse, 2026-06-11)
@@ -34,7 +35,7 @@ web/       # Node SPA at repo root
 - Subscription dedup moved from sha256-16hex PK to unique compound index `ix_subscriptions_dedup_triple` (strategy_code, symbol, interval) — created in BOTH migration and repo ensure_indexes; `SubscriptionAlreadyExistsError` carries the triple, not id
 - Boot migration precedents: tracked_symbols (delete-then-insert) · job_history (copy-then-delete, `_migrated_from` marker) · subscriptions (map-based: `_id_migration_map` {old_id, new_id, payload}; step1 upsert map → step2 delete/insert + FK update_many → step3 verify then drop map; residue keeps map + error log, boot continues). Map residue across boots = needs-human signal. NOTE: boot migrations have no cross-process lock — safe only under single-instance deploy assumption
 - Subscription FK fields (all str): orders.subscription_id, positions.subscription_id, backtest_runs.subscription_id, backtest_requests.sub_id — `_SUBSCRIPTION_FK_FIELDS` in main_extensions.py is canonical list
-- `_SUB_ID_SHAPE` (strategy_reconcile_service.py) pins uuid version nibble 7 — orphan-unload skips uuid4/legacy-16hex keys (leak-until-restart by design); synthetic `{code}::bt::{sub_id}` never matches
+- (2026-10-27) `_SUB_ID_SHAPE` guard REMOVED: backtests run in their own sandbox engine, so orphan-unload unloads every live key that has no subscription doc
 - `bson` banned via ruff TID251; FK reference fields stay str by decision; boundary rule: dict keys / domain events / structlog kwargs take `str(id)` — UUID-as-dict-key vs str lookup is the silent-failure class
 
 ### Tech Stack
