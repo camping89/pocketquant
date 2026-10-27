@@ -60,7 +60,7 @@ class BarRepository(SymbolScopedRepository):
                     source=source,
                     exc_info=True,
                 )
-        logger.info(
+        logger.debug(
             "bar_repo.insert_many.completed",
             attempted=len(records),
             upserted=count,

@@ -188,7 +188,8 @@ async def repair_integrity(
             symbol=symbol,
             interval=interval.value,
             still_missing=still_missing,
-            ranges=still_missing_ranges,
+            # Unbounded on a long outage; the count above carries the size.
+            ranges=still_missing_ranges[:5],
         )
 
     return {

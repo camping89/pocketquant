@@ -7,6 +7,9 @@ from structlog.types import Processor
 
 from pocketquant.core.config import Settings
 
+# Context key bound around a backtest replay; see drop_backtest_info.
+BACKTEST_RUN_ID = "backtest_run_id"
+
 
 def add_correlation_id(
     logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
@@ -29,9 +32,23 @@ def add_app_context(
     return event_dict
 
 
+def drop_backtest_info(
+    logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    """Drop INFO lines logged inside a backtest replay.
+
+    A replay reuses the live order and strategy services, so their per-fill INFO
+    lines would reach the prod log mixed with live fills. Warnings and errors pass.
+    """
+    if method_name == "info" and BACKTEST_RUN_ID in event_dict:
+        raise structlog.DropEvent
+    return event_dict
+
+
 def setup_logging(settings: Settings) -> None:
     shared_processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
+        drop_backtest_info,  # type: ignore[list-item]
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.PositionalArgumentsFormatter(),

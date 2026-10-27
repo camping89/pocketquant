@@ -1,7 +1,9 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from pocketquant.core.common.logging import get_logger
+import structlog
+
+from pocketquant.core.common.logging import BACKTEST_RUN_ID, get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
@@ -119,7 +121,8 @@ class BacktestAppService:
             bars = self._load_bars(config)
             bars_with_price = self._wrap_bars_with_price_update(config, bars)
 
-            replay_stats = await self._replay_engine.replay(config, bars_with_price)
+            with structlog.contextvars.bound_contextvars(**{BACKTEST_RUN_ID: run_id}):
+                replay_stats = await self._replay_engine.replay(config, bars_with_price)
 
             # Expire any LIMIT-like orders still pending (forward-test parity)
             expired = await self._broker.expire_pending_orders()

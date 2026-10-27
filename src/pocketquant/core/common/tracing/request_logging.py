@@ -1,3 +1,4 @@
+import logging
 import time
 from collections.abc import Callable
 
@@ -14,65 +15,54 @@ MAX_BODY_LOG_SIZE = 10_000
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """One DEBUG line per request; bodies are read only when DEBUG is on.
+
+    A request line at INFO would scale with traffic (the SPA polls every few
+    seconds), so the whole middleware is DEBUG. Reading a body costs a full
+    buffer and a rebuilt response, so it happens only when it will be printed.
+    """
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.url.path in SKIP_PATHS:
             return await call_next(request)
 
+        debug = logging.getLogger(__name__).isEnabledFor(logging.DEBUG)
         start_time = time.perf_counter()
         method = request.method
         path = request.url.path
-        query = str(request.query_params) if request.query_params else None
 
-        request_body = None
-        if method in {"POST", "PUT", "PATCH"}:
+        if debug and method in {"POST", "PUT", "PATCH"}:
             body_bytes = await request.body()
             if body_bytes:
-                request_body = body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
-
-        logger.info(
-            "http.request",
-            method=method,
-            path=path,
-            query=query,
-            client=request.client.host if request.client else None,
-        )
-        if request_body is not None:
-            logger.debug("http.request.body", path=path, body=request_body)
+                body = body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
+                logger.debug("http.request.body", path=path, body=body)
 
         response = await call_next(request)
-        duration_ms = (time.perf_counter() - start_time) * 1000
 
         # An SSE body never ends: reading it here would hold the whole response
         # back until the client disconnects. Judged by the response, not a route
         # list, so a new stream route cannot be missed.
         is_streaming = response.headers.get("content-type", "").startswith("text/event-stream")
-
-        response_body = None
-        if not is_streaming:
+        if debug and not is_streaming:
             if hasattr(response, "body"):
-                response_body = response.body[:MAX_BODY_LOG_SIZE].decode(errors="replace")
+                body_bytes = response.body
             else:
-                body_chunks = []
-                async for chunk in response.body_iterator:
-                    body_chunks.append(chunk)
-                response_body_bytes = b"".join(body_chunks)
-                response_body = response_body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
-
+                body_bytes = b"".join([chunk async for chunk in response.body_iterator])
                 response = Response(
-                    content=response_body_bytes,
+                    content=body_bytes,
                     status_code=response.status_code,
                     headers=dict(response.headers),
                     media_type=response.media_type,
                 )
+            body = body_bytes[:MAX_BODY_LOG_SIZE].decode(errors="replace")
+            logger.debug("http.response.body", path=path, body=body)
 
-        logger.info(
-            "http.response",
+        logger.debug(
+            "http.request",
             method=method,
             path=path,
+            query=str(request.query_params) if request.query_params else None,
             status=response.status_code,
-            duration_ms=round(duration_ms, 2),
+            duration_ms=round((time.perf_counter() - start_time) * 1000, 2),
         )
-        if response_body is not None:
-            logger.debug("http.response.body", path=path, body=response_body)
-
         return response

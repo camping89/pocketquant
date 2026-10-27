@@ -61,7 +61,7 @@ async def filter_new_bars(
     ]
     skipped = len(records) - len(filtered)
     if skipped > 0:
-        logger.info(
+        logger.debug(
             "market_data.sync.filtered_existing",
             kept=len(filtered),
             skipped=skipped,

@@ -118,8 +118,8 @@ class TradingViewAdapter(IDataProviderPort):
                 delayed_frontier_dropped=delayed_drop,
             )
 
-        # One-shot per symbol per interval per cron tick, which is bounded.
-        logger.info(
+        # Per symbol per minute through sync_1m, so DEBUG.
+        logger.debug(
             "tradingview.fetch_completed",
             symbol=symbol,
             interval=interval.value,

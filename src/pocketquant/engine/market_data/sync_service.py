@@ -57,7 +57,7 @@ class SyncService:
         symbol = request.symbol.upper()
         interval = request.interval
 
-        logger.info(
+        logger.debug(
             "market_data.sync.started",
             symbol=symbol,
             interval=interval.value,
@@ -102,7 +102,7 @@ class SyncService:
             decision = SyncProgressTrackerDomainService.decide(inserted_count)
             if decision is SyncProgressDecision.RESET:
                 await self._sync_status_repo.reset_empty_fetch(symbol, interval)
-                logger.info(
+                logger.debug(
                     "market_data.sync.completed",
                     symbol=symbol,
                     bars_inserted=inserted_count,

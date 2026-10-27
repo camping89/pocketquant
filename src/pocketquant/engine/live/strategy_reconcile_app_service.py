@@ -76,6 +76,9 @@ class StrategyReconcileAppService:
         self._symbol_lookup = symbol_lookup
         self._exness_risk = exness_risk
         self._futures_paper_risk = futures_paper_risk
+        # Subscriptions already reported as unloadable: the loop retries every
+        # tick, so the failure is logged once, not every five seconds.
+        self._reported: set[str] = set()
 
     async def bootstrap(self) -> None:
         """Load one RAM instance per persisted subscription, once at startup.
@@ -160,11 +163,13 @@ class StrategyReconcileAppService:
                 continue
             strategy_class = STRATEGY_REGISTRY.get(sub.strategy_code)
             if strategy_class is None:
-                logger.warning(
-                    "reconcile.unknown_template",
-                    sub_id=sub_id,
-                    strategy_code=sub.strategy_code,
-                )
+                if sub_id not in self._reported:
+                    self._reported.add(sub_id)
+                    logger.warning(
+                        "reconcile.unknown_template",
+                        sub_id=sub_id,
+                        strategy_code=sub.strategy_code,
+                    )
                 continue
             try:
                 contract_spec = (
@@ -192,8 +197,11 @@ class StrategyReconcileAppService:
                     strategy_class=strategy_class,
                 )
                 loaded += 1
+                self._reported.discard(sub_id)
             except Exception as exc:
-                logger.error("reconcile.load_failed", sub_id=sub_id, error=str(exc))
+                if sub_id not in self._reported:
+                    self._reported.add(sub_id)
+                    logger.error("reconcile.load_failed", sub_id=sub_id, error=str(exc))
 
         if loaded:
             logger.info("reconcile.instances_loaded", count=loaded)

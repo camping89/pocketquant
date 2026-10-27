@@ -417,7 +417,7 @@ class StrategyAppService:
         if not result.is_success:
             await strategy.on_order_rejected(result.error_message or "rejected")
 
-        logger.info(
+        logger.debug(
             "signal_processed",
             strategy_id=strategy.id,
             direction=signal.direction.value,

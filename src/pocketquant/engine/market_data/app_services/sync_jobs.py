@@ -282,7 +282,7 @@ async def _sync_by_intervals(
                             exc_info=True,
                         )
 
-    logger.info(
+    logger.debug(
         f"market_data.{job_name}.completed",
         synced_count=synced,
         error_count=errors,
@@ -502,7 +502,7 @@ async def sync_1m() -> None:
                     exc_info=True,
                 )
 
-        logger.info(
+        logger.debug(
             "sync_1m.cascade_summary",
             cascade_counts={tf.value: n for tf, n in cascade_total.items()},
         )
@@ -659,7 +659,7 @@ async def sync_verify_cascade() -> None:
                     sample_divergences=summary["samples"],
                 )
             else:
-                logger.info(
+                logger.debug(
                     "sync_verify_cascade.ok",
                     symbol=symbol,
                     compared=compared,

@@ -64,7 +64,7 @@ class BinanceAdapter(IDataProviderPort):
         validated_symbol = validate_symbol(code)
         binance_interval, bar_duration_ms = INTERVAL_TO_BINANCE[interval]
 
-        logger.info(
+        logger.debug(
             "binance.fetch_started",
             symbol=validated_symbol,
             interval=binance_interval,
@@ -124,7 +124,7 @@ class BinanceAdapter(IDataProviderPort):
             if remaining > 0:
                 await asyncio.sleep(_INTER_CALL_SLEEP_S)
 
-        logger.info(
+        logger.debug(
             "binance.fetch_completed",
             symbol=validated_symbol,
             bars_fetched=len(all_bars),
