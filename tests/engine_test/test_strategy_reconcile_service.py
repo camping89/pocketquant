@@ -253,25 +253,6 @@ async def test_run_loop_cancellation_propagates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_injected_backtest_strategy_without_sub_row_is_untouched() -> None:
-    """Load-bearing: reconcile is subscription-driven. A running instance under a
-    synthetic id with NO subscription row must be neither stopped nor written."""
-    svc = _FakeStrategyService()
-    svc.load("backtest-synthetic-id", running=True)  # injected, no sub row
-    sub = _sub(desired="stopped", actual="stopped")
-    recon, sub_repo = _service([sub], svc)
-
-    await recon._reconcile()
-
-    assert svc.stop_calls == []  # synthetic instance never stopped
-    assert svc.start_calls == []
-    assert sub_repo.actual_writes == []
-    strategy = svc.get_strategy("backtest-synthetic-id")
-    assert strategy is not None
-    assert strategy.is_running is True
-
-
-@pytest.mark.asyncio
 async def test_loads_instance_for_sub_without_one() -> None:
     svc = _FakeStrategyService()  # no instances
     sub = _sub(desired="stopped")
@@ -326,38 +307,6 @@ async def test_unloads_orphan_instance_when_sub_deleted() -> None:
 
     assert svc.unload_calls == [str(sub.id)]
     assert svc.get_strategy(str(sub.id)) is None
-
-
-@pytest.mark.asyncio
-async def test_synthetic_backtest_instance_never_unloaded() -> None:
-    """Anti-clobber: a synthetic backtest id (``{code}::bt::{sub_id}``) is not a
-    subscription-id shape, so orphan-unload skips it even with zero sub rows."""
-    sub = _sub()
-    synthetic_id = f"{_STRATEGY}::bt::{sub.id}"
-    svc = _FakeStrategyService()
-    svc.load(synthetic_id, running=True)
-    recon, _sub_repo = _service([], svc)  # no sub rows → orphan pass runs
-
-    await recon._reconcile()
-
-    assert svc.unload_calls == []
-    inst = svc.get_strategy(synthetic_id)
-    assert inst is not None and inst.is_running is True
-
-
-@pytest.mark.asyncio
-async def test_legacy_16hex_key_skipped_not_unloaded() -> None:
-    """A leftover legacy 16-hex RAM key no longer matches the uuid7 shape, so
-    orphan-unload ignores it (no unload, no crash). A restart clears such keys;
-    until then they are simply not the reconcile loop's to manage."""
-    svc = _FakeStrategyService()
-    svc.load("eef73dffbd77a20b", running=True)  # old deterministic-id shape
-    recon, _sub_repo = _service([], svc)
-
-    await recon._reconcile()
-
-    assert svc.unload_calls == []
-    assert svc.get_strategy("eef73dffbd77a20b") is not None
 
 
 @pytest.mark.asyncio

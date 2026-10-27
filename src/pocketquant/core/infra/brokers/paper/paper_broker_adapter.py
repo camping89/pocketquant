@@ -12,14 +12,14 @@ Every transition emits an ``OrderEvent`` to subscribers via
 
 Threading contract: subscriber callbacks are dispatched OUTSIDE ``self._lock``
 so they may freely re-enter broker methods without deadlock. State mutations
-(positions, balance, ``_orders``) happen inside the lock.
+(positions, balance) happen inside the lock.
 """
 
 import asyncio
 from datetime import datetime
 
 from pocketquant.core.common.constants import INTERVAL_SECONDS
-from pocketquant.core.common.messaging import EventBus, event_handler
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.bar.events import BarCompletedEvent
@@ -109,9 +109,6 @@ class PaperBrokerAdapter(IBrokerPort):
         self._spread = spread
 
         self._positions: dict[str, PositionAggregate] = {}
-        # _orders holds every OrderAggregate observed by submit_order, including
-        # REJECTED ones — consumers may enumerate this to build audit lists.
-        self._orders: dict[str, OrderAggregate] = {}
         self._order_callbacks: list[OrderCallback] = []
         self._trade_callbacks: list[TradeCallback] = []
         self._event_callbacks: list[OrderEventCallback] = []
@@ -184,7 +181,6 @@ class PaperBrokerAdapter(IBrokerPort):
         self, order: OrderAggregate, broker_order_id: str, now: datetime
     ) -> _FillOutcome:
         async with self._lock:
-            self._orders[str(order.id)] = order
             if order.order_type is not OrderType.MARKET:
                 return (
                     OrderResult(
@@ -266,6 +262,18 @@ class PaperBrokerAdapter(IBrokerPort):
     async def cancel_order(self, broker_order_id: str) -> bool:
         """Nothing to cancel: a paper order is terminal when ``submit_order`` returns."""
         return True
+
+    def drop_positions(self, subscription_id: str) -> int:
+        """Forget a subscription's positions without a fill; return how many.
+
+        Opening a paper position moves no cash, so dropping one leaves the
+        balance as it is. Used when the subscription is unloaded: no one is
+        left to manage the position.
+        """
+        keys = [k for k, p in self._positions.items() if p.subscription_id == subscription_id]
+        for key in keys:
+            del self._positions[key]
+        return len(keys)
 
     async def get_positions(self) -> list[PositionAggregate]:
         async with self._lock:
@@ -512,7 +520,6 @@ class PaperBrokerAdapter(IBrokerPort):
         if errors:
             raise errors[0]
 
-    @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         """Fill SL/TP exits as the bar resolves.
 
@@ -597,7 +604,6 @@ class PaperBrokerAdapter(IBrokerPort):
         now = get_current_time()
         async with self._lock:
             commission, trades = self._execute_fill_with_commission(exit_order, fill_price)
-            self._orders[str(exit_order.id)] = exit_order
             result = OrderResult(
                 order_id=str(exit_order.id),
                 broker_order_id=broker_order_id,
@@ -637,7 +643,6 @@ class PaperBrokerAdapter(IBrokerPort):
     def reset(self) -> None:
         self._balance = self._initial_balance
         self._positions.clear()
-        self._orders.clear()
         self._current_prices.clear()
         self._order_events.clear()
         self._finest_interval_s.clear()

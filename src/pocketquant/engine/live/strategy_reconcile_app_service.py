@@ -15,16 +15,13 @@ subscription docs; this loop materializes and tears down the RAM instances. That
 is why the loop owns load/unload — ``add_symbol`` does not load, so a continuous
 control-plane must.
 
-Orphan-unload is shape-guarded: it only unloads keys matching the subscription
-id shape (uuid7 string). Synthetic backtest instances
-(``{code}::bt::{sub_id}``) never match, so concurrent backtests are never
-clobbered.
+Backtests run in their own sandbox engine, so every key in this engine is a
+subscription id.
 """
 
 from __future__ import annotations
 
 import asyncio
-import re
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.risk import RiskConfig
@@ -39,11 +36,6 @@ from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookup
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
-
-# Subscription ids are uuid7 strings (8-4-4-4-12 lowercase hex, version nibble 7).
-# Synthetic backtest ids ("{code}::bt::{sub_id}") never match this shape, so the
-# orphan-unload pass that filters on it can never clobber a running backtest.
-_SUB_ID_SHAPE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 class StrategyReconcileAppService:
@@ -207,18 +199,11 @@ class StrategyReconcileAppService:
             logger.info("reconcile.instances_loaded", count=loaded)
 
     async def _unload_orphans(self, sub_ids: set[str]) -> None:
-        """Unload RAM instances whose subscription doc no longer exists.
-
-        Shape-guarded: only keys matching the subscription uuid7 id shape are
-        eligible. Synthetic backtest instances (``{code}::bt::{sub_id}``)
-        never match ``_SUB_ID_SHAPE``, so a concurrent backtest is never unloaded.
-        """
+        """Unload RAM instances whose subscription doc no longer exists."""
         unloaded = 0
         for key in self._strategy_service.loaded_strategy_ids():
             if key in sub_ids:
                 continue
-            if not _SUB_ID_SHAPE.match(key):
-                continue  # synthetic backtest id or other non-subscription key
             try:
                 await self._strategy_service.unload_strategy(key)
                 unloaded += 1

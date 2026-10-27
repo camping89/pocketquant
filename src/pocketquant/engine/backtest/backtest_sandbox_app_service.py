@@ -7,9 +7,8 @@ or publishing synthetic exit fills onto that bus would drive live handlers
 (phantom positions, bar dispatch to unrelated strategies) and let concurrent
 optimization runs cross-talk.
 
-Each sandbox builds a fresh ``EventBus`` and a ``StrategyAppService`` bound to it
-via a **local** ``EventRegistry`` (so handler bindings don't accumulate in the
-process-global registry across runs). Order/position trackers are throwaway
+Each sandbox builds a fresh ``EventBus`` and a ``StrategyAppService`` bound to
+it, so handler bindings live and die with the run. Order/position trackers are throwaway
 in-memory instances; the position tracker is deliberately **not started**, so it
 registers no handlers — the PaperBrokerAdapter is the position source of truth during a
 backtest, and the strategy's own one-position cap governs re-entry. Trades are
@@ -22,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.messaging import EventBus, EventRegistry
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
@@ -125,11 +124,7 @@ class BacktestSandboxAppService:
 
 
 async def build_backtest_sandbox() -> BacktestSandboxAppService:
-    """Create an isolated engine stack bound to a fresh per-run EventBus.
-
-    The StrategyAppService is started against a local EventRegistry so its
-    handler bindings live and die with this run's bus.
-    """
+    """Create an isolated engine stack bound to a fresh per-run EventBus."""
     bus = EventBus()
     placeholder_broker = PaperBrokerAdapter(event_bus=bus)
     engine = StrategyAppService(
@@ -139,5 +134,5 @@ async def build_backtest_sandbox() -> BacktestSandboxAppService:
         position_app_service=PositionAppService(bus, _InMemoryPositionRepo()),  # type: ignore[arg-type]
         risk_check_handler=RiskCheckHandler(),
     )
-    await engine.start(registry=EventRegistry())
+    await engine.start()
     return BacktestSandboxAppService(event_bus=bus, strategy_app_service=engine)

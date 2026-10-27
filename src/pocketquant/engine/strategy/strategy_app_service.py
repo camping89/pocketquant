@@ -3,12 +3,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from pocketquant.core.common.messaging import (
-    EventBus,
-    EventRegistry,
-    event_handler,
-    get_event_registry,
-)
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPort
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
@@ -24,6 +19,7 @@ from pocketquant.core.domain.risk import PositionCalculatorDomainService
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 from pocketquant.core.domain.symbol import ContractSpec
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 if TYPE_CHECKING:
     from pocketquant.engine.execution.order_app_service import OrderAppService
@@ -73,19 +69,18 @@ class StrategyAppService:
     def is_running(self) -> bool:
         return self._running
 
-    async def start(self, registry: EventRegistry | None = None) -> None:
+    async def start(self) -> None:
         """Subscribe handlers to the event bus and mark running.
 
-        Per-run backtest engines pass a local ``registry`` so their handler
-        bindings don't accumulate in the process-global registry across many
-        runs; the local registry (and the per-run bus it bound to) is discarded
-        when the run ends. The live engine passes nothing → global registry.
+        A broker subscribes to ``BarCompletedEvent`` when it connects, which is
+        after this, so strategies see a bar before the broker checks SL/TP.
         """
         if self._running:
             return
 
-        registry = registry or get_event_registry()
-        registry.register_instance(self, self._event_bus)
+        self._event_bus.subscribe(BarCompletedEvent, self._on_bar_completed)
+        self._event_bus.subscribe(OrderCancelledEvent, self._on_order_cancelled)
+        self._event_bus.subscribe(OrderFilledEvent, self._on_order_filled)
         self._running = True
 
         logger.info("strategy_engine_started")
@@ -170,14 +165,33 @@ class StrategyAppService:
             logger.info("strategy_stopped", strategy_id=strategy_id)
 
     async def unload_strategy(self, strategy_id: str) -> None:
+        """Stop and forget a strategy, and retire what only it held.
+
+        A paper broker simulates the position, so the subscription's position is
+        dropped and a broker with no other holder is disconnected; otherwise it
+        keeps checking SL/TP for no one. A venue keeps its position under its own
+        SL/TP, so that one is only logged.
+        """
         await self.stop_strategy(strategy_id)
 
         async with self._lock:
             self._strategies.pop(strategy_id, None)
-            self._brokers.pop(strategy_id, None)
+            broker = self._brokers.pop(strategy_id, None)
             self._configs.pop(strategy_id, None)
 
-            logger.info("strategy_unloaded", strategy_id=strategy_id)
+            if isinstance(broker, PaperBrokerAdapter):
+                dropped = broker.drop_positions(strategy_id)
+                if not any(b is broker for b in self._brokers.values()):
+                    await broker.disconnect()
+                logger.info("strategy_unloaded", strategy_id=strategy_id, positions_dropped=dropped)
+            else:
+                logger.info("strategy_unloaded", strategy_id=strategy_id)
+                if broker is not None and self._position_app_service.get(strategy_id):
+                    logger.warning(
+                        "strategy_unloaded_venue_position_kept",
+                        strategy_id=strategy_id,
+                        broker=broker.name,
+                    )
 
     async def inject_prepared_strategy(
         self,
@@ -218,13 +232,11 @@ class StrategyAppService:
     def loaded_strategy_ids(self) -> list[str]:
         """Return all currently-loaded instance keys (snapshot, lock-free read).
 
-        Keys are either subscription ids (uuid7 strings) or synthetic
-        backtest ids (``{code}::bt::{sub_id}``). The reconcile orphan-unload pass
-        filters on shape so it never touches synthetic backtest instances.
+        Keys are subscription ids in the live engine and strategy codes in a
+        backtest sandbox; each engine only ever holds one kind.
         """
         return list(self._strategies.keys())
 
-    @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         strategies = self._find_strategies(event.symbol, event.interval)
 
@@ -256,7 +268,6 @@ class StrategyAppService:
                 if signal:
                     await self._notify_rejected(strategy, str(e))
 
-    @event_handler(OrderFilledEvent)
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Route a fill to its owning strategy by subscription_id.
 
@@ -278,7 +289,6 @@ class StrategyAppService:
                 error=str(e),
             )
 
-    @event_handler(OrderCancelledEvent)
     async def _on_order_cancelled(self, event: OrderCancelledEvent) -> None:
         """Tell the owning strategy that a broker cancelled its submitted order."""
         strategy = self._strategies.get(event.subscription_id)

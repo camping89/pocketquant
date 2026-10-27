@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.messaging import EventBus, event_handler, get_event_registry
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.position import TradeClosedEvent
 from pocketquant.core.domain.trading import Trade
@@ -47,13 +47,10 @@ class LiveTradeCollector:
 
     async def start(self) -> None:
         """Subscribe the trade handler to the global bus (mirrors StrategyAppService)."""
-        get_event_registry().register_instance(self, self._event_bus)
+        self._event_bus.subscribe(TradeClosedEvent, self._on_trade_closed)
         logger.info("live_trade_collector_started")
 
-    @event_handler(TradeClosedEvent)
     async def _on_trade_closed(self, event: TradeClosedEvent) -> None:
-        # Single-underscore name is required: EventRegistry.register_instance only
-        # scans ``_``-prefixed methods for @event_handler bindings.
         config = self._strategy_service.get_config(event.subscription_id)
         strategy_code = config.name if config else ""
         exit_time = event.exit_time or datetime.now(UTC)
@@ -90,6 +87,4 @@ class LiveTradeCollector:
                 error=str(exc),
             )
             return
-        logger.debug(
-            "live_trade_persisted", subscription_id=event.subscription_id, pnl=event.pnl
-        )
+        logger.debug("live_trade_persisted", subscription_id=event.subscription_id, pnl=event.pnl)

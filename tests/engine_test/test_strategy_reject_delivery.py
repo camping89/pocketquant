@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pocketquant.core.common.messaging import EventBus, EventRegistry
+from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import (
     OrderAggregate,
@@ -194,7 +194,7 @@ async def test_async_cancel_publishes_event_and_rejects_strategy() -> None:
     bus.subscribe(OrderCancelledEvent, lambda e: cancelled.append(e))
     orders = OrderAppService(bus, _InMemoryOrderRepo())  # type: ignore[arg-type]
     engine = _engine(_Risk(True), bus=bus, orders=orders)
-    await engine.start(EventRegistry())
+    await engine.start()
     strategy = await _armed(engine)
     spy = AsyncMock(side_effect=strategy.on_order_rejected)
     strategy.on_order_rejected = spy  # type: ignore[method-assign]

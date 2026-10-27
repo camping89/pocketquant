@@ -2,7 +2,8 @@ import asyncio
 
 import structlog
 
-from pocketquant.core.common.messaging import EventBus, event_handler, get_event_registry
+from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -28,20 +29,32 @@ class PositionAppService:
         self._positions: dict[str, PositionAggregate] = {}
         self._lock = asyncio.Lock()
 
-    async def start(self) -> None:
-        await self.load_open_positions()
-        registry = get_event_registry()
-        registry.register_instance(self, self._event_bus)
+    async def start(self, venue_subscription_ids: frozenset[str] = frozenset()) -> None:
+        await self.load_open_positions(venue_subscription_ids)
+        self._event_bus.subscribe(OrderFilledEvent, self._on_order_filled)
         logger.info("position_tracker_started")
 
-    async def load_open_positions(self) -> None:
-        positions = await self._position_repo.find_open()
-        async with self._lock:
-            for pos in positions:
-                self._positions[pos.subscription_id] = pos
-        logger.info("loaded_open_positions", count=len(positions))
+    async def load_open_positions(self, venue_subscription_ids: frozenset[str]) -> None:
+        """Load the open rows; close every row a venue does not still hold.
 
-    @event_handler(OrderFilledEvent)
+        A paper broker keeps positions in memory, so a restart loses them; their
+        rows, and rows of deleted subscriptions, are closed here so the mirror
+        matches. A row of a venue subscription stays open: the venue holds it.
+        """
+        positions = await self._position_repo.find_open()
+        kept = [p for p in positions if p.subscription_id in venue_subscription_ids]
+        for pos in positions:
+            if pos.subscription_id not in venue_subscription_ids:
+                pos.is_closed = True
+                pos.closed_at = utc_now()
+                await self._position_repo.save(pos)
+        async with self._lock:
+            for pos in kept:
+                self._positions[pos.subscription_id] = pos
+        logger.info(
+            "loaded_open_positions", count=len(kept), closed_at_boot=len(positions) - len(kept)
+        )
+
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         async with self._lock:
             position = self._positions.get(event.subscription_id)
@@ -113,6 +126,3 @@ class PositionAppService:
 
     def get(self, strategy_id: str) -> PositionAggregate | None:
         return self._positions.get(strategy_id)
-
-        # Note: Price updates are frequent, don't persist every update
-        # Persistence happens on quantity changes
