@@ -80,9 +80,8 @@ async def test_filled_order_tracked_not_pending() -> None:
 
     await svc.submit(order, broker)
 
-    assert svc.get_order(str(order.id)) is order
     assert order.status == OrderStatus.FILLED
-    assert order not in svc.get_pending_orders()
+    assert str(order.id) not in svc._pending
 
 
 @pytest.mark.asyncio

@@ -48,25 +48,3 @@ async def test_create_refuses_an_unknown_broker(app_client):
     )
 
     assert r.status_code == 422, r.text
-
-
-@pytest.mark.asyncio
-async def test_delete_strategy_clears_all_subscriptions(app_client):
-    await app_client.post(
-        f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions",
-        json={"symbol": "BTC-USDT:BINANCE", "interval": "1h"},
-    )
-    await app_client.post(
-        f"/api/v1/strategies/{_STRATEGY_CODE}/subscriptions",
-        json={"symbol": "ETH-USDT:BINANCE", "interval": "1h"},
-    )
-
-    del_r = await app_client.delete(f"/api/v1/strategies/{_STRATEGY_CODE}")
-    assert del_r.status_code == 204, del_r.text
-
-    # Delete is a pure Mongo cascade — it does NOT unload the RAM instance (the
-    # control-plane reconcile orphan-unload does that out of band). Listing reads
-    # straight from Mongo, so no re-load is needed to verify the subs are gone.
-    list_r = await app_client.get(f"/api/v1/subscriptions/?strategy_code={_STRATEGY_CODE}")
-    assert list_r.status_code == 200, list_r.text
-    assert list_r.json() == []

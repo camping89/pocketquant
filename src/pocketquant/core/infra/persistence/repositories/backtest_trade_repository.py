@@ -153,24 +153,22 @@ class BacktestTradeRepository(SymbolScopedRepository):
         doc (order refs, fills, commission breakdowns stay out).
         """
         collection = self._collection()
-        cursor = (
-            collection.find(
-                {"run_id": run_id},
-                {
-                    "_id": 1,
-                    "entry_time": 1,
-                    "exit_time": 1,
-                    "direction": 1,
-                    "entry_price": 1,
-                    "exit_price": 1,
-                    "sl_price": 1,
-                    "tp_price": 1,
-                    "quantity": 1,
-                    "pnl": 1,
-                    "commission": 1,
-                },
-            ).sort("entry_time", 1)
-        )
+        cursor = collection.find(
+            {"run_id": run_id},
+            {
+                "_id": 1,
+                "entry_time": 1,
+                "exit_time": 1,
+                "direction": 1,
+                "entry_price": 1,
+                "exit_price": 1,
+                "sl_price": 1,
+                "tp_price": 1,
+                "quantity": 1,
+                "pnl": 1,
+                "commission": 1,
+            },
+        ).sort("entry_time", 1)
         return [doc async for doc in cursor]
 
     async def list_by_strategy_code(self, strategy_code: str, limit: int = 200) -> list[Trade]:
@@ -193,11 +191,6 @@ class BacktestTradeRepository(SymbolScopedRepository):
         result = await collection.delete_many({"run_id": run_id})
         return result.deleted_count
 
-    async def delete_by_strategy_code(self, strategy_code: str) -> int:
-        collection = self._collection()
-        result = await collection.delete_many({"strategy_code": strategy_code})
-        return result.deleted_count
-
     async def ensure_indexes(self) -> None:
         collection = self._collection()
         await collection.create_index("run_id", name="ix_bttrades_run_id")
@@ -211,7 +204,5 @@ class BacktestTradeRepository(SymbolScopedRepository):
         )
         # Keyset paging by pnl (pairs with the wins/losses filter); the default
         # entry_time sort rides ix_bttrades_run_entry above.
-        await collection.create_index(
-            [("run_id", 1), ("pnl", 1)], name="ix_bttrades_run_pnl"
-        )
+        await collection.create_index([("run_id", 1), ("pnl", 1)], name="ix_bttrades_run_pnl")
         logger.info("backtest_trades_indexes_created")

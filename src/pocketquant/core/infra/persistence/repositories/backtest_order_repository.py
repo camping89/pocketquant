@@ -59,11 +59,6 @@ class BacktestOrderRepository(SymbolScopedRepository):
         result = await collection.delete_many({"run_id": run_id})
         return result.deleted_count
 
-    async def delete_by_strategy_code(self, strategy_code: str) -> int:
-        collection = self._collection()
-        result = await collection.delete_many({"strategy_code": strategy_code})
-        return result.deleted_count
-
     async def ensure_indexes(self) -> None:
         collection = self._collection()
         await collection.create_index("run_id", name="ix_btorders_run_id")

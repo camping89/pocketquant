@@ -19,13 +19,6 @@ class PositionRepository(SymbolScopedRepository):
             return None
         return PositionAggregate.from_mongo(doc)
 
-    async def get_by_subscription(self, subscription_id: str) -> PositionAggregate | None:
-        collection = self._collection()
-        doc = await collection.find_one({"subscription_id": subscription_id, "is_closed": False})
-        if not doc:
-            return None
-        return PositionAggregate.from_mongo(doc)
-
     async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
         collection = self._collection()
         cursor = collection.find({"is_closed": False}).limit(limit)

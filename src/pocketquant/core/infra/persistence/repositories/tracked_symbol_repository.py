@@ -32,15 +32,6 @@ class TrackedSymbolRepository(SymbolScopedRepository):
             upsert=True,
         )
 
-    async def update(self, symbol: str, fields: dict) -> bool:
-        collection = self._collection()
-        fields["updated_at"] = datetime.now(UTC)
-        result = await collection.update_one(
-            {"symbol": symbol},
-            {"$set": fields},
-        )
-        return result.matched_count > 0
-
     async def exists(self, symbol: str) -> bool:
         """Return True if composite ``symbol`` is in the collection."""
         doc = await self._collection().find_one(

@@ -13,7 +13,6 @@ from pocketquant.core.common.constants import (
     CACHE_KEY_OHLCV,
     CACHE_KEY_QUOTE_LATEST,
 )
-from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.symbol.entities import COMPOSITE_SYMBOL_PATTERN
@@ -125,18 +124,6 @@ class TrackedSymbolService:
             "created_at": ts.created_at.isoformat(),
             "seeded_from": ts.seeded_from,
         }
-
-    async def update(self, symbol: str) -> dict:
-        # Currently no mutable metadata beyond the composite symbol itself —
-        # update is a no-op placeholder that validates existence.
-        found = await self._repo.update(symbol, {})
-        if not found:
-            raise NotFoundError(
-                f"Tracked symbol '{symbol}' not found",
-                error_code="TRACKED_SYMBOL_NOT_FOUND",
-            )
-        logger.info("tracked_symbols.updated", symbol=symbol)
-        return {"symbol": symbol, "status": "updated"}
 
     async def remove(self, symbol: str) -> dict:
         """Delete the symbol and every document and cache key that references it.

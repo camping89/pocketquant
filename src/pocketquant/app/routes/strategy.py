@@ -69,15 +69,6 @@ async def create_subscription(
     return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval, body.broker)
 
 
-@strategy_router.delete("/{strategy_code}", status_code=204)
-async def delete_strategy_by_code(
-    strategy_code: str,
-    cmd_svc: FromDishka[StrategyCommandService],
-) -> Response:
-    await cmd_svc.delete_strategy(strategy_code)
-    return Response(status_code=204)
-
-
 # subscription_router  — /subscriptions prefix
 
 subscription_router = APIRouter(

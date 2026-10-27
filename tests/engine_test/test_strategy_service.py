@@ -38,15 +38,12 @@ from pocketquant.engine.strategy.strategy_query_service import (
 def _cmd_svc(
     *,
     sub_repo: object | None = None,
-    bt_repo: object | None = None,
     tracked_repo: object | None = None,
 ) -> StrategyCommandService:
     sub_repo = sub_repo or MagicMock()
-    bt_repo = bt_repo or MagicMock()
     tracked_repo = tracked_repo or MagicMock()
     return StrategyCommandService(
         subscription_repository=sub_repo,
-        backtest_repository=bt_repo,
         tracked_symbol_repository=tracked_repo,
         settings=MagicMock(exness_live_trading=False),
     )
@@ -173,7 +170,6 @@ async def test_add_symbol_accepts_exness_only_while_live_trading_is_on() -> None
     def svc(live_trading: bool) -> StrategyCommandService:
         return StrategyCommandService(
             subscription_repository=sub_repo,
-            backtest_repository=MagicMock(),
             tracked_symbol_repository=tracked_repo,
             settings=MagicMock(exness_live_trading=live_trading),
         )
@@ -229,23 +225,6 @@ async def test_remove_symbol_deletes_subscription() -> None:
     await svc.remove_symbol("sub-1")
 
     sub_repo.delete.assert_awaited_once_with("sub-1")
-
-
-@pytest.mark.asyncio
-async def test_delete_strategy_cascades_in_order() -> None:
-    sub_repo = MagicMock()
-    sub_repo.delete_by_strategy_code = AsyncMock()
-    bt_repo = MagicMock()
-    bt_repo.delete_by_strategy_code = AsyncMock()
-
-    call_order: list[str] = []
-    bt_repo.delete_by_strategy_code.side_effect = lambda _: call_order.append("bt")
-    sub_repo.delete_by_strategy_code.side_effect = lambda _: call_order.append("sub")
-
-    svc = _cmd_svc(sub_repo=sub_repo, bt_repo=bt_repo)
-    await svc.delete_strategy("hitnrun2")
-
-    assert call_order == ["bt", "sub"]
 
 
 # ---------------------------------------------------------------------------

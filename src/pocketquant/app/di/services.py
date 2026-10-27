@@ -48,7 +48,6 @@ from pocketquant.engine.backtest.backtest_execution_service import BacktestExecu
 from pocketquant.engine.backtest.backtest_query_service import BacktestQueryService
 from pocketquant.engine.backtest.backtest_stats_service import BacktestStatsService
 from pocketquant.engine.execution.order_app_service import OrderAppService
-from pocketquant.engine.execution.orders_positions_service import OrderPositionQueryService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.live.live_metrics_query_service import LiveMetricsQueryService
@@ -240,9 +239,7 @@ class ServicesProvider(Provider):
     ) -> BacktestExecutionService:
         return BacktestExecutionService(dispatch_deps, backtest_repository)
 
-    # Feature services that routes inject directly. OrderPositionQueryService
-    # reads OrderAppService / PositionAppService, so its answers reflect the
-    # running execution engine.
+    # Feature services that routes inject directly.
     tracked_symbol_service = provide(TrackedSymbolService, scope=Scope.APP)
     tracked_symbol_backfill_service = provide(TrackedSymbolBackfillService, scope=Scope.APP)
     ohlcv_service = provide(OhlcvService, scope=Scope.APP)
@@ -255,4 +252,3 @@ class ServicesProvider(Provider):
     backtest_stats_service = provide(BacktestStatsService, scope=Scope.APP)
     strategy_command_service = provide(StrategyCommandService, scope=Scope.APP)
     strategy_query_service = provide(StrategyQueryService, scope=Scope.APP)
-    order_position_query_service = provide(OrderPositionQueryService, scope=Scope.APP)

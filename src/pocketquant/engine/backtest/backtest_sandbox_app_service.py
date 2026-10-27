@@ -48,11 +48,6 @@ class _InMemoryOrderRepo:
     async def get(self, order_id: str) -> OrderAggregate | None:
         return self._items.get(order_id)
 
-    async def find_by_subscription(
-        self, subscription_id: str, limit: int = 1000
-    ) -> list[OrderAggregate]:
-        return [o for o in self._items.values() if o.subscription_id == subscription_id][:limit]
-
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
         return []
 
@@ -66,12 +61,6 @@ class _InMemoryPositionRepo:
 
     async def get(self, position_id: str) -> PositionAggregate | None:
         return self._items.get(position_id)
-
-    async def get_by_subscription(self, subscription_id: str) -> PositionAggregate | None:
-        for p in self._items.values():
-            if p.subscription_id == subscription_id and not p.is_closed:
-                return p
-        return None
 
     async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
         return [p for p in self._items.values() if not p.is_closed][:limit]

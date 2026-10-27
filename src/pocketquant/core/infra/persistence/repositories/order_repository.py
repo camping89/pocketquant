@@ -21,13 +21,6 @@ class OrderRepository(SymbolScopedRepository):
             return None
         return OrderAggregate.from_mongo(doc)
 
-    async def find_by_subscription(
-        self, subscription_id: str, limit: int = 1000
-    ) -> list[OrderAggregate]:
-        collection = self._collection()
-        cursor = collection.find({"subscription_id": subscription_id}).limit(limit)
-        return [OrderAggregate.from_mongo(doc) async for doc in cursor]
-
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
         collection = self._collection()
         cursor = collection.find(

@@ -1,4 +1,4 @@
-"""Strategy command service — writes desired_state and cascade-deletes."""
+"""Strategy command service — writes desired_state and subscription docs."""
 
 from __future__ import annotations
 
@@ -10,9 +10,6 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.subscription import Subscription
-from pocketquant.core.infra.persistence.repositories.backtest_repository import (
-    BacktestRepository,
-)
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -31,12 +28,10 @@ class StrategyCommandService:
     def __init__(
         self,
         subscription_repository: SubscriptionRepository,
-        backtest_repository: BacktestRepository,
         tracked_symbol_repository: TrackedSymbolRepository,
         settings: Settings,
     ) -> None:
         self._sub_repo = subscription_repository
-        self._bt_repo = backtest_repository
         self._tracked_repo = tracked_symbol_repository
         self._settings = settings
 
@@ -118,13 +113,3 @@ class StrategyCommandService:
         Returns the number of subscription docs deleted.
         """
         return await self._sub_repo.delete(sub_id)
-
-    async def delete_strategy(self, strategy_id: str) -> None:
-        """Cascade-delete every persisted doc for a strategy template — pure Mongo.
-
-        No RAM unload, no scheduler: the app control-plane (reconcile orphan-unload)
-        tears down each instance once its subscription doc is gone. Ad-hoc backtest
-        runs for this strategy are dropped too; then the subscriptions.
-        """
-        await self._bt_repo.delete_by_strategy_code(strategy_id)
-        await self._sub_repo.delete_by_strategy_code(strategy_id)

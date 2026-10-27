@@ -174,22 +174,3 @@ async def test_update_desired_state_idempotent_reset_still_matches(repo):
     await repo.add(sub)
     assert await repo.update_desired_state(str(sub.id), "running") == 1
     assert await repo.update_desired_state(str(sub.id), "running") == 1
-
-
-@pytest.mark.asyncio
-async def test_delete_by_strategy_code_bulk(repo):
-    sub_a1 = _make_sub("strat-bulk-a", "BTC-USDT:BINANCE", Interval.HOUR_1)
-    sub_a2 = _make_sub("strat-bulk-a", "ETH-USDT:BINANCE", Interval.HOUR_1)
-    sub_a3 = _make_sub("strat-bulk-a", "SOL-USDT:BINANCE", Interval.HOUR_1)
-    sub_b1 = _make_sub("strat-bulk-b", "XRP-USDT:OKX", Interval.DAY_1)
-
-    for sub in (sub_a1, sub_a2, sub_a3, sub_b1):
-        await repo.add(sub)
-
-    deleted = await repo.delete_by_strategy_code("strat-bulk-a")
-    assert deleted == 3
-
-    assert await repo.list_by_strategy_code("strat-bulk-a") == []
-    remaining = await repo.list_by_strategy_code("strat-bulk-b")
-    assert len(remaining) == 1
-    assert remaining[0].id == sub_b1.id

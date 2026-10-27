@@ -374,20 +374,6 @@ async def add_tracked_symbol(
     return await service.add(cmd)
 
 
-@tracked_symbols_router.put("/tracked-symbols/{symbol}", response_model=dict)
-async def update_tracked_symbol(
-    symbol: str,
-    service: FromDishka[TrackedSymbolService],
-) -> dict:
-    """Update metadata for a tracked symbol. Requires X-Admin-Token.
-
-    ``symbol`` path param is URL-encoded composite ``{code}:{exchange}``
-    (e.g. ``BTCUSDT%3ABINANCE``).
-    """
-    symbol = validate_composite_symbol(symbol)
-    return await service.update(symbol)
-
-
 @tracked_symbols_router.delete("/tracked-symbols/{symbol}", response_model=dict)
 async def remove_tracked_symbol(
     symbol: str,

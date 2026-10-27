@@ -81,16 +81,6 @@ class SubscriptionRepository(BaseRepository):
         logger.debug("subscription_deleted", sub_id=sub_id, count=result.deleted_count)
         return result.deleted_count
 
-    async def delete_by_strategy_code(self, strategy_code: str) -> int:
-        collection = self._collection()
-        result = await collection.delete_many({"strategy_code": strategy_code})
-        logger.debug(
-            "subscriptions_deleted_by_strategy_code",
-            strategy_code=strategy_code,
-            count=result.deleted_count,
-        )
-        return result.deleted_count
-
     async def ensure_indexes(self) -> None:
         collection = self._collection()
         await collection.create_index(

@@ -99,14 +99,11 @@ async def test_round_trip_preserves_uuid_id(repo):
 
 
 @pytest.mark.asyncio
-async def test_exists_update_delete_by_symbol(repo):
+async def test_exists_delete_by_symbol(repo):
     await repo.upsert(TrackedSymbol(symbol="BNBUSDT:BINANCE"))
 
     assert await repo.exists("BNBUSDT:BINANCE") is True
     assert await repo.exists("NOPE:BINANCE") is False
-
-    assert await repo.update("BNBUSDT:BINANCE", {}) is True
-    assert await repo.update("NOPE:BINANCE", {}) is False
 
     assert await repo.delete_by_symbol("BNBUSDT:BINANCE") == 1
     assert await repo.delete_by_symbol("BNBUSDT:BINANCE") == 0

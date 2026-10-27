@@ -422,7 +422,6 @@ def register_routes(app: FastAPI, settings) -> None:
     from pocketquant.app.routes.market_data import tracked_symbols_router
     from pocketquant.app.routes.market_data_quotes import router as quote_router
     from pocketquant.app.routes.strategy import strategy_router, subscription_router
-    from pocketquant.app.routes.trading_orders_positions import trading_router
 
     @app.get("/health")
     @inject
@@ -459,7 +458,6 @@ def register_routes(app: FastAPI, settings) -> None:
     api.include_router(safeguards_router)
     api.include_router(strategy_router)
     api.include_router(subscription_router)
-    api.include_router(trading_router)
     api.include_router(backtest_router)
 
     app.include_router(api)

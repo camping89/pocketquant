@@ -25,15 +25,13 @@ class OrderAppService:
     - Submit orders to brokers
     - Track order status
     - Publish order events
-    - Handle order cancellation
+    - Apply broker fill and cancel callbacks
     """
 
     def __init__(self, event_bus: EventBus, order_repository: OrderRepository) -> None:
         self._event_bus = event_bus
         self._order_repo = order_repository
-        self._orders: dict[str, OrderAggregate] = {}
         self._pending: dict[str, OrderAggregate] = {}
-        self._broker_map: dict[str, str] = {}  # order_id -> broker_order_id
         self._lock = asyncio.Lock()
 
     async def submit(self, order: OrderAggregate, broker: IBrokerPort) -> OrderResult:
@@ -71,7 +69,6 @@ class OrderAppService:
         try:
             async with self._lock:
                 if result.is_success:
-                    self._broker_map[str(order.id)] = result.broker_order_id
                     order.broker_order_id = result.broker_order_id
 
                     if result.status == OrderStatus.FILLED:
@@ -83,7 +80,6 @@ class OrderAppService:
                             order.submit(result.broker_order_id)
                         order.fill(result.filled_quantity, result.filled_price or 0.0)
 
-                        self._orders[str(order.id)] = order
                         self._pending.pop(str(order.id), None)
 
                         await self._order_repo.save(order)
@@ -138,54 +134,6 @@ class OrderAppService:
 
         return result
 
-    async def cancel(self, order_id: str, broker: IBrokerPort) -> bool:
-        """Cancel an order.
-
-        Args:
-            order_id: Internal order ID
-            broker: Broker to cancel on
-
-        Returns:
-            True if cancellation was successful
-        """
-        async with self._lock:
-            broker_order_id = self._broker_map.get(order_id)
-            order = self._pending.get(order_id)
-            if not broker_order_id:
-                logger.warning("cancel_unknown_order", order_id=order_id)
-                return False
-
-        try:
-            success = await broker.cancel_order(broker_order_id)
-
-            if success:
-                async with self._lock:
-                    if order:
-                        order.cancel()
-                        await self._order_repo.save(order)
-                    self._pending.pop(order_id, None)
-
-                logger.info("order_cancelled", order_id=order_id)
-
-            return success
-
-        except Exception as e:
-            logger.error("order_cancel_error", order_id=order_id, error=str(e))
-            return False
-
-    def get_order(self, order_id: str) -> OrderAggregate | None:
-        return self._orders.get(order_id) or self._pending.get(order_id)
-
-    def get_pending_orders(self) -> list[OrderAggregate]:
-        return list(self._pending.values())
-
-    def get_filled_orders(self) -> list[OrderAggregate]:
-        return list(self._orders.values())
-
-    def get_orders_by_strategy(self, strategy_id: str) -> list[OrderAggregate]:
-        all_orders = list(self._orders.values()) + list(self._pending.values())
-        return [o for o in all_orders if o.subscription_id == strategy_id]
-
     async def on_order_update(self, result: OrderResult) -> None:
         """Handle order update from broker callback.
 
@@ -200,7 +148,6 @@ class OrderAppService:
                 order.fill(result.filled_quantity, result.filled_price or 0.0)
                 await self._order_repo.save(order)
 
-                self._orders[result.order_id] = order
                 self._pending.pop(result.order_id, None)
 
                 await self._event_bus.publish(
@@ -232,15 +179,4 @@ class OrderAppService:
         async with self._lock:
             for order in pending:
                 self._pending[str(order.id)] = order
-                if order.broker_order_id:
-                    self._broker_map[str(order.id)] = order.broker_order_id
         logger.info("loaded_pending_orders", count=len(pending))
-
-    async def get_order_async(self, order_id: str) -> OrderAggregate | None:
-        order = self._orders.get(order_id) or self._pending.get(order_id)
-        if order:
-            return order
-        return await self._order_repo.get(order_id)
-
-    async def get_orders_by_strategy_async(self, strategy_id: str) -> list[OrderAggregate]:
-        return await self._order_repo.find_by_subscription(strategy_id)

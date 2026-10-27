@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
@@ -36,9 +35,6 @@ class FakeTrackedSymbolRepo:
     async def upsert(self, ts: TrackedSymbol) -> None:
         self.upserted.append(ts)
         self.items[ts.symbol] = ts
-
-    async def update(self, symbol: str, fields: dict) -> bool:
-        return symbol in self.items
 
     async def delete_by_symbol(self, symbol: str) -> int:
         return int(self.items.pop(symbol, None) is not None)
@@ -146,19 +142,6 @@ async def test_add_upserts_and_returns_state():
     assert result["seeded_from"] == "admin"
     assert "created_at" in result
     assert len(repo.upserted) == 1
-
-
-@pytest.mark.asyncio
-async def test_update_validates_existence():
-    svc = _service(FakeTrackedSymbolRepo([_ts("BTCUSDT:BINANCE")]))
-    result = await svc.update("BTCUSDT:BINANCE")
-    assert result == {"symbol": "BTCUSDT:BINANCE", "status": "updated"}
-
-
-@pytest.mark.asyncio
-async def test_update_missing_raises_not_found():
-    with pytest.raises(NotFoundError):
-        await _service(FakeTrackedSymbolRepo()).update("NOPE:BINANCE")
 
 
 @pytest.mark.asyncio
