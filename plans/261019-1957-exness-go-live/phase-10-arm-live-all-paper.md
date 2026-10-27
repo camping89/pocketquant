@@ -61,7 +61,7 @@ Code blocks below are indented for Markdown. Before running one, remove only the
          print(sym, "1m", db.bars.count_documents({"symbol": sym, "interval": "1m"}), "1h", db.bars.count_documents({"symbol": sym, "interval": "1h"}))
      EOF
      ```
-  2. Latest E2 row: `grep -E '^\| [0-4]( re-run)? \| 2026' plans/261009-0858-exness-venue-lean-sync-refactor/phase-08-validation-spread-backtests-paper-week.md | tail -1`.
+  2. Latest E2 row: `grep -E '^\| [0-4]( re-run)? \| 2026' plans/archive/261009-0858-exness-venue-lean-sync-refactor/phase-08-validation-spread-backtests-paper-week.md | tail -1`.
   3. Dispatch auth from `grep "^Deploy A:" plans/261019-1957-exness-go-live/reports/ship-log.md`.
 - Success criteria: three facts gathered.
 - Verify: step 1 line 1 reads `flag False subs <n> paper <n> exness 0` with both `<n>` equal. Any other value → Failure Protocol.
