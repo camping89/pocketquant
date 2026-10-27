@@ -10,7 +10,7 @@ One Python package `src/pocketquant/` (subpackages: core, engine, app) + one Vit
 ## Rules that change decisions
 
 - **All repositories in core** (`core.infra.persistence.repositories`) — zero repos in engine/app.
-- **Routes** use `FromDishka[…CommandService/…QueryService]` + `DishkaRoute`, never `Depends()`. Service methods take scalars; a Pydantic model only for a real request body or a validated multi-field query. They return DTOs.
+- **Routes** use `FromDishka[…CommandService/…QueryService]` + `DishkaRoute`, never `Depends()`. Service methods take scalars; a Pydantic model only for a real request body or a validated multi-field query. They return DTOs. A route may inject a repository or `Cache` directly when the handler adds no logic (no service needed).
 - **fastapi only in app** — core/engine never import it (import-linter enforced, 8 contracts).
 - **Single uvicorn worker only** — scheduler/WS feed/broker are in-process singletons; `--workers N` duplicates the reconcile loop + live broker connection.
 - **Primary keys: UUIDv7 only** — never hash / natural key / ObjectId.

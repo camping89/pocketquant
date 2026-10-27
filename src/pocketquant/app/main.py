@@ -95,7 +95,7 @@ def create_app() -> FastAPI:
         # the OpenAPI snapshot baseline.
         title="PocketQuant",
         version=settings.app_version,
-        description="Algorithmic trading platform — API, SPA serving, and trading runtime",
+        description="Algorithmic trading platform — API and trading runtime",
         lifespan=lifespan,
         docs_url=f"{settings.api_prefix}/docs",
         redoc_url=f"{settings.api_prefix}/redoc",

@@ -55,7 +55,7 @@ ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s -o /dev/null -w 'HTTP
 
 ## Platform & URLs
 
-**Vultr VPS** (Ubuntu), self-managed Docker Compose. 6 containers: app (FastAPI + routes + SPA, internal :41921), web (nginx reverse proxy, internal), cloudflared (Cloudflare Tunnel, outbound only), MongoDB, Redis, Portainer. Networks: `edge` (cloudflared, web) and `backend` (web, app, MongoDB, Redis). Images built by Actions, pushed to Docker Hub, pulled on the VPS.
+**Vultr VPS** (Ubuntu), self-managed Docker Compose. 6 containers: app (FastAPI + routes, internal :41921), web (nginx: serves the SPA and reverse-proxies `/api`, internal), cloudflared (Cloudflare Tunnel, outbound only), MongoDB, Redis, Portainer. Networks: `edge` (cloudflared, web) and `backend` (web, app, MongoDB, Redis). Images built by Actions, pushed to Docker Hub, pulled on the VPS.
 
 | Surface | URL |
 |---|---|
@@ -101,8 +101,6 @@ Key prod env vars (full set in `vps/default/.env`):
 | `ADMIN_TOKEN` | Yes | Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`. |
 | `TUNNEL_TOKEN` | Yes | Token of the Cloudflare Tunnel run by `cloudflared`. Routes are set in the Cloudflare dashboard (Networking > Tunnels), not here. |
 | `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host ports, bound to 127.0.0.1 (use obscure values) |
-| `OKX_API_KEY` / `_SECRET` / `_PASSPHRASE` | No | OKX live trading only |
-| `OKX_DEMO_MODE` | Yes | `false` in prod, `true` in dev |
 | `TRADINGVIEW_PLAN` | No | `free` (default) or `cme_non_pro`. The single index-futures entitlement knob; derives bar cap, poll floor and real-time. |
 | `TRADINGVIEW_AUTH_TOKEN` | No | Supplies a session token directly and wins over username/password. |
 | `TRADINGVIEW_USERNAME` / `_PASSWORD` | No | Optional login; the scraper falls back to anonymous (delayed, limited) without it. |
@@ -284,7 +282,7 @@ ssh <VPS> "curl -s -X POST http://localhost:\$APP_PORT/api/v1/market-data/integr
 ssh <VPS> "curl -s -X POST http://localhost:\$APP_PORT/api/v1/market-data/integrity/repair -H 'Content-Type: application/json' -d '{\"symbol\":\"BTCUSDT:BINANCE\",\"interval\":\"1m\",\"days_back\":7}' | jq ."
 ```
 
-Re-audit → expect `missing_count == 0`. A residual gap means the source provider is missing that window (unrecoverable). At boot, `start_background_jobs` runs `enqueue_missed_catchups`: if the last `sync_backfill`/`sync_integrity` was >25h ago (or `sync_repair` >12.5h), a `<job_id>_catchup` one-off run is enqueued automatically.
+Re-audit → expect `missing_count == 0`. A residual gap means the source provider is missing that window (unrecoverable). At boot, `start_jobs` runs `enqueue_missed_catchups`: if the last `sync_backfill`/`sync_integrity` was >25h ago (or `sync_repair` >12.5h), a `<job_id>_catchup` one-off run is enqueued automatically.
 
 ---
 

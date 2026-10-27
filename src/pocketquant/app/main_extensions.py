@@ -1,8 +1,8 @@
 """Helpers for main.py: middleware, routes, health, and startup utilities.
 
 The app process is the single backend entrypoint — it runs the full trading
-runtime (scheduler, WS feed, reconcile loop, backtest worker) AND serves all
-HTTP feature routes plus the SPA.
+runtime (scheduler, WS feed, reconcile loop, backtest tasks) AND serves all
+HTTP feature routes. nginx serves the SPA.
 """
 
 import asyncio

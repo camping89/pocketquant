@@ -16,14 +16,13 @@ src/pocketquant/
 │   ├── domain/          # entities, value objects, events, domain services, strategies, ports + DTOs (no I/O)
 │   ├── infra/
 │   │   ├── persistence/ # Database, Cache, BaseRepository, every repository
-│   │   ├── brokers/     # paper/, okx/, exness/, broker_factory.py
+│   │   ├── brokers/     # paper/, exness/, broker_factory.py
 │   │   ├── binance/     # REST + @aggTrade WS
 │   │   ├── tradingview/ # tvDatafeed scraper client + adapters
 │   │   ├── exness/      # signed REST + WS client, data and quote adapters
 │   │   ├── market_data/ # routing data/quote adapters, provider health
 │   │   ├── calendars/   # trading calendars (CME Globex, Exness sessions)
-│   │   ├── scheduling/  # JobScheduler (APScheduler)
-│   │   └── http_client/ # retrying HTTP client
+│   │   └── scheduling/  # JobScheduler (APScheduler)
 │   ├── common/          # event bus, middleware, tracing, logging, health, exceptions, UUIDv7
 │   └── config.py        # Settings (every env var)
 ├── engine/
@@ -34,7 +33,7 @@ src/pocketquant/
 │   └── live/            # reconcile loop, live trade collector, live metrics
 └── app/
     ├── main.py          # create_app() + lifespan
-    ├── main_extensions.py # startup steps, middleware, routes, /health, SPA serving
+    ├── main_extensions.py # startup steps, middleware, routes, /health
     ├── di/              # three Dishka providers
     ├── routes/          # HTTP routes
     └── middleware/      # admin token check
@@ -66,6 +65,7 @@ tests/                   # core_test/, engine_test/, backtest_test/, app_test/, 
 | Reconcile loop | `engine/live/strategy_reconcile_app_service.py` |
 | Backtest task body | `engine/backtest/backtest_execution_service.py` |
 | Backtest sandbox | `engine/backtest/backtest_sandbox_app_service.py` |
+| Backtest bar replay | `engine/backtest/backtest_app_service.py` |
 | Startup order | `app/main.py` (`lifespan`) |
 | Middleware and route wiring | `app/main_extensions.py` |
 | DI providers | `app/di/` |

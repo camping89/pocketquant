@@ -8,7 +8,7 @@ One Python package (`pocketquant`) with import-linter-enforced subpackage bounda
 
 ```text
 src/pocketquant/
-├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, tradingview, exness, scheduler, http)
+├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, tradingview, exness, scheduler)
 ├── engine/     # framework-free orchestration, 5 feature areas: strategy/ execution/ market_data/ backtest/ live/
 └── app/        # FastAPI backend: routes, scheduler, WS feed, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI

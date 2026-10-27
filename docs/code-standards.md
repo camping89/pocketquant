@@ -38,7 +38,7 @@ strategy_service_interface.py        # IStrategyService (strategy interface)
 bar_repository.py                    # BarRepository (data access)
 data_provider_port.py                # IDataProviderPort (infra boundary)
 binance_adapter.py                   # BinanceAdapter (infra impl)
-okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separate adapter)
+exness_broker_adapter.py             # ExnessBrokerAdapter (source + type → separate adapter)
 ```
 
 ### Class Naming by Layer
@@ -53,7 +53,7 @@ okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separ
 | **Domain Strategy (Interface)** | `IStrategyService` | `IStrategyService` | `strategy_service_interface.py` | `IStrategyService` |
 | Repositories | `{Entity}Repository` | `Repository` | `*_repository.py` | `BarRepository`, `OrderRepository` |
 | **Infra Port (Interface)** | `I{Concept}Port` | `Port` | `*_port.py` (1 port/file) | `IBrokerPort`, `IDataProviderPort`, `IRealtimeQuoteProviderPort` |
-| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `OKXBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter` |
+| **Infra Adapter (Impl)** | `{Source}[{Type}]Adapter` | `Adapter` | `*_adapter.py` | `ExnessBrokerAdapter`, `BinanceAdapter`, `PaperBrokerAdapter` |
 | **Helper** | `{Name}Helper` | `Helper` | `*_helper.py` | (only when a helper module is justified) |
 | **App Services** | `{Name}AppService` | `AppService` | `*_app_service.py` | `StrategyReconcileAppService`, `BacktestReportAppService` |
 | Query / Command Models | `{Get\|List}{Entity}Query`, `{Action}{Entity}Command` | `Query` / `Command` | beside the service that takes it | `GetOHLCVQuery`, `SyncSymbolCommand`, `RunBacktestCommand` |
@@ -77,9 +77,8 @@ okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separ
 | CQRS | `*CommandService`, `*QueryService` (request-scoped, not orchestrators) |
 | Persistence | `*Repository` |
 | DI / cross-cutting | `*Provider`, `*Middleware` |
-| App handler | `RiskCheckHandler`, `event_handler` (decorator) |
+| App handler | `RiskCheckHandler` |
 | Infra factory/scheduler | `BrokerFactory`, `JobScheduler` |
-| Infra sub-component (OKX) | `OkxMessageParser`, `OkxOrderMapper`, `OkxPositionMapper`, `OkxReconnectionHandler`, `OkxStateReconciler` |
 | Data class | Entity, VO, enum, event, `*Command`/`*Query`/`*Response` |
 
 ## Routes & Services
@@ -89,7 +88,7 @@ okx_broker_adapter.py                # OKXBrokerAdapter (source + type → separ
 - Mutations are guarded once, on the `api` router; do not add per-route auth.
 - Service methods take scalars. A Pydantic model is passed only when it is a real request body (`SyncSymbolCommand`, `AddTrackedSymbolCommand`, `RunBacktestCommand`) or a multi-field parameter object that carries its own validation (`GetOHLCVQuery`, `BackfillTrackedSymbolCommand`). Do not wrap path or query scalars in a model.
 - No try/except in routes or services to turn an exception into a response. Exceptions propagate to the global handlers registered by `register_exception_handlers` (`core/common/exceptions.py`, wired in `app/main_extensions.py`): `NotFoundError` → 404, `DomainError` → 400, `AppError` → 500, body `{error: {code, message}}`. Catch a specific exception only where the code genuinely recovers (a job, an adapter retry); never a bare `except:`.
-- State changes publish domain events. Handlers are methods marked `@event_handler(...)` and registered with `registry.register_instance(service, event_bus)`.
+- State changes publish domain events. A service subscribes its handlers with `event_bus.subscribe(EventType, handler)`, usually in its `start()`.
 - Datetimes returned to the frontend go through `to_utc_iso()` (`pocketquant.core.common.time`) for a correct `Z` suffix. Bare `.isoformat()` is for internal use only (logs, cache keys).
 
 ```python
@@ -112,7 +111,7 @@ async def create_subscription(
 
 - Entities are Pydantic `BaseModel`s that serialize themselves with `to_mongo()` / `@classmethod from_mongo()`. There is no schemas directory and no `Create` subclass; factories are classmethods (`Symbol.create()`, `OrderAggregate.create()`, `PositionAggregate.open()`). Value objects and events are frozen dataclasses.
 - An aggregate earns its complexity: use one only when the entity protects invariants, has lifecycle behaviour, owns other entities or emits events. A data record (`Bar`) or a CRUD-only model stays a plain entity.
-- Strategies implement `IStrategyService` (`on_bar_completed` is required; `on_quote_received` and `on_order_filled` are optional) and return `Signal | None`. They stay pure — no broker, no database; `StrategyAppService` executes signals.
+- Strategies implement `IStrategyService` (`on_bar_completed` is required; `on_order_filled` and `on_order_rejected` are optional) and return `Signal | None`. They stay pure — no broker, no database; `StrategyAppService` executes signals.
 - All repositories live in `core.infra.persistence.repositories`; `engine` and `app` have none. A repository is an instance class that extends `BaseRepository`, gets `Database` through its constructor and uses `_collection(name)`.
 
 **Primary key: UUIDv7 only.** Every document our code writes has a UUIDv7 `_id` from `generate_id()` (`core/common/uuid.py`); persisted entities declare `id: UUID`. No hash key, no natural key, no Mongo ObjectId, no composite-string key. Uniqueness and idempotency go on a secondary unique index, never on `_id`. The one exception is a collection whose `_id` a third-party library writes (APScheduler's `apscheduler_jobs`); do not patch the library to force uuid7.
@@ -140,9 +139,9 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 - The suffix is the id of the data provider that produces the symbol's bars, written as `provider_id.upper()` in full — `BINANCE`, `TRADINGVIEW`, never a short code and never the exchange. Routing reads it in one place, `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py`; everything else treats `symbol` as opaque.
 - A suffix that names no registered provider fails loudly (`UnknownDataProviderError`, a `ValueError`) — it is never guessed or routed by asset class.
 - An unseeded symbol takes its provider's defaults (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`).
-- The execution broker (paper, OKX, Exness) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (`TRADINGVIEW_EXCHANGE_BY_CODE` in `tradingview_mappers.py`; OKX composes `instId` in `okx_mapper.py`; Exness maps it in `EXNESS_INSTRUMENTS` in `exness_mappers.py`).
+- The execution broker (paper, Exness) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (`TRADINGVIEW_EXCHANGE_BY_CODE` in `tradingview_mappers.py`; `EXNESS_INSTRUMENTS` in `exness_mappers.py`).
 - Validation: `COMPOSITE_SYMBOL_RE` for internal data, `COMPOSITE_SYMBOL_PATTERN` for HTTP input (`core/domain/symbol/entities.py`).
-- URL: `:` is encoded as `%3A` in path segments (`/api/v1/bar/BTCUSDT%3ABINANCE`). JSON and the database keep the raw `:`. Cache keys use the whole symbol: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`.
+- URL: `:` is encoded as `%3A` in path segments (`/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE`). JSON and the database keep the raw `:`. Cache keys use the whole symbol: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`.
 
 **Adding a data provider** touches exactly these places:
 
@@ -246,7 +245,7 @@ Comments are short, plain English only. They cost LOC and rot out of sync with c
 ### KEEP / write only for
 
 - **WHY:** races, ordering/suspension constraints, publish-before-subscribe, await-preemption notes, invariants, trade-offs
-- **Hacks / workarounds** + external-system quirks (OKX, Mongo, Redis, asyncio, APScheduler)
+- **Hacks / workarounds** + external-system quirks (Exness, TradingView, Mongo, Redis, asyncio, APScheduler)
 - `# type: ignore[...]` / `// @ts-expect-error` / `// eslint-disable` — always with their reason
 - Warnings about non-obvious failure modes (`# benign — already dropped`)
 - Docstrings documenting params / contracts / edge cases / non-obvious return semantics

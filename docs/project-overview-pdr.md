@@ -41,7 +41,7 @@ PocketQuant is a personal algorithmic trading platform. It keeps reliable market
 
 ### F5: Symbol registry
 
-- Tracked symbols are created, updated, backfilled and deleted under `/api/v1/market-data/tracked-symbols`. These mutations need the admin token when one is configured.
+- Tracked symbols are created, backfilled and deleted under `/api/v1/market-data/tracked-symbols`. These mutations need the admin token when one is configured.
 - Deleting a tracked symbol deletes all its data, including subscriptions and backtests.
 
 ### F6: Scheduled jobs and integrity
@@ -67,11 +67,10 @@ PocketQuant is a personal algorithmic trading platform. It keeps reliable market
 
 - Persist live orders, positions and closed trades per subscription.
 - Report per-subscription metrics: `GET /api/v1/subscriptions/{sub_id}/metrics`.
-- Read routes under `/api/v1/trading/orders` and `/api/v1/trading/positions`.
+- Read a subscription's positions and trades under `/api/v1/subscriptions/{sub_id}/positions` and `/trades`.
 
-### F10: Live trading (OKX, Exness off)
+### F10: Live trading (Exness, off by default)
 
-- OKX: live broker with HMAC auth, reconnect with backoff and a circuit breaker.
 - Exness: broker built and off by default (`EXNESS_LIVE_TRADING=false`). It needs a stop loss on every order, a daily loss cap and a reconciled account snapshot before any order.
 - Paper is the default broker.
 

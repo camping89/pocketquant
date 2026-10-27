@@ -1,7 +1,7 @@
 ---
 title: "Maintainability cleanup"
 description: "Cut reading and maintenance cost: fix the paper fill-path desync, demote hot-path INFO logs, delete dead and unreachable code, collapse the sync-job and backtest boilerplate, and make paper position ownership explicit."
-status: in-progress
+status: implemented-deploys-pending
 priority: P2
 effort: 2-3d code + 3 deploys
 branch: develop
@@ -39,16 +39,16 @@ No change to `core/infra/brokers/exness/exness_broker_adapter.py`. No DI one-lin
 
 | # | Phase | Status |
 |---|---|---|
-| 01 | [Commit pending plan files](phase-01-commit-pending-plan-files.md) | pending |
-| 02 | [Fill-path safety](phase-02-fill-path-safety.md) | pending |
-| 03 | [Log levels](phase-03-log-levels.md) — Deploy A point | pending |
-| 04 | [Backend dead-code deletion](phase-04-backend-dead-code-deletion.md) | pending |
-| 05 | [Web dead code and small web fixes](phase-05-web-dead-code-and-fixes.md) | pending |
-| 06 | [Dead live-execution surface and risk check](phase-06-dead-execution-surface-and-risk-check.md) | pending |
-| 07 | [Sync-job wrapper](phase-07-sync-job-wrapper.md) — Deploy B point | pending |
-| 08 | [Backtest chain 6 to 3 files](phase-08-backtest-chain-collapse.md) | pending |
-| 09 | [Paper position ownership and explicit subscriptions](phase-09-paper-position-ownership.md) — Deploy C point | pending |
-| 10 | [Polish and docs](phase-10-polish-and-docs.md) | pending |
+| 01 | [Commit pending plan files](phase-01-commit-pending-plan-files.md) | done |
+| 02 | [Fill-path safety](phase-02-fill-path-safety.md) | done |
+| 03 | [Log levels](phase-03-log-levels.md) — Deploy A point | done |
+| 04 | [Backend dead-code deletion](phase-04-backend-dead-code-deletion.md) | done |
+| 05 | [Web dead code and small web fixes](phase-05-web-dead-code-and-fixes.md) | done |
+| 06 | [Dead live-execution surface and risk check](phase-06-dead-execution-surface-and-risk-check.md) | done |
+| 07 | [Sync-job wrapper](phase-07-sync-job-wrapper.md) — Deploy B point | done |
+| 08 | [Backtest chain 6 to 3 files](phase-08-backtest-chain-collapse.md) | done |
+| 09 | [Paper position ownership and explicit subscriptions](phase-09-paper-position-ownership.md) — Deploy C point | done |
+| 10 | [Polish and docs](phase-10-polish-and-docs.md) | done |
 
 ## Conventions
 
@@ -59,11 +59,11 @@ No change to `core/infra/brokers/exness/exness_broker_adapter.py`. No DI one-lin
 
 ## Acceptance
 
-- [ ] An exception after a paper fill never rejects a FILLED order; the strategy sees the fill.
-- [ ] One failing event handler no longer stops the others.
-- [ ] At `LOG_LEVEL=INFO` no line repeats per symbol per minute or per HTTP request.
-- [ ] Every item in the "confirmed dead" and approved "unreachable" lists is gone, or kept with a stated reason.
-- [ ] `sync_jobs.py` has one job-history wrapper; a failed run is recorded once.
-- [ ] A backtest run reads in at most three engine files; stats of a fixed run are unchanged.
-- [ ] Unloading a paper subscription leaves no broker subscribed to bars; restart leaves no paper rows in the mirror.
-- [ ] Docs no longer describe OKX, `/trading/*` or removed routes.
+- [x] An exception after a paper fill never rejects a FILLED order; the strategy sees the fill.
+- [x] One failing event handler no longer stops the others.
+- [x] At `LOG_LEVEL=INFO` no line repeats per symbol per minute or per HTTP request.
+- [x] Every item in the "confirmed dead" and approved "unreachable" lists is gone, or kept with a stated reason.
+- [x] `sync_jobs.py` has one job-history wrapper; a failed run is recorded once.
+- [x] A backtest run reads in at most three engine files; stats of a fixed run are unchanged.
+- [x] Unloading a paper subscription leaves no broker subscribed to bars; restart leaves no paper rows in the mirror.
+- [x] Docs no longer describe OKX, `/trading/*` or removed routes.
