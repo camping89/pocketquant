@@ -6,7 +6,7 @@ priority: P2
 branch: develop
 tags: [trading-calc, paper-broker, position-aggregate, engine, core-domain, fifo-removal]
 blockedBy: []
-blocks: [260630-0031-backtest-mae-mfe-excursion]
+blocks: []
 created: "2026-07-05T22:16:00+07:00"
 createdBy: "ck:plan"
 source: "plans/reports/brainstorm-260705-2216-r4-broker-trade-emission-remove-fifo.md"
@@ -20,7 +20,7 @@ Gộp 2 hệ kế toán position (paper broker `PositionAggregate` + collector `
 
 - Brainstorm (đã duyệt): `plans/reports/brainstorm-260705-2216-r4-broker-trade-emission-remove-fifo.md`
 - Roadmap hàng R4: `plans/trading-calulation-fix/roadmap.md` · Model E: `design-execution-metrics-separation.md` · OKX: `okx-broker-verification.md`
-- Depends: R3 (done, `260705-2119-r3-commission-abstraction`). Blocks: `260630-0031-backtest-mae-mfe-excursion` (soft — đụng broker SL/TP path + xoá collector FIFO).
+- Depends: R3 (done, `260705-2119-r3-commission-abstraction`).
 
 ## Quyết định khoá
 

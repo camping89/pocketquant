@@ -4,7 +4,7 @@ sub: R2
 track: structure
 status: done
 depends: [R1]
-blocks: [R3, R8, 260630-0031-backtest-mae-mfe-excursion]  # cross-initiative: R2 rebase backtest paths
+blocks: [R3, R8]
 ---
 
 # R2 — Engine Restructure (gộp `backtest/` → `engine/`, 4→3 tầng)

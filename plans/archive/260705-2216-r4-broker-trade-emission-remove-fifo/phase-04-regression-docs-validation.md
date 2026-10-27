@@ -36,8 +36,7 @@
 2. **Full gate** — `just test`; nếu đỏ, fix theo recommendation, lặp tới xanh (KHÔNG bỏ qua test đỏ).
 3. `ruff` + `pyright` + `lint-imports` (8 contract).
 4. **Docs** — cập nhật 2 docs AS-IS (không changelog/banner). Mermaid/ASCII cho flow Trade emission nếu giúp.
-5. **Roadmap** — R4 Done + note ngắn; đánh dấu open-Q R4 đã giải (subscriber-stamp pattern), chuyển phần OKX/live-value sang R8; excursion plan (`260630-0031`) giờ unblock phần R4.
-6. **Cross-plan** — xác nhận `260630-0031-backtest-mae-mfe-excursion` blockedBy vẫn còn R5 (chưa làm) nếu áp dụng; cập nhật nếu R4 là blocker cuối của nó.
+5. **Roadmap** — R4 Done + note ngắn; đánh dấu open-Q R4 đã giải (subscriber-stamp pattern), chuyển phần OKX/live-value sang R8.
 
 ## Todo List
 - [x] Regression parity — analytical + test (không có golden-number test; xem Parity note dưới)
@@ -47,7 +46,6 @@
 - [x] `docs/code-standards.md` + `project-overview-pdr.md` gỡ LotTrackingHelper ref
 - [x] roadmap R4 → Done + giải 2 open-Q R4
 - [x] `git grep` LotTrackingHelper/_consumed_pnl sạch ở src/tests/docs-AS-IS
-- [x] Cross-plan excursion blockedBy annotate (R2/R3/R4 done → redesign approach)
 
 ## Parity note (AS-IS)
 - Không có golden-number regression test trước R4 → parity chứng minh bằng: (1) money-math bất biến — closing equity = `initial − Σ(fill commissions) + Σ(gross pnl)`, không đổi vì on_fill debit per-fill + on_trade credit gross pnl y hệt FIFO cũ; (2) 560 test xanh gồm e2e (hitnrun2/engulfing/persistence) + `mark_to_market` (MTM-on vs off metrics byte-identical).

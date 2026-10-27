@@ -40,4 +40,3 @@ R3 just unified the *commission source* (`OrderResult.commission`) but trade emi
 
 - **R5:** rename `BacktestResultAppService`→`BacktestReportAppService`, fully event-driven (gut residual equity accounting).
 - **R8:** OKX position→Trade emission (settle the source via demo payload), live-value for `Trade.run_id`/`strategy_code`.
-- **Cross-plan:** `260630-0031` (MAE/MFE excursion) has no more hard blocker (R2/R3/R4 done) but the old approach based on `_lot_tracker.lots` has been removed → needs a redesign to track on `PositionAggregate`.

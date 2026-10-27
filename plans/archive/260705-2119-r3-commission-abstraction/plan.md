@@ -6,7 +6,7 @@ priority: P2
 branch: "develop"
 tags: [trading-calc, commission, paper-broker, okx, engine, core-domain]
 blockedBy: []
-blocks: [260630-0031-backtest-mae-mfe-excursion]
+blocks: []
 created: "2026-07-05T21:19:00+07:00"
 createdBy: "ck:plan"
 source: skill

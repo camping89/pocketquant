@@ -118,8 +118,7 @@ Returns basis:
 
 Reconstructed from bar high/low inside `[entry_time, exit_time]`. The entry bar
 may hold the fill mid-bar, so extremes can slightly overstate the true
-excursion. `low_coverage` flags runs whose bar windows have gaps. When the engine
-writes MAE/MFE natively, prefer those.
+excursion. `low_coverage` flags runs whose bar windows have gaps.
 
 ## Static AST audit
 

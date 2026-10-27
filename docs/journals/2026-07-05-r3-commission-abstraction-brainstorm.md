@@ -36,7 +36,6 @@ Funding sim, SlippageModel, est_entry_commission (→R6), maker/taker/tiered.
 - Design: `plans/trading-calulation-fix/r3-commission-abstraction.md`
 - Plan: `plans/260705-2119-r3-commission-abstraction/` (5 phases)
 - Roadmap R3 → 📋 Planned; 2 unresolved (funding, Settings field) → RESOLVED.
-- Cross-plan: MAE/MFE plan `blockedBy` R3 (soft — touches the broker SL/TP path + LotTrackingHelper that R3→R5 modifies).
 
 ## Unresolved (deferred to impl/later R)
 

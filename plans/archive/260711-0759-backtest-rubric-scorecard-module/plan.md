@@ -56,8 +56,6 @@ Deferred roadmap (DSR/PBO/CSCV): [`../../docs/todo/deflated-sharpe-pbo-cscv-road
 
 ## Dependencies
 
-**Cross-plan (không blocking):** `260630-0031-backtest-mae-mfe-excursion` (P3, pending) cũng tính MAE/MFE nhưng **trong engine** (broker SL/TP path, forward-only, mutate `Trade` domain, run mới). Rubric tính MAE/MFE **offline từ `bars`** cho run cũ trong `scripts/`. Khác file ownership (`src/` vs `scripts/`), khác timing (live vs offline), không đụng nhau — KHÔNG block. Nếu plan engine chạy sau, rubric có thể đọc field mae/mfe DB thay vì tự tính (tối ưu tương lai, không phải giờ).
-
 **Intra-plan:** P1 (foundation) block tất cả. P2–P5 độc lập nhau (đều chỉ phụ thuộc P1), làm song song được. P6 (scoring) blockedBy P2–P5 (cần metric để chấm). P7 (renderers) blockedBy P6. P8 (CLI) blockedBy P7.
 
 ## Acceptance criteria

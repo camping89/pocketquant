@@ -55,4 +55,3 @@ Gate: `just test` 571 pass (+9 R8 tests), ruff/pyright/lint-imports (8 contracts
 
 - Live Sharpe is currently = 0 (not annualized). If the product needs a real live Sharpe → add a per-bar equity sampler for live (out of R8 scope).
 - OKX-backed subscription persists zero trades → `/metrics` returns zeros forever, no signal. Waiting for a future R to wire OKX position→Trade (needs a demo payload).
-- Soft-coupling `260630-0031-backtest-mae-mfe-excursion`: appending `mae/mfe/r_multiple` to `Trade`+`TradeClosedEvent` → the live collector will leave excursion fields = None, a light rebase when that side lands.

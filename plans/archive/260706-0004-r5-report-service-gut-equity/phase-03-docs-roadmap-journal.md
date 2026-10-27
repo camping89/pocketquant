@@ -12,7 +12,6 @@
 - `docs/project-overview-pdr.md` — dòng ~319 file tree
 - `docs/code-standards.md` — dòng ~375 bảng naming (ví dụ App Services)
 - `plans/trading-calulation-fix/roadmap.md` — R5 row → ✅ Done
-- `plans/260630-0031-backtest-mae-mfe-excursion/plan.md` — frontmatter `blockedBy` thêm R5 (soft, bidirectional)
 
 ## Implementation steps
 
@@ -34,10 +33,7 @@
 
 Cập nhật dependency graph note nếu cần (R5 done).
 
-### 5. Cross-plan bidirectional
-`260630-0031-backtest-mae-mfe-excursion/plan.md` frontmatter: thêm `260706-0004-r5-report-service-gut-equity` vào `blockedBy` (soft — đã note sẵn trong prose comment). Giữ prose note hiện có.
-
-### 6. Journal
+### 5. Journal
 `/ck:journal` — entry ngắn (giọng kỹ thuật, tiếng Việt): rename + gut shadow ledger, insight "broker._balance == shadow cũ nên parity-exact", verified dispatch-outside-lock, finalize async, 1-file minimal.
 
 ## Todo
@@ -45,9 +41,8 @@ Cập nhật dependency graph note nếu cần (R5 done).
 - [x] project-overview-pdr.md tree
 - [x] code-standards.md naming table
 - [x] roadmap.md R5 → Done
-- [x] mae-mfe plan blockedBy += R5 (đã có sẵn trong frontmatter)
 - [x] `/ck:journal`
 
 ## Success criteria
 - `git grep backtest_result_app_service docs/` → chỉ còn journal lịch sử (không phải doc mô tả hiện trạng).
-- Roadmap R5 = Done; mae-mfe cross-ref cập nhật.
+- Roadmap R5 = Done.

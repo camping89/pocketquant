@@ -21,7 +21,6 @@ Kéo 4 orchestrator lệch chuẩn về `*AppService`. Đây là các stateful o
 5. `StrategyReconcileService`: reconcile loop (lifespan singleton) — cập nhật đăng ký event-handler + lifespan init.
 
 ## Gotchas
-- **Overlap MAE/MFE plan**: `result_collector.py` + `backtest_engine_sandbox.py`. Rename trước để plan kia dùng tên mới.
 - `StrategyReconcileService` là singleton khởi tạo trong lifespan (reconcile loop in-process) — không đổi thứ tự wiring, chỉ đổi tên.
 - Event-handler registry (`registry.register_instance`) — cập nhật nếu tham chiếu class.
 

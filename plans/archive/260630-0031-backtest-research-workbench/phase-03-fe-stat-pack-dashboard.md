@@ -18,7 +18,7 @@ Nâng `BacktestResultView` từ 3 tab phẳng thành **single-run stat dashboard
 
 - Functional:
   - **Overview:** KPI hero 5 card tone-màu = **Total Return / CAGR / Sharpe / Max DD / Win Rate** (validation Q1); metrics phân 3 nhóm (validation): **Returns** {total_return, cagr, avg_win, avg_loss} · **Risk** {sharpe_ratio, sortino_ratio, max_drawdown, profit_factor} · **Trade Stats** {total_trades, winning_trades, losing_trades, win_rate, avg_trade_duration_seconds, total_commission}; equity+underwater full-width (lightweight-charts, drawdown đã có mỗi điểm).
-  - **Trades:** PnL/duration histogram (lightweight-charts `HistogramSeries`); win/loss streak; **profit factor LONG/SHORT split** (FE chỉ tính split; aggregate lấy từ `metrics` BE — red-team M7); bảng trades (tái dùng `PositionsTable`). *(Cột MAE/MFE thuộc plan mae-mfe-excursion, không ở đây.)*
+  - **Trades:** PnL/duration histogram (lightweight-charts `HistogramSeries`); win/loss streak; **profit factor LONG/SHORT split** (FE chỉ tính split; aggregate lấy từ `metrics` BE — red-team M7); bảng trades (tái dùng `PositionsTable`).
   - **Risk&Time:** `DrawdownTable` **top 5** (validation Q3) — mỗi dòng: depth %, start→trough date, recovery date (equity chạm lại peak trước drawdown), duration; tính từ `equity_curve.drawdown` (quét peak→trough→recovery). **KHÔNG monthly heatmap** (red-team H3 — hoãn iter 2; equity+underwater ở Overview đã cho cái nhìn drawdown chính xác).
   - **Orders:** stub (P4).
 - Non-functional: charting dùng lib sẵn có; màu qua CSS variables (`readChartColors()` pattern); component mới co-locate `components/backtest/` (gần `backtest-result-view.tsx`), KHÔNG rải sang `strategy/backtest-panel/`; module API `web/src/api/backtest-api.ts`.

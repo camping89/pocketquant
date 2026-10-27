@@ -6,7 +6,7 @@ priority: P2
 branch: develop
 tags: [trading-calc, backtest, engine, report-service, equity-accounting, rename]
 blockedBy: []
-blocks: [260630-0031-backtest-mae-mfe-excursion]
+blocks: []
 created: "2026-07-06T00:04:00+07:00"
 createdBy: "ck:plan"
 source: "plans/trading-calulation-fix/roadmap.md (R5) + design-execution-metrics-separation.md"
@@ -20,7 +20,7 @@ Rút ruột collector: rename `BacktestResultAppService`→`BacktestReportAppSer
 
 - Roadmap hàng R5: `plans/trading-calulation-fix/roadmap.md` · Model E §5/§8: `design-execution-metrics-separation.md`
 - Handoff R4 (journal `docs/journals/2026-07-05-r4-broker-trade-emission-remove-fifo.md`): *"R5: rename BacktestResultAppService→BacktestReportAppService, fully event-driven (gut residual equity accounting)."*
-- Depends: R1 (done) + R4 (done, `260705-2216-r4-broker-trade-emission-remove-fifo`). Soft-blocks: `260630-0031-backtest-mae-mfe-excursion` (pending — đụng cùng file collector).
+- Depends: R1 (done) + R4 (done, `260705-2216-r4-broker-trade-emission-remove-fifo`).
 
 ## Quyết định khoá (chốt với user)
 

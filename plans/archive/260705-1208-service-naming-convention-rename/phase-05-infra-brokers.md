@@ -30,7 +30,6 @@ Bounded context `brokers`: port `I*` → `I*Port` (tách file) + 3 adapter → `
 - Dishka bind `IBrokerPort` → factory chọn `PaperBrokerAdapter`/`OKXBrokerAdapter` theo config. Sai type-hint → resolve fail.
 - `paper_broker.py` docstring đề cập "PaperBroker", "collectors" — cập nhật name-echo nếu có.
 - import-linter: `core/infra` không được import `fastapi` — rename không đổi layer, an toàn; vẫn chạy `lint-imports` xác nhận 7 contracts pass.
-- Overlap MAE/MFE plan: `paper_broker.py` (broker SL/TP path). Rename trước.
 
 ## Verify
 - `just test` (FULL suite — phase nhạy nhất) · `import-linter` (7 contracts) · `pyright`.

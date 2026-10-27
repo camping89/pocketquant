@@ -58,9 +58,6 @@ Mỗi phase độc lập, tự verify được. Commit riêng từng phase.
 ## Correction từ brainstorm report
 `TradeStatsCalculator` **không tồn tại** (module VO + functions) → loại. Domain service = **4** class.
 
-## Cross-plan coordination
-Overlap `260630-0031-backtest-mae-mfe-excursion` (pending P3) trên `paper_broker.py`, `result_collector.py`, `backtest_engine_sandbox.py`. Khuyến nghị chạy plan rename này **trước** (cosmetic, nhanh) → MAE/MFE build trên tên mới. Soft-coordination, không hard-block.
-
 ## Key dependencies
 - Dishka DI (resolve theo type) — mọi rename type phải đồng bộ provider return-hint + `FromDishka[…]`.
 - `__init__.py` re-exports — nhiều package re-export symbol (vd `core/domain/risk/__init__.py`).

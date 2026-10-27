@@ -15,7 +15,6 @@ add Exness as a third live venue behind the existing ports, after a balanced ref
    - `CLAUDE.md` (repo rules — binding), `README.md`, `justfile`, `pyproject.toml` (ruff, pyright, 7 import-linter contracts at lines ~74-140)
    - `docs/code-standards.md`, `docs/system-architecture.md`, `docs/deployment.md`
    - `src/pocketquant/{core,engine,backtest,app}/`, `tests/{core_test,engine_test,backtest_test,app_test,baseline}/`, `scripts/`
-   - Prior plan for house style: `plans/260630-0031-backtest-mae-mfe-excursion/`
 4. Exness API: `https://www.exness-api.com/` and its OpenAPI spec `/exness_api.yaml` (v1.0.2). Facts already gathered are in source 2; re-fetch only to settle an exact endpoint/field name.
 
 Verify every file path, symbol, and command you put in the plan against the repo. Never invent paths.

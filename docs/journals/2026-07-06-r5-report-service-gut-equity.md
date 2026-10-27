@@ -51,7 +51,6 @@ In reality the broker already has a single source (PaperBrokerAdapter `_balance`
 
 ## Next
 
-- **MAE/MFE excursion (260630-0031):** R1+R2+R3+R4 complete; R5 doesn't hard-block. Old approach used `_lot_tracker.lots` (removed in R4) → needs redesign on `PositionAggregate` (soft-blocker, defer analysis).
 - **R6+:** Live broker integration; fee currency, funding fee; tiered commission model.
 
 ---

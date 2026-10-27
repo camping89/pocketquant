@@ -5,7 +5,7 @@ status: done
 priority: P2
 branch: "develop"
 tags: [engine, live, structure, trading-calc, r8]
-blockedBy: []   # R2 (structure) DONE → hết hard blocker. Soft-coupling: 260630-0031-backtest-mae-mfe-excursion đụng Trade VO + TradeClosedEvent (append-only) — không bên nào cần output bên kia; bên land sau rebase nhẹ.
+blockedBy: []   # R2 (structure) DONE → hết hard blocker.
 blocks: []
 created: "2026-07-06T02:00:00.000Z"
 createdBy: "ck:plan"
@@ -63,4 +63,3 @@ Thứ tự: structure (1→2) trước để logic không rebase path; logic 3�
 ## Dependencies
 
 - **blockedBy:** none (R2 done).
-- **Soft-coupling:** `260630-0031-backtest-mae-mfe-excursion` (pending) append `mae/mfe/r_multiple` vào `Trade` + `TradeClosedEvent`. Không hard-block; bên land sau rebase nhẹ (live collector để field excursion = None, ngoài scope R8).

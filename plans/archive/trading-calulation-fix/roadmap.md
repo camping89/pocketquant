@@ -88,4 +88,3 @@ Structure (R1,R2) trước để logic không phải rebase path; R8 cuối vì 
 **Còn lại (deferred, không blocking):**
 - **OKX live Trade emission** — `OKXBrokerAdapter.subscribe_trades` giữ **no-op**. Live paper trades chảy vào pipeline OK, OKX thật chưa. Cần demo fill payload verify snapshot-vs-per-fill (double-count `accFillSz`). → 1 R tương lai.
 - **Funding fee (SWAP)** — paper không sim (YAGNI, gap có document); mở lại khi có funding data.
-- **Soft-coupling `260630-0031-backtest-mae-mfe-excursion`** — append `mae`/`mfe`/`r_multiple` vào `Trade`+`TradeClosedEvent`, rebase nhẹ.

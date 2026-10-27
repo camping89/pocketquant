@@ -18,4 +18,3 @@
 ## Deferred (không blocking)
 - OKX live Trade emission (`subscribe_trades` no-op) — cần demo fill payload, 1 R tương lai.
 - Funding fee SWAP không sim (YAGNI, gap document).
-- `260630-0031-backtest-mae-mfe-excursion` — rebase nhẹ (mae/mfe/r_multiple vào Trade+event).

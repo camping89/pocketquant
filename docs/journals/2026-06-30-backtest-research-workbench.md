@@ -20,5 +20,3 @@ Reframe `/backtest` from single-run ephemeral (reload loses it) into a deep-link
 ## Results
 
 BE 608 passed / 1 skipped · ruff + pyright + import-linter 7/7 ✓. FE lint 0 errors · build ✓ · vitest 8/8 (`stats-utils`). Code review DONE_WITH_CONCERNS → H1 + M1 + M2 closed; L1/L2/L3 noted (dedupe timestamp, normalize off `initial_capital` literal, sampling caveat) — tradeoff accepted.
-
-Next plan `260630-0031-backtest-mae-mfe-excursion` (blockedBy this plan) is now unblocked: FE scatter needs the Trades tab + chart wrapper from phase 3.

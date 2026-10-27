@@ -6,7 +6,7 @@ priority: P2
 branch: "develop"
 tags: [backtest, web, statistics, tdd]
 blockedBy: []
-blocks: [260630-0031-backtest-mae-mfe-excursion]
+blocks: []
 created: "2026-06-30T01:59:20.499Z"
 createdBy: "ck:plan"
 source: skill
@@ -25,7 +25,7 @@ Tái dùng thiết kế history/compare: [`../reports/slice-3-backtest-history-c
 
 ## Decisions (đã chốt với user + red-team)
 
-- **Scope** = B (Research Workbench) + orders endpoint + verdict UI. **MAE/MFE tách sang plan riêng** `260630-0031-backtest-mae-mfe-excursion` (đụng engine + timing redesign).
+- **Scope** = B (Research Workbench) + orders endpoint + verdict UI.
 - **Coupling B1** — workbench ở `/backtest` standalone, KHÔNG tái-couple subscription. Slice forward (1/2/5) ở `/strategies` không đụng.
 - **Charting** = echarts (scatter/heatmap khi cần — đã cài, dùng ở `job-timeline-chart.tsx`) + lightweight-charts `HistogramSeries` (histogram/equity — đã wired theme qua `use-chart.ts`). **uPlot/visx bị loại** (dep thừa: 2 lib trên đã làm được).
 - **Storage scoping A2** — denormalize `symbol`+`interval` top-level. **Mở rộng `GET /backtest/strategy/{id}` thêm optional `symbol`/`interval` query param** (KHÔNG tạo endpoint `/runs` mới — red-team H4: trùng chức năng). `symbol` là **composite `CODE:EXCHANGE`** (vd `BTCUSDT:BINANCE`) — không bao giờ bare code.
@@ -49,7 +49,6 @@ P1 (BE scoping+orders) ─► P2 (FE routing) ─► P3 (FE dashboard) ─► P4
 ```
 
 Tuyến tính. P1 thuần BE. P2-P4 thuần FE, build dần trên shell.
-Plan `backtest-mae-mfe-excursion` blockedBy plan này (FE scatter cần Trades tab + echarts wrapper từ P3).
 
 ## Acceptance criteria (toàn plan)
 
@@ -80,7 +79,6 @@ Plan `backtest-mae-mfe-excursion` blockedBy plan này (FE scatter cần Trades t
 ## Dependencies
 
 - Plan hoàn thành `260629-2132-web-claude-theme-ui-tweaks` (done) — theme tokens + `datetime` form. Không blocking.
-- `blocks`: `260630-0031-backtest-mae-mfe-excursion` (plan đó blockedBy plan này).
 
 ## Red Team Review
 
@@ -90,19 +88,19 @@ Plan `backtest-mae-mfe-excursion` blockedBy plan này (FE scatter cần Trades t
 
 | # | Finding | Severity | Disposition | Applied To |
 |---|---------|----------|-------------|------------|
-| C1 | MAE/MFE timing paradox (`_mtm_on_bar` chạy sau lot remove) | Critical | Accept | Tách → mae-mfe plan (redesign broker-path) |
-| C2 | `list_trades` không serialize field mới → cột luôn "—" | Critical | Accept | mae-mfe plan P2 (list_trades) |
+| C1 | MAE/MFE timing paradox (`_mtm_on_bar` chạy sau lot remove) | Critical | Accept | Dropped (MAE/MFE cancelled) |
+| C2 | `list_trades` không serialize field mới → cột luôn "—" | Critical | Accept | Dropped (MAE/MFE cancelled) |
 | C3 | uPlot thừa (echarts + lightweight-charts HistogramSeries đã cài) | Critical | Accept | P3 (đổi charting) |
-| C4 | P2 MAE/MFE đụng engine → tách critical path | Critical | Accept | Tách → mae-mfe plan |
+| C4 | P2 MAE/MFE đụng engine → tách critical path | Critical | Accept | Dropped (MAE/MFE cancelled) |
 | H1 | symbol composite mismatch (`BTCUSDT` ≠ `BTCUSDT:BINANCE`) → history rỗng âm thầm | High | Accept | P1 + P4 (scope composite) |
 | H2 | baseline snapshot tests fail, thiếu `BASELINE_UPDATE=1 just baseline` | High | Accept | P1 (step regen) |
 | H3 | monthly heatmap sai số số-liệu (downsample lệch) | High | Accept | Hoãn iter 2 (P3 bỏ heatmap) |
 | H4 | `GET /runs` trùng `GET /strategy/{id}` đã có | High | Accept (modified) | P1 (mở rộng endpoint cũ + filter, bỏ /runs) |
-| M1 | `Trade` field-order trap | Medium | Accept | mae-mfe plan P2 |
-| M2 | regression-lock bỏ sót 2 test file | Medium | Accept | mae-mfe plan P1 |
-| M3 | failed-run persist MAE/MFE rác | Medium | Accept | mae-mfe plan P2 (null-out) |
+| M1 | `Trade` field-order trap | Medium | Accept | Dropped (MAE/MFE cancelled) |
+| M2 | regression-lock bỏ sót 2 test file | Medium | Accept | Dropped (MAE/MFE cancelled) |
+| M3 | failed-run persist MAE/MFE rác | Medium | Accept | Dropped (MAE/MFE cancelled) |
 | M4 | Order serialize `_id` vs `order_id` chưa chốt | Medium | Accept | P1 (map service, key order_id) |
-| M5 | acceptance "run cũ không lỗi" thiếu test | Medium | Accept | mae-mfe plan P3 (fixture null) |
+| M5 | acceptance "run cũ không lỗi" thiếu test | Medium | Accept | Dropped (MAE/MFE cancelled) |
 | M6 | FE module path `lib/` sai → `api/backtest-api.ts` | Medium | Accept | P3+P4 (path đúng) |
 | M7 | profit_factor recompute lệch BE | Medium | Accept | P3 (split-only, aggregate reuse BE) |
 
@@ -110,7 +108,6 @@ Plan `backtest-mae-mfe-excursion` blockedBy plan này (FE scatter cần Trades t
 
 ### Whole-Plan Consistency Sweep
 - Đã renumber 5→4 phase (MAE/MFE tách). Mọi tham chiếu "Phase 2 MAE/MFE", "uPlot", "monthly heatmap MVP", "GET /runs", "visx", "lib/backtest-api.ts" đã reconcile khỏi plan này.
-- Cross-plan: mae-mfe plan `blockedBy` plan này; plan này `blocks` mae-mfe. Bidirectional set.
 - Không còn contradiction chưa giải quyết.
 
 ## Validation Log
