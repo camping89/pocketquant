@@ -9,7 +9,7 @@ export type FilterKey = TradeFilterKey
 export type SortKey = TradeSortKey
 export type SortDir = TradeSortDir
 
-export function fmtDurationSeconds(sec: number): string {
+function fmtDurationSeconds(sec: number): string {
   if (!isFinite(sec) || sec < 0) return '—'
   if (sec < 60) return `${Math.round(sec)}s`
   if (sec < 3600) return `${Math.round(sec / 60)}m`

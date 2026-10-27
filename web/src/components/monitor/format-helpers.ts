@@ -1,17 +1,7 @@
 // Monitor-specific formatters that depend on monitor types.
-// Tz-aware formatters moved to `src/lib/datetime.ts` — use `useFmt()` from `src/lib/use-timezone.ts`.
-// Tz-independent helpers re-exported here for backward-compatible imports.
+// Generic time helpers live in `src/lib/datetime.ts`.
 
 import type { IntegrityReport, SyncStatus } from '../../types/market-data'
-
-export {
-  INTERVAL_MS,
-  parseIso,
-  formatAge,
-  ageColorClass,
-  formatDuration,
-  formatHumanizedNextRun,
-} from '../../lib/datetime'
 
 export function statusVariant(s: SyncStatus): 'ok' | 'warn' | 'error' | 'neutral' {
   if (s.error_message) return 'error'

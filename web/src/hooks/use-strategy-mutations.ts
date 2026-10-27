@@ -1,5 +1,5 @@
 /**
- * Mutations for subscription lifecycle: start, stop, delete; template-scoped delete.
+ * Mutations for subscription lifecycle: create, start, stop, delete.
  *
  * Routes are split:
  *   /strategies/{strategy_code}/...     template-scoped
@@ -9,7 +9,7 @@
  * A longer key such as ['subscriptions', code] would not match it.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { addSymbol, removeSubscription, deleteStrategy } from '../api/strategy-api'
+import { addSymbol, removeSubscription } from '../api/strategy-api'
 import { apiPost } from '../api/api-client'
 
 async function startSubscription(subId: string): Promise<void> {
@@ -46,17 +46,6 @@ export function useDeleteSubscription() {
     mutationFn: (subId: string) => removeSubscription(subId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions'] })
-    },
-  })
-}
-
-export function useDeleteStrategyById() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (strategyCode: string) => deleteStrategy(strategyCode),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] })
-      qc.invalidateQueries({ queryKey: ['strategies'] })
     },
   })
 }

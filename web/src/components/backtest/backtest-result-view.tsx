@@ -235,7 +235,7 @@ export function BacktestResultView({
               />
             </div>
           ) : (
-            <div className="empty-state">Symbol/interval không khả dụng cho run này.</div>
+            <div className="empty-state">Symbol/interval not available for this run.</div>
           )}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, padding: '8px 0' }}>
             <span>Max win streak: <strong style={{ color: 'var(--up-color)' }}>{stats?.streaks.max_win_streak ?? '—'}</strong></span>

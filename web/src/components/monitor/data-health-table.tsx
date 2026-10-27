@@ -6,7 +6,7 @@ import { useIntegrityRepair } from '../../hooks/use-integrity'
 import { useSyncStatus } from '../../hooks/use-sync-status'
 import type { IntegrityReport, RepairResult } from '../../types/market-data'
 import { DataHealthRow } from './data-health-row'
-import { formatAge } from './format-helpers'
+import { formatAge } from '../../lib/datetime'
 
 interface RowState {
   report?: IntegrityReport

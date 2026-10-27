@@ -1,12 +1,7 @@
 import type { IntegrityReport, RepairResult, SyncStatus } from '../../types/market-data'
 import { DataHealthDetail } from './data-health-detail'
-import {
-  ageColorClass,
-  formatAge,
-  formatIntegrity,
-  integrityColorClass,
-  statusVariant,
-} from './format-helpers'
+import { formatIntegrity, integrityColorClass, statusVariant } from './format-helpers'
+import { ageColorClass, formatAge } from '../../lib/datetime'
 import { useFmt } from '../../lib/use-timezone'
 import { dataLagMessage, formatLag } from '../../lib/data-lag'
 import { parseSymbol } from '../../lib/symbol-format'

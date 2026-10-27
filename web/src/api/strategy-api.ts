@@ -37,7 +37,3 @@ export async function addSymbol(
 export async function removeSubscription(subId: string): Promise<void> {
   return apiDelete(`/api/v1/subscriptions/${subId}`)
 }
-
-export async function deleteStrategy(strategyCode: string): Promise<void> {
-  return apiDelete(`/api/v1/strategies/${strategyCode}`)
-}

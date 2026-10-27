@@ -103,7 +103,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ghi chú ngắn cho run này…"
+          placeholder="Short note for this run…"
           maxLength={200}
         />
       </div>

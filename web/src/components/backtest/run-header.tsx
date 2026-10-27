@@ -86,7 +86,7 @@ export function RunHeader({ runId, status, errorMsg, strategyCode, name, symbol,
               className="run-detail-header__name-input"
               value={nameText}
               onChange={(e) => setNameText(e.target.value)}
-              placeholder="Tên run…"
+              placeholder="Run name…"
               maxLength={200}
               autoFocus
               onKeyDown={(e) => {

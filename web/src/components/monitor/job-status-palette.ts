@@ -1,6 +1,6 @@
 import type { JobRunStatus } from '../../types/job-history'
 
-export const STATUS_COLOR: Record<JobRunStatus, string> = {
+const STATUS_COLOR: Record<JobRunStatus, string> = {
   completed: '#10b981',
   running: '#38bdf8',
   missed: '#fbbf24',

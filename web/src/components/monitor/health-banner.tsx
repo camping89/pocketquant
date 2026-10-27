@@ -1,5 +1,5 @@
 import type { JobInfo, SyncStatus } from '../../types/market-data'
-import { INTERVAL_MS, parseIso } from './format-helpers'
+import { INTERVAL_MS, parseIso } from '../../lib/datetime'
 
 type PillVariant = 'ok' | 'warn' | 'error' | 'neutral'
 

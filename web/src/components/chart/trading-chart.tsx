@@ -196,7 +196,7 @@ export function TradingChart({
     }
     timeScale.subscribeVisibleLogicalRangeChange(onRangeChange)
 
-    chart.subscribeCrosshairMove((param) => {
+    const onCrosshairMove = (param: MouseEventParams<Time>) => {
       if (!param.time || !param.seriesData) {
         hoveredTimeRef.current = null
         setOhlcv(null)
@@ -213,7 +213,8 @@ export function TradingChart({
         hoveredTimeRef.current = null
         setOhlcv(null)
       }
-    })
+    }
+    chart.subscribeCrosshairMove(onCrosshairMove)
 
     // Click a trade's zone to select it: hit-test the click time against every
     // trade's [entry, exit] span (markers carry the box fields). A hit draws the
@@ -238,6 +239,7 @@ export function TradingChart({
 
     return () => {
       chart.unsubscribeClick(onClick)
+      chart.unsubscribeCrosshairMove(onCrosshairMove)
       timeScale.unsubscribeVisibleLogicalRangeChange(onRangeChange)
       if (chartRef.current) {
         if (candleRef.current) {

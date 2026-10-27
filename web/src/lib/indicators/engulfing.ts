@@ -63,7 +63,7 @@ const COLORS = {
 // Visual aid only: a fixed display threshold for strong/weak coloring. The
 // backtest reads max_rejection_wick_pct from config and may differ — see
 // docs/swing-pivot-key-level.md.
-export const STRONG_THRESHOLD = 0.3
+const STRONG_THRESHOLD = 0.3
 
 export function engulfingMarkers(
   candles: CandlestickData[],
