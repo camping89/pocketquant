@@ -1,7 +1,7 @@
 ---
 title: "Maintainability cleanup"
 description: "Cut reading and maintenance cost: fix the paper fill-path desync, demote hot-path INFO logs, delete dead and unreachable code, collapse the sync-job and backtest boilerplate, and make paper position ownership explicit."
-status: implemented-deploys-pending
+status: done
 priority: P2
 effort: 2-3d code + 3 deploys
 branch: develop
@@ -49,6 +49,8 @@ No change to `core/infra/brokers/exness/exness_broker_adapter.py`. No DI one-lin
 | 08 | [Backtest chain 6 to 3 files](phase-08-backtest-chain-collapse.md) | done |
 | 09 | [Paper position ownership and explicit subscriptions](phase-09-paper-position-ownership.md) — Deploy C point | done |
 | 10 | [Polish and docs](phase-10-polish-and-docs.md) | done |
+
+Deployed 2026-10-27 as one release (`ef6c4143`, master CI green). Before the deploy, prod `positions` was backed up (65 rows, 4 open) and the restore was verified. At boot the 4 open paper rows were deleted (`paper_dropped=4`); `01a178ef` kept running. Review fixes: [code-reviewer report](reports/code-reviewer-261027-1310-cleanup-commits-review.md).
 
 ## Conventions
 
