@@ -13,7 +13,7 @@ dependencies: []
 - User decision (light log): `unexpected_count` and `unexpected_ranges` ride on the 1m `integrity.issues_found` WARNING. Phases 08 and 12 do not read the WARNING: they call `POST /api/v1/market-data/integrity/check`, which returns the same report dict (`app/routes/market_data.py:112-118`). Phase 12 records the count only; it never fails a row (user decision 2026-10-20 20:20).
 - `check_integrity` (`src/pocketquant/engine/market_data/app_services/integrity_jobs.py`) reports only `expected − present`: it builds `in_progress`, `expected`, `missing` and `gap_ranges` (`:101-107`) and returns them (`:109-113`). The weekly branch returns early with no grid (`:91-99`).
 - The daily job logs `integrity.issues_found` only when bars are misaligned or missing (`engine/market_data/app_services/sync_jobs.py:368-376`). `SYNC_INTERVALS` includes `WEEK_1` (`sync_jobs.py:72-80`).
-- 1m is the only interval with no false positives (`D:/w/_me/algotrading/plans/reports/kongming-261020-1630-exness-trading-time-check.md` Q3): a 1m bar is expected exactly when its minute trades.
+- 1m is the only interval with no false positives (`D:/w/_me/algotrading/plans/reports/archive/kongming-261020-1630-exness-trading-time-check.md` Q3): a 1m bar is expected exactly when its minute trades.
 - `tests/app_test/market_data/test_integrity_calendar.py` already imports `EXNESS_CALENDARS` (`:21`).
 
 ## Gates in this phase

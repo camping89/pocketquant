@@ -10,7 +10,7 @@ dependencies: [1, 2, 5]
 # Phase 06: SPA: PAPER/LIVE badge, state pill, Exness strip, real-money hints (B11)
 
 ## Context
-- Spec: the "After" view of `D:/w/_me/algotrading/plans/reports/advise-261020-1630-exness-go-live-safeguards-preview.html` and `D:/w/_me/algotrading/plans/reports/kongming-261020-1837-strategies-button-grouping.md` (both user-approved). Where they differ, the advisory decides: one state pill per row, no dot (the mockup draws both, `preview.html:345-350`).
+- Spec: the "After" view of `D:/w/_me/algotrading/plans/reports/archive/advise-261020-1630-exness-go-live-safeguards-preview.html` and `D:/w/_me/algotrading/plans/reports/archive/kongming-261020-1837-strategies-button-grouping.md` (both user-approved). Where they differ, the advisory decides: one state pill per row, no dot (the mockup draws both, `preview.html:345-350`).
 - Needs: `broker` in the subscription list (Phase 02); `GET/POST /api/v1/admin/safeguards[...]` (Phase 05; the pause is stored, so the local check below writes the local `safeguards` collection); the 401 prompt-and-retry in `apiPost` (Phase 01).
 - Today: the TS `Subscription` has no `broker` (`web/src/api/strategy-api.ts:8-21`); rows show a status dot (`components/strategies/strategy-card.tsx:5,16-20,44`); Start has no confirm (`start-stop-button.tsx:88-96`); the Stop dialog says "This will halt live execution." (`:68`); Delete sits beside Start/Stop (`strategy-config-card.tsx:70-91`); red buttons use inline styles (`start-stop-button.tsx:32-33,76`; `strategy-config-card.tsx:84-86`); `index.css` has `.btn-warn` (`:637-644`) and no `.btn-danger`.
 - `.strategies-layout` and `.strategies-mobile` are each `calc(100vh - 41px)` (`index.css:1510-1523`); a strip above them would push the grid off-screen.
