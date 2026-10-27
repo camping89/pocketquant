@@ -1,6 +1,6 @@
 """Integration tests for hitnrun2 over BacktestAppService with in-memory repos.
 
-Drives the real BacktestAppService + HistoricalReplayAppService + PaperBrokerAdapter +
+Drives the real BacktestAppService + PaperBrokerAdapter +
 StrategyAppService wiring. Substitutes only persistence with in-memory fakes.
 
 No MongoDB / Redis required.
@@ -77,6 +77,14 @@ class _InMemoryBacktestRepo:
     async def save(self, result: BacktestResult) -> str:
         self.saved.append(result)
         return getattr(result, "run_id", "in-memory")
+
+
+class _ListRepo:
+    def __init__(self) -> None:
+        self.saved: list = []
+
+    async def save_many(self, items: list) -> None:
+        self.saved.extend(items)
 
 
 class _FakeBarRepo:
@@ -265,7 +273,8 @@ async def _run_backtest(
         backtest_repository=bt_repo,  # pyright: ignore[reportArgumentType]
         bar_repository=bar_repo,  # pyright: ignore[reportArgumentType]
         calendar=Continuous24x7Calendar(),
-        persist_results=False,
+        order_repository=_ListRepo(),  # pyright: ignore[reportArgumentType]
+        trade_repository=_ListRepo(),  # pyright: ignore[reportArgumentType]
     )
 
     config = BacktestConfig(

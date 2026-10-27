@@ -1,14 +1,14 @@
-from collections.abc import AsyncIterator
+import asyncio
 from datetime import UTC, datetime
+from time import perf_counter
 
 import structlog
 
 from pocketquant.core.common.logging import BACKTEST_RUN_ID, get_logger
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.common.time.simulation import clear_simulation_time
+from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestConfig, BacktestResult
-from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
@@ -24,25 +24,20 @@ from pocketquant.core.infra.persistence.repositories.backtest_trade_repository i
 )
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.backtest.backtest_report_app_service import BacktestReportAppService
-from pocketquant.engine.backtest.historical_replay_app_service import (
-    HistoricalReplayAppService,
-)
 
 logger = get_logger(__name__)
 
+# Yield to the event loop every N bars so a multi-hundred-thousand-bar run can't
+# starve the WS feed / reconcile loop / health checks sharing this process.
+_YIELD_EVERY = 10
+
 
 class BacktestAppService:
-    """Orchestrates a single backtest run with metrics collection and 3-collection persistence.
+    """Runs one backtest: replays stored bars on the bus, then persists the report.
 
-    Responsibilities:
-    - Reset broker state before run
-    - Set up result collector for metrics tracking
-    - Load OHLCV data from MongoDB
-    - Set current price on broker before each bar
-    - Execute replay through HistoricalReplayAppService
-    - Expire any still-pending LIMITs at end of run (forward-test parity)
-    - Persist 3 lists in order: orders → trades → run
-    - Clean up simulation time after run
+    Each bar sets the broker price and the simulation time, then is published as
+    a ``BarCompletedEvent``. The run, its orders and its trades are persisted in
+    the order orders → trades → run.
     """
 
     def __init__(
@@ -52,9 +47,8 @@ class BacktestAppService:
         backtest_repository: BacktestRepository,
         bar_repository: BarRepository,
         calendar: ITradingCalendarPort,
-        order_repository: BacktestOrderRepository | None = None,
-        trade_repository: BacktestTradeRepository | None = None,
-        persist_results: bool = True,
+        order_repository: BacktestOrderRepository,
+        trade_repository: BacktestTradeRepository,
     ) -> None:
         self._event_bus = event_bus
         self._broker = broker
@@ -63,15 +57,13 @@ class BacktestAppService:
         self._trade_repo = trade_repository
         self._bar_repo = bar_repository
         self._calendar = calendar
-        self._replay_engine = HistoricalReplayAppService(event_bus)
-        self._persist_results = persist_results
 
     async def run(self, config: BacktestConfig, run_id: str | None = None) -> BacktestResult:
         """Execute a single backtest run with full metrics collection.
 
         ``run_id`` is allocated by the caller (the route) so the started doc, the
-        finished doc, and every persisted order/trade share one id; only the
-        legacy in-engine path leaves it None and self-allocates.
+        finished doc, and every persisted order/trade share one id; a caller
+        without a started doc leaves it None and one is allocated here.
 
         Returns the slim BacktestResult (metrics + equity_curve + open_positions);
         Orders and Trades are persisted to ``backtest_orders`` and ``backtest_trades``
@@ -118,17 +110,40 @@ class BacktestAppService:
             await self._broker.subscribe_trades(collector.on_trade)
             self._event_bus.subscribe(BarCompletedEvent, _mtm_on_bar)
 
-            bars = self._load_bars(config)
-            bars_with_price = self._wrap_bars_with_price_update(config, bars)
-
+            replay_started = perf_counter()
+            bars_processed = 0
             with structlog.contextvars.bound_contextvars(**{BACKTEST_RUN_ID: run_id}):
-                replay_stats = await self._replay_engine.replay(config, bars_with_price)
+                # ``stream`` is end-inclusive (``$lte end``), so a minute-precise
+                # end keeps the bar at that exact minute and excludes later bars.
+                async for bar in self._bar_repo.stream(
+                    config.symbol, Interval(config.interval), config.start_date, config.end_date
+                ):
+                    self._broker.set_current_price(config.symbol, bar.close)
+                    if bar.datetime is None:
+                        continue
+                    set_simulation_time(bar.datetime)
+                    await self._event_bus.publish(
+                        BarCompletedEvent(
+                            symbol=bar.symbol,
+                            interval=config.interval,
+                            bar_start=bar.datetime,
+                            open=bar.open,
+                            high=bar.high,
+                            low=bar.low,
+                            close=bar.close,
+                            volume=bar.volume,
+                            # Sim time, so the broker's same-bar rule compares like with like.
+                            occurred_at=bar.datetime,
+                        )
+                    )
+                    bars_processed += 1
+                    if bars_processed % _YIELD_EVERY == 0:
+                        await asyncio.sleep(0)
 
             completed_at = datetime.now(UTC)
 
             positions = await self._broker.get_positions()
             collected = await collector.finalize(
-                run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
                 status="finished",
@@ -138,20 +153,18 @@ class BacktestAppService:
             logger.info(
                 "backtest_completed",
                 run_id=run_id,
-                bars=replay_stats.bars_processed,
+                bars=bars_processed,
+                replay_sec=round(perf_counter() - replay_started, 2),
                 trades=collected.run.metrics.total_trades,
                 orders=len(collected.orders),
                 sharpe=round(collected.run.metrics.sharpe_ratio, 2),
                 return_pct=round(collected.run.metrics.total_return * 100, 2),
             )
 
-            if self._persist_results:
-                # Order matters: orders → trades → run.
-                if self._order_repo is not None:
-                    await self._order_repo.save_many(collected.orders)
-                if self._trade_repo is not None:
-                    await self._trade_repo.save_many(collected.trades)
-                await self._backtest_repo.save(collected.run)
+            # Order matters: orders → trades → run.
+            await self._order_repo.save_many(collected.orders)
+            await self._trade_repo.save_many(collected.trades)
+            await self._backtest_repo.save(collected.run)
 
             return collected.run
 
@@ -161,7 +174,6 @@ class BacktestAppService:
 
             positions = await self._broker.get_positions()
             collected = await collector.finalize(
-                run_id=run_id,
                 started_at=started_at,
                 completed_at=completed_at,
                 status="failed",
@@ -169,16 +181,13 @@ class BacktestAppService:
                 positions=positions,
             )
 
-            if self._persist_results:
-                # Best-effort partial persistence for audit trail
-                try:
-                    if self._order_repo is not None:
-                        await self._order_repo.save_many(collected.orders)
-                    if self._trade_repo is not None:
-                        await self._trade_repo.save_many(collected.trades)
-                except Exception as persist_err:  # noqa: BLE001
-                    logger.warning("backtest_partial_persist_failed", error=str(persist_err))
-                await self._backtest_repo.save(collected.run)
+            # Best-effort partial persistence for audit trail
+            try:
+                await self._order_repo.save_many(collected.orders)
+                await self._trade_repo.save_many(collected.trades)
+            except Exception as persist_err:  # noqa: BLE001
+                logger.warning("backtest_partial_persist_failed", error=str(persist_err))
+            await self._backtest_repo.save(collected.run)
 
             return collected.run
 
@@ -188,21 +197,3 @@ class BacktestAppService:
             await self._broker.unsubscribe_trades()
             self._event_bus.unsubscribe(BarCompletedEvent, _mtm_on_bar)
             clear_simulation_time()
-
-    async def _load_bars(self, config: BacktestConfig) -> AsyncIterator[Bar]:
-        """Load OHLCV bars from MongoDB for the configured datetime range.
-
-        ``stream`` is end-inclusive (``$lte end``), so a minute-precise end keeps
-        the bar at that exact minute and excludes later bars.
-        """
-        async for bar in self._bar_repo.stream(
-            config.symbol, Interval(config.interval), config.start_date, config.end_date
-        ):
-            yield bar
-
-    async def _wrap_bars_with_price_update(
-        self, config: BacktestConfig, bars: AsyncIterator[Bar]
-    ) -> AsyncIterator[Bar]:
-        async for bar in bars:
-            self._broker.set_current_price(config.symbol, bar.close)
-            yield bar

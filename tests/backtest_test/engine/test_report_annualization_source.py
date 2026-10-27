@@ -52,13 +52,14 @@ async def _periods_passed_to_metrics(calendar, interval: str) -> float | None:
         initial_capital=10_000.0,
         broker=broker,
         calendar=calendar,
+        run_id=str(uuid5(NAMESPACE_OID, "run-1")),
     )
 
     with patch(
         "pocketquant.engine.backtest.backtest_report_app_service"
         ".PerformanceCalculatorDomainService.build"
     ) as build:
-        await collector.finalize(str(uuid5(NAMESPACE_OID, "run-1")), _T0, _T0)
+        await collector.finalize(_T0, _T0)
 
     return build.call_args.kwargs["periods_per_year"]
 

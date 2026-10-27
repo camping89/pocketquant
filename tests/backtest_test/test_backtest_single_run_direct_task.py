@@ -40,7 +40,6 @@ from pocketquant.engine.backtest.backtest_command_service import (
     BacktestCommandService,
     RunBacktestCommand,
 )
-from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps, run_single
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
@@ -101,14 +100,14 @@ async def _seed_bars(database: Database, bars: list[Bar]) -> None:
     await coll.insert_many([b.to_mongo() for b in bars])
 
 
-def _deps(database: Database) -> BacktestDispatchDeps:
-    """run_single builds its own isolated sandbox, so deps is just the repos."""
+def _execution(database: Database) -> BacktestExecutionService:
+    """Each run builds its own isolated sandbox, so the service needs only repos."""
     symbol_lookup = SymbolLookupHelper(SymbolRepository(database))
-    return BacktestDispatchDeps(
-        bar_repo=BarRepository(database),
-        backtest_repo=BacktestRepository(database),
-        order_repo=BacktestOrderRepository(database),
-        trade_repo=BacktestTradeRepository(database),
+    return BacktestExecutionService(
+        bar_repository=BarRepository(database),
+        backtest_repository=BacktestRepository(database),
+        backtest_order_repository=BacktestOrderRepository(database),
+        backtest_trade_repository=BacktestTradeRepository(database),
         calendar_factory=TradingCalendarFactory(symbol_lookup),
         symbol_lookup=symbol_lookup,
     )
@@ -150,9 +149,7 @@ async def test_run_saves_started_doc_then_execute_finishes_same_run_id(
     assert started.metrics.total_trades == 0
     assert started.equity_curve == []
 
-    await BacktestExecutionService(_deps(database), backtest_repo).execute_and_persist(
-        run_id, config
-    )
+    await _execution(database).execute_and_persist(run_id, config)
 
     # C2 — same id flips started → finished with real metrics + persisted children.
     finished = await backtest_repo.get(run_id)
@@ -172,13 +169,11 @@ async def test_engine_failure_marks_failed_via_inspect_not_exception(
     await _seed_bars(database, _engulfing_bars())
     backtest_repo = BacktestRepository(database)
 
-    # Unknown strategy → engine path raises inside run_single BEFORE the engine's
+    # Unknown strategy → the execution service raises BEFORE the engine's
     # own try/except, surfacing through execute_and_persist's outer guard.
     assert "definitely-not-a-strategy" not in STRATEGY_REGISTRY
     run_id, config = await _cmd_svc(database).run(_command(strategy_id="definitely-not-a-strategy"))
-    await BacktestExecutionService(_deps(database), backtest_repo).execute_and_persist(
-        run_id, config
-    )
+    await _execution(database).execute_and_persist(run_id, config)
 
     failed = await backtest_repo.get(run_id)
     assert failed is not None
@@ -281,12 +276,11 @@ async def _build_live_engine() -> tuple[
 @pytest.mark.asyncio
 async def test_backtest_sandbox_does_not_leak_to_live_engine(database: Database) -> None:
     """Replaying historical bars in a backtest must never drive a live engine
-    subscribed to the same bar/fill events — run_single builds its own bus."""
+    subscribed to the same bar/fill events — each run builds its own bus."""
     await _seed_bars(database, _engulfing_bars(cycles=3))
     _engine, live_broker, live_orders, live_positions = await _build_live_engine()
 
-    result = await run_single(
-        _deps(database),
+    result = await _execution(database).run(
         {
             "strategy_code": "engulfing",
             "symbol": _SYM,

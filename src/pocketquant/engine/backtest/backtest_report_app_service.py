@@ -19,6 +19,7 @@ the collector keeps no shadow ledger of its own. At ``finalize()`` it returns
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -40,7 +41,6 @@ from pocketquant.core.domain.trading import (
     PerformanceMetrics,
     Trade,
 )
-from pocketquant.engine.backtest.collected_results import CollectedResults
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,15 @@ logger = logging.getLogger(__name__)
 # while keeping every trade-carrying point. Sharpe is computed on the full
 # in-memory series before downsampling.
 _MAX_PERSISTED_EQUITY_POINTS = 5000
+
+
+@dataclass
+class CollectedResults:
+    """What ``finalize`` returns: the slim run plus the orders and trades to persist."""
+
+    run: BacktestResult
+    orders: list[OrderRecord] = field(default_factory=list)
+    trades: list[Trade] = field(default_factory=list)
 
 
 class BacktestReportAppService:
@@ -65,13 +74,13 @@ class BacktestReportAppService:
         initial_capital: float,
         broker: IBrokerPort,
         calendar: ITradingCalendarPort,
-        run_id: str | None = None,
+        run_id: str,
     ) -> None:
         self._config = config
         self._initial_capital = initial_capital
         self._broker = broker
         self._calendar = calendar
-        self._run_id = run_id or ""
+        self._run_id = run_id
 
         self._equity_curve: list[EquityPoint] = []
         # Per-bar mark-to-market curve (realized + unrealized), filled by
@@ -89,9 +98,6 @@ class BacktestReportAppService:
                 drawdown=0.0,
             )
         )
-
-    def set_run_id(self, run_id: str) -> None:
-        self._run_id = run_id
 
     async def on_fill(self, result: Any) -> None:
         if result.filled_quantity is None or result.filled_quantity <= 0:
@@ -263,9 +269,7 @@ class BacktestReportAppService:
     def _record_equity_point(self, timestamp: datetime, equity: float) -> None:
         # Drawdown is recomputed against a running peak at persist time
         # (``_with_drawdown``); the realized point only carries the equity value.
-        self._equity_curve.append(
-            EquityPoint(timestamp=timestamp, equity=equity, drawdown=0.0)
-        )
+        self._equity_curve.append(EquityPoint(timestamp=timestamp, equity=equity, drawdown=0.0))
 
     def mark_to_market(self, timestamp: datetime, total_equity: float) -> None:
         """Append a per-bar mark-to-market equity point — READ-ONLY accounting.
@@ -282,9 +286,7 @@ class BacktestReportAppService:
         are preserved at persist time; MTM points fill the gaps for even
         sampling.
         """
-        self._mtm_curve.append(
-            EquityPoint(timestamp=timestamp, equity=total_equity, drawdown=0.0)
-        )
+        self._mtm_curve.append(EquityPoint(timestamp=timestamp, equity=total_equity, drawdown=0.0))
 
     def _downsample_equity_curve(self) -> list[EquityPoint]:
         """Curve to persist: per-bar MTM series (with drawdown), hard-capped at 5000.
@@ -349,23 +351,12 @@ class BacktestReportAppService:
 
     async def finalize(
         self,
-        run_id: str,
         started_at: datetime,
         completed_at: datetime,
         status: str = "finished",
         error_message: str | None = None,
         positions: list[PositionAggregate] | None = None,
     ) -> CollectedResults:
-        # Late-bind run_id onto stubs created before set_run_id was known.
-        if not self._run_id:
-            self._run_id = run_id
-            for order in self._orders_by_id.values():
-                if not order.run_id:
-                    order.run_id = run_id
-            for trade in self._trades:
-                if not trade.run_id:
-                    trade.run_id = run_id
-
         open_positions = [
             self._position_to_open_lot(p) for p in (positions or []) if not p.is_closed
         ]
@@ -386,9 +377,7 @@ class BacktestReportAppService:
             periods_per_year = self._calendar.periods_per_year(interval)
         balance = await self._broker.get_balance()
         current_equity = balance.available_balance
-        total_commission = sum(
-            f.commission for o in self._orders_by_id.values() for f in o.fills
-        )
+        total_commission = sum(f.commission for o in self._orders_by_id.values() for f in o.fills)
         metrics: PerformanceMetrics = PerformanceCalculatorDomainService.build(
             closed_trades=self._trades,
             equity_curve=self._equity_curve,
@@ -418,7 +407,7 @@ class BacktestReportAppService:
 
         run = BacktestResult(
             # run_id circulates as str (Order/Trade FK fields); the entity PK is UUID.
-            id=UUID(run_id),
+            id=UUID(self._run_id),
             strategy_code=self._config.strategy_code,
             config_snapshot=config_snapshot,
             metrics=metrics,

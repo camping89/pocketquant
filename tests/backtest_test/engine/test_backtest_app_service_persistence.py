@@ -142,7 +142,6 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
         calendar=Continuous24x7Calendar(),
         order_repository=order_repo,
         trade_repository=trade_repo,
-        persist_results=True,
     )
     result = await runner.run(config)
 
@@ -240,7 +239,6 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
         calendar=Continuous24x7Calendar(),
         order_repository=order_repo,
         trade_repository=trade_repo,
-        persist_results=True,
     )
     result = await runner.run(config)
 

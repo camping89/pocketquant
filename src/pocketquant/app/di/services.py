@@ -20,15 +20,6 @@ from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.redis import Cache
-from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
-    BacktestOrderRepository,
-)
-from pocketquant.core.infra.persistence.repositories.backtest_repository import (
-    BacktestRepository,
-)
-from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
-    BacktestTradeRepository,
-)
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -43,7 +34,6 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
 from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 from pocketquant.engine.backtest.backtest_command_service import BacktestCommandService
-from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.engine.backtest.backtest_query_service import BacktestQueryService
 from pocketquant.engine.backtest.backtest_stats_service import BacktestStatsService
@@ -212,32 +202,7 @@ class ServicesProvider(Provider):
         )
 
     # Backtest execution.
-    @provide(scope=Scope.APP)
-    def get_dispatch_deps(
-        self,
-        bar_repository: BarRepository,
-        backtest_repository: BacktestRepository,
-        backtest_order_repository: BacktestOrderRepository,
-        backtest_trade_repository: BacktestTradeRepository,
-        calendar_factory: TradingCalendarFactory,
-        symbol_lookup: SymbolLookupHelper,
-    ) -> BacktestDispatchDeps:
-        return BacktestDispatchDeps(
-            bar_repo=bar_repository,
-            backtest_repo=backtest_repository,
-            order_repo=backtest_order_repository,
-            trade_repo=backtest_trade_repository,
-            calendar_factory=calendar_factory,
-            symbol_lookup=symbol_lookup,
-        )
-
-    @provide(scope=Scope.APP)
-    def get_backtest_execution_service(
-        self,
-        dispatch_deps: BacktestDispatchDeps,
-        backtest_repository: BacktestRepository,
-    ) -> BacktestExecutionService:
-        return BacktestExecutionService(dispatch_deps, backtest_repository)
+    backtest_execution_service = provide(BacktestExecutionService, scope=Scope.APP)
 
     # Feature services that routes inject directly.
     tracked_symbol_service = provide(TrackedSymbolService, scope=Scope.APP)

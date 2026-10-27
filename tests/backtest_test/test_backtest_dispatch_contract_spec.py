@@ -8,8 +8,8 @@ import pytest
 
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
-from pocketquant.engine.backtest import backtest_dispatch
-from pocketquant.engine.backtest.backtest_dispatch import BacktestDispatchDeps, run_single
+from pocketquant.engine.backtest import backtest_execution_service
+from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 
 ES_SYMBOL = "ES1!:TRADINGVIEW"
 ES = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, commission_per_contract=2.5)
@@ -26,7 +26,7 @@ class _FakeCalendars:
 
 
 class _CapturingRunner:
-    """Replaces BacktestAppService: records what run_single hands the engine."""
+    """Replaces BacktestAppService: records what the execution service hands the engine."""
 
     seen: dict[str, Any] = {}
 
@@ -43,18 +43,17 @@ class _CapturingRunner:
 async def test_backtest_config_and_broker_carry_the_symbol_spec(
     monkeypatch: pytest.MonkeyPatch, symbol: str, spec: ContractSpec
 ) -> None:
-    monkeypatch.setattr(backtest_dispatch, "BacktestAppService", _CapturingRunner)
-    deps = BacktestDispatchDeps(
-        bar_repo=None,  # type: ignore[arg-type]
-        backtest_repo=None,  # type: ignore[arg-type]
-        order_repo=None,  # type: ignore[arg-type]
-        trade_repo=None,  # type: ignore[arg-type]
+    monkeypatch.setattr(backtest_execution_service, "BacktestAppService", _CapturingRunner)
+    execution = BacktestExecutionService(
+        bar_repository=None,  # type: ignore[arg-type]
+        backtest_repository=None,  # type: ignore[arg-type]
+        backtest_order_repository=None,  # type: ignore[arg-type]
+        backtest_trade_repository=None,  # type: ignore[arg-type]
         calendar_factory=_FakeCalendars(),  # type: ignore[arg-type]
         symbol_lookup=_FakeLookup(),  # type: ignore[arg-type]
     )
 
-    await run_single(
-        deps,
+    await execution.run(
         {
             "strategy_code": "hitnrun2",
             "symbol": symbol,

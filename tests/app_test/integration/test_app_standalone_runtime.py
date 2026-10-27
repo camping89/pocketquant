@@ -118,7 +118,7 @@ async def test_app_backtest_execution_runs_without_http(app_container) -> None:
     backtest_repo = await app_container.get(BacktestRepository)
     execution = await app_container.get(BacktestExecutionService)
 
-    # A run for a non-existent strategy: run_single raises before the engine's own
+    # A run for a non-existent strategy: the service raises before the engine's own
     # guard, execute_and_persist's outer guard flips the doc to failed — proving
     # the run→persist path runs end-to-end inside the app graph.
     run_id = generate_id()

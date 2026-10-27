@@ -14,7 +14,7 @@ from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.symbol import LINEAR_SPEC
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
-from pocketquant.engine.backtest.backtest_dispatch import _config_from_dict
+from pocketquant.engine.backtest.backtest_execution_service import _config_from_dict
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _SYM = "XAUUSD:EXNESS"

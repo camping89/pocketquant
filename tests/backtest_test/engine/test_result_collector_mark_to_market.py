@@ -157,11 +157,9 @@ async def _round_trip(with_mtm: bool) -> BacktestReportAppService:
 
 async def test_mark_to_market_does_not_change_realized_metrics() -> None:
     c_without = await _round_trip(False)
-    without = (
-        await c_without.finalize(_oid("run"), _T0, _T0 + timedelta(hours=2))
-    ).run.metrics
+    without = (await c_without.finalize(_T0, _T0 + timedelta(hours=2))).run.metrics
     c_with = await _round_trip(True)
-    with_ = (await c_with.finalize(_oid("run"), _T0, _T0 + timedelta(hours=2))).run.metrics
+    with_ = (await c_with.finalize(_T0, _T0 + timedelta(hours=2))).run.metrics
 
     assert with_.total_return == without.total_return
     assert with_.cagr == without.cagr
@@ -180,11 +178,9 @@ async def test_mark_to_market_does_not_touch_realized_equity() -> None:
 
 async def test_sharpe_uses_mtm_curve_when_present() -> None:
     c_without = await _round_trip(False)
-    without = (
-        await c_without.finalize(_oid("run"), _T0, _T0 + timedelta(hours=2))
-    ).run.metrics
+    without = (await c_without.finalize(_T0, _T0 + timedelta(hours=2))).run.metrics
     c_with = await _round_trip(True)
-    with_ = (await c_with.finalize(_oid("run"), _T0, _T0 + timedelta(hours=2))).run.metrics
+    with_ = (await c_with.finalize(_T0, _T0 + timedelta(hours=2))).run.metrics
     # Different equity series → different Sharpe (MTM swings vs. realized-only).
     assert with_.sharpe_ratio != without.sharpe_ratio
 
@@ -202,7 +198,7 @@ async def test_persisted_equity_curve_capped() -> None:
     # 20k MTM points — well over the 5000 cap.
     for i in range(20_000):
         c.mark_to_market(_T0 + timedelta(minutes=i), base + (i % 7))
-    run = (await c.finalize(_oid("run"), _T0, _T0 + timedelta(days=14))).run
+    run = (await c.finalize(_T0, _T0 + timedelta(days=14))).run
     assert len(run.equity_curve) <= _MAX_PERSISTED_EQUITY_POINTS
 
 
@@ -237,5 +233,5 @@ async def test_persisted_curve_hard_capped_even_with_many_trade_points() -> None
                 exit_time=exit_time,
             )
         )
-    run = (await c.finalize(_oid("run"), _T0, _T0 + timedelta(days=30))).run
+    run = (await c.finalize(_T0, _T0 + timedelta(days=30))).run
     assert len(run.equity_curve) <= _MAX_PERSISTED_EQUITY_POINTS

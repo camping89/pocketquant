@@ -175,5 +175,5 @@ forbidden_modules = ["tvDatafeed"]
 allow_indirect_imports = true
 
 [tool.code-metrics]
-max_tiny_share = 0.4660
+max_tiny_share = 0.4631
 max_delegations = 71

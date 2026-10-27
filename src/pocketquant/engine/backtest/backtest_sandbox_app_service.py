@@ -20,7 +20,6 @@ of this bus.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus, EventRegistry
@@ -92,14 +91,11 @@ class BacktestSandboxAppService:
 
     event_bus: EventBus
     strategy_app_service: StrategyAppService
-    _broker: PaperBrokerAdapter | None = None
 
     def create_broker(
         self,
         initial_balance: float,
         slippage_percent: float = 0.0,
-        fill_delay_ms: int = 0,
-        currency: str = "USD",
         commission_bps: float = 0.0,
         contract_spec: ContractSpec = LINEAR_SPEC,
         spread: float = 0.0,
@@ -107,8 +103,7 @@ class BacktestSandboxAppService:
         broker = PaperBrokerAdapter(
             initial_balance=initial_balance,
             slippage_percent=slippage_percent,
-            fill_delay_ms=fill_delay_ms,
-            currency=currency,
+            fill_delay_ms=0,
             event_bus=self.event_bus,
             commission_model=commission_model_for(
                 contract_spec.commission_per_contract, commission_bps
@@ -116,7 +111,6 @@ class BacktestSandboxAppService:
             contract_spec=contract_spec,
             spread=spread,
         )
-        self._broker = broker
         # Late-bind the broker into the factory so any (unexpected) factory
         # lookup returns this run's broker rather than a foreign one.
         self.strategy_app_service._broker_factory = _SingleBrokerFactory(broker)  # type: ignore[assignment]
@@ -130,9 +124,7 @@ class BacktestSandboxAppService:
                 logger.warning("backtest_sandbox.unload_failed", sid=sid, error=str(exc))
 
 
-async def build_backtest_sandbox(
-    default_broker_config: dict[str, Any] | None = None,
-) -> BacktestSandboxAppService:
+async def build_backtest_sandbox() -> BacktestSandboxAppService:
     """Create an isolated engine stack bound to a fresh per-run EventBus.
 
     The StrategyAppService is started against a local EventRegistry so its
@@ -146,7 +138,6 @@ async def build_backtest_sandbox(
         order_app_service=OrderAppService(bus, _InMemoryOrderRepo()),  # type: ignore[arg-type]
         position_app_service=PositionAppService(bus, _InMemoryPositionRepo()),  # type: ignore[arg-type]
         risk_check_handler=RiskCheckHandler(),
-        default_broker_config=default_broker_config,
     )
     await engine.start(registry=EventRegistry())
     return BacktestSandboxAppService(event_bus=bus, strategy_app_service=engine)
