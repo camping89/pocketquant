@@ -1,7 +1,7 @@
 ---
 title: "Exness venue behind existing ports + lean sync refactor"
 description: "On develop: add Exness market data and quotes through suffix routing (XAUUSD:EXNESS), build the Exness broker switched off, and validate on paper, after collapsing DI, routes and wrappers and adding a code-metric ratchet."
-status: in-progress
+status: completed
 priority: P1
 effort: 7w
 branch: develop
@@ -34,7 +34,7 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 | 05 | [Lean coding standard and metric ratchet](./phase-05-lean-standard-and-metric-gate.md) | 2d | Done on develop (integration step 4) |
 | 06 | [Exness market data and quotes](./phase-06-exness-market-data-and-policy.md) | 7d | Completed 2026-10-19 (prod on master `7c3ca77`, D1 holds) |
 | 07 | [Exness broker behind the live-trading switch (off)](./phase-07-exness-broker-off-by-default.md) | 6d | Completed 2026-10-19 on develop (live trading off; go-live blockers listed in the phase) |
-| 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | In progress 2026-10-19 (spread in prod `83fcd9d`, D3 holds; paper week awaits user approval) |
+| 08 | [Validation: spread, backtests, paper week](./phase-08-validation-spread-backtests-paper-week.md) | 7d + weekend | Completed 2026-10-26 (spread in prod `83fcd9d`, D3 holds; paper checks rows 0–3 PASS; subscriptions stopped; DST check moved out) |
 | 09 | [Architecture, deployment, standard and MT5 docs](./phase-09-docs-architecture-deployment-mt5.md) | 1d | Completed 2026-10-19 on develop (docs-only push; three plan statements differ from the code, see the phase) |
 
 ## Dependencies
@@ -70,6 +70,9 @@ Phases 01–05 first ran on a July 2026 snapshot of the code (`backup/master-202
 <!-- Updated: Validation Session 1 - new section per decision 3 -->
 ## Out of scope: go-live plan
 A later plan owns going live. Its preconditions are: admin-token auth on every mutation route (fail-closed in production, with the SPA sending the token); a broker selection mechanism; the U3 risk cap (`EXNESS_DAILY_LOSS_CAP` set, `EXNESS_MAX_LOTS` unset so orders use the minimum lot); a live minimum-lot round trip per strategy with SL; a live-week observation; and only then `EXNESS_LIVE_TRADING=true`. It also owns persistence and refresh of the per-account access point (Redis cache, scheduled refresh, re-resolve on connect failure or 421) once Exness publishes the access-point contract.
+
+## Out of scope: US DST session shift
+The post-DST check of the Exness sessions (2026-11-02) moved on 2026-10-23, by user decision, to `../../261023-0056-exness-us-dst-session-shift/plan.md`. This plan completes without it.
 
 ## Validation Log
 ### Session 1 (2026-10-10)
