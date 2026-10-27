@@ -118,3 +118,7 @@ day.
 - Which fix option should the follow-up plan take?
 - How far back are live paper results affected? Every live paper subscription since this
   handler shipped, but that date is not traced here.
+
+## Prod verification after the fix
+
+- 2026-10-28: ES SHORT on subscription 01a178ef (entry 2026-10-27T12:55:13Z at 7739.8630, SL 7753.2455, TP 7703) closed by SL at 15:13:48Z at 7754.8877 (7754.50 x 1.00005), pnl -751.24, commission 4.65. The exit came on a 1m event: no 1m bar touched SL before the 15:00 bar, no 5m-1w bar drove it, and the signal-bar rule held. The pnl matches. The fill is 5 ticks worse than the stored REST 1m bars imply (7753.63), because the live 1m bar differs from the stored bar. The TradingView poller (`tradingview_quote_adapter.py`) emits only the vendor close once per 60 s (`poll_s=60`; a live 1m bar showed `tick_count` 1, O=H=L=C), so live 1m highs and lows under-report. The open is a sampled close, which the gap rule then fills at. The broker logic is correct on its input; the fidelity gap is in the feed.
