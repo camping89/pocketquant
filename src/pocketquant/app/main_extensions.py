@@ -150,7 +150,7 @@ async def recover_orphan_jobs(container: AsyncContainer) -> None:
     Safe to call repeatedly — idempotent. Logs once if any docs were updated.
 
     Must run AFTER ensure_all_indexes (proves DB connectivity) and BEFORE
-    start_background_jobs (so new runs aren't racing the reconcile sweep).
+    start_jobs (so new runs aren't racing the reconcile sweep).
     """
     repo = await container.get(JobHistoryRepository)
     n = await repo.reconcile_orphan_running(max_age_seconds=600)
@@ -172,25 +172,14 @@ async def bootstrap_live_instances(container: AsyncContainer) -> None:
     await svc.bootstrap()
 
 
-async def start_background_jobs(container: AsyncContainer) -> None:
-    """Register background sync jobs with the scheduler.
-
-    NOTE: the sync_jobs module-level container is wired at the top of lifespan()
-    in main.py — before any `await` — to win the race against persisted
-    MongoDBJobStore jobs that may dispatch during early Dishka resolves.
-    """
-    settings = await container.get(Settings)
-    if not settings.enable_jobs:
-        logger.info("background_jobs_disabled")
-        return
-
-    from pocketquant.engine.market_data.app_services.sync_jobs import register_sync_jobs
-
-    await register_sync_jobs(
-        container=container,
-        job_scheduler=await container.get(JobScheduler),
-    )
-    logger.info("background_jobs_enabled")
+async def _cancel(task: asyncio.Task | None) -> None:
+    """Cancel a background task and wait up to 5 s for it to finish."""
+    if task and not task.done():
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
+        except (TimeoutError, asyncio.CancelledError):
+            pass
 
 
 async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
@@ -211,66 +200,48 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 
 
 async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
-    for attr in ("ws_task", "subscription_task"):
-        task: asyncio.Task | None = getattr(app.state, attr, None)
-        if task and not task.done():
-            task.cancel()
-            try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
-            except (TimeoutError, asyncio.CancelledError):
-                pass
+    await _cancel(getattr(app.state, "ws_task", None))
+    await _cancel(getattr(app.state, "subscription_task", None))
 
     provider = await container.get(IRealtimeQuoteProviderPort)
     await provider.disconnect()
     logger.info("quote_feed.stopped")
 
 
-async def start_live_collector(container: AsyncContainer) -> None:
-    """Subscribe the live Trade collector to the bus.
+async def start_jobs(container: AsyncContainer, app: FastAPI) -> None:
+    """Register the sync jobs, subscribe the live trade collector, start reconcile.
 
-    Gated on ``enable_jobs`` — same flag as the reconcile loop — since a
-    collector only has trades to persist once the runtime actually runs
-    strategies. Must register BEFORE ``start_reconcile_loop`` starts strategies
-    so no trade closure is published before the handler exists.
+    All three are gated on ``enable_jobs``, so the test/CLI profile runs none of
+    them. The collector subscribes before the reconcile loop starts strategies,
+    so no trade closure is published before its handler exists. Call it after
+    ``bootstrap_live_instances``, so the loop's first tick finds every instance.
+
+    The sync_jobs module-level container is wired at the top of lifespan() in
+    main.py, before any ``await``, to win the race against persisted
+    MongoDBJobStore jobs that may dispatch during early Dishka resolves.
     """
     settings = await container.get(Settings)
     if not settings.enable_jobs:
-        logger.info("live_collector_disabled")
+        logger.info("background_jobs_disabled")
         return
 
+    from pocketquant.engine.market_data.app_services.sync_jobs import register_sync_jobs
+
+    await register_sync_jobs(
+        container=container,
+        job_scheduler=await container.get(JobScheduler),
+    )
     collector = await container.get(LiveTradeCollector)
     await collector.start()
-    logger.info("live_collector.started")
-
-
-async def start_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
-    """Start the declarative control-plane reconcile loop as a background task.
-
-    Gated on ``enable_jobs`` — same flag as background jobs, so the test/CLI
-    profile (``enable_jobs=False``) never spins a live loop. Must start AFTER
-    ``bootstrap_live_instances`` so instances exist; otherwise the first tick
-    logs N missing_instance warnings before catching up next tick.
-    """
-    settings = await container.get(Settings)
-    if not settings.enable_jobs:
-        logger.info("reconcile_loop_disabled")
-        return
-
     svc = await container.get(StrategyReconcileAppService)
     app.state.reconcile_task = asyncio.create_task(svc.run())
-    logger.info("reconcile_loop.started")
+    logger.info("background_jobs_enabled")
 
 
-async def stop_reconcile_loop(container: AsyncContainer, app: FastAPI) -> None:
+async def stop_reconcile_loop(app: FastAPI) -> None:
     """Cancel the reconcile task. Must run BEFORE quote-feed stop + container.close
     so reconcile never issues start/stop against an engine that is shutting down."""
-    task: asyncio.Task | None = getattr(app.state, "reconcile_task", None)
-    if task and not task.done():
-        task.cancel()
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
-        except (TimeoutError, asyncio.CancelledError):
-            pass
+    await _cancel(getattr(app.state, "reconcile_task", None))
     logger.info("reconcile_loop.stopped")
 
 
@@ -332,31 +303,6 @@ async def register_health_checks(container: AsyncContainer, app: FastAPI) -> Non
             await container.get(TrackedSymbolRepository),
         ),
     )
-
-
-def handle_startup_failure(error: Exception) -> None:
-    """Display a rich error panel and re-raise so lifespan finally block runs.
-
-    Raises the original exception so FastAPI's lifespan context manager propagates
-    it as a startup error (process exits), but the finally block in lifespan()
-    executes first — cancelling WS/subscription tasks and closing the DI container.
-    Using os._exit() would bypass that cleanup; sys.exit() / re-raise does not.
-    """
-    from rich.console import Console
-    from rich.panel import Panel
-
-    console = Console(stderr=True)
-    console.print(
-        Panel(
-            f"[bold red]{type(error).__name__}[/]: {error}",
-            title="Startup Failed",
-            border_style="red",
-        )
-    )
-    console.print("\n[dim]Your code:[/]")
-    console.print("  -> [cyan]pocketquant.app.main[/] in lifespan")
-    console.print("  -> [cyan]pocketquant.core.infra.persistence.mongodb[/] in connect")
-    raise error
 
 
 def configure_middleware(app: FastAPI, settings) -> None:

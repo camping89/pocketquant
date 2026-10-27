@@ -18,12 +18,11 @@ from pocketquant.app.main_extensions import (
     configure_middleware,
     drain_backtest_tasks,
     ensure_all_indexes,
-    handle_startup_failure,
     init_backtest_tasks,
     recover_orphan_backtests,
     register_health_checks,
     register_routes,
-    start_background_jobs,
+    start_jobs,
 )
 from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.config import Settings
@@ -55,10 +54,8 @@ def make_test_app(settings: Settings) -> FastAPI:
             await ensure_all_indexes(c)
             await recover_orphan_backtests(c)
             await register_health_checks(c, app)
-            await start_background_jobs(c)
+            await start_jobs(c, app)
             yield
-        except Exception as e:
-            handle_startup_failure(e)
         finally:
             await drain_backtest_tasks(app)
             await c.close()

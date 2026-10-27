@@ -12,16 +12,13 @@ from pocketquant.app.main_extensions import (
     configure_middleware,
     drain_backtest_tasks,
     ensure_all_indexes,
-    handle_startup_failure,
     init_backtest_tasks,
     recover_orphan_backtests,
     recover_orphan_jobs,
     register_health_checks,
     register_routes,
-    start_background_jobs,
-    start_live_collector,
+    start_jobs,
     start_quote_feed,
-    start_reconcile_loop,
     stop_quote_feed,
     stop_reconcile_loop,
 )
@@ -65,26 +62,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await recover_orphan_jobs(container)
         await bootstrap_live_instances(container)
         await register_health_checks(container, app)
-        await start_background_jobs(container)
         await start_quote_feed(container, app)
-        # Collector subscribes BEFORE the reconcile loop starts strategies, so no
-        # trade closure is published before its handler exists.
-        await start_live_collector(container)
-        # Start LAST — instances are bootstrapped, so the first tick has no spurious
-        # missing_instance warnings.
-        await start_reconcile_loop(container, app)
+        await start_jobs(container, app)
 
         logger.info("application_started")
         yield
 
-    except Exception as e:
-        handle_startup_failure(e)
+    except Exception:
+        # Re-raise so FastAPI reports a startup error; the finally block still
+        # cancels background tasks and closes the container first.
+        logger.exception("application_start_failed")
+        raise
     finally:
         # Drain in-flight backtests + stop reconcile FIRST — before quote feed and
         # container.close() (which stops StrategyAppService) — so neither runs
         # against a stopping engine. Drain (not cancel) lets persistence finish.
         await drain_backtest_tasks(app)
-        await stop_reconcile_loop(container, app)
+        await stop_reconcile_loop(app)
         await stop_quote_feed(container, app)
         # container.close() runs generator cleanup in reverse order:
         # StrategyAppService.stop → JobScheduler.shutdown → Cache/Database.disconnect

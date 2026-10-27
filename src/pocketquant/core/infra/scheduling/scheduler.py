@@ -43,10 +43,9 @@ class JobScheduler:
 
     def __init__(self, history_repo: JobHistoryRepository | None = None) -> None:
         self._scheduler: AsyncIOScheduler | None = None
-        # history_repo used by get_jobs() to enrich /system/jobs response AND by
-        # listeners to persist missed/skipped/failed events. Wrapper-path writes
-        # use UUID keys; listener-path writes use (job_id, scheduled_run_time)
-        # idempotency keys — distinct namespaces, no collision.
+        # The listeners persist missed/skipped/failed events through history_repo.
+        # Wrapper-path writes use UUID keys; listener-path writes use
+        # (job_id, scheduled_run_time) idempotency keys — distinct namespaces.
         self._history_repo = history_repo
         self._loop: asyncio.AbstractEventLoop | None = None
 

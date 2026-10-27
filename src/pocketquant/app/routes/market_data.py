@@ -7,17 +7,16 @@ X-Admin-Token; the list is public. ``symbol`` path params are URL-encoded
 composite ``{code}:{exchange}`` (e.g. ``BTCUSDT%3ABINANCE``).
 """
 
-import asyncio
-import json
 import time
 from datetime import datetime
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi import APIRouter, BackgroundTasks, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from pocketquant.app.common.sse_poll import poll_stream
 from pocketquant.app.common.symbol_validation import validate_composite_symbol
 from pocketquant.core.common.constants import LIMIT_OHLCV_QUERY_MAX
 from pocketquant.core.common.logging import get_logger
@@ -39,7 +38,10 @@ from pocketquant.engine.market_data.sync_service import (
     SyncService,
     SyncSymbolCommand,
 )
-from pocketquant.engine.market_data.sync_status_service import SyncStatusQueryService
+from pocketquant.engine.market_data.sync_status_service import (
+    SyncStatusQueryService,
+    SyncStatusResult,
+)
 from pocketquant.engine.market_data.tracked_symbols_backfill import (
     BackfillTrackedSymbolCommand,
     TrackedSymbolBackfillService,
@@ -214,7 +216,6 @@ def _make_payload(bar: dict[str, Any], interval: Interval) -> dict[str, Any]:
 @router.get("/bars/stream/{symbol}")
 async def stream_bars(
     symbol: str,
-    request: Request,
     bar_service: FromDishka[BarAppService],
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> StreamingResponse:
@@ -226,62 +227,12 @@ async def stream_bars(
     if unknown value.
     """
     symbol = validate_composite_symbol(symbol)
-
-    async def event_generator():
-        last_bar_start: str | None = None
-        last_close: float | None = None
-        last_volume: float | None = None
-
-        # Emit initial bar immediately on connect
-        try:
-            bar = await bar_service.get_current_bar(symbol, interval)
-            if bar is not None:
-                last_bar_start = bar.get("bar_start")
-                last_close = bar.get("close")
-                last_volume = bar.get("volume")
-                payload = _make_payload(bar, interval)
-                yield f"data: {json.dumps(payload)}\n\n"
-        except Exception as e:
-            logger.error("sse.bars.init_error", error=str(e))
-
-        # Poll loop — emit when bar_start, close, or volume changes
-        try:
-            while True:
-                await asyncio.sleep(_POLL_INTERVAL)
-
-                bar = await bar_service.get_current_bar(symbol, interval)
-                if bar is None:
-                    continue
-
-                bar_start = bar.get("bar_start")
-                close = bar.get("close")
-                volume = bar.get("volume")
-
-                bar_changed = bar_start != last_bar_start
-                ohlcv_changed = close != last_close or volume != last_volume
-
-                if not bar_changed and not ohlcv_changed:
-                    continue
-
-                last_bar_start = bar_start
-                last_close = close
-                last_volume = volume
-                yield f"data: {json.dumps(_make_payload(bar, interval))}\n\n"
-
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.error("sse.bars.poll_error", error=str(e))
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Transfer-Encoding": "chunked",
-            "Connection": "keep-alive",
-        },
+    return poll_stream(
+        "bars",
+        lambda: bar_service.get_current_bar(symbol, interval),
+        lambda bar: (bar.get("bar_start"), bar.get("close"), bar.get("volume")),
+        lambda bar: _make_payload(bar, interval),
+        _POLL_INTERVAL,
     )
 
 
@@ -291,26 +242,8 @@ async def stream_bars(
 @router.get("/sync-status")
 async def get_sync_statuses(
     sync_status_service: FromDishka[SyncStatusQueryService],
-) -> list[dict]:
-    statuses = await sync_status_service.get_sync_status()
-
-    return [
-        {
-            "symbol": s.symbol,
-            "interval": s.interval,
-            "status": s.status,
-            "bar_count": s.bar_count,
-            "last_sync_at": s.last_sync_at,
-            "last_bar_at": s.last_bar_at,
-            "error_message": s.error_message,
-            "consecutive_empty_fetches": s.consecutive_empty_fetches,
-            "is_stuck": s.is_stuck,
-            "is_market_open": s.is_market_open,
-            "lag_seconds": s.lag_seconds,
-            "is_delayed": s.is_delayed,
-        }
-        for s in statuses
-    ]
+) -> list[SyncStatusResult]:
+    return await sync_status_service.get_sync_status()
 
 
 @router.get("/sync-status/{symbol}")
@@ -318,23 +251,9 @@ async def get_symbol_sync_status(
     symbol: str,
     sync_status_service: FromDishka[SyncStatusQueryService],
     interval: Interval = Query(default=Interval.DAY_1),
-) -> dict:
+) -> SyncStatusResult:
     symbol = validate_composite_symbol(symbol)
-    status = await sync_status_service.get_symbol_sync_status(symbol, interval.value)
-
-    return {
-        "symbol": status.symbol,
-        "interval": status.interval,
-        "status": status.status,
-        "bar_count": status.bar_count,
-        "last_sync_at": status.last_sync_at,
-        "last_bar_at": status.last_bar_at,
-        "error_message": status.error_message,
-        "is_market_open": status.is_market_open,
-        "is_stuck": status.is_stuck,
-        "lag_seconds": status.lag_seconds,
-        "is_delayed": status.is_delayed,
-    }
+    return await sync_status_service.get_symbol_sync_status(symbol, interval.value)
 
 
 @router.get("/data-lag/{symbol}", response_model=DataLagResponse)

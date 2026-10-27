@@ -1,7 +1,7 @@
 """Realtime quote provider port — WebSocket-based tick stream interface.
 
-Neutral domain location so no concrete provider implementation (Binance, OKX,
-Kraken, etc.) is implied by the module path.
+Neutral domain location so no concrete provider implementation (Binance,
+TradingView, Exness) is implied by the module path.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any, Protocol, runtime_checkable
 class IRealtimeQuoteProviderPort(Protocol):
     """Protocol for realtime WebSocket-based quote providers.
 
-    Using Protocol (not ABC) so future providers (OKX, Kraken, etc.) satisfy the
+    Using Protocol (not ABC) so new providers satisfy the
     interface via structural subtyping without inheritance. @runtime_checkable
     enables isinstance() checks in DI tests and guard assertions.
 

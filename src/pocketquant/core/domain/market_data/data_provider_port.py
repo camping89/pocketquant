@@ -1,7 +1,7 @@
 """Data-provider port — REST/historical OHLCV fetch + symbol search.
 
-Neutral domain location so no concrete provider implementation (Binance, OKX,
-TradingView, etc.) is implied by the module path.
+Neutral domain location so no concrete provider implementation (Binance,
+TradingView, Exness) is implied by the module path.
 """
 
 from __future__ import annotations
