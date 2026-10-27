@@ -31,7 +31,7 @@ down:
 reset:
     docker compose -f deploy/compose.local.yml --env-file .env down -v
 
-# Start backend: full runtime (scheduler, WS feed, reconcile, backtest worker) + all API routes + SPA (port 41921).
+# Start backend: full runtime (scheduler, WS feed, reconcile, backtest worker) + all API routes (port 41921).
 # Single worker only — scheduler/WS/broker are in-process singletons; --workers N would duplicate them.
 # Route iteration tip: ENABLE_JOBS=false just be — skips the trading runtime so --reload restarts stay light.
 be:

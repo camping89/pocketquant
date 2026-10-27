@@ -20,7 +20,8 @@ class OrderResult:
     side: OrderSide | None = (
         None  # BUY/SELL — used by FIFO lot tracker; optional for backward compat
     )
-    commission: float = 0.0  # cost per fill (paper: computed; OKX: abs(venue fee)); 0 for non-fills
+    # Cost per fill (paper: computed; Exness: abs(deal commission)); 0 for non-fills.
+    commission: float = 0.0
 
     @property
     def is_success(self) -> bool:

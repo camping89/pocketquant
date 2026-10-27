@@ -15,7 +15,7 @@ class IBrokerPort(ABC):
 
     Implementations:
     - PaperBrokerAdapter: Simulated fills for backtesting/paper trading
-    - OKXBrokerAdapter: Live trading via OKX exchange API
+    - ExnessBrokerAdapter: Live trading via the Exness Trader API
     """
 
     # True when fills arrive later through subscribe_order_updates rather than

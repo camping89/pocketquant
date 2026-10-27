@@ -10,7 +10,7 @@ One Python package (`pocketquant`) with import-linter-enforced subpackage bounda
 src/pocketquant/
 ├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, tradingview, exness, scheduler, http)
 ├── engine/     # framework-free orchestration, 5 feature areas: strategy/ execution/ market_data/ backtest/ live/
-└── app/        # FastAPI backend: routes, SPA serving, scheduler, WS feed, reconcile loop, backtest tasks
+└── app/        # FastAPI backend: routes, scheduler, WS feed, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI
 ```
 
@@ -30,7 +30,7 @@ Python 3.14+ · `uv` · Docker Compose · Node 22+ · `just` (optional). Cross-p
 cp ../pocketquant-config/local/all-local.env .env
 just install                 # uv sync
 just up                      # mongo + redis
-just be                      # backend + API + SPA → :41921
+just be                      # backend + API → :41921
 just fe                      # vite dev UI → :5173 (proxies /api → :41921)
 ```
 

@@ -4,7 +4,6 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.domain.trading import commission_model_for
 from pocketquant.core.infra.brokers.exness.exness_broker_adapter import ExnessBrokerAdapter
 from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
-from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.exness.exness_client import ExnessClient
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -17,7 +16,7 @@ class BrokerFactory:
 
     Holds the application ``EventBus`` so paper brokers can subscribe to
     ``BarCompletedEvent`` and auto-fill SL/TP during live paper trading.
-    Real brokers (OKX) ignore the bus — they receive fills from the venue.
+    Exness also takes the bus: its fills arrive from the venue and are published.
     """
 
     def __init__(
@@ -37,7 +36,7 @@ class BrokerFactory:
         """Create broker instance from type and config.
 
         Args:
-            broker_type: "paper" or "okx"
+            broker_type: "paper" or "exness"
             config: Broker-specific configuration
 
         Returns:
@@ -67,23 +66,6 @@ class BrokerFactory:
                 event_bus=self._event_bus,
                 commission_model=commission_model_for(per_contract, commission_bps),
                 contract_spec=contract_spec,
-            )
-
-        elif broker_type == "okx":
-            # Validate required OKX credentials
-            api_key = config.get("api_key")
-            api_secret = config.get("api_secret")
-            passphrase = config.get("passphrase")
-
-            if not api_key or not api_secret or not passphrase:
-                raise ValueError("OKX broker requires api_key, api_secret, passphrase")
-
-            return OKXBrokerAdapter(
-                api_key=str(api_key),
-                api_secret=str(api_secret),
-                passphrase=str(passphrase),
-                demo=config.get("demo", True),
-                inst_suffix=config.get("inst_suffix", "USDT"),
             )
 
         elif broker_type == "exness":

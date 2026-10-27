@@ -162,10 +162,6 @@ class ServicesProvider(Provider):
                 "futures_initial_balance": settings.paper_futures_initial_balance,
                 "slippage_bps": settings.paper_slippage_bps,
                 "commission_bps": settings.paper_commission_bps,
-                "api_key": settings.okx_api_key,
-                "api_secret": settings.okx_api_secret,
-                "passphrase": settings.okx_passphrase,
-                "demo": settings.okx_demo_mode,
             },
         )
         await engine.start()

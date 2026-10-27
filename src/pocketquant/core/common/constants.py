@@ -43,7 +43,6 @@ LIMIT_OHLCV_QUERY_MAX = 5000
 
 # HTTP header names
 HEADER_CORRELATION_ID = "X-Correlation-ID"
-HEADER_IDEMPOTENCY_KEY = "Idempotency-Key"
 
 # Time intervals in seconds (for bar aggregation)
 INTERVAL_SECONDS = {

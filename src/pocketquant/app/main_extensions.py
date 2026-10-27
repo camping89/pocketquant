@@ -10,7 +10,6 @@ import os
 import time
 from datetime import UTC, datetime
 from functools import partial
-from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfoNotFoundError
 
@@ -23,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pocketquant.app.middleware.admin_auth_middleware import verify_admin_token
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
-from pocketquant.core.common.idempotency import IdempotencyMiddleware
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
@@ -375,7 +373,6 @@ def configure_middleware(app: FastAPI, settings) -> None:
     )
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(RateLimitMiddleware, capacity=200, refill_rate=20.0)
-    app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(CorrelationIDMiddleware)
 
 
@@ -466,27 +463,3 @@ def register_routes(app: FastAPI, settings) -> None:
     api.include_router(backtest_router)
 
     app.include_router(api)
-
-    # StaticFiles + SPA fallback — after API routes so /api/* is never intercepted
-    # repo root = 4 levels up from src/pocketquant/app/main_extensions.py
-    web_dist = Path(__file__).resolve().parents[3] / "web" / "dist"
-    if web_dist.is_dir():
-        from fastapi.responses import FileResponse
-        from fastapi.staticfiles import StaticFiles
-
-        app.mount("/assets", StaticFiles(directory=web_dist / "assets"), name="static-assets")
-
-        # include_in_schema=False: static-file serving, not API surface — keeps
-        # OpenAPI/route snapshots independent of whether web/dist was built.
-        @app.get("/{path:path}", include_in_schema=False)
-        async def spa_fallback(path: str) -> FileResponse:
-            file = web_dist / path
-            if file.is_file():
-                return FileResponse(file)
-            return FileResponse(web_dist / "index.html")
-
-        logger.info("spa_mounted", path=str(web_dist))
-    else:
-        # Expected in prod (web ships in its own container); locally it means
-        # `npm run build` hasn't produced web/dist yet.
-        logger.info("spa_not_mounted", path=str(web_dist))

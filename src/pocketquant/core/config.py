@@ -106,12 +106,6 @@ class Settings(BaseSettings):
         floor = self.tradingview_capabilities.min_poll_seconds
         return max(self.tradingview_poll_seconds or floor, floor)
 
-    # OKX Broker (optional, for live trading)
-    okx_api_key: str | None = None
-    okx_api_secret: str | None = None
-    okx_passphrase: str | None = None
-    okx_demo_mode: bool = True
-
     # Exness Trader API (optional). Every order call is refused while
     # exness_live_trading is false, which is the default.
     exness_api_base_url: str | None = None

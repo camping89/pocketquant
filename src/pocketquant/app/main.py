@@ -25,7 +25,6 @@ from pocketquant.app.main_extensions import (
     stop_quote_feed,
     stop_reconcile_loop,
 )
-from pocketquant.app.market_data.app_services.tracked_symbol_seeder import seed_tracked_symbols
 from pocketquant.core.common.logging import get_logger, setup_logging
 from pocketquant.core.config import get_settings
 from pocketquant.core.infra.persistence.mongodb import Database
@@ -64,7 +63,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await ensure_all_indexes(container)
         await recover_orphan_backtests(container)
         await recover_orphan_jobs(container)
-        await seed_tracked_symbols(container)
         await bootstrap_live_instances(container)
         await register_health_checks(container, app)
         await start_background_jobs(container)

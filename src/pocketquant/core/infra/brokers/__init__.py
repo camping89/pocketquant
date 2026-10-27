@@ -1,8 +1,8 @@
-"""Broker infrastructure — concrete adapters (paper, OKX).
+"""Broker infrastructure — concrete adapters (paper, Exness).
 
 Ports + DTOs (IBrokerPort, IBrokerFactoryPort, OrderResult, AccountBalance, OrderEvent)
 live in ``pocketquant.core.domain.brokers``. This package holds the concrete
-PaperBrokerAdapter and OKXBrokerAdapter adapters.
+PaperBrokerAdapter and ExnessBrokerAdapter adapters.
 """
 
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter

@@ -1,7 +1,7 @@
 """Brokers that declare async fills deliver them into OrderAppService.on_order_update.
 
-Only a broker with ``fills_async = True`` is subscribed; PaperBrokerAdapter and
-OKXBrokerAdapter report fills inline and stay unsubscribed.
+Only a broker with ``fills_async = True`` is subscribed; PaperBrokerAdapter
+reports fills inline and stays unsubscribed.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from pocketquant.core.domain.order import (
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
-from pocketquant.core.infra.brokers.okx.okx_broker_adapter import OKXBrokerAdapter
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
@@ -173,4 +172,3 @@ async def test_paper_broker_is_not_subscribed_to_order_updates() -> None:
 def test_only_async_brokers_declare_async_fills() -> None:
     assert IBrokerPort.fills_async is False
     assert PaperBrokerAdapter.fills_async is False
-    assert OKXBrokerAdapter.fills_async is False
