@@ -333,29 +333,37 @@ async def sync_1m() -> None:
     calendar_factory = await container.get(TradingCalendarFactory)
 
     async def body(doc_id: str | None) -> dict:
+        # A cancellation (shutdown) is a BaseException: it skips the cascade.
+        sync_error: Exception | None = None
+        totals: dict = {}
         try:
-            return await _rest_sync(
+            totals = await _rest_sync(
                 "sync_1m", [Interval.MINUTE_1], 100, SOURCE_REST_SYNC_1M, doc_id
             )
-        finally:
-            cascade_total: dict[Interval, int] = {}
-            for ts in await tracked_symbol_repo.list_all():
-                try:
-                    counts = await cascade_for_symbol(
-                        ts.symbol,
-                        lookback_minutes=100,
-                        bar_repo=bar_repo,
-                        calendar=await calendar_factory.for_symbol(ts.symbol),
-                    )
-                except Exception:
-                    logger.error("sync_1m.cascade_failed", symbol=ts.symbol, exc_info=True)
-                    continue
-                for tf, count in counts.items():
-                    cascade_total[tf] = cascade_total.get(tf, 0) + count
-            logger.debug(
-                "sync_1m.cascade_summary",
-                cascade_counts={tf.value: n for tf, n in cascade_total.items()},
-            )
+        except Exception as exc:
+            sync_error = exc
+
+        cascade_total: dict[Interval, int] = {}
+        for ts in await tracked_symbol_repo.list_all():
+            try:
+                counts = await cascade_for_symbol(
+                    ts.symbol,
+                    lookback_minutes=100,
+                    bar_repo=bar_repo,
+                    calendar=await calendar_factory.for_symbol(ts.symbol),
+                )
+            except Exception:
+                logger.error("sync_1m.cascade_failed", symbol=ts.symbol, exc_info=True)
+                continue
+            for tf, count in counts.items():
+                cascade_total[tf] = cascade_total.get(tf, 0) + count
+        logger.debug(
+            "sync_1m.cascade_summary",
+            cascade_counts={tf.value: n for tf, n in cascade_total.items()},
+        )
+        if sync_error:
+            raise sync_error
+        return totals
 
     await _tracked("sync_1m", body)
 

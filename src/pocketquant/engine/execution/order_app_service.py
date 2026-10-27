@@ -82,7 +82,7 @@ class OrderAppService:
 
                         self._pending.pop(str(order.id), None)
 
-                        await self._order_repo.save(order)
+                        await self._save_after_fill(order)
 
                         await self._event_bus.publish(
                             OrderFilledEvent(
@@ -134,6 +134,13 @@ class OrderAppService:
 
         return result
 
+    async def _save_after_fill(self, order: OrderAggregate) -> None:
+        """Save a filled order; a failed save is logged so the fill event still goes out."""
+        try:
+            await self._order_repo.save(order)
+        except Exception:
+            logger.error("order_save_failed", order_id=str(order.id), exc_info=True)
+
     async def on_order_update(self, result: OrderResult) -> None:
         """Handle order update from broker callback.
 
@@ -146,7 +153,7 @@ class OrderAppService:
 
             if result.status == OrderStatus.FILLED:
                 order.fill(result.filled_quantity, result.filled_price or 0.0)
-                await self._order_repo.save(order)
+                await self._save_after_fill(order)
 
                 self._pending.pop(result.order_id, None)
 

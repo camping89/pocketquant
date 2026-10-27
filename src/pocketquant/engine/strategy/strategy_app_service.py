@@ -181,6 +181,7 @@ class StrategyAppService:
 
             if isinstance(broker, PaperBrokerAdapter):
                 dropped = broker.drop_positions(strategy_id)
+                await self._position_app_service.drop(strategy_id)
                 if not any(b is broker for b in self._brokers.values()):
                     await broker.disconnect()
                 logger.info("strategy_unloaded", strategy_id=strategy_id, positions_dropped=dropped)

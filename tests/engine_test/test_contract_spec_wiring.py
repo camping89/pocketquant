@@ -51,6 +51,9 @@ class _NoPositions:
     def get(self, strategy_id: str) -> None:
         return None
 
+    async def drop(self, strategy_id: str) -> None:
+        return None
+
 
 class _AllowAll:
     def validate(self, *args: object) -> tuple[bool, str]:

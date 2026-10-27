@@ -1,8 +1,8 @@
 """A paper position never outlives its subscription or the process.
 
-Unload drops the subscription's paper position and disconnects a broker no
-other subscription holds; a restart closes every mirror row a venue does not
-still hold.
+Unload drops the subscription's paper position, in the broker and in the
+mirror, and disconnects a broker no other subscription holds. A restart deletes
+the mirror rows of paper subscriptions and keeps every other row.
 """
 
 from __future__ import annotations
@@ -47,71 +47,87 @@ class _Repo:
     async def find_pending(self, limit: int = 500) -> list:
         return []
 
+    async def delete_open_by_subscription(self, subscription_id: str) -> int:
+        gone = [k for k, p in self.rows.items() if p.subscription_id == subscription_id]
+        for key in gone:
+            del self.rows[key]
+        return len(gone)
 
-async def _engine() -> tuple[StrategyAppService, _Factory]:
+
+async def _engine() -> tuple[StrategyAppService, _Factory, PositionAppService, OrderAppService]:
     bus = EventBus()
     factory = _Factory(bus)
+    mirror = PositionAppService(bus, _Repo())  # type: ignore[arg-type]
+    orders = OrderAppService(bus, _Repo())  # type: ignore[arg-type]
     engine = StrategyAppService(
         event_bus=bus,
         broker_factory=factory,  # type: ignore[arg-type]
-        order_app_service=OrderAppService(bus, _Repo()),  # type: ignore[arg-type]
-        position_app_service=PositionAppService(bus, _Repo()),  # type: ignore[arg-type]
+        order_app_service=orders,
+        position_app_service=mirror,
         risk_check_handler=RiskCheckHandler(),
     )
+    await mirror.start()
     await engine.start()
-    return engine, factory
+    return engine, factory, mirror, orders
 
 
 def _config(sid: str) -> StrategyConfig:
     return StrategyConfig(id=sid, name="t", symbol=_SYM, interval="1m", broker="paper")
 
 
-async def _open(broker: PaperBrokerAdapter, sid: str) -> None:
-    await broker.submit_order(
-        OrderAggregate.create(
-            subscription_id=sid,
-            symbol=_SYM,
-            side=OrderSide.BUY,
-            order_type=OrderType.MARKET,
-            quantity=1.0,
-            price=100.0,
-            sl_price=90.0,
-        )
+async def _open(
+    broker: PaperBrokerAdapter, sid: str, orders: OrderAppService | None = None
+) -> None:
+    order = OrderAggregate.create(
+        subscription_id=sid,
+        symbol=_SYM,
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=1.0,
+        price=100.0,
+        sl_price=90.0,
     )
+    if orders is None:
+        await broker.submit_order(order)
+    else:
+        await orders.submit(order, broker)
 
 
 @pytest.mark.asyncio
 async def test_unload_drops_the_position_and_disconnects_a_broker_no_one_holds() -> None:
-    engine, factory = await _engine()
+    engine, factory, mirror, orders = await _engine()
     await engine.load_strategy(_config("a"))
     broker = factory.created[0]
     await broker.connect()
-    await _open(broker, "a")
+    await _open(broker, "a", orders)
+    assert mirror.get("a") is not None
 
     await engine.unload_strategy("a")
 
     assert await broker.get_positions() == []
     assert broker.is_connected is False
+    assert mirror.get("a") is None
 
 
 @pytest.mark.asyncio
 async def test_unload_keeps_a_shared_broker_and_the_other_position() -> None:
-    engine, factory = await _engine()
+    engine, factory, mirror, orders = await _engine()
     await engine.load_strategy(_config("a"))
     await engine.load_strategy(_config("b"))
     broker = factory.created[0]
     await broker.connect()
-    await _open(broker, "a")
-    await _open(broker, "b")
+    await _open(broker, "a", orders)
+    await _open(broker, "b", orders)
 
     await engine.unload_strategy("a")
 
     assert [p.subscription_id for p in await broker.get_positions()] == ["b"]
     assert broker.is_connected is True
+    assert mirror.get("b") is not None
 
 
 @pytest.mark.asyncio
-async def test_boot_closes_paper_rows_and_keeps_venue_rows() -> None:
+async def test_boot_deletes_paper_rows_and_keeps_the_rest() -> None:
     def row(sid: str) -> PositionAggregate:
         return PositionAggregate.open(
             subscription_id=sid, symbol=_SYM, side=PositionSide.LONG, entry_price=1.0, quantity=1.0
@@ -120,8 +136,22 @@ async def test_boot_closes_paper_rows_and_keeps_venue_rows() -> None:
     repo = _Repo([row("paper-sub"), row("venue-sub")])
     mirror = PositionAppService(EventBus(), repo)  # type: ignore[arg-type]
 
-    await mirror.start(frozenset({"venue-sub"}))
+    await mirror.start(frozenset({"paper-sub"}))
 
-    assert [p.subscription_id for p in await repo.find_open()] == ["venue-sub"]
+    assert [p.subscription_id for p in repo.rows.values()] == ["venue-sub"]
     assert mirror.get("paper-sub") is None
     assert mirror.get("venue-sub") is not None
+
+
+@pytest.mark.asyncio
+async def test_an_exit_queued_before_unload_does_not_open_a_new_position() -> None:
+    bus = EventBus()
+    broker = PaperBrokerAdapter(fill_delay_ms=0, event_bus=bus)
+    await broker.connect()
+    await _open(broker, "a")
+    [pos] = await broker.get_positions()
+    broker.drop_positions("a")
+
+    await broker._fire_synthetic_exit(pos, 90.0, OrderSide.SELL, "stop_loss")
+
+    assert await broker.get_positions() == []

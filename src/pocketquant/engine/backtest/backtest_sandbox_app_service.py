@@ -63,6 +63,12 @@ class _InMemoryPositionRepo:
     async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
         return [p for p in self._items.values() if not p.is_closed][:limit]
 
+    async def delete_open_by_subscription(self, subscription_id: str) -> int:
+        gone = [k for k, p in self._items.items() if p.subscription_id == subscription_id]
+        for key in gone:
+            del self._items[key]
+        return len(gone)
+
 
 class _SingleBrokerFactory:
     """Returns the run's pre-built broker; the inject path never asks the factory.

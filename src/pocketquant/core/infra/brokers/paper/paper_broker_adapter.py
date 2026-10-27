@@ -603,6 +603,10 @@ class PaperBrokerAdapter(IBrokerPort):
         broker_order_id = generate_id_str()
         now = get_current_time()
         async with self._lock:
+            # An earlier exit's callbacks may have awaited while this subscription
+            # was unloaded; a fill for its dropped position would open a new one.
+            if self._positions.get(f"{pos.subscription_id}:{pos.symbol}") is not pos:
+                return
             commission, trades = self._execute_fill_with_commission(exit_order, fill_price)
             result = OrderResult(
                 order_id=str(exit_order.id),

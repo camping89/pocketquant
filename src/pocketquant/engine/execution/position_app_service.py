@@ -3,7 +3,6 @@ import asyncio
 import structlog
 
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.infra.persistence.repositories.position_repository import (
@@ -29,31 +28,35 @@ class PositionAppService:
         self._positions: dict[str, PositionAggregate] = {}
         self._lock = asyncio.Lock()
 
-    async def start(self, venue_subscription_ids: frozenset[str] = frozenset()) -> None:
-        await self.load_open_positions(venue_subscription_ids)
+    async def start(self, paper_subscription_ids: frozenset[str] = frozenset()) -> None:
+        await self.load_open_positions(paper_subscription_ids)
         self._event_bus.subscribe(OrderFilledEvent, self._on_order_filled)
         logger.info("position_tracker_started")
 
-    async def load_open_positions(self, venue_subscription_ids: frozenset[str]) -> None:
-        """Load the open rows; close every row a venue does not still hold.
+    async def load_open_positions(self, paper_subscription_ids: frozenset[str]) -> None:
+        """Load the open rows; delete the rows of paper subscriptions.
 
-        A paper broker keeps positions in memory, so a restart loses them; their
-        rows, and rows of deleted subscriptions, are closed here so the mirror
-        matches. A row of a venue subscription stays open: the venue holds it.
+        A paper broker keeps positions in memory, so a restart loses them. Their
+        rows are deleted, not closed: a closed row reads as a completed trade.
+        Every other row stays open, because a venue may still hold it and the
+        venue snapshot maps its positions to these rows.
         """
         positions = await self._position_repo.find_open()
-        kept = [p for p in positions if p.subscription_id in venue_subscription_ids]
-        for pos in positions:
-            if pos.subscription_id not in venue_subscription_ids:
-                pos.is_closed = True
-                pos.closed_at = utc_now()
-                await self._position_repo.save(pos)
+        kept = [p for p in positions if p.subscription_id not in paper_subscription_ids]
+        for sid in {p.subscription_id for p in positions} & paper_subscription_ids:
+            await self._position_repo.delete_open_by_subscription(sid)
         async with self._lock:
             for pos in kept:
                 self._positions[pos.subscription_id] = pos
         logger.info(
-            "loaded_open_positions", count=len(kept), closed_at_boot=len(positions) - len(kept)
+            "loaded_open_positions", count=len(kept), paper_dropped=len(positions) - len(kept)
         )
+
+    async def drop(self, subscription_id: str) -> None:
+        """Forget a paper subscription's open position, in memory and in Mongo."""
+        async with self._lock:
+            self._positions.pop(subscription_id, None)
+            await self._position_repo.delete_open_by_subscription(subscription_id)
 
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         async with self._lock:

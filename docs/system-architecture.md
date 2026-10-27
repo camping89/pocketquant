@@ -198,9 +198,9 @@ The SPA loads the first quote over REST and marks a stream stale when updates st
 
 - Paper subscriptions with the same contract spec share one paper broker. A venue broker is one instance per process.
 - A paper broker holds its positions in memory only.
-- Unloading a subscription (`StrategyAppService.unload_strategy`) drops its paper position. A paper broker that no other subscription holds is disconnected, so it stops checking SL/TP.
+- Unloading a subscription (`StrategyAppService.unload_strategy`) drops its paper position from the broker and deletes its open `positions` row. A paper broker that no other subscription holds is disconnected, so it stops checking SL/TP.
 - A venue position stays open on unload under the venue's own SL/TP; the engine logs `strategy_unloaded_venue_position_kept`.
-- At boot `PositionAppService` keeps an open `positions` row only when its subscription exists and uses a venue broker. It closes every other open row and logs one `loaded_open_positions` line with `count` and `closed_at_boot`.
+- At boot `PositionAppService` deletes the open `positions` rows of paper subscriptions and keeps every other open row. It logs one `loaded_open_positions` line with `count` and `paper_dropped`. The rows are deleted, not closed, because a closed row reads as a completed trade.
 
 ### Exness broker
 

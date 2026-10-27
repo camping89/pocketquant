@@ -129,7 +129,7 @@ class ServicesProvider(Provider):
     ) -> PositionAppService:
         tracker = PositionAppService(event_bus, position_repository, symbol_lookup)
         subs = await subscription_repository.list_all()
-        await tracker.start(frozenset(str(s.id) for s in subs if s.broker != "paper"))
+        await tracker.start(frozenset(str(s.id) for s in subs if s.broker == "paper"))
         return tracker
 
     @provide(scope=Scope.APP)

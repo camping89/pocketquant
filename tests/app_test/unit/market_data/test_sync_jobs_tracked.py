@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -80,6 +81,20 @@ async def test_a_failed_rest_sync_still_cascades_and_is_recorded_once(
     finish = history.record_finish.await_args.kwargs
     assert finish["status"] == "failed"
     assert finish["error"] == "provider down"
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_sync_skips_the_cascade(monkeypatch: pytest.MonkeyPatch) -> None:
+    svc = MagicMock(spec=SyncService)
+    svc.sync_one = AsyncMock(side_effect=asyncio.CancelledError())
+    _wire(monkeypatch, svc, doc_id="hist-1")
+    cascade = AsyncMock(return_value={})
+    monkeypatch.setattr(sync_jobs, "cascade_for_symbol", cascade)
+
+    with pytest.raises(asyncio.CancelledError):
+        await sync_jobs.sync_1m()
+
+    cascade.assert_not_awaited()
 
 
 @pytest.mark.asyncio

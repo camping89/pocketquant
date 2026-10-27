@@ -33,6 +33,13 @@ class PositionRepository(SymbolScopedRepository):
         )
         return [PositionAggregate.from_mongo(doc) async for doc in cursor]
 
+    async def delete_open_by_subscription(self, subscription_id: str) -> int:
+        collection = self._collection()
+        result = await collection.delete_many(
+            {"subscription_id": subscription_id, "is_closed": False}
+        )
+        return result.deleted_count
+
     async def find_closed_by_subscription(
         self, subscription_id: str, limit: int = 100
     ) -> list[PositionAggregate]:
