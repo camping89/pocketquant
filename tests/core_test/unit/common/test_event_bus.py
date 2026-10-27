@@ -121,3 +121,21 @@ def test_event_bus_get_all_event_types():
 
     event_types = bus.get_all_event_types()
     assert TestEvent in event_types
+
+
+@pytest.mark.asyncio
+async def test_raising_handler_does_not_stop_later_handlers():
+    """Every handler runs; the first error is re-raised afterwards."""
+    bus = EventBus()
+    received = []
+
+    def boom(event: TestEvent) -> None:
+        raise ValueError("first")
+
+    bus.subscribe(TestEvent, boom)
+    bus.subscribe(TestEvent, lambda e: received.append(e))
+
+    with pytest.raises(ValueError, match="first"):
+        await bus.publish(TestEvent(data="x"))
+
+    assert len(received) == 1

@@ -26,13 +26,23 @@ class EventBus:
         return False
 
     async def publish(self, event: DomainEvent) -> None:
-        """Publish event to all subscribers (FIFO order)."""
-        handlers = self._handlers.get(type(event), [])
-        for handler in handlers:
-            result = handler(event)
-            if inspect.iscoroutine(result):
-                await result
+        """Publish event to all subscribers (FIFO order).
+
+        A raising handler does not stop the others; the first error is re-raised
+        after every handler ran. The list is copied because a handler may
+        subscribe or unsubscribe while it awaits.
+        """
+        errors: list[Exception] = []
+        for handler in list(self._handlers.get(type(event), [])):
+            try:
+                result = handler(event)
+                if inspect.iscoroutine(result):
+                    await result
+            except Exception as exc:  # noqa: BLE001 - re-raised below
+                errors.append(exc)
         self._history.append(event)
+        if errors:
+            raise errors[0]
 
     async def publish_all(self, events: Sequence[DomainEvent]) -> None:
         """Publish multiple events in order."""

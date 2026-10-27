@@ -53,7 +53,22 @@ class OrderAppService:
 
         try:
             result = await broker.submit_order(order)
+        except Exception as e:
+            async with self._lock:
+                order.reject(str(e))
+                await self._order_repo.save(order)
+                self._pending.pop(str(order.id), None)
 
+            logger.error("order_submit_error", order_id=str(order.id), error=str(e))
+
+            return OrderResult(
+                order_id=str(order.id),
+                broker_order_id="",
+                status=OrderStatus.REJECTED,
+                error_message=str(e),
+            )
+
+        try:
             async with self._lock:
                 if result.is_success:
                     self._broker_map[str(order.id)] = result.broker_order_id
@@ -111,22 +126,17 @@ class OrderAppService:
                         error=result.error_message,
                     )
 
-            return result
-
-        except Exception as e:
-            async with self._lock:
-                order.reject(str(e))
-                await self._order_repo.save(order)
-                self._pending.pop(str(order.id), None)
-
-            logger.error("order_submit_error", order_id=str(order.id), error=str(e))
-
-            return OrderResult(
+        except Exception:
+            # The broker already took the order, so it is never rejected here: a
+            # failed save or fill handler is logged and the broker's result stands.
+            logger.error(
+                "order_post_submit_error",
                 order_id=str(order.id),
-                broker_order_id="",
-                status=OrderStatus.REJECTED,
-                error_message=str(e),
+                status=order.status.value,
+                exc_info=True,
             )
+
+        return result
 
     async def cancel(self, order_id: str, broker: IBrokerPort) -> bool:
         """Cancel an order.

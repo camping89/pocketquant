@@ -83,3 +83,21 @@ async def test_filled_order_tracked_not_pending() -> None:
     assert svc.get_order(str(order.id)) is order
     assert order.status == OrderStatus.FILLED
     assert order not in svc.get_pending_orders()
+
+
+@pytest.mark.asyncio
+async def test_failing_fill_handler_keeps_the_order_filled() -> None:
+    """A fill handler that raises must not turn a broker fill into a reject."""
+    svc, broker, events = await _wired()
+
+    def _boom(_: OrderFilledEvent) -> None:
+        raise RuntimeError("mirror save failed")
+
+    svc._event_bus.subscribe(OrderFilledEvent, _boom)
+    order = _market(OrderSide.BUY)
+
+    result = await svc.submit(order, broker)
+
+    assert result.status == OrderStatus.FILLED
+    assert order.status == OrderStatus.FILLED
+    assert len(events) == 1
