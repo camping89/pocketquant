@@ -254,7 +254,6 @@ async def _run_backtest(
         name="hitnrun2",
         symbol=_SYM,
         interval="1m",
-        trigger="bar",
         broker="paper",
         parameters={
             "entry_lookback_bars": entry_lookback,

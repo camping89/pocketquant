@@ -25,10 +25,6 @@ class Continuous24x7Calendar(ITradingCalendarPort):
     def calendar_id(self) -> str:
         return CALENDAR_CRYPTO_24_7
 
-    @property
-    def tz(self) -> ZoneInfo:
-        return _UTC
-
     def is_open(self, instant: datetime) -> bool:
         return True
 

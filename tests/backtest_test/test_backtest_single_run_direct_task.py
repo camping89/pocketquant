@@ -281,7 +281,6 @@ async def _build_live_engine() -> tuple[
         name="engulfing",
         symbol=_SYM,
         interval="1m",
-        trigger="bar",
         broker="paper",
         parameters={"direction": "long", "key_level_lookback_bars": 5},
     )

@@ -12,7 +12,6 @@ from pocketquant.core.domain.order.enums import OrderSide, OrderStatus, OrderTyp
 from pocketquant.core.domain.order.events import (
     OrderCancelledEvent,
     OrderFilledEvent,
-    OrderPartiallyFilledEvent,
     OrderRejectedEvent,
     OrderSubmittedEvent,
 )
@@ -108,35 +107,6 @@ class OrderAggregate(BaseModel):
         )
         return self
 
-    def partial_fill(self, quantity: float, price: float) -> OrderAggregate:
-        self._validate_transition(OrderStatus.PARTIALLY_FILLED)
-        if quantity <= 0:
-            raise ValueError("Fill quantity must be positive")
-        if self.filled_quantity + quantity > self.quantity:
-            raise ValueError("Fill quantity exceeds order quantity")
-
-        total_filled = self.filled_quantity + quantity
-        if self.filled_price is not None:
-            self.filled_price = (
-                self.filled_price * self.filled_quantity + price * quantity
-            ) / total_filled
-        else:
-            self.filled_price = price
-
-        self.filled_quantity = total_filled
-        self.status = OrderStatus.PARTIALLY_FILLED
-        self.updated_at = utc_now()
-        self._events.append(
-            OrderPartiallyFilledEvent(
-                order_id=str(self.id),
-                subscription_id=self.subscription_id,
-                filled_quantity=quantity,
-                filled_price=price,
-                remaining_quantity=self.quantity - self.filled_quantity,
-            )
-        )
-        return self
-
     def fill(self, quantity: float, price: float) -> OrderAggregate:
         """Fully fill the order."""
         if self.status == OrderStatus.PARTIALLY_FILLED:
@@ -211,10 +181,6 @@ class OrderAggregate(BaseModel):
         events = self._events.copy()
         self._events.clear()
         return events
-
-    @property
-    def remaining_quantity(self) -> float:
-        return self.quantity - self.filled_quantity
 
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to MongoDB document."""

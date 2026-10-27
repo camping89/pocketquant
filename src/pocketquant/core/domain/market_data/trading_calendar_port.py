@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import date, datetime
-from zoneinfo import ZoneInfo
 
 from pocketquant.core.domain.shared.enums import Interval
 
@@ -27,12 +26,6 @@ class ITradingCalendarPort(ABC):
     @abstractmethod
     def calendar_id(self) -> str:
         """Stable identifier persisted on the symbol record."""
-        ...
-
-    @property
-    @abstractmethod
-    def tz(self) -> ZoneInfo:
-        """The exchange's own timezone, which local wall times are expressed in."""
         ...
 
     @abstractmethod

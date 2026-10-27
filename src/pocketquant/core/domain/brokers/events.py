@@ -19,15 +19,11 @@ from pocketquant.core.domain.order.enums import OrderStatus
 # Reason codes — string constants kept here for single source of truth.
 REASON_SUBMIT = "submit"
 REASON_MARKET_FILL = "market_fill"
-REASON_LIMIT_CROSS = "limit_cross"
-REASON_LIMIT_IMMEDIATE = "limit_immediate"
 REASON_AUTO_SL = "auto_sl"
 REASON_AUTO_TP = "auto_tp"
-REASON_USER_CANCEL = "user_cancel"
-REASON_END_OF_RUN = "end_of_run"
 REASON_INSUFFICIENT_BALANCE = "insufficient_balance"
-REASON_INVALID_LIMIT_PRICE = "invalid_limit_price"
 REASON_NO_MARKET_PRICE = "no_market_price"
+REASON_UNSUPPORTED_ORDER_TYPE = "unsupported_order_type"
 
 
 @dataclass

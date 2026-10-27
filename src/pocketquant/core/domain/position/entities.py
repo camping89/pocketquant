@@ -239,11 +239,6 @@ class PositionAggregate(BaseModel):
         # Price-unit notional, unmultiplied: the shipped margin and exposure checks read it.
         return self.quantity * self.current_price
 
-    @property
-    def cost_basis(self) -> float:
-        # Price-unit notional, unmultiplied: the shipped margin and exposure checks read it.
-        return self.quantity * self.entry_price
-
     def collect_events(self) -> list[DomainEvent]:
         events = self._events.copy()
         self._events.clear()

@@ -313,52 +313,6 @@ async def test_market_sell_opens_short_when_no_position() -> None:
     assert positions[0].side == PositionSide.SHORT
 
 
-async def test_limit_buy_pends_then_fills_on_crossing_bar() -> None:
-    b, bus = await _broker()
-    assert bus is not None
-    callbacks: list = []
-    await b.subscribe_order_updates(lambda r: callbacks.append(r))
-
-    # BUY LIMIT at 90 — no current price, so it queues pending (no immediate fill).
-    result = await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
-    assert result.status == OrderStatus.SUBMITTED
-    assert await b.get_positions() == []
-
-    # Bar whose low dips to/below 90 crosses the BUY LIMIT → fill.
-    await bus.publish(_bar_event(high=95.0, low=89.0, close=92.0))
-
-    positions = await b.get_positions()
-    assert len(positions) == 1
-    assert positions[0].side == PositionSide.LONG
-    fills = [c for c in callbacks if c.status == OrderStatus.FILLED]
-    assert len(fills) == 1
-    assert fills[0].filled_price == pytest.approx(90.0)
-
-
-async def test_limit_buy_stays_pending_when_bar_does_not_cross() -> None:
-    b, bus = await _broker()
-    assert bus is not None
-
-    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
-    # Bar stays above the limit — no cross, order remains pending.
-    await bus.publish(_bar_event(high=99.0, low=95.0, close=97.0))
-
-    assert await b.get_positions() == []
-
-
-async def test_pending_limit_expires_on_expire_call() -> None:
-    b, bus = await _broker()
-    assert bus is not None
-    callbacks: list = []
-    await b.subscribe_order_updates(lambda r: callbacks.append(r))
-
-    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
-    expired = await b.expire_pending_orders()
-
-    assert expired == 1
-    assert any(c.status == OrderStatus.EXPIRED for c in callbacks)
-
-
 async def _fills(b: PaperBrokerAdapter) -> list:
     fills: list = []
     await b.subscribe_order_updates(lambda r: fills.append(r))
@@ -379,21 +333,6 @@ async def test_coarser_bar_does_not_close_but_next_1m_does() -> None:
     await bus.publish(_bar_event(high=100.5, low=97.5))
     assert await b.get_positions() == []
     assert fills[-1].filled_price == pytest.approx(98.0)
-
-
-async def test_coarser_bar_does_not_fill_pending_limit() -> None:
-    b, bus = await _broker()
-    assert bus is not None
-    fills = await _fills(b)
-    await bus.publish(_bar_event(high=100.2, low=99.8))
-    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
-
-    await bus.publish(_bar_event(high=95.0, low=89.0, interval="4h"))
-    assert await b.get_positions() == []
-
-    await bus.publish(_bar_event(high=95.0, low=89.5))
-    assert len(await b.get_positions()) == 1
-    assert fills[-1].filled_price == pytest.approx(90.0)
 
 
 async def test_finest_interval_is_per_symbol() -> None:
@@ -438,18 +377,6 @@ async def test_signal_bar_does_not_close_entry_made_by_its_handler() -> None:
 
     await bus.publish(_bar_event(high=101.0, low=97.0))
     assert await b.get_positions() == []
-
-
-async def test_limit_filled_on_bar_is_still_checked_same_bar() -> None:
-    """A pending LIMIT that existed before the bar fills, then that bar may hit its SL."""
-    b, bus = await _broker()
-    assert bus is not None
-    fills = await _fills(b)
-    await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0, sl=85.0))
-    await bus.publish(_bar_event(high=95.0, low=84.0, open=92.0))
-    assert await b.get_positions() == []
-    filled = [f.filled_price for f in fills if f.status == OrderStatus.FILLED]
-    assert filled == pytest.approx([90.0, 85.0])
 
 
 async def test_long_sl_gap_fills_at_open() -> None:
@@ -499,3 +426,13 @@ async def test_short_sl_reopen_gap_matches_prod() -> None:
     await b.submit_order(_order(OrderSide.SELL, price=7665.87, sl=7680.92, tp=7651.25))
     await bus.publish(_bar_event(high=7698.5, low=7690.0, open=7690.0))
     assert fills[-1].filled_price == pytest.approx(7690.0 * 1.00005)
+
+
+async def test_a_limit_order_is_rejected() -> None:
+    """Paper fills market orders only; any other type is rejected at submit."""
+    b, _ = await _broker()
+
+    result = await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))
+
+    assert result.status == OrderStatus.REJECTED
+    assert await b.get_positions() == []

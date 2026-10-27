@@ -161,10 +161,6 @@ class ExnessSessionCalendarAdapter(ITradingCalendarPort):
     def calendar_id(self) -> str:
         return self._calendar_id
 
-    @property
-    def tz(self) -> ZoneInfo:
-        return _UTC
-
     def _spans(self, start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:
         """Open spans ``[open, close)`` covering at least a week either side of the window.
 

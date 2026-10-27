@@ -93,40 +93,13 @@ async def test_market_round_trip_net_is_gross_minus_both_commissions() -> None:
     exit_result = await b.submit_order(_order(OrderSide.SELL, qty=10, price=110.0))
     # gross = (110-100)*10 = 100; entry_comm = 1.0; exit_comm = 110*10*0.001 = 1.1.
     assert exit_result.commission == pytest.approx(1.1)
-    assert (await b.get_balance()).available_balance == pytest.approx(
-        _INITIAL + 100.0 - 1.0 - 1.1
-    )
+    assert (await b.get_balance()).available_balance == pytest.approx(_INITIAL + 100.0 - 1.0 - 1.1)
 
 
 # --- Path 2: LIMIT immediate --------------------------------------------------
 
 
-async def test_limit_immediate_debits_commission() -> None:
-    b, _bus, _fills = await _broker()
-    b.set_current_price(_SYM, 99.0)  # market below limit → BUY crosses immediately
-    result = await b.submit_order(
-        _order(OrderSide.BUY, qty=10, price=100.0, order_type=OrderType.LIMIT)
-    )
-    assert result.status == OrderStatus.FILLED
-    assert result.commission == pytest.approx(1.0)
-    assert (await b.get_balance()).available_balance == pytest.approx(_INITIAL - 1.0)
-
-
 # --- Path 3: LIMIT cross on a future bar --------------------------------------
-
-
-async def test_limit_cross_on_bar_debits_commission() -> None:
-    b, bus, fills = await _broker()
-    b.set_current_price(_SYM, 105.0)  # above limit → no immediate cross, goes pending
-    submit = await b.submit_order(
-        _order(OrderSide.BUY, qty=10, price=100.0, order_type=OrderType.LIMIT)
-    )
-    assert submit.status == OrderStatus.SUBMITTED
-    await bus.publish(_bar(high=106.0, low=99.0, close=101.0))  # low crosses 100
-    filled = [f for f in fills if f.status == OrderStatus.FILLED]
-    assert len(filled) == 1
-    assert filled[0].commission == pytest.approx(1.0)
-    assert (await b.get_balance()).available_balance == pytest.approx(_INITIAL - 1.0)
 
 
 # --- Path 4: synthetic SL/TP exit (risk #1 — the easy path to miss) -----------
@@ -141,9 +114,7 @@ async def test_synthetic_tp_exit_debits_commission() -> None:
     # exit fill at TP 110 → commission 110*10*0.001 = 1.1.
     assert exit_fills[0].commission == pytest.approx(1.1)
     # balance = initial - entry_comm(1.0) + gross(100) - exit_comm(1.1).
-    assert (await b.get_balance()).available_balance == pytest.approx(
-        _INITIAL + 100.0 - 1.0 - 1.1
-    )
+    assert (await b.get_balance()).available_balance == pytest.approx(_INITIAL + 100.0 - 1.0 - 1.1)
     assert (await b.get_positions()) == []
 
 

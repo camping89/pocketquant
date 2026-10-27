@@ -90,7 +90,6 @@ async def run_single(
         name=config.strategy_code,
         symbol=config.symbol,
         interval=config.interval,
-        trigger="bar",
         broker="paper",
         parameters={**config.parameters},
         contract_spec=config.contract_spec,

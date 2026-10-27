@@ -33,7 +33,3 @@ def set_simulation_time(timestamp: datetime) -> None:
 
 def clear_simulation_time() -> None:
     _simulated_time.set(None)
-
-
-def is_simulation_active() -> bool:
-    return _simulated_time.get() is not None

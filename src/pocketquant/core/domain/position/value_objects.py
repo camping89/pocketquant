@@ -9,7 +9,3 @@ class PnL:
     @property
     def total(self) -> float:
         return self.unrealized + self.realized
-
-    @property
-    def is_profitable(self) -> bool:
-        return self.total > 0

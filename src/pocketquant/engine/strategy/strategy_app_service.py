@@ -20,7 +20,6 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.domain.position import TradeClosedEvent
-from pocketquant.core.domain.quote.events import QuoteReceivedEvent
 from pocketquant.core.domain.risk import PositionCalculatorDomainService
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
@@ -32,6 +31,9 @@ if TYPE_CHECKING:
     from pocketquant.engine.execution.risk_check import RiskCheckHandler
 
 logger = structlog.get_logger(__name__)
+
+# Stop distance used for sizing when a signal carries no stop-loss price.
+_FALLBACK_SL_PCT = 0.01
 
 
 class StrategyAppService:
@@ -210,19 +212,6 @@ class StrategyAppService:
         """
         return self._configs.get(sid)
 
-    def get_strategies(self) -> list[dict]:
-        return [
-            {
-                "id": s.id,
-                "name": s.config.name,
-                "symbol": s.config.symbol,
-                "interval": s.config.interval,
-                "broker": s.config.broker,
-                "is_running": s.is_running,
-            }
-            for s in self._strategies.values()
-        ]
-
     def get_strategy(self, strategy_id: str) -> IStrategyService | None:
         return self._strategies.get(strategy_id)
 
@@ -237,7 +226,7 @@ class StrategyAppService:
 
     @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        strategies = self._find_strategies(event.symbol, event.interval, trigger="bar")
+        strategies = self._find_strategies(event.symbol, event.interval)
 
         for strategy in strategies:
             signal = None
@@ -266,35 +255,6 @@ class StrategyAppService:
                 )
                 if signal:
                     await self._notify_rejected(strategy, str(e))
-
-    @event_handler(QuoteReceivedEvent)
-    async def _on_quote_received(self, event: QuoteReceivedEvent) -> None:
-        strategies = self._find_strategies(event.symbol, trigger="tick")
-
-        for strategy in strategies:
-            try:
-                tick = {
-                    "symbol": event.symbol,
-                    "price": event.price,
-                    "volume": event.volume,
-                    "timestamp": event.timestamp,
-                }
-
-                order = await strategy.on_quote_received(tick)
-
-                if order:
-                    broker = self._brokers.get(strategy.id)
-                    if broker:
-                        result = await self._order_app_service.submit(order, broker)
-                        if not result.is_success:
-                            await strategy.on_order_rejected(result.error_message or "rejected")
-
-            except Exception as e:
-                logger.error(
-                    "strategy_on_tick_error",
-                    strategy_id=strategy.id,
-                    error=str(e),
-                )
 
     @event_handler(OrderFilledEvent)
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
@@ -336,22 +296,15 @@ class StrategyAppService:
                 error=str(e),
             )
 
-    def _find_strategies(
-        self,
-        symbol: str,
-        interval: str | None = None,
-        trigger: str = "bar",
-    ) -> list[IStrategyService]:
-        """Find strategies matching composite symbol/interval/trigger."""
+    def _find_strategies(self, symbol: str, interval: str) -> list[IStrategyService]:
+        """Find running strategies on this composite symbol and interval."""
         matches = []
         for strategy in self._strategies.values():
             if not strategy.is_running:
                 continue
             if strategy.config.symbol != symbol:
                 continue
-            if interval and strategy.config.interval != interval:
-                continue
-            if strategy.config.trigger != trigger:
+            if strategy.config.interval != interval:
                 continue
             matches.append(strategy)
         return matches
@@ -385,9 +338,9 @@ class StrategyAppService:
             return
 
         stop_loss = signal.stop_loss_price or (
-            current_price * (1 - strategy.config.orders.stop_loss.distance_percent)
+            current_price * (1 - _FALLBACK_SL_PCT)
             if signal.direction == Direction.LONG
-            else current_price * (1 + strategy.config.orders.stop_loss.distance_percent)
+            else current_price * (1 + _FALLBACK_SL_PCT)
         )
 
         calc = PositionCalculatorDomainService.calculate(
@@ -434,19 +387,13 @@ class StrategyAppService:
     ) -> OrderAggregate:
         side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
 
-        order_type = (
-            OrderType.MARKET if strategy.config.orders.entry_type == "market" else OrderType.LIMIT
-        )
-
-        price = signal.entry_price if order_type == OrderType.LIMIT else current_price
-
         return OrderAggregate.create(
             subscription_id=strategy.id,
             symbol=signal.symbol,
             side=side,
-            order_type=order_type,
+            order_type=OrderType.MARKET,
             quantity=size,
-            price=price,
+            price=current_price,
             sl_price=signal.stop_loss_price,
             tp_price=signal.take_profit_price,
         )

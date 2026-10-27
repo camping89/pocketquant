@@ -56,10 +56,6 @@ class CmeGlobexCalendarAdapter(ITradingCalendarPort):
     def calendar_id(self) -> str:
         return CALENDAR_CME_GLOBEX_EQUITY
 
-    @property
-    def tz(self) -> ZoneInfo:
-        return _TZ
-
     # --- schedule access -------------------------------------------------
 
     @functools.lru_cache(maxsize=64)  # noqa: B019 — APP-scoped singleton, bounded by maxsize

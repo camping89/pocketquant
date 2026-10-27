@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Protocol
 
-from pocketquant.core.domain.order import OrderAggregate, OrderSide
+from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 
 
@@ -22,12 +22,12 @@ class IStrategyService(ABC):
     """Abstract base class for trading strategies.
 
     Strategies implement trading logic and generate signals based on
-    market data. The StrategyAppService calls hooks based on the trigger type.
+    completed bars. The StrategyAppService calls the hooks below.
 
     Lifecycle:
         1. __init__(config) - Initialize with configuration
         2. on_start() - Called when strategy starts
-        3. on_bar_completed()/on_quote_received() - Called on market data
+        3. on_bar_completed() - Called on each completed bar
         4. on_order_filled() - Called when orders are filled
         5. on_stop() - Called when strategy stops
     """
@@ -59,20 +59,6 @@ class IStrategyService(ABC):
         """
         ...
 
-    async def on_quote_received(self, tick: dict) -> OrderAggregate | None:
-        """Process tick for intra-bar adjustments (optional).
-
-        Override this for tick-triggered strategies or for managing
-        trailing stops and dynamic exits.
-
-        Args:
-            tick: Quote tick data with keys: price, bid, ask, timestamp
-
-        Returns:
-            Order modification if needed, None otherwise
-        """
-        return None
-
     async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
         """Called when an order is filled (optional).
 
@@ -89,6 +75,3 @@ class IStrategyService(ABC):
     async def on_order_rejected(self, reason: str) -> None:
         """Called when an entry signal ends without a fill (risk, size, minimum, broker reject)."""
         return None
-
-    def get_parameter(self, key: str, default: object = None) -> object:
-        return self.config.parameters.get(key, default)

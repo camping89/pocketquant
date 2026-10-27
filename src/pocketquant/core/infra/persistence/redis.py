@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -114,17 +113,3 @@ class Cache:
     async def exists(self, key: str) -> bool:
         client = self.get_client()
         return bool(await client.exists(key))
-
-    async def get_or_set(
-        self,
-        key: str,
-        factory: Callable,
-        ttl: int | timedelta | None = None,
-    ) -> Any:
-        value = await self.get(key)
-        if value is not None:
-            return value
-
-        value = await factory()
-        await self.set(key, value, ttl)
-        return value

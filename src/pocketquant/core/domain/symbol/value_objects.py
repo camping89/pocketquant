@@ -82,15 +82,3 @@ DEFAULT_CALENDAR_BY_ASSET_CLASS: dict[AssetClass, str] = {
     AssetClass.INDEX_FUTURE: CALENDAR_CME_GLOBEX_EQUITY,
     AssetClass.CFD: CALENDAR_EXNESS_FX,
 }
-
-DEFAULT_SPEC_BY_ASSET_CLASS: dict[AssetClass, ContractSpec] = {
-    AssetClass.CRYPTO_SPOT: LINEAR_SPEC,
-    AssetClass.CRYPTO_PERP: LINEAR_SPEC,
-    # Per-symbol multipliers (ES 50, NQ 20, YM 5) are set at seed time; this is
-    # only the shape every index future shares.
-    AssetClass.INDEX_FUTURE: ContractSpec(
-        multiplier=1.0, tick_size=0.25, lot_step=1.0, currency="USD"
-    ),
-    # Per-instrument tick sizes are set at seed time.
-    AssetClass.CFD: LINEAR_SPEC,
-}

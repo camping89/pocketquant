@@ -223,7 +223,6 @@ async def _run_backtest(
         name=_CODE,
         symbol=_SYM,
         interval="1m",
-        trigger="bar",
         broker="paper",
         parameters={
             "direction": direction,

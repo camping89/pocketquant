@@ -51,14 +51,6 @@ class Quote(BaseModel):
         return cls(**data)
 
 
-class QuoteSubscription(BaseModel):
-    symbol: str = Field(..., description="Composite symbol {code}:{exchange}")
-
-    @property
-    def key(self) -> str:
-        return self.symbol.upper()
-
-
 class QuoteTick(BaseModel):
     # Composite symbol ``{code}:{exchange}``
     symbol: str
@@ -71,31 +63,5 @@ class QuoteTick(BaseModel):
             "symbol": self.symbol.upper(),
             "timestamp": self.timestamp,
             "price": self.price,
-            "volume": self.volume,
-        }
-
-
-class AggregatedBar(BaseModel):
-    # Composite symbol ``{code}:{exchange}``
-    symbol: str
-    interval: str
-    bar_start: dt
-    bar_end: dt
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-    tick_count: int
-
-    def to_ohlcv_dict(self) -> dict[str, Any]:
-        return {
-            "symbol": self.symbol.upper(),
-            "interval": self.interval,
-            "datetime": self.bar_start,
-            "open": self.open,
-            "high": self.high,
-            "low": self.low,
-            "close": self.close,
             "volume": self.volume,
         }

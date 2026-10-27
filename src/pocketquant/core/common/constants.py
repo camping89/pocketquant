@@ -29,16 +29,13 @@ CACHE_KEY_DATA_LAG = "data_lag:{symbol}"
 
 # Cache time-to-live (seconds)
 TTL_QUOTE_LATEST = 60
-TTL_BAR_CURRENT = 300
 TTL_OHLCV_QUERY = 300
 # Five missed minute checks: a stopped job lets the flag lapse to "unknown"
 # rather than leave a stale reading on screen.
 TTL_DATA_LAG = 300
-TTL_DEFAULT = 3600
 
 # System constraints
 LIMIT_TVDATAFEED_MAX_BARS = 5000
-LIMIT_BULK_SYNC_MAX = 50
 LIMIT_OHLCV_QUERY_MAX = 5000
 
 # HTTP header names

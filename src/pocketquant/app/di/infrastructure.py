@@ -56,7 +56,7 @@ class InfrastructureProvider(Provider):
 
     @provide(scope=Scope.APP)
     def get_event_bus(self) -> EventBus:
-        return EventBus(max_history=100)
+        return EventBus()
 
     @provide(scope=Scope.APP)
     async def get_database(self, settings: Settings) -> AsyncIterator[Database]:

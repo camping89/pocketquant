@@ -72,7 +72,6 @@ def _config(sid: str = "strat-1") -> StrategyConfig:
         name=sid,
         symbol="BTCUSDT:BINANCE",
         interval="1m",
-        trigger="bar",
         broker="paper",
     )
 

@@ -91,12 +91,6 @@ class Symbol(BaseModel):
             contract_spec=contract_spec or LINEAR_SPEC,
         )
 
-    def deactivate(self) -> None:
-        self.is_active = False
-
-    def activate(self) -> None:
-        self.is_active = True
-
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to MongoDB document."""
         return {

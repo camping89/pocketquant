@@ -34,9 +34,7 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     return epoch + timedelta(seconds=aligned_seconds)
 
 
-def is_bar_aligned(
-    timestamp: datetime, interval: Interval, calendar: ITradingCalendarPort
-) -> bool:
+def is_bar_aligned(timestamp: datetime, interval: Interval, calendar: ITradingCalendarPort) -> bool:
     """True when ``timestamp`` is the open instant of its bar on ``calendar``.
 
     The grid belongs to the symbol's calendar, not to the clock: a session that
@@ -111,9 +109,6 @@ class BarBuilderDomainService:
         self.tick_count += 1
         return True
 
-    def is_complete(self, current_time: datetime) -> bool:
-        return self.bar_end is not None and current_time >= self.bar_end
-
     def is_empty(self) -> bool:
         return self.tick_count == 0
 
@@ -130,18 +125,3 @@ class BarBuilderDomainService:
             "volume": self.volume,
             "tick_count": self.tick_count,
         }
-
-    @classmethod
-    def create_for_tick(
-        cls, symbol: str, interval: Interval, timestamp: datetime
-    ) -> BarBuilderDomainService:
-        """Factory to create a bar builder aligned to the tick timestamp.
-
-        ``symbol`` is composite ``{code}:{exchange}``.
-        """
-        bar_start = get_bar_start(timestamp, interval)
-        return cls(
-            symbol=symbol,
-            interval=interval,
-            bar_start=bar_start,
-        )

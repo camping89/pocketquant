@@ -283,9 +283,7 @@ async def _fetch_window(
 
     bars: list = []
     cursor_ms = start_ms
-    chunk_idx = 0
     while cursor_ms <= end_ms:
-        chunk_idx += 1
         klines = await fetch_klines(http, code, cfg.interval, cursor_ms, end_ms)
         if not klines:
             break

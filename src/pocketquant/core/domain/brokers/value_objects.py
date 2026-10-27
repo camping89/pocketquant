@@ -41,7 +41,3 @@ class AccountBalance:
     currency: str = "USDT"
     margin_used: float = 0.0
     unrealized_pnl: float = 0.0
-
-    @property
-    def buying_power(self) -> float:
-        return self.available_balance

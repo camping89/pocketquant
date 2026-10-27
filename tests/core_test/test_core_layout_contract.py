@@ -13,7 +13,6 @@ import pytest
 # Every subpackage that must exist in the new layout.
 NEW_MODULES = [
     # ex-concepts merged into domain
-    "pocketquant.core.domain.quote",
     "pocketquant.core.domain.risk",
     "pocketquant.core.domain.strategy",
     "pocketquant.core.domain.strategy.services.hitnrun2_strategy_service",
@@ -23,7 +22,6 @@ NEW_MODULES = [
     "pocketquant.core.infra.persistence",
     "pocketquant.core.infra.persistence.repositories",
     "pocketquant.core.infra.scheduling",
-    "pocketquant.core.infra.http_client",
     # untouched
     "pocketquant.core.common",
     "pocketquant.core.domain",

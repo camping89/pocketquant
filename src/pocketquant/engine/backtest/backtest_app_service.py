@@ -124,11 +124,6 @@ class BacktestAppService:
             with structlog.contextvars.bound_contextvars(**{BACKTEST_RUN_ID: run_id}):
                 replay_stats = await self._replay_engine.replay(config, bars_with_price)
 
-            # Expire any LIMIT-like orders still pending (forward-test parity)
-            expired = await self._broker.expire_pending_orders()
-            if expired:
-                logger.info("backtest_pending_expired", run_id=run_id, expired=expired)
-
             completed_at = datetime.now(UTC)
 
             positions = await self._broker.get_positions()

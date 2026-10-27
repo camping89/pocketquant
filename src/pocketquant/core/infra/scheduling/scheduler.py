@@ -22,15 +22,12 @@ from apscheduler.events import (
     EVENT_JOB_MISSED,
 )
 from apscheduler.executors.asyncio import AsyncIOExecutor
-from apscheduler.jobstores.base import JobLookupError
 from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 
 from pocketquant.core.common.logging import get_logger
-from pocketquant.core.common.time import to_utc_iso
 from pocketquant.core.config import Settings
 
 if TYPE_CHECKING:
@@ -144,51 +141,6 @@ class JobScheduler:
             self._scheduler = None
             logger.info("scheduler.stopped")
 
-    def add_interval_job(
-        self,
-        func: Callable | str,
-        *,
-        job_id: str,
-        seconds: int | None = None,
-        minutes: int | None = None,
-        hours: int | None = None,
-        start_date: datetime | None = None,
-        **kwargs: Any,
-    ) -> str:
-        """Register an interval job. `func` must be a text reference (e.g. "pkg.mod:func")
-        when using a persistent jobstore — closures cannot be serialized."""
-        if self._scheduler is None:
-            raise RuntimeError("Scheduler not initialized.")
-
-        trigger_kwargs: dict[str, Any] = {}
-        if seconds is not None:
-            trigger_kwargs["seconds"] = seconds
-        if minutes is not None:
-            trigger_kwargs["minutes"] = minutes
-        if hours is not None:
-            trigger_kwargs["hours"] = hours
-        if start_date is not None:
-            trigger_kwargs["start_date"] = start_date
-
-        trigger = IntervalTrigger(**trigger_kwargs)
-
-        self._scheduler.add_job(
-            func,
-            trigger=trigger,
-            id=job_id,
-            replace_existing=True,
-            kwargs=kwargs,
-        )
-
-        logger.info(
-            "scheduler.registered_interval_job",
-            job_id=job_id,
-            interval_seconds=seconds,
-            interval_minutes=minutes,
-            interval_hours=hours,
-        )
-        return job_id
-
     def add_cron_job(
         self,
         func: Callable | str,
@@ -289,18 +241,6 @@ class JobScheduler:
         logger.info("scheduler.registered_one_off_job", job_id=job_id, run_at=run_at)
         return job_id
 
-    def remove_job(self, job_id: str) -> bool:
-        if self._scheduler is None:
-            return False
-
-        try:
-            self._scheduler.remove_job(job_id)
-            logger.info("scheduler.removed_job", job_id=job_id)
-            return True
-        except JobLookupError:
-            logger.warning("scheduler.job_not_found", job_id=job_id)
-            return False
-
     def get_raw_jobs(self) -> list[Any]:
         """Registered APScheduler job objects, for callers that need the trigger.
 
@@ -310,41 +250,3 @@ class JobScheduler:
         if self._scheduler is None:
             return []
         return list(self._scheduler.get_jobs())
-
-    async def get_jobs(self) -> list[dict[str, Any]]:
-        if self._scheduler is None:
-            return []
-
-        raw_jobs = self._scheduler.get_jobs()
-        job_ids = [j.id for j in raw_jobs]
-
-        last_runs: dict[str, dict[str, Any]] = {}
-        if self._history_repo and job_ids:
-            try:
-                last_runs = await self._history_repo.get_latest_by_job_ids(job_ids)
-            except Exception:
-                logger.warning("scheduler.get_last_runs_failed", exc_info=True)
-
-        jobs = []
-        for job in raw_jobs:
-            entry: dict[str, Any] = {
-                "id": job.id,
-                "name": job.name,
-                "next_run": to_utc_iso(job.next_run_time),
-                "trigger": str(job.trigger),
-                "last_run": last_runs.get(job.id),
-            }
-            jobs.append(entry)
-        return jobs
-
-    def run_job_now(self, job_id: str) -> bool:
-        if self._scheduler is None:
-            return False
-
-        job = self._scheduler.get_job(job_id)
-        if job:
-            job.modify(next_run_time=datetime.now(UTC))
-            logger.info("scheduler.triggered_job", job_id=job_id)
-            return True
-
-        return False

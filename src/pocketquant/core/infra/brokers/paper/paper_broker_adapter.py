@@ -1,13 +1,9 @@
 """Paper broker implementation for simulated trading + backtesting.
 
-State machine and LIMIT-pending behavior aligned with Backtrader / QuantConnect.
+Only MARKET orders fill; every order is terminal when ``submit_order`` returns.
 
-Order lifecycle: SUBMITTED → FILLED | CANCELLED | REJECTED | EXPIRED
+Order lifecycle: SUBMITTED → FILLED | REJECTED
    - MARKET           : SUBMITTED → FILLED  (immediate)
-   - LIMIT reachable  : SUBMITTED → FILLED  (immediate, ``limit_immediate``)
-   - LIMIT pending    : SUBMITTED → (waits) → FILLED (``limit_cross``)
-                                            | CANCELLED (``user_cancel``)
-                                            | EXPIRED   (``end_of_run``)
    - REJECT           : SUBMITTED → REJECTED (``insufficient_balance`` / etc.)
 
 Every transition emits an ``OrderEvent`` to subscribers via
@@ -16,11 +12,10 @@ Every transition emits an ``OrderEvent`` to subscribers via
 
 Threading contract: subscriber callbacks are dispatched OUTSIDE ``self._lock``
 so they may freely re-enter broker methods without deadlock. State mutations
-(positions, balance, pending queue, ``_orders``) happen inside the lock.
+(positions, balance, ``_orders``) happen inside the lock.
 """
 
 import asyncio
-from dataclasses import dataclass
 from datetime import datetime
 
 from pocketquant.core.common.constants import INTERVAL_SECONDS
@@ -36,15 +31,11 @@ from pocketquant.core.domain.brokers.broker_port import (
 from pocketquant.core.domain.brokers.events import (
     REASON_AUTO_SL,
     REASON_AUTO_TP,
-    REASON_END_OF_RUN,
     REASON_INSUFFICIENT_BALANCE,
-    REASON_INVALID_LIMIT_PRICE,
-    REASON_LIMIT_CROSS,
-    REASON_LIMIT_IMMEDIATE,
     REASON_MARKET_FILL,
     REASON_NO_MARKET_PRICE,
     REASON_SUBMIT,
-    REASON_USER_CANCEL,
+    REASON_UNSUPPORTED_ORDER_TYPE,
     OrderEvent,
     OrderEventCallback,
 )
@@ -64,26 +55,11 @@ from pocketquant.core.domain.position import (
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.domain.trading import CommissionModel, PercentageCommissionModel
 
-# STOP_LIMIT / STOP_MARKET share the LIMIT pending path until real STOP
-# semantics (price-rises-through trigger) are implemented.
-# TODO(phase: future): real STOP semantics — BUY STOP fires when bar.high >= stop
-_LIMIT_LIKE_TYPES = frozenset({OrderType.LIMIT, OrderType.STOP_LIMIT, OrderType.STOP_MARKET})
-
 # (from_status, to_status, reason, when) transitions emitted after a lock section.
 _StatusEvents = list[tuple[OrderStatus | None, OrderStatus, str, datetime]]
 # What a fill-handler hands back to submit_order: the result, its status
 # transitions, and any trade closures to forward after the fill notify.
 _FillOutcome = tuple[OrderResult, _StatusEvents, list[TradeClosedEvent]]
-
-
-@dataclass
-class _PendingOrder:
-    """Queue entry for a LIMIT-like order waiting to fill on a future bar."""
-
-    order: OrderAggregate
-    broker_order_id: str
-    submitted_at: datetime
-    limit_price: float
 
 
 class PaperBrokerAdapter(IBrokerPort):
@@ -95,7 +71,6 @@ class PaperBrokerAdapter(IBrokerPort):
     - In-memory position tracking
     - Order callback subscription (fill results)
     - Order *event* (lifecycle) callback subscription — paper-broker only
-    - LIMIT non-fill persistence: orders queued and expired at end of run
     - Optional SL/TP auto-fill: when an ``event_bus`` is supplied, the broker
       subscribes to ``BarCompletedEvent`` on ``connect()`` and emits synthetic
       exit fills when ``bar.high``/``bar.low`` crosses a tracked position's
@@ -141,10 +116,7 @@ class PaperBrokerAdapter(IBrokerPort):
         self._trade_callbacks: list[TradeCallback] = []
         self._event_callbacks: list[OrderEventCallback] = []
         # Full lifecycle log per order_id — collectors snapshot this at finalize.
-        # NOTE: a pending LIMIT carries only the SUBMITTED event until terminal.
         self._order_events: dict[str, list[OrderEvent]] = {}
-        # LIMIT-like orders awaiting fill.
-        self._pending_orders: dict[str, _PendingOrder] = {}
         self._lock = asyncio.Lock()
         self._connected = False
         self._bar_subscribed = False
@@ -183,7 +155,7 @@ class PaperBrokerAdapter(IBrokerPort):
             self._bar_subscribed = False
 
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
-        """Route order to MARKET fill, immediate LIMIT, or pending LIMIT queue.
+        """Fill a MARKET order at the current price; reject anything else.
 
         Lock is held only for state mutation; ``OrderEvent`` and ``OrderResult``
         callbacks fire after release so subscribers may re-enter the broker.
@@ -196,10 +168,7 @@ class PaperBrokerAdapter(IBrokerPort):
             (None, OrderStatus.SUBMITTED, REASON_SUBMIT, now),
         ]
 
-        if order.order_type in _LIMIT_LIKE_TYPES:
-            result, more_events, trades = await self._handle_limit(order, broker_order_id, now)
-        else:
-            result, more_events, trades = await self._handle_market(order, broker_order_id, now)
+        result, more_events, trades = await self._handle_market(order, broker_order_id, now)
         pending_events.extend(more_events)
 
         # Dispatch events + fill notification AFTER lock-protected mutations.
@@ -216,6 +185,26 @@ class PaperBrokerAdapter(IBrokerPort):
     ) -> _FillOutcome:
         async with self._lock:
             self._orders[str(order.id)] = order
+            if order.order_type is not OrderType.MARKET:
+                return (
+                    OrderResult(
+                        order_id=str(order.id),
+                        broker_order_id=broker_order_id,
+                        status=OrderStatus.REJECTED,
+                        error_message="paper broker fills market orders only",
+                        submitted_at=now,
+                        side=order.side,
+                    ),
+                    [
+                        (
+                            OrderStatus.SUBMITTED,
+                            OrderStatus.REJECTED,
+                            REASON_UNSUPPORTED_ORDER_TYPE,
+                            now,
+                        )
+                    ],
+                    [],
+                )
             try:
                 base_price = order.price if order.price else self._get_market_price(order)
             except ValueError as e:
@@ -274,155 +263,9 @@ class PaperBrokerAdapter(IBrokerPort):
                 trades,
             )
 
-    async def _handle_limit(
-        self, order: OrderAggregate, broker_order_id: str, now: datetime
-    ) -> _FillOutcome:
-        async with self._lock:
-            self._orders[str(order.id)] = order
-            if order.price is None:
-                return (
-                    OrderResult(
-                        order_id=str(order.id),
-                        broker_order_id=broker_order_id,
-                        status=OrderStatus.REJECTED,
-                        error_message="LIMIT order requires price",
-                        submitted_at=now,
-                        side=order.side,
-                    ),
-                    [
-                        (
-                            OrderStatus.SUBMITTED,
-                            OrderStatus.REJECTED,
-                            REASON_INVALID_LIMIT_PRICE,
-                            now,
-                        )
-                    ],
-                    [],
-                )
-
-            cur = self._current_prices.get(order.symbol.upper())
-            if cur is not None and self._limit_crosses(order.side, order.price, cur):
-                fill_price = self._apply_slippage(order.price, order.side)
-                if not self._can_afford(order, fill_price):
-                    return (
-                        OrderResult(
-                            order_id=str(order.id),
-                            broker_order_id=broker_order_id,
-                            status=OrderStatus.REJECTED,
-                            error_message="Insufficient balance",
-                            submitted_at=now,
-                            side=order.side,
-                        ),
-                        [
-                            (
-                                OrderStatus.SUBMITTED,
-                                OrderStatus.REJECTED,
-                                REASON_INSUFFICIENT_BALANCE,
-                                now,
-                            )
-                        ],
-                        [],
-                    )
-                commission, trades = self._execute_fill_with_commission(order, fill_price)
-                result = OrderResult(
-                    order_id=str(order.id),
-                    broker_order_id=broker_order_id,
-                    status=OrderStatus.FILLED,
-                    filled_quantity=order.quantity,
-                    filled_price=fill_price,
-                    submitted_at=now,
-                    sl_price=order.sl_price,
-                    tp_price=order.tp_price,
-                    side=order.side,
-                    commission=commission,
-                )
-                return (
-                    result,
-                    [(OrderStatus.SUBMITTED, OrderStatus.FILLED, REASON_LIMIT_IMMEDIATE, now)],
-                    trades,
-                )
-
-            self._pending_orders[str(order.id)] = _PendingOrder(
-                order=order,
-                broker_order_id=broker_order_id,
-                submitted_at=now,
-                limit_price=order.price,
-            )
-            return (
-                OrderResult(
-                    order_id=str(order.id),
-                    broker_order_id=broker_order_id,
-                    status=OrderStatus.SUBMITTED,
-                    filled_quantity=0.0,
-                    submitted_at=now,
-                    sl_price=order.sl_price,
-                    tp_price=order.tp_price,
-                    side=order.side,
-                ),
-                [],
-                [],
-            )
-
     async def cancel_order(self, broker_order_id: str) -> bool:
-        """Cancel a pending LIMIT. Idempotent for already-filled orders."""
-        async with self._lock:
-            pending_id: str | None = None
-            for oid, pending in self._pending_orders.items():
-                if pending.broker_order_id == broker_order_id:
-                    pending_id = oid
-                    break
-            if pending_id is None:
-                return True
-            pending = self._pending_orders.pop(pending_id)
-            when = get_current_time()
-            result = OrderResult(
-                order_id=pending_id,
-                broker_order_id=pending.broker_order_id,
-                status=OrderStatus.CANCELLED,
-                filled_quantity=0.0,
-                submitted_at=pending.submitted_at,
-                side=pending.order.side,
-            )
-        await self._emit_event(
-            pending_id,
-            OrderStatus.SUBMITTED,
-            OrderStatus.CANCELLED,
-            REASON_USER_CANCEL,
-            when=when,
-        )
-        await self._notify_callbacks(result)
+        """Nothing to cancel: a paper order is terminal when ``submit_order`` returns."""
         return True
-
-    async def expire_pending_orders(self) -> int:
-        """Mark all still-pending LIMIT orders as EXPIRED. Returns count expired.
-
-        Called by ``BacktestAppService`` after replay completes so each non-fill
-        LIMIT has a terminal state recorded (forward-test parity). OrderResults
-        with status=EXPIRED are delivered via ``subscribe_order_updates``.
-        """
-        async with self._lock:
-            pendings = list(self._pending_orders.values())
-            self._pending_orders.clear()
-            when = get_current_time()
-
-        for pending in pendings:
-            await self._emit_event(
-                str(pending.order.id),
-                OrderStatus.SUBMITTED,
-                OrderStatus.EXPIRED,
-                REASON_END_OF_RUN,
-                when=when,
-            )
-            result = OrderResult(
-                order_id=str(pending.order.id),
-                broker_order_id=pending.broker_order_id,
-                status=OrderStatus.EXPIRED,
-                filled_quantity=0.0,
-                submitted_at=pending.submitted_at,
-                side=pending.order.side,
-            )
-            await self._notify_callbacks(result)
-        return len(pendings)
 
     async def get_positions(self) -> list[PositionAggregate]:
         async with self._lock:
@@ -439,11 +282,7 @@ class PaperBrokerAdapter(IBrokerPort):
             )
 
     def get_order_events(self, order_id: str) -> list[OrderEvent]:
-        """Return the full lifecycle event log for an order (copy).
-
-        A still-pending LIMIT carries only the initial SUBMITTED event until
-        it reaches a terminal state (FILLED / CANCELLED / EXPIRED).
-        """
+        """Return the full lifecycle event log for an order (copy)."""
         return list(self._order_events.get(order_id, []))
 
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
@@ -512,18 +351,6 @@ class PaperBrokerAdapter(IBrokerPort):
         commission = self._commission(fill_price, order.quantity)
         # Price-unit notional on purpose: the shipped margin model, not contract value.
         return fill_price * order.quantity + commission <= self._balance
-
-    @staticmethod
-    def _limit_crosses(side: OrderSide, limit_price: float, market_price: float) -> bool:
-        if side == OrderSide.BUY:
-            return market_price <= limit_price
-        return market_price >= limit_price
-
-    @staticmethod
-    def _limit_crosses_bar(side: OrderSide, limit_price: float, high: float, low: float) -> bool:
-        if side == OrderSide.BUY:
-            return low <= limit_price
-        return high >= limit_price
 
     def _execute_fill(
         self, order: OrderAggregate, fill_price: float, commission: float
@@ -687,14 +514,13 @@ class PaperBrokerAdapter(IBrokerPort):
 
     @event_handler(BarCompletedEvent)
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        """Auto-fill pending LIMITs + SL/TP exits as the bar resolves.
+        """Fill SL/TP exits as the bar resolves.
 
         Only bars of the finest interval seen for the symbol act. A bar acts
         only on positions and orders that existed when it was published, so a
         position a strategy opens on its signal bar is checked from the next
         bar (strategy handlers run first: the broker subscribes LAST, see
-        ``connect``). Order: pending-LIMIT fills first (a LIMIT filled here may
-        be closed by this bar's SL/TP), then SL/TP scans positions.
+        ``connect``).
         """
         secs = INTERVAL_SECONDS[event.interval]
         finest = min(secs, self._finest_interval_s.get(event.symbol, secs))
@@ -703,8 +529,6 @@ class PaperBrokerAdapter(IBrokerPort):
             return
         self._current_prices[event.symbol.upper()] = event.close
         fresh = {p.id for p in self._positions.values() if p.opened_at >= event.occurred_at}
-
-        await self._fill_pending_on_bar(event)
 
         to_close: list[tuple[PositionAggregate, float, OrderSide, str]] = []
         async with self._lock:
@@ -729,66 +553,6 @@ class PaperBrokerAdapter(IBrokerPort):
             for pos in self._positions.values():
                 if not pos.is_closed and pos.symbol == event.symbol:
                     pos.update_price(event.close)
-
-    async def _fill_pending_on_bar(self, event: BarCompletedEvent) -> None:
-        to_fill: list[_PendingOrder] = []
-        async with self._lock:
-            for pending in list(self._pending_orders.values()):
-                if (
-                    pending.order.symbol != event.symbol
-                    or pending.submitted_at >= event.occurred_at
-                ):
-                    continue
-                if self._limit_crosses_bar(
-                    pending.order.side, pending.limit_price, event.high, event.low
-                ):
-                    to_fill.append(pending)
-                    del self._pending_orders[str(pending.order.id)]
-
-        when = get_current_time()
-        for pending in to_fill:
-            fill_price = self._apply_slippage(pending.limit_price, pending.order.side)
-            trades: list[TradeClosedEvent] = []
-            async with self._lock:
-                if not self._can_afford(pending.order, fill_price):
-                    event_args: tuple[OrderStatus, OrderStatus, str] = (
-                        OrderStatus.SUBMITTED,
-                        OrderStatus.REJECTED,
-                        REASON_INSUFFICIENT_BALANCE,
-                    )
-                    result = OrderResult(
-                        order_id=str(pending.order.id),
-                        broker_order_id=pending.broker_order_id,
-                        status=OrderStatus.REJECTED,
-                        error_message="Insufficient balance",
-                        submitted_at=pending.submitted_at,
-                        side=pending.order.side,
-                    )
-                else:
-                    commission, trades = self._execute_fill_with_commission(
-                        pending.order, fill_price
-                    )
-                    event_args = (
-                        OrderStatus.SUBMITTED,
-                        OrderStatus.FILLED,
-                        REASON_LIMIT_CROSS,
-                    )
-                    result = OrderResult(
-                        order_id=str(pending.order.id),
-                        broker_order_id=pending.broker_order_id,
-                        status=OrderStatus.FILLED,
-                        filled_quantity=pending.order.quantity,
-                        filled_price=fill_price,
-                        submitted_at=pending.submitted_at,
-                        sl_price=pending.order.sl_price,
-                        tp_price=pending.order.tp_price,
-                        side=pending.order.side,
-                        commission=commission,
-                    )
-            await self._emit_event(str(pending.order.id), *event_args, when=when)
-            await self._notify_callbacks(result)
-            for trade in trades:
-                await self._notify_trade_callbacks(trade)
 
     def _check_sl_tp(
         self, pos: PositionAggregate, bar: BarCompletedEvent
@@ -876,5 +640,4 @@ class PaperBrokerAdapter(IBrokerPort):
         self._orders.clear()
         self._current_prices.clear()
         self._order_events.clear()
-        self._pending_orders.clear()
         self._finest_interval_s.clear()

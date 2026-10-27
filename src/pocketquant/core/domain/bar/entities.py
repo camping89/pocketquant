@@ -60,10 +60,6 @@ class Bar(BaseModel):
     def __hash__(self) -> int:
         return hash(self.id)
 
-    @property
-    def is_complete(self) -> bool:
-        return self.tick_count > 0
-
     def to_mongo(self) -> dict[str, Any]:
         """Serialize to MongoDB document."""
         return {
