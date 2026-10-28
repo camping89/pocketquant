@@ -1,8 +1,7 @@
 """Background job scheduler — instance-based for DI container.
 
-Uses APScheduler with MongoDBJobStore for distributed coordination across
-multiple processes (e.g. local dev + VPS). Both instances share the same Mongo
-collection; the first to update next_run_time wins each tick.
+Only one scheduler may run at a time. APScheduler 3 does not support two
+schedulers on one job store: jobs run twice or are skipped.
 
 Jobs MUST be passed as text references (e.g. "module.path:func") so they can be
 serialized into Mongo. Module-level coroutine functions only — no closures.
@@ -50,9 +49,7 @@ class JobScheduler:
         self._loop: asyncio.AbstractEventLoop | None = None
 
     def initialize(self, settings: Settings) -> None:
-        # MongoDBJobStore = distributed coordination across processes (VPS + local).
-        # Each tick, scheduler instances race to update next_run_time in Mongo;
-        # the loser's view becomes stale and skips. No extra lock layer needed.
+        # Only one scheduler runs at a time; the Mongo store only keeps jobs across restarts.
         jobstores = {
             "default": MongoDBJobStore(
                 database=settings.mongodb_database,
@@ -96,7 +93,12 @@ class JobScheduler:
         """APScheduler EVENT_JOB_MISSED / EVENT_JOB_MAX_INSTANCES handler.
         Persists a record so silent skips become visible in /runs."""
         status = "skipped_max_instances" if event.code == EVENT_JOB_MAX_INSTANCES else "missed"
-        self._dispatch_skip(event.job_id, event.scheduled_run_time, status, None)
+        # A max-instances event is a submission event: it carries a list of run times.
+        if event.code == EVENT_JOB_MAX_INSTANCES:
+            run_time = event.scheduled_run_times[-1]
+        else:
+            run_time = event.scheduled_run_time
+        self._dispatch_skip(event.job_id, run_time, status, None)
 
     def _on_error(self, event: Any) -> None:
         """APScheduler EVENT_JOB_ERROR handler — captures exceptions raised
@@ -130,9 +132,20 @@ class JobScheduler:
             error=error,
         )
         try:
-            asyncio.run_coroutine_threadsafe(coro, self._loop)
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         except Exception:
             logger.warning("scheduler.listener_dispatch_failed", exc_info=True)
+            return
+
+        def _log_failure(done: Any) -> None:
+            if not done.cancelled() and done.exception() is not None:
+                logger.warning(
+                    "scheduler.record_skip_failed",
+                    job_id=job_id,
+                    error=type(done.exception()).__name__,
+                )
+
+        future.add_done_callback(_log_failure)
 
     def shutdown(self, wait: bool = True) -> None:
         if self._scheduler is not None:

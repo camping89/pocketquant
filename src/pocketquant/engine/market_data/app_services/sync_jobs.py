@@ -638,10 +638,10 @@ async def enqueue_missed_catchups(
     """Enqueue a one-off catch-up run for each CATCHUP_TARGETS job whose last
     success exceeds its per-job ``max_gap``.
 
-    Multi-instance safe: ``add_one_off_job`` uses ``replace_existing=True`` with
-    a stable ``_catchup`` suffix, so a simultaneous resolve on VPS + local-dev
-    overwrites the first call — only one execution. Fresh DB (``last is None``)
-    is treated as "no catch-up needed"; the next cron tick handles the first run.
+    ``add_one_off_job`` uses ``replace_existing=True`` with a stable ``_catchup``
+    suffix, so a repeated resolve replaces the pending catch-up instead of adding
+    one. Fresh DB (``last is None``) is treated as "no catch-up needed"; the next
+    cron tick handles the first run.
 
     Assumes ``scheduler.start()`` has already run by call time (the JobScheduler
     Dishka factory starts the scheduler inside its async-gen yield, which
