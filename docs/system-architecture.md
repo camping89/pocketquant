@@ -226,7 +226,7 @@ All repositories live in `core/infra/persistence/repositories/`, extend `BaseRep
 | `backtest_runs`, `backtest_orders`, `backtest_trades` | Backtest records, keyed by `run_id`. |
 | `safeguards` | One document: the Exness entry pause. |
 | `job_history` | Job run history. |
-| `apscheduler_jobs` | APScheduler's job store; processes sharing a database coordinate through it. |
+| `apscheduler_jobs` | APScheduler's job store. Only one scheduler runs at a time; APScheduler 3 does not support two on one job store. |
 
 ### Symbol removal
 

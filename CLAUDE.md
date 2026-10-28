@@ -23,7 +23,7 @@ One Python package `src/pocketquant/` (subpackages: core, engine, app) + one Vit
   - A new class, port, helper, parameter, flag or config key needs a second real caller today, not a possible one.
   - Delete dead code in the same change; never deprecate and keep.
   - Prefer one 40-line function a reader can follow over five 8-line ones.
-  - When a change needs more code than the code it replaces, stop and ask.
+  - Prefer the simplest design that meets the requirement; a larger diff is fine when it removes complexity or is required by the scope.
 
 ## Reference docs (discover detail here)
 

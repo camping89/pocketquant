@@ -107,4 +107,4 @@ PocketQuant is a personal algorithmic trading platform. It keeps reliable market
 ### NF6: Scale
 
 - One process, one uvicorn worker. Scale vertically.
-- Several processes may share one database only with jobs enabled in exactly one of them (`ENABLE_JOBS=false` elsewhere).
+- Several processes may share one database; only one of them runs the scheduler, because APScheduler 3 does not support two schedulers on one job store.
