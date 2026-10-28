@@ -18,7 +18,9 @@ from pocketquant.app.main_extensions import (
     register_health_checks,
     register_routes,
     start_jobs,
+    start_loop_lag_probe,
     start_quote_feed,
+    stop_loop_lag_probe,
     stop_quote_feed,
     stop_reconcile_loop,
 )
@@ -50,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     try:
         assert_utc_runtime()
+        start_loop_lag_probe(app)
 
         # Expose DB/Cache on app.state for middleware hot-path access
         app.state.database = await container.get(Database)
@@ -74,6 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.exception("application_start_failed")
         raise
     finally:
+        await stop_loop_lag_probe(app)
         # Drain in-flight backtests + stop reconcile FIRST — before quote feed and
         # container.close() (which stops StrategyAppService) — so neither runs
         # against a stopping engine. Drain (not cancel) lets persistence finish.

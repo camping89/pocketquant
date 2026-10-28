@@ -8,6 +8,7 @@ HTTP feature routes. nginx serves the SPA.
 import asyncio
 import os
 import time
+from collections import deque
 from datetime import UTC, datetime
 from functools import partial
 from typing import Any
@@ -180,6 +181,34 @@ async def _cancel(task: asyncio.Task | None) -> None:
             await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
         except (TimeoutError, asyncio.CancelledError):
             pass
+
+
+_LAG_SAMPLE_S = 0.5
+_LAG_WARN_S = 0.25
+_LAG_WINDOW_SAMPLES = 120  # 60 s of 0.5 s samples
+
+
+async def _run_loop_lag_probe(app: FastAPI) -> None:
+    loop = asyncio.get_running_loop()
+    samples: deque[float] = deque(maxlen=_LAG_WINDOW_SAMPLES)
+    while True:
+        started = loop.time()
+        await asyncio.sleep(_LAG_SAMPLE_S)
+        lag = max(0.0, loop.time() - started - _LAG_SAMPLE_S)
+        samples.append(lag)
+        app.state.loop_lag_max_s = round(max(samples), 3)
+        if lag > _LAG_WARN_S:
+            logger.warning("event_loop.lag", lag_s=round(lag, 3))
+
+
+def start_loop_lag_probe(app: FastAPI) -> None:
+    """Sample loop lag every 0.5 s; ``/health`` reports the 60 s maximum."""
+    app.state.loop_lag_max_s = 0.0
+    app.state.loop_lag_task = asyncio.create_task(_run_loop_lag_probe(app))
+
+
+async def stop_loop_lag_probe(app: FastAPI) -> None:
+    await _cancel(getattr(app.state, "loop_lag_task", None))
 
 
 async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
@@ -377,6 +406,7 @@ def register_routes(app: FastAPI, settings) -> None:
         result = await health_coordinator.check_all()
         result["version"] = settings.app_version
         result["environment"] = settings.environment
+        result["event_loop_lag_max_s"] = getattr(app.state, "loop_lag_max_s", 0.0)
         return result
 
     api = APIRouter(
