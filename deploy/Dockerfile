@@ -1,7 +1,7 @@
 # ============================================
 # Stage 1: Builder
 # ============================================
-FROM python:3.14-rc-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN uv sync --frozen --no-dev --no-editable
 # ============================================
 # Stage 2: Runtime
 # ============================================
-FROM python:3.14-rc-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 WORKDIR /app
 
