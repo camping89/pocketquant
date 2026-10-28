@@ -68,7 +68,11 @@ def setup_logging(settings: Settings) -> None:
     else:
         processors = [
             *shared_processors,
-            structlog.dev.ConsoleRenderer(colors=True),
+            structlog.dev.ConsoleRenderer(
+                colors=True,
+                # Tracebacks reach the public deploy output; locals can hold secrets.
+                exception_formatter=structlog.dev.plain_traceback,
+            ),
         ]
 
     structlog.configure(
