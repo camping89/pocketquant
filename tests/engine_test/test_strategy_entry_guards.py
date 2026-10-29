@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 import structlog
@@ -150,7 +151,7 @@ def _bar(
     )
 
 
-def _events(logs: list[dict], name: str) -> list[dict]:
+def _events(logs: list[Any], name: str) -> list[Any]:
     return [entry for entry in logs if entry["event"] == name]
 
 
@@ -164,7 +165,7 @@ async def _positions(broker: PaperBrokerAdapter, sid: str = "a") -> list:
     [("1m", 10), ("5m", 30), ("15m", 60), ("1h", 120), ("4h", 300), ("1d", 600), ("1w", 600)],
 )
 async def test_stale_budget(interval: str, budget: int, offset: int) -> None:
-    engine, bus, broker, _ = await _engine(interval)
+    _, bus, broker, _ = await _engine(interval)
     event = _bar(_T, interval)
     assert event.bar_end is not None
     set_simulation_time(event.bar_end + timedelta(seconds=budget + offset))
@@ -182,7 +183,7 @@ async def test_stale_budget(interval: str, budget: int, offset: int) -> None:
 
 
 async def test_a_gap_flagged_bar_skips_the_entry() -> None:
-    engine, bus, broker, _ = await _engine()
+    _, bus, broker, _ = await _engine()
     set_simulation_time(_T + timedelta(seconds=61))
 
     with structlog.testing.capture_logs() as logs:
@@ -193,7 +194,7 @@ async def test_a_gap_flagged_bar_skips_the_entry() -> None:
 
 
 async def test_a_non_successor_bar_skips_the_entry() -> None:
-    engine, bus, broker, _ = await _engine()
+    _, bus, _, _ = await _engine()
     set_simulation_time(_T + timedelta(seconds=61))
     await bus.publish(_bar(_T))
     later = _T + timedelta(minutes=2)
@@ -232,7 +233,7 @@ async def test_paper_sl_still_fills_on_a_stale_bar() -> None:
 
 
 async def test_a_backtest_event_never_skips() -> None:
-    engine, bus, broker, _ = await _engine()
+    _, bus, broker, _ = await _engine()
     set_simulation_time(_T + timedelta(days=1))
 
     await bus.publish(_bar(_T, live=False))
@@ -241,7 +242,7 @@ async def test_a_backtest_event_never_skips() -> None:
 
 
 async def test_a_seen_bar_is_ignored() -> None:
-    engine, bus, broker, _ = await _engine()
+    engine, bus, _, _ = await _engine()
     set_simulation_time(_T + timedelta(seconds=61))
     event = _bar(_T)
 
@@ -308,7 +309,7 @@ async def test_an_expired_lease_skips_the_entry() -> None:
 
 
 async def test_one_latency_line_per_live_signal() -> None:
-    engine, bus, broker, _ = await _engine()
+    _, bus, _, _ = await _engine()
     set_simulation_time(_T + timedelta(seconds=61))
 
     with structlog.testing.capture_logs() as logs:
@@ -329,7 +330,7 @@ async def test_one_latency_line_per_live_signal() -> None:
     ):
         assert key in line
 
-    backtest_engine, backtest_bus, _, _ = await _engine()
+    _, backtest_bus, _, _ = await _engine()
     with structlog.testing.capture_logs() as logs:
         await backtest_bus.publish(_bar(_T, live=False))
     assert _events(logs, "live.signal_latency") == []

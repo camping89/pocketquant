@@ -46,8 +46,10 @@ class _StoredBars:
     async def find(
         self, symbol: str, interval: Interval, start_date=None, end_date=None, limit: int = 5000
     ) -> list[Bar]:
-        found = [b for b in self._bars if end_date is None or b.datetime <= end_date]
-        return sorted(found, key=lambda b: b.datetime, reverse=True)[:limit]
+        found = [
+            b for b in self._bars if b.datetime and (end_date is None or b.datetime <= end_date)
+        ]
+        return sorted(found, key=lambda b: b.datetime or _T, reverse=True)[:limit]
 
 
 class _Factory:
@@ -190,7 +192,7 @@ async def test_a_long_mirror_row_restores_direction_long() -> None:
 
 async def test_a_hole_after_the_stored_bars_warns_once_and_gap_skips() -> None:
     with structlog.testing.capture_logs() as logs:
-        engine, bus, fills = await _engine(_flat(10, _T - 5 * _MINUTE), _AlwaysLong)
+        _, bus, fills = await _engine(_flat(10, _T - 5 * _MINUTE), _AlwaysLong)
     assert len([e for e in logs if e["event"] == "strategy.warmup_incomplete"]) == 1
 
     set_simulation_time(_T + _MINUTE + timedelta(seconds=1))

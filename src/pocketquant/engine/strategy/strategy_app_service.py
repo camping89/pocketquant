@@ -261,14 +261,16 @@ class StrategyAppService:
             step = timedelta(seconds=INTERVAL_SECONDS[config.interval])
             calendar = await self._calendar_factory.for_symbol(config.symbol)
             bars = await self._closed_bars(config.symbol, interval, step, now)
+            last = bars[-1].datetime if bars else None
             if (
                 now.second < _WARMUP_READY_SECOND
-                and bars
-                and bars[-1].datetime + step < calendar.bar_start(now, interval)
+                and last is not None
+                and last + step < calendar.bar_start(now, interval)
             ):
                 await asyncio.sleep(_WARMUP_READY_SECOND - now.second - now.microsecond / 1e6)
                 now = get_current_time()
                 bars = await self._closed_bars(config.symbol, interval, step, now)
+                last = bars[-1].datetime if bars else None
 
             # No I/O from here to the direction restore.
             await strategy.on_start()
@@ -287,19 +289,19 @@ class StrategyAppService:
                 )
                 if signal:
                     await strategy.on_order_rejected("warmup")
-            if bars:
-                self._last_bar_start[strategy_id] = bars[-1].datetime
+            if last is not None:
+                self._last_bar_start[strategy_id] = last
             else:
                 self._last_bar_start.pop(strategy_id, None)
             strategy.restore_direction(_direction_of(self._position_app_service.get(strategy_id)))
 
-            if bars:
+            if last is not None:
                 current = calendar.bar_start(now, interval)
-                if calendar.trading_minutes(bars[-1].datetime + step, current):
+                if calendar.trading_minutes(last + step, current):
                     logger.warning(
                         "strategy.warmup_incomplete",
                         subscription_id=strategy_id,
-                        last_bar_start=bars[-1].datetime.isoformat(),
+                        last_bar_start=last.isoformat(),
                         current_bucket_start=current.isoformat(),
                     )
 
@@ -310,7 +312,7 @@ class StrategyAppService:
     ) -> list[Bar]:
         """Stored bars that closed by ``now``, oldest first."""
         found = await self._bar_repository.find(symbol, interval, end_date=now, limit=_WARMUP_BARS)
-        return [b for b in reversed(found) if b.datetime + step <= now]
+        return [b for b in reversed(found) if b.datetime is not None and b.datetime + step <= now]
 
     async def stop_strategy(self, strategy_id: str) -> None:
         async with self._lock:
