@@ -1,5 +1,24 @@
 name: pocketquant-prod
 
+# Shared by api, worker and trader: one image, settings from .env (materialized
+# from pocketquant-config/vps/default/.env each deploy), backend network only.
+x-backend: &backend
+  image: ${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  env_file:
+    - .env
+  networks: [backend]
+  depends_on:
+    mongodb:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   web:
     image: ${DOCKERHUB_USERNAME}/pocketquant-web:${IMAGE_TAG:-latest}
@@ -7,10 +26,10 @@ services:
     restart: unless-stopped
     # No host port: Cloudflare Tunnel (cloudflared) is the only public entry.
     networks: [edge, backend]
-    # nginx proxies /api → app (the single backend). Wait for app readiness so
-    # the SPA never hits a dead upstream on first paint.
+    # nginx proxies /api to api. Wait for api readiness so the SPA never hits a dead
+    # upstream on first paint.
     depends_on:
-      app:
+      api:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80"]
@@ -50,46 +69,60 @@ services:
         max-size: "5m"
         max-file: "3"
 
-  # Backend with all roles (APP_ROLES below). Migrations and indexes run before
-  # yield; the trader warms up in standby before yield, so healthy means warm.
-  # No published host port: only nginx reaches it on the compose network.
-  app:
-    image: ${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}
-    container_name: pocketquant-app
-    restart: unless-stopped
-    # One uvicorn worker per container; the worker and trader roles act only while
-    # they hold their Mongo lease.
+  # api, worker and trader run one image with different APP_ROLES. No container_name:
+  # a deploy starts a second copy beside the old one (deploy/vps/10-deploy.sh roll).
+  # TZ is set after env_file so it wins; the app refuses a non-UTC zone. Only the
+  # trader may trade live: api and worker pin EXNESS_LIVE_TRADING off.
+  api:
+    <<: *backend
     command: ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921", "--forwarded-allow-ips", "172.16.0.0/12,192.168.0.0/16", "--timeout-graceful-shutdown", "10"]
-    # SSE close (10 s) + trader drain at a 1m boundary and bounded stop (up to 160 s) + release.
-    stop_grace_period: 180s
-    # Single source of truth: every app setting comes from .env (the file
-    # materialized on the VPS from pocketquant-config/vps/default/.env each
-    # deploy). MONGODB_URL/REDIS_URL in that file use the internal docker
-    # service names (mongodb, redis), which resolve on this compose network.
-    env_file:
-      - .env
-    # Declared after env_file so it wins over any TZ key in .env. The app
-    # asserts a UTC process timezone at startup and refuses to run without it.
     environment:
       TZ: "UTC"
-      APP_ROLES: "api,worker,trader"
-    networks: [backend]
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      APP_ROLES: "api"
+      EXNESS_RATE_FRACTION: "0.05"
+      EXNESS_LIVE_TRADING: "false"
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:41921/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
       retries: 3
+      start_period: 30s
+
+  worker:
+    <<: *backend
+    command: ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921"]
+    environment:
+      TZ: "UTC"
+      APP_ROLES: "worker"
+      EXNESS_RATE_FRACTION: "0.3"
+      EXNESS_LIVE_TRADING: "false"
+    # Scheduler pause, running jobs finish (up to 90 s), worker lease release.
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:41921/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  trader:
+    <<: *backend
+    command: ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921"]
+    environment:
+      TZ: "UTC"
+      APP_ROLES: "trader"
+      EXNESS_RATE_FRACTION: "0.6"
+    # Drain at the next 1m boundary and bounded stop (up to 160 s), then release the
+    # trader lease.
+    stop_grace_period: 180s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:41921/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      # Healthy = warm standby.
       start_period: 180s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   mongodb:
     # Pinned patch of the 7.0 line (same data files); 7.0.28+ fixes CVE-2025-14847.
@@ -111,8 +144,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Chatty on stdout (per-connection accepted/ended từ healthcheck mongosh mỗi
-    # 10s). Không cap thì json.log phình vô hạn — stateful nên deploy không recreate.
+    # Chatty on stdout (a connection line per healthcheck every 10 s). Capped because a
+    # stateful service is not recreated on deploy, so its json.log would grow without bound.
     logging:
       driver: json-file
       options:
@@ -162,7 +195,7 @@ volumes:
   redis_data:
   portainer_data:
 
-# edge: cloudflared and web only; backend: web, app and the data stores.
+# edge: cloudflared and web only; backend: web, api, worker, trader and the data stores.
 networks:
   edge: {}
   backend: {}
