@@ -89,9 +89,9 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261028-0652-exness
 10. `tests/core_test/infra/brokers/exness/test_exness_broker_factory.py`: all three `BrokerFactory(...)` calls (`:28`, `:32`, `:40`) pass `safeguards_repository=AsyncMock()` (import `AsyncMock` beside `MagicMock`); the built-when-live case still expects an `ExnessBrokerAdapter`. No `None` case is added. <!-- Red team 2026-10-28: #14 -->
 11. Commit: `fix(exness): read the entry pause from the store on every open`.
 
-**Success criteria:** the eight named tests pass (six pause tests, the cached read, the GET flood); no source file references `set_entries_paused`; the POST route never changes in-memory pause state; `BrokerFactory` has no `None` default for the store. <!-- Red team 2026-10-28: #8 #14 -->
+**Success criteria:** the eight named tests pass (six pause tests, the cached read, the GET flood); no source file references `set_entries_paused` (the removed `Safeguards` method; the route helper `_set_entries_paused` stays); the POST route never changes in-memory pause state; `BrokerFactory` has no `None` default for the store. <!-- Red team 2026-10-28: #8 #14 -->
 
-**Verify:** `uv run python -m pytest tests/core_test/infra/brokers tests/engine_test tests/app_test/integration/test_safeguards_api.py tests/core_test/unit/common/test_rate_limit_middleware.py -q > /dev/null 2>&1; echo "exit=$?"; git grep -n -E "set_entries_paused|entries_paused=await|safeguards_repository: SafeguardsRepository \| None" -- src | wc -l | tr -d ' '` prints `exit=0` then `0`. <!-- Red team 2026-10-28: #8 #10 #14 -->
+**Verify:** `uv run python -m pytest tests/core_test/infra/brokers tests/engine_test tests/app_test/integration/test_safeguards_api.py tests/core_test/unit/common/test_rate_limit_middleware.py -q > /dev/null 2>&1; echo "exit=$?"; git grep -n -E "(^|[^_])set_entries_paused|entries_paused=await|safeguards_repository: SafeguardsRepository \| None" -- src | wc -l | tr -d ' '` prints `exit=0` then `0`. <!-- Red team 2026-10-28: #8 #10 #14 --> <!-- Added 2026-10-29: Verify regex excluded the route helper named in step 8 -->
 
 ### Task 4.2 — Reject opposite entries; delete the Exness close path
 

@@ -42,7 +42,7 @@ Line numbers are from `develop` @ 453e8e90; Phase 03 may have edited comments in
 Run each command from `D:/w/_me/algotrading/pocketquant`:
 
 1. `git fetch -q origin && echo "branch=$(git rev-parse --abbrev-ref HEAD) dirty=$(git status --porcelain -- src web deploy tests scripts docs | wc -l | tr -d ' ') synced=$(test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo yes || echo no)"` prints `branch=develop dirty=0 synced=yes`.
-2. `git grep -n -E "closePosition|set_entries_paused" -- src | wc -l | tr -d ' '` prints `0` (Phase 04 merged). <!-- Red team 2026-10-28: #10 -->
+2. `git grep -n -E "closePosition|(^|[^_])set_entries_paused" -- src | wc -l | tr -d ' '` prints `0` (Phase 04 merged). <!-- Red team 2026-10-28: #10 --> <!-- Added 2026-10-29: Verify regex excluded the route helper named in step 8 -->
 3. `export GH_TOKEN=$(gh auth token --user camping89); gh run list --workflow cicd.yml --branch develop --limit 5 --json headSha,conclusion -q ".[] | select(.headSha==\"$(git rev-parse HEAD)\") | .conclusion" | head -1` prints `success`.
 4. `docker ps > /dev/null 2>&1 && echo docker-ok` prints `docker-ok` (if not, start `"/c/Program Files/Docker/Docker/Docker Desktop.exe" &`, wait 10 s, re-run once).
 
