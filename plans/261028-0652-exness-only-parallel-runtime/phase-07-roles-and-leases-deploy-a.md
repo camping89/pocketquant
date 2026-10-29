@@ -69,6 +69,34 @@ Modify: `src/pocketquant/core/config.py`, `src/pocketquant/core/common/constants
 
 ## Tasks
 
+<!-- Added 2026-10-29 after the Phase 06 checkpoint -->
+**Corrections (2026-10-29).** Verified on `develop` @ d10c1c3d after Phase 06 (deployed as 3905ff6b). Apply these over the Context and Tasks below.
+
+Line numbers (find by name when they drift again): `main.py` lifespan body is `:55-74` (`recover_orphan_backtests :65`, `recover_orphan_jobs :66`, `bootstrap_live_instances :67`, `take_over :68`, `register_health_checks :69`, `start_quote_feed :70`, `start_jobs :71`), `finally :81-92`; `enable_jobs: bool = True` is `config.py:57`, `extra="ignore"` is `:37`; `get_job_scheduler` is `infrastructure.py:95-105`; `JobScheduler.shutdown` is `scheduler.py:150-154`, `scheduler.started` is logged at `:90`; `start_jobs` is `main_extensions.py:242-269`, `/health` is `:392-401`; `_inflight :121`, `_pending_ack :122`, `_needs_snapshot :127` in `exness_broker_adapter.py`; `fills_async` is `broker_port.py:24`; the Dockerfile comment is `deploy/Dockerfile:56-57` and `CMD` is `:58` (Task 7.6 step 2); the formatter line is `setup.py:74`. `enable_jobs` callers in `main_extensions.py` are `:169` (docstring), `:245-246` (docstring), `:255` (`if not settings.enable_jobs`), `:415` (comment); Task 7.1 step 3 uses these.
+
+Phase 06 facts the tasks rely on: `_process_signal(strategy, signal, event, signal_at, published_at)` takes five arguments; `cancel_pending_signals()` itself logs INFO `strategy.signal_discarded reason=lease` once per cancelled task; `take_over()` holds the engine `_lock` for its whole body and sets `_discard_reason = "drain"` before `_take_over` arms `trading_until`, so one `reason=drain` discard may be logged during a takeover; the DI generator already calls `engine.stop(timeout_s=5.0)` on container close (`services.py:162-163`), and `stop()` returns at once when the engine is not running, so `hand_over` and `_on_lost` may stop the engine first. Entry-guard tests that cover the fence: `test_standby_discards_the_signal`, `test_a_drained_engine_discards_at_info`, `test_the_order_deadline_is_trading_until`, `test_an_expired_lease_skips_the_entry` (`tests/engine_test/test_strategy_entry_guards.py`); their harness is `_engine()` (`_AlwaysLong`, `_Factory`, `_DeadlineBroker(PaperBrokerAdapter)`, `_Repo`, `NoStoredBars`, `NoClosedTrades`).
+
+Task 7.1 step 7: verified with pydantic-settings 2.12.0 that an unknown `.env` key reaches a `mode="before"` validator while an unknown process-environment key does not; the `os.environ` read stays.
+
+Task 7.3 step 4: `_tracked` registers `task = asyncio.current_task()` and adds it only when not `None`, so pyright stays at its baseline.
+
+Task 7.4 step 2 (optional): `start_strategy` may connect on `self.trading_until is not None` alone; the order fence is at the send.
+
+Task 7.4 step 4, `_take_over`: call `await collector.start()` before `await engine.take_over()`. `take_over()` connects the paper brokers, whose `connect` subscribes their SL/TP handler to bars, and keeps awaiting afterwards; a paper exit on a bar closing in that window would publish a `TradeClosedEvent` with no collector subscribed. The collector only records closed trades, so starting it first changes nothing else. Keep the `trader.takeover` log, `bars.publishes_current = True`, then `collector.start()`, then `engine.take_over()`, then the reconcile task, then `trading_until`.
+
+Task 7.4 step 5: remove the now-unused `StrategyAppService` import from `main.py` with the `take_over()` line (ruff F401).
+
+Task 7.4 step 9, `test_trader_role.py`: the fixture drops `leases`, `orders`, `positions` and `trades` before the foreign lease doc is inserted, or the three count assertions in `test_standby_trader_does_not_trade` see rows left by other app tests.
+
+Task 7.4 step 9, `test_trader_lifespan_handover.py`: `pocketquant.app.main` builds the app at import (`main.py:121`, `app = create_app()` → `get_settings()`), and neither the local checkout nor the CI test job has a `.env`, so a top-level import fails collection. Inside the test, before anything else: `monkeypatch.setenv` every required `Settings` field from the `settings` fixture (`APP_NAME`, `APP_VERSION`, `ENVIRONMENT`, `MONGODB_URL`, `MONGODB_DATABASE`, `MONGODB_MIN_POOL_SIZE`, `MONGODB_MAX_POOL_SIZE`, `REDIS_URL`, `REDIS_CACHE_TTL`, `LOG_LEVEL`, `LOG_FORMAT`), call `get_settings.cache_clear()`, then `main = importlib.import_module("pocketquant.app.main")` and patch `main.get_settings` as written. Two more facts for the same test: a `hitnrun2` instance never signals from one live bar with no stored warm-up, so `monkeypatch.setitem(STRATEGY_REGISTRY, "hitnrun2", _AlwaysLong)` (copy `_AlwaysLong` from the entry-guard harness) before the lifespans are entered, and publish the triggering `BarCompletedEvent` with `bar_end` within 10 s of real wall time (the lease uses `datetime.now(UTC)`, so this test cannot use simulation time). The simplest `SlowAsyncFillBroker` subclasses `PaperBrokerAdapter` and overrides only `fills_async = True`, `submit_order` and `inflight_count`, so `get_balance`, `normalize_quantity`, `subscribe_trades` and `subscribe_order_updates` come for free.
+
+Task 7.4 step 9, `test_trader_fence.py::test_standby_engine_connects_no_broker_on_start`: the copied `_engine()` helper calls `start_strategy` with the default `trading_until`; build the engine, set `trading_until = None`, then `load_strategy` and `start_strategy` (give the helper a `trading_until` parameter or inline the three calls).
+
+Task 7.8 Verify: `docker logs --since 15m` counts only lines newer than 15 min; run the Verify within 15 min of the container start printed by `docker inspect -f '{{.State.StartedAt}}' pocketquant-app`, or widen `--since` to that start time.
+
+Task 7.9: the compose project is `pocketquant-prod` (`deploy/compose.prod.yml:1`), so `--network pocketquant-prod_backend` is right. If the prod `app` loses its lease during the probe window, the probe trader takes over, trades paper until its 600 s timeout, drains and releases, and the restarted `app` takes the lease back; `app_lost=0` in the Verify is what proves this did not happen.
+
+
 ### Task 7.1 — `APP_ROLES` replaces `enable_jobs`
 
 **Goal:** one setting names the roles a process runs, its default runs no lease-holding role, and a leftover `ENABLE_JOBS` stops startup; `enable_jobs` is gone.
