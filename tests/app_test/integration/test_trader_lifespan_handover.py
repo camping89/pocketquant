@@ -224,7 +224,11 @@ async def test_sigterm_mid_open_drains_releases_and_the_next_trader_takes_over(
             assert await _wait_for(lambda: app_b.state.lease_state.get("trader") == "held", 3.0)
             doc = await (await app_b.state.dishka_container.get(LeaseRepository)).get("trader")
             assert doc is not None and doc["owner"].startswith("trader-b:")
-            assert acked[0] < doc["released_at"]
+            # Mongo keeps milliseconds.
+            assert (
+                acked[0].replace(microsecond=acked[0].microsecond // 1000 * 1000)
+                <= doc["released_at"]
+            )
             assert (doc["renewed_at"] - doc["released_at"]).total_seconds() <= 3.0
             after = logs[logs.index(released) :]
             takeover, complete = [

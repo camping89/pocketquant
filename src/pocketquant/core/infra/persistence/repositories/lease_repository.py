@@ -29,7 +29,7 @@ class LeaseRepository(BaseRepository):
         expires_at = now + timedelta(seconds=ttl_s)
         try:
             await self._collection().update_one(
-                {"name": name, "$or": [{"expires_at": {"$lt": now}}, {"owner": owner}]},
+                {"name": name, "$or": [{"expires_at": {"$lte": now}}, {"owner": owner}]},
                 {
                     "$set": {"owner": owner, "expires_at": expires_at, "renewed_at": now},
                     "$setOnInsert": {"_id": generate_id_str()},
