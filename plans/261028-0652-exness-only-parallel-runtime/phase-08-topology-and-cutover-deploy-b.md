@@ -60,6 +60,18 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 
 ## Tasks
 
+<!-- Added 2026-10-30 after the Phase 07 checkpoint -->
+**Corrections (2026-10-29).** Verified on `develop` @ 762b8233 after Phase 07 (deployed as e646b3b5) and the docstring purge (d5c45781). Apply these over the Context and Tasks below.
+
+- Context line 16: the Context was verified @ 453e8e90; Phase 07 (2efcc067) edited `compose.prod.yml` and `10-deploy.sh`, so the line numbers below replace the old ones.
+- Context line 18 (`deploy/compose.prod.yml`): `app` is `:53-92` (comment `:53-55`, service `:56-92`), not `:53-91`; `container_name: pocketquant-app` is `:58`, not `:60`; the Vietnamese comments are `:114-115`, not `:113-114`; the networks comment is `:165`, not `:164`; `backend` is declared at `:168`, not `:167`.
+- Context line 20 (`deploy/vps/10-deploy.sh`, 79 lines): `wait_health` is `:54-71`, not `:54-70`; `wait_health pocketquant-app 41921 240` is `:73`, not `:72`; the prune is `:76`, not `:75`.
+- Task 8.1 targets: `:53-57` becomes `:53-55`, `:113-114` becomes `:114-115`, and `:164` becomes `:165`. Step 2 `(:53-91)` becomes `(:53-92)`; step 4 `:113-114` becomes `:114-115`; step 5 `:164` becomes `:165`.
+- Task 8.3 target: `10-deploy.sh` `:43-78` becomes `:43-79`.
+- Phase 07 facts this phase relies on are unchanged: the lease names `worker` and `trader`, the `/health` fields `role`, `lease` and `lease_renewed_age_s`, the owner `hostname:pid`, and `app_roles` defaulting to `api`. `LeaseRepository.acquire` now treats an expiry equal to now as free (`$lte`); no step here depends on that.
+- The tracing middleware moved from `core/common/tracing` to `app/middleware/` (`correlation_id_middleware.py`, `request_logging_middleware.py`) in d5c45781; no Phase 08 step names those files.
+- Open item, not in scope here: on every trader start, the first Binance WS connect is rejected with HTTP 400 and reconnects after 1 s (`reports/kongming-phase-07-checkpoint.md` Q2). It predates Phase 07 and is scheduled for Phase 09. After Task 8.4 it shows as WARN in `11-verify.sh`, never FAIL.
+
 ### Task 8.1 — Three services from one image
 
 **Goal:** compose runs `api`, `worker` and `trader` with their roles, rate fractions and grace periods; only the trader may trade live; `web` waits for `api`.
