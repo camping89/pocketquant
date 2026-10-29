@@ -34,6 +34,11 @@ from pocketquant.core.infra.persistence.repositories.position_repository import 
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
@@ -71,6 +76,9 @@ async def _build_engine(db: Database) -> StrategyAppService:
         order_app_service=order_svc,
         position_app_service=position_svc,
         risk_check_handler=RiskCheckHandler(),
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
         default_broker_config={"initial_balance": 100_000.0},
     )
     await engine.start()
@@ -124,7 +132,7 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     assert _strategy(engine_a, str(sub.id)).is_running is True
     sub_doc = await repo.get(str(sub.id))
     assert sub_doc is not None and sub_doc.actual_state == "running"
-    await engine_a.stop()
+    await engine_a.stop(timeout_s=5.0)
 
     # --- Engine B: simulated restart. Fresh engine, RAM empty, rehydrate stopped.
     engine_b = await _build_engine(db)
@@ -139,7 +147,7 @@ async def test_running_sub_auto_resumes_across_simulated_restart(db: Database) -
     assert _strategy(engine_b, str(sub.id)).is_running is True
     sub_doc = await repo.get(str(sub.id))
     assert sub_doc is not None and sub_doc.actual_state == "running"
-    await engine_b.stop()
+    await engine_b.stop(timeout_s=5.0)
 
 
 @pytest.mark.asyncio
@@ -171,4 +179,4 @@ async def test_stop_convergence_stops_running_strategy(db: Database) -> None:
     assert _strategy(engine, str(sub.id)).is_running is False
     sub_doc = await repo.get(str(sub.id))
     assert sub_doc is not None and sub_doc.actual_state == "stopped"
-    await engine.stop()
+    await engine.stop(timeout_s=5.0)

@@ -41,6 +41,11 @@ from pocketquant.engine.backtest.backtest_command_service import (
     RunBacktestCommand,
 )
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
@@ -257,6 +262,9 @@ async def _build_live_engine() -> tuple[
         order_app_service=order_svc,
         position_app_service=position_svc,
         risk_check_handler=RiskCheckHandler(),
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
     await engine.start()
 

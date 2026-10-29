@@ -15,6 +15,11 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 
@@ -66,6 +71,9 @@ def _service() -> StrategyAppService:
         order_app_service=AsyncMock(),
         position_app_service=AsyncMock(),
         risk_check_handler=AsyncMock(),
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
 
 

@@ -17,6 +17,11 @@ from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.domain.strategy import Direction, Signal
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
@@ -68,6 +73,9 @@ async def _engine() -> tuple[StrategyAppService, _Factory, PositionAppService, O
         order_app_service=orders,
         position_app_service=mirror,
         risk_check_handler=RiskCheckHandler(),
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
     await mirror.start()
     await engine.start()

@@ -19,6 +19,11 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
@@ -109,6 +114,9 @@ def _engine() -> tuple[StrategyAppService, MagicMock]:
         order_app_service=MagicMock(),
         position_app_service=MagicMock(),
         risk_check_handler=MagicMock(),
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
     return engine, factory
 

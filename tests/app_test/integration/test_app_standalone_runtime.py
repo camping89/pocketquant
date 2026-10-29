@@ -106,7 +106,7 @@ async def test_app_reconcile_runs_desired_running_without_http(
 
     assert engine.get_strategy(str(sub.id)).is_running is True
     assert (await repo.get(str(sub.id))).actual_state == "running"
-    await engine.stop()
+    await engine.stop(timeout_s=5.0)
 
 
 async def test_app_backtest_execution_runs_without_http(app_container) -> None:

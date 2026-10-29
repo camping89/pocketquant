@@ -23,6 +23,11 @@ from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
@@ -69,6 +74,9 @@ def _engine(order_service: _RecordingOrderService | None = None) -> StrategyAppS
         order_app_service=order_service or _RecordingOrderService(),  # type: ignore[arg-type]
         position_app_service=_NoPositions(),  # type: ignore[arg-type]
         risk_check_handler=_AllowAll(),  # type: ignore[arg-type]
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
         default_broker_config={"initial_balance": 1_000_000.0},
     )
 
@@ -259,6 +267,9 @@ def _two_balance_engine(futures_balance: float | None, orders=None) -> StrategyA
         order_app_service=orders or _RecordingOrderService(),  # type: ignore[arg-type]
         position_app_service=_NoPositions(),  # type: ignore[arg-type]
         risk_check_handler=_AllowAll(),  # type: ignore[arg-type]
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
         default_broker_config={
             "initial_balance": 10_000.0,
             "futures_initial_balance": futures_balance,

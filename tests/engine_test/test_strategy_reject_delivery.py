@@ -26,6 +26,11 @@ from pocketquant.core.domain.strategy.services.hitnrun2_strategy_service import 
 )
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
+from pocketquant.engine.backtest.backtest_sandbox_app_service import (
+    Continuous24x7CalendarFactory,
+    NoClosedTrades,
+    NoStoredBars,
+)
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
@@ -105,6 +110,9 @@ def _engine(risk: _Risk, bus: EventBus | None = None, orders=None) -> StrategyAp
         order_app_service=orders or OrderAppService(bus, _InMemoryOrderRepo()),  # type: ignore[arg-type]
         position_app_service=_NoPositions(),  # type: ignore[arg-type]
         risk_check_handler=risk,  # type: ignore[arg-type]
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
         default_broker_config={"initial_balance": 100_000.0},
     )
 

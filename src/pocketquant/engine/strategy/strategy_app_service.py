@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import structlog
@@ -22,6 +23,9 @@ from pocketquant.core.domain.symbol import ContractSpec
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 if TYPE_CHECKING:
+    from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+    from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+    from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
     from pocketquant.engine.execution.order_app_service import OrderAppService
     from pocketquant.engine.execution.position_app_service import PositionAppService
     from pocketquant.engine.execution.risk_check import RiskCheckHandler
@@ -37,6 +41,8 @@ class StrategyAppService:
 
     Subscribes to market events and dispatches to registered strategies.
     Coordinates signal processing through risk checks and order submission.
+    Warm-up reads the bar repository, the successor check the calendar, the paper
+    restore the trade repository; the backtest sandbox passes no-op versions.
     """
 
     def __init__(
@@ -47,6 +53,10 @@ class StrategyAppService:
         position_app_service: PositionAppService,
         risk_check_handler: RiskCheckHandler,
         default_broker_config: dict | None = None,
+        *,
+        bar_repository: BarRepository,
+        calendar_factory: TradingCalendarFactory,
+        trade_repository: TradeRepository,
     ) -> None:
         self._event_bus = event_bus
         self._broker_factory = broker_factory
@@ -54,6 +64,9 @@ class StrategyAppService:
         self._position_app_service = position_app_service
         self._risk_check_handler = risk_check_handler
         self._default_broker_config = default_broker_config or {}
+        self._bar_repository = bar_repository
+        self._calendar_factory = calendar_factory
+        self._trade_repository = trade_repository
 
         self._strategies: dict[str, IStrategyService] = {}
         self._brokers: dict[str, IBrokerPort] = {}
@@ -64,6 +77,20 @@ class StrategyAppService:
         self._configs: dict[str, StrategyConfig] = {}
         self._running = False
         self._lock = asyncio.Lock()
+
+        # None = no new entry (standby, drained or lease lost): signals are discarded.
+        # Before roles exist every engine trades.
+        self.trading_until: datetime | None = datetime.max.replace(tzinfo=UTC)
+        self._signal_tasks: dict[str, asyncio.Task[None]] = {}
+        self._last_bar_start: dict[str, datetime] = {}
+        # _on_bar_completed calls still running, inline paper fills included; the trader
+        # hands over at 0.
+        self._running_bar_handlers = 0
+        # Subscriptions whose signal reached the broker call; a lost lease never cancels those.
+        self._sending: set[str] = set()
+        # Why a None switch discards: standby before take_over(), drain after it, lease
+        # after cancel_pending_signals().
+        self._discard_reason = "standby"
 
     @property
     def is_running(self) -> bool:
@@ -85,9 +112,19 @@ class StrategyAppService:
 
         logger.info("strategy_engine_started")
 
-    async def stop(self) -> None:
+    async def stop(self, timeout_s: float) -> None:
+        """Waits at most ``timeout_s`` for signal tasks: the caller passes what is left of its
+        shutdown grace."""
         if not self._running:
             return
+
+        pending = [t for t in self._signal_tasks.values() if not t.done()]
+        if pending:
+            _, late = await asyncio.wait(pending, timeout=max(timeout_s, 0.0))
+            for task in late:
+                task.cancel()
+            if late:
+                logger.error("strategy_engine.stop_timeout", pending=len(late))
 
         for strategy_id in list(self._strategies.keys()):
             await self.stop_strategy(strategy_id)
@@ -178,6 +215,7 @@ class StrategyAppService:
             self._strategies.pop(strategy_id, None)
             broker = self._brokers.pop(strategy_id, None)
             self._configs.pop(strategy_id, None)
+            self._last_bar_start.pop(strategy_id, None)
 
             if isinstance(broker, PaperBrokerAdapter):
                 dropped = broker.drop_positions(strategy_id)

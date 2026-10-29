@@ -138,6 +138,9 @@ class ServicesProvider(Provider):
         position_app_service: PositionAppService,
         risk_check_handler: RiskCheckHandler,
         settings: Settings,
+        bar_repository: BarRepository,
+        calendar_factory: TradingCalendarFactory,
+        trade_repository: TradeRepository,
     ) -> AsyncIterator[StrategyAppService]:
         engine = StrategyAppService(
             event_bus=event_bus,
@@ -151,10 +154,14 @@ class ServicesProvider(Provider):
                 "slippage_bps": settings.paper_slippage_bps,
                 "commission_bps": settings.paper_commission_bps,
             },
+            bar_repository=bar_repository,
+            calendar_factory=calendar_factory,
+            trade_repository=trade_repository,
         )
         await engine.start()
         yield engine
-        await engine.stop()
+        # A drained trader has no task left; this bounds every other shutdown.
+        await engine.stop(timeout_s=5.0)
 
     @provide(scope=Scope.APP)
     def get_reconcile_service(

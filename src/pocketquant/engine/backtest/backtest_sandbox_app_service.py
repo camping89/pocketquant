@@ -22,7 +22,10 @@ from dataclasses import dataclass
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
@@ -68,6 +71,27 @@ class _InMemoryPositionRepo:
         for key in gone:
             del self._items[key]
         return len(gone)
+
+
+class NoStoredBars:
+    """A backtest has no stored bars."""
+
+    async def find(self, *args: object, **kwargs: object) -> list[Bar]:
+        return []
+
+
+class NoClosedTrades:
+    """A backtest has no closed live trades."""
+
+    async def realized_net(self, run_ids: list[str]) -> float:
+        return 0.0
+
+
+class Continuous24x7CalendarFactory:
+    """A backtest has no session calendar."""
+
+    async def for_symbol(self, symbol: str) -> ITradingCalendarPort:
+        return Continuous24x7Calendar()
 
 
 class _SingleBrokerFactory:
@@ -139,6 +163,9 @@ async def build_backtest_sandbox() -> BacktestSandboxAppService:
         order_app_service=OrderAppService(bus, _InMemoryOrderRepo()),  # type: ignore[arg-type]
         position_app_service=PositionAppService(bus, _InMemoryPositionRepo()),  # type: ignore[arg-type]
         risk_check_handler=RiskCheckHandler(),
+        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
+        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
     await engine.start()
     return BacktestSandboxAppService(event_bus=bus, strategy_app_service=engine)
