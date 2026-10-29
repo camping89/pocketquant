@@ -48,6 +48,7 @@ from pocketquant.core.infra.persistence.repositories.bar_repository import BarRe
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
+from pocketquant.core.infra.persistence.repositories.lease_repository import LeaseRepository
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
@@ -119,6 +120,7 @@ _REPO_TYPES: list[type] = [
     SubscriptionRepository,
     TrackedSymbolRepository,
     TradeRepository,
+    LeaseRepository,
 ]
 
 

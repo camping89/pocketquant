@@ -29,6 +29,7 @@ from pocketquant.core.infra.persistence.repositories.bar_repository import BarRe
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
 )
+from pocketquant.core.infra.persistence.repositories.lease_repository import LeaseRepository
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
@@ -89,6 +90,7 @@ class InfrastructureProvider(Provider):
     tracked_symbol_repository = provide(TrackedSymbolRepository, scope=Scope.APP)
     trade_repository = provide(TradeRepository, scope=Scope.APP)
     safeguards_repository = provide(SafeguardsRepository, scope=Scope.APP)
+    lease_repository = provide(LeaseRepository, scope=Scope.APP)
 
     trading_calendar_factory = provide(TradingCalendarFactory, scope=Scope.APP)
 
