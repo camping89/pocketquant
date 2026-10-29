@@ -38,6 +38,9 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.shared.value_objects import INTERVAL_SECONDS
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence import Cache
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
     JobHistoryRepository,
@@ -648,6 +651,16 @@ async def data_lag_check() -> None:
     await _tracked("data_lag_check", body)
 
 
+async def backtest_orphan_sweep() -> None:
+    """Fail backtest runs whose task stopped refreshing its heartbeat."""
+    backtest_repo = await _get_container().get(BacktestRepository)
+
+    async def body(_: str | None) -> None:
+        await backtest_repo.mark_orphaned_started_as_failed()
+
+    await _tracked("backtest_orphan_sweep", body)
+
+
 async def enqueue_missed_catchups(
     history_repo: JobHistoryRepository,
     job_scheduler: JobScheduler,
@@ -693,7 +706,7 @@ async def register_sync_jobs(
     container: AsyncContainer,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Register 6 sync/integrity/lag jobs as text refs.
+    """Register 7 sync/integrity/lag/sweep jobs as text refs.
 
     The container reference is set at app startup (``set_container``), before
     any job can run; ``container`` is used here only for the catch-up sweep.
@@ -759,6 +772,13 @@ async def register_sync_jobs(
         cron_expression="0 */12 * * *",
         misfire_grace_time=1800,
     )
+    job_scheduler.add_cron_job(
+        f"{_MODULE}:backtest_orphan_sweep",
+        job_id="backtest_orphan_sweep",
+        cron_expression="*/5 * * * *",
+        second=40,
+        misfire_grace_time=300,
+    )
 
     # Every registered trigger must be UTC. One that picked up the host zone
     # would fire at a different instant per machine and pickle that zone into
@@ -777,4 +797,4 @@ async def register_sync_jobs(
     history_repo = await container.get(JobHistoryRepository)
     await enqueue_missed_catchups(history_repo, job_scheduler)
 
-    logger.info("market_data.registered_sync_jobs", job_count=6)
+    logger.info("market_data.registered_sync_jobs", job_count=7)

@@ -8,6 +8,7 @@ never the live execution engine.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -32,6 +33,8 @@ from pocketquant.engine.backtest.backtest_app_service import BacktestAppService
 from pocketquant.engine.backtest.backtest_sandbox_app_service import build_backtest_sandbox
 
 logger = get_logger(__name__)
+
+_HEARTBEAT_S = 15.0
 
 
 def _config_from_dict(payload: dict[str, Any], contract_spec: ContractSpec) -> BacktestConfig:
@@ -77,6 +80,7 @@ class BacktestExecutionService:
         faults OUTSIDE the engine (e.g. an unknown strategy, a transient repo
         error), and flips the started doc to ``failed`` so it can't stay stuck.
         """
+        beat = asyncio.create_task(self._heartbeat(run_id))
         try:
             result = await self.run(config_payload, run_id=run_id)
             if result.status == "failed":
@@ -88,6 +92,17 @@ class BacktestExecutionService:
         except Exception as exc:  # noqa: BLE001
             logger.error("backtest_execution.dispatch_failed", run_id=run_id, error=str(exc))
             await self._backtest_repo.mark_failed(run_id, str(exc)[:500])
+        finally:
+            beat.cancel()
+
+    async def _heartbeat(self, run_id: str) -> None:
+        """Keep the run out of the worker's orphan sweep while this task lives."""
+        while True:
+            try:
+                await self._backtest_repo.touch_heartbeat(run_id)
+            except Exception:
+                logger.warning("backtest_execution.heartbeat_failed", run_id=run_id, exc_info=True)
+            await asyncio.sleep(_HEARTBEAT_S)
 
     async def run(
         self, config_payload: dict[str, Any], run_id: str | None = None

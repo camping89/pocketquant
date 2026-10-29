@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_RUNS
@@ -7,6 +7,8 @@ from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 logger = get_logger(__name__)
+
+_ORPHAN_AFTER = timedelta(seconds=60)
 
 
 class BacktestRepository(SymbolScopedRepository):
@@ -89,17 +91,26 @@ class BacktestRepository(SymbolScopedRepository):
         result = await collection.update_one({"_id": run_id}, {"$set": {"name": name}})
         return result.matched_count > 0
 
-    async def mark_orphaned_started_as_failed(self) -> int:
-        """Flip every run still ``started`` to ``failed`` — call once at boot.
+    async def touch_heartbeat(self, run_id: str) -> None:
+        await self._collection().update_one(
+            {"_id": run_id, "status": "started"}, {"$set": {"heartbeat_at": datetime.now(UTC)}}
+        )
 
-        The app is a single uvicorn worker, so no legitimately in-flight run can
-        survive a restart: any ``started`` doc is a task killed mid-run. Without
-        this, the doc stays ``started`` forever and FE polls it indefinitely.
-        Returns the count updated.
+    async def mark_orphaned_started_as_failed(self) -> int:
+        """Fail runs whose task stopped refreshing its heartbeat; a live run refreshes every 15 s.
+
+        A run with no heartbeat yet falls back to ``started_at``. Returns the count updated.
         """
+        cutoff = datetime.now(UTC) - _ORPHAN_AFTER
         collection = self._collection()
         result = await collection.update_many(
-            {"status": "started"},
+            {
+                "status": "started",
+                "$or": [
+                    {"heartbeat_at": {"$lt": cutoff}},
+                    {"heartbeat_at": {"$exists": False}, "started_at": {"$lt": cutoff}},
+                ],
+            },
             {"$set": {"status": "failed", "error_message": "interrupted_by_restart"}},
         )
         if result.modified_count:

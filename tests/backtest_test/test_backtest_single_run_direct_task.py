@@ -187,10 +187,13 @@ async def test_engine_failure_marks_failed_via_inspect_not_exception(
 
 
 @pytest.mark.asyncio
-async def test_orphan_started_swept_to_failed_on_boot(database: Database) -> None:
-    """M2 — a run left ``started`` by a killed task is flipped on the next boot."""
+async def test_orphan_started_with_stale_start_is_swept_to_failed(database: Database) -> None:
+    """A run left ``started`` by a killed task, with no heartbeat, is failed after 60 s."""
     backtest_repo = BacktestRepository(database)
     run_id, _ = await _cmd_svc(database).run(_command())
+    await backtest_repo._collection().update_one(
+        {"_id": run_id}, {"$set": {"started_at": datetime.now(UTC) - timedelta(seconds=61)}}
+    )
 
     n = await backtest_repo.mark_orphaned_started_as_failed()
     assert n == 1
