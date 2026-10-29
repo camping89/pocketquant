@@ -173,7 +173,7 @@ async def bootstrap_live_instances(container: AsyncContainer) -> None:
     await svc.bootstrap()
 
 
-async def _cancel(task: asyncio.Task | None) -> None:
+async def cancel_task(task: asyncio.Task | None) -> None:
     """Cancel a background task and wait up to 5 s for it to finish."""
     if task and not task.done():
         task.cancel()
@@ -208,7 +208,7 @@ def start_loop_lag_probe(app: FastAPI) -> None:
 
 
 async def stop_loop_lag_probe(app: FastAPI) -> None:
-    await _cancel(getattr(app.state, "loop_lag_task", None))
+    await cancel_task(getattr(app.state, "loop_lag_task", None))
 
 
 async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
@@ -231,9 +231,9 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 
 
 async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
-    await _cancel(getattr(app.state, "close_timer_task", None))
-    await _cancel(getattr(app.state, "ws_task", None))
-    await _cancel(getattr(app.state, "subscription_task", None))
+    await cancel_task(getattr(app.state, "close_timer_task", None))
+    await cancel_task(getattr(app.state, "ws_task", None))
+    await cancel_task(getattr(app.state, "subscription_task", None))
 
     provider = await container.get(IRealtimeQuoteProviderPort)
     await provider.disconnect()
@@ -274,7 +274,7 @@ async def start_jobs(container: AsyncContainer, app: FastAPI) -> None:
 async def stop_reconcile_loop(app: FastAPI) -> None:
     """Cancel the reconcile task. Must run BEFORE quote-feed stop + container.close
     so reconcile never issues start/stop against an engine that is shutting down."""
-    await _cancel(getattr(app.state, "reconcile_task", None))
+    await cancel_task(getattr(app.state, "reconcile_task", None))
     logger.info("reconcile_loop.stopped")
 
 

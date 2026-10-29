@@ -147,6 +147,11 @@ class JobScheduler:
 
         future.add_done_callback(_log_failure)
 
+    def pause(self) -> None:
+        """Stop starting new runs; running jobs continue."""
+        if self._scheduler is not None:
+            self._scheduler.pause()
+
     def shutdown(self, wait: bool = True) -> None:
         if self._scheduler is not None:
             self._scheduler.shutdown(wait=wait)

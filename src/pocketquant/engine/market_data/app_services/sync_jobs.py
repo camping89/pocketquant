@@ -21,6 +21,7 @@ resolved at job-execution time from a module-level container reference set by
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -97,6 +98,8 @@ CATCHUP_TARGETS: list[tuple[str, str, int]] = [
 # Module-level container reference. Set once at startup by register_sync_jobs.
 # Job functions resolve their dependencies via this container at execution time.
 _container: AsyncContainer | None = None
+# Job bodies running now; the worker waits for them before it releases its lease.
+_RUNNING: set[asyncio.Task] = set()
 
 # Verify cascade thresholds (per-field).
 # Price relative threshold catches scale-aware drift across assets:
@@ -154,35 +157,49 @@ async def _tracked(name: str, body: Callable[[str | None], Awaitable[dict | None
     record itself failed does the error reach the scheduler, which records it.
     A failed history write is logged and never fails the job.
     """
-    history_repo = await _get_container().get(JobHistoryRepository)
-    started = datetime.now(UTC)
-    doc_id: str | None = None
+    task = asyncio.current_task()
+    if task is not None:
+        _RUNNING.add(task)
     try:
-        doc_id = await history_repo.record_start(name)
-    except Exception:
-        logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
+        history_repo = await _get_container().get(JobHistoryRepository)
+        started = datetime.now(UTC)
+        doc_id: str | None = None
+        try:
+            doc_id = await history_repo.record_start(name)
+        except Exception:
+            logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
-    totals: dict = {}
-    error: str | None = None
-    try:
-        totals = await body(doc_id) or {}
-    except Exception as exc:
+        totals: dict = {}
+        error: str | None = None
+        try:
+            totals = await body(doc_id) or {}
+        except Exception as exc:
+            if doc_id is None:
+                raise
+            logger.error(f"market_data.{name}.failed", exc_info=True)
+            error = str(exc)
         if doc_id is None:
-            raise
-        logger.error(f"market_data.{name}.failed", exc_info=True)
-        error = str(exc)
-    if doc_id is None:
-        return
-    try:
-        await history_repo.record_finish(
-            doc_id,
-            status="failed" if error else "completed",
-            duration_ms=_ms_since(started),
-            error=error,
-            **totals,
-        )
-    except Exception:
-        logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
+            return
+        try:
+            await history_repo.record_finish(
+                doc_id,
+                status="failed" if error else "completed",
+                duration_ms=_ms_since(started),
+                error=error,
+                **totals,
+            )
+        except Exception:
+            logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
+    finally:
+        if task is not None:
+            _RUNNING.discard(task)
+
+
+async def wait_running_jobs(timeout_s: float) -> int:
+    """Wait until running jobs finish or the timeout passes; return how many still run."""
+    if _RUNNING:
+        await asyncio.wait(set(_RUNNING), timeout=max(0.0, timeout_s))
+    return len(_RUNNING)
 
 
 async def _sync_by_intervals(
@@ -643,9 +660,8 @@ async def enqueue_missed_catchups(
     one. Fresh DB (``last is None``) is treated as "no catch-up needed"; the next
     cron tick handles the first run.
 
-    Assumes ``scheduler.start()`` has already run by call time (the JobScheduler
-    Dishka factory starts the scheduler inside its async-gen yield, which
-    completes before ``container.get(JobScheduler)`` returns in the caller). If
+    Assumes ``scheduler.start()`` has already run: the worker role starts the
+    scheduler after it takes the worker lease and only then registers the jobs. If
     that ever inverts, the one-off persists with ``next_run_time=now`` and fires
     on the first post-start tick — harmlessly deferred, never dropped.
 
