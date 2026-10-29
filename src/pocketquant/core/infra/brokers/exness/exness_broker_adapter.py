@@ -21,7 +21,7 @@ import inspect
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -60,6 +60,7 @@ logger = get_logger(__name__)
 _FILL_TIMEOUT_S = 15
 _STATUS_POLLS = 4
 _PAGE_LIMIT = 200
+_CACHE_MAX_AGE_S = 90
 # Deal types whose profit is realized PnL; ``balance`` (deposits, withdrawals) never counts.
 _PNL_DEAL_TYPES = frozenset({"close", "swap_fee", "admin_fee", "dividend"})
 _SIDE_BY_DIRECTION = {"buy": PositionSide.LONG, "sell": PositionSide.SHORT}
@@ -124,6 +125,12 @@ class ExnessBrokerAdapter(IBrokerPort):
         self._snapshot_ready = False
         self._needs_snapshot = False
         self._currency: str | None = None
+        self._balance_cache: tuple[float, AccountBalance] | None = None
+        # (monotonic time, UTC date, value); a close sets ``_realized_invalid_at`` so a
+        # read that started before the close never stores its stale value.
+        self._realized: tuple[float, date, float] | None = None
+        self._realized_invalid_at = 0.0
+        self._refresh_task: asyncio.Task[None] | None = None
         self._stream: ExnessStream | None = None
         self._stream_task: asyncio.Task[None] | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
@@ -146,6 +153,7 @@ class ExnessBrokerAdapter(IBrokerPort):
             stale_after_s=None,
         )
         self._stream_task = asyncio.create_task(self._stream.run_forever())
+        self._refresh_task = asyncio.create_task(self._refresh_loop())
         self._connected = True
         logger.info("exness.broker_connected")
 
@@ -156,8 +164,13 @@ class ExnessBrokerAdapter(IBrokerPort):
             self._stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._stream_task
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._refresh_task
         self._stream = None
         self._stream_task = None
+        self._refresh_task = None
         self._connected = False
         logger.info("exness.broker_disconnected")
 
@@ -283,14 +296,47 @@ class ExnessBrokerAdapter(IBrokerPort):
     async def _loss_cap_reason(self) -> str | None:
         cap = self._safeguards.daily_loss_cap
         assert cap is not None
-        try:
-            realized = await self._realized_today()
-        except ExnessApiError as e:
-            return f"daily loss check failed: {e.code}"
+        # After a close the next open reads the deals synchronously, about one paced data
+        # call (1-2 s).
+        cached = self._realized
+        if (
+            cached is not None
+            and cached[1] == datetime.now(UTC).date()
+            and time.monotonic() - cached[0] < _CACHE_MAX_AGE_S
+        ):
+            realized = cached[2]
+        else:
+            try:
+                realized = await self._read_realized()
+            except ExnessApiError as e:
+                return f"daily loss check failed: {e.code}"
         if realized <= -cap:
             logger.warning("exness.daily_loss_cap_reached", realized=realized)
             return "daily loss cap reached"
         return None
+
+    async def _read_realized(self) -> float:
+        """Read today's realized PnL; store it unless a close landed during the read."""
+        started = time.monotonic()
+        today = datetime.now(UTC).date()
+        realized = await self._realized_today()
+        if started > self._realized_invalid_at:
+            self._realized = (time.monotonic(), today, realized)
+        return realized
+
+    async def _refresh_caches(self) -> None:
+        try:
+            self._balance_cache = (time.monotonic(), await self._read_balance())
+            await self._read_realized()
+        except Exception as e:
+            logger.warning("exness.cache_refresh_failed", error=str(e))
+
+    async def _refresh_loop(self) -> None:
+        """Refresh the caches at second 30 of every minute, away from the bar close."""
+        while True:
+            now = datetime.now(UTC)
+            await asyncio.sleep((30 - now.second - now.microsecond / 1e6) % 60 or 60)
+            await self._refresh_caches()
 
     async def _realized_today(self) -> float:
         midnight = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -487,6 +533,8 @@ class ExnessBrokerAdapter(IBrokerPort):
         held = _held_from_repo(pos, pos.entry_price)
         await self._publish_close_fill(held, held.units, latest)
         await self._emit_trade((held, latest, held.units))
+        self._realized = None
+        self._realized_invalid_at = time.monotonic()
         logger.info("exness.position_closed_while_away", symbol=pos.symbol)
 
     async def _on_transaction(self, event: dict[str, Any]) -> None:
@@ -529,6 +577,8 @@ class ExnessBrokerAdapter(IBrokerPort):
             units = min(lots_to_units(lots, Decimal(cond["contract_size"])), held.units)
             await self._publish_close_fill(held, units, deal)
             await self._emit_trade((held, deal, units))
+            self._realized = None
+            self._realized_invalid_at = time.monotonic()
             held.units -= units
             if held.units <= 0:
                 self._positions.pop(pid, None)
@@ -653,6 +703,14 @@ class ExnessBrokerAdapter(IBrokerPort):
     # ── account state ───────────────────────────────────────────────────────
 
     async def get_balance(self) -> AccountBalance:
+        cached = self._balance_cache
+        if cached is not None and time.monotonic() - cached[0] < _CACHE_MAX_AGE_S:
+            return cached[1]
+        balance = await self._read_balance()
+        self._balance_cache = (time.monotonic(), balance)
+        return balance
+
+    async def _read_balance(self) -> AccountBalance:
         state = (await self._client.call("getTradingStateSnapshot"))["account_state"]
         if self._currency is None:
             details = await self._client.call("getAccountDetails")
