@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Observe and correct: KISS rule, loop-lag probe, skip listener, docstrings, machine baseline"
-status: pending
+status: done
 priority: P1
 effort: "3h + deploy D-1"
 dependencies: []
