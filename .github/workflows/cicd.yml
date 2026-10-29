@@ -12,7 +12,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A master run deploys: cancelling it mid-roll can leave two copies of a service.
+  # Other refs still cancel.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   tests:
