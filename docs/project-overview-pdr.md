@@ -4,7 +4,7 @@ What PocketQuant is for and what it must do. How it is built: [system-architectu
 
 ## Vision
 
-PocketQuant is a personal algorithmic trading platform. It keeps reliable market-data history for crypto, index futures and CFDs, runs strategies against it in backtests and forward tests, and can trade live through a broker.
+PocketQuant is a personal algorithmic trading platform. It keeps reliable market-data history for crypto and CFDs, runs strategies against it in backtests and forward tests, and can trade live through a broker.
 
 ## Goals
 
@@ -17,7 +17,7 @@ PocketQuant is a personal algorithmic trading platform. It keeps reliable market
 
 ### F1: Historical data sync
 
-- Fetch bars from the provider the symbol's suffix names: Binance (crypto spot), TradingView (index futures), Exness (CFDs).
+- Fetch bars from the provider the symbol's suffix names: Binance (crypto spot), Exness (CFDs).
 - Intervals: 1m, 5m, 15m, 1h, 4h, 1d, 1w.
 - Upsert; never duplicate a bar.
 - Track sync status per symbol and interval.

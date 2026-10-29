@@ -100,9 +100,9 @@ class TrackedSymbolBackfillService:
         mode = cmd.resolved_mode()
         symbol = cmd.symbol.upper()
 
-        # A session calendar's daily bar must come from the provider. Its day
-        # opens at the session open the evening before (17:00 Chicago for CME),
-        # so a cascaded daily bar would never match the vendor's chart — which is
+        # A session calendar's daily bar must come from the provider. The vendor
+        # builds it from its own session (Exness publishes its own D1 candles),
+        # so a cascaded daily bar need not match the vendor's chart — which is
         # why ``cascade_tfs`` already omits DAY_1 for a session calendar. The
         # consequence for a backfill is that cascade mode would persist 1m bars
         # and produce no daily bar at all, reporting success for work it did not

@@ -37,7 +37,7 @@ Ports live in the domain so the engine depends on contracts, not implementations
 | Provider | File | Provides |
 |---|---|---|
 | `InfrastructureProvider` | `infrastructure.py` | Settings, EventBus, Database, Cache, repositories, calendars, JobScheduler, health. |
-| `AdaptersProvider` | `adapters.py` | TradingView and Exness clients, the routed data and quote ports, `BrokerFactory`. |
+| `AdaptersProvider` | `adapters.py` | Exness client, the routed data and quote ports, `BrokerFactory`. |
 | `ServicesProvider` | `services.py` | App services, the strategy engine, the command and query services routes inject. |
 
 ## Startup and Shutdown
@@ -115,7 +115,7 @@ A backtest is an ad-hoc single run, independent of subscriptions. The run reads 
 
 ### Market-data routing
 
-- A composite symbol is `{CODE}:{PROVIDER}`. The suffix, lower-cased, is the provider id: `BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`, `XAUUSD:EXNESS` → `exness`. `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py` is the only parser.
+- A composite symbol is `{CODE}:{PROVIDER}`. The suffix, lower-cased, is the provider id: `BTCUSDT:BINANCE` → `binance`, `XAUUSD:EXNESS` → `exness`. `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py` is the only parser.
 - `RoutingDataProviderAdapter` and `RoutingRealtimeQuoteAdapter` (`core/infra/market_data/`) send a symbol to exactly that provider. There is no fallback, because another provider's bars for the same code are a different instrument. An unknown suffix raises `UnknownDataProviderError`.
 - An unseeded symbol takes its provider's `asset_class` and `calendar_id` from `DATA_PROVIDER_DEFAULTS`.
 - How to add a provider: "Adding a data provider" in [code-standards.md](./code-standards.md#composite-symbol-format).
@@ -125,7 +125,6 @@ A backtest is an ad-hoc single run, independent of subscriptions. The run reads 
 | Provider | Adapter package | Notes |
 |---|---|---|
 | Binance | `core/infra/binance/` | Public REST, no auth. `@aggTrade` WS for quotes. |
-| TradingView | `core/infra/tradingview/` | Index futures through the unofficial `tvDatafeed` scraper, with no stability promise. `TvDatafeedClient` serialises every call with a lock, because the library shares one chart session and parallel calls return one symbol's bars for another. `TRADINGVIEW_EXCHANGE_BY_CODE` maps codes to the scraper's exchange. |
 | Exness | `core/infra/exness/` | Signed REST and WS (Ed25519) for CFDs. See below. |
 
 **Exness client.** `EXNESS_API_BASE_URL` serves only `getAccessPoint`. Every later call goes to the per-account access point, resolved once per process and held in memory. Requests are paced by the strictest published limit with 20% headroom, scaled by `EXNESS_RATE_FRACTION`. A 429 on a data call is retried at most 3 times; a 429 on an order call is never retried. Order calls are refused while `EXNESS_LIVE_TRADING` is false.
@@ -156,7 +155,7 @@ Job history (`job_history`):
 
 ### Data lag
 
-A delayed feed (the free TradingView plan runs about 10 to 15 minutes behind CME) is flagged, not treated as broken. Lag is counted in trading minutes from the newest 1m bar, so weekends and halts are not lag. Thresholds are constants at the top of `engine/market_data/data_lag_service.py`.
+A delayed feed is flagged, not treated as broken. Lag is counted in trading minutes from the newest 1m bar, so weekends and halts are not lag. Thresholds are constants at the top of `engine/market_data/data_lag_service.py`.
 
 | State | Meaning |
 |---|---|

@@ -23,7 +23,7 @@ from pocketquant.core.infra.market_data.routing_realtime_quote_adapter import (
     RoutingRealtimeQuoteAdapter,
 )
 
-SYMBOL = "ES1!:TRADINGVIEW"
+SYMBOL = "XAUUSD:EXNESS"
 
 
 def _child(
@@ -51,14 +51,12 @@ def _adapter(providers: dict) -> RoutingRealtimeQuoteAdapter:
 @pytest.mark.asyncio
 async def test_subscribe_uses_only_the_provider_the_suffix_names() -> None:
     binance = _child()
-    tradingview = _child()
+    exness = _child()
 
-    key = await _adapter({"binance": binance, "tradingview": tradingview}).subscribe(
-        SYMBOL, lambda _: None
-    )
+    key = await _adapter({"binance": binance, "exness": exness}).subscribe(SYMBOL, lambda _: None)
 
     assert key == "sub-key"
-    tradingview.subscribe.assert_awaited_once()
+    exness.subscribe.assert_awaited_once()
     binance.subscribe.assert_not_awaited()
 
 
@@ -71,7 +69,7 @@ async def test_unsubscribe_reaches_the_owning_provider() -> None:
     """
     first_registered = _child()
     owner = _child()
-    adapter = _adapter({"tradingview": first_registered, "binance": owner})
+    adapter = _adapter({"exness": first_registered, "binance": owner})
 
     await adapter.subscribe("BTCUSDT:BINANCE", lambda _: None)
     await adapter.unsubscribe("BTCUSDT:BINANCE")
@@ -85,7 +83,7 @@ async def test_unsubscribing_an_unknown_symbol_reaches_no_child() -> None:
     """Reconcile can ask to drop a symbol this adapter never subscribed."""
     child = _child()
 
-    await _adapter({"tradingview": child}).unsubscribe("NEVER:SUBSCRIBED")
+    await _adapter({"exness": child}).unsubscribe("NEVER:SUBSCRIBED")
 
     child.unsubscribe.assert_not_awaited()
 
@@ -98,12 +96,12 @@ async def test_subscriptions_merges_children() -> None:
     """
     adapter = _adapter(
         {
-            "tradingview": _child(subscriptions={"ES1!:TRADINGVIEW": ("k1", None)}),
+            "exness": _child(subscriptions={"XAUUSD:EXNESS": ("k1", None)}),
             "binance": _child(subscriptions={"BTCUSDT:BINANCE": ("k2", None)}),
         }
     )
 
-    assert set(adapter.subscriptions.keys()) == {"ES1!:TRADINGVIEW", "BTCUSDT:BINANCE"}
+    assert set(adapter.subscriptions.keys()) == {"XAUUSD:EXNESS", "BTCUSDT:BINANCE"}
     assert adapter.subscription_count == 2
 
 
@@ -113,7 +111,7 @@ async def test_last_tick_at_is_the_max_across_children() -> None:
     newer = datetime(2026, 5, 5, 12, 5, tzinfo=UTC)
     adapter = _adapter(
         {
-            "tradingview": _child(last_tick_at=older),
+            "exness": _child(last_tick_at=older),
             "binance": _child(last_tick_at=newer),
         }
     )
@@ -125,12 +123,10 @@ async def test_last_tick_at_is_the_max_across_children() -> None:
 async def test_last_tick_at_ignores_a_child_that_has_never_ticked() -> None:
     """A silent child reports ``None``; ``max`` over it would raise."""
     seen = datetime(2026, 5, 5, 12, 0, tzinfo=UTC)
-    adapter = _adapter(
-        {"tradingview": _child(last_tick_at=None), "binance": _child(last_tick_at=seen)}
-    )
+    adapter = _adapter({"exness": _child(last_tick_at=None), "binance": _child(last_tick_at=seen)})
 
     assert adapter.last_tick_at == seen
-    assert _adapter({"tradingview": _child(last_tick_at=None)}).last_tick_at is None
+    assert _adapter({"exness": _child(last_tick_at=None)}).last_tick_at is None
 
 
 @pytest.mark.asyncio
@@ -153,17 +149,17 @@ async def test_one_bad_child_does_not_block_shutdown_of_the_others() -> None:
     failing.disconnect = AsyncMock(side_effect=RuntimeError("socket stuck"))
     healthy = _child()
 
-    await _adapter({"tradingview": failing, "binance": healthy}).disconnect()
+    await _adapter({"exness": failing, "binance": healthy}).disconnect()
 
     healthy.disconnect.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_is_connected_is_true_when_any_child_is() -> None:
-    adapter = _adapter({"tradingview": _child(connected=False), "binance": _child(connected=True)})
+    adapter = _adapter({"exness": _child(connected=False), "binance": _child(connected=True)})
 
     assert adapter.is_connected() is True
-    assert _adapter({"tradingview": _child(connected=False)}).is_connected() is False
+    assert _adapter({"exness": _child(connected=False)}).is_connected() is False
 
 
 @pytest.mark.asyncio
@@ -207,7 +203,7 @@ class TestRunForeverSupervisesEveryChild:
         to wind down behind it.
         """
         first, second = _BlockingChild(), _BlockingChild()
-        adapter = _adapter({"tradingview": first, "binance": second})
+        adapter = _adapter({"exness": first, "binance": second})
 
         task = asyncio.create_task(adapter.run_forever())
         await asyncio.wait_for(

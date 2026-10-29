@@ -3,7 +3,7 @@ import { dataLagLabel, dataLagMessage } from '../lib/data-lag'
 import { parseSymbol } from '../lib/symbol-format'
 
 interface DataLagBadgeProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "ES1!:TRADINGVIEW" */
+  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "XAUUSD:EXNESS" */
   symbol: string
 }
 

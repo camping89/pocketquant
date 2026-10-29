@@ -2,10 +2,9 @@
 
 Each routing adapter maps a provider id to its venue adapter. The key is the
 provider id a symbol's suffix names (BTCUSDT:BINANCE -> "binance",
-ES1!:TRADINGVIEW -> "tradingview", XAUUSD:EXNESS -> "exness"). Adding a
-provider is one entry in each router here and one in DATA_PROVIDER_DEFAULTS;
-the routing adapters implement the same ports, so every consumer above them is
-unchanged. ``BrokerFactory`` builds the broker adapters.
+XAUUSD:EXNESS -> "exness"). Adding a provider is one entry in each router here
+and one in DATA_PROVIDER_DEFAULTS; the routing adapters implement the same
+ports, so every consumer above them is unchanged. ``BrokerFactory`` builds the broker adapters.
 """
 
 from collections.abc import AsyncIterator
@@ -24,7 +23,6 @@ from pocketquant.core.infra.binance.binance_websocket_adapter import (
 )
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
-from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.exness.exness_adapter import ExnessAdapter
 from pocketquant.core.infra.exness.exness_client import ExnessClient
 from pocketquant.core.infra.exness.exness_quote_adapter import ExnessQuoteAdapter
@@ -40,9 +38,6 @@ from pocketquant.core.infra.persistence.repositories.position_repository import 
 from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
     SafeguardsRepository,
 )
-from pocketquant.core.infra.tradingview.tradingview_adapter import TradingViewAdapter
-from pocketquant.core.infra.tradingview.tradingview_quote_adapter import TradingViewQuoteAdapter
-from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
 
 
 class AdaptersProvider(Provider):
@@ -74,12 +69,6 @@ class AdaptersProvider(Provider):
         )
 
     @provide(scope=Scope.APP)
-    def get_tradingview_client(self, settings: Settings) -> TvDatafeedClient:
-        # One scraper session for history and quotes: its lock then serialises
-        # both, instead of two sessions bursting at an unofficial endpoint.
-        return TvDatafeedClient(settings=settings)
-
-    @provide(scope=Scope.APP)
     async def get_exness_client(self, settings: Settings) -> AsyncIterator[ExnessClient]:
         """One signed client for history and quotes; it sends nothing until used."""
         client = ExnessClient(settings)
@@ -88,40 +77,22 @@ class AdaptersProvider(Provider):
 
     @provide(scope=Scope.APP)
     def get_data_provider(
-        self,
-        settings: Settings,
-        calendar_factory: TradingCalendarFactory,
-        tradingview_client: TvDatafeedClient,
-        exness_client: ExnessClient,
+        self, settings: Settings, exness_client: ExnessClient
     ) -> IDataProviderPort:
         return RoutingDataProviderAdapter(
             providers={
                 "binance": BinanceAdapter(settings=settings),
-                "tradingview": TradingViewAdapter(
-                    client=tradingview_client,
-                    settings=settings,
-                    calendar_factory=calendar_factory,
-                ),
                 "exness": ExnessAdapter(exness_client),
             },
         )
 
     @provide(scope=Scope.APP)
     def get_realtime_quote_provider(
-        self,
-        settings: Settings,
-        calendar_factory: TradingCalendarFactory,
-        tradingview_client: TvDatafeedClient,
-        exness_client: ExnessClient,
+        self, exness_client: ExnessClient
     ) -> IRealtimeQuoteProviderPort:
         return RoutingRealtimeQuoteAdapter(
             providers={
                 "binance": BinanceWebSocketAdapter(),
-                "tradingview": TradingViewQuoteAdapter(
-                    client=tradingview_client,
-                    settings=settings,
-                    calendar_factory=calendar_factory,
-                ),
                 "exness": ExnessQuoteAdapter(exness_client),
             },
         )

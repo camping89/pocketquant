@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pocketquant.core.common.constants import TTL_QUOTE_LATEST
 from pocketquant.engine.market_data.app_services.quote_app_service import QuoteAppService
 
 
@@ -42,14 +43,7 @@ def mock_cache() -> AsyncMock:
 @pytest.fixture
 def service(mock_bar_manager: AsyncMock, mock_cache: AsyncMock) -> QuoteAppService:
     """QuoteAppService with all external dependencies mocked."""
-    settings = MagicMock(tradingview_effective_poll_seconds=60)
-    provider = MagicMock()
-    return QuoteAppService(
-        settings=settings,
-        cache=mock_cache,
-        bar_manager=mock_bar_manager,
-        provider=provider,
-    )
+    return QuoteAppService(cache=mock_cache, bar_manager=mock_bar_manager, provider=MagicMock())
 
 
 class TestOnQuoteUpdateVolumeClamping:
@@ -110,18 +104,10 @@ class TestOnQuoteUpdateVolumeClamping:
 
 
 @pytest.mark.asyncio
-async def test_latest_quote_outlives_three_polls_of_a_polled_feed(
-    mock_bar_manager: AsyncMock, mock_cache: AsyncMock
+async def test_latest_quote_is_cached_for_the_latest_quote_ttl(
+    service: QuoteAppService, mock_cache: AsyncMock
 ) -> None:
-    """A 60s-polled futures quote must not expire before the next poll lands."""
-    from pocketquant.core.config import Settings
-
-    service = QuoteAppService(
-        settings=Settings(),
-        cache=mock_cache,
-        bar_manager=mock_bar_manager,
-        provider=MagicMock(),
-    )
+    """The latest quote is cached for TTL_QUOTE_LATEST seconds, whatever the provider."""
     await service.on_quote_update(_make_quote_data(volume=1.0))
 
-    assert mock_cache.set.call_args.kwargs["ttl"] == 180
+    assert mock_cache.set.call_args.kwargs["ttl"] == TTL_QUOTE_LATEST

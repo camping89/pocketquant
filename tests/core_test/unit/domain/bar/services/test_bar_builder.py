@@ -17,10 +17,10 @@ from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
 )
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
+from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
 
 CALENDAR = Continuous24x7Calendar()
-CME = CmeGlobexCalendarAdapter()
+EXNESS_FX = EXNESS_CALENDARS[0]
 BAR_START = datetime(2026, 5, 8, 10, 0, 0, tzinfo=UTC)
 BAR_END = BAR_START + timedelta(seconds=60)  # 1m bar
 
@@ -139,30 +139,27 @@ class TestCalendarGovernsAlignment:
     Without these, threading a calendar through alignment is unobservable:
     the 24/7 calendar delegates straight back to ``get_bar_start``, so every
     other test passes just as well when the calendar argument is ignored. The
-    CME calendar is the real one futures will use, and its sessions open the
-    evening before, which puts daily and 4h bars on a different grid.
+    Exness FX calendar is a real session calendar, and its weeks open on Sunday
+    00:00 UTC, which puts weekly bars on a different grid than the Monday one.
     """
 
-    # 2026-06-10 is an ordinary CME Globex equity session; it opens 17:00
-    # Chicago the previous evening, which is 22:00 UTC in summer.
-    UTC_MIDNIGHT = datetime(2026, 6, 10, 0, 0, tzinfo=UTC)
-    CME_SESSION_OPEN = datetime(2026, 6, 9, 22, 0, tzinfo=UTC)
+    # The reference week of the Exness calendars starts on Sunday 2026-10-11.
+    MONDAY_MIDNIGHT = datetime(2026, 10, 12, 0, 0, tzinfo=UTC)
+    SUNDAY_MIDNIGHT = datetime(2026, 10, 11, 0, 0, tzinfo=UTC)
 
-    @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
-    def test_utc_midnight_aligns_only_on_the_continuous_calendar(self, interval: Interval) -> None:
-        assert is_bar_aligned(self.UTC_MIDNIGHT, interval, CALENDAR) is True
-        assert is_bar_aligned(self.UTC_MIDNIGHT, interval, CME) is False
+    def test_monday_midnight_aligns_only_on_the_continuous_calendar(self) -> None:
+        assert is_bar_aligned(self.MONDAY_MIDNIGHT, Interval.WEEK_1, CALENDAR) is True
+        assert is_bar_aligned(self.MONDAY_MIDNIGHT, Interval.WEEK_1, EXNESS_FX) is False
 
-    @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
-    def test_session_open_aligns_only_on_the_session_calendar(self, interval: Interval) -> None:
-        assert is_bar_aligned(self.CME_SESSION_OPEN, interval, CME) is True
-        assert is_bar_aligned(self.CME_SESSION_OPEN, interval, CALENDAR) is False
+    def test_session_week_open_aligns_only_on_the_session_calendar(self) -> None:
+        assert is_bar_aligned(self.SUNDAY_MIDNIGHT, Interval.WEEK_1, EXNESS_FX) is True
+        assert is_bar_aligned(self.SUNDAY_MIDNIGHT, Interval.WEEK_1, CALENDAR) is False
 
     def test_filter_aligned_bars_partitions_by_the_calendar(self) -> None:
         bars = [
             Bar(
-                symbol="ES1!:TRADINGVIEW",
-                interval=Interval.DAY_1,
+                symbol="EURUSD:EXNESS",
+                interval=Interval.WEEK_1,
                 datetime=ts,
                 open=1.0,
                 high=1.0,
@@ -170,14 +167,14 @@ class TestCalendarGovernsAlignment:
                 close=1.0,
                 volume=1.0,
             )
-            for ts in (self.UTC_MIDNIGHT, self.CME_SESSION_OPEN)
+            for ts in (self.MONDAY_MIDNIGHT, self.SUNDAY_MIDNIGHT)
         ]
 
-        aligned_247, dropped_247 = filter_aligned_bars(bars, Interval.DAY_1, CALENDAR)
-        aligned_cme, dropped_cme = filter_aligned_bars(bars, Interval.DAY_1, CME)
+        aligned_247, dropped_247 = filter_aligned_bars(bars, Interval.WEEK_1, CALENDAR)
+        aligned_fx, dropped_fx = filter_aligned_bars(bars, Interval.WEEK_1, EXNESS_FX)
 
         # The same two bars partition the opposite way on the two calendars.
-        assert [b.datetime for b in aligned_247] == [self.UTC_MIDNIGHT]
-        assert [b.datetime for b in dropped_247] == [self.CME_SESSION_OPEN]
-        assert [b.datetime for b in aligned_cme] == [self.CME_SESSION_OPEN]
-        assert [b.datetime for b in dropped_cme] == [self.UTC_MIDNIGHT]
+        assert [b.datetime for b in aligned_247] == [self.MONDAY_MIDNIGHT]
+        assert [b.datetime for b in dropped_247] == [self.SUNDAY_MIDNIGHT]
+        assert [b.datetime for b in aligned_fx] == [self.SUNDAY_MIDNIGHT]
+        assert [b.datetime for b in dropped_fx] == [self.MONDAY_MIDNIGHT]

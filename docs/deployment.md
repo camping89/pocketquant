@@ -101,9 +101,6 @@ Key prod env vars (full set in `vps/default/.env`):
 | `ADMIN_TOKEN` | Yes | Required in production; mutations return 503 while unset. Sent as `X-Admin-Token`. |
 | `TUNNEL_TOKEN` | Yes | Token of the Cloudflare Tunnel run by `cloudflared`. Routes are set in the Cloudflare dashboard (Networking > Tunnels), not here. |
 | `MONGO_PORT` / `REDIS_PORT` / `PORTAINER_PORT` | Yes | Host ports, bound to 127.0.0.1 (use obscure values) |
-| `TRADINGVIEW_PLAN` | No | `free` (default) or `cme_non_pro`. The single index-futures entitlement knob; derives bar cap, poll floor and real-time. |
-| `TRADINGVIEW_AUTH_TOKEN` | No | Supplies a session token directly and wins over username/password. |
-| `TRADINGVIEW_USERNAME` / `_PASSWORD` | No | Optional login; the scraper falls back to anonymous (delayed, limited) without it. |
 | `EXNESS_API_BASE_URL` | No | `https://api.exness.com` exactly (any other host or scheme leaves Exness unconfigured). Serves `getAccessPoint` only. |
 | `EXNESS_ACCOUNT_ID` | No | Exness account id. |
 | `EXNESS_API_KEY` | No | Exness API key id. |

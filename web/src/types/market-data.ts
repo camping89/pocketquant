@@ -17,7 +17,7 @@ export interface OHLCVResponse {
   count: number
 }
 
-/** Composite symbol string in the format "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "ES1!:TRADINGVIEW". */
+/** Composite symbol string in the format "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "XAUUSD:EXNESS". */
 export type SelectedSymbol = string
 
 export interface SymbolInfo {

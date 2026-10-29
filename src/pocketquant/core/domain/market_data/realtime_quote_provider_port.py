@@ -1,7 +1,7 @@
 """Realtime quote provider port — WebSocket-based tick stream interface.
 
 Neutral domain location so no concrete provider implementation (Binance,
-TradingView, Exness) is implied by the module path.
+Exness) is implied by the module path.
 """
 
 from __future__ import annotations
@@ -34,7 +34,6 @@ class IRealtimeQuoteProviderPort(Protocol):
         than storing it.
         """
         ...
-
 
     async def connect(self) -> None:
         """Open the WebSocket connection."""

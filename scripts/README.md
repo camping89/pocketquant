@@ -9,11 +9,6 @@ Operational scripts. Run from repository root.
 - `migrate_symbol_asset_class.py` — one-time. Stamps pre-asset-class symbol documents with
   `asset_class`/`calendar_id`/`contract_spec` and drops `asset_type`. Dry-run by default;
   `--apply` writes. Idempotent — skips documents that already carry `asset_class`.
-- `seed_index_futures.py` — seeds `ES1!:TRADINGVIEW`, `NQ1!:TRADINGVIEW` and `YM1!:TRADINGVIEW`
-  into `symbols` + `tracked_symbols` with `asset_class=index_future`, the CME calendar and each
-  contract's multiplier/tick size. Dry-run by default; `--apply` writes. Idempotent. Run it
-  before the first sync reaches these symbols: an unseeded symbol takes its provider's
-  defaults (index future, CME calendar) but a linear contract spec.
 - `seed_exness_symbols.py` — seeds `XAUUSD:EXNESS`, `EURUSD:EXNESS` and `BTCUSD:EXNESS` into
   `symbols` + `tracked_symbols` with `asset_class=cfd`, each instrument's session calendar and tick
   size. Dry-run by default; `--apply` writes. Idempotent. Run it before the first sync reaches these

@@ -1,7 +1,7 @@
 """Where the closed-market skip sits relative to the retry loop.
 
 ``fetch_with_retry``'s backoff loop reads an empty result as "try again", and a
-halted CME session is a legitimately empty answer from an unofficial scraper.
+closed Exness session is a legitimately empty answer from the provider.
 These tests wire the real chain — ``_sync_by_intervals`` ->
 ``SyncService.sync_one`` -> ``fetch_with_retry`` ->
 ``RoutingDataProviderAdapter`` -> fake children — and pin two things about it:
@@ -27,7 +27,7 @@ from pocketquant.core.infra.market_data.routing_data_provider_adapter import (
 from pocketquant.engine.market_data.app_services.sync_jobs import _sync_by_intervals
 from pocketquant.engine.market_data.sync_service import SyncService
 
-SYMBOL = "ES1!:TRADINGVIEW"
+SYMBOL = "XAUUSD:EXNESS"
 
 
 class _Shut(Continuous24x7Calendar):
@@ -106,11 +106,11 @@ async def test_a_shut_market_reaches_no_provider_through_either_loop() -> None:
     """The skip is upstream of the backoff loop.
 
     This is the guard that keeps a halted session from costing a burst of
-    scrape calls a minute. Asserting on the children rather than on
+    provider calls a minute. Asserting on the children rather than on
     ``sync_one`` is the whole point: a skip that merely stopped the service
     would still let a caller elsewhere spin the loop.
     """
-    providers = {"tradingview": _empty_provider(), "binance": _empty_provider()}
+    providers = {"exness": _empty_provider(), "binance": _empty_provider()}
 
     await _run_job(_Shut(), providers)
 
@@ -127,7 +127,7 @@ async def test_an_open_empty_market_costs_one_call_per_attempt_to_its_own_provid
     The backoff delays are flattened because this pins how many calls happen,
     not how long they wait; leaving them real would add 11s of sleeping.
     """
-    providers = {"tradingview": _empty_provider(), "binance": _empty_provider()}
+    providers = {"exness": _empty_provider(), "binance": _empty_provider()}
 
     with patch(
         "pocketquant.engine.market_data.sync_internals.provider_fetch._BACKOFF_SECONDS",
@@ -136,7 +136,7 @@ async def test_an_open_empty_market_costs_one_call_per_attempt_to_its_own_provid
         await _run_job(Continuous24x7Calendar(), providers)
 
     attempts = 3
-    assert providers["tradingview"].fetch_ohlcv.await_count == attempts
+    assert providers["exness"].fetch_ohlcv.await_count == attempts
     providers["binance"].fetch_ohlcv.assert_not_awaited()
 
 
@@ -158,7 +158,7 @@ async def test_an_open_market_costs_one_call_once_the_provider_answers() -> None
         "pocketquant.engine.market_data.sync_internals.provider_fetch.has_aligned_bar",
         return_value=True,
     ):
-        await _run_job(Continuous24x7Calendar(), {"tradingview": answering, "binance": fallback})
+        await _run_job(Continuous24x7Calendar(), {"exness": answering, "binance": fallback})
 
     assert answering.fetch_ohlcv.await_count == 1
     fallback.fetch_ohlcv.assert_not_awaited()
@@ -177,7 +177,7 @@ async def test_a_failing_sole_provider_costs_one_call_not_three() -> None:
     refusing = AsyncMock()
     refusing.fetch_ohlcv = AsyncMock(side_effect=RuntimeError("HTTP 429 rate limited"))
 
-    history = await _run_job(Continuous24x7Calendar(), {"tradingview": refusing})
+    history = await _run_job(Continuous24x7Calendar(), {"exness": refusing})
 
     assert refusing.fetch_ohlcv.await_count == 1
     detail = history.record_detail.await_args.kwargs

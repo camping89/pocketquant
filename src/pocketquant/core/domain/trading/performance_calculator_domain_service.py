@@ -41,8 +41,8 @@ class PerformanceCalculatorDomainService:
         Deliberately calendar-time, not session-time, and deliberately not
         parameterized by a trading calendar. ``days`` is wall-clock days, so the
         divisor must be wall-clock days per year: substituting a session count
-        (259 for CME Globex) would stretch one real year into 1.41 and report a
-        doubling as 63% growth.
+        (312 daily bars for Exness FX) would stretch one real year into 1.17 and
+        report a doubling as 81% growth.
 
         Sharpe and Sortino are the opposite case — they count return
         observations, so they do take the calendar's periods per year.

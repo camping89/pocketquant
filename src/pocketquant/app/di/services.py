@@ -86,14 +86,11 @@ class ServicesProvider(Provider):
     @provide(scope=Scope.APP)
     def get_quote_service(
         self,
-        settings: Settings,
         cache: Cache,
         bar_manager: BarAppService,
         provider: IRealtimeQuoteProviderPort,
     ) -> QuoteAppService:
-        return QuoteAppService(
-            settings=settings, cache=cache, bar_manager=bar_manager, provider=provider
-        )
+        return QuoteAppService(cache=cache, bar_manager=bar_manager, provider=provider)
 
     @provide(scope=Scope.APP)
     def get_ws_subscription_manager(

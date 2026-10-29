@@ -2,13 +2,13 @@
 
 Every ``datetime`` crossing this interface is a timezone-aware UTC instant, in
 both directions. Session boundaries are derived from the exchange-local wall
-time converted through ``zoneinfo``, never by adding a fixed offset: CME's open
-is 17:00 Chicago time all year, which is 22:00 UTC in summer and 23:00 UTC in
-winter.
+time converted through ``zoneinfo``, never by adding a fixed offset: Exness
+sessions follow New York time, so the XAUUSD daily break starts at 20:58 UTC
+under US daylight saving and at 21:58 UTC after it ends.
 
-``session_date`` is the exchange's own day key, which is not the UTC date. A CME
-session opens the previous evening, so the instant 2026-06-10T02:00Z belongs to
-session date 2026-06-10 even though it is still 2026-06-09 in Chicago.
+``session_date`` is the calendar's own day key, which need not be the UTC date.
+The Exness calendars key by the UTC date, so a Sunday session is dated Sunday
+even though its first trade comes in the evening.
 """
 
 from __future__ import annotations

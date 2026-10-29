@@ -69,7 +69,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
 
     const sym = symbol.trim().toUpperCase()
     if (!effectiveStrategy) { setErrorMsg('Select a strategy.'); return }
-    if (!sym.includes(':')) { setErrorMsg('Symbol must be CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or ES1!:TRADINGVIEW).'); return }
+    if (!sym.includes(':')) { setErrorMsg('Symbol must be CODE:EXCHANGE (e.g. BTCUSDT:BINANCE or XAUUSD:EXNESS).'); return }
     if (!startDate || !endDate) { setErrorMsg('Start and end datetimes are required.'); return }
     if (startDate > endDate) { setErrorMsg('Start must be on or before end.'); return }
 

@@ -1,7 +1,7 @@
 """The reconcile loop runs every 5s, so what it logs per tick is multiplied by it.
 
-A tracked symbol that no realtime provider serves — an index future before a quote
-adapter exists — fails to subscribe on every tick. That is a configured state, not
+A tracked symbol that no realtime provider serves — its suffix names no registered
+quote adapter — fails to subscribe on every tick. That is a configured state, not
 a transient fault: it must be said once at WARNING, and must not be reported as an
 INFO change on every tick either.
 """
@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import structlog
 from structlog.testing import capture_logs
+from structlog.typing import EventDict
 
 from pocketquant.engine.market_data.app_services import ws_subscription_app_service as module
 from pocketquant.engine.market_data.app_services.ws_subscription_app_service import (
@@ -21,7 +22,7 @@ from pocketquant.engine.market_data.app_services.ws_subscription_app_service imp
 )
 
 CRYPTO = "BTCUSDT:BINANCE"
-FUTURE = "ES1!:TRADINGVIEW"
+UNSERVED = "XAUUSD:EXNESS"
 
 
 class _FakeProvider:
@@ -58,24 +59,24 @@ def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "logger", structlog.get_logger("test.ws_reconcile"))
 
 
-def _events(logs: list[dict], event: str, level: str) -> list[dict]:
+def _events(logs: list[EventDict], event: str, level: str) -> list[EventDict]:
     return [e for e in logs if e["event"] == event and e["log_level"] == level]
 
 
 async def test_an_unservable_symbol_warns_once_across_many_ticks() -> None:
-    service = _service(_FakeProvider(unservable={FUTURE}), [CRYPTO, FUTURE])
+    service = _service(_FakeProvider(unservable={UNSERVED}), [CRYPTO, UNSERVED])
 
     with capture_logs() as logs:
         for _ in range(5):
             await service._reconcile()
 
     warnings = _events(logs, "ws_subscription_manager.subscribe_failed", "warning")
-    assert [w["symbol"] for w in warnings] == [FUTURE]
+    assert [w["symbol"] for w in warnings] == [UNSERVED]
 
 
 async def test_a_failing_symbol_is_not_reported_as_a_change_every_tick() -> None:
-    provider = _FakeProvider(unservable={FUTURE})
-    service = _service(provider, [CRYPTO, FUTURE])
+    provider = _FakeProvider(unservable={UNSERVED})
+    service = _service(provider, [CRYPTO, UNSERVED])
 
     with capture_logs() as logs:
         for _ in range(5):
@@ -88,14 +89,14 @@ async def test_a_failing_symbol_is_not_reported_as_a_change_every_tick() -> None
 
 
 async def test_a_symbol_tracked_again_after_removal_warns_again() -> None:
-    tracked = [FUTURE]
-    service = _service(_FakeProvider(unservable={FUTURE}), tracked)
+    tracked = [UNSERVED]
+    service = _service(_FakeProvider(unservable={UNSERVED}), tracked)
 
     with capture_logs() as logs:
         await service._reconcile()
         tracked.clear()
         await service._reconcile()
-        tracked.append(FUTURE)
+        tracked.append(UNSERVED)
         await service._reconcile()
 
     warnings = _events(logs, "ws_subscription_manager.subscribe_failed", "warning")
@@ -103,16 +104,16 @@ async def test_a_symbol_tracked_again_after_removal_warns_again() -> None:
 
 
 async def test_a_symbol_that_recovers_then_fails_again_warns_again() -> None:
-    unservable = {FUTURE}
+    unservable = {UNSERVED}
     provider = _FakeProvider(unservable=unservable)
-    service = _service(provider, [FUTURE])
+    service = _service(provider, [UNSERVED])
 
     with capture_logs() as logs:
         await service._reconcile()
         unservable.clear()
         await service._reconcile()
         provider.subscriptions.clear()  # the feed dropped it
-        unservable.add(FUTURE)
+        unservable.add(UNSERVED)
         await service._reconcile()
 
     warnings = _events(logs, "ws_subscription_manager.subscribe_failed", "warning")

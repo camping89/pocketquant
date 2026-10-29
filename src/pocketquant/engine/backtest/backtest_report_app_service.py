@@ -360,8 +360,8 @@ class BacktestReportAppService:
         open_positions = [
             self._position_to_open_lot(p) for p in (positions or []) if not p.is_closed
         ]
-        # Annualization belongs to the symbol's calendar: a CME year holds
-        # roughly 252 sessions, not 365 days, and Sharpe scales by its square
+        # Annualization belongs to the symbol's calendar: an Exness FX year holds
+        # 312 daily bars, not 365 days, and Sharpe scales by its square
         # root. A stale queued request can still carry an interval that is no
         # longer an Interval member, and that still skips scaling rather than
         # raising.

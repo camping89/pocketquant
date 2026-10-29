@@ -10,13 +10,9 @@ Nothing here touches the network. Authentication is read from a cached flag,
 because the container health check polls ``/health`` every 30s and a blocking
 scraper call would time it out.
 
-``degraded`` means a provider was given credentials and holds no session. An
-anonymous provider is not degraded: production scrapes TradingView anonymously
-by choice, and a permanent warning would teach everyone to ignore the flag. It
-reports ``degraded``, never ``unhealthy``: the scraper re-logs on its next
-fetch, and a health check that fails for it would restart the container for
-nothing. The session is built on first fetch, so a credentialed provider reads
-``degraded`` for the first minute after a restart.
+``degraded`` means a provider was given credentials and holds no session. It
+never reads ``unhealthy``, so the container health check never restarts the app
+for it.
 """
 
 from __future__ import annotations

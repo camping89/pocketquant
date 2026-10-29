@@ -13,12 +13,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 import structlog
+from structlog.typing import EventDict
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
 from pocketquant.engine.market_data.data_lag_service import FeedState
+from pocketquant.engine.market_data.sync_internals import anomaly_log
 from pocketquant.engine.market_data.sync_internals.anomaly_log import emit_no_progress
 from pocketquant.engine.market_data.sync_status_service import (
     SyncStatusQueryService,
@@ -27,7 +28,6 @@ from pocketquant.engine.market_data.sync_status_service import (
 )
 
 CALENDAR = Continuous24x7Calendar()
-CME = CmeGlobexCalendarAdapter()
 
 
 class _ClosedCalendar(Continuous24x7Calendar):
@@ -64,10 +64,15 @@ class TestStucknessIsMeasuredToTheLastClose:
 
 
 class TestNoProgressIsSilentWhileTheMarketIsShut:
-    def _emit(self, calendar) -> list[dict]:
+    @pytest.fixture(autouse=True)
+    def _fresh_logger(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A cached module logger ignores capture_logs once it has emitted.
+        monkeypatch.setattr(anomaly_log, "logger", structlog.get_logger(anomaly_log.__name__))
+
+    def _emit(self, calendar) -> list[EventDict]:
         with structlog.testing.capture_logs() as logs:
             emit_no_progress(
-                "ES1!:TRADINGVIEW",
+                "EURUSD:EXNESS",
                 Interval.MINUTE_1,
                 bars_fetched=0,
                 filtered_misaligned=0,
@@ -75,7 +80,7 @@ class TestNoProgressIsSilentWhileTheMarketIsShut:
                 attempts=3,
                 streak=1,
                 latest_bar=Bar(
-                    symbol="ES1!:TRADINGVIEW",
+                    symbol="EURUSD:EXNESS",
                     interval=Interval.MINUTE_1,
                     datetime=datetime.now(UTC) - timedelta(hours=9),
                     open=1.0,
@@ -105,7 +110,7 @@ class TestNoProgressIsSilentWhileTheMarketIsShut:
 @pytest.mark.asyncio
 async def test_status_reports_whether_the_market_is_open() -> None:
     status = AsyncMock()
-    status.symbol = "ES1!:TRADINGVIEW"
+    status.symbol = "EURUSD:EXNESS"
     status.interval = Interval.MINUTE_1.value
     status.status = "completed"
     status.bar_count = 10

@@ -8,7 +8,10 @@ import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
+from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.bar_app_service import (
@@ -330,64 +333,79 @@ class TestFlushAllBars:
         assert count > 0
 
 
-class _CmeCalendars:
-    """Stands in for TradingCalendarFactory: every symbol is on CME Globex."""
+class _OneCalendar:
+    """Stands in for TradingCalendarFactory: every symbol is on ``calendar``."""
 
-    async def for_symbol(self, composite: str):
-        from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import (
-            CmeGlobexCalendarAdapter,
-        )
+    def __init__(self, calendar: ITradingCalendarPort) -> None:
+        self._calendar = calendar
 
-        return CmeGlobexCalendarAdapter()
+    async def for_symbol(self, composite: str) -> ITradingCalendarPort:
+        return self._calendar
+
+
+class _ShortWeekCalendar(Continuous24x7Calendar):
+    """Two weeks whose boundary comes an hour early, as a session week's does
+    when US clocks spring forward: the second week opens 6 days 23 hours after
+    the first. Every other interval keeps the 24/7 grid."""
+
+    FIRST_WEEK = datetime(2027, 3, 7, 23, 0, tzinfo=UTC)
+    SECOND_WEEK = datetime(2027, 3, 14, 22, 0, tzinfo=UTC)
+
+    def bar_start(self, instant: datetime, interval: Interval) -> datetime:
+        if interval != Interval.WEEK_1:
+            return super().bar_start(instant, interval)
+        return self.SECOND_WEEK if instant >= self.SECOND_WEEK else self.FIRST_WEEK
 
 
 class TestSessionCalendarBuckets:
-    """Futures realtime bars open on the session grid, not at 00:00 UTC."""
+    """Realtime bars open on the symbol's calendar grid, not on the 24/7 one."""
 
     @pytest.mark.asyncio
-    async def test_es_daily_and_4h_bars_open_at_the_session_open(
+    async def test_exness_weekly_bar_opens_on_sunday_and_holds_the_sunday_session(
         self, mock_cache, mock_bar_repo, mock_event_bus
     ):
         service = BarAppService(
             cache=mock_cache,
             bar_repository=mock_bar_repo,
             event_bus=mock_event_bus,
-            intervals=[Interval.HOUR_4, Interval.DAY_1],
-            calendar_factory=_CmeCalendars(),  # type: ignore[arg-type]
+            intervals=[Interval.HOUR_4, Interval.DAY_1, Interval.WEEK_1],
+            calendar_factory=_OneCalendar(EXNESS_CALENDARS[0]),  # type: ignore[arg-type]
         )
-        symbol = "ES1!:TRADINGVIEW"
-        # Wednesday 2026-09-23: the CME session opened at 22:00 UTC (17:00 CDT).
+        symbol = "EURUSD:EXNESS"
+        # EURUSD opens Sunday 2026-10-11 at 21:05 UTC. On the 24/7 grid that
+        # evening belongs to the week of Monday 10-05, and Monday's tick would
+        # close it; on Exness both ticks are in the week of Sunday 10-11.
         for ts, price in (
-            (datetime(2026, 9, 23, 23, 0, tzinfo=UTC), 6600.0),
-            (datetime(2026, 9, 24, 2, 30, tzinfo=UTC), 6601.0),
+            (datetime(2026, 10, 11, 21, 30, tzinfo=UTC), 1.1600),
+            (datetime(2026, 10, 12, 2, 30, tzinfo=UTC), 1.1601),
         ):
             await service.add_tick(QuoteTick(symbol=symbol, timestamp=ts, price=price, volume=1.0))
 
-        session_open = datetime(2026, 9, 23, 22, 0, tzinfo=UTC)
-        assert service._bars[symbol][Interval.DAY_1].bar_start == session_open
-        assert service._bars[symbol][Interval.HOUR_4].bar_start == datetime(
-            2026, 9, 24, 2, 0, tzinfo=UTC
-        )
+        week_open = datetime(2026, 10, 11, 0, 0, tzinfo=UTC)
+        monday = datetime(2026, 10, 12, 0, 0, tzinfo=UTC)
+        assert service._bars[symbol][Interval.WEEK_1].bar_start == week_open
+        assert service._bars[symbol][Interval.DAY_1].bar_start == monday
+        assert service._bars[symbol][Interval.HOUR_4].bar_start == monday
         completed = [c.args[0] for c in mock_event_bus.publish.await_args_list]
         assert [(e.interval, e.bar_start) for e in completed] == [
-            (Interval.HOUR_4.value, session_open)
+            (Interval.HOUR_4.value, datetime(2026, 10, 11, 20, 0, tzinfo=UTC)),
+            (Interval.DAY_1.value, week_open),
         ]
 
     @pytest.mark.asyncio
     async def test_a_bucket_shorter_than_its_interval_still_closes_on_time(
         self, mock_cache, mock_bar_repo, mock_event_bus
     ):
-        # US clocks spring forward on 2027-03-14, so the week that opened at
-        # 23:00 UTC on 03-07 is followed by one opening at 22:00 UTC: an hour
-        # short of seven days. The first tick of the new week must close it.
+        # The new week opens an hour short of seven days after the old one, so
+        # its first tick comes before old open + 7 days. It must still close it.
         service = BarAppService(
             cache=mock_cache,
             bar_repository=mock_bar_repo,
             event_bus=mock_event_bus,
             intervals=[Interval.WEEK_1],
-            calendar_factory=_CmeCalendars(),  # type: ignore[arg-type]
+            calendar_factory=_OneCalendar(_ShortWeekCalendar()),  # type: ignore[arg-type]
         )
-        symbol = "ES1!:TRADINGVIEW"
+        symbol = "X:Y"
         for ts, price in (
             (datetime(2027, 3, 8, 15, 0, tzinfo=UTC), 6600.0),
             (datetime(2027, 3, 14, 22, 30, tzinfo=UTC), 6610.0),

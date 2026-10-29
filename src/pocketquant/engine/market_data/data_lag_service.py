@@ -1,12 +1,11 @@
 """Feed lag — how far a symbol's market data runs behind real time.
 
-A delayed feed is not a broken one. The free TradingView plan serves CME bars
-10-15 minutes late, and they keep arriving every minute, just behind the clock.
+A delayed feed is not a broken one: it keeps arriving, just behind the clock.
 Lag is measured from the stored bars rather than from which provider serves the
 symbol, so a new provider (delayed or real-time) needs no change here.
 
-Only trading minutes count. A weekend, a holiday or the daily CME halt is the
-market being shut, not the feed falling behind, so the lag reported on a Monday
+Only trading minutes count, so a weekend, a holiday or a daily session break is
+the market being shut, not the feed falling behind. The lag reported on a Monday
 open is the feed's delay rather than the length of the weekend.
 
 The ``data_lag_check`` job writes one snapshot per tracked symbol to Redis each

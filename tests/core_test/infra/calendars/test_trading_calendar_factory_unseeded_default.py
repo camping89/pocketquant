@@ -17,8 +17,8 @@ from pocketquant.core.domain.market_data.provider_routing_domain_service import 
 from pocketquant.core.domain.shared.enums import AssetClass
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.symbol.value_objects import (
-    CALENDAR_CME_GLOBEX_EQUITY,
     CALENDAR_CRYPTO_24_7,
+    CALENDAR_EXNESS_FX,
 )
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 
@@ -37,10 +37,10 @@ async def test_an_unseeded_binance_symbol_is_24x7() -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_unseeded_tradingview_symbol_gets_the_cme_calendar() -> None:
-    calendar = await _factory(None).for_symbol("ES1!:TRADINGVIEW")
+async def test_an_unseeded_exness_symbol_gets_the_exness_fx_calendar() -> None:
+    calendar = await _factory(None).for_symbol("EURUSD:EXNESS")
 
-    assert calendar.calendar_id == CALENDAR_CME_GLOBEX_EQUITY
+    assert calendar.calendar_id == CALENDAR_EXNESS_FX
 
 
 @pytest.mark.asyncio
@@ -52,8 +52,8 @@ async def test_an_unseeded_symbol_of_an_unregistered_provider_is_refused() -> No
 
 @pytest.mark.asyncio
 async def test_a_seeded_record_wins_over_the_provider_default() -> None:
-    seeded = Symbol.create("ES1!:TRADINGVIEW", asset_class=AssetClass.CRYPTO_SPOT)
+    seeded = Symbol.create("EURUSD:EXNESS", asset_class=AssetClass.CRYPTO_SPOT)
 
-    calendar = await _factory(seeded).for_symbol("ES1!:TRADINGVIEW")
+    calendar = await _factory(seeded).for_symbol("EURUSD:EXNESS")
 
     assert calendar.calendar_id == CALENDAR_CRYPTO_24_7

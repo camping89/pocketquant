@@ -1,9 +1,9 @@
 """Contract-aware PnL through PaperBrokerAdapter.
 
-A 0.25-point ES move on 2 contracts is 25.00 USD, not 0.50: the broker's
-``ContractSpec.multiplier`` scales realized and unrealized PnL into account
-currency, while the shipped margin accounting (cash moves only by realized
-delta and commission) is untouched.
+A 0.25 move on 2 lots of XAUUSD is 50.00 USD, not 0.50: the broker's
+``ContractSpec.multiplier`` (100 oz per lot) scales realized and unrealized PnL
+into account currency, while the shipped margin accounting (cash moves only by
+realized delta and commission) is untouched.
 """
 
 from __future__ import annotations
@@ -23,9 +23,11 @@ from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBroke
 _T0 = datetime(2026, 9, 23, 14, 0, tzinfo=UTC)
 _INITIAL = 100_000.0
 
-ES = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0)
-NQ = ContractSpec(multiplier=20.0, tick_size=0.25, lot_step=1.0)
-YM = ContractSpec(multiplier=5.0, tick_size=1.0, lot_step=1.0)
+XAUUSD_SYMBOL = "XAUUSD:EXNESS"
+EURUSD_SYMBOL = "EURUSD:EXNESS"
+# Exness lot grids: 100 oz of gold and 100 000 EUR per lot, sized in 0.01 lots.
+XAUUSD = ContractSpec(multiplier=100.0, tick_size=0.001, lot_step=0.01)
+EURUSD = ContractSpec(multiplier=100_000.0, tick_size=0.00001, lot_step=0.01)
 
 
 def _order(symbol: str, side: OrderSide, *, qty: float, price: float) -> OrderAggregate:
@@ -75,42 +77,43 @@ async def _round_trip(
 
 
 @pytest.mark.asyncio
-async def test_es_round_trip_realizes_25_usd() -> None:
-    broker, trades = await _round_trip(ES, "ES1!:TRADINGVIEW", qty=2, entry=4500.00, exit_=4500.25)
+async def test_xauusd_round_trip_realizes_50_usd() -> None:
+    broker, trades = await _round_trip(XAUUSD, XAUUSD_SYMBOL, qty=2, entry=2650.00, exit_=2650.25)
 
     assert len(trades) == 1
-    assert trades[0].pnl == pytest.approx(25.0, abs=1e-9)
-    assert (await broker.get_balance()).available_balance == pytest.approx(_INITIAL + 25.0)
+    assert trades[0].pnl == pytest.approx(50.0, abs=1e-9)
+    assert (await broker.get_balance()).available_balance == pytest.approx(_INITIAL + 50.0)
 
 
 @pytest.mark.asyncio
-async def test_es_round_trip_with_per_contract_commission() -> None:
+async def test_xauusd_round_trip_with_per_contract_commission() -> None:
     broker, trades = await _round_trip(
-        ES,
-        "ES1!:TRADINGVIEW",
+        XAUUSD,
+        XAUUSD_SYMBOL,
         qty=2,
-        entry=4500.00,
-        exit_=4500.25,
+        entry=2650.00,
+        exit_=2650.25,
         commission_model=PerContractCommissionModel(2.5),
     )
 
-    # 2 contracts in + 2 contracts out at 2.50 each.
-    assert trades[0].pnl == pytest.approx(25.0, abs=1e-9)
+    # 2 lots in + 2 lots out at 2.50 each.
+    assert trades[0].pnl == pytest.approx(50.0, abs=1e-9)
     assert trades[0].commission == pytest.approx(10.0, abs=1e-9)
     balance = (await broker.get_balance()).available_balance
-    assert balance == pytest.approx(_INITIAL + 25.0 - 10.0)
+    assert balance == pytest.approx(_INITIAL + 50.0 - 10.0)
 
 
 @pytest.mark.asyncio
-async def test_nq_multiplier_20() -> None:
-    _, trades = await _round_trip(NQ, "NQ1!:TRADINGVIEW", qty=1, entry=19_000.00, exit_=19_001.00)
+async def test_eurusd_multiplier_100_000() -> None:
+    _, trades = await _round_trip(EURUSD, EURUSD_SYMBOL, qty=1, entry=1.08000, exit_=1.08010)
 
-    assert trades[0].pnl == pytest.approx(20.0, abs=1e-9)
+    assert trades[0].pnl == pytest.approx(10.0, abs=1e-9)
 
 
 @pytest.mark.asyncio
-async def test_ym_multiplier_5() -> None:
-    _, trades = await _round_trip(YM, "YM1!:TRADINGVIEW", qty=1, entry=42_000.0, exit_=42_001.0)
+async def test_a_fractional_xauusd_lot_scales_by_the_contract_size() -> None:
+    # 0.05 lot is 5 oz, so a 1.00 move is 5.00 USD.
+    _, trades = await _round_trip(XAUUSD, XAUUSD_SYMBOL, qty=0.05, entry=2650.0, exit_=2651.0)
 
     assert trades[0].pnl == pytest.approx(5.0, abs=1e-9)
 
@@ -128,11 +131,11 @@ async def test_linear_default_is_unchanged() -> None:
 
 @pytest.mark.asyncio
 async def test_equity_curve_has_no_jump_at_fill_beyond_commission() -> None:
-    symbol = "ES1!:TRADINGVIEW"
-    broker, bus, trades = await _broker(ES, PerContractCommissionModel(2.5))
+    symbol = XAUUSD_SYMBOL
+    broker, bus, trades = await _broker(XAUUSD, PerContractCommissionModel(2.5))
 
     before_open = await broker.get_balance()
-    await broker.submit_order(_order(symbol, OrderSide.BUY, qty=2, price=4500.00))
+    await broker.submit_order(_order(symbol, OrderSide.BUY, qty=2, price=2650.00))
     after_open = await broker.get_balance()
     # Opening moves equity by the entry commission only.
     assert after_open.total_equity - before_open.total_equity == pytest.approx(-5.0)
@@ -142,18 +145,18 @@ async def test_equity_curve_has_no_jump_at_fill_beyond_commission() -> None:
             symbol=symbol,
             interval="1m",
             bar_start=_T0,
-            open=4500.00,
-            high=4500.25,
-            low=4500.00,
-            close=4500.25,
+            open=2650.00,
+            high=2650.25,
+            low=2650.00,
+            close=2650.25,
             volume=100.0,
         )
     )
     marked = await broker.get_balance()
     # Mark-to-market is contract-scaled too, so closing at the mark cannot jump.
-    assert marked.unrealized_pnl == pytest.approx(25.0)
+    assert marked.unrealized_pnl == pytest.approx(50.0)
 
-    await broker.submit_order(_order(symbol, OrderSide.SELL, qty=2, price=4500.25))
+    await broker.submit_order(_order(symbol, OrderSide.SELL, qty=2, price=2650.25))
     after_close = await broker.get_balance()
 
     trade = trades[0]

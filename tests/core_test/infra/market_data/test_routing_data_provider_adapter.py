@@ -51,27 +51,25 @@ async def _fetch(adapter: RoutingDataProviderAdapter, symbol: str) -> list[Bar]:
 @pytest.mark.asyncio
 async def test_a_binance_suffix_is_served_by_binance_only() -> None:
     binance = _provider([_bar("BTCUSDT:BINANCE")])
-    tradingview = _provider([_bar("BTCUSDT:BINANCE"), _bar("BTCUSDT:BINANCE")])
+    exness = _provider([_bar("BTCUSDT:BINANCE"), _bar("BTCUSDT:BINANCE")])
 
-    bars = await _fetch(
-        _adapter({"tradingview": tradingview, "binance": binance}), "BTCUSDT:BINANCE"
-    )
+    bars = await _fetch(_adapter({"exness": exness, "binance": binance}), "BTCUSDT:BINANCE")
 
     assert len(bars) == 1
     binance.fetch_ohlcv.assert_awaited_once_with(
         symbol="BTCUSDT:BINANCE", interval=Interval.MINUTE_1, n_bars=10
     )
-    tradingview.fetch_ohlcv.assert_not_awaited()
+    exness.fetch_ohlcv.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_a_tradingview_suffix_is_served_by_tradingview_only() -> None:
-    binance = _provider([_bar("ES1!:TRADINGVIEW")])
-    tradingview = _provider([_bar("ES1!:TRADINGVIEW")])
+async def test_an_exness_suffix_is_served_by_exness_only() -> None:
+    binance = _provider([_bar("XAUUSD:EXNESS")])
+    exness = _provider([_bar("XAUUSD:EXNESS")])
 
-    await _fetch(_adapter({"binance": binance, "tradingview": tradingview}), "ES1!:TRADINGVIEW")
+    await _fetch(_adapter({"binance": binance, "exness": exness}), "XAUUSD:EXNESS")
 
-    tradingview.fetch_ohlcv.assert_awaited_once()
+    exness.fetch_ohlcv.assert_awaited_once()
     binance.fetch_ohlcv.assert_not_awaited()
 
 
@@ -115,20 +113,20 @@ async def test_an_outage_is_raised_rather_than_reported_as_an_empty_market() -> 
     would leave ``fetch_with_retry`` retrying the failure as though it were
     emptiness — three calls at a venue that is rate-limiting us.
     """
-    adapter = _adapter({"tradingview": _provider(RuntimeError("scraper down"))})
+    adapter = _adapter({"exness": _provider(RuntimeError("exness down"))})
 
-    with pytest.raises(RuntimeError, match="scraper down"):
-        await _fetch(adapter, "ES1!:TRADINGVIEW")
+    with pytest.raises(RuntimeError, match="exness down"):
+        await _fetch(adapter, "XAUUSD:EXNESS")
 
 
 @pytest.mark.asyncio
 async def test_a_failing_provider_does_not_fall_back_to_another() -> None:
     """Another provider's bars for the same code would be another instrument."""
-    binance = _provider([_bar("ES1!:TRADINGVIEW")])
-    adapter = _adapter({"tradingview": _provider(RuntimeError("down")), "binance": binance})
+    binance = _provider([_bar("XAUUSD:EXNESS")])
+    adapter = _adapter({"exness": _provider(RuntimeError("down")), "binance": binance})
 
     with pytest.raises(RuntimeError):
-        await _fetch(adapter, "ES1!:TRADINGVIEW")
+        await _fetch(adapter, "XAUUSD:EXNESS")
 
     binance.fetch_ohlcv.assert_not_awaited()
 
@@ -141,18 +139,18 @@ async def test_a_quiet_provider_returns_an_empty_list() -> None:
 @pytest.mark.asyncio
 async def test_search_goes_to_the_named_default_provider() -> None:
     assert DEFAULT_SEARCH_PROVIDER_ID == "binance"
-    binance, tradingview = _provider([]), _provider([])
+    binance, exness = _provider([]), _provider([])
 
-    result = await _adapter({"tradingview": tradingview, "binance": binance}).search_symbols("btc")
+    result = await _adapter({"exness": exness, "binance": binance}).search_symbols("btc")
 
     assert result == [{"symbol": "BTCUSDT"}]
     binance.search_symbols.assert_awaited_once_with("btc")
-    tradingview.search_symbols.assert_not_awaited()
+    exness.search_symbols.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_search_without_its_default_provider_registered_returns_nothing() -> None:
-    assert await _adapter({"tradingview": _provider([])}).search_symbols("btc") == []
+    assert await _adapter({"exness": _provider([])}).search_symbols("btc") == []
 
 
 @pytest.mark.asyncio
@@ -161,6 +159,6 @@ async def test_close_reaches_every_child_even_when_one_fails() -> None:
     failing.close = AsyncMock(side_effect=RuntimeError("stuck"))
 
     with pytest.raises(RuntimeError, match="stuck"):
-        await _adapter({"tradingview": failing, "binance": healthy}).close()
+        await _adapter({"exness": failing, "binance": healthy}).close()
 
     healthy.close.assert_awaited_once()

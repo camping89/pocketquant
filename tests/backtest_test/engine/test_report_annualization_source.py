@@ -1,8 +1,8 @@
 """The backtest report annualizes on the symbol's calendar, not on the interval.
 
-The interval table answers for a market that never closes. A CME 1h series has
-about 5910 bars a year, not 8760, and Sharpe scales by the square root of that,
-so reading the wrong source overstates a futures Sharpe by roughly 22%.
+The interval table answers for a market that never closes. An Exness XAUUSD 1h
+series has 5980 bars a year, not 8760, and Sharpe scales by the square root of
+that, so reading the wrong source overstates a gold Sharpe by roughly 21%.
 
 Every other backtest test runs on crypto, where the two sources agree exactly —
 which is why the wrong source would otherwise go unnoticed.
@@ -20,16 +20,17 @@ from pocketquant.core.domain.backtest import BacktestConfig
 from pocketquant.core.domain.brokers.value_objects import AccountBalance
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
+from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
 from pocketquant.engine.backtest.backtest_report_app_service import BacktestReportAppService
 
 _T0 = datetime(2026, 6, 10, 14, 0, tzinfo=UTC)
+_XAUUSD = EXNESS_CALENDARS[1]
 
 
 def _config(interval: str) -> BacktestConfig:
     return BacktestConfig(
         strategy_code="s1",
-        symbol="ES1!:TRADINGVIEW",
+        symbol="XAUUSD:EXNESS",
         interval=interval,
         start_date=datetime(2026, 1, 1, tzinfo=UTC),
         end_date=datetime(2026, 6, 30, tzinfo=UTC),
@@ -66,9 +67,9 @@ async def _periods_passed_to_metrics(calendar, interval: str) -> float | None:
 
 @pytest.mark.asyncio
 async def test_a_session_symbol_annualizes_on_its_sessions() -> None:
-    periods = await _periods_passed_to_metrics(CmeGlobexCalendarAdapter(), "1h")
+    periods = await _periods_passed_to_metrics(_XAUUSD, "1h")
 
-    assert periods == 5_910.0
+    assert periods == 5_980.0
     # Emphatically not the 24/7 answer for the same interval.
     assert periods != Interval.HOUR_1.periods_per_year
 

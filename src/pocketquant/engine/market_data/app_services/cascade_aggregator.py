@@ -51,8 +51,8 @@ def cascade_tfs(calendar: ITradingCalendarPort) -> list[Interval]:
 
     A market that never closes can have its daily bar built by cascading 1m
     across UTC midnight, because that is exactly where its day begins. A session
-    market's day begins at the session open the evening before, so a cascaded
-    daily bar would never match the vendor's own chart. Those come from the
+    market's vendor builds the daily bar from its own session, so a cascaded
+    daily bar need not match the vendor's own chart. Those come from the
     provider instead.
     """
     if calendar.calendar_id == CALENDAR_CRYPTO_24_7:

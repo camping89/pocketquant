@@ -12,7 +12,6 @@ from pocketquant.core.domain.market_data.provider_routing_domain_service import 
     provider_defaults_for,
 )
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
-from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
 from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
 from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
 
@@ -26,7 +25,7 @@ class TradingCalendarFactory:
         self._symbol_lookup = symbol_lookup
         self._default = Continuous24x7Calendar()
         self._calendars: dict[str, ITradingCalendarPort] = {
-            c.calendar_id: c for c in (self._default, CmeGlobexCalendarAdapter(), *EXNESS_CALENDARS)
+            c.calendar_id: c for c in (self._default, *EXNESS_CALENDARS)
         }
         self._warned_unknown: set[str] = set()
 

@@ -65,9 +65,9 @@ logger = get_logger(__name__)
 # 1w via REST (Binance serves Monday-aligned weekly klines natively — cascading
 # from 1m would mis-bucket since floor-of-epoch aligns weeks to Thursday).
 #
-# For a calendar-based asset class both 1d and 1w are REST-only: their sessions
-# open the evening before, so a cascade bucketed across UTC midnight would
-# produce a daily bar that never matches the vendor chart. The list below is
+# For a calendar-based asset class both 1d and 1w are REST-only: the vendor
+# builds them from its own session, so a cascade bucketed across UTC midnight
+# need not match the vendor chart. The list below is
 # unchanged because REST already fetches both for every symbol; what differs is
 # that ``cascade_tfs`` stops deriving 1d for those calendars.
 SYNC_INTERVALS = [

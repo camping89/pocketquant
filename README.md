@@ -1,6 +1,6 @@
 # PocketQuant
 
-Algorithmic trading platform: market-data sync from Binance (REST/WS, no auth), TradingView (index futures) and Exness (signed REST/WS market data and quotes for CFDs), live quote ingestion + bar aggregation, single-run backtesting, strategy/broker orchestration, and a React chart UI.
+Algorithmic trading platform: market-data sync from Binance (REST/WS, no auth) and Exness (signed REST/WS market data and quotes for CFDs), live quote ingestion + bar aggregation, single-run backtesting, strategy/broker orchestration, and a React chart UI.
 
 One Python package (`pocketquant`) with import-linter-enforced subpackage boundaries + a separate Vite SPA.
 
@@ -8,7 +8,7 @@ One Python package (`pocketquant`) with import-linter-enforced subpackage bounda
 
 ```text
 src/pocketquant/
-├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, tradingview, exness, scheduler)
+├── core/       # domain, ports/DTOs, entities + ALL concrete adapters (DB, cache, repos, brokers, binance, exness, scheduler)
 ├── engine/     # framework-free orchestration, 5 feature areas: strategy/ execution/ market_data/ backtest/ live/
 └── app/        # FastAPI backend: routes, scheduler, WS feed, reconcile loop, backtest tasks
 web/            # React 19 + Vite chart UI
@@ -38,14 +38,7 @@ just fe                      # vite dev UI → :5173 (proxies /api → :41921)
 - `.env` sanity: `MONGODB_URL`/`REDIS_URL` hosts+ports must match `MONGO_PORT`/`REDIS_PORT`.
 - Fast route iteration: `ENABLE_JOBS=false just be` skips the trading runtime so `--reload` stays light.
 - Market-data routing has no env knob: a composite symbol's suffix names the data provider
-  that serves its bars (`BTCUSDT:BINANCE` → `binance`, `ES1!:TRADINGVIEW` → `tradingview`).
-- TradingView (index futures source): entitlement is the single `TRADINGVIEW_PLAN`
-  (`free` — the default, works unconfigured — or `cme_non_pro`), which derives the bar cap,
-  the poll floor and whether the feed is real-time. `TRADINGVIEW_USERNAME` /
-  `TRADINGVIEW_PASSWORD` are optional; `TRADINGVIEW_AUTH_TOKEN` supplies a token directly and
-  wins over them, which is the way past a broken login. `TRADINGVIEW_MAX_BARS` and
-  `TRADINGVIEW_POLL_SECONDS` are optional overrides that may only make a request gentler than
-  the plan allows. Values live in `../pocketquant-config/`, never in this repo.
+  that serves its bars (`BTCUSDT:BINANCE` → `binance`, `XAUUSD:EXNESS` → `exness`).
 - `TZ` must be `UTC`. The app refuses to start on any other process zone, because bars, cron
   triggers and session calendars are UTC instants.
 

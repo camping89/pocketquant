@@ -14,11 +14,9 @@ from typing import Any
 from pocketquant.core.domain.shared.enums import AssetClass
 
 # Calendar identifiers. These are REFERENCES persisted on the symbol record; the
-# schedule rules themselves stay in code behind ITradingCalendarPort, because CME
-# holidays and early closes change yearly and a stored copy would have to be
-# hand-synchronised against CME notices.
+# schedule rules stay in code behind ITradingCalendarPort, because venue holidays
+# and session changes are code, not data.
 CALENDAR_CRYPTO_24_7 = "CRYPTO_24_7"
-CALENDAR_CME_GLOBEX_EQUITY = "CME_GLOBEX_EQUITY"
 # Exness CFD sessions: FX, gold with its daily break, and 24/7 crypto. Exness
 # weeks open on Sunday, so BTCUSD cannot share CALENDAR_CRYPTO_24_7.
 CALENDAR_EXNESS_FX = "EXNESS_FX"
@@ -79,6 +77,5 @@ LINEAR_SPEC = ContractSpec()
 DEFAULT_CALENDAR_BY_ASSET_CLASS: dict[AssetClass, str] = {
     AssetClass.CRYPTO_SPOT: CALENDAR_CRYPTO_24_7,
     AssetClass.CRYPTO_PERP: CALENDAR_CRYPTO_24_7,
-    AssetClass.INDEX_FUTURE: CALENDAR_CME_GLOBEX_EQUITY,
     AssetClass.CFD: CALENDAR_EXNESS_FX,
 }

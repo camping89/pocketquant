@@ -1,8 +1,8 @@
 """Backfill / re-sync OHLCV bars from Binance public klines REST API.
 
 One tool, two scopes — both fetch from Binance's free, unauthenticated
-`/api/v3/klines` endpoint with start/end pagination (beyond TradingView REST's
-5000-bar cap):
+`/api/v3/klines` endpoint with start/end pagination (beyond the 5000-bar
+request cap):
 
 - **Targeted** (`--symbol`): backfill one symbol/interval over an explicit
   window. Insert-only by default — a surgical gap-filler.

@@ -1,8 +1,8 @@
 """The symbol's contract spec reaches every live-path consumer.
 
-A futures subscription must size in whole contracts, fill on a broker that
-prices PnL with the ES multiplier, and persist a position mirror whose PnL
-matches the broker's. Crypto keeps one shared linear paper broker.
+A lot-sized CFD subscription must size on its lot grid, fill on a broker that
+prices PnL with the XAUUSD contract size, and persist a position mirror whose
+PnL matches the broker's. Crypto keeps one shared linear paper broker.
 """
 
 from __future__ import annotations
@@ -26,16 +26,17 @@ from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
-ES_SYMBOL = "ES1!:TRADINGVIEW"
-ES = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, commission_per_contract=2.5)
+XAUUSD_SYMBOL = "XAUUSD:EXNESS"
+# 100 oz per lot in 0.01-lot steps; the per-lot fee exercises the per-contract model.
+XAUUSD = ContractSpec(multiplier=100.0, tick_size=0.001, lot_step=0.01, commission_per_contract=2.5)
 NOW = datetime(2026, 9, 23, 14, tzinfo=UTC)
 
 
 class _FakeLookup:
-    """Stands in for SymbolLookupHelper: only ES is seeded."""
+    """Stands in for SymbolLookupHelper: only XAUUSD is seeded."""
 
     async def contract_spec(self, composite: str) -> ContractSpec:
-        return ES if composite == ES_SYMBOL else LINEAR_SPEC
+        return XAUUSD if composite == XAUUSD_SYMBOL else LINEAR_SPEC
 
 
 class _RecordingOrderService:
@@ -83,59 +84,59 @@ def _config(sid: str, symbol: str, spec: ContractSpec, risk: RiskConfig | None =
 
 
 @pytest.mark.asyncio
-async def test_futures_subscription_gets_its_own_spec_priced_broker() -> None:
+async def test_a_contract_subscription_gets_its_own_spec_priced_broker() -> None:
     engine = _engine()
     await engine.load_strategy(_config("btc", "BTCUSDT:BINANCE", LINEAR_SPEC))
     await engine.load_strategy(_config("eth", "ETHUSDT:BINANCE", LINEAR_SPEC))
-    await engine.load_strategy(_config("es", ES_SYMBOL, ES))
+    await engine.load_strategy(_config("xau", XAUUSD_SYMBOL, XAUUSD))
 
-    btc, eth, es = (engine._brokers[s] for s in ("btc", "eth", "es"))
+    btc, eth, xau = (engine._brokers[s] for s in ("btc", "eth", "xau"))
     assert btc is eth  # crypto still shares one paper account
-    assert es is not btc
-    assert isinstance(es, PaperBrokerAdapter)
-    assert es._contract_spec == ES
+    assert xau is not btc
+    assert isinstance(xau, PaperBrokerAdapter)
+    assert xau._contract_spec == XAUUSD
     # Trade forwarding is wired once per broker, not once per subscription.
-    for broker in (btc, es):
+    for broker in (btc, xau):
         assert broker._trade_callbacks.count(engine._forward_trade_to_bus) == 1  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
-async def test_futures_signal_sizes_whole_contracts_and_realizes_in_usd() -> None:
+async def test_a_contract_signal_floors_to_the_lot_step_and_realizes_in_usd() -> None:
     orders = _RecordingOrderService()
     engine = _engine(orders)
-    # 850 USD at risk against a 10-point stop is 1.7 contracts.
-    risk = RiskConfig(risk_per_trade=0.00085, max_exposure_percent=1.0)
-    await engine.load_strategy(_config("es", ES_SYMBOL, ES, risk))
-    strategy = engine._strategies["es"]
-    broker = engine._brokers["es"]
+    # 1234 USD at risk against a 10.00 stop is 123.4 oz, 1.234 lots, floored to 1.23.
+    risk = RiskConfig(risk_per_trade=0.001234, max_exposure_percent=1.0)
+    await engine.load_strategy(_config("xau", XAUUSD_SYMBOL, XAUUSD, risk))
+    strategy = engine._strategies["xau"]
+    broker = engine._brokers["xau"]
 
     entry = Signal(
-        symbol=ES_SYMBOL,
+        symbol=XAUUSD_SYMBOL,
         direction=Direction.LONG,
         confidence=1.0,
         timestamp=NOW,
-        subscription_id="es",
-        stop_loss_price=4490.0,
+        subscription_id="xau",
+        stop_loss_price=2640.0,
     )
-    await engine._process_signal(strategy, entry, 4500.0)
+    await engine._process_signal(strategy, entry, 2650.0)
 
-    assert orders.orders[0].quantity == 1.0
+    assert orders.orders[0].quantity == 1.23
     exit_order = OrderAggregate.create(
-        subscription_id="es",
-        symbol=ES_SYMBOL,
+        subscription_id="xau",
+        symbol=XAUUSD_SYMBOL,
         side=OrderSide.SELL,
         order_type=orders.orders[0].order_type,
-        quantity=1.0,
-        price=4510.0,
+        quantity=1.23,
+        price=2660.0,
     )
     await broker.submit_order(exit_order)
-    # 10 points x 50 x 1 contract, less 2.50 in and 2.50 out.
+    # 10.00 x 100 oz x 1.23 lots, less 2.50 a lot in and out.
     balance = await broker.get_balance()
-    assert balance.available_balance == pytest.approx(1_000_000.0 + 500.0 - 5.0)
+    assert balance.available_balance == pytest.approx(1_000_000.0 + 1230.0 - 6.15)
 
 
 @pytest.mark.asyncio
-async def test_reconcile_loads_a_futures_subscription_with_its_spec() -> None:
+async def test_reconcile_loads_a_contract_subscription_with_its_spec() -> None:
     loaded: list[StrategyConfig] = []
 
     class _Engine:
@@ -154,7 +155,7 @@ async def test_reconcile_loads_a_futures_subscription_with_its_spec() -> None:
             interval=Interval.MINUTE_5,
             created_at=NOW,
         )
-        for symbol in (ES_SYMBOL, "BTCUSDT:BINANCE")
+        for symbol in (XAUUSD_SYMBOL, "BTCUSDT:BINANCE")
     ]
     recon = StrategyReconcileAppService(
         None,  # type: ignore[arg-type]
@@ -164,7 +165,7 @@ async def test_reconcile_loads_a_futures_subscription_with_its_spec() -> None:
     await recon._ensure_instances(subs)
 
     assert {c.symbol: c.contract_spec for c in loaded} == {
-        ES_SYMBOL: ES,
+        XAUUSD_SYMBOL: XAUUSD,
         "BTCUSDT:BINANCE": LINEAR_SPEC,
     }
 
@@ -183,12 +184,12 @@ async def test_position_mirror_reports_contract_scaled_pnl() -> None:
     repo = _MemoryPositionRepo()
     service = PositionAppService(bus, repo, _FakeLookup())  # type: ignore[arg-type]
 
-    for side, price in ((OrderSide.BUY, 4500.00), (OrderSide.SELL, 4500.25)):
+    for side, price in ((OrderSide.BUY, 2650.00), (OrderSide.SELL, 2650.25)):
         await service._on_order_filled(
             OrderFilledEvent(
                 order_id=str(generate_id()),
-                subscription_id="es",
-                symbol=ES_SYMBOL,
+                subscription_id="xau",
+                symbol=XAUUSD_SYMBOL,
                 side=side,
                 filled_quantity=2.0,
                 filled_price=price,
@@ -197,9 +198,9 @@ async def test_position_mirror_reports_contract_scaled_pnl() -> None:
 
     closed = repo.saved[-1]
     assert closed.is_closed
-    assert closed.multiplier == 50.0
-    assert closed.realized_pnl == pytest.approx(25.0)
-    assert PositionAggregate.from_mongo(closed.to_mongo()).multiplier == 50.0
+    assert closed.multiplier == 100.0
+    assert closed.realized_pnl == pytest.approx(50.0)
+    assert PositionAggregate.from_mongo(closed.to_mongo()).multiplier == 100.0
 
 
 @pytest.mark.asyncio
@@ -234,7 +235,7 @@ async def test_reconcile_gives_futures_paper_subscriptions_the_futures_risk() ->
             interval=Interval.MINUTE_15,
             created_at=NOW,
         )
-        for symbol in (ES_SYMBOL, "BTCUSDT:BINANCE")
+        for symbol in (XAUUSD_SYMBOL, "BTCUSDT:BINANCE")
     ]
     recon = StrategyReconcileAppService(
         None,  # type: ignore[arg-type]
@@ -245,7 +246,7 @@ async def test_reconcile_gives_futures_paper_subscriptions_the_futures_risk() ->
     await recon._ensure_instances(subs)
 
     assert {c.symbol: c.risk for c in loaded} == {
-        ES_SYMBOL: RiskConfig(leverage=20),
+        XAUUSD_SYMBOL: RiskConfig(leverage=20),
         "BTCUSDT:BINANCE": RiskConfig(),
     }
 
@@ -265,42 +266,42 @@ def _two_balance_engine(futures_balance: float | None, orders=None) -> StrategyA
 
 
 @pytest.mark.parametrize(
-    ("futures_balance", "es_balance"), [(200_000.0, 200_000.0), (None, 10_000.0)]
+    ("futures_balance", "xau_balance"), [(200_000.0, 200_000.0), (None, 10_000.0)]
 )
 @pytest.mark.asyncio
 async def test_futures_paper_account_starts_at_the_futures_balance(
-    futures_balance: float | None, es_balance: float
+    futures_balance: float | None, xau_balance: float
 ) -> None:
     engine = _two_balance_engine(futures_balance)
     await engine.load_strategy(_config("btc", "BTCUSDT:BINANCE", LINEAR_SPEC))
-    await engine.load_strategy(_config("es", ES_SYMBOL, ES))
+    await engine.load_strategy(_config("xau", XAUUSD_SYMBOL, XAUUSD))
 
     assert (await engine._brokers["btc"].get_balance()).available_balance == 10_000.0
-    assert (await engine._brokers["es"].get_balance()).available_balance == es_balance
+    assert (await engine._brokers["xau"].get_balance()).available_balance == xau_balance
 
 
 @pytest.mark.parametrize(
-    ("futures_balance", "leverage", "contracts"),
-    [(200_000.0, 20.0, 1.0), (None, 1.0, None)],
+    ("futures_balance", "leverage", "lots"),
+    [(200_000.0, 20.0, 1.5), (None, 1.0, None)],
 )
 @pytest.mark.asyncio
-async def test_futures_paper_settings_let_an_es_signal_open_contracts(
-    futures_balance: float | None, leverage: float, contracts: float | None
+async def test_futures_paper_settings_let_an_xauusd_signal_open_lots(
+    futures_balance: float | None, leverage: float, lots: float | None
 ) -> None:
-    # The leveraged cap, 200,000 x 10 % x 20 = 400,000 USD, is 1.03 contracts at
-    # 7800 and binds before the 2 % risk over a 30-point stop (2.67 contracts).
-    # The 10,000 crypto balance sizes the same signal to zero.
+    # The leveraged cap, 200,000 x 10 % x 20 = 400,000 USD, is 1.509 lots at
+    # 2650, floored to 1.50, and binds before the 2 % risk over a 20.00 stop
+    # (2.00 lots). The 10,000 crypto balance sizes the same signal to zero.
     orders = _RecordingOrderService()
     engine = _two_balance_engine(futures_balance, orders)
-    await engine.load_strategy(_config("es", ES_SYMBOL, ES, RiskConfig(leverage=leverage)))
+    await engine.load_strategy(_config("xau", XAUUSD_SYMBOL, XAUUSD, RiskConfig(leverage=leverage)))
     signal = Signal(
-        symbol=ES_SYMBOL,
+        symbol=XAUUSD_SYMBOL,
         direction=Direction.LONG,
         confidence=1.0,
         timestamp=NOW,
-        subscription_id="es",
-        stop_loss_price=7770.0,
+        subscription_id="xau",
+        stop_loss_price=2630.0,
     )
-    await engine._process_signal(engine._strategies["es"], signal, 7800.0)
+    await engine._process_signal(engine._strategies["xau"], signal, 2650.0)
 
-    assert [o.quantity for o in orders.orders] == ([contracts] if contracts else [])
+    assert [o.quantity for o in orders.orders] == ([lots] if lots else [])

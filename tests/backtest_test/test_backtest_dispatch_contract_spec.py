@@ -1,4 +1,4 @@
-"""An ad-hoc backtest on a futures symbol runs with that symbol's contract spec."""
+"""An ad-hoc backtest on a lot-sized CFD runs with that symbol's contract spec."""
 
 from __future__ import annotations
 
@@ -11,13 +11,14 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.engine.backtest import backtest_execution_service
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 
-ES_SYMBOL = "ES1!:TRADINGVIEW"
-ES = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, commission_per_contract=2.5)
+XAUUSD_SYMBOL = "XAUUSD:EXNESS"
+# 100 oz per lot in 0.01-lot steps; the per-lot fee exercises the per-contract model.
+XAUUSD = ContractSpec(multiplier=100.0, tick_size=0.001, lot_step=0.01, commission_per_contract=2.5)
 
 
 class _FakeLookup:
     async def contract_spec(self, composite: str) -> ContractSpec:
-        return ES if composite == ES_SYMBOL else LINEAR_SPEC
+        return XAUUSD if composite == XAUUSD_SYMBOL else LINEAR_SPEC
 
 
 class _FakeCalendars:
@@ -39,7 +40,9 @@ class _CapturingRunner:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("symbol", "spec"), [(ES_SYMBOL, ES), ("BTCUSDT:BINANCE", LINEAR_SPEC)])
+@pytest.mark.parametrize(
+    ("symbol", "spec"), [(XAUUSD_SYMBOL, XAUUSD), ("BTCUSDT:BINANCE", LINEAR_SPEC)]
+)
 async def test_backtest_config_and_broker_carry_the_symbol_spec(
     monkeypatch: pytest.MonkeyPatch, symbol: str, spec: ContractSpec
 ) -> None:
@@ -66,5 +69,7 @@ async def test_backtest_config_and_broker_carry_the_symbol_spec(
     assert _CapturingRunner.seen["config"].contract_spec == spec
     broker = _CapturingRunner.seen["broker"]
     assert broker._contract_spec == spec
-    # ES commission is per contract; crypto keeps the percentage model.
-    assert broker._commission(4500.0, 2) == pytest.approx(5.0 if spec is ES else 4500 * 2 * 3e-4)
+    # XAUUSD commission is per lot; crypto keeps the percentage model.
+    assert broker._commission(2650.0, 2) == pytest.approx(
+        5.0 if spec is XAUUSD else 2650 * 2 * 3e-4
+    )

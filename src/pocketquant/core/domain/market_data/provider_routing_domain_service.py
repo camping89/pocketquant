@@ -1,7 +1,7 @@
 """Which data provider serves a symbol: the composite symbol's suffix names it.
 
-``BTCUSDT:BINANCE`` is served by ``binance`` and ``ES1!:TRADINGVIEW`` by
-``tradingview``: the suffix is the provider id, upper-cased in full. The
+``BTCUSDT:BINANCE`` is served by ``binance`` and ``XAUUSD:EXNESS`` by
+``exness``: the suffix is the provider id, upper-cased in full. The
 execution broker is a separate, per-strategy setting and plays no part here.
 
 Both routing adapters — REST history and realtime quotes — need the same
@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from pocketquant.core.domain.shared.enums import AssetClass
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.symbol.value_objects import (
-    CALENDAR_CME_GLOBEX_EQUITY,
     CALENDAR_CRYPTO_24_7,
     CALENDAR_EXNESS_FX,
 )
@@ -43,7 +42,6 @@ class DataProviderDefaults:
 # is how a different asset class or calendar is recorded.
 DATA_PROVIDER_DEFAULTS: dict[str, DataProviderDefaults] = {
     "binance": DataProviderDefaults(AssetClass.CRYPTO_SPOT, CALENDAR_CRYPTO_24_7),
-    "tradingview": DataProviderDefaults(AssetClass.INDEX_FUTURE, CALENDAR_CME_GLOBEX_EQUITY),
     "exness": DataProviderDefaults(AssetClass.CFD, CALENDAR_EXNESS_FX),
 }
 

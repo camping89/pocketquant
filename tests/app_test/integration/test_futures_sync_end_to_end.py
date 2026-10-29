@@ -1,18 +1,20 @@
-"""One futures symbol through the real pipeline, against real Mongo and Redis.
+"""One session-hours symbol through the real pipeline, against real Mongo and Redis.
 
-Everything Phases 2 and 3 built for session calendars has so far only run on the
-24/7 calendar, where most of it is the identity. This drives ``ES1!:TRADINGVIEW``
-on the CME calendar through ``SyncService.sync_one``, the integrity scan and the
-no-progress anomaly path, with a stub provider in place of TradingView.
+Everything built for session calendars would otherwise only run on the 24/7
+calendar, where most of it is the identity. This drives ``XAUUSD:EXNESS`` on the
+Exness gold calendar through ``SyncService.sync_one``, the integrity scan and the
+no-progress anomaly path, with a stub provider in place of Exness.
 
 The services are constructed directly rather than through ``make_test_app``.
 Overriding one DI binding in a built container is not something dishka offers,
 and none of these assertions involve HTTP — the same reasoning
 ``test_sync_backfill_gap_fill.py`` records for skipping the handler graph.
 
-Session 2026-06-10 is the reference throughout. It opens 2026-06-09T22:00Z
-(17:00 Chicago, the evening before its own date) and closes 2026-06-10T21:00Z,
-which is the property that makes a session calendar different from a 24/7 one.
+The reference week opens Sunday 2026-10-11 (EDT). Gold trades from Sunday
+22:01:30Z to Friday 20:57:59Z with a daily break Monday to Thursday from
+20:58:00Z to 22:00:29Z. Its bars sit on the UTC grid, except that a week opens
+on Sunday 00:00Z, which is the property that makes its bar grid differ from the
+24/7 one.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from pocketquant.core.domain.bar.services.bar_builder_domain_service import get_
 from pocketquant.core.domain.shared.enums import AssetClass, Interval
 from pocketquant.core.domain.symbol import Symbol
 from pocketquant.core.domain.symbol.value_objects import (
-    CALENDAR_CME_GLOBEX_EQUITY,
+    CALENDAR_EXNESS_XAUUSD,
     ContractSpec,
 )
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
@@ -55,10 +57,11 @@ from pocketquant.engine.market_data.sync_internals import anomaly_log
 from pocketquant.engine.market_data.sync_internals.anomaly_log import emit_no_progress
 from pocketquant.engine.market_data.sync_service import SyncService
 
-SYMBOL = "ES1!:TRADINGVIEW"
-SESSION = date(2026, 6, 10)
+SYMBOL = "XAUUSD:EXNESS"
+SESSION = date(2026, 10, 14)  # a Wednesday, with the daily break that evening
+WEEK_OPEN = datetime(2026, 10, 11, 0, 0, tzinfo=UTC)  # a Sunday
 SOURCE = SOURCE_REST_SYNC_1M
-ES_SPEC = ContractSpec(multiplier=50.0, tick_size=0.25, lot_step=1.0, currency="USD")
+XAUUSD_SPEC = ContractSpec(multiplier=1.0, tick_size=0.001, lot_step=None, currency="USD")
 
 
 class _StubProvider:
@@ -82,10 +85,10 @@ def _bar(ts: datetime, interval: Interval) -> Bar:
         symbol=SYMBOL,
         interval=interval,
         datetime=ts,
-        open=5800.0,
-        high=5810.0,
-        low=5795.0,
-        close=5805.0,
+        open=4100.0,
+        high=4110.0,
+        low=4095.0,
+        close=4105.0,
         volume=1000.0,
         tick_count=0,
     )
@@ -93,7 +96,7 @@ def _bar(ts: datetime, interval: Interval) -> Bar:
 
 @pytest_asyncio.fixture
 async def futures_env(settings: Settings):
-    """Real Mongo + Redis with ES seeded as an index future on the CME calendar."""
+    """Real Mongo + Redis with XAUUSD seeded as a CFD on the Exness gold calendar."""
     database = Database()
     await database.connect(settings)
     cache = Cache()
@@ -115,16 +118,17 @@ async def futures_env(settings: Settings):
     await symbol_repo.upsert(
         Symbol.create(
             symbol=SYMBOL,
-            name="E-mini S&P 500 continuous",
-            asset_class=AssetClass.INDEX_FUTURE,
-            contract_spec=ES_SPEC,
+            name="Gold vs US Dollar (Exness CFD)",
+            asset_class=AssetClass.CFD,
+            calendar_id=CALENDAR_EXNESS_XAUUSD,
+            contract_spec=XAUUSD_SPEC,
         )
     )
     await tracked_repo.upsert(TrackedSymbol(symbol=SYMBOL, seeded_from="test"))
 
     calendar_factory = TradingCalendarFactory(symbol_lookup=SymbolLookupHelper(symbol_repo))
     calendar = await calendar_factory.for_symbol(SYMBOL)
-    assert calendar.calendar_id == CALENDAR_CME_GLOBEX_EQUITY, "seed must resolve the CME calendar"
+    assert calendar.calendar_id == CALENDAR_EXNESS_XAUUSD, "seed must resolve the gold calendar"
 
     def make_sync(bars: list[Bar]) -> SyncService:
         return SyncService(
@@ -150,13 +154,16 @@ async def futures_env(settings: Settings):
 async def test_session_aligned_hourly_bars_all_survive(futures_env) -> None:
     """Bars on the session grid are neither dropped nor stamped as crypto.
 
-    The grid starts at the session open, not at UTC midnight, so a bar at
-    22:00Z is aligned here and would be aligned on a 24/7 calendar too — but a
-    bar at 22:30Z is aligned on neither, which is what makes the count real.
+    The six bars run from 18:00Z to the next day's 00:00Z across the daily
+    break: the provider prints no 21:00Z bar, and the 22:00Z bar opens with
+    trading at 22:00:30Z.
     """
     make_sync, bar_repo, calendar = futures_env
-    open_instant = calendar.session_open(SESSION)
-    bars = [_bar(open_instant + timedelta(hours=i), Interval.HOUR_1) for i in range(6)]
+    evening = calendar.session_open(SESSION) + timedelta(hours=18)
+    hours = [evening + timedelta(hours=i) for i in (0, 1, 2, 4, 5, 6)]
+    assert all(calendar.is_open(h + timedelta(minutes=30)) for h in hours)
+    assert not calendar.is_open(evening + timedelta(hours=3, minutes=30))
+    bars = [_bar(h, Interval.HOUR_1) for h in hours]
 
     result = await make_sync(bars).sync_one(
         SyncSymbolCommand(symbol=SYMBOL, interval=Interval.HOUR_1, n_bars=10, source=SOURCE)
@@ -167,29 +174,33 @@ async def test_session_aligned_hourly_bars_all_survive(futures_env) -> None:
 
     stored = await bar_repo.find(SYMBOL, Interval.HOUR_1)
     assert len(stored) == 6
-    assert {b.calendar_id for b in stored} == {CALENDAR_CME_GLOBEX_EQUITY}
+    assert {b.calendar_id for b in stored} == {CALENDAR_EXNESS_XAUUSD}
 
 
 @pytest.mark.asyncio
-async def test_daily_sync_stamps_the_exchange_session_date(futures_env) -> None:
-    """The daily bar's session date is the exchange's day, not the UTC date.
+async def test_weekly_sync_keeps_the_sunday_open_and_stamps_its_session_date(
+    futures_env,
+) -> None:
+    """The weekly bar opens on Sunday 00:00Z and is keyed by that Sunday.
 
-    The bar opens 2026-06-09T22:00Z, so a UTC-date reading would call it the
-    9th. The exchange calls it the 10th, and that is what must be stored.
+    On the 24/7 grid a week opens on Monday, so this bar would be dropped as
+    misaligned. The calendar keeps it and stamps the Sunday as its session date.
     """
     make_sync, bar_repo, calendar = futures_env
-    open_instant = calendar.session_open(SESSION)
+    assert calendar.bar_start(WEEK_OPEN + timedelta(days=3), Interval.WEEK_1) == WEEK_OPEN
+    assert get_bar_start(WEEK_OPEN, Interval.WEEK_1) != WEEK_OPEN
 
-    result = await make_sync([_bar(open_instant, Interval.DAY_1)]).sync_one(
-        SyncSymbolCommand(symbol=SYMBOL, interval=Interval.DAY_1, n_bars=10, source=SOURCE)
+    result = await make_sync([_bar(WEEK_OPEN, Interval.WEEK_1)]).sync_one(
+        SyncSymbolCommand(symbol=SYMBOL, interval=Interval.WEEK_1, n_bars=10, source=SOURCE)
     )
 
+    assert result.filtered_misaligned == 0
     assert result.bars_synced == 1
-    stored = await bar_repo.find(SYMBOL, Interval.DAY_1)
+    stored = await bar_repo.find(SYMBOL, Interval.WEEK_1)
     assert len(stored) == 1
-    assert stored[0].session_date == SESSION
+    assert stored[0].session_date == date(2026, 10, 11)
     assert stored[0].datetime is not None
-    assert stored[0].datetime.astimezone(UTC).day == 9, "the session opens the evening before"
+    assert stored[0].datetime.astimezone(UTC) == WEEK_OPEN
 
 
 @pytest.mark.asyncio
@@ -197,7 +208,7 @@ async def test_integrity_does_not_count_shut_hours_as_missing(futures_env) -> No
     """Seed exactly the calendar's trading minutes; nothing may be reported missing.
 
     The window is the scan's own seven days, which always spans a weekend. On a
-    24/7 grid the weekend and every overnight break would be expected bars, so
+    24/7 grid the weekend and every daily break would be expected bars, so
     this is the assertion that proves the grid comes from the calendar.
     """
     _, bar_repo, calendar = futures_env
@@ -224,12 +235,12 @@ async def test_no_progress_is_silent_while_the_market_is_shut(
     """A shut market producing no bars is the schedule working, not an anomaly.
 
     ``emit_no_progress`` takes no instant — it reads the clock itself — so the
-    clock is what the test controls. The real CME calendar still decides whether
+    clock is what the test controls. The real gold calendar still decides whether
     that instant is inside a session; only "now" is faked.
     """
     _, _, calendar = futures_env
-    # Saturday 2026-06-13, mid-afternoon UTC: no CME equity session is open.
-    shut = datetime(2026, 6, 13, 15, 0, tzinfo=UTC)
+    # Saturday 2026-10-17, mid-afternoon UTC: no gold session is open.
+    shut = datetime(2026, 10, 17, 15, 0, tzinfo=UTC)
     assert not calendar.is_open(shut)
 
     class _FrozenDatetime(datetime):

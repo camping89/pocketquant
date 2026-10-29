@@ -64,7 +64,6 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
-from pocketquant.core.infra.tradingview.tvdatafeed_client import TvDatafeedClient
 from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
@@ -301,30 +300,19 @@ async def drain_backtest_tasks(app: FastAPI, timeout: float = 10.0) -> None:
         logger.warning("backtest_tasks.drain_timeout", abandoned=len(still_pending))
 
 
-def _tradingview_credentialed(settings: Settings) -> bool:
-    """Whether TradingView was configured to log in rather than scrape anonymously."""
-    has_login = settings.tradingview_username and settings.tradingview_password
-    return bool(settings.tradingview_auth_token or has_login)
-
-
 async def register_health_checks(container: AsyncContainer, app: FastAPI) -> None:
     hc = await container.get(HealthCoordinator)
     hc.register("database", partial(check_database, app.state.database))
     hc.register("redis", partial(check_redis, app.state.cache))
 
-    settings = await container.get(Settings)
-    tradingview_client = await container.get(TvDatafeedClient)
     exness_client = await container.get(ExnessClient)
-    credentialed = {"tradingview"} if _tradingview_credentialed(settings) else set()
-    if exness_client.is_configured:
-        credentialed.add("exness")
+    credentialed = {"exness"} if exness_client.is_configured else set()
     hc.register(
         "market_data_providers",
         partial(
             check_market_data_providers,
             {
                 "binance": lambda: True,
-                "tradingview": tradingview_client.is_authenticated,
                 "exness": lambda: exness_client.is_configured,
             },
             credentialed,

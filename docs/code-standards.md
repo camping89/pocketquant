@@ -133,13 +133,13 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 
 ## Composite Symbol Format
 
-**Format:** `{CODE}:{PROVIDER}` (e.g., `BTCUSDT:BINANCE`, `ES1!:TRADINGVIEW`, `XAUUSD:EXNESS`)
+**Format:** `{CODE}:{PROVIDER}` (e.g., `BTCUSDT:BINANCE`, `XAUUSD:EXNESS`)
 
 - One immutable `symbol: str` field replaces `(code, exchange)` pairs on every entity: Bar, Order, Position, Symbol, SyncStatus, Subscription, TrackedSymbol.
-- The suffix is the id of the data provider that produces the symbol's bars, written as `provider_id.upper()` in full — `BINANCE`, `TRADINGVIEW`, never a short code and never the exchange. Routing reads it in one place, `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py`; everything else treats `symbol` as opaque.
+- The suffix is the id of the data provider that produces the symbol's bars, written as `provider_id.upper()` in full — `BINANCE`, `EXNESS`, never a short code and never the exchange. Routing reads it in one place, `provider_id_for()` in `core/domain/market_data/provider_routing_domain_service.py`; everything else treats `symbol` as opaque.
 - A suffix that names no registered provider fails loudly (`UnknownDataProviderError`, a `ValueError`) — it is never guessed or routed by asset class.
 - An unseeded symbol takes its provider's defaults (`DATA_PROVIDER_DEFAULTS`: `asset_class` + `calendar_id`).
-- The execution broker (paper, Exness) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (`TRADINGVIEW_EXCHANGE_BY_CODE` in `tradingview_mappers.py`; `EXNESS_INSTRUMENTS` in `exness_mappers.py`).
+- The execution broker (paper, Exness) is a strategy setting (`StrategyConfig.broker`), not part of the symbol. A broker's own instrument name is the broker adapter's concern: it maps from the full composite symbol in its own table (`EXNESS_INSTRUMENTS` in `exness_mappers.py`).
 - Validation: `COMPOSITE_SYMBOL_RE` for internal data, `COMPOSITE_SYMBOL_PATTERN` for HTTP input (`core/domain/symbol/entities.py`).
 - URL: `:` is encoded as `%3A` in path segments (`/api/v1/market-data/sync-status/BTCUSDT%3ABINANCE`). JSON and the database keep the raw `:`. Cache keys use the whole symbol: `quote:latest:{symbol}`, `bar:current:{symbol}:{interval}`.
 
@@ -149,7 +149,7 @@ await collection.create_index([("strategy_code", 1), ("symbol", 1), ("interval",
 2. `Settings` fields in `src/pocketquant/core/config.py`.
 3. One `DATA_PROVIDER_DEFAULTS` entry (`core/domain/market_data/provider_routing_domain_service.py`) and one entry in each router in `app/di/adapters.py` (`get_data_provider`, `get_realtime_quote_provider`); `tests/app_test/unit/test_data_provider_registration.py` enforces that the three match.
 4. A calendar registered in `TradingCalendarFactory` (`core/infra/calendars/trading_calendar_factory.py`) when no existing one fits, built from recorded sessions.
-5. A `ContractSpec` per symbol, written by a seed script modelled on `scripts/seed_index_futures.py` (`symbols` and `tracked_symbols`).
+5. A `ContractSpec` per symbol, written by a seed script modelled on `scripts/seed_exness_symbols.py` (`symbols` and `tracked_symbols`).
 6. The provider in the `/health` provider map (`register_health_checks`, `app/main_extensions.py`).
 7. Any new symbol-keyed collection or Redis key joins the symbol-removal cascade (`TrackedSymbolService.remove`).
 8. A broker is optional and separate: a `BrokerFactory` branch, with the broker's own instrument table keyed by the full composite symbol.
@@ -245,7 +245,7 @@ Comments are short, plain English only. They cost LOC and rot out of sync with c
 ### KEEP / write only for
 
 - **WHY:** races, ordering/suspension constraints, publish-before-subscribe, await-preemption notes, invariants, trade-offs
-- **Hacks / workarounds** + external-system quirks (Exness, TradingView, Mongo, Redis, asyncio, APScheduler)
+- **Hacks / workarounds** + external-system quirks (Exness, Mongo, Redis, asyncio, APScheduler)
 - `# type: ignore[...]` / `// @ts-expect-error` / `// eslint-disable` — always with their reason
 - Warnings about non-obvious failure modes (`# benign — already dropped`)
 - Docstrings documenting params / contracts / edge cases / non-obvious return semantics
@@ -296,7 +296,7 @@ A change is done when all of these pass. Ruff and Pyright must report 0 errors i
 | Metric ratchet | `uv run python scripts/code_metrics.py --ratchet` |
 
 - The CI `tests` job in `.github/workflows/cicd.yml` runs `lint-imports`, the metric ratchet and `pytest` in each timezone leg. Ruff and Pyright are not CI steps; run them locally.
-- **Import contracts** (`[tool.importlinter]` in `pyproject.toml`): the `app → engine → core` layers, domain free of infra, the backtest/live driver independence, shared engine machinery free of drivers, `fastapi` only in `app`, no `bson`, `pandas_market_calendars` only in `core.infra.calendars`, and `tvDatafeed` only in `core.infra.tradingview`.
+- **Import contracts** (`[tool.importlinter]` in `pyproject.toml`): the `app → engine → core` layers, domain free of infra, the backtest/live driver independence, shared engine machinery free of drivers, `fastapi` only in `app`, and no `bson`.
 - **Metric ratchet:** `scripts/code_metrics.py` measures `tiny_share` (share of functions whose body is ≤ 2 statements) and `delegations` (functions whose body is a single `return` or expression calling an attribute) over `src/pocketquant`; the exact definitions are in the script's docstring. `--ratchet` compares them with `max_tiny_share` and `max_delegations` in `[tool.code-metrics]` of `pyproject.toml` and exits 1 when either is above its ceiling.
 - The ceiling only moves down. Lower it when a change improves a metric; raising it is a user decision, never a way to make CI green. When the ratchet blocks a change, restructure (for example inline a thin wrapper) — do not inline code only to move the number.
 - A tiny share ≤ 30% and ≤ 20 delegations are the aspiration, not a gate.

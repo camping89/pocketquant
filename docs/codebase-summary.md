@@ -18,10 +18,9 @@ src/pocketquant/
 │   │   ├── persistence/ # Database, Cache, BaseRepository, every repository
 │   │   ├── brokers/     # paper/, exness/, broker_factory.py
 │   │   ├── binance/     # REST + @aggTrade WS
-│   │   ├── tradingview/ # tvDatafeed scraper client + adapters
 │   │   ├── exness/      # signed REST + WS client, data and quote adapters
 │   │   ├── market_data/ # routing data/quote adapters, provider health
-│   │   ├── calendars/   # trading calendars (CME Globex, Exness sessions)
+│   │   ├── calendars/   # trading calendars (Exness sessions)
 │   │   └── scheduling/  # JobScheduler (APScheduler)
 │   ├── common/          # event bus, middleware, tracing, logging, health, exceptions, UUIDv7
 │   └── config.py        # Settings (every env var)

@@ -7,12 +7,14 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import structlog
+from structlog.typing import EventDict
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
+from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
+from pocketquant.engine.market_data.app_services import cascade_aggregator
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     aggregate_ohlcv,
@@ -23,7 +25,16 @@ from pocketquant.engine.market_data.app_services.cascade_aggregator import (
 )
 
 CALENDAR = Continuous24x7Calendar()
-CME = CmeGlobexCalendarAdapter()
+EURUSD, XAUUSD, _ = EXNESS_CALENDARS
+
+
+@pytest.fixture(autouse=True)
+def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A cached module logger ignores capture_logs once it has emitted, which
+    # would let the "nothing logged" assertions below pass vacuously.
+    monkeypatch.setattr(
+        cascade_aggregator, "logger", structlog.get_logger(cascade_aggregator.__name__)
+    )
 
 
 class TestTfSeconds:
@@ -426,13 +437,13 @@ class TestShortBucketsAreNotReportedByTheCascade:
     integrity check, so the cascade stays silent about all of them.
     """
 
-    # 21:00-22:00 UTC is the CME daily maintenance halt: zero trading minutes
-    # there, sixty on a market that never closes.
-    HALT_START = datetime(2026, 6, 10, 21, 0, tzinfo=UTC)
+    # On Wednesday 2026-10-14 (EDT) XAUUSD breaks from 20:58:00 to 22:00:29 UTC:
+    # zero trading minutes in 21:00-22:00, sixty on a market that never closes.
+    HALT_START = datetime(2026, 10, 14, 21, 0, tzinfo=UTC)
 
     async def _cascade_one_bucket(
         self, symbol: str, boundary: datetime, calendar, bar_count: int
-    ) -> tuple[AsyncMock, list[dict]]:
+    ) -> tuple[AsyncMock, list[EventDict]]:
         bars = [
             Bar(
                 symbol=symbol,
@@ -475,9 +486,9 @@ class TestShortBucketsAreNotReportedByTheCascade:
 
     @pytest.mark.asyncio
     async def test_a_halted_hour_bounds_the_query_by_the_calendar(self) -> None:
-        """The halt has no trading minutes, so only the edge headroom is fetched."""
+        """The break has no trading minutes, so only the edge headroom is fetched."""
         bar_repo, _ = await self._cascade_one_bucket(
-            "ES1!:TRADINGVIEW", self.HALT_START, CME, bar_count=3
+            "XAUUSD:EXNESS", self.HALT_START, XAUUSD, bar_count=3
         )
         assert bar_repo.find.await_args.kwargs["limit"] == 5
 
@@ -532,14 +543,14 @@ class TestCascadedBarsCarryTheirCalendar:
 
 
 class TestCascadeTimeframesDependOnTheCalendar:
-    """Daily bars are cascaded only where the day begins at UTC midnight."""
+    """Daily bars are cascaded only on the 24/7 calendar; a session market fetches its own."""
 
     def test_a_continuous_market_cascades_its_daily_bar(self) -> None:
         assert Interval.DAY_1 in cascade_tfs(CALENDAR)
         assert cascade_tfs(CALENDAR) == CASCADE_TFS
 
     def test_a_session_market_fetches_its_daily_bar_instead(self) -> None:
-        tfs = cascade_tfs(CME)
+        tfs = cascade_tfs(EURUSD)
         assert Interval.DAY_1 not in tfs
         # Intraday timeframes are still derived, in the same order.
         assert tfs == [t for t in CASCADE_TFS if t is not Interval.DAY_1]
@@ -550,7 +561,7 @@ class TestCascadeTimeframesDependOnTheCalendar:
         bar_repo.find = AsyncMock(
             return_value=[
                 Bar(
-                    symbol="ES1!:TRADINGVIEW",
+                    symbol="EURUSD:EXNESS",
                     interval=Interval.MINUTE_1,
                     datetime=datetime(2026, 6, 10, 14, 0, tzinfo=UTC),
                     open=1.0,
@@ -563,7 +574,7 @@ class TestCascadeTimeframesDependOnTheCalendar:
         )
         bar_repo.upsert_bar = AsyncMock()
 
-        await cascade_for_symbol("ES1!:TRADINGVIEW", 60, bar_repo, CME)
+        await cascade_for_symbol("EURUSD:EXNESS", 60, bar_repo, EURUSD)
 
         written = [c.args[0].interval for c in bar_repo.upsert_bar.await_args_list]
         assert Interval.DAY_1 not in written

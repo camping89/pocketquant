@@ -18,7 +18,7 @@ describe('ageColorClass', () => {
 
 describe('statusVariant', () => {
   const stuck: SyncStatus = {
-    symbol: 'ES1!:TRADINGVIEW',
+    symbol: 'XAUUSD:EXNESS',
     interval: '1m',
     status: 'completed',
     bar_count: 10,

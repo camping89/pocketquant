@@ -99,7 +99,7 @@ async def check_integrity(
         }
 
     # The UTC cutoff above is not the calendar's: a session's bar in progress
-    # (today's daily bar, a CME 4h bar opened at 02:00) can still start before it.
+    # (today's daily bar, an Exness weekly bar opened on Sunday) can still start before it.
     in_progress = calendar.bar_start(now, interval)
     expected = {i for i in _expected_instants(interval, start, end, calendar) if i < in_progress}
     step = timedelta(seconds=INTERVAL_SECONDS[interval])

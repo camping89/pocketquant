@@ -64,8 +64,8 @@ class BarAppService:
         calendar_factory: TradingCalendarFactory | None = None,
     ):
         self._cache = cache
-        # Bucket boundaries belong to the symbol's calendar: a CME daily bar opens
-        # at the session open, not at 00:00 UTC. Without a factory every symbol
+        # Bucket boundaries belong to the symbol's calendar: an Exness weekly bar
+        # opens on Sunday 00:00 UTC, not on Monday. Without a factory every symbol
         # uses the 24/7 grid, which is exactly right for crypto.
         self._calendar_factory = calendar_factory
         self._default_calendar = Continuous24x7Calendar()

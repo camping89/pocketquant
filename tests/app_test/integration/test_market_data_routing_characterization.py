@@ -5,7 +5,7 @@ These assertions describe production as it runs today — every tracked symbol i
 routing adapters are built in one helper each, so a change to how they are
 constructed touches the helpers and never the assertions.
 
-Real Mongo and Redis; stub children stand in for Binance and TradingView.
+Real Mongo and Redis; stub children stand in for Binance and Exness.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ async def _health(
     tracked: TrackedSymbolRepository,
 ) -> dict:
     return await check_market_data_providers(
-        {"binance": lambda: True, "tradingview": lambda: True},
+        {"binance": lambda: True, "exness": lambda: True},
         set(),
         calendars,
         tracked,
@@ -152,8 +152,8 @@ async def test_an_unseeded_binance_symbol_syncs_through_binance_and_is_stamped_c
 ) -> None:
     _, cache, repos, lookup, calendars = env
     bars = [_bar(START + timedelta(hours=i)) for i in range(4)]
-    binance, tradingview = _rest_child(bars), _rest_child([])
-    routing = _routing_rest({"binance": binance, "tradingview": tradingview}, settings, lookup)
+    binance, exness = _rest_child(bars), _rest_child([])
+    routing = _routing_rest({"binance": binance, "exness": exness}, settings, lookup)
 
     # Before the first sync the symbol has no document and still reads as 24/7.
     assert (await calendars.for_symbol(SYMBOL)).calendar_id == CALENDAR_CRYPTO_24_7
@@ -173,7 +173,7 @@ async def test_an_unseeded_binance_symbol_syncs_through_binance_and_is_stamped_c
 
     assert result.bars_synced == 4
     binance.fetch_ohlcv.assert_awaited()
-    tradingview.fetch_ohlcv.assert_not_awaited()
+    exness.fetch_ohlcv.assert_not_awaited()
 
     stored = await repos["bars"].find(SYMBOL, Interval.HOUR_1)
     assert {b.calendar_id for b in stored} == {CALENDAR_CRYPTO_24_7}
@@ -190,7 +190,7 @@ async def test_a_binance_outage_is_raised_not_reported_as_an_empty_market(
 ) -> None:
     _, _, _, lookup, _ = env
     routing = _routing_rest(
-        {"binance": _rest_child(RuntimeError("binance down")), "tradingview": _rest_child([])},
+        {"binance": _rest_child(RuntimeError("binance down")), "exness": _rest_child([])},
         settings,
         lookup,
     )
@@ -203,7 +203,7 @@ async def test_a_binance_outage_is_raised_not_reported_as_an_empty_market(
 async def test_a_quiet_binance_answer_is_an_empty_list(settings: Settings, env) -> None:
     _, _, _, lookup, _ = env
     routing = _routing_rest(
-        {"binance": _rest_child([]), "tradingview": _rest_child([])}, settings, lookup
+        {"binance": _rest_child([]), "exness": _rest_child([])}, settings, lookup
     )
 
     assert await routing.fetch_ohlcv(SYMBOL, Interval.MINUTE_1, 10) == []
@@ -212,12 +212,12 @@ async def test_a_quiet_binance_answer_is_an_empty_list(settings: Settings, env) 
 @pytest.mark.asyncio
 async def test_symbol_search_goes_to_binance(settings: Settings, env) -> None:
     _, _, _, lookup, _ = env
-    binance, tradingview = _rest_child([]), _rest_child([])
-    routing = _routing_rest({"binance": binance, "tradingview": tradingview}, settings, lookup)
+    binance, exness = _rest_child([]), _rest_child([])
+    routing = _routing_rest({"binance": binance, "exness": exness}, settings, lookup)
 
     assert await routing.search_symbols("btc") == [{"symbol": "BTCUSDT"}]
     binance.search_symbols.assert_awaited_once_with("btc")
-    tradingview.search_symbols.assert_not_awaited()
+    exness.search_symbols.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -225,15 +225,15 @@ async def test_a_binance_symbol_streams_through_the_binance_child_only(
     settings: Settings, env
 ) -> None:
     _, _, _, lookup, _ = env
-    binance, tradingview = _realtime_child(), _realtime_child()
-    routing = _routing_realtime({"binance": binance, "tradingview": tradingview}, settings, lookup)
+    binance, exness = _realtime_child(), _realtime_child()
+    routing = _routing_realtime({"binance": binance, "exness": exness}, settings, lookup)
 
     assert await routing.subscribe(SYMBOL, lambda _: None) == "sub-key"
     await routing.unsubscribe(SYMBOL)
 
     binance.subscribe.assert_awaited_once()
     binance.unsubscribe.assert_awaited_once_with(SYMBOL)
-    tradingview.subscribe.assert_not_awaited()
+    exness.subscribe.assert_not_awaited()
 
 
 @pytest.mark.asyncio

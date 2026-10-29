@@ -1,28 +1,41 @@
 """A session-calendar daily backfill must go direct, never through the cascade.
 
-A CME daily bar opens at 17:00 Chicago the evening before its own date, so
-building one by aggregating 1m bars buckets it at UTC midnight and produces a bar
-that never matches the vendor's chart. Crypto is unaffected, because its trading
-day is the UTC day — which is exactly why no existing test can detect this.
+The vendor builds a session calendar's daily bar from its own session (Exness
+publishes its own D1 candles), so ``cascade_tfs`` omits DAY_1 for a session
+calendar: a cascade backfill would persist 1m bars and build no daily bar at all.
+Crypto on the 24/7 calendar is unaffected and still cascades.
 """
 
 from __future__ import annotations
 
 from typing import cast
 
+import pytest
 import structlog.testing
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.symbol.value_objects import (
-    CALENDAR_CME_GLOBEX_EQUITY,
     CALENDAR_CRYPTO_24_7,
+    CALENDAR_EXNESS_FX,
 )
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+from pocketquant.engine.market_data import tracked_symbols_backfill
 from pocketquant.engine.market_data.tracked_symbols_backfill import (
     BackfillTrackedSymbolCommand,
     TrackedSymbolBackfillService,
 )
+
+EURUSD = "EURUSD:EXNESS"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    # structlog caches a module logger on first use; one cached before
+    # capture_logs() ignores the capture. A fresh proxy per test avoids that.
+    monkeypatch.setattr(
+        tracked_symbols_backfill, "logger", structlog.get_logger(tracked_symbols_backfill.__name__)
+    )
 
 
 class _RecordingProvider:
@@ -65,8 +78,8 @@ def _service(provider: _RecordingProvider, calendar_id: str) -> TrackedSymbolBac
 
 async def test_session_calendar_daily_backfill_goes_direct() -> None:
     provider = _RecordingProvider()
-    result = await _service(provider, CALENDAR_CME_GLOBEX_EQUITY).run(
-        BackfillTrackedSymbolCommand(symbol="ES1!:TRADINGVIEW", interval=Interval.DAY_1, n=10)
+    result = await _service(provider, CALENDAR_EXNESS_FX).run(
+        BackfillTrackedSymbolCommand(symbol=EURUSD, interval=Interval.DAY_1, n=10)
     )
 
     assert result["mode_used"] == "direct"
@@ -95,9 +108,9 @@ async def test_an_explicit_cascade_is_overridden_audibly() -> None:
     """
     provider = _RecordingProvider()
     with structlog.testing.capture_logs() as logs:
-        result = await _service(provider, CALENDAR_CME_GLOBEX_EQUITY).run(
+        result = await _service(provider, CALENDAR_EXNESS_FX).run(
             BackfillTrackedSymbolCommand(
-                symbol="ES1!:TRADINGVIEW", interval=Interval.DAY_1, n=10, mode="cascade"
+                symbol=EURUSD, interval=Interval.DAY_1, n=10, mode="cascade"
             )
         )
 
@@ -113,8 +126,8 @@ async def test_auto_mode_is_overridden_silently() -> None:
     """Nothing was contradicted, so nothing is warned about."""
     provider = _RecordingProvider()
     with structlog.testing.capture_logs() as logs:
-        await _service(provider, CALENDAR_CME_GLOBEX_EQUITY).run(
-            BackfillTrackedSymbolCommand(symbol="ES1!:TRADINGVIEW", interval=Interval.DAY_1, n=10)
+        await _service(provider, CALENDAR_EXNESS_FX).run(
+            BackfillTrackedSymbolCommand(symbol=EURUSD, interval=Interval.DAY_1, n=10)
         )
 
     assert [e for e in logs if e["event"] == "backfill.mode_overridden"] == []

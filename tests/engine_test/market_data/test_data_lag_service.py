@@ -7,13 +7,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 import structlog
+from structlog.typing import EventDict
 
 from pocketquant.core.common.constants import CACHE_KEY_DATA_LAG
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.sync_status.entities import SyncStatus
-from pocketquant.core.infra.calendars.cme_globex_calendar_adapter import CmeGlobexCalendarAdapter
+from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
 from pocketquant.engine.market_data.app_services import sync_jobs
 from pocketquant.engine.market_data.app_services.sync_jobs import _log_feed_transition
 from pocketquant.engine.market_data.data_lag_service import (
@@ -31,12 +32,13 @@ from pocketquant.engine.market_data.sync_status_service import (
 )
 
 CRYPTO = Continuous24x7Calendar()
-CME = CmeGlobexCalendarAdapter()
-ES = "ES1!:TRADINGVIEW"
-# A Monday mid-session, and the Sunday evening Globex open before it.
-MONDAY = datetime(2026, 9, 21, 14, 0, 30, tzinfo=UTC)
-SUNDAY_OPEN = datetime(2026, 9, 20, 22, 0, tzinfo=UTC)
-FRIDAY_LAST_BAR = datetime(2026, 9, 18, 20, 59, tzinfo=UTC)
+FX = EXNESS_CALENDARS[0]
+EURUSD = "EURUSD:EXNESS"
+# A Monday mid-session, and the Sunday evening EURUSD open before it (21:05 UTC
+# under EDT). The week closes Friday 20:58:59, so 20:58 is the last 1m bar.
+MONDAY = datetime(2026, 10, 12, 14, 0, 30, tzinfo=UTC)
+SUNDAY_OPEN = datetime(2026, 10, 11, 21, 5, tzinfo=UTC)
+FRIDAY_LAST_BAR = datetime(2026, 10, 9, 20, 58, tzinfo=UTC)
 
 
 def _bar(symbol: str, dt: datetime, interval: Interval = Interval.MINUTE_1) -> Bar:
@@ -68,19 +70,19 @@ class TestFeedLagCountsTradingMinutes:
 
     def test_a_feed_twelve_minutes_late_reports_twelve_minutes(self) -> None:
         latest = MONDAY.replace(second=0) - timedelta(minutes=13)
-        assert feed_lag_seconds(latest, CME, MONDAY) == 12 * 60
+        assert feed_lag_seconds(latest, FX, MONDAY) == 12 * 60
 
     def test_a_weekend_is_not_lag(self) -> None:
         """Five minutes after the Sunday open, Friday's last bar is five minutes behind."""
         now = SUNDAY_OPEN + timedelta(minutes=5)
-        assert feed_lag_seconds(FRIDAY_LAST_BAR, CME, now) == 5 * 60
+        assert feed_lag_seconds(FRIDAY_LAST_BAR, FX, now) == 5 * 60
 
     def test_a_closed_market_that_has_caught_up_has_no_lag(self) -> None:
-        saturday = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
-        assert feed_lag_seconds(FRIDAY_LAST_BAR, CME, saturday) == 0
+        saturday = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
+        assert feed_lag_seconds(FRIDAY_LAST_BAR, FX, saturday) == 0
 
     def test_no_bar_at_all_is_unknown_not_zero(self) -> None:
-        assert feed_lag_seconds(None, CME, MONDAY) is None
+        assert feed_lag_seconds(None, FX, MONDAY) is None
 
 
 class TestClassifyFeed:
@@ -125,14 +127,14 @@ class TestClassifyFeed:
 async def test_compute_data_lag_reads_the_1m_feed() -> None:
     bar_repo = AsyncMock()
     bar_repo.get_latest = AsyncMock(
-        return_value=_bar(ES, MONDAY.replace(second=0) - timedelta(minutes=13))
+        return_value=_bar(EURUSD, MONDAY.replace(second=0) - timedelta(minutes=13))
     )
     sync_status_repo = AsyncMock()
-    sync_status_repo.find_one = AsyncMock(return_value=_status(ES, Interval.MINUTE_1))
+    sync_status_repo.find_one = AsyncMock(return_value=_status(EURUSD, Interval.MINUTE_1))
 
-    snapshot = await compute_data_lag(ES, bar_repo, sync_status_repo, CME, now=MONDAY)
+    snapshot = await compute_data_lag(EURUSD, bar_repo, sync_status_repo, FX, now=MONDAY)
 
-    bar_repo.get_latest.assert_awaited_once_with(ES, Interval.MINUTE_1)
+    bar_repo.get_latest.assert_awaited_once_with(EURUSD, Interval.MINUTE_1)
     assert snapshot.state is FeedState.DELAYED
     assert snapshot.lag_seconds == 720
     assert snapshot.is_market_open is True
@@ -143,14 +145,14 @@ async def test_compute_data_lag_reads_the_1m_feed() -> None:
 async def test_a_1m_sync_that_stopped_running_makes_the_feed_stuck() -> None:
     bar_repo = AsyncMock()
     bar_repo.get_latest = AsyncMock(
-        return_value=_bar(ES, MONDAY.replace(second=0) - timedelta(minutes=13))
+        return_value=_bar(EURUSD, MONDAY.replace(second=0) - timedelta(minutes=13))
     )
-    status = _status(ES, Interval.MINUTE_1)
+    status = _status(EURUSD, Interval.MINUTE_1)
     status.last_sync_at = MONDAY - timedelta(minutes=10)
     sync_status_repo = AsyncMock()
     sync_status_repo.find_one = AsyncMock(return_value=status)
 
-    snapshot = await compute_data_lag(ES, bar_repo, sync_status_repo, CME, now=MONDAY)
+    snapshot = await compute_data_lag(EURUSD, bar_repo, sync_status_repo, FX, now=MONDAY)
 
     assert snapshot.state is FeedState.STUCK
 
@@ -161,9 +163,9 @@ class TestDataLagQueryService:
         cache = AsyncMock()
         cache.get = AsyncMock(return_value=None)
 
-        result = await DataLagQueryService(cache).get_data_lag("es1!:tradingview")
+        result = await DataLagQueryService(cache).get_data_lag("eurusd:exness")
 
-        cache.get.assert_awaited_once_with(CACHE_KEY_DATA_LAG.format(symbol=ES))
+        cache.get.assert_awaited_once_with(CACHE_KEY_DATA_LAG.format(symbol=EURUSD))
         assert result.state is FeedState.UNKNOWN
         assert result.lag_seconds is None
 
@@ -171,15 +173,15 @@ class TestDataLagQueryService:
     async def test_a_stored_snapshot_round_trips(self) -> None:
         bar_repo = AsyncMock()
         bar_repo.get_latest = AsyncMock(
-            return_value=_bar(ES, MONDAY.replace(second=0) - timedelta(minutes=13))
+            return_value=_bar(EURUSD, MONDAY.replace(second=0) - timedelta(minutes=13))
         )
         sync_status_repo = AsyncMock()
         sync_status_repo.find_one = AsyncMock(return_value=None)
-        snapshot = await compute_data_lag(ES, bar_repo, sync_status_repo, CME, now=MONDAY)
+        snapshot = await compute_data_lag(EURUSD, bar_repo, sync_status_repo, FX, now=MONDAY)
         cache = AsyncMock()
         cache.get = AsyncMock(return_value=snapshot.to_cache_dict())
 
-        result = await DataLagQueryService(cache).get_data_lag(ES)
+        result = await DataLagQueryService(cache).get_data_lag(EURUSD)
 
         assert result.state is FeedState.DELAYED
         assert result.lag_seconds == 720
@@ -194,9 +196,9 @@ class TestTransitionsAreLoggedOnce:
         # breaking unrelated tests later in the run. A fresh proxy avoids that.
         monkeypatch.setattr(sync_jobs, "logger", structlog.get_logger("test.data_lag"))
 
-    def _logs(self, previous: dict | None, state: FeedState) -> list[dict]:
+    def _logs(self, previous: dict | None, state: FeedState) -> list[EventDict]:
         with structlog.testing.capture_logs() as logs:
-            _log_feed_transition(previous, state, ES, 720)
+            _log_feed_transition(previous, state, EURUSD, 720)
         return logs
 
     def test_an_unchanged_state_is_silent(self) -> None:
@@ -239,11 +241,11 @@ class TestSyncStatusCarriesTheFeedLag:
         now = datetime.now(UTC).replace(second=0, microsecond=0)
         # The feed is 12 minutes behind; the 5m row is as late as the feed makes it.
         latest = {
-            Interval.MINUTE_1: _bar(ES, now - timedelta(minutes=13)),
-            Interval.MINUTE_5: _bar(ES, now - timedelta(minutes=25), Interval.MINUTE_5),
+            Interval.MINUTE_1: _bar(EURUSD, now - timedelta(minutes=13)),
+            Interval.MINUTE_5: _bar(EURUSD, now - timedelta(minutes=25), Interval.MINUTE_5),
         }
         service = self._service(
-            [_status(ES, Interval.MINUTE_1), _status(ES, Interval.MINUTE_5)], latest
+            [_status(EURUSD, Interval.MINUTE_1), _status(EURUSD, Interval.MINUTE_5)], latest
         )
 
         rows = {r.interval: r for r in await service.get_sync_status()}
@@ -256,9 +258,9 @@ class TestSyncStatusCarriesTheFeedLag:
     @pytest.mark.asyncio
     async def test_a_stalled_feed_marks_the_1m_row_stuck(self) -> None:
         now = datetime.now(UTC).replace(second=0, microsecond=0)
-        latest = {Interval.MINUTE_1: _bar(ES, now - timedelta(minutes=30))}
+        latest = {Interval.MINUTE_1: _bar(EURUSD, now - timedelta(minutes=30))}
         service = self._service(
-            [_status(ES, Interval.MINUTE_1, empty_syncs=STUCK_AFTER_EMPTY_SYNCS)], latest
+            [_status(EURUSD, Interval.MINUTE_1, empty_syncs=STUCK_AFTER_EMPTY_SYNCS)], latest
         )
 
         [row] = await service.get_sync_status()
@@ -288,13 +290,13 @@ class TestSyncStatusCarriesTheFeedLag:
     async def test_a_stalled_feed_excuses_no_other_row(self) -> None:
         now = datetime.now(UTC).replace(second=0, microsecond=0)
         latest = {
-            Interval.MINUTE_1: _bar(ES, now - timedelta(minutes=30)),
-            Interval.MINUTE_5: _bar(ES, now - timedelta(minutes=30), Interval.MINUTE_5),
+            Interval.MINUTE_1: _bar(EURUSD, now - timedelta(minutes=30)),
+            Interval.MINUTE_5: _bar(EURUSD, now - timedelta(minutes=30), Interval.MINUTE_5),
         }
         service = self._service(
             [
-                _status(ES, Interval.MINUTE_1, empty_syncs=STUCK_AFTER_EMPTY_SYNCS),
-                _status(ES, Interval.MINUTE_5),
+                _status(EURUSD, Interval.MINUTE_1, empty_syncs=STUCK_AFTER_EMPTY_SYNCS),
+                _status(EURUSD, Interval.MINUTE_5),
             ],
             latest,
         )

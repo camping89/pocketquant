@@ -6,7 +6,7 @@ sync_internals/responses (which builds SyncResponse instances).
 
 from pydantic import BaseModel, Field
 
-from pocketquant.core.common.constants import LIMIT_TVDATAFEED_MAX_BARS
+from pocketquant.core.common.constants import LIMIT_SYNC_MAX_BARS
 from pocketquant.core.domain.shared.enums import Interval as DomainInterval
 
 
@@ -19,9 +19,9 @@ class SyncSymbolCommand(BaseModel):
     symbol: str = Field(..., description="Composite symbol (e.g., BTCUSDT:BINANCE)")
     interval: DomainInterval = Field(default=DomainInterval.DAY_1, description="Time interval")
     n_bars: int = Field(
-        default=LIMIT_TVDATAFEED_MAX_BARS,
+        default=LIMIT_SYNC_MAX_BARS,
         ge=1,
-        le=LIMIT_TVDATAFEED_MAX_BARS,
+        le=LIMIT_SYNC_MAX_BARS,
         description="Number of bars to fetch",
     )
     skip_filter: bool = Field(
@@ -48,9 +48,9 @@ class BulkSyncCommand(BaseModel):
     )
     interval: DomainInterval = Field(default=DomainInterval.DAY_1, description="Time interval")
     n_bars: int = Field(
-        default=LIMIT_TVDATAFEED_MAX_BARS,
+        default=LIMIT_SYNC_MAX_BARS,
         ge=1,
-        le=LIMIT_TVDATAFEED_MAX_BARS,
+        le=LIMIT_SYNC_MAX_BARS,
         description="Number of bars to fetch",
     )
 
