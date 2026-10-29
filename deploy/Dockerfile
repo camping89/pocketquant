@@ -53,6 +53,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 41921
 
-# Single worker only — scheduler/WS feed/broker are in-process singletons;
-# --workers N would duplicate the reconcile loop and live broker connection.
+# One uvicorn worker per container; the worker and trader roles act only while they hold their Mongo lease.
 CMD ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921"]

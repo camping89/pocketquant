@@ -50,18 +50,18 @@ services:
         max-size: "5m"
         max-file: "3"
 
-  # Single backend: full trading runtime (scheduler, WS feed, strategy
-  # lifecycle, reconcile loop, backtest worker) + all API routes + SPA
-  # serving. No published host port — only nginx reaches it on the compose
-  # network. Migrations + ensure_indexes run in lifespan BEFORE yield, so the
-  # container is only healthy after schema is ready.
+  # Backend with all roles (APP_ROLES below). Migrations and indexes run before
+  # yield; the trader warms up in standby before yield, so healthy means warm.
+  # No published host port: only nginx reaches it on the compose network.
   app:
     image: ${DOCKERHUB_USERNAME}/pocketquant:${IMAGE_TAG:-latest}
     container_name: pocketquant-app
     restart: unless-stopped
-    # Single worker only — scheduler/WS feed/broker are in-process singletons;
-    # --workers N would duplicate the reconcile loop and live broker connection.
-    command: ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921", "--forwarded-allow-ips", "172.16.0.0/12,192.168.0.0/16"]
+    # One uvicorn worker per container; the worker and trader roles act only while
+    # they hold their Mongo lease.
+    command: ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921", "--forwarded-allow-ips", "172.16.0.0/12,192.168.0.0/16", "--timeout-graceful-shutdown", "10"]
+    # SSE close (10 s) + trader drain at a 1m boundary and bounded stop (up to 160 s) + release.
+    stop_grace_period: 180s
     # Single source of truth: every app setting comes from .env (the file
     # materialized on the VPS from pocketquant-config/vps/default/.env each
     # deploy). MONGODB_URL/REDIS_URL in that file use the internal docker
@@ -72,6 +72,7 @@ services:
     # asserts a UTC process timezone at startup and refuses to run without it.
     environment:
       TZ: "UTC"
+      APP_ROLES: "api,worker,trader"
     networks: [backend]
     depends_on:
       mongodb:
@@ -83,7 +84,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 180s
     logging:
       driver: json-file
       options:

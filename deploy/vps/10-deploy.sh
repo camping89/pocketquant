@@ -58,8 +58,9 @@ wait_health() {
   until docker exec "$container" curl -fsS --max-time 2 "http://localhost:${port}/health" >/dev/null 2>&1; do
     if [ "$(date +%s)" -ge "$deadline" ]; then
       echo "ERROR: $container did not become healthy within ${timeout}s"
-      echo "--- last 30 log lines ---"
-      docker logs "$container" --tail 30 2>&1 || true
+      # The Actions log is public: the log tail stays on the VPS.
+      f=/opt/pocketquant/logs/failed-app-$(date -u +%Y%m%dT%H%M%SZ).log; mkdir -p /opt/pocketquant/logs; docker logs "$container" --tail 30 > "$f" 2>&1 || true
+      echo "--- log tail saved on the VPS: $f ---"
       echo "--- container status ---"
       docker ps --format "table {{.Names}}\t{{.Status}}" | grep pocketquant || true
       exit 1
@@ -69,7 +70,7 @@ wait_health() {
   echo "$container is healthy."
 }
 
-wait_health pocketquant-app 41921 60
+wait_health pocketquant-app 41921 240
 
 echo "=== Cleaning old images ==="
 docker image prune -f
