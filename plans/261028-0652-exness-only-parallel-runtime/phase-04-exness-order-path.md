@@ -59,6 +59,15 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261028-0652-exness
 
 ## Tasks
 
+<!-- Added 2026-10-29 after the Phase 03 checkpoint -->
+**Corrections (2026-10-29).**
+- Anchors moved after Phase 03: `app/di/services.py:171` is now `:168`; `tests/engine_test/test_contract_spec_wiring.py:66,256` is now `:67,257`. Locate by symbol.
+- Task 4.1 missed a caller: `tests/engine_test/test_exness_clamp_fill_position.py:47` builds `ExnessBrokerAdapter(client, bus, repo, Safeguards(...))` positionally; it passes a fifth argument `AsyncMock()` (its pause read returns a truthy mock, so pass an object whose `load_entries_paused` returns `False`). Added to Modify tests.
+- Task 4.4 race: a close event can land while `_refresh_caches` or `_loss_cap_reason` is awaiting `_realized_today`, and the stale value would then overwrite the `None`. Add `self._realized_invalid_at = 0.0`; both close paths set it to `time.monotonic()` beside `self._realized = None`; every writer of `_realized` records `started = time.monotonic()` before the read and stores only when `started > self._realized_invalid_at`. Add `test_a_close_during_the_deals_read_keeps_the_cache_stale`: wrap `_realized_today` so it delivers a broker close event before returning; after `_refresh_caches()`, `h.broker._realized is None`.
+- Task 4.7 step 1 uses the Phase 03 baseline form: `ruff check` passes; `ruff format --check` and `pyright` report no more than the baseline at the phase start (11 files, 25 errors), all in files this phase does not touch.
+- Tasks run serially (shared files). The only accepted parameter without a second caller is `deadline`.
+
+
 ### Task 4.1 — The entry pause lives only in the store
 
 **Goal:** a pause written by any process stops the next open of every process; an unreadable store refuses the open; a failed store write is reported as 503.
