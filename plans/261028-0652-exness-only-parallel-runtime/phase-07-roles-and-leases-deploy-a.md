@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Roles and leases inside one process (Deploy A)"
-status: pending
+status: done
 priority: P1
 effort: "2d code + 1 deploy (D-4) + 11 min prod probe"
 dependencies: [1, 6]
