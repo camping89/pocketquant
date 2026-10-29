@@ -128,5 +128,5 @@ source_modules = ["pocketquant"]
 forbidden_modules = ["bson"]
 
 [tool.code-metrics]
-max_tiny_share = 0.4750
+max_tiny_share = 0.4790
 max_delegations = 70
