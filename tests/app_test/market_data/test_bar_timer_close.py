@@ -184,6 +184,24 @@ async def test_last_closed_boundary_moves_after_the_publish_returns() -> None:
     assert svc.last_closed_boundary == _at(12, 1)
 
 
+async def test_a_failing_handler_does_not_drop_other_symbols() -> None:
+    svc, bus, _ = _service()
+
+    def fail(event: BarCompletedEvent) -> None:
+        if event.symbol == "AAA:EXNESS":
+            raise RuntimeError("handler failed")
+
+    bus.subscribe(BarCompletedEvent, fail)
+    events = _collect(bus)
+    await svc.add_tick(_tick("AAA:EXNESS", _at(12, 0, 30)))
+    await svc.add_tick(_tick("BBB:EXNESS", _at(12, 0, 31)))
+
+    await _close_at(svc, _at(12, 1, 0.6))
+
+    assert [e.symbol for e in events] == ["AAA:EXNESS", "BBB:EXNESS"]
+    assert svc.last_closed_boundary == _at(12, 1)
+
+
 async def test_a_running_tick_close_publish_holds_the_boundary() -> None:
     svc, bus, _ = _service()
     release = _blocking(bus)

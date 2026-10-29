@@ -139,10 +139,22 @@ class BarAppService:
             await self._publish(events)
 
     async def _publish(self, events: list[BarCompletedEvent]) -> None:
-        """Publish closed bars in order, outside the bar lock; the caller counted this publish."""
+        """Publish closed bars in order, outside the bar lock; the caller counted this publish.
+
+        A failing handler costs only its own bar: the rest of the batch is still published.
+        """
         try:
             for event in events:
-                await self._event_bus.publish(event)
+                try:
+                    await self._event_bus.publish(event)
+                except Exception:
+                    logger.error(
+                        "bar.publish_failed",
+                        symbol=event.symbol,
+                        interval=event.interval,
+                        exc_info=True,
+                    )
+                    continue
                 logger.debug(
                     "bar_completed_event_published",
                     symbol=event.symbol,
