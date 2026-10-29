@@ -218,6 +218,12 @@ def _no_watch_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(adapter_module, "_FILL_TIMEOUT_S", 3600)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
+    monkeypatch.setattr(adapter_module, "logger", structlog.get_logger("test.exness_broker"))
+
+
 # ── rejections before any order call ────────────────────────────────────────
 
 
@@ -393,9 +399,7 @@ async def test_resumed_open_is_sent() -> None:
     assert len(h.client.ops("openPosition")) == 1
 
 
-async def test_an_unreadable_pause_refuses_the_open(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
-    monkeypatch.setattr(adapter_module, "logger", structlog.get_logger("test.exness_broker"))
+async def test_an_unreadable_pause_refuses_the_open() -> None:
     h = await _Harness().start()
     h.pause.error = RuntimeError("mongo down")
 
