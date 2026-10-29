@@ -690,8 +690,9 @@ async def register_sync_jobs(
     # Strategy correctness depends on bar-close events arriving on time; lag/gaps
     # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
     #
-    # sync_1m runs at +2s from bar close. Gives the data provider time to settle the
-    # just-closed bar. Cascade runs in-process after 1m upsert — no extra API calls.
+    # sync_1m runs at +12 s from bar close: the provider has settled the bar, and the
+    # live 1m entries (timer close at +0.5 s, orders by about +2 s) are done.
+    # Cascade runs in-process after 1m upsert — no extra API calls.
     # coalesce + max_instances=1 are APScheduler defaults — overlap prevention built-in.
     #
     # Per-job grace rationale (overrides global 300s default):
@@ -704,7 +705,7 @@ async def register_sync_jobs(
         f"{_MODULE}:sync_1m",
         job_id="sync_1m",
         cron_expression="*/1 * * * *",
-        second=2,
+        second=12,
         misfire_grace_time=120,
     )
     # data_lag_check reads what sync_1m just wrote, so it runs mid-minute.
