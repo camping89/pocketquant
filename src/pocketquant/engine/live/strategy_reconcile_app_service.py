@@ -73,17 +73,23 @@ class StrategyReconcileAppService:
         self._reported: set[str] = set()
 
     async def bootstrap(self) -> None:
-        """Load one RAM instance per persisted subscription, once at startup.
+        """Runs in the trader role before the lease: loads and warms every running
+        subscription; brokers stay disconnected until the lease is held.
 
-        Runs once at startup, so instances exist before the first tick and it
-        never logs spurious ``missing_instance`` warnings. Reuses
-        ``_ensure_instances`` (the loop's own load-per-subscription pass) so the
-        boot path and the steady-state path can never drift.
+        Reuses ``_ensure_instances`` (the loop's own load pass) so the boot path and
+        the steady-state path cannot drift. ``actual_state`` is written only by the loop.
         """
         subs = await self._sub_repo.list_all()
         if not subs:
             return
         await self._ensure_instances(subs)
+        for sub in subs:
+            if sub.desired_state != "running":
+                continue
+            try:
+                await self._strategy_service.start_strategy(str(sub.id))
+            except Exception as exc:
+                logger.error("reconcile.sub_failed", sub_id=str(sub.id), error=str(exc))
         logger.info("live_instances_bootstrapped", subscriptions=len(subs))
 
     async def run(self) -> None:

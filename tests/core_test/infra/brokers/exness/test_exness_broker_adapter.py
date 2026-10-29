@@ -12,6 +12,7 @@ import copy
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -257,6 +258,17 @@ async def test_unmapped_instrument_blocks_orders_on_it() -> None:
 
     assert result.error_message == "unmapped exness position on XAUUSD"
     assert h.client.ops("openPosition") == []
+
+
+async def test_inflight_count_counts_opens_and_acks_not_a_pending_snapshot() -> None:
+    h = await _Harness().start()
+    assert h.broker.inflight_count == 0
+
+    h.broker._inflight["r1"] = SimpleNamespace(order=_order(), instrument="XAUUSD")  # type: ignore[assignment]
+    h.broker._pending_ack.add("r2")
+    h.broker._needs_snapshot = True
+
+    assert h.broker.inflight_count == 2
 
 
 # ── daily loss cap ──────────────────────────────────────────────────────────

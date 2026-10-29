@@ -484,6 +484,15 @@ class StrategyAppService:
         if self._signal_tasks.get(strategy_id) is task:
             del self._signal_tasks[strategy_id]
 
+    def inflight_count(self) -> int:
+        """Venue signal tasks and bar handlers still running plus orders the brokers have
+        not settled; the trader hands over at 0."""
+        return (
+            sum(not t.done() for t in self._signal_tasks.values())
+            + self._running_bar_handlers
+            + sum(b.inflight_count for b in set(self._brokers.values()))
+        )
+
     def cancel_pending_signals(self) -> int:
         """A lost lease calls this: tasks that have not reached the broker stop now; a task
         at the broker is stopped by the order deadline check there."""

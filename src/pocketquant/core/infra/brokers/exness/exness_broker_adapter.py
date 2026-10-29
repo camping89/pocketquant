@@ -145,6 +145,11 @@ class ExnessBrokerAdapter(IBrokerPort):
     def is_connected(self) -> bool:
         return self._connected
 
+    @property
+    def inflight_count(self) -> int:
+        # A pending snapshot is not counted: the next trader's takeover snapshot covers it.
+        return len(self._inflight) + len(self._pending_ack)
+
     async def connect(self) -> None:
         self._stream = ExnessStream(
             self._client,

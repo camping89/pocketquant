@@ -1,3 +1,7 @@
+import asyncio
+import os
+import socket
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,38 +12,45 @@ from fastapi import FastAPI
 from pocketquant.app.di import create_container
 from pocketquant.app.main_extensions import (
     assert_utc_runtime,
-    bootstrap_live_instances,
     configure_middleware,
     drain_backtest_tasks,
     ensure_all_indexes,
     init_backtest_tasks,
-    recover_orphan_backtests,
-    recover_orphan_jobs,
     register_health_checks,
     register_routes,
-    start_jobs,
     start_loop_lag_probe,
     start_quote_feed,
     stop_loop_lag_probe,
     stop_quote_feed,
     stop_reconcile_loop,
 )
+from pocketquant.app.roles import (
+    hand_over,
+    start_trader_lease,
+    start_trader_standby,
+    start_worker,
+    stop_worker,
+)
 from pocketquant.core.common.logging import get_logger, setup_logging
+from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.config import get_settings
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.app_services.sync_jobs import (
     set_container as set_sync_container,
 )
-from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    started_at = time.monotonic()
     settings = get_settings()
-    logger.info("application_starting", environment=settings.environment)
+    owner = f"{socket.gethostname()}:{os.getpid()}"
+    app.state.lease_state = {}
+    roles = settings.roles
+    logger.info("application_starting", environment=settings.environment, roles=settings.app_roles)
 
     container: AsyncContainer = app.state.dishka_container
 
@@ -62,13 +73,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         init_backtest_tasks(app)
 
         await ensure_all_indexes(container)
-        await recover_orphan_backtests(container)
-        await recover_orphan_jobs(container)
-        await bootstrap_live_instances(container)
-        await (await container.get(StrategyAppService)).take_over()
         await register_health_checks(container, app)
-        await start_quote_feed(container, app)
-        await start_jobs(container, app)
+        if "trader" in roles:
+            await start_trader_standby(container, started_at)
+            await start_quote_feed(container, app)
+            start_trader_lease(container, app, owner)
+        if "worker" in roles:
+            start_worker(container, app, owner)
 
         logger.info("application_started")
         yield
@@ -79,13 +90,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.exception("application_start_failed")
         raise
     finally:
+        # Every drain and stop deadline counts from here.
+        started = get_current_time()
         await stop_loop_lag_probe(app)
-        # Drain in-flight backtests + stop reconcile FIRST — before quote feed and
-        # container.close() (which stops StrategyAppService) — so neither runs
-        # against a stopping engine. Drain (not cancel) lets persistence finish.
+        # Together, so the next worker starts while this trader drains and neither eats
+        # the other's grace.
+        results = await asyncio.gather(
+            stop_worker(container, app, owner, started),
+            hand_over(container, app, owner, started),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.error("application.stop_failed", exc_info=result)
+        # Drain (not cancel) lets backtest persistence finish before the engine stops.
         await drain_backtest_tasks(app)
         await stop_reconcile_loop(app)
-        await stop_quote_feed(container, app)
+        if "trader" in roles:
+            await stop_quote_feed(container, app)
         # container.close() runs generator cleanup in reverse order:
         # StrategyAppService.stop → JobScheduler.shutdown → Cache/Database.disconnect
         await container.close()

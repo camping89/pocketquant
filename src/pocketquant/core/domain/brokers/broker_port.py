@@ -24,6 +24,11 @@ class IBrokerPort(ABC):
     fills_async: bool = False
 
     @property
+    def inflight_count(self) -> int:
+        """Orders sent and not yet settled; a trader hands over only at 0."""
+        return 0
+
+    @property
     @abstractmethod
     def name(self) -> str: ...
 

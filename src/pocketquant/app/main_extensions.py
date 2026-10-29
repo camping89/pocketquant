@@ -1,9 +1,4 @@
-"""Helpers for main.py: middleware, routes, health, and startup utilities.
-
-The app process is the single backend entrypoint — it runs the full trading
-runtime (scheduler, WS feed, reconcile loop, backtest tasks) AND serves all
-HTTP feature routes. nginx serves the SPA.
-"""
+"""Helpers for main.py. A process runs the roles in APP_ROLES; see roles.py."""
 
 import asyncio
 import os
@@ -26,7 +21,6 @@ from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
 from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
-from pocketquant.core.config import Settings
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
@@ -64,8 +58,6 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
-from pocketquant.core.infra.scheduling.scheduler import JobScheduler
-from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
@@ -131,18 +123,6 @@ async def ensure_all_indexes(container: AsyncContainer) -> None:
     logger.info("database_indexes_ensured")
 
 
-async def recover_orphan_backtests(container: AsyncContainer) -> None:
-    """Flip any run left ``started`` by a killed task to ``failed`` on startup.
-
-    Single uvicorn worker → no legitimately in-flight run survives a restart, so
-    every ``started`` doc is an orphan. Without this, FE would poll it forever.
-    """
-    repo = await container.get(BacktestRepository)
-    n = await repo.mark_orphaned_started_as_failed()
-    if n:
-        logger.info("orphan_backtest_recovery", marked_failed=n)
-
-
 async def recover_orphan_jobs(container: AsyncContainer) -> None:
     """Mark any job_history docs stuck at status='running' as 'failed' on startup.
 
@@ -151,8 +131,8 @@ async def recover_orphan_jobs(container: AsyncContainer) -> None:
     CancelledError). Without this sweep, dashboards show forever-running jobs.
     Safe to call repeatedly — idempotent. Logs once if any docs were updated.
 
-    Must run AFTER ensure_all_indexes (proves DB connectivity) and BEFORE
-    start_jobs (so new runs aren't racing the reconcile sweep).
+    Runs when the worker takes its lease, before the scheduler starts, so new
+    runs do not race the sweep.
     """
     repo = await container.get(JobHistoryRepository)
     n = await repo.reconcile_orphan_running(max_age_seconds=600)
@@ -238,37 +218,6 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     provider = await container.get(IRealtimeQuoteProviderPort)
     await provider.disconnect()
     logger.info("quote_feed.stopped")
-
-
-async def start_jobs(container: AsyncContainer, app: FastAPI) -> None:
-    """Register the sync jobs, subscribe the live trade collector, start reconcile.
-
-    All three run only in the worker role, so the test/CLI profile
-    (``APP_ROLES=api``) runs none of them. The collector subscribes before the
-    reconcile loop starts strategies, so no trade closure is published before its
-    handler exists. Call it after ``bootstrap_live_instances``, so the loop's first
-    tick finds every instance.
-
-    The sync_jobs module-level container is wired at the top of lifespan() in
-    main.py, before any ``await``, to win the race against persisted
-    MongoDBJobStore jobs that may dispatch during early Dishka resolves.
-    """
-    settings = await container.get(Settings)
-    if "worker" not in settings.roles:
-        logger.info("background_jobs_disabled")
-        return
-
-    from pocketquant.engine.market_data.app_services.sync_jobs import register_sync_jobs
-
-    await register_sync_jobs(
-        container=container,
-        job_scheduler=await container.get(JobScheduler),
-    )
-    collector = await container.get(LiveTradeCollector)
-    await collector.start()
-    svc = await container.get(StrategyReconcileAppService)
-    app.state.reconcile_task = asyncio.create_task(svc.run())
-    logger.info("background_jobs_enabled")
 
 
 async def stop_reconcile_loop(app: FastAPI) -> None:
@@ -395,10 +344,30 @@ def register_routes(app: FastAPI, settings) -> None:
     @inject
     async def health_check(
         health_coordinator: FromDishka[HealthCoordinator],
+        lease_repo: FromDishka[LeaseRepository],
     ) -> dict:
         result = await health_coordinator.check_all()
         result["version"] = settings.app_version
         result["environment"] = settings.environment
+        result["role"] = settings.app_roles
+        states: dict[str, str] = getattr(app.state, "lease_state", {})
+        held = [name for name, state in states.items() if state == "held"]
+        result["lease"] = (
+            "none" if not states else ("held" if len(held) == len(states) else "standby")
+        )
+        # A stale age means renewals stopped.
+        result["lease_renewed_age_s"] = None
+        try:
+            now = datetime.now(UTC)
+            ages = [
+                (now - doc["renewed_at"]).total_seconds()
+                for doc in [await lease_repo.get(name) for name in held]
+                if doc and doc.get("renewed_at")
+            ]
+            if ages:
+                result["lease_renewed_age_s"] = round(max(ages), 1)
+        except Exception:
+            logger.warning("health.lease_read_failed", exc_info=True)
         result["event_loop_lag_max_s"] = getattr(app.state, "loop_lag_max_s", 0.0)
         return result
 

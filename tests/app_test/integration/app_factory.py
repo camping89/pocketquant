@@ -19,10 +19,8 @@ from pocketquant.app.main_extensions import (
     drain_backtest_tasks,
     ensure_all_indexes,
     init_backtest_tasks,
-    recover_orphan_backtests,
     register_health_checks,
     register_routes,
-    start_jobs,
 )
 from pocketquant.core.common.logging import setup_logging
 from pocketquant.core.config import Settings
@@ -52,9 +50,7 @@ def make_test_app(settings: Settings) -> FastAPI:
             app.state.cache = await c.get(Cache)
             init_backtest_tasks(app)
             await ensure_all_indexes(c)
-            await recover_orphan_backtests(c)
             await register_health_checks(c, app)
-            await start_jobs(c, app)
             yield
         finally:
             await drain_backtest_tasks(app)

@@ -333,3 +333,17 @@ async def test_existing_instance_not_reloaded() -> None:
     await recon._reconcile()
 
     assert svc.load_calls == []  # already present — not reloaded
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_starts_running_subscriptions_without_writing_actual_state() -> None:
+    svc = _FakeStrategyService()
+    running, stopped = _sub(desired="running"), _sub(desired="stopped")
+    recon, sub_repo = _service([running, stopped], svc)
+
+    await recon.bootstrap()
+
+    started, idle = svc.get_strategy(str(running.id)), svc.get_strategy(str(stopped.id))
+    assert started is not None and started.is_running
+    assert idle is not None and not idle.is_running
+    assert sub_repo.actual_writes == []
