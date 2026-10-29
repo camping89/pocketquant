@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Bar path: publish outside the lock, timer close, gap facts, Redis seed"
-status: pending
+status: done
 priority: P1
 effort: 1d
 dependencies: [4]
