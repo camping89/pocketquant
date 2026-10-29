@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Strategy runtime and restart state: guards, signal tasks, latency, warm-up, paper restore"
-status: pending
+status: done
 priority: P1
 effort: 1.5d code + deploy D-3 + 2 h watch
 dependencies: [5]
