@@ -3,7 +3,6 @@ pacing, transport retries, the 429 rule and the URL and limits helpers."""
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 from collections.abc import Callable, Sequence
@@ -28,6 +27,7 @@ from pocketquant.core.infra.exness.exness_client import (
     allowed_access_point,
     history_age_days,
     min_request_interval,
+    order_request_interval,
     validate_base_url,
     ws_url,
 )
@@ -121,6 +121,7 @@ def _client(
 ) -> ExnessClient:
     if not paced:
         monkeypatch.setattr(exness_client, "min_request_interval", lambda _limits: 0.0)
+        monkeypatch.setattr(exness_client, "order_request_interval", lambda _limits, _fraction: 0.0)
     client = ExnessClient(_settings(**update))
     client._http = httpx.AsyncClient(transport=httpx.MockTransport(exness.handler))
     return client
@@ -379,36 +380,42 @@ async def test_the_pacer_spaces_requests_by_its_interval() -> None:
     pacer = _RequestPacer(0.6, clock=clock, sleep=advance)
     starts = []
     for _ in range(3):
-        await pacer.wait(priority=False)
+        await pacer.wait()
         starts.append(now[0])
 
     assert all(b - a >= 0.6 - 1e-9 for a, b in zip(starts, starts[1:], strict=False))
 
 
-async def test_a_priority_waiter_goes_before_a_queued_one() -> None:
+async def test_three_order_waits_leave_point_three_apart() -> None:
     now, clock = _fake_time()
-    gate = asyncio.Event()
 
-    async def held(delay: float) -> None:
-        await gate.wait()
+    async def advance(delay: float) -> None:
         now[0] += delay
 
-    pacer = _RequestPacer(0.6, clock=clock, sleep=held)
-    await pacer.wait(priority=False)
-    order: list[str] = []
+    pacer = _RequestPacer(0.3, clock=clock, sleep=advance)
+    starts = []
+    for _ in range(3):
+        await pacer.wait()
+        starts.append(now[0])
 
-    async def request(name: str, priority: bool) -> None:
-        await pacer.wait(priority=priority)
-        order.append(name)
+    assert starts == pytest.approx([0.0, 0.3, 0.6])
 
-    tasks = []
-    for name, priority in (("holder", False), ("queued", False), ("order", True)):
-        tasks.append(asyncio.create_task(request(name, priority)))
-        await asyncio.sleep(0)
-    gate.set()
-    await asyncio.gather(*tasks)
 
-    assert order == ["holder", "order", "queued"]
+def test_order_request_interval_uses_the_order_limits() -> None:
+    assert order_request_interval(LIMITS, 0.6) == pytest.approx(0.3)
+    assert order_request_interval(LIMITS, 0.05) == pytest.approx(2.4)
+
+
+async def test_order_calls_use_their_own_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(_Exness(), monkeypatch, paced=True, exness_rate_fraction=0.6)
+
+    order = await client._pacer_for("openPosition")
+
+    assert order is await client._pacer_for("getOperationStatus")
+    assert order.min_interval_s == pytest.approx(0.3)
+    data = await client._pacer_for("getCandleHistory")
+    assert data is not order
+    assert data.min_interval_s == pytest.approx(1.0)
 
 
 async def test_the_rate_fraction_widens_the_pacer_interval(

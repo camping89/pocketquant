@@ -2,9 +2,10 @@
 
 Every call except the access-point discovery goes to the per-account access
 point, which is discovered once and again after a transport failure or a 421:
-the base host answers account routes with a bare 404. Requests are spaced by
-the strictest published rate with headroom; a 429 on a data call is retried a
-bounded number of times, a 429 on an order call never is. Order calls are
+the base host answers account routes with a bare 404. Data calls are spaced by
+the strictest published rate with headroom; order calls have their own lane. A
+429 on a data call is retried a bounded number of times, a 429 on an order call
+never is. Order calls are
 refused while ``EXNESS_LIVE_TRADING`` is false, before any network use.
 
 Headers, keys and signed bodies are never logged.
@@ -13,8 +14,6 @@ Headers, keys and signed bodies are never logged.
 from __future__ import annotations
 
 import asyncio
-import heapq
-import itertools
 import json
 import re
 import time
@@ -119,6 +118,19 @@ def min_request_interval(limits: dict[str, Any]) -> float:
     return max(r["window_seconds"] / r["limit"] for r in rates) * 1.2
 
 
+def order_request_interval(limits: dict[str, Any], fraction: float) -> float:
+    rest = limits["limits"]["rest"]
+    own = max(
+        m["rate_limit"]["window_seconds"] / m["rate_limit"]["limit"]
+        for m in rest["methods"]
+        if m["api_operation_id"] in ("openPosition", "getOperationStatus")
+    )
+    shared = rest["global_account_rate"]["window_seconds"] / rest["global_account_rate"]["limit"]
+    # Only the trader sends order calls, so their own limits are not scaled by the
+    # fraction; the account-wide limit is.
+    return max(own * 1.2, shared * 1.2 / fraction)
+
+
 def history_age_days(limits: dict[str, Any]) -> int:
     for method in limits["limits"]["rest"]["methods"]:
         if method["api_operation_id"] == "getDealsHistory":
@@ -144,11 +156,7 @@ class ExnessApiError(Exception):
 
 
 class _RequestPacer:
-    """Lets requests leave one at a time, at least ``min_interval_s`` apart.
-
-    A priority waiter goes before every waiting non-priority one, so an order
-    call never queues behind a backlog of candle requests.
-    """
+    """Lets requests leave one at a time, at least ``min_interval_s`` apart, in arrival order."""
 
     def __init__(
         self,
@@ -160,38 +168,14 @@ class _RequestPacer:
         self._clock = clock
         self._sleep = sleep
         self._next_at = 0.0
-        self._busy = False
-        self._queue: list[tuple[int, int, asyncio.Future[None]]] = []
-        self._seq = itertools.count()
+        self._lock = asyncio.Lock()
 
-    async def wait(self, *, priority: bool) -> None:
-        if self._busy or self._queue:
-            future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
-            heapq.heappush(self._queue, (0 if priority else 1, next(self._seq), future))
-            try:
-                await future
-            except asyncio.CancelledError:
-                # Handed the slot just as it was cancelled: pass it on.
-                if future.done() and not future.cancelled():
-                    self._release()
-                raise
-        else:
-            self._busy = True
-        try:
+    async def wait(self) -> None:
+        async with self._lock:
             delay = self._next_at - self._clock()
             if delay > 0:
                 await self._sleep(delay)
             self._next_at = self._clock() + self.min_interval_s
-        finally:
-            self._release()
-
-    def _release(self) -> None:
-        while self._queue:
-            _, _, future = heapq.heappop(self._queue)
-            if not future.done():
-                future.set_result(None)
-                return
-        self._busy = False
 
 
 class ExnessClient:
@@ -208,7 +192,8 @@ class ExnessClient:
         self._access_point: str | None = None
         self._access_point_lock = asyncio.Lock()
         self._bootstrap_pacer = _RequestPacer(_BOOTSTRAP_INTERVAL_S)
-        self._pacer: _RequestPacer | None = None
+        self._data_pacer: _RequestPacer | None = None
+        self._order_pacer: _RequestPacer | None = None
         self._cache: dict[str, tuple[float, Any]] = {}
         self.is_configured = self._configure()
 
@@ -296,7 +281,7 @@ class ExnessClient:
         pacer = await self._pacer_for(op)
         attempt = 0
         while True:
-            await pacer.wait(priority=op in _PRIORITY_OPS)
+            await pacer.wait()
             response = await self._send(method, url, body, idempotency_key)
             if response.status_code != 429:
                 return response
@@ -345,14 +330,15 @@ class ExnessClient:
         )
 
     async def _pacer_for(self, op: str) -> _RequestPacer:
-        if self._pacer is not None:
-            return self._pacer
-        if op in _BOOTSTRAP_OPS:
-            return self._bootstrap_pacer
-        interval = min_request_interval(await self.limits())
-        if self._pacer is None:
-            self._pacer = _RequestPacer(interval / self._settings.exness_rate_fraction)
-        return self._pacer
+        if self._data_pacer is None or self._order_pacer is None:
+            if op in _BOOTSTRAP_OPS:
+                return self._bootstrap_pacer
+            limits = await self.limits()
+            fraction = self._settings.exness_rate_fraction
+            if self._data_pacer is None or self._order_pacer is None:
+                self._data_pacer = _RequestPacer(min_request_interval(limits) / fraction)
+                self._order_pacer = _RequestPacer(order_request_interval(limits, fraction))
+        return self._order_pacer if op in _PRIORITY_OPS else self._data_pacer
 
     async def _cached(self, key: str, fetch: Callable[[], Awaitable[Any]]) -> Any:
         hit = self._cache.get(key)
