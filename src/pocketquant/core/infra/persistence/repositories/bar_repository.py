@@ -3,8 +3,6 @@
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
-from cachetools import TTLCache
-
 from pocketquant.core.common.constants import COLLECTION_BARS
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import Bar
@@ -12,26 +10,6 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 logger = get_logger(__name__)
-
-# Module-level cache to deduplicate writes across cascade re-runs.
-# Process-local — restart triggers a cold window (~5 cascade ticks to warm up).
-# Key:   (symbol_composite_upper, interval_value, datetime_iso_utc)
-# Value: (open, high, low, close, volume)  — tick_count excluded by design.
-_BAR_VALUE_CACHE: TTLCache = TTLCache(maxsize=20_000, ttl=3600)
-
-
-def _cache_key(bar: Bar) -> tuple[str, str, str]:
-    interval_val = bar.interval.value if bar.interval else ""
-    dt_iso = bar.datetime.isoformat() if bar.datetime else ""
-    return (
-        bar.symbol.upper(),
-        interval_val,
-        dt_iso,
-    )
-
-
-def _cache_value(bar: Bar) -> tuple[float, float, float, float, float]:
-    return (bar.open, bar.high, bar.low, bar.close, bar.volume)
 
 
 class BarRepository(SymbolScopedRepository):
@@ -69,21 +47,10 @@ class BarRepository(SymbolScopedRepository):
         return count
 
     async def upsert_bar(self, bar: Bar, *, source: str) -> None:
-        """Diff-aware upsert. Only bumps updated_at when OHLCV actually changes.
-
-        Three branches:
-        1. Cache hit + same OHLCV   → no DB IO.
-        2. DB miss (new doc)        → $setOnInsert _id/created_at, $set OHLCV+updated_at+source.
-        3. DB has same OHLCV        → warm cache, no write.
-        4. DB has different OHLCV   → $set OHLCV+updated_at+source (created_at preserved).
+        """Diff-aware upsert from one ``find_one``: a new bar is inserted, an equal one is left
+        alone, a changed one gets ``$set`` with a new ``updated_at``.
         """
-        key = _cache_key(bar)
-        new_value = _cache_value(bar)
-
-        cached = _BAR_VALUE_CACHE.get(key)
-        if cached == new_value:
-            return
-
+        new_value = (bar.open, bar.high, bar.low, bar.close, bar.volume)
         collection = self._collection()
         now = datetime.now(UTC)
         filter_q = {
@@ -112,7 +79,6 @@ class BarRepository(SymbolScopedRepository):
                 },
                 upsert=True,
             )
-            _BAR_VALUE_CACHE[key] = new_value
             return
 
         existing_value = (
@@ -123,7 +89,6 @@ class BarRepository(SymbolScopedRepository):
             existing.get("volume", 0.0),
         )
         if existing_value == new_value:
-            _BAR_VALUE_CACHE[key] = new_value
             return
 
         await collection.update_one(
@@ -141,7 +106,6 @@ class BarRepository(SymbolScopedRepository):
                 },
             },
         )
-        _BAR_VALUE_CACHE[key] = new_value
 
     async def find(
         self,
@@ -279,17 +243,6 @@ class BarRepository(SymbolScopedRepository):
             end_dt=end_dt.isoformat(),
             deleted_count=deleted,
         )
-        return deleted
-
-    async def delete_by_symbol(self, symbol: str) -> int:
-        """Delete every bar of ``symbol`` and drop its write-dedup cache entries.
-
-        A stale cache entry would make a later re-add of the symbol skip writing
-        bars whose values match the cached ones, leaving gaps in Mongo.
-        """
-        deleted = await super().delete_by_symbol(symbol)
-        for key in [k for k in _BAR_VALUE_CACHE if k[0] == symbol]:
-            _BAR_VALUE_CACHE.pop(key, None)
         return deleted
 
     async def ensure_indexes(self) -> None:

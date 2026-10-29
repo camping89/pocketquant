@@ -1,10 +1,9 @@
-"""Unit tests for BarRepository — upsert diff-aware cache, insert_many loop, delete_many_by_range.
+"""Unit tests for BarRepository — diff-aware upsert, insert_many loop, delete_many_by_range.
 
 Covers:
-- Cache hit (same OHLCV) → zero DB calls.
-- Cache miss + new doc (find_one None) → $setOnInsert created_at, $set OHLCV+updated_at+source.
-- Cache miss + existing doc with same OHLCV → no write, cache warmed.
-- Cache miss + existing doc with different OHLCV → $set OHLCV+updated_at+source, no $setOnInsert.
+- New doc (find_one None) → $setOnInsert created_at, $set OHLCV+updated_at+source.
+- Existing doc with same OHLCV → no write.
+- Existing doc with different OHLCV → $set OHLCV+updated_at+source, no $setOnInsert.
 - upsert_bar/insert_many without source kwarg raise TypeError.
 - insert_many calls upsert_bar once per record, forwards source, is a no-op on empty list,
   and continues past individual upsert failures.
@@ -21,12 +20,7 @@ import pytest
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.persistence.repositories.bar_repository import (
-    _BAR_VALUE_CACHE,
-    BarRepository,
-    _cache_key,
-    _cache_value,
-)
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 
 _START = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 _END = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
@@ -39,13 +33,6 @@ _CANONICAL_TFS = [
     Interval.HOUR_4,
     Interval.DAY_1,
 ]
-
-
-@pytest.fixture(autouse=True)
-def _reset_cache():
-    _BAR_VALUE_CACHE.clear()
-    yield
-    _BAR_VALUE_CACHE.clear()
 
 
 def _make_bar(close: float = 1.5) -> Bar:
@@ -110,19 +97,6 @@ def _make_delete_repo(deleted_count: int = 42) -> tuple[BarRepository, MagicMock
     return repo, mock_collection
 
 
-class TestCacheHit:
-    @pytest.mark.asyncio
-    async def test_same_value_hits_cache_no_db_call(self) -> None:
-        bar = _make_bar()
-        repo, collection = _make_repo()
-        _BAR_VALUE_CACHE[_cache_key(bar)] = _cache_value(bar)
-
-        await repo.upsert_bar(bar, source="rest_sync_1m")
-
-        collection.find_one.assert_not_called()
-        collection.update_one.assert_not_called()
-
-
 class TestCacheMissNewDoc:
     @pytest.mark.asyncio
     async def test_uses_set_on_insert_created_at_and_set_audit_fields(self) -> None:
@@ -139,13 +113,6 @@ class TestCacheMissNewDoc:
         assert update_ops["$set"]["source"] == "rest_sync_1m"
         assert isinstance(update_ops["$set"]["updated_at"], datetime)
         assert kwargs.get("upsert") is True
-
-    @pytest.mark.asyncio
-    async def test_populates_cache_after_insert(self) -> None:
-        bar = _make_bar()
-        repo, _ = _make_repo(existing_doc=None)
-        await repo.upsert_bar(bar, source="rest_sync_1m")
-        assert _BAR_VALUE_CACHE.get(_cache_key(bar)) == _cache_value(bar)
 
 
 class TestCacheMissExistingSameValue:
@@ -165,7 +132,6 @@ class TestCacheMissExistingSameValue:
 
         collection.find_one.assert_called_once()
         collection.update_one.assert_not_called()
-        assert _BAR_VALUE_CACHE.get(_cache_key(bar)) == _cache_value(bar)
 
 
 class TestCacheMissExistingDiffValue:

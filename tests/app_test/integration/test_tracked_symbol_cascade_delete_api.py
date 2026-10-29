@@ -18,10 +18,7 @@ from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.domain.tracked_symbol.entities import TrackedSymbol
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
-from pocketquant.core.infra.persistence.repositories.bar_repository import (
-    _BAR_VALUE_CACHE,
-    BarRepository,
-)
+from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -199,8 +196,6 @@ async def test_delete_cascades_all_symbol_data_and_spares_other_symbols(app_clie
         .count_documents({"job_id": "cascade-test"})
         == 2
     )
-    assert not [k for k in _BAR_VALUE_CACHE if k[0] == _GONE]
-    assert [k for k in _BAR_VALUE_CACHE if k[0] == _KEPT]
 
     again = await app_client.delete(
         f"/api/v1/market-data/tracked-symbols/{_GONE.replace(':', '%3A')}"
