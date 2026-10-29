@@ -114,6 +114,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         # A snapshot rebuild replaces ``_positions`` across awaits; fills and broker
         # closes that land meanwhile must wait for it rather than write the old dict.
         self._state_lock = asyncio.Lock()
+        self._open_lock = asyncio.Lock()
         self._held_unmapped: set[str] = set()
         self._inflight: dict[str, _Inflight] = {}
         self._pending_ack: set[str] = set()
@@ -204,52 +205,67 @@ class ExnessBrokerAdapter(IBrokerPort):
         return await self._submit_open(order)
 
     async def _submit_open(self, order: OrderAggregate) -> OrderResult:
-        try:
-            paused = await self._safeguards_repo.load_entries_paused()
-        except Exception:
-            logger.warning(
-                "exness.order_rejected_presubmit",
-                reason="pause_unreadable",
-                subscription_id=order.subscription_id,
-                symbol=order.symbol,
-            )
-            return _rejected(order, "entries pause unreadable")
-        if paused:
-            logger.warning(
-                "exness.order_rejected_presubmit",
-                reason="entries_paused",
-                subscription_id=order.subscription_id,
-                symbol=order.symbol,
-            )
-            return _rejected(order, "entries paused")
-        if self._held_for(order.subscription_id) is not None:
-            return _rejected(order, "position already open for subscription")
-        reason = self._presubmit_reason(order)
-        if reason:
-            return _rejected(order, reason)
-        if order.sl_price is None:
-            return _rejected(order, "stop loss required")
-        reason = await self._loss_cap_reason()
-        if reason:
-            return _rejected(order, reason)
-        name = instrument_name(order.symbol)
-        assert name is not None
-        cond = await self._client.conditions(name)
-        lots = self._lots(order.quantity, cond)
-        if lots is None or lots_to_units(lots, Decimal(cond["contract_size"])) != order.quantity:
-            logger.warning(
-                "exness.order_rejected_presubmit", reason="not_normalized", quantity=order.quantity
-            )
-            return _rejected(order, "quantity not normalized to the exness lot grid")
-        digits = int(cond["point_digits"])
-        body: dict[str, Any] = {
-            "instrument": name,
-            "side": "buy" if order.side == OrderSide.BUY else "sell",
-            "volume": str(lots),
-            "stop_loss_price": format_price(order.sl_price, digits),
-        }
-        if order.tp_price:
-            body["take_profit_price"] = format_price(order.tp_price, digits)
+        # One account-wide lock over the checks and the registration only: two opens never
+        # interleave their checks, yet their sends overlap.
+        async with self._open_lock:
+            try:
+                paused = await self._safeguards_repo.load_entries_paused()
+            except Exception:
+                logger.warning(
+                    "exness.order_rejected_presubmit",
+                    reason="pause_unreadable",
+                    subscription_id=order.subscription_id,
+                    symbol=order.symbol,
+                )
+                return _rejected(order, "entries pause unreadable")
+            if paused:
+                logger.warning(
+                    "exness.order_rejected_presubmit",
+                    reason="entries_paused",
+                    subscription_id=order.subscription_id,
+                    symbol=order.symbol,
+                )
+                return _rejected(order, "entries paused")
+            if self._held_for(order.subscription_id) is not None:
+                return _rejected(order, "position already open for subscription")
+            if any(
+                i.order.subscription_id == order.subscription_id for i in self._inflight.values()
+            ):
+                return _rejected(order, "entry already in flight for subscription")
+            reason = self._presubmit_reason(order)
+            if reason:
+                return _rejected(order, reason)
+            if order.sl_price is None:
+                return _rejected(order, "stop loss required")
+            reason = await self._loss_cap_reason()
+            if reason:
+                return _rejected(order, reason)
+            name = instrument_name(order.symbol)
+            assert name is not None
+            cond = await self._client.conditions(name)
+            lots = self._lots(order.quantity, cond)
+            if (
+                lots is None
+                or lots_to_units(lots, Decimal(cond["contract_size"])) != order.quantity
+            ):
+                logger.warning(
+                    "exness.order_rejected_presubmit",
+                    reason="not_normalized",
+                    quantity=order.quantity,
+                )
+                return _rejected(order, "quantity not normalized to the exness lot grid")
+            digits = int(cond["point_digits"])
+            body: dict[str, Any] = {
+                "instrument": name,
+                "side": "buy" if order.side == OrderSide.BUY else "sell",
+                "volume": str(lots),
+                "stop_loss_price": format_price(order.sl_price, digits),
+            }
+            if order.tp_price:
+                body["take_profit_price"] = format_price(order.tp_price, digits)
+            rid = str(order.id)
+            self._inflight[rid] = _Inflight(order, name, datetime.now(UTC))
+            self._pending_ack.add(rid)
         return await self._send_tracked(order, body)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
@@ -319,8 +335,6 @@ class ExnessBrokerAdapter(IBrokerPort):
     async def _send_tracked(self, order: OrderAggregate, json_body: dict[str, Any]) -> OrderResult:
         rid = str(order.id)
         name = instrument_name(order.symbol) or ""
-        self._inflight[rid] = _Inflight(order, name, datetime.now(UTC))
-        self._pending_ack.add(rid)
         try:
             ack = await self._client.call("openPosition", json_body=json_body, idempotency_key=rid)
         except ExnessApiError as e:
