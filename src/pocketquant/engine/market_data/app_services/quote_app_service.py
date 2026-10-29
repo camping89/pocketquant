@@ -30,6 +30,7 @@ class QuoteAppService:
         self.bar_manager = bar_manager
         self.running = False
         self.ws_task: asyncio.Task | None = None
+        self.close_timer_task: asyncio.Task | None = None
 
     async def on_quote_update(self, quote_data: dict[str, Any]) -> None:
         """Handle incoming quote updates.
@@ -99,4 +100,5 @@ class QuoteAppService:
 
         self.running = True
         self.ws_task = asyncio.create_task(self.provider.run_forever())
+        self.close_timer_task = asyncio.create_task(self.bar_manager.run_close_timer())
         logger.info("quote_service.ws_task_started")

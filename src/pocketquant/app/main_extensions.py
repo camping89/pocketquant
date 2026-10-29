@@ -215,6 +215,7 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 
     Stores task handles on app.state for lifespan cleanup:
       app.state.ws_task          — IRealtimeQuoteProviderPort.run_forever()
+      app.state.close_timer_task — BarAppService.run_close_timer()
       app.state.subscription_task — WsSubscriptionAppService.run()
     """
     quote_svc = await container.get(QuoteAppService)
@@ -222,12 +223,14 @@ async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 
     await quote_svc.start()
     app.state.ws_task = quote_svc.ws_task  # task created inside start()
+    app.state.close_timer_task = quote_svc.close_timer_task
 
     app.state.subscription_task = asyncio.create_task(sub_mgr.run())
     logger.info("quote_feed.started")
 
 
 async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
+    await _cancel(getattr(app.state, "close_timer_task", None))
     await _cancel(getattr(app.state, "ws_task", None))
     await _cancel(getattr(app.state, "subscription_task", None))
 

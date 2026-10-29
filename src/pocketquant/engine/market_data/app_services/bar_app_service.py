@@ -1,7 +1,7 @@
 import asyncio
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
@@ -25,6 +25,11 @@ logger = get_logger(__name__)
 
 # Minimum seconds between Redis flushes per (symbol, interval) key — throttle high-frequency ticks
 BAR_CURRENT_FLUSH_MIN_INTERVAL_S = 0.2
+# A bar closes on the timer this long after its end; the timer runs every _TIMER_TICK_S.
+_TIMER_CLOSE_GRACE_S = 0.5
+_TIMER_TICK_S = 0.25
+# Only bars up to 1h are cut at the session close.
+_SESSION_CUT_MAX_INTERVAL_S = 3600
 
 # All canonical timeframes tracked in-memory per symbol
 _DEFAULT_INTERVALS = [
@@ -83,6 +88,10 @@ class BarAppService:
         # Only the trading process writes or deletes ``bar:current``; a standby trader only
         # reads it as its seed. True until roles exist.
         self.publishes_current: bool = True
+        # The latest 1m boundary whose bars are all closed and whose publish returned; a
+        # draining trader releases only after it.
+        self.last_closed_boundary: datetime | None = None
+        self._calendars: dict[str, ITradingCalendarPort] = {}
 
         self._lock = asyncio.Lock()
 
@@ -95,6 +104,7 @@ class BarAppService:
             if self._calendar_factory
             else self._default_calendar
         )
+        self._calendars[symbol_key] = calendar
         events: list[BarCompletedEvent] = []
         async with self._lock:
             for interval in self._intervals:
@@ -130,20 +140,31 @@ class BarAppService:
         calendar: ITradingCalendarPort | None = None,
     ) -> BarCompletedEvent | None:
         """Add ``tick`` to its bar; return the event of the bar it closed, if any."""
+        calendar = calendar or self._default_calendar
         current_bar = self._bars[symbol_key].get(interval)
-        bar_start = (calendar or self._default_calendar).bar_start(tick.timestamp, interval)
+        bar_start = calendar.bar_start(tick.timestamp, interval)
 
         if current_bar is None:
-            current_bar = BarBuilderDomainService(
-                symbol=symbol_key,
-                interval=interval,
-                bar_start=bar_start,
-            )
-            # Hydrate from Mongo when a bar already exists at this bucket
-            # (e.g. after mid-bucket restart with cascade-populated in-progress
-            # bar). Prevents the first post-restart tick price from overwriting
-            # the true bucket-open and causing a visible chart gap.
-            await self._seed_builder_from_mongo(current_bar)
+            last_end = self._last_end.get((symbol_key, interval))
+            if last_end is not None and bar_start < last_end:
+                logger.debug(
+                    "bar.late_tick_dropped",
+                    symbol=symbol_key,
+                    interval=interval.value,
+                    tick_ts=tick.timestamp.isoformat(),
+                )
+                return None
+            current_bar = self._new_builder(symbol_key, interval, bar_start, calendar)
+            if last_end is not None:
+                # The previous bar of this key closed here, so coverage starts at the bucket.
+                current_bar.last_tick_at = bar_start
+                current_bar.coverage_start = bar_start
+            else:
+                # Hydrate from Mongo when a bar already exists at this bucket
+                # (e.g. after mid-bucket restart with cascade-populated in-progress
+                # bar). Prevents the first post-restart tick price from overwriting
+                # the true bucket-open and causing a visible chart gap.
+                await self._seed_builder_from_mongo(current_bar)
             self._bars[symbol_key][interval] = current_bar
 
         # A later bucket closes the current bar. On a uniform grid this is the
@@ -151,17 +172,11 @@ class BarAppService:
         # not all one interval long (a DST day, a short last bar of the session).
         elif bar_start > current_bar.bar_start:
             event = await self._complete_bar(
-                current_bar,
-                calendar or self._default_calendar,
-                closed_by="tick",
-                closing_tick_at=tick.timestamp,
+                current_bar, calendar, closed_by="tick", closing_tick_at=tick.timestamp
             )
 
-            current_bar = BarBuilderDomainService(
-                symbol=symbol_key,
-                interval=interval,
-                bar_start=bar_start,
-            )
+            current_bar = self._new_builder(symbol_key, interval, bar_start, calendar)
+            current_bar.coverage_start = bar_start
             self._bars[symbol_key][interval] = current_bar
             current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
             await self._cache_current_bar(symbol_key, interval, current_bar, force=True)
@@ -170,6 +185,61 @@ class BarAppService:
         current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
         await self._cache_current_bar(symbol_key, interval, current_bar)
         return None
+
+    def _new_builder(
+        self,
+        symbol_key: str,
+        interval: Interval,
+        bar_start: datetime,
+        calendar: ITradingCalendarPort,
+    ) -> BarBuilderDomainService:
+        """A builder for ``bar_start``; bars up to 1h end no later than the session close."""
+        bar_end = None
+        if INTERVAL_SECONDS[interval] <= _SESSION_CUT_MAX_INTERVAL_S:
+            full_end = bar_start + timedelta(seconds=INTERVAL_SECONDS[interval])
+            try:
+                close = calendar.session_close(calendar.session_date(bar_start))
+                bar_end = min(full_end, close + timedelta(seconds=1))
+            except KeyError:
+                bar_end = full_end
+        return BarBuilderDomainService(
+            symbol=symbol_key, interval=interval, bar_start=bar_start, bar_end=bar_end
+        )
+
+    async def close_due_bars(self) -> None:
+        """Close every bar whose end is at least the grace in the past, then publish them."""
+        now = get_current_time()
+        grace = timedelta(seconds=_TIMER_CLOSE_GRACE_S)
+        events: list[BarCompletedEvent] = []
+        async with self._lock:
+            for symbol_key, builders in self._bars.items():
+                calendar = self._calendars.get(symbol_key, self._default_calendar)
+                for interval, builder in list(builders.items()):
+                    assert builder.bar_end is not None
+                    if builder.bar_end + grace > now:
+                        continue
+                    event = await self._complete_bar(
+                        builder, calendar, closed_by="timer", closing_tick_at=None
+                    )
+                    del builders[interval]
+                    if event is not None:
+                        events.append(event)
+            if events:
+                self._publishes_running += 1
+        if events:
+            await self._publish(events)
+        # Every bar that ended at or before this boundary is closed, by a tick or by this
+        # pass; a running publish holds it until a later pass.
+        if self._publishes_running == 0:
+            self.last_closed_boundary = (now - grace).replace(second=0, microsecond=0)
+
+    async def run_close_timer(self) -> None:
+        while True:
+            await asyncio.sleep(_TIMER_TICK_S)
+            try:
+                await self.close_due_bars()
+            except Exception:
+                logger.error("bar.close_timer_failed", exc_info=True)
 
     async def _complete_bar(
         self,
