@@ -44,8 +44,8 @@ class WsSubscriptionAppService:
         self._quote_app_service = quote_app_service
         self._interval_s = interval_s
         # Symbols whose subscribe failure has already been logged at WARNING. A
-        # symbol no realtime provider serves (index futures before a quote
-        # adapter exists) fails every tick, so repeating the WARNING every 5s
+        # symbol no realtime provider serves (a provider with no quote adapter)
+        # fails every tick, so repeating the WARNING every 5s
         # would flood the log with a state that is configured, not transient.
         self._warned_subscribe_failed: set[str] = set()
 

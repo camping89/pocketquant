@@ -1,8 +1,8 @@
 """Contract units and calendar references, keyed by asset class.
 
 Crypto spot is priced one-for-one in the quote currency, so the pipeline could
-treat ``price * quantity`` as notional. A futures contract cannot: one ES point
-is 50 USD, size moves in whole contracts, and prices snap to a tick. Making
+treat ``price * quantity`` as notional. A lot-sized CFD cannot: one XAUUSD lot
+is 100 ounces, size moves in lot steps, and prices snap to a tick. Making
 those units data rather than an assumption is what lets one pipeline serve both.
 """
 

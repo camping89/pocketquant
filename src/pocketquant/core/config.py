@@ -81,8 +81,8 @@ class Settings(BaseSettings):
 
     # Strategy Engine
     paper_initial_balance: float = 10_000.0
-    # Paper accounts for futures (contract specs with a multiplier). One ES
-    # contract is worth about 390,000 USD, so the crypto balance sizes it to zero.
+    # Paper accounts for contract specs with a multiplier. One XAUUSD lot (100 oz)
+    # is worth far more than the crypto balance, so that balance sizes it to zero.
     # Unset balance falls back to paper_initial_balance; leverage 1 is unleveraged.
     paper_futures_initial_balance: float | None = Field(default=None, gt=0)
     paper_futures_leverage: float = Field(default=1.0, ge=1)

@@ -58,7 +58,7 @@ class StrategyAppService:
         self._strategies: dict[str, IStrategyService] = {}
         self._brokers: dict[str, IBrokerPort] = {}
         # Paper pools per contract spec (it prices every fill with one spec, so an
-        # ES subscription cannot share the crypto paper account); a venue broker
+        # XAUUSD subscription cannot share the crypto paper account); a venue broker
         # pools per type, with no spec in its key.
         self._broker_pool: dict[tuple[str, ContractSpec | None], IBrokerPort] = {}
         self._configs: dict[str, StrategyConfig] = {}

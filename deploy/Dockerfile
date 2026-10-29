@@ -5,11 +5,6 @@ FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
-# Install system deps for building
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -30,7 +25,7 @@ FROM python:3.14-slim AS runtime
 WORKDIR /app
 
 # Install runtime deps (curl for healthcheck, tzdata so zoneinfo can resolve
-# named zones such as America/Chicago — ENV TZ alone ships no zone data)
+# named zones such as America/New_York — ENV TZ alone ships no zone data)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tzdata \
