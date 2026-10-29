@@ -82,7 +82,6 @@ class EngulfingPullback30TouchStrategyService(IStrategyService):
         self._highs: deque[float] = deque(maxlen=self.key_level_lookback_bars)
         self._lows: deque[float] = deque(maxlen=self.key_level_lookback_bars)
         self._prev_bar: dict | None = None
-        self._open_direction: Direction | None = None
         self._armed: dict | None = None
 
     async def on_start(self) -> None:

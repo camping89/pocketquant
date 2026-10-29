@@ -63,7 +63,6 @@ class HitNRun2StrategyService(IStrategyService):
         self._highs: deque[float] = deque(maxlen=self._buffer_size)
         self._lows: deque[float] = deque(maxlen=self._buffer_size)
         self._closes: deque[float] = deque(maxlen=self._buffer_size)
-        self._open_direction: Direction | None = None
 
     async def on_start(self) -> None:
         await super().on_start()

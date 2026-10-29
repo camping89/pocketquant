@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Protocol
 
 from pocketquant.core.domain.order import OrderSide
+from pocketquant.core.domain.strategy.enums import Direction
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 
 
@@ -36,6 +37,7 @@ class IStrategyService(ABC):
         self.config = config
         self.id = config.id
         self._is_running = False
+        self._open_direction: Direction | None = None
 
     @property
     def is_running(self) -> bool:
@@ -43,6 +45,10 @@ class IStrategyService(ABC):
 
     async def on_start(self) -> None:
         self._is_running = True
+
+    def restore_direction(self, direction: Direction | None) -> None:
+        """Set the open direction from the stored position after a restart."""
+        self._open_direction = direction
 
     async def on_stop(self) -> None:
         self._is_running = False

@@ -8,6 +8,7 @@ import structlog
 from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import get_current_time
+from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPort
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
@@ -18,8 +19,9 @@ from pocketquant.core.domain.order import (
     OrderSide,
     OrderType,
 )
-from pocketquant.core.domain.position import TradeClosedEvent
+from pocketquant.core.domain.position import PositionAggregate, PositionSide, TradeClosedEvent
 from pocketquant.core.domain.risk import PositionCalculatorDomainService
+from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 from pocketquant.core.domain.symbol import ContractSpec
@@ -39,6 +41,16 @@ logger = structlog.get_logger(__name__)
 _FALLBACK_SL_PCT = 0.01
 # A live bar older than this (seconds after its end) is too late for an entry.
 _STALE_AFTER_S = {"1m": 10, "5m": 30, "15m": 60, "1h": 120, "4h": 300, "1d": 600, "1w": 600}
+# Stored bars replayed into a strategy when it starts.
+_WARMUP_BARS = 500
+# sync_1m stores the last closed 1m bar at second 12; a start before second 20 waits for it.
+_WARMUP_READY_SECOND = 20
+
+
+def _direction_of(position: PositionAggregate | None) -> Direction | None:
+    if position is None:
+        return None
+    return Direction.LONG if position.side == PositionSide.LONG else Direction.SHORT
 
 
 class StrategyAppService:
@@ -179,6 +191,11 @@ class StrategyAppService:
             return config.id
 
     async def start_strategy(self, strategy_id: str) -> None:
+        """Start a strategy warmed up from up to 500 stored bars, with its stored direction.
+
+        Signals of replayed bars are rejected, never sent. A standby engine does not
+        connect the broker.
+        """
         async with self._lock:
             if strategy_id not in self._strategies:
                 raise ValueError(f"Strategy not found: {strategy_id}")
@@ -188,12 +205,66 @@ class StrategyAppService:
                 return
 
             broker = self._brokers[strategy_id]
-            if not broker.is_connected:
+            now = get_current_time()
+            trading = self.trading_until is not None and now < self.trading_until
+            if trading and not broker.is_connected:
                 await broker.connect()
 
-            await strategy.on_start()
+            config = strategy.config
+            interval = Interval(config.interval)
+            step = timedelta(seconds=INTERVAL_SECONDS[config.interval])
+            calendar = await self._calendar_factory.for_symbol(config.symbol)
+            bars = await self._closed_bars(config.symbol, interval, step, now)
+            if (
+                now.second < _WARMUP_READY_SECOND
+                and bars
+                and bars[-1].datetime + step < calendar.bar_start(now, interval)
+            ):
+                await asyncio.sleep(_WARMUP_READY_SECOND - now.second - now.microsecond / 1e6)
+                now = get_current_time()
+                bars = await self._closed_bars(config.symbol, interval, step, now)
 
-            logger.info("strategy_started", strategy_id=strategy_id)
+            # No I/O from here to the direction restore.
+            await strategy.on_start()
+            for stored in bars:
+                signal = await strategy.on_bar_completed(
+                    {
+                        "symbol": config.symbol,
+                        "interval": config.interval,
+                        "open": stored.open,
+                        "high": stored.high,
+                        "low": stored.low,
+                        "close": stored.close,
+                        "volume": stored.volume,
+                        "timestamp": stored.datetime,
+                    }
+                )
+                if signal:
+                    await strategy.on_order_rejected("warmup")
+            if bars:
+                self._last_bar_start[strategy_id] = bars[-1].datetime
+            else:
+                self._last_bar_start.pop(strategy_id, None)
+            strategy.restore_direction(_direction_of(self._position_app_service.get(strategy_id)))
+
+            if bars:
+                current = calendar.bar_start(now, interval)
+                if calendar.trading_minutes(bars[-1].datetime + step, current):
+                    logger.warning(
+                        "strategy.warmup_incomplete",
+                        subscription_id=strategy_id,
+                        last_bar_start=bars[-1].datetime.isoformat(),
+                        current_bucket_start=current.isoformat(),
+                    )
+
+            logger.info("strategy_started", strategy_id=strategy_id, warmup_bars=len(bars))
+
+    async def _closed_bars(
+        self, symbol: str, interval: Interval, step: timedelta, now: datetime
+    ) -> list[Bar]:
+        """Stored bars that closed by ``now``, oldest first."""
+        found = await self._bar_repository.find(symbol, interval, end_date=now, limit=_WARMUP_BARS)
+        return [b for b in reversed(found) if b.datetime + step <= now]
 
     async def stop_strategy(self, strategy_id: str) -> None:
         async with self._lock:
