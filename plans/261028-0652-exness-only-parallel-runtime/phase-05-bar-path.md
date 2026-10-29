@@ -43,10 +43,10 @@ Run each command from `D:/w/_me/algotrading/pocketquant`:
 
 1. `git fetch -q origin && echo "branch=$(git rev-parse --abbrev-ref HEAD) dirty=$(git status --porcelain -- src web deploy tests scripts docs | wc -l | tr -d ' ') synced=$(test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo yes || echo no)"` prints `branch=develop dirty=0 synced=yes`.
 2. `git grep -n -E "closePosition|(^|[^_])set_entries_paused" -- src | wc -l | tr -d ' '` prints `0` (Phase 04 merged). <!-- Red team 2026-10-28: #10 --> <!-- Added 2026-10-29: Verify regex excluded the route helper named in step 8 -->
-3. `export GH_TOKEN=$(gh auth token --user camping89); gh run list --workflow cicd.yml --branch develop --limit 5 --json headSha,conclusion -q ".[] | select(.headSha==\"$(git rev-parse HEAD)\") | .conclusion" | head -1` prints `success`.
+3. `export GH_TOKEN=$(gh auth token --user camping89); gh run list --workflow cicd.yml --branch develop --limit 5 --json headSha,conclusion -q ".[] | select(.headSha==\"$(git log -1 --format=%H -- src tests scripts web pyproject.toml uv.lock .github)\") | .conclusion" | head -1` prints `success`. <!-- Added 2026-10-29: CI skips docs-only commits, so the gate checks the last code commit -->
 4. `docker ps > /dev/null 2>&1 && echo docker-ok` prints `docker-ok` (if not, start `"/c/Program Files/Docker/Docker/Docker Desktop.exe" &`, wait 10 s, re-run once).
 
-On a resume after this phase's own unpushed commits (plan.md Conventions, Resume), line 1 may print `synced=no`; that passes when `git rev-list --count HEAD..origin/develop` prints `0`, and line 3 then checks `origin/develop` instead of `HEAD` (replace `$(git rev-parse HEAD)` with `$(git rev-parse origin/develop)`).
+On a resume after this phase's own unpushed commits (plan.md Conventions, Resume), line 1 may print `synced=no`; that passes when `git rev-list --count HEAD..origin/develop` prints `0`, and line 3 is unchanged (it already checks the last code commit).
 
 On any miss: edit nothing and end with exactly:
 ```
@@ -62,6 +62,14 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261028-0652-exness
 - Create tests: `tests/app_test/market_data/test_bar_timer_close.py`, `tests/app_test/market_data/test_bar_gap_flags.py`, `tests/core_test/infra/persistence/test_bar_repository_shared_writes.py` (#12). <!-- Red team 2026-10-28: #12 -->
 
 ## Tasks
+
+<!-- Added 2026-10-29 after the Phase 04 checkpoint -->
+**Corrections (2026-10-29).**
+- Entry gate line 3 looks up the CI run of the last code commit: a docs-only `HEAD` has no CI run.
+- Anchors moved: `start_quote_feed` is `app/main_extensions.py:213-227`, `stop_quote_feed` `:230-235`; `QuoteAppService.start` is `quote_app_service.py:94-102`; `TestFlushAllBars` is `test_bar_app_service_unit.py:308-333`. Locate by symbol.
+- `QuoteAppService.start` returns early when `self.running` is set (`:97-99`). Task 5.3 step 8 creates `close_timer_task` after that check, beside `ws_task`.
+- Task 5.2 step 3 also breaks two existing tests in `tests/app_test/market_data/test_bar_app_service_unit.py`. `test_bar_completion_no_mongo_write` (`:175`) calls `_complete_bar(bar, calendar, closed_by="tick", closing_tick_at=None)` and keeps `upsert_bar.assert_not_called()`. `test_event_bus_publishes_on_bar_completion` (`:195-198`) feeds two ticks through `add_tick` (the 12:00 and then the 12:05 bucket) instead of calling the private method, and keeps its event asserts.
+
 
 ### Task 5.1 — Event and builder fields
 

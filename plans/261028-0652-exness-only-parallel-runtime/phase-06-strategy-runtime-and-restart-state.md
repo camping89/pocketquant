@@ -41,7 +41,7 @@ Run each command from `D:/w/_me/algotrading/pocketquant`:
 
 1. `git fetch -q origin && echo "branch=$(git rev-parse --abbrev-ref HEAD) dirty=$(git status --porcelain -- src web deploy tests scripts docs | wc -l | tr -d ' ') synced=$(test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo yes || echo no)"` prints `branch=develop dirty=0 synced=yes`.
 2. `git grep -n -E "flush_all_bars|_seed_builder_from_mongo" -- src | wc -l | tr -d ' '; grep -c "second=12" src/pocketquant/engine/market_data/app_services/sync_jobs.py` prints `0` then `1` (Phase 05 merged). <!-- Red team 2026-10-28: #10 -->
-3. `export GH_TOKEN=$(gh auth token --user camping89); gh run list --workflow cicd.yml --branch develop --limit 5 --json headSha,conclusion -q ".[] | select(.headSha==\"$(git rev-parse HEAD)\") | .conclusion" | head -1` prints `success`.
+3. `export GH_TOKEN=$(gh auth token --user camping89); gh run list --workflow cicd.yml --branch develop --limit 5 --json headSha,conclusion -q ".[] | select(.headSha==\"$(git log -1 --format=%H -- src tests scripts web pyproject.toml uv.lock .github)\") | .conclusion" | head -1` prints `success`. <!-- Added 2026-10-29: CI skips docs-only commits, so the gate checks the last code commit -->
 4. NTP gate (D20): `mkdir -p .cache/ssh && tr -d '\r' < ../pocketquant-config/vps/default/id_rsa > .cache/ssh/vps_key && chmod 600 .cache/ssh/vps_key; HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'timedatectl show -p NTPSynchronized --value'` prints `yes`.
 5. `docker ps > /dev/null 2>&1 && echo docker-ok` prints `docker-ok` (if not, start `"/c/Program Files/Docker/Docker/Docker Desktop.exe" &`, wait 10 s, re-run once).
 
