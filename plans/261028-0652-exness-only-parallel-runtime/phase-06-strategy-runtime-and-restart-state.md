@@ -63,6 +63,17 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261028-0652-exness
 
 ## Tasks
 
+<!-- Added 2026-10-29 after the Phase 05 checkpoint -->
+**Corrections (2026-10-29).**
+- New Task 6.0, the first commit of this phase, so D-3 carries it: `BarAppService._publish` isolates each event. Today one raising handler (a paper SL fill whose Mongo write fails) stops the loop, and in a timer pass the batch holds every symbol due at that boundary, so the other symbols' bars are never published while their `_last_end` already moved. Wrap each `await self._event_bus.publish(event)` in `try/except Exception` that logs ERROR `bar.publish_failed` (`symbol`, `interval`, `exc_info=True`) and continues; the `finally` decrement stays. Test in `tests/app_test/market_data/test_bar_timer_close.py`: `test_a_failing_handler_does_not_drop_other_symbols`: AAA and BBB both due at one timer pass, a subscriber raising for AAA; BBB's event is collected and `last_closed_boundary` is set. Commit `fix(bars): publish every closed bar even when one handler fails`. Verify: `uv run python -m pytest tests/app_test/market_data -q > /dev/null 2>&1; echo "exit=$?"` prints `exit=0`. Modify list gains `bar_app_service.py` and `test_bar_timer_close.py`.
+- `engine.stop()` callers: `app/di/services.py:157`; `tests/engine_test/test_reconcile_restart_resume_integration.py` has three calls (`:127` `engine_a.stop()`, `:142` `engine_b.stop()`, `:174`); `tests/app_test/integration/test_app_standalone_runtime.py:109`. All test calls pass `timeout_s=5.0`.
+- `_process_signal` test callers: `tests/engine_test/test_contract_spec_wiring.py:122` and `:306` both pass `2650.0`; `tests/engine_test/test_strategy_reject_delivery.py:139,156,168` pass `100.0`; `tests/engine_test/test_paper_position_lifecycle.py:180` passes `100.0`. Re-list with `git grep -n "_process_signal" -- tests`.
+- `StrategyAppService(` sites: 2 in `src` (`app/di/services.py:142`, `engine/backtest/backtest_sandbox_app_service.py:136`) and 14 in tests. Re-list with `git grep -n "StrategyAppService(" -- src tests`.
+- Anchors: `fills_async` is `broker_port.py:24` and Exness `:98`; `get_position_tracker` is `services.py:120-131`; `get_strategy_engine` `:133-158`; `app/main.py` `bootstrap_live_instances` `:66` and `start_quote_feed` `:68` (insert `take_over()` after `:66`); `BarRepository.find` `:110-139` (newest first, `sort("datetime", -1)`); `IStrategyService.__init__` `:36-39`. Locate by symbol.
+- Task 6.2 step 5: `t3_published` is `get_current_time()` at `_on_bar_completed` entry (the delivery time); `event.occurred_at` is set when the event is built under the bar lock, so it is the close time, not the publish time.
+- Task 6.8 step 3 [ASK] text: say "mọi khung bar đóng theo timer ở cuối bucket; bar <= 1h bị cắt tại giờ đóng phiên" instead of "bar <= 1h đóng theo timer"; add "sync_1m chạy ở giây 12" and "bucket đang mở lúc deploy bị đánh gap, entry trên bucket đó bị bỏ qua tới bucket sau". Show with the [ASK]: the CI run id and HEAD sha, the gate results, the `WINDOW_OK` line and UTC time, the NTP `yes`, `free -m` and the image tag, and `printenv EXNESS_LIVE_TRADING` read inside the container.
+
+
 ### Task 6.1 — Live-only dependencies and the trading switch
 
 **Goal:** every engine gets the bar, calendar and trade dependencies as required parameters (the sandbox passes explicit no-ops and behaves as today), one `trading_until` field, the bookkeeping Phase 07's drain reads, and a bounded `stop`. <!-- Red team 2026-10-28: #4 #14 -->
