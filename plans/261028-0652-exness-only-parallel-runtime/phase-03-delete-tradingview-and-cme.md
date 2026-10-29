@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Delete TradingView and the CME calendar (prod data first, then code)"
-status: pending
+status: done
 priority: P1
 effort: "1d + deploy D-2"
 dependencies: [2]
