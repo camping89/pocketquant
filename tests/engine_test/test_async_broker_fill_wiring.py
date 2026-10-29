@@ -7,6 +7,7 @@ reports fills inline and stays unsubscribed.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -160,7 +161,9 @@ async def test_paper_broker_is_not_subscribed_to_order_updates() -> None:
     bus = EventBus()
     orders = OrderAppService(bus, _InMemoryOrderRepo())  # type: ignore[arg-type]
     positions = PositionAppService(bus, _InMemoryPositionRepo())  # type: ignore[arg-type]
-    engine = _engine(bus, BrokerFactory(EventBus()), orders, positions)
+    engine = _engine(
+        bus, BrokerFactory(EventBus(), safeguards_repository=AsyncMock()), orders, positions
+    )
 
     await engine.load_strategy(_config("paper"))
 

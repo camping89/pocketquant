@@ -9,6 +9,7 @@ model (default bps=0) keeps pre-R3 balances (backward compat).
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -149,7 +150,7 @@ async def test_default_model_bps_zero_keeps_pre_r3_balance() -> None:
 async def test_broker_factory_bps_wiring() -> None:
     from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 
-    factory = BrokerFactory(EventBus())
+    factory = BrokerFactory(EventBus(), safeguards_repository=AsyncMock())
     broker = factory.create(
         "paper",
         {"initial_balance": _INITIAL, "slippage_bps": 0.0, "commission_bps": 5.0},

@@ -14,6 +14,7 @@ or the bus — so a backtest trade is never double-counted here.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -80,7 +81,7 @@ async def _build_engine(bus: EventBus, db: Database) -> StrategyAppService:
     await position_svc.start()
     engine = StrategyAppService(
         event_bus=bus,
-        broker_factory=BrokerFactory(bus),
+        broker_factory=BrokerFactory(bus, safeguards_repository=AsyncMock()),
         order_app_service=order_svc,
         position_app_service=position_svc,
         risk_check_handler=RiskCheckHandler(),

@@ -165,7 +165,6 @@ class ServicesProvider(Provider):
         symbol_lookup: SymbolLookupHelper,
         safeguards: Safeguards,
     ) -> StrategyReconcileAppService:
-        # Taking the safeguards also loads the stored entry pause before bootstrap.
         return StrategyReconcileAppService(
             subscription_repository,
             strategy_app_service,

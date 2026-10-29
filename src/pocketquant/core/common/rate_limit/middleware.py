@@ -35,8 +35,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.refill_rate = refill_rate
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Pause must work while the API is flooded.
-        if request.url.path.startswith(_UNLIMITED_PREFIX):
+        # Pause and resume must work while the API is flooded; the public read is
+        # limited like any route.
+        if request.method == "POST" and request.url.path.startswith(_UNLIMITED_PREFIX):
             return await call_next(request)
         cache = request.app.state.cache
         client_ip = request.client.host if request.client else "unknown"

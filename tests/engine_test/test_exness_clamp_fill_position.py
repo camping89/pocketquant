@@ -22,7 +22,10 @@ from pocketquant.core.infra.persistence.repositories.position_repository import 
 )
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
-from tests.core_test.infra.brokers.exness.test_exness_broker_adapter import _FakeClient
+from tests.core_test.infra.brokers.exness.test_exness_broker_adapter import (
+    _FakeClient,
+    _PauseStore,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -51,6 +54,7 @@ async def test_clamped_size_fills_into_a_matching_position(db: Database) -> None
         Safeguards(
             live_trading=True, daily_loss_cap=50.0, max_lots=None, leverage=1.0, risk_per_trade=0.02
         ),
+        _PauseStore(),  # type: ignore[arg-type]
     )
     await broker._on_event({"event_type": "trading_state_snapshot", "payload": {"positions": []}})
     await broker.subscribe_order_updates(orders.on_order_update)

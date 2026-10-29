@@ -1,4 +1,7 @@
-"""The rate limiter caps each client, but never the safeguard routes behind Pause."""
+"""The rate limiter caps each client, including the public safeguards read.
+
+It never limits the pause and resume writes.
+"""
 
 from __future__ import annotations
 
@@ -32,6 +35,7 @@ def _client() -> TestClient:
     app = Starlette(
         routes=[
             Route("/api/v1/x", _ok),
+            Route("/api/v1/admin/safeguards", _ok, methods=["GET"]),
             Route("/api/v1/admin/safeguards/pause", _ok, methods=["POST"]),
         ]
     )
@@ -53,3 +57,11 @@ def test_pause_is_never_rate_limited() -> None:
     codes = [client.post("/api/v1/admin/safeguards/pause").status_code for _ in range(3)]
 
     assert codes == [200, 200, 200]
+
+
+def test_a_safeguards_read_flood_gets_429() -> None:
+    client = _client()
+
+    codes = [client.get("/api/v1/admin/safeguards").status_code for _ in range(2)]
+
+    assert codes == [200, 429]

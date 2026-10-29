@@ -42,15 +42,14 @@ from pocketquant.core.infra.persistence.repositories.safeguards_repository impor
 
 class AdaptersProvider(Provider):
     @provide(scope=Scope.APP)
-    async def get_safeguards(self, settings: Settings, repo: SafeguardsRepository) -> Safeguards:
-        """The env caps plus the stored entry pause, loaded before any strategy starts."""
+    def get_safeguards(self, settings: Settings) -> Safeguards:
+        """The env caps; the entry pause is read from the store on every open."""
         return Safeguards(
             live_trading=settings.exness_live_trading,
             daily_loss_cap=settings.exness_daily_loss_cap,
             max_lots=settings.exness_max_lots,
             leverage=settings.exness_leverage,
             risk_per_trade=settings.exness_risk_per_trade,
-            entries_paused=await repo.load_entries_paused(),
         )
 
     @provide(scope=Scope.APP)
@@ -60,12 +59,14 @@ class AdaptersProvider(Provider):
         safeguards: Safeguards,
         exness_client: ExnessClient,
         position_repository: PositionRepository,
+        safeguards_repository: SafeguardsRepository,
     ) -> BrokerFactory:
         return BrokerFactory(
             event_bus,
             exness_client=exness_client,
             position_repository=position_repository,
             safeguards=safeguards,
+            safeguards_repository=safeguards_repository,
         )
 
     @provide(scope=Scope.APP)

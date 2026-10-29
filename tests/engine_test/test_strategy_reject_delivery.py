@@ -99,7 +99,7 @@ def _engine(risk: _Risk, bus: EventBus | None = None, orders=None) -> StrategyAp
     bus = bus or EventBus()
     return StrategyAppService(
         event_bus=bus,
-        broker_factory=BrokerFactory(EventBus()),
+        broker_factory=BrokerFactory(EventBus(), safeguards_repository=AsyncMock()),
         order_app_service=orders or OrderAppService(bus, _InMemoryOrderRepo()),  # type: ignore[arg-type]
         position_app_service=_NoPositions(),  # type: ignore[arg-type]
         risk_check_handler=risk,  # type: ignore[arg-type]

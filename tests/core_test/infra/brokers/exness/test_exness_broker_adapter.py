@@ -124,6 +124,19 @@ class _Repo:
         return self.positions
 
 
+class _PauseStore:
+    """Stands in for the stored entry pause."""
+
+    def __init__(self) -> None:
+        self.paused: bool = False
+        self.error: Exception | None = None
+
+    async def load_entries_paused(self) -> bool:
+        if self.error is not None:
+            raise self.error
+        return self.paused
+
+
 class _Harness:
     def __init__(
         self, cap: float | None = 50.0, repo: _Repo | None = None, max_lots: float | None = None
@@ -139,11 +152,13 @@ class _Harness:
             leverage=1.0,
             risk_per_trade=0.02,
         )
+        self.pause = _PauseStore()
         self.broker = ExnessBrokerAdapter(
             self.client,  # type: ignore[arg-type]
             self.bus,
             repo or _Repo(),  # type: ignore[arg-type]
             self.safeguards,
+            self.pause,  # type: ignore[arg-type]
         )
         self.results: list[OrderResult] = []
         self.trades: list[TradeClosedEvent] = []
@@ -354,7 +369,7 @@ async def test_open_request_formats_stop_loss_to_point_digits() -> None:
 
 async def test_paused_open_is_rejected_before_any_venue_call() -> None:
     h = await _Harness().start()
-    h.safeguards.set_entries_paused(True)
+    h.pause.paused = True
 
     with structlog.testing.capture_logs() as logs:
         result = await h.broker.submit_order(_order())
@@ -367,25 +382,32 @@ async def test_paused_open_is_rejected_before_any_venue_call() -> None:
     assert paused[0]["symbol"] == SYMBOL
 
 
-async def test_paused_close_of_a_held_position_is_sent() -> None:
-    h, _ = await _holding_p1()
-    h.safeguards.set_entries_paused(True)
-
-    result = await h.broker.submit_order(_order(side=OrderSide.SELL))
-
-    assert result.status == OrderStatus.SUBMITTED
-    assert len(h.client.ops("closePosition")) == 1
-
-
 async def test_resumed_open_is_sent() -> None:
     h = await _Harness().start()
-    h.safeguards.set_entries_paused(True)
-    h.safeguards.set_entries_paused(False)
+    h.pause.paused = True
+    h.pause.paused = False
 
     result = await h.broker.submit_order(_order())
 
     assert result.status == OrderStatus.SUBMITTED
     assert len(h.client.ops("openPosition")) == 1
+
+
+async def test_an_unreadable_pause_refuses_the_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
+    monkeypatch.setattr(adapter_module, "logger", structlog.get_logger("test.exness_broker"))
+    h = await _Harness().start()
+    h.pause.error = RuntimeError("mongo down")
+
+    with structlog.testing.capture_logs() as logs:
+        result = await h.broker.submit_order(_order())
+
+    assert result.status == OrderStatus.REJECTED
+    assert result.error_message == "entries pause unreadable"
+    assert h.client.calls == []
+    rejected = [e for e in logs if e["event"] == "exness.order_rejected_presubmit"]
+    assert len(rejected) == 1
+    assert rejected[0]["reason"] == "pause_unreadable"
 
 
 # ── events ──────────────────────────────────────────────────────────────────

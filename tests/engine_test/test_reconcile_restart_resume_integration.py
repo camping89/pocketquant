@@ -15,6 +15,7 @@ before reconciling again. Zero ``start_strategy`` calls appear in the test body.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -66,7 +67,7 @@ async def _build_engine(db: Database) -> StrategyAppService:
     await position_svc.start()
     engine = StrategyAppService(
         event_bus=event_bus,
-        broker_factory=BrokerFactory(event_bus),
+        broker_factory=BrokerFactory(event_bus, safeguards_repository=AsyncMock()),
         order_app_service=order_svc,
         position_app_service=position_svc,
         risk_check_handler=RiskCheckHandler(),

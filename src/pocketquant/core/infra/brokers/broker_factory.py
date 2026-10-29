@@ -9,6 +9,9 @@ from pocketquant.core.infra.exness.exness_client import ExnessClient
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
 )
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
+)
 
 
 class BrokerFactory:
@@ -26,11 +29,13 @@ class BrokerFactory:
         exness_client: ExnessClient | None = None,
         position_repository: PositionRepository | None = None,
         safeguards: Safeguards | None = None,
+        safeguards_repository: SafeguardsRepository,
     ) -> None:
         self._event_bus = event_bus
         self._exness_client = exness_client
         self._position_repository = position_repository
         self._safeguards = safeguards
+        self._safeguards_repository = safeguards_repository
 
     def create(self, broker_type: str, config: dict) -> IBrokerPort:
         """Create broker instance from type and config.
@@ -81,6 +86,7 @@ class BrokerFactory:
                 self._event_bus,
                 self._position_repository,
                 safeguards,
+                self._safeguards_repository,
             )
 
         else:

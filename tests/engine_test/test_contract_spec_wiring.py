@@ -8,6 +8,7 @@ PnL matches the broker's. Crypto keeps one shared linear paper broker.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -64,7 +65,7 @@ class _AllowAll:
 def _engine(order_service: _RecordingOrderService | None = None) -> StrategyAppService:
     return StrategyAppService(
         event_bus=EventBus(),
-        broker_factory=BrokerFactory(EventBus()),
+        broker_factory=BrokerFactory(EventBus(), safeguards_repository=AsyncMock()),
         order_app_service=order_service or _RecordingOrderService(),  # type: ignore[arg-type]
         position_app_service=_NoPositions(),  # type: ignore[arg-type]
         risk_check_handler=_AllowAll(),  # type: ignore[arg-type]
@@ -254,7 +255,7 @@ async def test_reconcile_gives_futures_paper_subscriptions_the_futures_risk() ->
 def _two_balance_engine(futures_balance: float | None, orders=None) -> StrategyAppService:
     return StrategyAppService(
         event_bus=EventBus(),
-        broker_factory=BrokerFactory(EventBus()),
+        broker_factory=BrokerFactory(EventBus(), safeguards_repository=AsyncMock()),
         order_app_service=orders or _RecordingOrderService(),  # type: ignore[arg-type]
         position_app_service=_NoPositions(),  # type: ignore[arg-type]
         risk_check_handler=_AllowAll(),  # type: ignore[arg-type]

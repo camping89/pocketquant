@@ -10,8 +10,8 @@ and the deals history when the stream missed it.
 
 Order calls are additionally refused by the client while ``EXNESS_LIVE_TRADING``
 is false, and ``BrokerFactory`` refuses to build this adapter in that case. The
-caps and the entry pause are read from the shared ``Safeguards`` on every order;
-while entries are paused every open is rejected before any venue call.
+caps are read from the shared ``Safeguards``; the entry pause is read from the
+store on every open, and an unreadable store refuses the open.
 """
 
 from __future__ import annotations
@@ -51,6 +51,9 @@ from pocketquant.core.infra.exness.exness_mappers import (
 from pocketquant.core.infra.exness.exness_stream import ExnessStream
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
+)
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
 )
 
 logger = get_logger(__name__)
@@ -101,11 +104,13 @@ class ExnessBrokerAdapter(IBrokerPort):
         event_bus: EventBus,
         position_repository: PositionRepository,
         safeguards: Safeguards,
+        safeguards_repository: SafeguardsRepository,
     ) -> None:
         self._client = client
         self._event_bus = event_bus
         self._position_repository = position_repository
         self._safeguards = safeguards
+        self._safeguards_repo = safeguards_repository
         self._order_callbacks: list[OrderCallback] = []
         self._trade_callbacks: list[TradeCallback] = []
         self._positions: dict[str, _Held] = {}
@@ -214,6 +219,24 @@ class ExnessBrokerAdapter(IBrokerPort):
         )
 
     async def _submit_open(self, order: OrderAggregate) -> OrderResult:
+        try:
+            paused = await self._safeguards_repo.load_entries_paused()
+        except Exception:
+            logger.warning(
+                "exness.order_rejected_presubmit",
+                reason="pause_unreadable",
+                subscription_id=order.subscription_id,
+                symbol=order.symbol,
+            )
+            return _rejected(order, "entries pause unreadable")
+        if paused:
+            logger.warning(
+                "exness.order_rejected_presubmit",
+                reason="entries_paused",
+                subscription_id=order.subscription_id,
+                symbol=order.symbol,
+            )
+            return _rejected(order, "entries paused")
         reason = self._presubmit_reason(order)
         if reason:
             return _rejected(order, reason)
@@ -243,14 +266,6 @@ class ExnessBrokerAdapter(IBrokerPort):
         return await self._send_tracked("openPosition", order, kind="open", json_body=body)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
-        if self._safeguards.entries_paused:
-            logger.warning(
-                "exness.order_rejected_presubmit",
-                reason="entries_paused",
-                subscription_id=order.subscription_id,
-                symbol=order.symbol,
-            )
-            return "entries paused"
         if self._safeguards.daily_loss_cap is None:
             return "EXNESS_DAILY_LOSS_CAP not set"
         if not self._snapshot_ready or self._needs_snapshot:

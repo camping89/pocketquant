@@ -1,49 +1,70 @@
 """HTTP endpoints for the Exness safeguards.
 
 Exposes:
-  - GET /admin/safeguards — the caps and the entry pause.
-  - POST /admin/safeguards/pause and /resume — flip the entry pause and store it.
+  - GET /admin/safeguards — the caps and the entry pause; the public read is cached for one second.
+  - POST /admin/safeguards/pause and /resume — flip the stored entry pause; a failed store
+    write returns 503.
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import asdict
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
+from pocketquant.core.common.logging import get_logger
 from pocketquant.core.infra.brokers.exness.exness_safeguards import Safeguards
 from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
     SafeguardsRepository,
 )
 
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/admin/safeguards", route_class=DishkaRoute)
+
+_READ_CACHE_S = 1.0
 
 
 @router.get("")
-async def get_safeguards(safeguards: FromDishka[Safeguards]) -> dict[str, Any]:
-    return asdict(safeguards)
+async def get_safeguards(
+    request: Request, safeguards: FromDishka[Safeguards], repo: FromDishka[SafeguardsRepository]
+) -> dict[str, Any]:
+    # The read is public: at most one store read per second per process, so a flood
+    # cannot load the store the open path reads.
+    cached = getattr(request.app.state, "entries_paused_read", None)
+    if cached is None or time.monotonic() - cached[0] > _READ_CACHE_S:
+        cached = (time.monotonic(), await repo.load_entries_paused())
+        request.app.state.entries_paused_read = cached
+    return asdict(safeguards) | {"entries_paused": cached[1]}
 
 
 @router.post("/pause")
 async def pause_entries(
-    safeguards: FromDishka[Safeguards], repo: FromDishka[SafeguardsRepository]
+    request: Request, safeguards: FromDishka[Safeguards], repo: FromDishka[SafeguardsRepository]
 ) -> dict[str, Any]:
-    return await _set_entries_paused(safeguards, repo, paused=True)
+    return await _set_entries_paused(request, safeguards, repo, paused=True)
 
 
 @router.post("/resume")
 async def resume_entries(
-    safeguards: FromDishka[Safeguards], repo: FromDishka[SafeguardsRepository]
+    request: Request, safeguards: FromDishka[Safeguards], repo: FromDishka[SafeguardsRepository]
 ) -> dict[str, Any]:
-    return await _set_entries_paused(safeguards, repo, paused=False)
+    return await _set_entries_paused(request, safeguards, repo, paused=False)
 
 
 async def _set_entries_paused(
-    safeguards: Safeguards, repo: SafeguardsRepository, *, paused: bool
+    request: Request, safeguards: Safeguards, repo: SafeguardsRepository, *, paused: bool
 ) -> dict[str, Any]:
-    # The in-memory flag flips first, so a failed store write still leaves the pause in force.
-    safeguards.set_entries_paused(paused)
-    await repo.save_entries_paused(paused)
-    return asdict(safeguards)
+    try:
+        await repo.save_entries_paused(paused)
+    except Exception:
+        logger.warning("exness.safeguards.pause_store_failed", paused=paused)
+        raise HTTPException(status_code=503, detail="pause not stored") from None
+    request.app.state.entries_paused_read = (time.monotonic(), paused)
+    logger.warning(
+        "exness.safeguards.entries_paused" if paused else "exness.safeguards.entries_resumed"
+    )
+    return asdict(safeguards) | {"entries_paused": paused}

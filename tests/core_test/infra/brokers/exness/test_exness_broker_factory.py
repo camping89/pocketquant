@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -25,11 +25,13 @@ def _safeguards(live_trading: bool = True) -> Safeguards:
 @pytest.mark.parametrize("safeguards", [None, _safeguards(live_trading=False)])
 def test_exness_refused_while_live_trading_is_off(safeguards: Safeguards | None) -> None:
     with pytest.raises(ValueError, match="EXNESS_LIVE_TRADING is false"):
-        BrokerFactory(EventBus(), safeguards=safeguards).create("exness", {})
+        BrokerFactory(EventBus(), safeguards=safeguards, safeguards_repository=AsyncMock()).create(
+            "exness", {}
+        )
 
 
 def test_exness_requires_a_configured_client() -> None:
-    factory = BrokerFactory(EventBus(), safeguards=_safeguards())
+    factory = BrokerFactory(EventBus(), safeguards=_safeguards(), safeguards_repository=AsyncMock())
 
     with pytest.raises(ValueError, match="requires EXNESS_\\* settings"):
         factory.create("exness", {})
@@ -42,6 +44,7 @@ def test_exness_built_when_live_and_configured() -> None:
         exness_client=client,
         position_repository=MagicMock(),
         safeguards=_safeguards(),
+        safeguards_repository=AsyncMock(),
     )
 
     broker = factory.create("exness", {})
