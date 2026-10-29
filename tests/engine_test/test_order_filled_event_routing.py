@@ -12,14 +12,18 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
+from pocketquant.core.domain.order import OrderAggregate, OrderFilledEvent, OrderSide, OrderType
+from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
+from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
     Continuous24x7CalendarFactory,
     NoClosedTrades,
     NoStoredBars,
 )
+from pocketquant.engine.execution.order_app_service import OrderAppService
+from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 
@@ -139,3 +143,39 @@ async def test_handler_swallows_strategy_exception() -> None:
 
     # Must not propagate — one strategy's failure cannot break the event bus.
     await svc._on_order_filled(_event("strat-A", OrderSide.BUY, 100.0))
+
+
+class _Rows:
+    def __init__(self) -> None:
+        self.positions: list[PositionAggregate] = []
+
+    async def save(self, item) -> None:  # noqa: ANN001
+        if isinstance(item, PositionAggregate):
+            self.positions.append(item)
+
+    async def find_open(self, limit: int = 200) -> list[PositionAggregate]:
+        return []
+
+
+@pytest.mark.asyncio
+async def test_the_mirror_row_keeps_the_order_sl_and_tp() -> None:
+    bus = EventBus()
+    rows = _Rows()
+    await PositionAppService(bus, rows).start()  # type: ignore[arg-type]
+    broker = PaperBrokerAdapter(fill_delay_ms=0, event_bus=bus)
+    await broker.connect()
+    order = OrderAggregate.create(
+        subscription_id="a",
+        symbol="BTCUSDT:BINANCE",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=1.0,
+        price=100.0,
+        sl_price=95.0,
+        tp_price=110.0,
+    )
+
+    await OrderAppService(bus, _Rows()).submit(order, broker)  # type: ignore[arg-type]
+
+    [row] = rows.positions
+    assert (row.sl_price, row.tp_price) == (95.0, 110.0)

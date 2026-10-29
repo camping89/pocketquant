@@ -76,6 +76,8 @@ class PositionAppService:
                     side=side,
                     entry_price=event.filled_price,
                     quantity=event.filled_quantity,
+                    sl_price=event.sl_price,
+                    tp_price=event.tp_price,
                     multiplier=multiplier,
                 )
 

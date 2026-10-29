@@ -96,6 +96,8 @@ class OrderAppService:
                                 side=order.side,
                                 filled_quantity=result.filled_quantity,
                                 filled_price=result.filled_price or 0.0,
+                                sl_price=order.sl_price,
+                                tp_price=order.tp_price,
                             )
                         )
 
@@ -169,6 +171,8 @@ class OrderAppService:
                         side=order.side,
                         filled_quantity=result.filled_quantity,
                         filled_price=result.filled_price or 0.0,
+                        sl_price=order.sl_price,
+                        tp_price=order.tp_price,
                     )
                 )
 

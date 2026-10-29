@@ -20,7 +20,11 @@ class OrderSubmittedEvent(DomainEvent):
 
 @dataclass(frozen=True, eq=False)
 class OrderFilledEvent(DomainEvent):
-    """Event raised when an order is fully filled."""
+    """Event raised when an order is fully filled.
+
+    An entry fill carries the order's SL and TP so the position mirror stores them;
+    exit fills leave them None.
+    """
 
     order_id: str = ""
     subscription_id: str = ""
@@ -28,6 +32,8 @@ class OrderFilledEvent(DomainEvent):
     side: OrderSide = OrderSide.BUY
     filled_quantity: float = 0.0
     filled_price: float = 0.0
+    sl_price: float | None = None
+    tp_price: float | None = None
 
 
 @dataclass(frozen=True, eq=False)
