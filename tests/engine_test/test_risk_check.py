@@ -52,3 +52,24 @@ def test_zero_equity_with_an_open_position_is_rejected() -> None:
     valid, _ = RiskCheckHandler().validate(_signal(Direction.LONG), account, _position())
 
     assert valid is False
+
+
+@pytest.mark.parametrize(
+    ("side", "direction"),
+    [(PositionSide.LONG, Direction.SHORT), (PositionSide.SHORT, Direction.LONG)],
+)
+def test_an_opposite_entry_is_rejected(side: PositionSide, direction: Direction) -> None:
+    position = PositionAggregate.open(
+        subscription_id="s1", symbol="BTCUSDT:BINANCE", side=side, entry_price=100.0, quantity=1.0
+    )
+
+    result = RiskCheckHandler().validate(_signal(direction), _ACCOUNT, position)
+
+    assert result == (False, "opposite position open")
+
+
+def test_a_same_side_entry_still_reaches_the_exposure_check() -> None:
+    assert RiskCheckHandler().validate(_signal(Direction.LONG), _ACCOUNT, _position()) == (
+        True,
+        "",
+    )

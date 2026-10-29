@@ -282,12 +282,8 @@ async def test_order_calls_are_refused_while_live_trading_is_off(
         await client.call(
             "openPosition", json_body={"instrument": "XAUUSD"}, idempotency_key="order-00001"
         )
-    with pytest.raises(ExnessApiError) as closed:
-        await client.call(
-            "closePosition", path_params={"position_id": "1"}, idempotency_key="order-00002"
-        )
 
-    assert opened.value.code == closed.value.code == "LIVE_TRADING_DISABLED"
+    assert opened.value.code == "LIVE_TRADING_DISABLED"
     assert exness.requests == []
 
 

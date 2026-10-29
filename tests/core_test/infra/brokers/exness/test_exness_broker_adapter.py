@@ -93,7 +93,7 @@ class _FakeClient:
                 raise self.deals_error
             cursor = kwargs["params"].get("cursor")
             return self.deal_pages[1 if cursor else 0]
-        if op in ("openPosition", "closePosition"):
+        if op == "openPosition":
             if self.on_order_call:
                 await self.on_order_call(kwargs)
             if self.order_error:
@@ -516,38 +516,16 @@ async def test_broker_side_close_publishes_fill_then_trade() -> None:
     assert "p1" not in h.broker._positions
 
 
-async def test_opposite_order_closes_held_position() -> None:
+async def test_opposite_order_is_rejected_and_keeps_the_position() -> None:
     h, _ = await _holding_p1()
-    close = _order(side=OrderSide.SELL)
+    calls = len(h.client.calls)
 
-    async def check_pending(kwargs: dict[str, Any]) -> None:
-        assert str(close.id) in h.broker._pending_ack
+    result = await h.broker.submit_order(_order(side=OrderSide.SELL))
 
-    h.client.on_order_call = check_pending
-    await h.broker.submit_order(close)
-
-    call = h.client.ops("closePosition")[0]
-    assert call["path_params"] == {"position_id": "p1"}
-    assert call["idempotency_key"] == str(close.id)
-    close_deal = _deal(
-        "close",
-        volume="0.01",
-        price="2350.000",
-        position_id="p1",
-        profit={"amount": "4.9", "currency": "USD"},
-    )
-    event = {
-        "operation_id": "op2",
-        "client_request_id": str(close.id),
-        "status": "success",
-        "payload": {"deals": [close_deal]},
-    }
-    await h.event("transaction_event", **event)
-    await h.event("transaction_event", **event)
-
-    assert [r.status for r in h.results] == [OrderStatus.FILLED, OrderStatus.FILLED]
-    assert len(h.trades) == 1
-    assert h.trades[0].pnl == 4.9
+    assert result.status == OrderStatus.REJECTED
+    assert result.error_message == "position already open for subscription"
+    assert len(h.client.calls) == calls
+    assert h.broker._held_for("sub1") is not None
 
 
 async def test_same_direction_order_is_rejected() -> None:
@@ -556,35 +534,6 @@ async def test_same_direction_order_is_rejected() -> None:
     result = await h.broker.submit_order(_order())
 
     assert result.error_message == "position already open for subscription"
-
-
-async def test_exit_skips_stop_loss_and_loss_cap() -> None:
-    h, _ = await _holding_p1()
-    h.client.deals_error = ExnessApiError(429, "REQUEST_RATE_LIMIT", "x")
-
-    result = await h.broker.submit_order(_order(side=OrderSide.SELL, sl_price=None))
-
-    assert result.status == OrderStatus.SUBMITTED
-    assert len(h.client.ops("closePosition")) == 1
-
-
-async def test_exit_is_sent_while_the_snapshot_gate_is_closed() -> None:
-    h, _ = await _holding_p1()
-    h.broker._needs_snapshot = True
-
-    result = await h.broker.submit_order(_order(side=OrderSide.SELL))
-
-    assert result.status == OrderStatus.SUBMITTED
-    assert len(h.client.ops("closePosition")) == 1
-
-
-async def test_exit_must_close_the_whole_position() -> None:
-    h, _ = await _holding_p1()
-
-    result = await h.broker.submit_order(_order(side=OrderSide.SELL, quantity=2.0))
-
-    assert result.error_message == "close quantity must equal the held position"
-    assert h.client.ops("closePosition") == []
 
 
 async def test_partial_broker_close_reduces_the_hold() -> None:
@@ -619,35 +568,6 @@ async def test_fill_for_dropped_request_blocks_the_instrument() -> None:
     assert h.broker._held_unmapped == {"XAUUSD"}
     assert h.broker._needs_snapshot
     assert h.results == []
-
-
-@ACK_OUTCOMES
-async def test_close_filled_before_ack_emits_trade_after_fill(
-    ack_error: ExnessApiError | None,
-) -> None:
-    h, _ = await _holding_p1()
-    close = _order(side=OrderSide.SELL)
-    seen: list[str] = []
-    h.broker._order_callbacks = [lambda r: seen.append("fill")]
-    h.broker._trade_callbacks = [lambda t: seen.append("trade")]
-    close_deal = _deal("close", volume="0.01", price="2350.000", position_id="p1")
-
-    async def fill_during_call(kwargs: dict[str, Any]) -> None:
-        await h.event(
-            "transaction_event",
-            client_request_id=str(close.id),
-            status="success",
-            payload={"deals": [close_deal]},
-        )
-
-    h.client.on_order_call = fill_during_call
-    h.client.order_error = ack_error
-    result = await h.broker.submit_order(close)
-
-    assert result.status == OrderStatus.SUBMITTED
-    assert seen == []
-    await _drain()
-    assert seen == ["fill", "trade"]
 
 
 # ── recovery ────────────────────────────────────────────────────────────────

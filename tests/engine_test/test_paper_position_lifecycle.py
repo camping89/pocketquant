@@ -7,11 +7,14 @@ the mirror rows of paper subscriptions and keeps every other row.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
+from pocketquant.core.domain.strategy import Direction, Signal
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.execution.order_app_service import OrderAppService
@@ -155,3 +158,28 @@ async def test_an_exit_queued_before_unload_does_not_open_a_new_position() -> No
     await broker._fire_synthetic_exit(pos, 90.0, OrderSide.SELL, "stop_loss")
 
     assert await broker.get_positions() == []
+
+
+@pytest.mark.asyncio
+async def test_an_opposite_signal_keeps_the_paper_position() -> None:
+    engine, factory, mirror, orders = await _engine()
+    await engine.load_strategy(_config("a"))
+    broker = factory.created[0]
+    await broker.connect()
+    await _open(broker, "a", orders)
+    strategy = engine.get_strategy("a")
+    assert strategy is not None
+    short = Signal(
+        symbol=_SYM,
+        direction=Direction.SHORT,
+        confidence=1.0,
+        timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        subscription_id="a",
+    )
+
+    await engine._process_signal(strategy, short, 100.0)
+
+    assert [p.side for p in await broker.get_positions()] == [PositionSide.LONG]
+    held = mirror.get("a")
+    assert held is not None
+    assert held.side == PositionSide.LONG

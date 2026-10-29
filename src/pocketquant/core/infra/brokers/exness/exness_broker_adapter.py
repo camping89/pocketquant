@@ -3,10 +3,9 @@
 Every live-money rule is enforced before any HTTP call: market orders only, a
 stop loss on every open, at most the minimum lot unless ``max_lots`` is raised,
 a daily loss cap computed from real deals, and no new position until the trading
-snapshot is reconciled. An exit only has to be a market order for the whole held
-position. ``openPosition`` and ``closePosition`` are acknowledged asynchronously;
-the fill arrives on the events stream, or is recovered from the operation status
-and the deals history when the stream missed it.
+snapshot is reconciled. ``openPosition`` is acknowledged asynchronously; the fill
+arrives on the events stream, or is recovered from the operation status and the
+deals history. Positions close only by venue SL/TP or a broker stop-out.
 
 Order calls are additionally refused by the client while ``EXNESS_LIVE_TRADING``
 is false, and ``BrokerFactory`` refuses to build this adapter in that case. The
@@ -86,8 +85,6 @@ class _Inflight:
 
     order: OrderAggregate
     instrument: str
-    kind: str  # "open" | "close"
-    position_id: str | None
     sent_at: datetime
 
 
@@ -120,7 +117,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         self._held_unmapped: set[str] = set()
         self._inflight: dict[str, _Inflight] = {}
         self._pending_ack: set[str] = set()
-        self._early: dict[str, tuple[OrderResult, _Trade | None]] = {}
+        self._early: dict[str, OrderResult] = {}
         self._acked_at: dict[str, float] = {}
         self._seen_terminal: set[str] = set()
         self._snapshot_ready = False
@@ -204,19 +201,7 @@ class ExnessBrokerAdapter(IBrokerPort):
     async def submit_order(self, order: OrderAggregate) -> OrderResult:
         if order.order_type != OrderType.MARKET:
             return _rejected(order, "exness adapter supports market orders only")
-        held = self._held_for(order.subscription_id)
-        if held is None:
-            return await self._submit_open(order)
-        pid, position = held
-        if position.side == _position_side(order.side):
-            return _rejected(order, "position already open for subscription")
-        # An exit skips the snapshot gate and the open rules: blocking it would keep the risk
-        # open. Closing by position id is safe on stale state; the venue rejects a gone id.
-        if order.quantity != position.units:
-            return _rejected(order, "close quantity must equal the held position")
-        return await self._send_tracked(
-            "closePosition", order, kind="close", position_id=pid, path_params={"position_id": pid}
-        )
+        return await self._submit_open(order)
 
     async def _submit_open(self, order: OrderAggregate) -> OrderResult:
         try:
@@ -237,6 +222,8 @@ class ExnessBrokerAdapter(IBrokerPort):
                 symbol=order.symbol,
             )
             return _rejected(order, "entries paused")
+        if self._held_for(order.subscription_id) is not None:
+            return _rejected(order, "position already open for subscription")
         reason = self._presubmit_reason(order)
         if reason:
             return _rejected(order, reason)
@@ -263,7 +250,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         }
         if order.tp_price:
             body["take_profit_price"] = format_price(order.tp_price, digits)
-        return await self._send_tracked("openPosition", order, kind="open", json_body=body)
+        return await self._send_tracked(order, body)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
         if self._safeguards.daily_loss_cap is None:
@@ -329,24 +316,13 @@ class ExnessBrokerAdapter(IBrokerPort):
             None,
         )
 
-    async def _send_tracked(
-        self,
-        op: str,
-        order: OrderAggregate,
-        *,
-        kind: str,
-        position_id: str | None = None,
-        path_params: dict[str, str] | None = None,
-        json_body: dict[str, Any] | None = None,
-    ) -> OrderResult:
+    async def _send_tracked(self, order: OrderAggregate, json_body: dict[str, Any]) -> OrderResult:
         rid = str(order.id)
         name = instrument_name(order.symbol) or ""
-        self._inflight[rid] = _Inflight(order, name, kind, position_id, datetime.now(UTC))
+        self._inflight[rid] = _Inflight(order, name, datetime.now(UTC))
         self._pending_ack.add(rid)
         try:
-            ack = await self._client.call(
-                op, path_params=path_params, json_body=json_body, idempotency_key=rid
-            )
+            ack = await self._client.call("openPosition", json_body=json_body, idempotency_key=rid)
         except ExnessApiError as e:
             if rid not in self._early:
                 if e.code in ("TRANSPORT", "REQUEST_RATE_LIMIT"):
@@ -358,20 +334,19 @@ class ExnessBrokerAdapter(IBrokerPort):
             # Its outcome already arrived on the stream, so the venue took the request:
             # report SUBMITTED and let the hand-off below deliver that outcome.
             logger.warning("exness.order_ack_lost_after_outcome", order_id=rid, code=e.code)
-            ack = {"operation_id": self._early[rid][0].broker_order_id}
+            ack = {"operation_id": self._early[rid].broker_order_id}
         finally:
             self._pending_ack.discard(rid)
             if rid in self._early:
                 # Hand off after OrderAppService.submit has recorded SUBMITTED.
-                self._spawn(self._complete(*self._early.pop(rid)))
+                self._spawn(self._complete(self._early.pop(rid)))
         self._acked_at[rid] = time.monotonic()
         logger.info(
             "exness.order_submitted",
             order_id=rid,
             operation_id=ack.get("operation_id"),
             instrument=name,
-            kind=kind,
-            volume=(json_body or {}).get("volume"),
+            volume=json_body.get("volume"),
         )
         self._spawn(self._watch_operation(rid, str(ack.get("operation_id", ""))))
         return OrderResult(
@@ -414,7 +389,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         if inflight is None or rid in self._seen_terminal:
             return
         async for deal in self._deals(since=inflight.sent_at, instrument=inflight.instrument):
-            if deal.get("type") == inflight.kind:
+            if deal.get("type") == "open":
                 await self._apply_success(rid, None, deal)
                 break
         else:
@@ -508,8 +483,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         if rid and rid in self._inflight:
             status = event.get("status")
             if status == "success":
-                inflight = self._inflight[rid]
-                deal = next((d for d in deals if d.get("type") == inflight.kind), None)
+                deal = next((d for d in deals if d.get("type") == "open"), None)
                 if deal is not None:
                     await self._apply_success(rid, event.get("operation_id"), deal)
             elif status in ("rejected", "failed"):
@@ -555,18 +529,16 @@ class ExnessBrokerAdapter(IBrokerPort):
         units = lots_to_units(Decimal(deal["volume"]), Decimal(cond["contract_size"]))
         pid = str(deal["position_id"])
         async with self._state_lock:
-            held = self._positions.pop(pid, None) if inflight.kind == "close" else None
-            if inflight.kind == "open":
-                self._positions[pid] = _Held(
-                    subscription_id=order.subscription_id,
-                    symbol=order.symbol,
-                    side=_position_side(order.side),
-                    units=units,
-                    open_price=float(deal["price"]),
-                    opened_at=_parse_time(deal.get("create_time")),
-                    sl_price=order.sl_price,
-                    tp_price=order.tp_price,
-                )
+            self._positions[pid] = _Held(
+                subscription_id=order.subscription_id,
+                symbol=order.symbol,
+                side=_position_side(order.side),
+                units=units,
+                open_price=float(deal["price"]),
+                opened_at=_parse_time(deal.get("create_time")),
+                sl_price=order.sl_price,
+                tp_price=order.tp_price,
+            )
         result = OrderResult(
             order_id=rid,
             broker_order_id=operation_id or order.broker_order_id or "",
@@ -578,23 +550,21 @@ class ExnessBrokerAdapter(IBrokerPort):
         )
         ack_to_fill_ms = int((time.monotonic() - self._acked_at.pop(rid, time.monotonic())) * 1000)
         logger.info("exness.order_filled", order_id=rid, ack_to_fill_ms=ack_to_fill_ms)
-        await self._finish(rid, result, (held, deal, units) if held is not None else None)
+        await self._finish(rid, result)
 
-    async def _finish(self, rid: str, result: OrderResult, trade: _Trade | None = None) -> None:
+    async def _finish(self, rid: str, result: OrderResult) -> None:
         """Deliver one terminal outcome for ``rid``; later duplicates are dropped."""
         self._seen_terminal.add(rid)
         self._inflight.pop(rid, None)
         if rid in self._pending_ack:
             # Delivered by submit's hand-off, after OrderAppService records SUBMITTED.
-            self._early[rid] = (result, trade)
+            self._early[rid] = result
         else:
-            await self._complete(result, trade)
+            await self._complete(result)
 
-    async def _complete(self, result: OrderResult, trade: _Trade | None) -> None:
-        """Fill first, then its trade; run a deferred reconcile once nothing is in flight."""
+    async def _complete(self, result: OrderResult) -> None:
+        """Deliver the outcome; run a deferred reconcile once nothing is in flight."""
         await self._notify(result)
-        if trade is not None:
-            await self._emit_trade(trade)
         if not self._inflight and (self._needs_snapshot or not self._snapshot_ready):
             await self._reconcile_snapshot()
 

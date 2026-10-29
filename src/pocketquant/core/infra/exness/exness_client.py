@@ -54,9 +54,8 @@ _ENDPOINTS: dict[str, tuple[str, str]] = {
         "/v1/trading/accounts/{account_id}/operations/{operation_id}",
     ),
     "openPosition": ("POST", "/v1/trading/accounts/{account_id}/positions"),
-    "closePosition": ("DELETE", "/v1/trading/accounts/{account_id}/positions/{position_id}"),
 }
-_ORDER_OPS = frozenset({"openPosition", "closePosition"})
+_ORDER_OPS = frozenset({"openPosition"})
 _PRIORITY_OPS = _ORDER_OPS | {"getOperationStatus"}
 _BOOTSTRAP_OPS = frozenset({"getAccessPoint", "getLimits"})
 _RATE_LIMIT_RETRIES = 3

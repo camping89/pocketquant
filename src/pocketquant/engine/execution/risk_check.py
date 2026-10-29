@@ -1,7 +1,7 @@
 import structlog
 
 from pocketquant.core.domain.brokers.value_objects import AccountBalance
-from pocketquant.core.domain.position import PositionAggregate
+from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.domain.risk import PositionCalculatorDomainService, RiskConfig
 from pocketquant.core.domain.strategy import Direction, Signal
 
@@ -21,7 +21,8 @@ class RiskCheckHandler:
         """Return (is_valid, rejection_reason).
 
         Only LONG and SHORT open an order: the order path maps every other
-        direction to SELL, so EXIT and FLAT are rejected here.
+        direction to SELL, so EXIT and FLAT are rejected here. An entry against
+        an open position is rejected: exits are SL/TP only.
         """
         if account.available_balance <= 0:
             return False, "Insufficient balance"
@@ -31,6 +32,9 @@ class RiskCheckHandler:
 
         if position is None or position.is_closed:
             return True, ""
+
+        if (signal.direction == Direction.LONG) != (position.side == PositionSide.LONG):
+            return False, "opposite position open"
 
         if account.total_equity <= 0:
             return False, "No account equity"
