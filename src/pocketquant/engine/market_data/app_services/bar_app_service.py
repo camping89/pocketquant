@@ -1,11 +1,13 @@
 import asyncio
 import time
 from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
 from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
     BarBuilderDomainService,
@@ -75,6 +77,12 @@ class BarAppService:
 
         self._bars: dict[str, dict[Interval, BarBuilderDomainService]] = defaultdict(dict)
         self._last_flush_ts: dict[tuple[str, Interval], float] = {}
+        # The end of the last closed bar per (symbol, interval), for the process lifetime.
+        self._last_end: dict[tuple[str, Interval], datetime] = {}
+        self._publishes_running = 0
+        # Only the trading process writes or deletes ``bar:current``; a standby trader only
+        # reads it as its seed. True until roles exist.
+        self.publishes_current: bool = True
 
         self._lock = asyncio.Lock()
 
@@ -87,9 +95,32 @@ class BarAppService:
             if self._calendar_factory
             else self._default_calendar
         )
+        events: list[BarCompletedEvent] = []
         async with self._lock:
             for interval in self._intervals:
-                await self._process_tick_for_interval(tick, symbol_key, interval, calendar)
+                event = await self._process_tick_for_interval(tick, symbol_key, interval, calendar)
+                if event is not None:
+                    events.append(event)
+            if events:
+                # Counted under the lock, so a timer pass never sees 0 while this publish waits.
+                self._publishes_running += 1
+        if events:
+            await self._publish(events)
+
+    async def _publish(self, events: list[BarCompletedEvent]) -> None:
+        """Publish closed bars in order, outside the bar lock; the caller counted this publish."""
+        try:
+            for event in events:
+                await self._event_bus.publish(event)
+                logger.debug(
+                    "bar_completed_event_published",
+                    symbol=event.symbol,
+                    interval=event.interval,
+                    bar_start=event.bar_start.isoformat() if event.bar_start else None,
+                    tick_count=event.tick_count,
+                )
+        finally:
+            self._publishes_running -= 1
 
     async def _process_tick_for_interval(
         self,
@@ -97,7 +128,8 @@ class BarAppService:
         symbol_key: str,
         interval: Interval,
         calendar: ITradingCalendarPort | None = None,
-    ) -> None:
+    ) -> BarCompletedEvent | None:
+        """Add ``tick`` to its bar; return the event of the bar it closed, if any."""
         current_bar = self._bars[symbol_key].get(interval)
         bar_start = (calendar or self._default_calendar).bar_start(tick.timestamp, interval)
 
@@ -118,8 +150,12 @@ class BarAppService:
         # same test as ``tick >= bar_end``, but a session calendar's buckets are
         # not all one interval long (a DST day, a short last bar of the session).
         elif bar_start > current_bar.bar_start:
-            completed = current_bar
-            await self._save_completed_bar(completed)
+            event = await self._complete_bar(
+                current_bar,
+                calendar or self._default_calendar,
+                closed_by="tick",
+                closing_tick_at=tick.timestamp,
+            )
 
             current_bar = BarBuilderDomainService(
                 symbol=symbol_key,
@@ -129,22 +165,32 @@ class BarAppService:
             self._bars[symbol_key][interval] = current_bar
             current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
             await self._cache_current_bar(symbol_key, interval, current_bar, force=True)
-            return
+            return event
 
         current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
         await self._cache_current_bar(symbol_key, interval, current_bar)
+        return None
 
-    async def _save_completed_bar(self, bar: BarBuilderDomainService) -> None:
-        """Emit BarCompletedEvent and clean up Redis for the closed bar.
+    async def _complete_bar(
+        self,
+        bar: BarBuilderDomainService,
+        calendar: ITradingCalendarPort,
+        *,
+        closed_by: str,
+        closing_tick_at: datetime | None,
+    ) -> BarCompletedEvent | None:
+        """Close ``bar`` under the bar lock and return its event; the caller publishes it.
 
         NOTE: No MongoDB write here — cron sync_1m + cascade aggregator
         is the sole Mongo writer for `bars`. Removing upsert_bar is intentional.
         """
+        assert bar.bar_end is not None
+        self._last_end[(bar.symbol, bar.interval)] = bar.bar_end
         if bar.is_empty():
-            return
+            return None
 
         if bar.open is None or bar.high is None or bar.low is None or bar.close is None:
-            return
+            return None
 
         # Emit event — at-least-once delivery; strategy subscribers must be idempotent
         # bar.symbol is composite ``{code}:{exchange}``
@@ -158,24 +204,23 @@ class BarAppService:
             close=bar.close,
             volume=bar.volume,
             tick_count=bar.tick_count,
+            bar_end=bar.bar_end,
+            gap=bar.gap,
+            closed_at=get_current_time(),
+            closing_tick_at=closing_tick_at,
+            closed_by=closed_by,
         )
-        await self._event_bus.publish(event)
 
         # Delete the exact in-progress key for this (symbol, tf) so SSE stops
         # reporting a stale closed bar when no follow-up tick arrives (e.g. provider stall).
-        exact_key = CACHE_KEY_BAR_CURRENT.format(
-            symbol=bar.symbol.upper(),
-            interval=bar.interval.value,
-        )
-        await self._cache.delete(exact_key)
-
-        logger.debug(
-            "bar_completed_event_published",
-            symbol=bar.symbol,
-            interval=bar.interval.value,
-            bar_start=bar.bar_start.isoformat(),
-            tick_count=bar.tick_count,
-        )
+        # The delete stays under the lock: the next builder writes the same key right after.
+        if self.publishes_current:
+            exact_key = CACHE_KEY_BAR_CURRENT.format(
+                symbol=bar.symbol.upper(),
+                interval=bar.interval.value,
+            )
+            await self._cache.delete(exact_key)
+        return event
 
     async def _seed_builder_from_mongo(self, bar: BarBuilderDomainService) -> None:
         """Hydrate ``bar`` from Mongo if an aggregated bar exists at ``bar.bar_start``.
@@ -219,6 +264,8 @@ class BarAppService:
         Throttle check is inside the caller's _lock to avoid races.
         force=True bypasses throttle (used on bar roll).
         """
+        if not self.publishes_current:
+            return
         now = time.monotonic()
         flush_key = (symbol_key, interval)
 
@@ -274,16 +321,25 @@ class BarAppService:
         see the partial close signal before process exits.
         """
         cleared_count = 0
+        events: list[BarCompletedEvent] = []
 
         async with self._lock:
             for _symbol_key, intervals in self._bars.items():
                 for _interval, bar in intervals.items():
                     if not bar.is_empty():
-                        await self._save_completed_bar(bar)
+                        event = await self._complete_bar(
+                            bar, self._default_calendar, closed_by="tick", closing_tick_at=None
+                        )
+                        if event is not None:
+                            events.append(event)
                         cleared_count += 1
 
             self._bars.clear()
             self._last_flush_ts.clear()
+            if events:
+                self._publishes_running += 1
+        if events:
+            await self._publish(events)
 
         logger.info("bar_manager.bars_cleared", bars_cleared=cleared_count)
         return cleared_count

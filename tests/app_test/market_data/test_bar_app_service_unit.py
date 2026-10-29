@@ -172,7 +172,9 @@ class TestNoMongoWrite:
         bar.add_tick(100.0, 1.0, datetime(2026, 5, 6, 10, 0, 1, tzinfo=UTC))
         bar.add_tick(102.0, 2.0, datetime(2026, 5, 6, 10, 0, 2, tzinfo=UTC))
 
-        await bar_service._save_completed_bar(bar)
+        await bar_service._complete_bar(
+            bar, Continuous24x7Calendar(), closed_by="tick", closing_tick_at=None
+        )
 
         # upsert_bar should NOT be called
         mock_bar_repo.upsert_bar.assert_not_called()
@@ -180,27 +182,20 @@ class TestNoMongoWrite:
     @pytest.mark.asyncio
     async def test_event_bus_publishes_on_bar_completion(self, bar_service, mock_event_bus):
         """BarCompletedEvent IS published on bar completion."""
-        from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
-            BarBuilderDomainService,
-        )
+        for ts in (
+            datetime(2026, 5, 6, 12, 0, 1, tzinfo=UTC),
+            datetime(2026, 5, 6, 12, 5, 1, tzinfo=UTC),
+        ):
+            tick = QuoteTick(symbol="BINANCE:BTC", price=100.0, volume=1.0, timestamp=ts)
+            await bar_service.add_tick(tick)
 
-        bar = BarBuilderDomainService(
-            symbol="BINANCE:BTC",
-            interval=Interval.MINUTE_5,
-            bar_start=datetime(2026, 5, 6, 10, 0, tzinfo=UTC),
-        )
-        bar.add_tick(100.0, 1.0, datetime(2026, 5, 6, 10, 0, 1, tzinfo=UTC))
-        bar.add_tick(102.0, 2.0, datetime(2026, 5, 6, 10, 0, 2, tzinfo=UTC))
-
-        await bar_service._save_completed_bar(bar)
-
-        # Event published
-        mock_event_bus.publish.assert_called_once()
-        call_args = mock_event_bus.publish.call_args
-        event = call_args[0][0]
-        assert isinstance(event, BarCompletedEvent)
-        assert event.symbol == "BINANCE:BTC"
-        assert event.interval == "5m"
+        # The second tick closes the 12:00 bar of both intervals.
+        events = [c[0][0] for c in mock_event_bus.publish.call_args_list]
+        assert all(isinstance(e, BarCompletedEvent) for e in events)
+        assert [(e.symbol, e.interval) for e in events] == [
+            ("BINANCE:BTC", "1m"),
+            ("BINANCE:BTC", "5m"),
+        ]
 
 
 class TestMultiTfState:
