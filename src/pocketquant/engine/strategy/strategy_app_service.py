@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import TYPE_CHECKING
 
 import structlog
@@ -284,8 +285,10 @@ class StrategyAppService:
         """Feed the bar to each matching strategy and send its signal unless a guard skips it.
 
         A bar already seen is ignored. An entry on a stale, gapped or non-successor live
-        bar is skipped; the strategy still sees the bar, and exits (paper SL/TP) run in
-        the broker's own handler.
+        bar, or while the subscription's last entry is still in flight, is skipped; the
+        strategy still sees the bar, and exits (paper SL/TP) run in the broker's own
+        handler. A venue (async-fill) entry runs as a task so one slow venue call never
+        holds the bar; a paper entry fills inline.
         """
         published_at = get_current_time()
         self._running_bar_handlers += 1
@@ -330,6 +333,9 @@ class StrategyAppService:
                         reason = "stale"
                     elif event.gap or not successor:
                         reason = "gap"
+                running = self._signal_tasks.get(strategy.id)
+                if reason is None and running is not None and not running.done():
+                    reason = "inflight"
                 if reason is not None:
                     logger.warning(
                         "strategy.entry_skipped",
@@ -342,9 +348,35 @@ class StrategyAppService:
                     )
                     await self._notify_rejected(strategy, reason)
                     continue
-                await self._process_signal(strategy, signal, event, signal_at, published_at)
+                broker = self._brokers.get(strategy.id)
+                if broker is None or not broker.fills_async:
+                    await self._process_signal(strategy, signal, event, signal_at, published_at)
+                    continue
+                task = asyncio.create_task(
+                    self._process_signal(strategy, signal, event, signal_at, published_at)
+                )
+                self._signal_tasks[strategy.id] = task
+                task.add_done_callback(partial(self._forget_signal_task, strategy.id))
         finally:
             self._running_bar_handlers -= 1
+
+    def _forget_signal_task(self, strategy_id: str, task: asyncio.Task[None]) -> None:
+        # A later task of the same subscription may already hold the slot.
+        if self._signal_tasks.get(strategy_id) is task:
+            del self._signal_tasks[strategy_id]
+
+    def cancel_pending_signals(self) -> int:
+        """A lost lease calls this: tasks that have not reached the broker stop now; a task
+        at the broker is stopped by the order deadline check there."""
+        self._discard_reason = "lease"
+        cancelled = 0
+        for strategy_id, task in self._signal_tasks.items():
+            if task.done() or strategy_id in self._sending:
+                continue
+            task.cancel()
+            logger.info("strategy.signal_discarded", reason="lease", subscription_id=strategy_id)
+            cancelled += 1
+        return cancelled
 
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Route a fill to its owning strategy by subscription_id.
