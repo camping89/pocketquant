@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import (
     OrderAggregate,
@@ -144,7 +145,7 @@ async def test_risk_rejection_on_paper_rearms_strategy_without_order() -> None:
     broker = engine._brokers["s1"]
     broker.submit_order = AsyncMock()  # type: ignore[method-assign]
 
-    await engine._process_signal(strategy, _signal(), 100.0)
+    await engine._process_signal(strategy, _signal(), BarCompletedEvent(close=100.0), _NOW, _NOW)
 
     broker.submit_order.assert_not_called()
     orders.submit.assert_not_called()
@@ -161,7 +162,7 @@ async def test_zero_size_on_paper_rearms_strategy(monkeypatch: pytest.MonkeyPatc
     engine = _engine(_Risk(True))
     strategy = await _armed(engine)
 
-    await engine._process_signal(strategy, _signal(), 100.0)
+    await engine._process_signal(strategy, _signal(), BarCompletedEvent(close=100.0), _NOW, _NOW)
 
     assert strategy._open_direction is None
 
@@ -173,7 +174,7 @@ async def _with_fake_broker(broker: _FakeBroker) -> tuple[StrategyAppService, As
     strategy = engine._strategies["s1"]
     rejected = AsyncMock()
     strategy.on_order_rejected = rejected  # type: ignore[method-assign]
-    await engine._process_signal(strategy, _signal(), 100.0)
+    await engine._process_signal(strategy, _signal(), BarCompletedEvent(close=100.0), _NOW, _NOW)
     return engine, rejected
 
 

@@ -1,10 +1,12 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import structlog
 
+from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPort
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
@@ -34,6 +36,8 @@ logger = structlog.get_logger(__name__)
 
 # Stop distance used for sizing when a signal carries no stop-loss price.
 _FALLBACK_SL_PCT = 0.01
+# A live bar older than this (seconds after its end) is too late for an entry.
+_STALE_AFTER_S = {"1m": 10, "5m": 30, "15m": 60, "1h": 120, "4h": 300, "1d": 600, "1w": 600}
 
 
 class StrategyAppService:
@@ -277,11 +281,28 @@ class StrategyAppService:
         return list(self._strategies.keys())
 
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        strategies = self._find_strategies(event.symbol, event.interval)
+        """Feed the bar to each matching strategy and send its signal unless a guard skips it.
 
-        for strategy in strategies:
-            signal = None
-            try:
+        A bar already seen is ignored. An entry on a stale, gapped or non-successor live
+        bar is skipped; the strategy still sees the bar, and exits (paper SL/TP) run in
+        the broker's own handler.
+        """
+        published_at = get_current_time()
+        self._running_bar_handlers += 1
+        try:
+            for strategy in self._find_strategies(event.symbol, event.interval):
+                assert event.bar_start is not None
+                last = self._last_bar_start.get(strategy.id)
+                if last is not None and event.bar_start <= last:
+                    continue
+                # Recorded before the next await, so a second publish of this bar is ignored.
+                self._last_bar_start[strategy.id] = event.bar_start
+                successor = True
+                if event.bar_end is not None and last is not None:
+                    calendar = await self._calendar_factory.for_symbol(event.symbol)
+                    step = timedelta(seconds=INTERVAL_SECONDS[event.interval])
+                    successor = not calendar.trading_minutes(last + step, event.bar_start)
+
                 bar = {
                     "symbol": event.symbol,
                     "interval": event.interval,
@@ -292,20 +313,38 @@ class StrategyAppService:
                     "volume": event.volume,
                     "timestamp": event.bar_start,
                 }
+                try:
+                    signal = await strategy.on_bar_completed(bar)
+                except Exception as e:
+                    logger.error("strategy_on_bar_error", strategy_id=strategy.id, error=str(e))
+                    continue
+                if not signal:
+                    continue
 
-                signal = await strategy.on_bar_completed(bar)
-
-                if signal:
-                    await self._process_signal(strategy, signal, event.close)
-
-            except Exception as e:
-                logger.error(
-                    "strategy_on_bar_error",
-                    strategy_id=strategy.id,
-                    error=str(e),
-                )
-                if signal:
-                    await self._notify_rejected(strategy, str(e))
+                signal_at = get_current_time()
+                reason = None
+                age_s = None
+                if event.bar_end is not None:
+                    age_s = (signal_at - event.bar_end).total_seconds()
+                    if age_s > _STALE_AFTER_S[event.interval]:
+                        reason = "stale"
+                    elif event.gap or not successor:
+                        reason = "gap"
+                if reason is not None:
+                    logger.warning(
+                        "strategy.entry_skipped",
+                        reason=reason,
+                        subscription_id=strategy.id,
+                        symbol=event.symbol,
+                        interval=event.interval,
+                        bar_start=event.bar_start.isoformat(),
+                        age_s=None if age_s is None else round(age_s, 1),
+                    )
+                    await self._notify_rejected(strategy, reason)
+                    continue
+                await self._process_signal(strategy, signal, event, signal_at, published_at)
+        finally:
+            self._running_bar_handlers -= 1
 
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
         """Route a fill to its owning strategy by subscription_id.
@@ -359,73 +398,133 @@ class StrategyAppService:
         return matches
 
     async def _process_signal(
-        self, strategy: IStrategyService, signal: Signal, current_price: float
+        self,
+        strategy: IStrategyService,
+        signal: Signal,
+        event: BarCompletedEvent,
+        signal_at: datetime,
+        published_at: datetime,
     ) -> None:
-        broker = self._brokers.get(strategy.id)
-        if not broker:
-            logger.warning("no_broker_for_strategy", strategy_id=strategy.id)
-            await strategy.on_order_rejected("no broker")
-            return
+        """Size and send one entry; no entry leaves while ``trading_until`` is None or past."""
+        try:
+            if self.trading_until is None:
+                reason = self._discard_reason
+                # standby discards every bar of a warm standby trader; drain and lease
+                # only happen around a handover.
+                log = logger.debug if reason == "standby" else logger.info
+                log("strategy.signal_discarded", reason=reason, subscription_id=strategy.id)
+                await strategy.on_order_rejected(reason)
+                return
+            deadline = self.trading_until
+            if get_current_time() >= deadline:
+                logger.warning(
+                    "strategy.entry_skipped",
+                    reason="lease",
+                    subscription_id=strategy.id,
+                    symbol=event.symbol,
+                    interval=event.interval,
+                    bar_start=event.bar_start.isoformat() if event.bar_start else None,
+                    age_s=None,
+                )
+                await strategy.on_order_rejected("lease")
+                return
 
-        balance = await broker.get_balance()
+            broker = self._brokers.get(strategy.id)
+            if not broker:
+                logger.warning("no_broker_for_strategy", strategy_id=strategy.id)
+                await strategy.on_order_rejected("no broker")
+                return
 
-        position = self._position_app_service.get(strategy.id)
+            current_price = event.close
+            balance = await broker.get_balance()
 
-        valid, reason = self._risk_check_handler.validate(
-            signal,
-            balance,
-            position,
-            strategy.config.risk,
-        )
-        if not valid:
-            logger.info(
-                "signal_rejected_by_risk",
-                strategy_id=strategy.id,
-                reason=reason,
+            position = self._position_app_service.get(strategy.id)
+
+            valid, reason = self._risk_check_handler.validate(
+                signal,
+                balance,
+                position,
+                strategy.config.risk,
             )
-            await strategy.on_order_rejected(reason)
-            return
+            if not valid:
+                logger.info(
+                    "signal_rejected_by_risk",
+                    strategy_id=strategy.id,
+                    reason=reason,
+                )
+                await strategy.on_order_rejected(reason)
+                return
 
-        stop_loss = signal.stop_loss_price or (
-            current_price * (1 - _FALLBACK_SL_PCT)
-            if signal.direction == Direction.LONG
-            else current_price * (1 + _FALLBACK_SL_PCT)
-        )
+            stop_loss = signal.stop_loss_price or (
+                current_price * (1 - _FALLBACK_SL_PCT)
+                if signal.direction == Direction.LONG
+                else current_price * (1 + _FALLBACK_SL_PCT)
+            )
 
-        calc = PositionCalculatorDomainService.calculate(
-            balance.available_balance,
-            current_price,
-            stop_loss,
-            strategy.config.risk,
-            contract_spec=strategy.config.contract_spec,
-        )
-        size = calc.size
+            calc = PositionCalculatorDomainService.calculate(
+                balance.available_balance,
+                current_price,
+                stop_loss,
+                strategy.config.risk,
+                contract_spec=strategy.config.contract_spec,
+            )
+            size = calc.size
 
-        if size <= 0:
-            logger.info("zero_position_size", strategy_id=strategy.id)
-            await strategy.on_order_rejected("zero position size")
-            return
+            if size <= 0:
+                logger.info("zero_position_size", strategy_id=strategy.id)
+                await strategy.on_order_rejected("zero position size")
+                return
 
-        normalized = await broker.normalize_quantity(signal.symbol, size)
-        if normalized is None:
-            logger.info("order_quantity_below_broker_minimum", strategy_id=strategy.id)
-            await strategy.on_order_rejected("quantity below broker minimum")
-            return
-        size = normalized
+            normalized = await broker.normalize_quantity(signal.symbol, size)
+            if normalized is None:
+                logger.info("order_quantity_below_broker_minimum", strategy_id=strategy.id)
+                await strategy.on_order_rejected("quantity below broker minimum")
+                return
+            size = normalized
 
-        order = self._create_order(strategy, signal, size, current_price)
+            order = self._create_order(strategy, signal, size, current_price)
 
-        result = await self._order_app_service.submit(order, broker)
-        if not result.is_success:
-            await strategy.on_order_rejected(result.error_message or "rejected")
+            self._sending.add(strategy.id)
+            try:
+                t5 = get_current_time()
+                result = await self._order_app_service.submit(order, broker, deadline=deadline)
+                t6 = get_current_time()
+            finally:
+                self._sending.discard(strategy.id)
+            if not result.is_success:
+                await strategy.on_order_rejected(result.error_message or "rejected")
 
-        logger.debug(
-            "signal_processed",
-            strategy_id=strategy.id,
-            direction=signal.direction.value,
-            size=size,
-            order_status=result.status.value,
-        )
+            logger.debug(
+                "signal_processed",
+                strategy_id=strategy.id,
+                direction=signal.direction.value,
+                size=size,
+                order_status=result.status.value,
+            )
+            if event.bar_end is not None:
+                # One line per live signal: bounded, so INFO.
+                logger.info(
+                    "live.signal_latency",
+                    subscription_id=strategy.id,
+                    symbol=event.symbol,
+                    interval=event.interval,
+                    bar_start=event.bar_start.isoformat() if event.bar_start else None,
+                    closed_by=event.closed_by,
+                    t0_bar_end=event.bar_end.isoformat(),
+                    t1_closing_tick=(
+                        event.closing_tick_at.isoformat() if event.closing_tick_at else None
+                    ),
+                    t2_closed=event.closed_at.isoformat() if event.closed_at else None,
+                    t3_published=published_at.isoformat(),
+                    t4_signal=signal_at.isoformat(),
+                    t5_submit=t5.isoformat(),
+                    t6_returned=t6.isoformat(),
+                    t0_t5_ms=int((t5 - event.bar_end).total_seconds() * 1000),
+                    t0_t6_ms=int((t6 - event.bar_end).total_seconds() * 1000),
+                )
+        except Exception as e:
+            logger.error("strategy_on_bar_error", strategy_id=strategy.id, error=str(e))
+            await self._notify_rejected(strategy, str(e))
 
     def _create_order(
         self,

@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 import pytest
 
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.domain.strategy import Direction, Signal
@@ -185,7 +186,8 @@ async def test_an_opposite_signal_keeps_the_paper_position() -> None:
         subscription_id="a",
     )
 
-    await engine._process_signal(strategy, short, 100.0)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    await engine._process_signal(strategy, short, BarCompletedEvent(close=100.0), now, now)
 
     assert [p.side for p in await broker.get_positions()] == [PositionSide.LONG]
     held = mirror.get("a")

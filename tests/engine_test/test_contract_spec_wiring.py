@@ -14,6 +14,7 @@ import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.uuid import generate_id
+from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.order import OrderAggregate, OrderFilledEvent, OrderSide
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.risk.value_objects import RiskConfig
@@ -49,7 +50,9 @@ class _RecordingOrderService:
     def __init__(self) -> None:
         self.orders: list[OrderAggregate] = []
 
-    async def submit(self, order: OrderAggregate, broker: object) -> object:
+    async def submit(
+        self, order: OrderAggregate, broker: object, *, deadline: object = None
+    ) -> object:
         self.orders.append(order)
         return await broker.submit_order(order)  # type: ignore[attr-defined]
 
@@ -127,7 +130,7 @@ async def test_a_contract_signal_floors_to_the_lot_step_and_realizes_in_usd() ->
         subscription_id="xau",
         stop_loss_price=2640.0,
     )
-    await engine._process_signal(strategy, entry, 2650.0)
+    await engine._process_signal(strategy, entry, BarCompletedEvent(close=2650.0), NOW, NOW)
 
     assert orders.orders[0].quantity == 1.23
     exit_order = OrderAggregate.create(
@@ -314,6 +317,8 @@ async def test_futures_paper_settings_let_an_xauusd_signal_open_lots(
         subscription_id="xau",
         stop_loss_price=2630.0,
     )
-    await engine._process_signal(engine._strategies["xau"], signal, 2650.0)
+    await engine._process_signal(
+        engine._strategies["xau"], signal, BarCompletedEvent(close=2650.0), NOW, NOW
+    )
 
     assert [o.quantity for o in orders.orders] == ([lots] if lots else [])
