@@ -75,6 +75,10 @@ class BarBuilderDomainService:
     close: float | None = None
     volume: float = 0.0
     tick_count: int = 0
+    last_tick_at: datetime | None = None
+    gap: bool = False
+    # The time from which this bucket's ticks are covered.
+    coverage_start: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.bar_end is None:
@@ -107,6 +111,7 @@ class BarBuilderDomainService:
             self.volume += volume
 
         self.tick_count += 1
+        self.last_tick_at = timestamp
         return True
 
     def is_empty(self) -> bool:
@@ -124,4 +129,6 @@ class BarBuilderDomainService:
             "close": self.close,
             "volume": self.volume,
             "tick_count": self.tick_count,
+            "gap": self.gap,
+            "coverage_start": self.coverage_start.isoformat() if self.coverage_start else None,
         }

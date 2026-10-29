@@ -104,6 +104,20 @@ class TestDeltaSemantics:
         assert builder.tick_count == before_tick_count
 
 
+def test_add_tick_records_the_last_tick_time(builder: BarBuilderDomainService) -> None:
+    assert builder.gap is False
+    assert builder.last_tick_at is None
+    assert builder.to_dict()["gap"] is False
+    assert builder.to_dict()["coverage_start"] is None
+    t = _tick_ts(5)
+
+    assert builder.add_tick(1.0, 1.0, t) is True
+    assert builder.last_tick_at == t
+
+    assert builder.add_tick(1.0, 1.0, BAR_END + timedelta(seconds=1)) is False
+    assert builder.last_tick_at == t
+
+
 class TestWeeklyAlignment:
     """get_bar_start(WEEK_1) anchors to Monday 00:00 UTC (Binance convention).
 
