@@ -4,7 +4,6 @@ import { parseSymbol } from '../../lib/symbol-format'
 import { TickerStaleIndicator } from './ticker-stale-indicator'
 
 interface TickerWidgetProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "XAUUSD:EXNESS" */
   symbol: string
 }
 

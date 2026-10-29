@@ -32,14 +32,11 @@ def add_app_context(
     return event_dict
 
 
+# A replay reuses the live order and strategy services, so their per-fill INFO lines
+# would reach the prod log mixed with live fills.
 def drop_backtest_info(
     logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
-    """Drop INFO lines logged inside a backtest replay.
-
-    A replay reuses the live order and strategy services, so their per-fill INFO
-    lines would reach the prod log mixed with live fills. Warnings and errors pass.
-    """
     if method_name == "info" and BACKTEST_RUN_ID in event_dict:
         raise structlog.DropEvent
     return event_dict

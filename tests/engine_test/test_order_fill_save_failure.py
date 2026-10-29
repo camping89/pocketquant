@@ -1,5 +1,3 @@
-"""A fill reaches the position mirror even when saving the order fails."""
-
 from __future__ import annotations
 
 import pytest

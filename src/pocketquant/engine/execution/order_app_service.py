@@ -1,5 +1,3 @@
-"""Order manager - handles order lifecycle and broker submission."""
-
 import asyncio
 from datetime import datetime
 
@@ -20,15 +18,6 @@ logger = structlog.get_logger(__name__)
 
 
 class OrderAppService:
-    """Manages order lifecycle from creation to completion.
-
-    Responsibilities:
-    - Submit orders to brokers
-    - Track order status
-    - Publish order events
-    - Apply broker fill and cancel callbacks
-    """
-
     def __init__(self, event_bus: EventBus, order_repository: OrderRepository) -> None:
         self._event_bus = event_bus
         self._order_repo = order_repository
@@ -38,16 +27,6 @@ class OrderAppService:
     async def submit(
         self, order: OrderAggregate, broker: IBrokerPort, *, deadline: datetime | None = None
     ) -> OrderResult:
-        """Submit order to broker and track status.
-
-        Args:
-            order: Order to submit
-            broker: Broker to submit to
-            deadline: passed to the broker; the order is not sent at or after it
-
-        Returns:
-            OrderResult from broker
-        """
         async with self._lock:
             self._pending[str(order.id)] = order
 
@@ -140,18 +119,14 @@ class OrderAppService:
 
         return result
 
+    # A failed save is only logged, so the fill event still goes out.
     async def _save_after_fill(self, order: OrderAggregate) -> None:
-        """Save a filled order; a failed save is logged so the fill event still goes out."""
         try:
             await self._order_repo.save(order)
         except Exception:
             logger.error("order_save_failed", order_id=str(order.id), exc_info=True)
 
     async def on_order_update(self, result: OrderResult) -> None:
-        """Handle order update from broker callback.
-
-        Called by broker WebSocket when order status changes.
-        """
         async with self._lock:
             order = self._pending.get(result.order_id)
             if not order:

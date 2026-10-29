@@ -1,5 +1,3 @@
-"""provider_bars: refuses beside live trading and reports an unrouted symbol."""
-
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock

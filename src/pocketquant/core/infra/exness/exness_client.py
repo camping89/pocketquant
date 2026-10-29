@@ -1,16 +1,3 @@
-"""Signed REST client for the Exness Trader API — the only path to Exness endpoints.
-
-Every call except the access-point discovery goes to the per-account access
-point, which is discovered once and again after a transport failure or a 421:
-the base host answers account routes with a bare 404. Data calls are spaced by
-the strictest published rate with headroom; order calls have their own lane. A
-429 on a data call is retried a bounded number of times, a 429 on an order call
-never is. Order calls are
-refused while ``EXNESS_LIVE_TRADING`` is false, before any network use.
-
-Headers, keys and signed bodies are never logged.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -147,9 +134,8 @@ def max_candles(limits: dict[str, Any]) -> int:
     return 1000
 
 
+# status 0 means no HTTP answer.
 class ExnessApiError(Exception):
-    """An Exness call that did not succeed. ``status`` 0 means no HTTP answer."""
-
     def __init__(self, status: int, code: str, message: str) -> None:
         super().__init__(f"{status} {code}: {message}")
         self.status = status
@@ -158,8 +144,6 @@ class ExnessApiError(Exception):
 
 
 class _RequestPacer:
-    """Lets requests leave one at a time, at least ``min_interval_s`` apart, in arrival order."""
-
     def __init__(
         self,
         min_interval_s: float,
@@ -180,9 +164,11 @@ class _RequestPacer:
             self._next_at = self._clock() + self.min_interval_s
 
 
+# Every call but access-point discovery goes to the per-account access point: the base
+# host answers account routes with a bare 404. A 429 on a data call is retried a bounded
+# number of times; a 429 on an order call never is. Headers, keys and signed bodies are
+# never logged.
 class ExnessClient:
-    """Signed, paced REST access to one Exness account. Builds no request until used."""
-
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._http = httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S)
@@ -222,7 +208,6 @@ class ExnessClient:
         return self._account_id
 
     async def access_point(self) -> str:
-        """The account's access-point host, discovered again after a transport failure or 421."""
         if self._access_point is not None:
             return self._access_point
         async with self._access_point_lock:
@@ -241,13 +226,6 @@ class ExnessClient:
         idempotency_key: str = "",
         deadline: datetime | None = None,
     ) -> dict[str, Any]:
-        """Send operation ``op`` and return its JSON body; never send it at or after ``deadline``.
-
-        Raises:
-            ExnessApiError: not configured, live trading off for an order call,
-                deadline passed, transport failure, exhausted 429 retries, or any non-2xx
-                answer.
-        """
         if not self.is_configured:
             raise ExnessApiError(0, "NOT_CONFIGURED", "exness settings missing or invalid")
         if op in _ORDER_OPS and not self._settings.exness_live_trading:
@@ -304,13 +282,10 @@ class ExnessClient:
             logger.warning("exness.rate_limited_retry", op=op, attempt=attempt)
             await asyncio.sleep(delay)
 
+    # Transport failures retry with the same idempotency key, never after the deadline.
     async def _send(
         self, method: str, url: str, body: bytes, idempotency_key: str, deadline: datetime | None
     ) -> httpx.Response:
-        """One signed request.
-
-        Transport failures retried with the same idempotency key, never after the deadline.
-        """
         headers = {"Content-Type": "application/json"} if body else {}
         for attempt in range(_TRANSPORT_ATTEMPTS):
             request = self._http.build_request(method, url, content=body or None, headers=headers)
@@ -379,8 +354,8 @@ class ExnessClient:
         # The API rejects a window of exactly history_age_days.
         return history_age_days(await self.limits()) - 1
 
+    # Exness signs a WS handshake as a GET over the path.
     def sign_ws_headers(self, path: str) -> dict[str, str]:
-        """Handshake headers: a WS handshake is signed as a GET over the path."""
         return self._sign("GET", path, b"", "")
 
     async def ws_url(self, path: str) -> str:

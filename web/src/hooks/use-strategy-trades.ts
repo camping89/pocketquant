@@ -1,12 +1,7 @@
-/**
- * Fetch recent trades (closed positions) for a subscription instance.
- * Backend: GET /api/v1/subscriptions/{sub_id}/trades — newest-first list.
- */
 import { useQuery } from '@tanstack/react-query'
 import type { StrategyTrade } from '../components/strategies/recent-trades-table'
 import type { Trade } from '../types/strategy'
 
-/** Shape returned by the hook — extends StrategyTrade with Trade marker fields. */
 export type { Trade }
 
 async function fetchSubscriptionTrades(subId: string): Promise<StrategyTrade[]> {

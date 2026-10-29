@@ -1,9 +1,3 @@
-"""Lease-holding roles.
-
-The worker runs the scheduler and the trader sends orders, each only while it holds
-its Mongo lease; a second copy waits in standby.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -62,6 +56,8 @@ async def _try_acquire(repo: LeaseRepository, name: str, owner: str) -> datetime
         return None
 
 
+# state[name] is held only after on_acquired returned, so health and a waiting copy
+# never see a holder that has not finished its takeover.
 async def hold_lease(
     repo: LeaseRepository,
     name: str,
@@ -71,11 +67,6 @@ async def hold_lease(
     on_lost: Callable[[], Awaitable[None]],
     on_renewed: Callable[[datetime], None],
 ) -> None:
-    """Wait for ``name``, take over, then renew until the lease is lost.
-
-    ``state[name]`` is ``held`` only after ``on_acquired`` returned, so health and
-    a waiting copy never see a holder that has not finished its takeover.
-    """
     state[name] = "standby"
     expires = await _try_acquire(repo, name, owner)
     if expires is None:
@@ -117,8 +108,6 @@ async def hold_lease(
 
 
 def start_worker(container: AsyncContainer, app: FastAPI, owner: str) -> None:
-    """Hold the worker lease; the scheduler starts only after it is taken."""
-
     async def on_acquired(expires: datetime) -> None:
         scheduler = await container.get(JobScheduler)
         await recover_orphan_jobs(container)
@@ -145,7 +134,6 @@ def start_worker(container: AsyncContainer, app: FastAPI, owner: str) -> None:
 async def stop_worker(
     container: AsyncContainer, app: FastAPI, owner: str, started: datetime
 ) -> None:
-    """Let running jobs finish (bounded), then release the worker lease."""
     task = getattr(app.state, "worker_lease_task", None)
     if task is None:
         return
@@ -168,7 +156,6 @@ async def stop_worker(
 
 
 async def start_trader_standby(container: AsyncContainer, started_at: float) -> None:
-    """Load and warm every running subscription with no broker connected and no orders."""
     engine = await container.get(StrategyAppService)
     engine.trading_until = None
     # Only the trader lease holder writes or deletes bar:current.
@@ -182,7 +169,6 @@ async def start_trader_standby(container: AsyncContainer, started_at: float) -> 
 
 
 def start_trader_lease(container: AsyncContainer, app: FastAPI, owner: str) -> None:
-    """Wait for the trader lease, take over, and trade until the lease is lost or released."""
     waiting_since = datetime.now(UTC)
 
     async def run() -> None:
@@ -240,8 +226,6 @@ def start_trader_lease(container: AsyncContainer, app: FastAPI, owner: str) -> N
 async def drain_trader(
     engine: StrategyAppService, bars: BarAppService, started: datetime
 ) -> tuple[int, datetime]:
-    """Stop new entries at a minute boundary once its bars are published and nothing is
-    in flight; retry once at the next boundary, and give up at the drain deadline."""
     deadline = started + timedelta(seconds=DRAIN_DEADLINE_S)
     boundary = started.replace(second=0, microsecond=0) + timedelta(minutes=1)
     for attempt in (1, 2):
@@ -268,7 +252,6 @@ async def drain_trader(
 
 
 async def hand_over(container: AsyncContainer, app: FastAPI, owner: str, started: datetime) -> None:
-    """Drain at a boundary, stop the engine, then release the trader lease."""
     task = getattr(app.state, "trader_lease_task", None)
     if task is None:
         return

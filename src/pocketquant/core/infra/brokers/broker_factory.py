@@ -14,14 +14,9 @@ from pocketquant.core.infra.persistence.repositories.safeguards_repository impor
 )
 
 
+# Holds the EventBus: paper brokers subscribe to BarCompletedEvent to auto-fill SL/TP,
+# and Exness publishes the fills that arrive from the venue.
 class BrokerFactory:
-    """Factory for creating broker instances from configuration.
-
-    Holds the application ``EventBus`` so paper brokers can subscribe to
-    ``BarCompletedEvent`` and auto-fill SL/TP during live paper trading.
-    Exness also takes the bus: its fills arrive from the venue and are published.
-    """
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -38,18 +33,6 @@ class BrokerFactory:
         self._safeguards_repository = safeguards_repository
 
     def create(self, broker_type: str, config: dict) -> IBrokerPort:
-        """Create broker instance from type and config.
-
-        Args:
-            broker_type: "paper" or "exness"
-            config: Broker-specific configuration
-
-        Returns:
-            IBrokerPort instance
-
-        Raises:
-            ValueError: If broker type is unknown
-        """
         if broker_type == "paper":
             # Config surfaces slippage + commission as bps; the adapter takes
             # slippage as a fraction, so convert here at the boundary.

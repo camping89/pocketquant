@@ -1,8 +1,3 @@
-"""Pytest fixtures for backtest tests.
-
-Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -20,7 +15,6 @@ def settings(
     mongo_container: MongoDbContainer,
     redis_container: RedisContainer,
 ) -> Settings:
-    """Test Settings wired to ephemeral containers."""
     redis_host = redis_container.get_container_host_ip()
     redis_port = redis_container.get_exposed_port(6379)
 
@@ -43,10 +37,6 @@ def settings(
 
 @pytest.fixture
 async def database(settings: Settings) -> AsyncIterator[Database]:
-    """Per-test Mongo Database connected to the testcontainer.
-
-    Drops the test DB on teardown so collections don't leak between tests.
-    """
     db = Database()
     await db.connect(settings)
     try:

@@ -1,20 +1,9 @@
-"""Threshold-based scoring: raw metrics → 0-4 per metric → weighted-sum per axis
-→ A-F, with the overall grade taken as the weakest axis (min).
-
-Two aggregation levels, deliberately different:
-- metric → axis: weighted sum (each axis a blend of its metrics).
-- axis → overall: MIN (weakest-axis dominates). A robustness F drags the whole
-  run down even with A-grade performance — a weighted average would hide the F.
-
-Bands are step functions over the raw value (first band whose upper bound the
-value falls under). This expresses higher-better (calmar), lower-better (ulcer,
-degrees_of_freedom), and range-optimal (mae_to_stop, best in 0.6-0.85) shapes
-uniformly. Thresholds are industry references (see docs/backtest-rubric/
-methodology.md); bump RUBRIC_VERSION when any band or weight changes.
-
-Crypto-1m caveat: these thresholds originate from equity/daily research. On 1m
-crypto they are directional, not calibrated — carried in output metadata.
-"""
+# The overall grade is the weakest axis (min), not a weighted average: a robustness F drags
+# the run down even with A-grade performance, and an average would hide the F. Metrics blend
+# into an axis by weighted sum.
+# Thresholds are industry references from equity/daily research. On 1m crypto they are
+# directional, not calibrated; the output metadata carries that caveat. Bump RUBRIC_VERSION
+# when any band, weight or metric formula changes.
 
 from __future__ import annotations
 
@@ -78,7 +67,6 @@ WEIGHTS: dict[str, dict[str, float]] = {
 
 
 def score_metric(name: str, value: float | None) -> int | None:
-    """Map a raw value to 0-4 via its threshold bands. None (metric N/A) → None."""
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return None
     bands = THRESHOLDS.get(name)
@@ -103,7 +91,6 @@ def grade_from_score(score: float) -> str:
 
 
 def score_axis(axis: str, values: dict[str, float | None]) -> AxisScore:
-    """Weighted-sum the axis's metrics; drop N/A metrics and re-normalize weights."""
     weights = WEIGHTS[axis]
     breakdown: list[dict] = []
     weighted_sum = 0.0
@@ -126,7 +113,6 @@ def score_axis(axis: str, values: dict[str, float | None]) -> AxisScore:
 
 
 def _diagnose(values: dict[str, float | None], axes: dict[str, AxisScore]) -> str:
-    """Short plain-language read of the dominant failure mode."""
     gross = values.get("gross_edge_bps")
     net = values.get("net_edge_bps")
     psr = values.get("psr")
@@ -166,7 +152,6 @@ def score_run(
     audit: dict,
     aliases: list[str] | None = None,
 ) -> ScorecardResult:
-    """Assemble the full scorecard. ``overall = min(axis scores)`` (weakest-axis)."""
     reconciliation = metrics.get("reconciliation", {})
     values: dict[str, float | None] = {
         **{k: v for k, v in metrics.items() if isinstance(v, (int, float))},

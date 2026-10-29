@@ -1,9 +1,3 @@
-"""PositionAggregate emits TradeClosedEvent on reduce/close (average-cost).
-
-Covers economic payload correctness: chunk pnl (non-cumulative), commission
-portion draining, duration, direction as PositionSide.name, and sim-time inject.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

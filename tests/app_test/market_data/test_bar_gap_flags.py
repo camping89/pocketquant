@@ -1,5 +1,3 @@
-"""BarAppService gap facts: tick silence, a stale or missing restart seed, the weekend."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -25,8 +23,6 @@ SYMBOL = "EURUSD:EXNESS"
 
 
 class _FxCalendars:
-    """Stands in for TradingCalendarFactory: every symbol is on the Exness FX calendar."""
-
     async def for_symbol(self, symbol: str) -> ITradingCalendarPort:
         return next(c for c in EXNESS_CALENDARS if c.calendar_id == CALENDAR_EXNESS_FX)
 
@@ -48,7 +44,6 @@ async def _run(
     interval: Interval = Interval.MINUTE_5,
     price: float = 1.25,
 ) -> tuple[BarAppService, list[BarCompletedEvent]]:
-    """Feed ``ticks`` and close the first bar on the timer; return the service and events."""
     cache = AsyncMock(spec=Cache)
     cache.get = AsyncMock(return_value=seed)
     bus = EventBus()

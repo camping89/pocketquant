@@ -1,12 +1,3 @@
-"""Bounded retry around IDataProviderPort.fetch_ohlcv.
-
-Provider may return [] or in-progress (misaligned) bar at exact bar-close
-moment. Brief retry recovers without breaking cron alignment.
-
-Tunables intentionally module-level constants (KISS). Promote to Settings
-only when ops needs runtime tuning.
-"""
-
 import asyncio
 import time
 
@@ -19,16 +10,18 @@ from pocketquant.engine.market_data.sync_internals.bar_alignment import has_alig
 
 logger = get_logger(__name__)
 
-# Retry policy: aggressive. Combined with +2s cron offset (sync_jobs.py) which
-# eliminates the bar-close race; retry now only handles residual Binance hiccups.
-# See docs/learning/retry-tuning-aggressive-vs-conservative.md for the decision
-# and trade-offs. Promote to Settings only when (a) ops needs runtime tuning
+# Retry policy: aggressive. The sync_1m cron offset (sync_jobs.py) avoids the
+# bar-close race, so retry only handles residual provider hiccups.
+# Promote to Settings only when (a) ops needs runtime tuning
 # during a live incident, or (b) a second provider with different latency
 # profile is added.
 _BACKOFF_SECONDS = (0, 3, 8)
 _TIME_BUDGET_SECONDS = 15
 
 
+# At the exact bar close the provider may return [] or the in-progress bar; a brief
+# retry recovers without breaking cron alignment. Returns the last attempt's raw
+# records; the caller still runs the full filter pipeline.
 async def fetch_with_retry(
     provider: IDataProviderPort,
     symbol: str,
@@ -36,12 +29,6 @@ async def fetch_with_retry(
     n_bars: int,
     calendar: ITradingCalendarPort,
 ) -> tuple[list[Bar], int]:
-    """Fetch bars; retry on empty / all-misaligned response.
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-    Returns (records, attempts). `records` is the LAST attempt's raw output —
-    caller still runs full filter pipeline (existing + alignment).
-    """
     deadline = time.monotonic() + _TIME_BUDGET_SECONDS
     records: list[Bar] = []
     attempt = 0

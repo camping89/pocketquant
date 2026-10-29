@@ -1,5 +1,3 @@
-"""Server-sent events stream that polls a source and emits each change."""
-
 import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -12,6 +10,8 @@ from pocketquant.core.common.logging import get_logger
 logger = get_logger(__name__)
 
 
+# A fetch error ends the stream with one log line; the browser's EventSource
+# reconnects.
 def poll_stream(
     name: str,
     fetch: Callable[[], Awaitable[dict | None]],
@@ -19,12 +19,6 @@ def poll_stream(
     payload: Callable[[dict], dict],
     interval_s: float,
 ) -> StreamingResponse:
-    """Emit the current value on connect, then every change ``fetch`` returns.
-
-    ``change_key`` picks the fields whose change triggers an emit. A fetch error
-    ends the stream with one log line; the browser's EventSource reconnects.
-    """
-
     async def events() -> AsyncIterator[str]:
         last: Any = None
         try:

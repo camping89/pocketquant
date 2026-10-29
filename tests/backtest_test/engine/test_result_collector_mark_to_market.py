@@ -1,16 +1,5 @@
-"""BacktestReportAppService mark-to-market — read-only equity + persist downsampling.
-
-Pins the invariants Bug #2's fix must preserve:
-- ``mark_to_market`` never mutates realized accounting → total_return / cagr /
-  max_drawdown / win_rate / profit_factor byte-identical with vs. without MTM.
-- Sharpe/Sortino use the per-bar MTM curve when present.
-- The persisted equity_curve is capped at 5000 points.
-
-Post-R5 the realized equity curve is broker-sourced: ``on_trade`` and
-``finalize`` read ``broker.get_balance().available_balance``. A ``_FakeBroker``
-mirrors the broker's realized ledger (initial − Σcommission + Σpnl) so the
-collector sees the same balance the real PaperBrokerAdapter would.
-"""
+# mark_to_market never mutates realized accounting: total_return, cagr, max_drawdown,
+# win_rate and profit_factor are identical with and without MTM.
 
 from __future__ import annotations
 
@@ -37,15 +26,10 @@ _T0 = datetime(2024, 1, 5, 10, tzinfo=UTC)
 _COMMISSION = PercentageCommissionModel(bps=10.0)
 
 
+# Tests script available_balance to mirror the broker's realized ledger (initial -
+# commissions + pnl) and total_equity independently, to prove MTM swings never leak into the
+# realized curve.
 class _FakeBroker:
-    """Minimal IBrokerPort stand-in — only ``get_balance()`` is exercised.
-
-    Tests script ``available_balance`` to mirror the broker's realized ledger
-    (initial − Σcommission + Σpnl) as fills/trades are fed to the collector, and
-    ``total_equity`` independently to prove MTM swings never leak into the
-    realized curve.
-    """
-
     def __init__(self, balance: float) -> None:
         self.available_balance = balance
         self.total_equity = balance
@@ -97,7 +81,6 @@ def _long_trade(
     entry_time: datetime,
     exit_time: datetime,
 ) -> TradeClosedEvent:
-    """A LONG round-trip closure as the broker would emit it (avg-cost)."""
     return TradeClosedEvent(
         symbol="BTCUSDT:OKX",
         direction="LONG",
@@ -203,7 +186,6 @@ async def test_persisted_equity_curve_capped() -> None:
 
 
 async def test_persisted_curve_hard_capped_even_with_many_trade_points() -> None:
-    """Cap is a hard guarantee: even >5000 trade-carrying points get strided down."""
     broker = _FakeBroker(10_000.0)
     c = BacktestReportAppService(
         _config(),  # type: ignore[arg-type]

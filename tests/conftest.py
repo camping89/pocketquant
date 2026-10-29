@@ -1,8 +1,5 @@
-"""Root conftest for tests/ — sys.path bootstrap, prod-DB guard, env seeding.
-
-Single source for the test-environment contract; per-suite conftests only add
-fixtures (testcontainers, Settings, app objects) on top.
-"""
+# Single source of the test-environment contract (sys.path, prod-DB guard, env seeding);
+# per-suite conftests only add fixtures on top.
 
 from __future__ import annotations
 

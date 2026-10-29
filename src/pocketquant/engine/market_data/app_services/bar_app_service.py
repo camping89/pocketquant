@@ -47,7 +47,6 @@ _DEFAULT_INTERVALS = [
 
 
 def _trading_seconds(calendar: ITradingCalendarPort, a: datetime, b: datetime) -> float:
-    """The part of ``[a, b)`` inside trading minutes; the wall gap when it is 60 s or less."""
     wall = (b - a).total_seconds()
     if wall <= _GAP_AFTER_S:
         return wall
@@ -63,26 +62,16 @@ def _trading_seconds(calendar: ITradingCalendarPort, a: datetime, b: datetime) -
 
 
 def _ttl_for_interval(tf: Interval) -> int:
-    """Return Redis TTL for a bar:current key. Longer TFs need longer TTLs.
-
-    Formula: max(300, interval_seconds * 2) — ensures 1d bar survives 48h.
-    """
     tf_seconds = INTERVAL_SECONDS.get(tf, 60)
     return max(300, tf_seconds * 2)
 
 
+# Ticks never write Mongo bars: stored bars come from the REST sync, the backfill
+# and the cascade. Redis bar:current and get_current_bar's Mongo fallback serve the
+# live view. A closed bar's event is published after the bar lock is released, at
+# most once. A restart or feed gap loses a bar or sets gap; consumers skip entries
+# on gapped bars.
 class BarAppService:
-    """Aggregates real-time ticks into bars at multiple intervals.
-
-    In-memory state: _bars[symbol_key][interval] = BarBuilderDomainService (running OHLCV).
-    symbol_key is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    Cron sync_1m + cascade is the sole MongoDB writer — no upsert_bar here.
-    On bar close: publish ``BarCompletedEvent`` after the bar lock is released, at most
-    once. A restart or a feed gap loses a bar or sets ``gap``; consumers skip entries on
-    gapped bars.
-    BarRepository kept for get_current_bar DB fallback (SSE endpoint).
-    """
-
     def __init__(
         self,
         cache: Cache,
@@ -138,11 +127,8 @@ class BarAppService:
         if events:
             await self._publish(events)
 
+    # A failing handler costs only its own bar: the rest of the batch is still published.
     async def _publish(self, events: list[BarCompletedEvent]) -> None:
-        """Publish closed bars in order, outside the bar lock; the caller counted this publish.
-
-        A failing handler costs only its own bar: the rest of the batch is still published.
-        """
         try:
             for event in events:
                 try:
@@ -172,7 +158,6 @@ class BarAppService:
         interval: Interval,
         calendar: ITradingCalendarPort | None = None,
     ) -> BarCompletedEvent | None:
-        """Add ``tick`` to its bar; return the event of the bar it closed, if any."""
         calendar = calendar or self._default_calendar
         current_bar = self._bars[symbol_key].get(interval)
         bar_start = calendar.bar_start(tick.timestamp, interval)
@@ -223,6 +208,7 @@ class BarAppService:
         await self._cache_current_bar(symbol_key, interval, current_bar)
         return None
 
+    # Bars up to 1h end no later than the session close.
     def _new_builder(
         self,
         symbol_key: str,
@@ -230,7 +216,6 @@ class BarAppService:
         bar_start: datetime,
         calendar: ITradingCalendarPort,
     ) -> BarBuilderDomainService:
-        """A builder for ``bar_start``; bars up to 1h end no later than the session close."""
         bar_end = None
         if INTERVAL_SECONDS[interval] <= _SESSION_CUT_MAX_INTERVAL_S:
             full_end = bar_start + timedelta(seconds=INTERVAL_SECONDS[interval])
@@ -244,7 +229,6 @@ class BarAppService:
         )
 
     async def close_due_bars(self) -> None:
-        """Close every bar whose end is at least the grace in the past, then publish them."""
         now = get_current_time()
         grace = timedelta(seconds=_TIMER_CLOSE_GRACE_S)
         events: list[BarCompletedEvent] = []
@@ -286,11 +270,6 @@ class BarAppService:
         closed_by: str,
         closing_tick_at: datetime | None,
     ) -> BarCompletedEvent | None:
-        """Close ``bar`` under the bar lock and return its event; the caller publishes it.
-
-        NOTE: No MongoDB write here — cron sync_1m + cascade aggregator
-        is the sole Mongo writer for `bars`. Removing upsert_bar is intentional.
-        """
         assert bar.bar_end is not None
         self._last_end[(bar.symbol, bar.interval)] = bar.bar_end
         if bar.is_empty():
@@ -334,15 +313,12 @@ class BarAppService:
             await self._cache.delete(exact_key)
         return event
 
+    # A covering seed has the same bucket, a coverage_start (older images write none)
+    # and a last_update at most 60 trading seconds before the first tick. Otherwise
+    # coverage starts at the first tick.
     async def _seed_from_redis(
         self, bar: BarBuilderDomainService, calendar: ITradingCalendarPort, first_tick: datetime
     ) -> None:
-        """Restore ``bar`` from its ``bar:current`` key when that seed covers ``first_tick``.
-
-        A covering seed has the same bucket, a ``coverage_start`` (older images write none)
-        and a ``last_update`` at most 60 trading seconds before the first tick. Otherwise
-        coverage starts at the first tick.
-        """
         key = CACHE_KEY_BAR_CURRENT.format(symbol=bar.symbol, interval=bar.interval.value)
         try:
             seed = await self._cache.get(key)
@@ -376,6 +352,7 @@ class BarAppService:
             bar_start=bar.bar_start.isoformat(),
         )
 
+    # The throttle check runs inside the caller's _lock to avoid races.
     async def _cache_current_bar(
         self,
         symbol_key: str,
@@ -383,11 +360,6 @@ class BarAppService:
         bar: BarBuilderDomainService,
         force: bool = False,
     ) -> None:
-        """Write bar:current Redis key, throttled per (symbol_key, interval).
-
-        Throttle check is inside the caller's _lock to avoid races.
-        force=True bypasses throttle (used on bar roll).
-        """
         if not self.publishes_current:
             return
         now = time.monotonic()
@@ -411,7 +383,6 @@ class BarAppService:
         symbol: str,
         interval: Interval,
     ) -> dict[str, Any] | None:
-        """``symbol`` is composite ``{code}:{exchange}``."""
         cache_key = CACHE_KEY_BAR_CURRENT.format(symbol=symbol.upper(), interval=interval.value)
         cached = await self._cache.get(cache_key)
         if cached is not None:

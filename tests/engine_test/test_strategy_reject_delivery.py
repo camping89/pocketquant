@@ -1,8 +1,5 @@
-"""Every signal that does not end in a fill reaches the strategy as a rejection.
-
-``hitnrun2`` arms ``_open_direction`` when it emits a signal and only clears it
-on an opposite fill, so a signal that never fills used to silence it for good.
-"""
+# hitnrun2 arms _open_direction when it emits a signal and clears it only on an opposite
+# fill, so a signal that never filled used to silence it for good.
 
 from __future__ import annotations
 
@@ -61,8 +58,6 @@ class _Risk:
 
 
 class _FakeBroker:
-    """Minimal broker: a fixed submit result and an optional quantity floor."""
-
     fills_async = False
 
     def __init__(self, status: OrderStatus, normalized: float | None = 1.0) -> None:

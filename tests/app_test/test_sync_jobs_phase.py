@@ -1,10 +1,6 @@
-"""Regression guard: every interval-mapped sync job MUST use UTC wall-clock cron.
-
-Lag or gaps on bar-close events break strategy entries/exits. `IntervalTrigger`
-without `start_date` anchors to scheduler-startup time, so restarts shift the
-phase off the bar boundary (e.g. fires at :09 instead of :00 for 15m bars).
-This test catches reintroduction of `IntervalTrigger` for any bar-aligned job.
-"""
+# IntervalTrigger without start_date anchors to scheduler-startup time, so a restart shifts
+# the phase off the bar boundary (fires at :09 instead of :00 for 15m bars), and lag on
+# bar-close events breaks strategy entries and exits.
 
 from __future__ import annotations
 
@@ -29,15 +25,9 @@ BAR_ALIGNED_JOB_IDS: set[str] = {
 }
 
 
+# register_sync_jobs also resolves JobHistoryRepository for its catch-up sweep; its
+# AsyncMock methods return None or empty so catch-up short-circuits.
 class _FakeContainer:
-    """Minimal stand-in for AsyncContainer.
-
-    register_sync_jobs both stores the ref AND resolves JobHistoryRepository
-    for its catch-up sweep — give it a no-op `.get(...)` that returns an
-    AsyncMock whose own coroutine methods (e.g. find_last_success) return
-    None / empty so the catch-up logic short-circuits.
-    """
-
     async def get(self, _type):
         repo = AsyncMock()
         # Catch-up sweep calls this; None means "no last success, skip catch-up".
@@ -45,18 +35,15 @@ class _FakeContainer:
         return repo
 
 
+# add_*_job only needs _scheduler set; start() would fail on asyncio.get_running_loop() in a
+# sync test.
 def _build_scheduler(settings: Settings) -> JobScheduler:
-    """Initialize scheduler without start() — add_*_job only needs _scheduler!=None.
-
-    Avoids `asyncio.get_running_loop()` failure in sync test context.
-    """
     sched = JobScheduler(history_repo=None)
     sched.initialize(settings)
     return sched
 
 
 async def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None:
-    """No bar-aligned job may use IntervalTrigger — must be CronTrigger only."""
     scheduler = _build_scheduler(settings)
     await register_sync_jobs(_FakeContainer(), scheduler)  # type: ignore[arg-type]
     assert scheduler._scheduler is not None  # pyright: ignore[reportPrivateUsage]
@@ -79,7 +66,6 @@ async def test_all_bar_aligned_jobs_use_cron_trigger(settings: Settings) -> None
 
 
 def test_scheduler_runs_in_utc(settings: Settings) -> None:
-    """Cron expressions evaluate against scheduler timezone — must be UTC."""
     scheduler = _build_scheduler(settings)
     assert scheduler._scheduler is not None  # pyright: ignore[reportPrivateUsage]
     assert str(scheduler._scheduler.timezone) == "UTC", (  # pyright: ignore[reportPrivateUsage]

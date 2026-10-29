@@ -1,8 +1,5 @@
-"""Brokers that declare async fills deliver them into OrderAppService.on_order_update.
-
-Only a broker with ``fills_async = True`` is subscribed; PaperBrokerAdapter
-reports fills inline and stays unsubscribed.
-"""
+# Only a broker with fills_async = True is subscribed; PaperBrokerAdapter reports fills
+# inline and stays unsubscribed.
 
 from __future__ import annotations
 

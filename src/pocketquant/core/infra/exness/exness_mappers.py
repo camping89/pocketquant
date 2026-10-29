@@ -1,9 +1,3 @@
-"""Pure conversions between Exness payloads and PocketQuant shapes.
-
-The instrument table here is the only place Exness instrument names live; the
-adapters own every CFD and naming decision through it.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -40,8 +34,8 @@ def composite_for(instrument: str) -> str | None:
     return next((k for k, v in EXNESS_INSTRUMENTS.items() if v == instrument), None)
 
 
+# Exness volume is a tick count, so it fills both volume and tick_count.
 def candle_to_bar(candle: dict[str, Any], symbol: str, interval: Interval) -> Bar:
-    """Map one candle; Exness ``volume`` is a tick count, so it fills both fields."""
     return Bar(
         symbol=symbol.upper(),
         interval=interval,
@@ -55,8 +49,8 @@ def candle_to_bar(candle: dict[str, Any], symbol: str, interval: Interval) -> Ba
     )
 
 
+# The last price is the bid.
 def tick_to_quote_dict(tick: dict[str, Any], symbol: str) -> dict[str, Any]:
-    """Map a WS tick to the QuoteAppService callback dict; the last price is the bid."""
     bid = float(tick["bid"])
     return {
         "symbol": symbol.upper(),
@@ -74,6 +68,8 @@ def tick_to_quote_dict(tick: dict[str, Any], symbol: str) -> dict[str, Any]:
     }
 
 
+# Floored to the lot step; None below the minimum lot. Without max_lots the cap is the
+# minimum lot.
 def units_to_lots(
     quantity: Decimal,
     *,
@@ -83,10 +79,6 @@ def units_to_lots(
     volume_max: Decimal,
     max_lots: Decimal | None,
 ) -> Decimal | None:
-    """Lots for ``quantity`` units, floored to the step and capped; None below the minimum.
-
-    Without ``max_lots`` the cap is the minimum lot.
-    """
     raw = quantity / contract_size
     if raw < volume_min:
         return None

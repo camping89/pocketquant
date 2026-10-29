@@ -1,27 +1,3 @@
-"""LiveMetricsQueryService — on-demand performance metrics per subscription (M1).
-
-Reads persisted live Trades, builds a cumulative-PnL equity curve anchored at the
-paper account nominal, and runs the shared PerformanceCalculatorDomainService.
-Stateless — recomputes from the ``trades`` collection every call.
-
-Model M1 (relative-per-sub):
-- Equity curve is trade-keyed (one point per closure), anchored at the paper
-  account nominal (the futures paper balance for a futures subscription). A
-  positive anchor keeps ``max_drawdown``'s relative formula finite — a zero
-  anchor divides by a zero/near-zero running peak → garbage
-  (``-inf`` → ``np.nan_to_num`` → ``-1.79e308``).
-- ``total_return``/``cagr`` are nulled: dividing one sub's PnL by the whole shared
-  account understates its return, so an honest null beats a misleading number.
-  ``max_drawdown`` is kept — a peak-to-trough giveback measured against the account
-  nominal is a valid, bounded risk read (and finite by construction).
-- ``sharpe_ratio``/``sortino_ratio`` are NOT annualized (``periods_per_year=None``):
-  a trade-keyed curve has no fixed time step to annualize by. Passing bars/year
-  (as backtest does for its even per-bar curve) would annualize per-*trade* returns
-  by √(bars/year) and overstate Sharpe by orders of magnitude. A per-bar live
-  equity sampler would be needed for a real annualized figure — out of scope; build
-  returns 0.0 for both (its established "not annualizable" value).
-"""
-
 from __future__ import annotations
 
 from typing import Any
@@ -77,18 +53,18 @@ class LiveMetricsQueryService:
             total_commission=total_commission,
             start_date=trades[0].entry_time,
             end_date=trades[-1].exit_time,
-            # Trade-keyed curve — no fixed bar step to annualize by (see module docstring).
+            # A trade-keyed curve has no fixed time step to annualize by: bars/year
+            # would scale per-trade returns and overstate Sharpe by orders of
+            # magnitude. build then returns 0.0 for Sharpe and Sortino.
             periods_per_year=None,
         )
         return self._serialize(metrics)
 
+    # Anchored at the paper account nominal: a positive anchor keeps max_drawdown's
+    # relative formula finite, while a zero anchor divides by a near-zero peak.
+    # trades arrive oldest-first (list_by_subscription sorts by entry_time).
     @staticmethod
     def _equity_curve(trades: list[Trade], baseline: float) -> list[EquityPoint]:
-        """Baseline anchor + running cumulative PnL, one point per trade exit.
-
-        ``trades`` arrive oldest-first (``list_by_subscription`` sorts entry_time).
-        build recomputes drawdown against this curve's running peak.
-        """
         points = [EquityPoint(timestamp=trades[0].entry_time, equity=baseline, drawdown=0.0)]
         equity = baseline
         for t in trades:

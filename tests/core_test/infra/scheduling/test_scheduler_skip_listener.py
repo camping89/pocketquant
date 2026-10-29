@@ -1,5 +1,3 @@
-"""Unit tests for JobScheduler._on_skip: dropped runs become job_history rows."""
-
 from __future__ import annotations
 
 import asyncio

@@ -1,9 +1,3 @@
-"""Unit tests for BarBuilderDomainService — delta-semantics volume aggregation.
-
-All tests exercise BarBuilderDomainService.add_tick() with per-tick DELTA volume
-as per the documented contract. No I/O, no clock dependency.
-"""
-
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -27,7 +21,6 @@ BAR_END = BAR_START + timedelta(seconds=60)  # 1m bar
 
 @pytest.fixture
 def builder() -> BarBuilderDomainService:
-    """Fresh 1-minute BarBuilderDomainService aligned to BAR_START."""
     return BarBuilderDomainService(
         symbol="BTC:BINANCE",
         interval=Interval.MINUTE_1,
@@ -36,22 +29,17 @@ def builder() -> BarBuilderDomainService:
 
 
 def _tick_ts(offset_s: int = 1) -> datetime:
-    """Return a timestamp inside the bar window."""
     return BAR_START + timedelta(seconds=offset_s)
 
 
 class TestDeltaSemantics:
-    """BarBuilderDomainService.add_tick sums per-tick delta volumes correctly."""
-
     def test_single_delta_tick(self, builder: BarBuilderDomainService) -> None:
-        """Single tick with delta=0.5 → bar.volume == 0.5."""
         result = builder.add_tick(100.0, 0.5, _tick_ts(1))
 
         assert result is True
         assert builder.volume == pytest.approx(0.5)
 
     def test_sum_of_deltas(self, builder: BarBuilderDomainService) -> None:
-        """Three delta ticks 0.5 + 0.3 + 0.2 → bar.volume == 1.0."""
         builder.add_tick(100.0, 0.5, _tick_ts(1))
         builder.add_tick(101.0, 0.3, _tick_ts(2))
         builder.add_tick(102.0, 0.2, _tick_ts(3))
@@ -59,7 +47,6 @@ class TestDeltaSemantics:
         assert builder.volume == pytest.approx(1.0)
 
     def test_zero_delta_tick_updates_ohlc(self, builder: BarBuilderDomainService) -> None:
-        """Zero-volume tick is accepted; OHLC updates, volume stays 0.0."""
         result = builder.add_tick(100.0, 0.0, _tick_ts(1))
 
         assert result is True
@@ -72,7 +59,6 @@ class TestDeltaSemantics:
         assert builder.tick_count == 1
 
     def test_none_volume_does_not_accumulate(self, builder: BarBuilderDomainService) -> None:
-        """Two None-volume ticks → volume stays 0.0, OHLC still updates."""
         builder.add_tick(100.0, None, _tick_ts(1))
         builder.add_tick(101.0, None, _tick_ts(2))
 
@@ -82,14 +68,12 @@ class TestDeltaSemantics:
         assert builder.tick_count == 2
 
     def test_mix_none_then_delta(self, builder: BarBuilderDomainService) -> None:
-        """None tick followed by delta tick → volume == delta only."""
         builder.add_tick(100.0, None, _tick_ts(1))
         builder.add_tick(101.0, 0.5, _tick_ts(2))
 
         assert builder.volume == pytest.approx(0.5)
 
     def test_out_of_bar_tick_rejected(self, builder: BarBuilderDomainService) -> None:
-        """Tick timestamped after bar_end is rejected; state unchanged."""
         # Record state before
         before_volume = builder.volume
         before_open = builder.open
@@ -118,13 +102,9 @@ def test_add_tick_records_the_last_tick_time(builder: BarBuilderDomainService) -
     assert builder.last_tick_at == t
 
 
+# A plain floor(epoch / 604800) would land on Thursday, and the integrity job would then
+# flag every weekly bar as misaligned and purge it.
 class TestWeeklyAlignment:
-    """get_bar_start(WEEK_1) anchors to Monday 00:00 UTC (Binance convention).
-
-    A plain floor(epoch / 604800) would land on Thursday — the integrity/repair
-    job would then flag every weekly bar as misaligned and purge it.
-    """
-
     def test_midweek_aligns_to_monday(self) -> None:
         # 2026-05-08 is a Friday; its week opens Monday 2026-05-04.
         ts = datetime(2026, 5, 8, 13, 37, 0, tzinfo=UTC)
@@ -147,16 +127,10 @@ class TestWeeklyAlignment:
         assert is_bar_aligned(tuesday, Interval.WEEK_1, CALENDAR) is False
 
 
+# The 24/7 calendar delegates straight back to get_bar_start, so without these every other
+# test passes even when the calendar argument is ignored. Exness FX weeks open on Sunday
+# 00:00 UTC, which puts weekly bars on a different grid than the Monday one.
 class TestCalendarGovernsAlignment:
-    """The symbol's calendar decides the grid — not the UTC clock.
-
-    Without these, threading a calendar through alignment is unobservable:
-    the 24/7 calendar delegates straight back to ``get_bar_start``, so every
-    other test passes just as well when the calendar argument is ignored. The
-    Exness FX calendar is a real session calendar, and its weeks open on Sunday
-    00:00 UTC, which puts weekly bars on a different grid than the Monday one.
-    """
-
     # The reference week of the Exness calendars starts on Sunday 2026-10-11.
     MONDAY_MIDNIGHT = datetime(2026, 10, 12, 0, 0, tzinfo=UTC)
     SUNDAY_MIDNIGHT = datetime(2026, 10, 11, 0, 0, tzinfo=UTC)

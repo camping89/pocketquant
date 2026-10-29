@@ -1,5 +1,3 @@
-"""A degraded dependency is reported, but never fails the whole instance."""
-
 from __future__ import annotations
 
 import pytest

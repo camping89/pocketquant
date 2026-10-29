@@ -1,8 +1,5 @@
-"""A backfilled bar carries the same calendar stamp as a synced one.
-
-The scheduled sync stamps ``calendar_id`` and ``session_date`` before insert. The
-backfill wrote provider bars as they came, so seeded CFD history had neither.
-"""
+# The scheduled sync stamps calendar_id and session_date before insert; a backfill that
+# wrote provider bars as they came left seeded CFD history without either.
 
 from __future__ import annotations
 

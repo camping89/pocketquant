@@ -39,9 +39,6 @@ interface RunHistoryRailProps {
   onSelect: (runId: string) => void
 }
 
-/** History rail: defaults to "All" strategies; narrow by strategy / composite
- *  symbol / interval via the pickers, then browse, sort, or select runs to
- *  compare. "+ New run" opens the backtest form in a drawer. */
 export function RunHistoryRail({ selectedRun, onSelect }: RunHistoryRailProps) {
   const navigate = useNavigate()
   const { data: strategies = [] } = useStrategyList()

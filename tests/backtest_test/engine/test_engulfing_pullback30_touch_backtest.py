@@ -1,11 +1,5 @@
-"""Integration tests for engulfing_pullback30_touch over BacktestAppService.
-
-Drives the real BacktestAppService + PaperBrokerAdapter +
-StrategyAppService wiring (only persistence is faked). Confirms the deferred
-entry: the engulfing bar arms, a pullback bar enters at its close, price clears
-TP → round-trip; and that an engulfing without a following pullback yields no
-trade at all (unlike the parent engulfing, which enters immediately).
-"""
+# Unlike the parent engulfing, which enters immediately, an engulfing without a following
+# pullback yields no trade at all.
 
 from __future__ import annotations
 
@@ -138,14 +132,11 @@ def _flat(idx: int) -> Bar:
     return _bar(idx, o=100.0, h=100.2, lo=99.8, c=100.0)
 
 
+# Each cycle: red prev, green engulfing (arms at level=100.52, SL ~99.2), a pullback bar
+# dipping to low=100.3 (<= level, > SL) and closing at 100.6, which enters at that close, a
+# spike whose high clears the ~102 TP, then flat fillers to roll the spike high out of the
+# lookback window.
 def _pullback_long_cycle_bars(cycles: int = 2, lookback: int = 5) -> list[Bar]:
-    """Warmup, then repeated arm → pullback entry → TP round trips.
-
-    Each cycle: red prev, green engulfing (arms at level=100.52, SL~99.2), a
-    pullback bar dipping to low=100.3 (<= level, > SL) and closing at 100.6 →
-    enters at that close, a spike whose high clears the ~102 TP, then flat
-    fillers to roll the spike high out of the lookback window.
-    """
     bars: list[Bar] = []
     idx = 0
     for _ in range(lookback + 1):
@@ -167,7 +158,6 @@ def _pullback_long_cycle_bars(cycles: int = 2, lookback: int = 5) -> list[Bar]:
 
 
 def _no_pullback_bars(lookback: int = 5) -> list[Bar]:
-    """Engulfing arms but the next bar never dips to the level → discarded."""
     bars: list[Bar] = []
     idx = 0
     for _ in range(lookback + 1):

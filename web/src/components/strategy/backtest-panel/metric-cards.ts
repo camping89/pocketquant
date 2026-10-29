@@ -75,9 +75,7 @@ const METRIC_GROUPS: { title: string; keys: string[] }[] = [
   },
 ]
 
-/** buildMetricCards partitioned into the 3 dashboard groups. total_commission is
- *  surfaced separately via buildCostCards (the Overview "Costs" section), so it
- *  is intentionally absent here. */
+// total_commission is intentionally absent: buildCostCards surfaces it in the Overview "Costs" section.
 export function buildMetricGroups(m: BacktestMetrics): MetricGroup[] {
   const byKey = new Map(buildMetricCards(m).map((c) => [c.key, c]))
   return METRIC_GROUPS.map((g) => ({
@@ -86,23 +84,18 @@ export function buildMetricGroups(m: BacktestMetrics): MetricGroup[] {
   }))
 }
 
-/** Coerce a config_snapshot value (typed `unknown`) to a finite number, else null. */
 function num(v: unknown): number | null {
   return typeof v === 'number' && isFinite(v) ? v : null
 }
 
-/** A per-fill rate in bps rendered with its percent equivalent (1 bp = 0.01%).
- *  Old runs may lack the field → em dash. */
+// Old runs may lack the field, so null renders an em dash.
 function fmtBpsRate(bps: number | null): string {
   if (bps == null) return '—'
   return `${bps} bps (${(bps / 100).toFixed(2)}%)`
 }
 
-/** Every cost the user is charged, for the Overview "Costs" section: the per-fill
- *  commission + slippage RATES (from the run's config snapshot, so each run shows
- *  the exact settings it ran with) and the total commission actually paid (USD).
- *  Slippage has no USD line — it is baked into fill prices, so it already lives
- *  inside every trade's PnL. */
+// Rates come from the run's config snapshot so each run shows the exact settings it ran with.
+// Slippage has no USD line: it is baked into fill prices, so it already lives inside every trade's PnL.
 export function buildCostCards(
   cfg: Record<string, unknown>,
   m: BacktestMetrics,

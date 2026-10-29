@@ -1,5 +1,3 @@
-"""Tests for MongoDB datetime normalization in domain entities."""
-
 from datetime import UTC, datetime
 
 from pocketquant.core.domain.bar.entities import Bar

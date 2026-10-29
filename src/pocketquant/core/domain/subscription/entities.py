@@ -14,14 +14,9 @@ RunState = Literal["running", "stopped"]
 BROKERS = ("paper", "exness")
 
 
+# Carries the triple, not the id: ids are random uuid7, so only the triple says which
+# subscription collided. HTTP 409: a duplicate is a conflict, not a malformed request.
 class SubscriptionAlreadyExistsError(DomainError):
-    """Raised when a subscription for the same (strategy, symbol, interval) exists.
-
-    Carries the triple, not the id: ids are random uuid7, so only the triple
-    identifies WHICH subscription collided. Maps to HTTP 409 — a duplicate is a
-    resource conflict, not a malformed request.
-    """
-
     def __init__(self, strategy_code: str, symbol: str, interval: str) -> None:
         super().__init__(
             f"Subscription for '{strategy_code}' on '{symbol}' @ '{interval}' already exists.",
@@ -30,16 +25,9 @@ class SubscriptionAlreadyExistsError(DomainError):
         )
 
 
+# Uniqueness of (strategy_code, symbol, interval) is the DB compound index, not the id.
 @dataclass(frozen=True)
 class Subscription:
-    """Immutable runtime mapping of a strategy template to a (symbol, interval) pair.
-
-    ``symbol`` stores composite identifier ``{code}:{exchange}``.
-
-    The ID is a random uuid7 — uniqueness of the (strategy_code, symbol,
-    interval) triple is enforced by the DB compound unique index, not the id.
-    """
-
     id: UUID
     strategy_code: str
     symbol: str

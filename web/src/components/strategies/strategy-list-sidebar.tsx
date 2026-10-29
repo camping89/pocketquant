@@ -1,7 +1,3 @@
-/**
- * Left pane of the strategies dashboard.
- * Lists the subscriptions the page polls, with filter + New button.
- */
 import { useState, useMemo } from 'react'
 import { StrategyCard } from './strategy-card'
 import { NewSubscriptionDialog } from './new-subscription-dialog'

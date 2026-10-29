@@ -1,11 +1,7 @@
-"""Fixtures for sync-handler unit tests.
-
-These tests assert log output via ``structlog.testing.capture_logs``. Production
-logging uses ``cache_logger_on_first_use=True``, so a module-level logger that
-already emitted during an earlier test keeps its cached processor chain and
-ignores the capture configuration. Rebinding a fresh lazy proxy per test makes
-log capture order-independent.
-"""
+# Production logging uses cache_logger_on_first_use=True, so a module-level logger that
+# already emitted in an earlier test keeps its cached processor chain and ignores
+# structlog.testing.capture_logs. A fresh lazy proxy per test makes log capture
+# order-independent.
 
 from __future__ import annotations
 

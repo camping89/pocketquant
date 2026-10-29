@@ -1,7 +1,5 @@
-"""Entry guards on live bars: stale, gapped, non-successor, seen, standby and lease.
-
-Exits never depend on them: a paper SL still fills on a bar whose entry is skipped.
-"""
+# Exits never depend on the entry guards: a paper SL still fills on a bar whose entry is
+# skipped.
 
 from __future__ import annotations
 
@@ -38,8 +36,6 @@ _T = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
 
 
 class _DeadlineBroker(PaperBrokerAdapter):
-    """A paper broker that records the deadline each order carries."""
-
     deadlines: list[datetime | None]
 
     async def submit_order(self, order, *, deadline=None):  # noqa: ANN001, ANN201

@@ -1,12 +1,3 @@
-"""Binance WebSocket client — @aggTrade per-trade stream.
-
-Supports single and combined-stream subscriptions.
-Single:   wss://stream.binance.com:9443/ws/{symbol}@aggTrade
-Combined: wss://stream.binance.com:9443/stream?streams=btcusdt@aggTrade/ethusdt@aggTrade
-
-volume in callback dict = raw per-trade quantity (delta, NOT cumulative).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -38,14 +29,6 @@ _WATCHDOG_INTERVAL_S = 5.0
 
 
 class BinanceWebSocketAdapter:
-    """Realtime @aggTrade stream client for Binance public WebSocket API.
-
-    Usage:
-        client = BinanceWebSocketAdapter()
-        await client.subscribe("BTCUSDT:BINANCE", my_callback)
-        await client.run_forever()   # blocks; reconnects on drop
-    """
-
     def __init__(self) -> None:
         # composite_symbol -> (code, callback) — composite is e.g. "BTCUSDT:BINANCE"
         self._subscriptions: dict[str, tuple[str, Callable[[dict[str, Any]], Any]]] = {}
@@ -55,7 +38,6 @@ class BinanceWebSocketAdapter:
         self.last_tick_at: datetime | None = None
 
     async def connect(self) -> None:
-        """Open WebSocket to Binance stream URL based on current subscriptions."""
         url = self._build_url()
         self._ws = await websockets.connect(
             url,
@@ -78,7 +60,6 @@ class BinanceWebSocketAdapter:
         symbol: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Register a subscription. ``symbol`` composite ``{code}:{exchange}``. Returns key."""
         # Extract bare code for Binance API stream name (BINANCE-specific boundary)
         code = symbol.split(":")[0] if ":" in symbol else symbol
         validated = validate_symbol(code)
@@ -88,23 +69,14 @@ class BinanceWebSocketAdapter:
         return composite
 
     async def unsubscribe(self, symbol: str) -> None:
-        """Remove a subscription. ``symbol`` is composite ``{code}:{exchange}``."""
+        # Local only: the stream URL is built at connect, so the open stream
+        # keeps the symbol until the next reconnect.
         composite = symbol.upper()
         if composite in self._subscriptions:
             del self._subscriptions[composite]
             logger.info("binance_ws.unsubscribed", symbol=composite)
 
     async def run_forever(self) -> None:
-        """Connect and receive messages, reconnecting with exponential backoff on failure.
-
-        Handles three exit modes:
-        - `ConnectionClosed` raised by the iterator (abnormal close codes).
-        - Silent iterator exit on normal close (1000/1001) — websockets does NOT
-          raise in this case, so the silent-exit branch forces a reconnect.
-        - Stale socket where the iterator neither yields nor raises (observed with
-          websockets 16.0 + Python 3.14): a watchdog closes `_ws` after
-          `_STALE_TICK_TIMEOUT_S` of no ticks, unblocking the iterator.
-        """
         self._running = True
 
         while self._running:
@@ -122,7 +94,7 @@ class BinanceWebSocketAdapter:
                         break
                     await self._handle_frame(raw_frame)
 
-                # `async for` exited silently (close 1000/1001) — treat as disconnect
+                # websockets does not raise on a normal close (1000/1001); reconnect anyway.
                 logger.warning("binance_ws.iterator_exited_silently")
                 await self._close_ws()
                 if self._running:
@@ -147,7 +119,6 @@ class BinanceWebSocketAdapter:
                         await watchdog
 
     def is_connected(self) -> bool:
-        """Return True when the underlying WebSocket is open."""
         if self._ws is None:
             return False
         try:
@@ -175,7 +146,6 @@ class BinanceWebSocketAdapter:
         return f"{_WS_BASE}/ws/"
 
     async def _handle_frame(self, raw_frame: str | bytes) -> None:
-        """Parse a raw WebSocket frame and dispatch to callbacks."""
         text = raw_frame if isinstance(raw_frame, str) else raw_frame.decode()
         try:
             frame = json.loads(text)
@@ -227,21 +197,15 @@ class BinanceWebSocketAdapter:
         self._reconnect_delay = min(self._reconnect_delay * 2, _RECONNECT_DELAY_MAX)
 
     async def _close_ws(self) -> None:
-        """Best-effort close + clear `_ws`. Idempotent."""
         if self._ws is None:
             return
         with contextlib.suppress(Exception):
             await self._ws.close()
         self._ws = None
 
+    # A dead socket can stay open and neither yield nor raise (seen with websockets 16.0 +
+    # Python 3.14). Closing it from this sibling task unblocks the iterator in run_forever.
     async def _stale_connection_watchdog(self) -> None:
-        """Force-close `_ws` if no frame has arrived for `_STALE_TICK_TIMEOUT_S`.
-
-        Runs as a sibling task to the `async for` consumer. Closing the socket
-        from outside causes the iterator to raise/return so `run_forever` can
-        recover. Without this, a dead-but-not-closed socket spins the event
-        loop indefinitely (observed with websockets 16.0 + Python 3.14).
-        """
         while True:
             await asyncio.sleep(_WATCHDOG_INTERVAL_S)
             last = self.last_tick_at

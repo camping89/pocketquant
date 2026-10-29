@@ -39,9 +39,8 @@ export interface EquityPoint {
 
 export type BacktestStatus = 'started' | 'finished' | 'failed'
 
-/** A single ad-hoc backtest run. Closed trades are NO LONGER inlined here — the
- *  Trades tab pages them from ``/trades``. ``open_positions`` carries only the
- *  still-open lots from the run doc (rendered in their own tab). */
+// Closed trades are not inlined; the Trades tab pages them from /trades.
+// open_positions holds only the still-open lots.
 export interface BacktestRunResult {
   id?: string
   strategy_code?: string
@@ -51,8 +50,7 @@ export interface BacktestRunResult {
   open_positions: BacktestPosition[]
   equity_curve: EquityPoint[]
   config_snapshot?: Record<string, unknown>
-  /** Composite symbol / interval / window end — lifted from config_snapshot so a
-   *  chart can anchor OHLCV to the exact backtest window without re-reading it. */
+  // Lifted from config_snapshot so a chart can anchor OHLCV to the exact backtest window.
   symbol?: string
   interval?: string
   end_date?: string
@@ -79,7 +77,6 @@ export type TradeSortKey =
 export type TradeSortDir = 'asc' | 'desc'
 export type TradeFilterKey = 'all' | 'wins' | 'losses'
 
-/** One closed trade as returned by the paged endpoint (carries its stable id). */
 export interface TradeRow {
   trade_id: string
   direction: 'LONG' | 'SHORT'
@@ -99,17 +96,13 @@ export interface PagedTrades {
   items: TradeRow[]
   next_cursor: string | null
   has_more: boolean
-  /** Count of the full filtered set (not just loaded pages) — table footer. */
+  // total, total_pnl and total_commission cover the full filtered set, not just the loaded pages.
   total: number
-  /** Summed PnL of the full filtered set — table footer. */
   total_pnl: number
-  /** Summed commission of the full filtered set — footer's net = total_pnl − this. */
   total_commission: number
 }
 
-/** All-trades list for the chart: entry/exit arrows + click-to-select hit-testing.
- *  Carries the box fields so a chart click can draw a trade's detail box without
- *  paging the trades table. */
+// Carries the box fields so a chart click can draw a trade's detail box without paging the trades table.
 export interface TradeMarker {
   trade_id: string
   entry_time: string
@@ -226,8 +219,6 @@ export async function runBacktest(body: RunBacktestBody): Promise<{ request_id: 
   return apiPost<{ request_id: string }>('/api/v1/backtest/run', body)
 }
 
-/** Fetch a run's slim doc. Closed trades are paged separately via
- *  ``fetchBacktestTradesPage`` — only the still-open lots come inline here. */
 export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult> {
   const doc = await apiFetch<BacktestRunDoc>(`/api/v1/backtest/${runId}`)
   const open_positions: BacktestPosition[] = (doc.open_positions ?? []).map((ol) => ({
@@ -281,13 +272,12 @@ export interface BacktestRunRow {
 
 export interface BacktestRunScope {
   strategy: string
-  /** Composite CODE:EXCHANGE (e.g. BTCUSDT:BINANCE), or undefined for strategy-wide. */
+  // undefined means strategy-wide.
   symbol?: string
   interval?: string
 }
 
-/** History for a strategy, scoped by composite symbol + interval when provided.
- *  ``symbol`` MUST be composite — a bare code never matches a stored run. */
+// symbol must be composite: a bare code never matches a stored run.
 export async function listBacktestRuns(scope: BacktestRunScope): Promise<BacktestRunRow[]> {
   const params: Record<string, string> = { limit: '50' }
   if (scope.symbol) params.symbol = scope.symbol
@@ -295,9 +285,8 @@ export async function listBacktestRuns(scope: BacktestRunScope): Promise<Backtes
   return apiFetch<BacktestRunRow[]>(`/api/v1/backtest/strategy/${scope.strategy}`, params)
 }
 
-/** Runs across ALL strategies, optionally narrowed by symbol/interval. There is
- *  no list-all endpoint by design (storage stays scoped) — fan out over the
- *  strategy registry and merge, then sort newest-first. */
+// There is no list-all endpoint by design (storage stays scoped), so fan out over the
+// strategy registry and merge.
 export async function listAllBacktestRuns(
   scope: Omit<BacktestRunScope, 'strategy'> = {},
 ): Promise<BacktestRunRow[]> {

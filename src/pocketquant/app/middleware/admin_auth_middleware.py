@@ -1,16 +1,3 @@
-"""Admin authentication dependency for mutation endpoints.
-
-Attached once, as a router-level dependency on the ``api`` router in
-``main_extensions.register_routes``, so every route under the API prefix carries
-it. Safe methods (GET/HEAD/OPTIONS) skip the check, because the SPA's
-``EventSource`` streams cannot send headers.
-
-Uses X-Admin-Token header compared against Settings.admin_token (SecretStr).
-If admin_token is unset, production fails closed (503); other environments
-skip auth with a warning log.
-Comparison uses hmac.compare_digest to prevent timing-side-channel attacks.
-"""
-
 import hmac
 
 from fastapi import Header, HTTPException, Request
@@ -23,15 +10,12 @@ logger = get_logger(__name__)
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
+# Safe methods skip the check because the SPA's EventSource streams cannot send
+# headers. With no token configured, production fails closed (503); other
+# environments skip auth with a warning.
 async def verify_admin_token(
     request: Request, x_admin_token: str | None = Header(default=None)
 ) -> None:
-    """FastAPI dependency — validate X-Admin-Token header on mutations.
-
-    Raises 401 if token configured and header is missing or wrong.
-    Raises 503 in production when no token is configured.
-    Uses timing-safe comparison to prevent secret enumeration via timing attacks.
-    """
     if request.method in _SAFE_METHODS:
         return
 

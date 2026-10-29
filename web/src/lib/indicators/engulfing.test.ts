@@ -1,8 +1,8 @@
 import { detectEngulfing } from './engulfing'
 import fixture from './__fixtures__/engulfing_golden_fixture.json'
 
-// Same fixture as the Python detector test. A byte-identical copy is diffed in
-// Phase 5 to guard against TS/Python drift.
+// Same fixture as the Python detector test. Keep the two copies byte-identical;
+// no check diffs them.
 
 interface OHLC {
   open: number

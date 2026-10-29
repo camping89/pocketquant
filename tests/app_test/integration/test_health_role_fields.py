@@ -1,5 +1,3 @@
-"""/health reports the process roles and its lease state."""
-
 from __future__ import annotations
 
 import pytest

@@ -1,24 +1,3 @@
-"""StrategyReconcileAppService — owns instance lifecycle + converges run-state.
-
-A Kubernetes-style controller loop: every ``interval_s`` it reads each
-subscription from Mongo and drives RAM toward it in three steps per tick:
-
-  1. **Ensure instance** — a subscription with a valid template but no RAM
-     instance gets one loaded (keyed by ``sub.id``).
-  2. **Unload orphan** — a RAM instance keyed like a subscription id whose
-     subscription doc is gone gets unloaded.
-  3. **Converge run-state** — start/stop the instance to match ``desired_state``;
-     mirror observed actual back to Mongo only on drift (no per-tick write churn).
-
-Mongo is the single source of truth. Writers (API route handlers) only persist
-subscription docs; this loop materializes and tears down the RAM instances. That
-is why the loop owns load/unload — ``add_symbol`` does not load, so a continuous
-control-plane must.
-
-Backtests run in their own sandbox engine, so every key in this engine is a
-subscription id.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -38,26 +17,17 @@ from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 logger = get_logger(__name__)
 
 
+# Mongo is the source of truth. Routes only persist subscription docs, and
+# add_symbol does not load an instance, so this loop owns load and unload.
+# Backtests run in their own sandbox, so every key in this engine is a
+# subscription id.
 class StrategyReconcileAppService:
-    """Poll loop reconciling subscription desired_state vs live engine state.
-
-    Args:
-        sub_repo: Subscription persistence (desired_state source, actual_state sink).
-        strategy_service: Live engine; start/stop are ``_lock``-guarded + idempotent.
-        interval_s: Seconds between reconcile ticks (default 5.0).
-        symbol_lookup: Resolves each subscription's contract units; without it
-            every instance loads linear, which is only right for crypto.
-        exness_risk: Risk config for ``exness`` subscriptions (leverage and risk
-            per trade from the safeguards).
-        futures_paper_risk: Risk config for ``paper`` subscriptions on a futures
-            contract spec. Every other subscription keeps ``RiskConfig()``.
-    """
-
     def __init__(
         self,
         sub_repo: SubscriptionRepository,
         strategy_service: StrategyAppService,
         interval_s: float = 5.0,
+        # Without symbol_lookup every instance loads linear, which is only right for crypto.
         symbol_lookup: SymbolLookupHelper | None = None,
         exness_risk: RiskConfig | None = None,
         futures_paper_risk: RiskConfig | None = None,
@@ -72,13 +42,10 @@ class StrategyReconcileAppService:
         # tick, so the failure is logged once, not every five seconds.
         self._reported: set[str] = set()
 
+    # Runs in the trader role before the lease: brokers stay disconnected until the
+    # lease is held. It reuses _ensure_instances so the boot path and the loop cannot
+    # drift; actual_state is written only by the loop.
     async def bootstrap(self) -> None:
-        """Runs in the trader role before the lease: loads and warms every running
-        subscription; brokers stay disconnected until the lease is held.
-
-        Reuses ``_ensure_instances`` (the loop's own load pass) so the boot path and
-        the steady-state path cannot drift. ``actual_state`` is written only by the loop.
-        """
         subs = await self._sub_repo.list_all()
         if not subs:
             return
@@ -93,7 +60,6 @@ class StrategyReconcileAppService:
         logger.info("live_instances_bootstrapped", subscriptions=len(subs))
 
     async def run(self) -> None:
-        """Reconcile loop. Runs until cancelled by lifespan shutdown."""
         logger.info("reconcile.started", interval_s=self._interval_s)
 
         while True:
@@ -144,15 +110,9 @@ class StrategyReconcileAppService:
         if started or stopped:
             logger.info("reconcile.converged", started=started, stopped=stopped)
 
+    # load_strategy is _lock-guarded and raises if already loaded; the per-sub guard
+    # and try/except keep one failure from starving the rest of the tick.
     async def _ensure_instances(self, subs: list[Subscription]) -> None:
-        """Load one instance per subscription that lacks a RAM instance.
-
-        ``add_symbol`` only persists the subscription doc — this loop
-        materializes the instance. Subscriptions whose template
-        is unknown are skipped with a warning (mirrors rehydrate). ``load_strategy``
-        is ``_lock``-guarded and raises if already loaded; a per-sub guard +
-        try/except keeps one failure from starving the rest of the tick.
-        """
         loaded = 0
         for sub in subs:
             sub_id = str(sub.id)
@@ -204,7 +164,6 @@ class StrategyReconcileAppService:
             logger.info("reconcile.instances_loaded", count=loaded)
 
     async def _unload_orphans(self, sub_ids: set[str]) -> None:
-        """Unload RAM instances whose subscription doc no longer exists."""
         unloaded = 0
         for key in self._strategy_service.loaded_strategy_ids():
             if key in sub_ids:
@@ -218,13 +177,9 @@ class StrategyReconcileAppService:
         if unloaded:
             logger.info("reconcile.orphans_unloaded", count=unloaded)
 
+    # After _ensure_instances a missing instance means an unknown template; it reports
+    # stopped, and the caller surfaces the gap only on drift.
     async def _converge_one(self, sub_id: str, desired: RunState) -> RunState:
-        """Drive one subscription toward ``desired``; return observed actual after.
-
-        Missing RAM instance → observed stays stopped. After ``_ensure_instances``
-        this only happens for an unknown-template sub; the gap is surfaced by the
-        caller on drift only.
-        """
         strategy = self._strategy_service.get_strategy(sub_id)
 
         if strategy is None:

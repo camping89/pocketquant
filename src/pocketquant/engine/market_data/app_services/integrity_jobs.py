@@ -1,8 +1,3 @@
-"""Integrity check and repair functions for bar data.
-
-All functions accept composite ``symbol`` (``{code}:{exchange}``) — no separate exchange param.
-"""
-
 from datetime import UTC, datetime, timedelta
 
 from pocketquant.core.common.logging import get_logger
@@ -40,7 +35,6 @@ def _expected_instants(
     end: datetime,
     calendar: ITradingCalendarPort,
 ) -> set[datetime]:
-    """The instants a bar should exist at, according to the symbol's calendar."""
     if interval == Interval.DAY_1:
         return {calendar.session_open(d) for d in calendar.sessions(start, end)}
 
@@ -51,6 +45,9 @@ def _expected_instants(
     }
 
 
+# The expected grid comes from the symbol's calendar, so overnight, weekend and
+# holiday closures are not reported as gaps. Weekly bars are skipped: there is no
+# agreed weekly convention across venues to check them against yet.
 async def check_integrity(
     symbol: str,
     interval: Interval,
@@ -58,15 +55,6 @@ async def check_integrity(
     calendar: ITradingCalendarPort,
     days_back: int = 7,
 ) -> dict:
-    """Check bar alignment + gaps for composite ``symbol``.
-
-    Returns misaligned docs, missing count, gap ranges.
-
-    The expected grid comes from the symbol's own calendar, so a market that
-    closes overnight, at weekends or for a holiday reports those hours as shut
-    rather than as gaps. Weekly bars are skipped outright: there is no agreed
-    weekly convention across venues to check them against yet.
-    """
     # Grid ends at last CLOSED bar — current incomplete bar can't exist in DB yet
     now = datetime.now(UTC)
     end = get_bar_start(now, interval)
@@ -133,10 +121,6 @@ async def repair_integrity(
     source: str,
     days_back: int = 7,
 ) -> dict:
-    """Delete misaligned bars + resync gaps via sync pipeline (skip_filter=True).
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-    """
     report = await check_integrity(symbol, interval, bar_repo, calendar, days_back)
 
     deleted = 0

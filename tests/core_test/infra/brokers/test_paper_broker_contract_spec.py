@@ -1,10 +1,6 @@
-"""Contract-aware PnL through PaperBrokerAdapter.
-
-A 0.25 move on 2 lots of XAUUSD is 50.00 USD, not 0.50: the broker's
-``ContractSpec.multiplier`` (100 oz per lot) scales realized and unrealized PnL
-into account currency, while the shipped margin accounting (cash moves only by
-realized delta and commission) is untouched.
-"""
+# A 0.25 move on 2 lots of XAUUSD is 50.00 USD, not 0.50: ContractSpec.multiplier (100 oz
+# per lot) scales realized and unrealized PnL into account currency, while the margin
+# accounting (cash moves only by realized delta and commission) is untouched.
 
 from __future__ import annotations
 

@@ -1,5 +1,3 @@
-"""Bar entities — Pydantic models with MongoDB persistence."""
-
 from datetime import UTC, date
 from datetime import datetime as dt
 from typing import Any
@@ -22,12 +20,6 @@ SOURCE_ONE_TIME_LEGACY = "one_time_legacy"
 
 
 class Bar(BaseModel):
-    """Price bar with identity and MongoDB persistence.
-
-    Flat structure for direct field access. ``symbol`` stores composite
-    identifier ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    """
-
     model_config = ConfigDict(populate_by_name=True)
 
     id: UUID = Field(default_factory=generate_id)
@@ -42,8 +34,7 @@ class Bar(BaseModel):
     tick_count: int = 0
     # Session-day key and its calendar. `datetime` still moves with DST, so a
     # consumer that wants "which trading day is this" needs a stable key that
-    # does not. Populated at the write path from Phase 3; None on crypto bars
-    # written before that.
+    # does not. Populated at the write path; None on older crypto bars.
     session_date: date | None = None
     calendar_id: str | None = None
     created_at: dt = Field(default_factory=utc_now)
@@ -61,7 +52,6 @@ class Bar(BaseModel):
         return hash(self.id)
 
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to MongoDB document."""
         return {
             "_id": str(self.id),
             "symbol": self.symbol,
@@ -82,7 +72,6 @@ class Bar(BaseModel):
 
     @classmethod
     def from_mongo(cls, doc: dict[str, Any]) -> Bar:
-        """Reconstruct from MongoDB document."""
         raw_id = doc.get("_id", "")
         interval_val = doc.get("interval")
         if isinstance(interval_val, str):
@@ -109,14 +98,11 @@ class Bar(BaseModel):
             source=doc.get("source"),
         )
 
+    # A naive value means an adapter guessed a zone, or failed to; both give bars that look
+    # right on one host and wrong on every other.
     @field_validator("datetime", "created_at", "updated_at", mode="after")
     @classmethod
     def _require_utc(cls, v: dt | None) -> dt | None:
-        """Reject naive datetimes at the domain boundary.
-
-        A naive value here means an adapter guessed a zone, or failed to. Both
-        produce bars that look right on one host and wrong on every other.
-        """
         if v is None:
             return v
         if v.tzinfo is None:

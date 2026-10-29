@@ -1,5 +1,3 @@
-"""The ``market_data_providers`` health check: routing and session state, no network."""
-
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -81,9 +79,9 @@ async def test_each_symbol_reports_the_provider_its_suffix_names() -> None:
     assert result["symbols"]["BTCUSDT:BINANCE"]["provider"] == "binance"
 
 
+# One bad tracked symbol must not hide the state of every other one.
 @pytest.mark.asyncio
 async def test_an_unregistered_suffix_is_reported_on_its_row_not_raised() -> None:
-    """One bad tracked symbol must not hide the state of every other one."""
     result = await _check(True, "XAUUSD:MT5", "BTCUSDT:BINANCE")
 
     assert result["symbols"]["XAUUSD:MT5"]["provider"] is None

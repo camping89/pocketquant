@@ -1,11 +1,3 @@
-"""Unit tests for EngulfingStrategyService.
-
-Synthetic OHLCV crafted per branch; direct ``on_bar_completed`` calls (no bus).
-``on_order_filled`` is exercised directly to model the fill-driven open-direction
-lifecycle: entry fill sets it, opposite fill clears it, a missing entry fill
-(rejected/zero-size order) must NOT wedge the position cap.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -85,10 +77,10 @@ _PREV_GREEN = (98.0, 100.5, 97.5, 100.0)
 _CURR_RED_STRONG = (101.0, 101.2, 96.8, 97.0)  # rejection ~0.045
 
 
+# Two fillers and a prev-red bar, then the strong-green pattern bar (idx 3).
 async def _warm_to_pattern_long(
     s: EngulfingStrategyService, *, filler_high: float = 100.0, filler_low: float = 99.0
 ) -> Any:
-    """Feed 2 fillers + prev-red, then the strong-green pattern bar (idx 3)."""
     await s.on_bar_completed(_bar(0, 100.0, filler_high, filler_low, 100.0))
     await s.on_bar_completed(_bar(1, 100.0, filler_high, filler_low, 100.0))
     await s.on_bar_completed(_bar(2, *_PREV_RED))
@@ -149,13 +141,9 @@ async def test_long_tp_takes_key_level_when_swing_far() -> None:
     assert sig.take_profit_price == pytest.approx(110.0)
 
 
+# With lookback=5 the same 4-bar sequence is one bar short of warmup, so the pattern at idx
+# 3 must not fire: the window counts strictly-prior bars, never the current one.
 async def test_key_level_window_excludes_current_bar_via_warmup_boundary() -> None:
-    """Snapshot-before-append: first entry needs exactly ``lookback`` prior bars.
-
-    With lookback=5 the same 4-bar sequence is one bar short of warmup, so the
-    pattern at idx 3 must NOT fire — proving the window counts strictly-prior
-    bars and never the current one.
-    """
     s = await _strategy(direction="long", lookback=5)
     sig = await _warm_to_pattern_long(s)
     assert sig is None
@@ -210,12 +198,9 @@ async def test_position_cap_blocks_second_entry_until_close() -> None:
     assert reentry.direction == Direction.LONG
 
 
+# Models a rejected or zero-size entry order: on_order_filled never fires for it, so the
+# next valid pattern must still signal.
 async def test_unfilled_entry_does_not_wedge_open_direction() -> None:
-    """No optimistic set: a signal with no entry fill leaves the cap open.
-
-    Models a rejected / zero-size entry order — ``on_order_filled`` never fires
-    for it, so the next valid pattern must still be allowed to signal.
-    """
     s = await _strategy(direction="long")
     first = await _warm_to_pattern_long(s)
     assert first is not None

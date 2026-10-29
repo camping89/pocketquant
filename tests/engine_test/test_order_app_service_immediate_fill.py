@@ -1,9 +1,6 @@
-"""OrderAppService.submit — immediate MARKET fills publish OrderFilledEvent.
-
-Regression: an immediate broker fill used to call order.fill() on a PENDING
-order, violating the PENDING→SUBMITTED→FILLED state machine. The fill raised,
-the order was wrongly REJECTED, and the entry OrderFilledEvent never published.
-"""
+# Regression: an immediate broker fill called order.fill() on a PENDING order, violating the
+# PENDING -> SUBMITTED -> FILLED state machine. The fill raised, the order was wrongly
+# REJECTED, and the entry OrderFilledEvent never published.
 
 from __future__ import annotations
 
@@ -86,7 +83,6 @@ async def test_filled_order_tracked_not_pending() -> None:
 
 @pytest.mark.asyncio
 async def test_failing_fill_handler_keeps_the_order_filled() -> None:
-    """A fill handler that raises must not turn a broker fill into a reject."""
     svc, broker, events = await _wired()
 
     def _boom(_: OrderFilledEvent) -> None:

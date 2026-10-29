@@ -1,10 +1,3 @@
-"""Unit tests for the hardened sync_verify_cascade job.
-
-Covers:
-  - compare_bar_fields: per-field divergence (price 0.01% / volume 5%).
-  - _verify_one_symbol: REST↔DB join, no-overlap edge cases.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -21,6 +14,7 @@ from pocketquant.engine.market_data.app_services.sync_jobs import (
 )
 
 
+# The verify code only reads fields, not Bar identity.
 def _bar(
     *,
     dt: datetime | None = None,
@@ -30,7 +24,6 @@ def _bar(
     close: float = 100.5,
     volume: float = 10.0,
 ) -> SimpleNamespace:
-    """Lightweight Bar stub — verify code only reads fields, not Bar identity."""
     return SimpleNamespace(
         datetime=dt or datetime(2026, 5, 8, 10, 0, tzinfo=UTC),
         open=open_,

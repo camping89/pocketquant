@@ -1,5 +1,3 @@
-"""ExnessAdapter: pagination, in-progress filtering and error propagation."""
-
 from __future__ import annotations
 
 import copy
@@ -30,9 +28,8 @@ def _limits(page: int) -> dict[str, Any]:
     return limits
 
 
+# Answers `count` candles ending at `from` (inclusive), ascending.
 def _client(candles: list[dict[str, Any]], page: int = 100) -> MagicMock:
-    """A client answering ``count`` candles ending at ``from`` (inclusive), ascending."""
-
     async def call(op: str, *, params: dict[str, Any]) -> dict[str, Any]:
         assert op == "getCandleHistory"
         until = datetime.fromisoformat(params["from"])

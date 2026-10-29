@@ -1,11 +1,3 @@
-"""Infrastructure provider: Settings, EventBus, storage, repositories, scheduler.
-
-``Settings`` comes from the container context (see ``create_container``).
-Database and Cache use async generator factories for lifecycle management
-(connect on enter, disconnect on exit). Repositories are auto-resolved
-via BaseRepository.__init__(database: Database) type hint.
-"""
-
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, from_context, provide
@@ -61,7 +53,6 @@ class InfrastructureProvider(Provider):
 
     @provide(scope=Scope.APP)
     async def get_database(self, settings: Settings) -> AsyncIterator[Database]:
-        """Create and connect MongoDB. Disconnect on app shutdown."""
         database = Database()
         await database.connect(settings)
         yield database
@@ -69,7 +60,6 @@ class InfrastructureProvider(Provider):
 
     @provide(scope=Scope.APP)
     async def get_cache(self, settings: Settings) -> AsyncIterator[Cache]:
-        """Create and connect Redis. Disconnect on app shutdown."""
         cache = Cache()
         await cache.connect(settings)
         yield cache

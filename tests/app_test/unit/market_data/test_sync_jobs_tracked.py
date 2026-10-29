@@ -1,5 +1,3 @@
-"""Job-history wrapper: a failed run is recorded once and never stops the rest."""
-
 from __future__ import annotations
 
 import asyncio

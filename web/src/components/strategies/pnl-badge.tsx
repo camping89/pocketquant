@@ -1,5 +1,3 @@
-/** Large PnL display with +/- prefix and semantic color. */
-
 interface PnlBadgeProps {
   pnl: number
   label?: string

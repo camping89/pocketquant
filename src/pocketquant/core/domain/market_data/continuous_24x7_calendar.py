@@ -1,10 +1,3 @@
-"""The 24/7 calendar — crypto's schedule, expressed as an ordinary calendar.
-
-This exists so the pipeline has exactly one code path. Every method reproduces
-what the crypto path already did implicitly, so threading a calendar through the
-sync, cascade, integrity and annualization math leaves crypto numbers identical.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
@@ -18,9 +11,9 @@ from pocketquant.core.domain.symbol.value_objects import CALENDAR_CRYPTO_24_7
 _UTC = ZoneInfo("UTC")
 
 
+# Gives the pipeline one code path: each method reproduces the implicit crypto
+# behaviour, so crypto numbers stay identical with a calendar threaded through.
 class Continuous24x7Calendar(ITradingCalendarPort):
-    """A market that never closes. Session date is simply the UTC date."""
-
     @property
     def calendar_id(self) -> str:
         return CALENDAR_CRYPTO_24_7

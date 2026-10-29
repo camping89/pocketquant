@@ -1,10 +1,6 @@
-"""Declarative control-plane invariants over the HTTP API.
-
-POST start must only flip ``desired_state`` in Mongo — the reconcile loop (not
-the request handler) is what changes ``actual_state``. The test app runs with
-``app_roles="api"`` so no reconcile loop is live, making the boundary
-observable: after the POST, ``actual_state`` is still ``stopped``.
-"""
+# POST start only flips desired_state; the reconcile loop changes actual_state. The app runs
+# with app_roles="api", so no reconcile loop is live and actual_state stays stopped after
+# the POST.
 
 from __future__ import annotations
 

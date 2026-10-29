@@ -1,5 +1,3 @@
-"""ExnessStream: reconnect backoff, circuit breaker, signed handshake, handler isolation."""
-
 from __future__ import annotations
 
 import asyncio
@@ -22,8 +20,6 @@ PATH = "/v1/server-events/accounts/1/ws/ticks"
 
 
 class _FakeSocket:
-    """Yields scripted frames, then ends like a normal close."""
-
     def __init__(self, frames: list[str]) -> None:
         self._frames = frames
         self.state = exness_stream.websockets.State.OPEN
@@ -44,9 +40,8 @@ class _FakeSocket:
         self.state = exness_stream.websockets.State.CLOSED
 
 
+# Fails `failures` times, then serves each script once, then cancels the run.
 class _FakeConnect:
-    """Fails ``failures`` times, then serves each script once; then cancels the run."""
-
     def __init__(self, failures: int, scripts: list[list[str]]) -> None:
         self.failures = failures
         self.scripts = scripts

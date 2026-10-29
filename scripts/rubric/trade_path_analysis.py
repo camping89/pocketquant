@@ -1,17 +1,6 @@
-"""Offline MAE/MFE from the bar path between each trade's entry and exit.
-
-For runs that predate in-engine excursion tracking, this reconstructs how far
-each trade ran against (MAE) and in favour of (MFE) the position by scanning bar
-high/low inside ``[entry_time, exit_time]``. It is an offline approximation: the
-entry bar may contain the fill mid-bar, so extremes can slightly overstate the
-true excursion. When the engine writes MAE/MFE natively, read those instead.
-
-Aggregates answer two design questions numerically:
-- MFE capture rate — of the favourable move available, how much did the exit
-  actually bank (per winning trade).
-- MAE-to-stop ratio — how close adverse moves came to the stop distance
-  (calibration: <0.5 stop too wide, 0.6-0.85 calibrated, >0.85 too tight).
-"""
+# Offline approximation for runs that predate in-engine excursion tracking: the entry bar
+# may hold the fill mid-bar, so extremes can slightly overstate the true excursion. When the
+# engine writes MAE/MFE natively, read those instead.
 
 from __future__ import annotations
 
@@ -24,23 +13,19 @@ from scripts.rubric.types import TradeRow
 _COVERAGE_FLOOR = 0.5
 
 
+# MFE >= 0 is favourable, MAE <= 0 is adverse.
 def _excursion(direction: str, entry: float, hi: float, lo: float) -> tuple[float, float]:
-    """(MFE, MAE) for one window. MFE ≥ 0 favourable, MAE ≤ 0 adverse."""
     if direction == "LONG":
         return hi - entry, lo - entry
     # SHORT: favourable = price falls, adverse = price rises.
     return entry - lo, entry - hi
 
 
+# Bars are loaded once per run and each trade slices its window by binary search, so there
+# is no per-trade query.
 def compute_excursions(
     trades: list[TradeRow], bars: np.ndarray
 ) -> dict[str, object]:
-    """Per-trade MAE/MFE + aggregate diagnostics.
-
-    ``bars`` is the struct array from ``data_access.load_bars`` (datetime as
-    float epoch-seconds, sorted). Bars are loaded once per run; each trade slices
-    its own window via binary search — no per-trade query.
-    """
     if bars.size == 0 or not trades:
         return _empty()
 

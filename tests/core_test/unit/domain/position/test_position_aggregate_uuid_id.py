@@ -1,5 +1,3 @@
-"""PositionAggregate.id representation lock — UUID in RAM, str in Mongo."""
-
 from __future__ import annotations
 
 from uuid import UUID, uuid7

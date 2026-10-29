@@ -1,5 +1,3 @@
-"""PercentageCommissionModel — cost is |price*qty|*bps/10000, always ≥ 0."""
-
 import pytest
 
 from pocketquant.core.domain.trading import PercentageCommissionModel

@@ -1,26 +1,3 @@
-"""Deep backfill for any routed data provider, beyond the 5000-bar request cap.
-
-Fetches ``--days`` of history for one composite symbol through the same routed
-``IDataProviderPort`` the app uses, so the symbol's suffix picks the provider
-(``XAUUSD:EXNESS`` -> Exness). It resolves only the data port and the bar
-repository from the DI container, so no scheduler or job starts.
-
-It shares the Exness request rate with the running app, so it uses only
-``--rate-fraction`` of it (default 0.5). The two processes do not share a pacer;
-the client's bounded 429 retries absorb an overlap. It refuses to run while
-``EXNESS_LIVE_TRADING`` is true, so a backfill never competes with order calls.
-
-Usage (on the VPS: ``docker exec pocketquant-app python scripts/backfill/provider_bars.py``):
-    uv run python scripts/backfill/provider_bars.py \\
-        --symbol XAUUSD:EXNESS --interval 1m --days 30 [--rate-fraction 0.5] [--dry-run]
-
-Prints one line: ``fetched=<n> inserted=<n> total_bars=<n>`` (``total_bars=-1`` on
-a dry run).
-
-Exit codes: 0 = bars fetched; 1 = nothing fetched or a provider error;
-2 = no data provider for the symbol; 3 = refused because live trading is on.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -53,7 +30,27 @@ class BackfillConfig:
 
 
 def parse_args(argv: list[str]) -> BackfillConfig:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=(
+            "Deep backfill of one composite symbol through the routed data provider its"
+            " suffix names (XAUUSD:EXNESS -> Exness), beyond the 5000-bar request cap."
+        ),
+        epilog="""\
+Example:
+    uv run python scripts/backfill/provider_bars.py \\
+        --symbol XAUUSD:EXNESS --interval 1m --days 30 [--rate-fraction 0.5] [--dry-run]
+
+On the VPS: docker exec pocketquant-app python scripts/backfill/provider_bars.py ...
+
+Uses --rate-fraction of the Exness request rate, shared with the running app.
+Refuses to run while EXNESS_LIVE_TRADING is true.
+
+Prints one line: fetched=<n> inserted=<n> total_bars=<n> (total_bars=-1 on a dry run).
+
+Exit codes: 0 = bars fetched; 1 = nothing fetched or a provider error;
+2 = no data provider for the symbol; 3 = refused because live trading is on.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--symbol", required=True, help="composite, e.g. XAUUSD:EXNESS")
     parser.add_argument("--interval", required=True, choices=[i.value for i in Interval])
     parser.add_argument("--days", type=int, required=True)
@@ -73,9 +70,13 @@ def parse_args(argv: list[str]) -> BackfillConfig:
 
 async def run(cfg: BackfillConfig) -> int:
     settings = get_settings()
+    # A backfill must never compete with order calls for the Exness request rate.
     if settings.exness_live_trading:
         print("refusing: EXNESS_LIVE_TRADING is true")
         return 3
+    # The two processes do not share a pacer, so this one takes only a fraction of the
+    # rate and the client's bounded 429 retries absorb an overlap. Only the data port
+    # and the bar repository are resolved, so no scheduler or job starts.
     container = create_container(
         settings.model_copy(update={"exness_rate_fraction": cfg.rate_fraction})
     )

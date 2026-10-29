@@ -1,8 +1,5 @@
-"""DELETE /tracked-symbols/{symbol} empties every collection and cache key of the symbol.
-
-Seeds the same shape of data for two symbols against real Mongo + Redis, deletes
-one through the HTTP route, and checks the other symbol is left untouched.
-"""
+# Seeds the same shape of data for two symbols, deletes one, and checks the other is left
+# untouched.
 
 from __future__ import annotations
 

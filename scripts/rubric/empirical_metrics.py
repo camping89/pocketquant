@@ -1,17 +1,10 @@
-"""Extended performance metrics (quantstats formulas), plus an aggregator that
-wires them to the domain ``PerformanceCalculatorDomainService`` so profit_factor,
-drawdown and win/loss stats are never re-implemented.
-
-Returns basis (fixed per plan validation S1):
-- Distribution metrics (tail_ratio, gain_to_pain, SQN) use **per-trade net
-  returns** — net_pnl / notional — because they describe the shape of realized
-  trade outcomes.
-- Drawdown metrics (ulcer, calmar, recovery, MAR) use the **equity curve** —
-  they are peak-to-trough by construction.
-
-profit_factor is reported GROSS (matches the stored metric): it signals whether
-a raw edge exists before costs; cost_to_edge then shows whether costs erase it.
-"""
+# profit_factor, drawdown and win/loss stats come from the domain
+# PerformanceCalculatorDomainService and are never re-implemented here.
+# Basis: tail_ratio and gain_to_pain use per-trade net returns (net_pnl / notional), SQN
+# uses realized R-multiples; both describe realized trade outcomes. Drawdown metrics (ulcer,
+# calmar, MAR, recovery) use the equity curve, being peak-to-trough by construction.
+# profit_factor is GROSS, matching the stored metric: it shows whether a raw edge exists
+# before costs, and cost_to_edge shows whether costs erase it.
 
 from __future__ import annotations
 
@@ -40,12 +33,9 @@ def mar(total_return: float, max_drawdown: float) -> float:
     return total_return / abs(max_drawdown)
 
 
+# Divides by n-1 per the quantstats convention. `drawdown_series` holds negative decimals
+# (-0.05 for a 5% drawdown).
 def ulcer_index(drawdown_series: np.ndarray) -> float:
-    """sqrt(mean of squared drawdowns), scaled to percent. Uses (n-1) per the
-    quantstats convention; 0 when fewer than 2 points.
-
-    ``drawdown_series`` are negative decimals (e.g. -0.05 for a 5% drawdown).
-    """
     dd = np.asarray(drawdown_series, dtype=float)
     if dd.size < 2:
         return 0.0
@@ -61,10 +51,8 @@ def ulcer_performance_index(
     return (total_return * 100.0 - risk_free) / ulcer
 
 
+# About 1 is symmetric; below 1 the loss tail is heavier.
 def tail_ratio(returns: np.ndarray) -> float:
-    """|p95 / p5| of the return distribution. ~1 is symmetric; <1 means the left
-    tail (losses) is heavier than the right.
-    """
     r = np.asarray(returns, dtype=float)
     if r.size < 2:
         return 0.0
@@ -84,7 +72,6 @@ def cpc_index(profit_factor: float, win_rate: float, win_loss_ratio: float) -> f
 
 
 def gain_to_pain(returns: np.ndarray) -> float:
-    """Σ returns / |Σ negative returns| — total gain per unit of total loss."""
     r = np.asarray(returns, dtype=float)
     if r.size == 0:
         return 0.0
@@ -95,25 +82,21 @@ def gain_to_pain(returns: np.ndarray) -> float:
 
 
 def recovery_factor(total_return: float, max_drawdown: float) -> float:
-    """Net equity return over max drawdown (both on the equity basis)."""
     if max_drawdown == 0:
         return 0.0
     return abs(total_return) / abs(max_drawdown)
 
 
 def kelly(win_rate: float, win_loss_ratio: float) -> float:
-    """Kelly fraction: ((b·p) − q) / b, with b=win/loss ratio, p=win rate, q=1−p."""
     if win_loss_ratio == 0:
         return 0.0
     return (win_loss_ratio * win_rate - (1 - win_rate)) / win_loss_ratio
 
 
+# Computed in log-space to avoid underflow. The base is below 1 for any win_rate > 0, so at
+# the trade counts here (>5k) this saturates to about 0: a sanity floor, not a calibrated
+# estimate.
 def risk_of_ruin(win_rate: float, n_trades: int) -> float:
-    """((1−wr)/(1+wr))^n, computed in log-space to avoid underflow.
-
-    The base is < 1 for any win_rate > 0, so this simple form saturates to ~0 at
-    the trade counts here (>5k); it is a sanity floor, not a calibrated estimate.
-    """
     if n_trades <= 0:
         return 1.0
     if win_rate <= 0:
@@ -127,7 +110,6 @@ def risk_of_ruin(win_rate: float, n_trades: int) -> float:
 
 
 def sqn(r_multiples: np.ndarray) -> float:
-    """System Quality Number: (mean R / std R) · sqrt(n). Needs ≥2 R-multiples."""
     r = np.asarray(r_multiples, dtype=float)
     if r.size < 2:
         return 0.0
@@ -137,10 +119,9 @@ def sqn(r_multiples: np.ndarray) -> float:
     return float((np.mean(r) / std) * math.sqrt(r.size))
 
 
+# Above 1 the gross edge survives costs. Signed: a negative gross edge gives a negative
+# ratio.
 def cost_to_edge(gross_edge_bps: float, friction_bps: float) -> float:
-    """How many multiples of round-trip friction the gross edge covers. >1 means
-    the edge survives costs. Signed: a negative gross edge yields a negative ratio.
-    """
     if friction_bps == 0:
         return 0.0
     return gross_edge_bps / friction_bps
@@ -151,7 +132,6 @@ def _net_pnl_list(trades: list[TradeRow]) -> list[float]:
 
 
 def _per_trade_returns(trades: list[TradeRow]) -> np.ndarray:
-    """Net per-trade return as a fraction of notional (entry_price · quantity)."""
     out = []
     for t in trades:
         notional = t.entry_price * t.quantity
@@ -162,11 +142,6 @@ def _per_trade_returns(trades: list[TradeRow]) -> np.ndarray:
 
 
 def compute_metrics(run: RunData, trades: list[TradeRow]) -> dict[str, object]:
-    """Assemble every empirical metric + reconciliation for one run.
-
-    Domain ``Perf`` supplies profit_factor / drawdown / win-loss (DRY); this
-    layer adds the extended ratios and the returns/drawdown basis split.
-    """
     recon = reconcile(trades, run.commission_bps, run.slippage_bps)
 
     equity = np.array([p.get("equity", 0.0) for p in run.equity_curve], dtype=float)

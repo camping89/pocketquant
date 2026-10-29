@@ -1,5 +1,3 @@
-"""Trade stats calculator — parity with the former FE stats-utils semantics."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

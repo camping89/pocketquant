@@ -1,20 +1,5 @@
-"""Unit tests for scripts/backfill/binance_bars.py — mock httpx + BarRepository.
-
-Lives beside the script (not under tests/) and is excluded from the default
-`just test` run by pyproject's testpaths=["tests"]. Run explicitly:
-    uv run python -m pytest scripts/backfill/test_binance_bars.py
-
-Covers:
-- Arg parsing: window XOR days, inverted range, unknown interval, replace/cascade flags
-- Rolling window math: end = floor(now,1min) - 1s; start = end - days
-- Checkpoint: load missing/valid/corrupt, atomic save roundtrip
-- Dry-run: no DB writes, plan printed, only tracked BINANCE symbols listed
-- Bulk orchestration: delete -> fetch -> insert -> cascade order, --replace gate,
-  --no-cascade skip, delete uses full CANONICAL_TFS, checkpoint resume
-- Symbol filtering: non-BINANCE skipped, --symbols subset narrows the work-list
-- In-progress bar filter: bars at/after end dropped before insert
-- Targeted single-symbol mode: one symbol, insert-only (no checkpoint)
-"""
+# Lives beside the script; pyproject testpaths=["tests"] keeps it out of the default run.
+# Run it with: uv run python -m pytest scripts/backfill/
 
 from __future__ import annotations
 
@@ -59,7 +44,6 @@ def _make_bar(symbol: str = "BTCUSDT", dt: datetime | None = None) -> MagicMock:
 
 
 def _bulk_mocks(tracked: list[MagicMock], fetch_bars: list | None = None):
-    """Build the (db, tracked_repo, bar_repo, http) mock bundle for a bulk run."""
     mock_db = MagicMock()
     mock_db.connect = AsyncMock()
     mock_db.disconnect = AsyncMock()
@@ -75,6 +59,7 @@ def _bulk_mocks(tracked: list[MagicMock], fetch_bars: list | None = None):
     return mock_db, mock_tracked_repo, mock_bar_repo
 
 
+# `klines` feeds fetch_klines; the cascade defaults to a no-op.
 def _patches(
     *,
     db: MagicMock,
@@ -84,7 +69,6 @@ def _patches(
     cascade: AsyncMock | None = None,
     ckpt_path: Path | None = None,
 ):
-    """Common patch context. `klines` feeds fetch_klines; cascade defaults to no-op."""
     cascade = cascade or AsyncMock(return_value={})
     klines = klines if klines is not None else []
     ctx = [

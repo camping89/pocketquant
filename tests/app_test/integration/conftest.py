@@ -1,11 +1,5 @@
-"""Fixtures for pocketquant-app integration tests.
-
-Strategy: Build a FastAPI test app using the shared `make_test_app` factory
-from app_factory.py which injects the testcontainer Settings directly into
-dishka, bypassing the module-level `app = create_app()` in main.py.
-
-The `settings` fixture (function-scoped) is defined in the parent conftest.py.
-"""
+# make_test_app injects the testcontainer Settings into dishka directly, bypassing the
+# module-level app = create_app() in main.py.
 
 from __future__ import annotations
 
@@ -19,7 +13,6 @@ from .app_factory import make_test_app
 
 @pytest_asyncio.fixture
 async def app_client(settings: Settings):
-    """ASGI test client with full FastAPI lifespan against testcontainer DB/Redis."""
     app = make_test_app(settings)
     transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with app.router.lifespan_context(app):

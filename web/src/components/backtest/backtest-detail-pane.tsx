@@ -3,8 +3,6 @@ import { BacktestStatusBadge } from '../strategy/backtest-status-badge'
 import { RunHeader } from './run-header'
 import { useBacktestRun } from '../../hooks/use-backtest-run'
 
-/** Detail pane of the workbench. Lazy: `useBacktestRun` is gated by `enabled`,
- *  so nothing is fetched until a run is selected (`runId` non-null). */
 export function BacktestDetailPane({
   runId,
   activeTab,

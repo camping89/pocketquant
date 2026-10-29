@@ -4,14 +4,9 @@ from datetime import datetime
 from pocketquant.core.domain.shared.events import DomainEvent
 
 
+# bar_end is None for replayed (backtest) bars.
 @dataclass(frozen=True, eq=False)
 class BarCompletedEvent(DomainEvent):
-    """Raised when a real-time bar is completed.
-
-    ``symbol`` is composite ``{code}:{exchange}``. ``bar_end`` is None for replayed
-    (backtest) bars; ``closed_by`` is ``tick`` or ``timer``.
-    """
-
     symbol: str = ""
     interval: str = ""
     bar_start: datetime | None = None

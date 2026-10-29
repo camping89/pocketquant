@@ -1,9 +1,3 @@
-"""Resolve a symbol's trading calendar from its persisted ``calendar_id``.
-
-Implementations are instantiated once and shared. They hold only schedule
-caches, so they are stateless from a caller's point of view.
-"""
-
 from __future__ import annotations
 
 from pocketquant.core.common.logging import get_logger
@@ -18,9 +12,9 @@ from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookup
 logger = get_logger(__name__)
 
 
+# Implementations are shared: they hold only schedule caches. A missing or unknown
+# calendar_id falls back to 24/7.
 class TradingCalendarFactory:
-    """Maps a ``calendar_id`` to its implementation, defaulting to 24/7."""
-
     def __init__(self, symbol_lookup: SymbolLookupHelper) -> None:
         self._symbol_lookup = symbol_lookup
         self._default = Continuous24x7Calendar()
@@ -30,7 +24,6 @@ class TradingCalendarFactory:
         self._warned_unknown: set[str] = set()
 
     def get(self, calendar_id: str | None) -> ITradingCalendarPort:
-        """The calendar for ``calendar_id``; 24/7 when it is missing or unknown."""
         if calendar_id is None:
             return self._default
 
@@ -44,17 +37,9 @@ class TradingCalendarFactory:
             logger.warning("calendar.unknown_id_fallback_24x7", calendar_id=calendar_id)
         return self._default
 
+    # An unseeded symbol takes its data provider's default calendar, so bars from a
+    # session-hours venue are never read as 24/7 just because nobody seeded the symbol.
     async def for_symbol(self, composite: str) -> ITradingCalendarPort:
-        """The calendar for a composite symbol.
-
-        An unseeded symbol takes its data provider's default calendar, so a
-        symbol whose bars come from a session-hours venue is never read as 24/7
-        just because nobody seeded it.
-
-        Raises:
-            UnknownDataProviderError: when the symbol is unseeded and its suffix
-                names no registered data provider.
-        """
         symbol = await self._symbol_lookup.get(composite)
         if symbol is None:
             return self.get(provider_defaults_for(composite).calendar_id)

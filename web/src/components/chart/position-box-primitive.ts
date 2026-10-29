@@ -1,17 +1,3 @@
-/**
- * Lightweight-charts v5 primitive that renders position ZONES onto the chart in two
- * stacked layers:
- *   - Fill layer (zOrder 'bottom', drawBackground) — behind the candles: an ambient
- *     soft zone per trade (fill + faint entry line) plus a stronger shaded SL↔TP zone
- *     for the selected / hovered trade.
- *   - Level-line layer (zOrder 'top', draw) — above the candles: dashed entry/exit/
- *     SL/TP lines for the active detail box only, each CLAMPED to the trade's box
- *     span (not full-width). Their on-axis price labels are owned by TradingChart
- *     (createPriceLine with lineVisible:false, axisLabelVisible:true) so the label
- *     reaches the price axis while the line stays inside the box.
- * Numeric stats render in the HTML OHLCV legend.
- */
-
 import type {
   IChartApiBase,
   IPrimitivePaneRenderer,
@@ -34,12 +20,10 @@ export interface PositionData {
   pnl: number
   commission: number
   direction?: 'LONG' | 'SHORT'
-  /** Which selection drew this box — solid outline for a click, dashed for a
-   *  hover. Decoupled from any array index so paging can't misalign the outline. */
+  // Solid outline for a click, dashed for a hover. Not tied to an array index, so paging
+  // can't misalign the outline.
   highlightKind?: 'click' | 'hover'
-  /** Ambient (always-on) preview drawn for every trade so its zone is visible
-   *  without clicking: a soft blurred fill + faint entry line, no SL/TP lines,
-   *  no outline, no info card. Detail boxes (click/hover) draw over it. */
+  // Always-on preview for every trade so its zone shows without a click; detail boxes draw over it.
   ambient?: boolean
 }
 

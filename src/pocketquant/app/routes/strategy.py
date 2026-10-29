@@ -1,11 +1,3 @@
-"""Strategy + subscription API routes.
-
-Two top-level routers:
-
-* ``strategy_router``      (prefix ``/strategies``)    — template-scoped operations
-* ``subscription_router``  (prefix ``/subscriptions``) — subscription-instance operations
-"""
-
 from typing import Literal
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
@@ -19,11 +11,6 @@ from pocketquant.engine.strategy.strategy_query_service import StrategyQueryServ
 
 
 class CreateSubscriptionBody(BaseModel):
-    """Request body for creating a subscription under a strategy template.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    """
-
     symbol: str
     interval: str
     broker: Literal["paper", "exness"] = "paper"
@@ -62,10 +49,6 @@ async def create_subscription(
     body: CreateSubscriptionBody,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    """Create a subscription that binds a strategy template to (symbol, interval).
-
-    ``symbol`` must be composite ``{code}:{exchange}``.
-    """
     return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval, body.broker)
 
 
@@ -124,11 +107,6 @@ async def get_subscription_metrics(
     sub_id: str,
     metrics_svc: FromDishka[LiveMetricsQueryService],
 ) -> dict:
-    """Trade-derived performance metrics for a subscription (M1 relative model).
-
-    Empty subscription → zeroed metrics, HTTP 200. ``total_return``/``cagr`` are
-    null (live subs share one account — no per-subscription capital baseline).
-    """
     return await metrics_svc.get_metrics(sub_id)
 
 

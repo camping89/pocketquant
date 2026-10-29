@@ -27,8 +27,6 @@ class TokenBucket:
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Per-client-IP rate limiting via Redis."""
-
     def __init__(self, app, capacity: int = 200, refill_rate: float = 20.0):
         super().__init__(app)
         self.capacity = capacity

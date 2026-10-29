@@ -1,13 +1,4 @@
-"""Pure trade-statistics calculators for the backtest result view.
-
-Distribution + streak + profit-factor + drawdown-period analytics that the FE
-used to compute over the full trade list. Centralized here so the browser loads
-numbers instead of raw trades. Static/free functions, no I/O — mirrors the
-``PerformanceCalculatorDomainService`` convention.
-
-Semantics match the former FE implementation exactly (same edge cases) so the
-result view is visually identical after the move.
-"""
+# Computed server-side so the browser loads numbers instead of the full trade list.
 
 from __future__ import annotations
 
@@ -19,8 +10,6 @@ from pocketquant.core.domain.trading.value_objects import EquityPoint
 
 @dataclass
 class HistogramBin:
-    """A single bucket: half-open [lo, hi) range and the count inside it."""
-
     lo: float
     hi: float
     count: int
@@ -34,16 +23,12 @@ class StreakStats:
 
 @dataclass
 class DirectionProfitFactor:
-    """Profit factor split by side; ``None`` when a side has no losing PnL."""
-
     long: float | None
     short: float | None
 
 
 @dataclass
 class DrawdownPeriod:
-    """One peak-to-trough episode read off the equity curve's per-point drawdown."""
-
     depth: float  # negative fraction, e.g. -0.18
     start_time: datetime
     trough_time: datetime
@@ -51,13 +36,8 @@ class DrawdownPeriod:
     duration_seconds: float
 
 
+# The top edge is clamped into the last bin so max is not dropped by the half-open range.
 def histogram(values: list[float], bin_count: int = 20) -> list[HistogramBin]:
-    """Bucket ``values`` into ``bin_count`` equal-width bins over [min, max].
-
-    Empty input -> []. A degenerate range (all equal) collapses to one bin. The
-    top edge is clamped into the last bin so ``max`` isn't dropped by the
-    half-open range.
-    """
     if not values:
         return []
     lo = min(values)
@@ -67,8 +47,7 @@ def histogram(values: list[float], bin_count: int = 20) -> list[HistogramBin]:
 
     width = (hi - lo) / bin_count
     bins = [
-        HistogramBin(lo=lo + i * width, hi=lo + (i + 1) * width, count=0)
-        for i in range(bin_count)
+        HistogramBin(lo=lo + i * width, hi=lo + (i + 1) * width, count=0) for i in range(bin_count)
     ]
     for v in values:
         idx = min(bin_count - 1, int((v - lo) / width))
@@ -76,12 +55,8 @@ def histogram(values: list[float], bin_count: int = 20) -> list[HistogramBin]:
     return bins
 
 
+# Break-even (pnl == 0) resets both streaks.
 def win_loss_streaks(pnls: list[float]) -> StreakStats:
-    """Longest consecutive win / loss run over closed trades in order.
-
-    Break-even (pnl == 0) resets both streaks. Caller passes closed-trade PnL in
-    chronological order (open positions are excluded upstream).
-    """
     max_win = max_loss = cur_win = cur_loss = 0
     for pnl in pnls:
         if pnl > 0:
@@ -97,14 +72,10 @@ def win_loss_streaks(pnls: list[float]) -> StreakStats:
     return StreakStats(max_win_streak=max_win, max_loss_streak=max_loss)
 
 
+# None for a side with no losing PnL; the FE renders it as infinity.
 def profit_factor_by_direction(
     entries: list[tuple[str, float]],
 ) -> DirectionProfitFactor:
-    """Gross-profit / gross-loss per direction over closed trades.
-
-    ``entries`` is ``(direction, pnl)`` pairs. A side with no losing PnL yields
-    ``None`` (factor undefined / infinite) — the FE renders that as ∞.
-    """
     acc = {"LONG": {"profit": 0.0, "loss": 0.0}, "SHORT": {"profit": 0.0, "loss": 0.0}}
     for direction, pnl in entries:
         side = acc.get(direction)
@@ -121,13 +92,8 @@ def profit_factor_by_direction(
     return DirectionProfitFactor(long=factor(acc["LONG"]), short=factor(acc["SHORT"]))
 
 
+# An unrecovered tail period has recovery_time None.
 def drawdown_periods(curve: list[EquityPoint], top_n: int = 5) -> list[DrawdownPeriod]:
-    """Top-N deepest drawdown episodes scanned from per-point drawdown.
-
-    A period opens when drawdown goes negative, tracks its deepest point, and
-    closes when equity reclaims the prior peak (drawdown back to >= 0). An
-    unrecovered tail period has ``recovery_time = None``. Sorted deepest first.
-    """
     periods: list[DrawdownPeriod] = []
     open_start: datetime | None = None
     open_trough: datetime | None = None

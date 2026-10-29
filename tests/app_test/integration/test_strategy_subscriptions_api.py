@@ -1,10 +1,3 @@
-"""Integration test for strategy-delete subscription cascade via the HTTP API.
-
-Exercises the full request/response cycle through the ASGI test client: a
-DELETE on a strategy must clear all its subscriptions from Mongo, observable
-via the subscriptions list endpoint reading straight from the DB.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -14,13 +7,10 @@ pytestmark = pytest.mark.integration
 _STRATEGY_CODE = "test-sub-strat"
 
 
+# The DELETE and cascade handlers are pure Mongo, so only DB isolation is needed; there is
+# no in-RAM StrategyAppService state to reset.
 @pytest.fixture(autouse=True)
 async def load_strategy(app_client):
-    """Clean MongoDB subscription/backtest collections per test.
-
-    The DELETE + cascade handlers are pure Mongo, so only DB isolation is
-    needed here — no in-RAM StrategyAppService state to reset.
-    """
     from pocketquant.core.infra.persistence.repositories.backtest_repository import (
         BacktestRepository,
     )

@@ -1,5 +1,3 @@
-"""Feed lag: measured in trading minutes, classified, stored, and read back."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -72,8 +70,8 @@ class TestFeedLagCountsTradingMinutes:
         latest = MONDAY.replace(second=0) - timedelta(minutes=13)
         assert feed_lag_seconds(latest, FX, MONDAY) == 12 * 60
 
+    # Five minutes after the Sunday open, Friday's last bar is five minutes behind.
     def test_a_weekend_is_not_lag(self) -> None:
-        """Five minutes after the Sunday open, Friday's last bar is five minutes behind."""
         now = SUNDAY_OPEN + timedelta(minutes=5)
         assert feed_lag_seconds(FRIDAY_LAST_BAR, FX, now) == 5 * 60
 
@@ -106,12 +104,12 @@ class TestClassifyFeed:
     def test_no_bars_is_unknown(self) -> None:
         assert classify_feed(None, 0, market_open=True) is FeedState.UNKNOWN
 
+    # The sync stops after the close, so a delayed feed's lag freezes; that is not a flag.
     def test_a_shut_market_is_closed_even_with_the_delayed_tail_missing(self) -> None:
-        """The sync stops after the close, so a delayed feed's lag freezes; not a flag."""
         assert classify_feed(840, 0, market_open=False) is FeedState.CLOSED
 
+    # A sync that stopped running never grows its streak.
     def test_far_behind_is_stuck_even_without_an_empty_streak(self) -> None:
-        """A sync that stopped running never grows its streak."""
         lag = STUCK_AFTER_LAG_SECONDS + 60
         assert classify_feed(lag, 0, market_open=True) is FeedState.STUCK
 
@@ -220,8 +218,6 @@ class TestTransitionsAreLoggedOnce:
 
 
 class TestSyncStatusCarriesTheFeedLag:
-    """Every interval row of a symbol reports that symbol's 1m feed lag."""
-
     def _service(
         self, statuses: list[SyncStatus], latest_by_interval: dict[Interval, Bar]
     ) -> SyncStatusQueryService:
@@ -268,9 +264,9 @@ class TestSyncStatusCarriesTheFeedLag:
         assert row.is_delayed is True
         assert row.is_stuck is True
 
+    # No streak, no delay excuse: two hours behind is a stopped sync.
     @pytest.mark.asyncio
     async def test_a_real_time_feed_that_stopped_hours_ago_is_stuck_on_every_row(self) -> None:
-        """No streak, no delay excuse: two hours behind is a stopped sync."""
         now = datetime.now(UTC).replace(second=0, microsecond=0)
         btc = "BTCUSDT:BINANCE"
         latest = {

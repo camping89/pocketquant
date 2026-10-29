@@ -1,5 +1,3 @@
-"""Test domain layer has no I/O dependencies."""
-
 import ast
 import os
 
@@ -16,7 +14,6 @@ FORBIDDEN_IMPORTS = [
 
 
 def test_domain_has_no_io_imports():
-    """Verify domain layer has no external I/O dependencies."""
     # tests/core_test/unit/domain → 4 levels up = repo root
     domain_path = os.path.join(
         os.path.dirname(__file__), "..", "..", "..", "..", "src", "pocketquant", "core", "domain"

@@ -1,21 +1,10 @@
-"""One session-hours symbol through the real pipeline, against real Mongo and Redis.
-
-Everything built for session calendars would otherwise only run on the 24/7
-calendar, where most of it is the identity. This drives ``XAUUSD:EXNESS`` on the
-Exness gold calendar through ``SyncService.sync_one``, the integrity scan and the
-no-progress anomaly path, with a stub provider in place of Exness.
-
-The services are constructed directly rather than through ``make_test_app``.
-Overriding one DI binding in a built container is not something dishka offers,
-and none of these assertions involve HTTP — the same reasoning
-``test_sync_backfill_gap_fill.py`` records for skipping the handler graph.
-
-The reference week opens Sunday 2026-10-11 (EDT). Gold trades from Sunday
-22:01:30Z to Friday 20:57:59Z with a daily break Monday to Thursday from
-20:58:00Z to 22:00:29Z. Its bars sit on the UTC grid, except that a week opens
-on Sunday 00:00Z, which is the property that makes its bar grid differ from the
-24/7 one.
-"""
+# Session-calendar code would otherwise only run on the 24/7 calendar, where most of it is
+# the identity. The services are built directly rather than through make_test_app: dishka
+# offers no way to override one binding in a built container, and no assertion here involves
+# HTTP.
+# The reference week opens Sunday 2026-10-11 (EDT). Gold trades from Sunday 22:01:30Z to
+# Friday 20:57:59Z with a daily break Monday to Thursday from 20:58:00Z to 22:00:29Z. Its
+# bars sit on the UTC grid, except that a week opens on Sunday 00:00Z.
 
 from __future__ import annotations
 
@@ -64,9 +53,8 @@ SOURCE = SOURCE_REST_SYNC_1M
 XAUUSD_SPEC = ContractSpec(multiplier=1.0, tick_size=0.001, lot_step=None, currency="USD")
 
 
+# Returns exactly the bars it was given, ignoring n_bars.
 class _StubProvider:
-    """Returns exactly the bars it was given, ignoring n_bars."""
-
     def __init__(self, bars: list[Bar]) -> None:
         self._bars = bars
 
@@ -96,7 +84,6 @@ def _bar(ts: datetime, interval: Interval) -> Bar:
 
 @pytest_asyncio.fixture
 async def futures_env(settings: Settings):
-    """Real Mongo + Redis with XAUUSD seeded as a CFD on the Exness gold calendar."""
     database = Database()
     await database.connect(settings)
     cache = Cache()
@@ -150,14 +137,10 @@ async def futures_env(settings: Settings):
         await database.disconnect()
 
 
+# The six bars run from 18:00Z to the next day's 00:00Z across the daily break: the provider
+# prints no 21:00Z bar, and the 22:00Z bar opens with trading at 22:00:30Z.
 @pytest.mark.asyncio
 async def test_session_aligned_hourly_bars_all_survive(futures_env) -> None:
-    """Bars on the session grid are neither dropped nor stamped as crypto.
-
-    The six bars run from 18:00Z to the next day's 00:00Z across the daily
-    break: the provider prints no 21:00Z bar, and the 22:00Z bar opens with
-    trading at 22:00:30Z.
-    """
     make_sync, bar_repo, calendar = futures_env
     evening = calendar.session_open(SESSION) + timedelta(hours=18)
     hours = [evening + timedelta(hours=i) for i in (0, 1, 2, 4, 5, 6)]
@@ -177,15 +160,11 @@ async def test_session_aligned_hourly_bars_all_survive(futures_env) -> None:
     assert {b.calendar_id for b in stored} == {CALENDAR_EXNESS_XAUUSD}
 
 
+# On the 24/7 grid a week opens on Monday, so this bar would be dropped as misaligned.
 @pytest.mark.asyncio
 async def test_weekly_sync_keeps_the_sunday_open_and_stamps_its_session_date(
     futures_env,
 ) -> None:
-    """The weekly bar opens on Sunday 00:00Z and is keyed by that Sunday.
-
-    On the 24/7 grid a week opens on Monday, so this bar would be dropped as
-    misaligned. The calendar keeps it and stamps the Sunday as its session date.
-    """
     make_sync, bar_repo, calendar = futures_env
     assert calendar.bar_start(WEEK_OPEN + timedelta(days=3), Interval.WEEK_1) == WEEK_OPEN
     assert get_bar_start(WEEK_OPEN, Interval.WEEK_1) != WEEK_OPEN
@@ -203,14 +182,11 @@ async def test_weekly_sync_keeps_the_sunday_open_and_stamps_its_session_date(
     assert stored[0].datetime.astimezone(UTC) == WEEK_OPEN
 
 
+# The window is the scan's own seven days, which always spans a weekend. On a 24/7 grid the
+# weekend and every daily break would be expected bars, so this proves the grid comes from
+# the calendar.
 @pytest.mark.asyncio
 async def test_integrity_does_not_count_shut_hours_as_missing(futures_env) -> None:
-    """Seed exactly the calendar's trading minutes; nothing may be reported missing.
-
-    The window is the scan's own seven days, which always spans a weekend. On a
-    24/7 grid the weekend and every daily break would be expected bars, so
-    this is the assertion that proves the grid comes from the calendar.
-    """
     _, bar_repo, calendar = futures_env
     # check_integrity reads its own clock, so its window can advance by a minute
     # between here and there. Seed a buffer past both ends: a minute it does not
@@ -228,16 +204,12 @@ async def test_integrity_does_not_count_shut_hours_as_missing(futures_env) -> No
     assert report["misaligned_count"] == 0
 
 
+# emit_no_progress reads the clock itself, so only now is faked; the real gold calendar
+# still decides whether that instant is inside a session.
 @pytest.mark.asyncio
 async def test_no_progress_is_silent_while_the_market_is_shut(
     futures_env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A shut market producing no bars is the schedule working, not an anomaly.
-
-    ``emit_no_progress`` takes no instant — it reads the clock itself — so the
-    clock is what the test controls. The real gold calendar still decides whether
-    that instant is inside a session; only "now" is faked.
-    """
     _, _, calendar = futures_env
     # Saturday 2026-10-17, mid-afternoon UTC: no gold session is open.
     shut = datetime(2026, 10, 17, 15, 0, tzinfo=UTC)

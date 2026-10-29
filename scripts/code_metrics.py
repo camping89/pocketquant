@@ -1,25 +1,3 @@
-"""Measure tiny functions and pure delegations, optionally against a ceiling.
-
-Definitions (pinned so numbers stay comparable across commits):
-
-- Population: every ``def`` / ``async def`` under ``--path`` (methods and nested
-  functions included). ``body`` is the function body minus a leading docstring.
-- Measured set (for the tiny share) drops stubs (empty body, or only ``...`` /
-  ``pass``), ``property`` / ``setter`` / ``cached_property`` / ``abstractmethod``
-  decorated functions, and dunders.
-- ``tiny``: measured functions with ``len(body) <= 2``.
-- ``delegations``: population functions whose body is a single ``return`` or
-  expression whose value (after one ``await``) is a call on an attribute.
-
-Usage:
-    uv run python scripts/code_metrics.py --json
-    uv run python scripts/code_metrics.py --out .cache/metrics.json
-    uv run python scripts/code_metrics.py --ratchet   # ceiling from [tool.code-metrics]
-
-Exit codes: 0 = within ceiling, 1 = a metric is above its ceiling,
-2 = ``--ratchet`` without a ``[tool.code-metrics]`` section.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -29,6 +7,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+# The metric definitions are pinned so the numbers stay comparable across commits.
 _EXCLUDED_DECORATORS = {"property", "setter", "cached_property", "abstractmethod"}
 _LONG_FUNCTION_LINES = 60
 
@@ -117,13 +96,24 @@ def measure(path: Path) -> dict:
 
 
 def load_ceiling(pyproject: Path) -> dict:
-    """Return ``[tool.code-metrics]`` from ``pyproject`` (empty dict when absent)."""
     data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     return data.get("tool", {}).get("code-metrics", {})
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="Measure tiny functions and pure delegations, optionally against a ceiling.",
+        epilog="""\
+Population: every def / async def under --path, methods and nested functions included.
+Measured set (tiny share): the population minus stubs, property / setter /
+cached_property / abstractmethod functions and dunders.
+tiny: a measured function whose body has at most 2 statements.
+delegation: a body that is one return or expression calling an attribute (one await allowed).
+
+Exit codes: 0 = within ceiling, 1 = a metric is above its ceiling,
+2 = --ratchet without a [tool.code-metrics] section.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--path", type=Path, default=Path("src/pocketquant"))
     parser.add_argument("--json", action="store_true", help="print the metrics dict")
     parser.add_argument("--out", type=Path, help="write the metrics JSON to this file")

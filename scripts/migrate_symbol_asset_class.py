@@ -1,24 +1,3 @@
-"""Stamp existing symbol documents with an explicit asset class and calendar.
-
-Every symbol in Mongo predates the asset-class model and carries a free-string
-``asset_type``. All of them are crypto spot on a 24/7 calendar with linear
-contract units, so the migration is a single unconditional shape: set the three
-new fields, drop the old one.
-
-Documents that already have ``asset_class`` are left alone, which makes this
-safe to re-run and safe to run before or after the deploy that introduces the
-new ``Symbol`` shape — ``Symbol.from_mongo`` already defaults a missing field to
-exactly the values written here.
-
-Usage:
-    uv run python scripts/migrate_symbol_asset_class.py [--apply]
-
-Dry-run by default: prints how many documents would change and writes nothing.
-``--apply`` performs the update.
-
-Exit codes: 0 = completed (or dry run); 1 = a write failed; 2 = MONGODB_URL unset.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -30,6 +9,8 @@ from pymongo import AsyncMongoClient
 
 COLLECTION = "symbols"
 
+# Every symbol stored before the asset-class model is crypto spot on a 24/7 calendar
+# with linear contract units, so one unconditional shape migrates them all.
 MIGRATION = {
     "$set": {
         "asset_class": "crypto_spot",
@@ -45,6 +26,9 @@ MIGRATION = {
     "$unset": {"asset_type": ""},
 }
 
+# Skipping documents that already have asset_class makes a re-run safe, and running
+# before or after the deploy is safe: Symbol.from_mongo defaults a missing field to
+# exactly these values.
 SELECTOR = {"asset_class": {"$exists": False}}
 
 
@@ -85,7 +69,14 @@ async def migrate(apply: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="Stamp existing symbol documents with an explicit asset class and calendar.",
+        epilog=(
+            "Dry-run by default: prints how many documents would change and writes nothing."
+            " Idempotent. Exit codes: 0 = completed (or dry run); 1 = a write failed;"
+            " 2 = MONGODB_URL unset."
+        ),
+    )
     parser.add_argument(
         "--apply",
         action="store_true",

@@ -42,8 +42,8 @@ const TABS: { key: ResultTab; label: string }[] = [
 
 const TAB_KEYS = TABS.map((t) => t.key)
 
-/** The path segment is free-form, so an unknown/absent tab falls back to the
- *  default view rather than rendering a blank pane. */
+// The path segment is free-form, so an unknown or absent tab falls back to the
+// default view rather than rendering a blank pane.
 function coerceTab(raw: string | undefined): ResultTab {
   return TAB_KEYS.includes(raw as ResultTab) ? (raw as ResultTab) : 'overview'
 }

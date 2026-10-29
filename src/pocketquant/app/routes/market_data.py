@@ -1,12 +1,3 @@
-"""Market-data routes under ``/market-data``: sync, integrity, OHLCV, status, symbols.
-
-``tracked_symbols_router`` holds the tracked-symbol CRUD and backfill. It keeps
-its own OpenAPI tag and is mounted under the same ``/market-data`` prefix in
-``main_extensions.register_routes``. Tracked-symbol writes require
-X-Admin-Token; the list is public. ``symbol`` path params are URL-encoded
-composite ``{code}:{exchange}`` (e.g. ``BTCUSDT%3ABINANCE``).
-"""
-
 import time
 from datetime import datetime
 from typing import Any
@@ -68,7 +59,6 @@ async def sync_symbol(
     cmd: SyncSymbolCommand,
     sync_service: FromDishka[SyncService],
 ) -> SyncResponse:
-    """Sync historical OHLCV data. ``symbol`` in body is composite ``{code}:{exchange}``."""
     logger.info(
         "api.sync_requested",
         symbol=cmd.symbol,
@@ -103,8 +93,6 @@ async def sync_bulk(
 
 
 class IntegrityRequest(BaseModel):
-    """Request body for integrity check/repair. ``symbol`` is composite ``{code}:{exchange}``."""
-
     symbol: str
     interval: Interval
     days_back: int = Field(default=7, ge=1, le=90)
@@ -147,8 +135,6 @@ async def integrity_repair(
 
 
 class OHLCVResponse(BaseModel):
-    """``symbol`` is composite ``{code}:{exchange}``."""
-
     symbol: str
     interval: str
     data: list[dict[str, Any]]
@@ -184,13 +170,6 @@ async def get_ohlcv(
 
 
 def _make_payload(bar: dict[str, Any], interval: Interval) -> dict[str, Any]:
-    """Build unified SSE payload from bar dict (Redis or Mongo fallback shape).
-
-    Redis shape: includes 'last_update' timestamp + 'bar_start' as ISO string.
-    Mongo fallback shape: same keys, no 'last_update', tick_count=0.
-    is_in_progress=True when sourced from Redis (live in-progress bar).
-    staleness_ms=None when Mongo source; ms since last update when Redis source.
-    """
     last_update = bar.get("last_update")
     is_in_progress = last_update is not None
 
@@ -219,13 +198,6 @@ async def stream_bars(
     bar_service: FromDishka[BarAppService],
     interval: Interval = Query(default=Interval.MINUTE_1),
 ) -> StreamingResponse:
-    """SSE stream — polls Redis (in-progress) + Mongo fallback, emits on change.
-
-    ``{symbol}`` path param is URL-encoded composite (e.g. ``BTCUSDT%3ABINANCE``).
-    Validates composite format (400 on mismatch).
-    Validates ?interval against Interval enum; returns 400 with INVALID_INTERVAL
-    if unknown value.
-    """
     symbol = validate_composite_symbol(symbol)
     return poll_stream(
         "bars",
@@ -261,7 +233,6 @@ async def get_data_lag(
     symbol: str,
     data_lag_service: FromDishka[DataLagQueryService],
 ) -> DataLagResponse:
-    """How far this symbol's data runs behind real time, as the minute check last saw it."""
     symbol = validate_composite_symbol(symbol)
     return await data_lag_service.get_data_lag(symbol)
 
@@ -289,7 +260,6 @@ async def add_tracked_symbol(
     cmd: AddTrackedSymbolCommand,
     service: FromDishka[TrackedSymbolService],
 ) -> dict:
-    """Add (exchange, symbol) to tracked list. Idempotent. Requires X-Admin-Token."""
     return await service.add(cmd)
 
 
@@ -298,14 +268,6 @@ async def remove_tracked_symbol(
     symbol: str,
     service: FromDishka[TrackedSymbolService],
 ) -> dict:
-    """Remove a symbol and all data that references it. Requires X-Admin-Token.
-
-    Cascades to symbols, bars, sync_status, subscriptions (stopped first),
-    backtest runs/orders/trades, live orders/positions/trades, job_history
-    details and symbol-keyed cache keys. Idempotent: always 200, ``deleted``
-    holds per-collection counts. ``symbol`` path param is URL-encoded composite
-    ``{code}:{exchange}`` (e.g. ``BTCUSDT%3ABINANCE``).
-    """
     symbol = validate_composite_symbol(symbol)
     return await service.remove(symbol)
 
@@ -321,13 +283,6 @@ async def backfill_tracked_symbol(
     n: int = Query(default=100, ge=1, le=5000, description="Number of bars"),
     mode: str = Query(default="auto", description="cascade | direct | auto"),
 ) -> dict:
-    """Backfill historical bars for one tracked symbol. Requires X-Admin-Token.
-
-    ``symbol`` is composite ``{code}:{exchange}`` — URL-encode ``:`` as ``%3A``.
-    mode=cascade: REST-fetch 1m bars, upsert, cascade to requested tf (default for >=5m).
-    mode=direct:  REST-fetch the requested tf directly (default for 1m).
-    mode=auto:    select mode based on interval (cascade for >=5m, direct for 1m).
-    """
     symbol = validate_composite_symbol(symbol)
     cmd = BackfillTrackedSymbolCommand(
         symbol=symbol,

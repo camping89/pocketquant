@@ -1,14 +1,3 @@
-"""App runtime self-sufficiency: the trading runtime needs no HTTP traffic.
-
-The app owns the ENTIRE runtime in its own DI graph: scheduler, strategy
-engine, reconcile service, single-run backtest execution — none of it depends
-on any request hitting the API.
-
-These tests resolve each runtime piece from the real app container (built from
-the production providers, wired to ephemeral Mongo/Redis) and drive a reconcile
-tick + a backtest run end-to-end, without any HTTP client involved.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -44,15 +33,12 @@ _SYMBOL = "BTCUSDT:BINANCE"
 
 @pytest_asyncio.fixture
 async def app_container(settings: Settings):
-    """Full app DI graph — the production container."""
     c = create_container(settings)
     yield c
     await c.close()
 
 
 async def test_app_container_resolves_full_runtime(app_container) -> None:
-    """The headless runtime — scheduler, engine, reconcile, backtest execution —
-    all resolve from the app container with no external process."""
     scheduler = await app_container.get(JobScheduler)
     engine = await app_container.get(StrategyAppService)
     reconcile = await app_container.get(StrategyReconcileAppService)
@@ -67,8 +53,6 @@ async def test_app_container_resolves_full_runtime(app_container) -> None:
 async def test_app_reconcile_runs_desired_running_without_http(
     app_container, settings: Settings
 ) -> None:
-    """A desired=running subscription converges to actual=running via a single
-    reconcile tick driven entirely inside the app graph."""
     db = await app_container.get(Database)
     for coll in ("subscriptions", "orders", "positions"):
         await db.get_collection(coll).drop()
@@ -110,8 +94,6 @@ async def test_app_reconcile_runs_desired_running_without_http(
 
 
 async def test_app_backtest_execution_runs_without_http(app_container) -> None:
-    """A malformed run is executed + marked failed in-process — the engine drains
-    via the execution service inside the app graph, no HTTP enqueue path needed."""
     db = await app_container.get(Database)
     await db.get_collection("backtest_runs").drop()
 

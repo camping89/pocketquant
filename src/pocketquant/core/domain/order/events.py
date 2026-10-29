@@ -1,5 +1,3 @@
-"""Order domain events."""
-
 from dataclasses import dataclass
 
 from pocketquant.core.domain.order.enums import OrderSide
@@ -8,8 +6,6 @@ from pocketquant.core.domain.shared.events import DomainEvent
 
 @dataclass(frozen=True, eq=False)
 class OrderSubmittedEvent(DomainEvent):
-    """Event raised when an order is submitted to broker."""
-
     order_id: str = ""
     subscription_id: str = ""
     symbol: str = ""
@@ -18,14 +14,10 @@ class OrderSubmittedEvent(DomainEvent):
     price: float | None = None
 
 
+# An entry fill carries the order's SL and TP so the position mirror stores them; exit
+# fills leave them None.
 @dataclass(frozen=True, eq=False)
 class OrderFilledEvent(DomainEvent):
-    """Event raised when an order is fully filled.
-
-    An entry fill carries the order's SL and TP so the position mirror stores them;
-    exit fills leave them None.
-    """
-
     order_id: str = ""
     subscription_id: str = ""
     symbol: str = ""
@@ -38,8 +30,6 @@ class OrderFilledEvent(DomainEvent):
 
 @dataclass(frozen=True, eq=False)
 class OrderPartiallyFilledEvent(DomainEvent):
-    """Event raised when an order is partially filled."""
-
     order_id: str = ""
     subscription_id: str = ""
     filled_quantity: float = 0.0
@@ -49,8 +39,6 @@ class OrderPartiallyFilledEvent(DomainEvent):
 
 @dataclass(frozen=True, eq=False)
 class OrderCancelledEvent(DomainEvent):
-    """Event raised when an order is cancelled."""
-
     order_id: str = ""
     subscription_id: str = ""
     reason: str = ""
@@ -58,8 +46,6 @@ class OrderCancelledEvent(DomainEvent):
 
 @dataclass(frozen=True, eq=False)
 class OrderRejectedEvent(DomainEvent):
-    """Event raised when an order is rejected by broker."""
-
     order_id: str = ""
     subscription_id: str = ""
     reason: str = ""

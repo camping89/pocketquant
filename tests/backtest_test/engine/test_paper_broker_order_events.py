@@ -1,5 +1,3 @@
-"""Tests for PaperBrokerAdapter OrderEvent emission (Phase 2 contract)."""
-
 from __future__ import annotations
 
 from collections.abc import Generator

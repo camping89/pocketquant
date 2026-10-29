@@ -1,12 +1,5 @@
-"""Integration test — filter_new_bars allows non-contiguous gap fill via real Mongo.
-
-Seeds bars with a middle hole, runs filter_new_bars + insert_many directly,
-verifies hole bars are kept and persisted. Skips going through full
-SyncSymbolHandler to avoid mocking the entire handler dependency graph; the
-filter+repo path is the unit under test.
-
-Uses testcontainers MongoDB session-scoped from parent conftest.
-"""
+# Runs filter_new_bars and insert_many directly rather than the whole sync handler, to avoid
+# mocking its dependency graph; the filter and repository path is the unit under test.
 
 from __future__ import annotations
 
@@ -47,7 +40,6 @@ def _series(start: datetime, count: int) -> list[Bar]:
 
 @pytest_asyncio.fixture
 async def bar_repo(settings: Settings):
-    """Real BarRepository against test Mongo. Cleans collection before/after each test."""
     db = Database()
     await db.connect(settings)
     repo = BarRepository(db)
@@ -61,14 +53,10 @@ async def bar_repo(settings: Settings):
         await db.disconnect()
 
 
+# Seed 02:00..02:30 (31 bars) and 03:00..03:38 (39 bars), leaving a hole 02:31..02:59 (29
+# bars). A 100-bar fetch 02:00..03:39 keeps 30: the 29 hole bars and the new 03:39 tail.
 @pytest.mark.asyncio
 async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> None:
-    """Real-Mongo: seed two spans with a hole, run filter, verify hole survives.
-
-    Seed: 02:00..02:30 (31 bars) + 03:00..03:38 (39 bars). Hole 02:31..02:59 (29 bars).
-    Fetch (simulated): 100 bars 02:00..03:39.
-    Expected after filter: 30 bars (29 hole + 1 new tail at 03:39).
-    """
     base = datetime(2026, 5, 7, 2, 0, tzinfo=UTC)
 
     # Seed two non-contiguous spans.
@@ -127,17 +115,13 @@ async def test_middle_hole_filter_keeps_hole_bars(bar_repo: BarRepository) -> No
 # variant is the only one that touches a live Mongo round-trip. Keep skipped
 # until the find_datetimes mismatch is root-caused, then un-skip — deleting this
 # would hide a production-observed failure pattern, not remove dead code.
+# Mirrors the production failure: sync_backfill could not fill gaps behind `latest`.
 @pytest.mark.skip(
     reason="known gap: real-Mongo find_datetimes does not return seeded docs, so "
     "filter_new_bars under-filters; backfill-behind-latest path unverified"
 )
 @pytest.mark.asyncio
 async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) -> None:
-    """Real-Mongo: 3 tail bars exist; backfill 1000 → 997 new persisted.
-
-    Mirrors the production failure pattern (sync_backfill couldn't fill gaps
-    behind `latest`).
-    """
     base = datetime(2026, 5, 7, 3, 35, tzinfo=UTC)
 
     # Seed only the 3 most recent bars.
@@ -167,7 +151,6 @@ async def test_tail_gap_filter_fills_backfill_window(bar_repo: BarRepository) ->
 
 @pytest.mark.asyncio
 async def test_continuous_db_filter_drops_overlap(bar_repo: BarRepository) -> None:
-    """Real-Mongo: contiguous DB; refetch overlap → only new tail kept."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
 
     seeded = _series(base, 99)  # 00:00..01:38

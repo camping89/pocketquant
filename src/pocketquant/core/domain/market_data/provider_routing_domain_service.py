@@ -1,17 +1,5 @@
-"""Which data provider serves a symbol: the composite symbol's suffix names it.
-
-``BTCUSDT:BINANCE`` is served by ``binance`` and ``XAUUSD:EXNESS`` by
-``exness``: the suffix is the provider id, upper-cased in full. The
-execution broker is a separate, per-strategy setting and plays no part here.
-
-Both routing adapters — REST history and realtime quotes — need the same
-answer, so neither owns the rule. Keeping it here also keeps it testable
-without constructing an adapter.
-
-A symbol with no ``symbols`` document yet takes its asset class and calendar
-from its provider's defaults, so an unseeded symbol is described by where its
-bars come from rather than assumed to be crypto.
-"""
+# Both routing adapters (REST history and realtime quotes) need this answer, so neither
+# owns the rule. The execution broker is a separate per-strategy setting.
 
 from __future__ import annotations
 
@@ -25,14 +13,11 @@ from pocketquant.core.domain.symbol.value_objects import (
 )
 
 
-class UnknownDataProviderError(ValueError):
-    """The symbol's suffix names no registered data provider."""
+class UnknownDataProviderError(ValueError): ...
 
 
 @dataclass(frozen=True)
 class DataProviderDefaults:
-    """What an unseeded symbol from this provider is assumed to be."""
-
     asset_class: AssetClass
     calendar_id: str
 
@@ -47,11 +32,6 @@ DATA_PROVIDER_DEFAULTS: dict[str, DataProviderDefaults] = {
 
 
 def provider_id_for(symbol: str) -> str:
-    """The provider id a composite symbol names: its suffix, lower-cased.
-
-    Raises:
-        UnknownDataProviderError: when the symbol carries no suffix.
-    """
     _, separator, suffix = symbol.rpartition(":")
     if not separator or not suffix:
         raise UnknownDataProviderError(
@@ -60,13 +40,8 @@ def provider_id_for(symbol: str) -> str:
     return suffix.lower()
 
 
+# Raises on an unknown suffix: guessing would give a gold symbol a 24/7 crypto calendar.
 def provider_defaults_for(symbol: str) -> DataProviderDefaults:
-    """The defaults of the provider ``symbol`` names.
-
-    Raises:
-        UnknownDataProviderError: when the suffix is not a registered provider.
-            Guessing would give, say, a gold symbol a 24/7 crypto calendar.
-    """
     provider_id = provider_id_for(symbol)
     defaults = DATA_PROVIDER_DEFAULTS.get(provider_id)
     if defaults is None:
@@ -77,7 +52,6 @@ def provider_defaults_for(symbol: str) -> DataProviderDefaults:
 
 
 def unseeded_symbol(symbol: str) -> Symbol:
-    """The record an unseeded symbol is assumed to have, from its provider."""
     defaults = provider_defaults_for(symbol)
     return Symbol.create(
         symbol=symbol,

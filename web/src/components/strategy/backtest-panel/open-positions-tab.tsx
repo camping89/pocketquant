@@ -3,8 +3,7 @@ import { fmtDateTime, fmtPrice } from './positions-utils'
 import { useTimezone } from '../../../lib/use-timezone'
 import { formatQty } from '../../../lib/number-format'
 
-/** Still-open lots at run-end — a small, non-paged list (kept out of the paged
- *  closed-trades table so cursor paging only ever walks ``backtest_trades``). */
+// Kept out of the paged closed-trades table so cursor paging only ever walks backtest_trades.
 export function OpenPositionsTab({ positions }: { positions: BacktestPosition[] }) {
   const { mode } = useTimezone()
 

@@ -6,8 +6,6 @@ from pocketquant.core.domain.order import OrderSide, OrderStatus
 
 @dataclass
 class OrderResult:
-    """Result of an order submission to broker."""
-
     order_id: str
     broker_order_id: str
     status: OrderStatus
@@ -25,12 +23,10 @@ class OrderResult:
 
     @property
     def is_success(self) -> bool:
-        """Check if order was accepted by broker."""
         return self.status not in (OrderStatus.REJECTED,)
 
     @property
     def is_filled(self) -> bool:
-        """Check if order is fully filled."""
         return self.status == OrderStatus.FILLED
 
 

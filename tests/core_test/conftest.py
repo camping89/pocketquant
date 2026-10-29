@@ -1,12 +1,3 @@
-"""Pytest configuration and fixtures.
-
-Tests run against ephemeral docker containers (testcontainers) so they never
-touch the production VPS database. The session-scoped Mongo + Redis containers
-live in the root ``tests/conftest.py`` and resolve here via fixture inheritance.
-
-Local Docker is required.
-"""
-
 from __future__ import annotations
 
 import os
@@ -25,20 +16,14 @@ from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.redis import Cache
 
 
+# time.tzset only refreshes the C library while tzlocal memoizes the zone separately, so a
+# caller that refreshes only one of them sees a stale zone and proves nothing.
+# Pass canonical IANA names. Deprecated aliases (Asia/Saigon, US/Central) live in the
+# separate tzdata-legacy package on Debian/Ubuntu, and glibc falls back to UTC for a zone it
+# cannot find rather than raising, hence the resolve check. require_resolved=False exercises
+# that degradation deliberately.
 @pytest.fixture
 def host_timezone() -> Iterator[Callable[..., None]]:
-    """Switch the process timezone for one test, restoring it on teardown.
-
-    ``time.tzset`` only refreshes the C library, while ``tzlocal`` memoizes the
-    zone separately, so a caller that changes only one of them observes a stale
-    zone and silently proves nothing.
-
-    Pass canonical IANA names. Deprecated aliases (``Asia/Saigon``, ``US/Central``)
-    live in the separate ``tzdata-legacy`` package on Debian/Ubuntu, and glibc
-    falls back to UTC for a zone it cannot find rather than raising — hence the
-    resolve check. Set ``require_resolved=False`` to exercise that degradation
-    deliberately.
-    """
     original = os.environ.get("TZ")
 
     def refresh_caches() -> None:
@@ -74,7 +59,6 @@ def settings(
     mongo_container: MongoDbContainer,
     redis_container: RedisContainer,
 ) -> Settings:
-    """Test Settings wired to ephemeral containers. Never reads any .env file."""
     redis_host = redis_container.get_container_host_ip()
     redis_port = redis_container.get_exposed_port(6379)
 
@@ -102,10 +86,6 @@ def event_bus() -> EventBus:
 
 @pytest.fixture
 async def database(settings: Settings) -> AsyncIterator[Database]:
-    """Per-test Mongo Database connected to the testcontainer.
-
-    Drops the backtest collections on teardown so they don't leak between tests.
-    """
     db = Database()
     await db.connect(settings)
     try:
@@ -126,7 +106,6 @@ async def database(settings: Settings) -> AsyncIterator[Database]:
 
 @pytest.fixture
 async def cache(settings: Settings) -> AsyncIterator[Cache]:
-    """Per-test Redis Cache connected to the testcontainer."""
     c = Cache()
     await c.connect(settings)
     try:

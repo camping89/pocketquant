@@ -1,11 +1,7 @@
-"""A weekly bar opens on Monday, never on the epoch's Thursday.
-
-The in-progress cutoff used to floor the epoch directly: ``floor(now / 604800)``
-lands on a Thursday because 1970-01-01 was one. From Thursday to Sunday that put
-the cutoff inside the current week, so the partial week-to-date bar was treated
-as closed and persisted. Deriving the cutoff from ``get_bar_start`` — the same
-alignment the drop filter uses — makes the two impossible to disagree.
-"""
+# floor(now / 604800) lands on a Thursday because 1970-01-01 was one. From Thursday to
+# Sunday that put the in-progress cutoff inside the current week, so the partial
+# week-to-date bar was treated as closed and persisted. Deriving the cutoff from
+# get_bar_start, the alignment the drop filter uses, keeps the two in agreement.
 
 from __future__ import annotations
 

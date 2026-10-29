@@ -1,21 +1,3 @@
-"""Per-run isolated engine stack for backtests.
-
-A backtest must not share the live execution engine's EventBus. The live
-``StrategyAppService``/``PositionAppService`` subscribe to ``BarCompletedEvent``
-and ``OrderFilledEvent`` on the application-wide bus; replaying historical bars
-or publishing synthetic exit fills onto that bus would drive live handlers
-(phantom positions, bar dispatch to unrelated strategies) and let concurrent
-optimization runs cross-talk.
-
-Each sandbox builds a fresh ``EventBus`` and a ``StrategyAppService`` bound to
-it, so handler bindings live and die with the run. Order/position trackers are throwaway
-in-memory instances; the position tracker is deliberately **not started**, so it
-registers no handlers — the PaperBrokerAdapter is the position source of truth during a
-backtest, and the strategy's own one-position cap governs re-entry. Trades are
-built by the ``BacktestReportAppService`` from broker fill callbacks, independent
-of this bus.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -74,33 +56,23 @@ class _InMemoryPositionRepo:
 
 
 class NoStoredBars:
-    """A backtest has no stored bars."""
-
     async def find(self, *args: object, **kwargs: object) -> list[Bar]:
         return []
 
 
 class NoClosedTrades:
-    """A backtest has no closed live trades."""
-
     async def realized_net(self, run_ids: list[str]) -> float:
         return 0.0
 
 
 class Continuous24x7CalendarFactory:
-    """A backtest has no session calendar."""
-
     async def for_symbol(self, symbol: str) -> ITradingCalendarPort:
         return Continuous24x7Calendar()
 
 
+# StrategyAppService asks the factory only in load_strategy (the live path).
+# Backtests inject a prepared broker, so this is a safety stand-in.
 class _SingleBrokerFactory:
-    """Returns the run's pre-built broker; the inject path never asks the factory.
-
-    StrategyAppService only consults the factory in ``load_strategy`` (live
-    path). Backtests inject a prepared broker, so this is a safety stand-in.
-    """
-
     def __init__(self, broker: IBrokerPort) -> None:
         self._broker = broker
 
@@ -110,14 +82,6 @@ class _SingleBrokerFactory:
 
 @dataclass
 class BacktestSandboxAppService:
-    """An isolated engine stack for one backtest run.
-
-    ``event_bus`` and ``strategy_app_service`` are private to this run. Build a
-    broker with ``create_broker`` (wired to this bus), inject the strategy into
-    ``strategy_app_service``, run via ``BacktestAppService(event_bus=...)``, then
-    ``aclose()`` to unload strategies and release bus bindings.
-    """
-
     event_bus: EventBus
     strategy_app_service: StrategyAppService
 
@@ -153,8 +117,12 @@ class BacktestSandboxAppService:
                 logger.warning("backtest_sandbox.unload_failed", sid=sid, error=str(exc))
 
 
+# A backtest must not share the live EventBus: replayed bars or synthetic exit fills
+# would drive live handlers (phantom positions, bars sent to unrelated strategies)
+# and let concurrent runs cross-talk. The position tracker is deliberately not
+# started, so it registers no handlers: the paper broker is the position source of
+# truth during a backtest.
 async def build_backtest_sandbox() -> BacktestSandboxAppService:
-    """Create an isolated engine stack bound to a fresh per-run EventBus."""
     bus = EventBus()
     placeholder_broker = PaperBrokerAdapter(event_bus=bus)
     engine = StrategyAppService(

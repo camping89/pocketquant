@@ -1,5 +1,3 @@
-"""INFO lines logged inside a backtest replay do not reach the log."""
-
 from __future__ import annotations
 
 import pytest

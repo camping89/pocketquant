@@ -1,9 +1,5 @@
-"""LiveMetricsQueryService — trade-derived metrics per subscription (M1).
-
-Covers: aggregate stats from seeded trades, %-return omission, empty-subscription
-no-crash, and the drawdown-stays-finite regression (a zero baseline made
-``max_drawdown`` divide by a zero running peak → garbage).
-"""
+# Drawdown must stay finite: a zero baseline once made max_drawdown divide by a zero running
+# peak.
 
 from __future__ import annotations
 

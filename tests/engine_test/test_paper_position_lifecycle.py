@@ -1,10 +1,3 @@
-"""A paper position never outlives its subscription or the process.
-
-Unload drops the subscription's paper position, in the broker and in the
-mirror, and disconnects a broker no other subscription holds. A restart deletes
-the mirror rows of paper subscriptions and keeps every other row.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

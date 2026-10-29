@@ -1,10 +1,3 @@
-"""tracked_symbols feature service — CRUD on the tracked composite-symbol list.
-
-Removing a symbol cascades to every document and cache key that references it.
-Request DTOs keep their original class names so OpenAPI schema components
-stay stable (routes expose them as request bodies).
-"""
-
 from pydantic import BaseModel, Field, field_validator
 
 from pocketquant.core.common.constants import (
@@ -52,9 +45,8 @@ from pocketquant.engine.strategy.strategy_command_service import StrategyCommand
 logger = get_logger(__name__)
 
 
+# Request DTO class names stay fixed so OpenAPI schema components stay stable.
 class AddTrackedSymbolCommand(BaseModel):
-    """Add composite ``{code}:{exchange}`` symbol to tracked_symbols. Idempotent — 200 if exists."""
-
     symbol: str = Field(
         ...,
         min_length=3,
@@ -72,8 +64,6 @@ class AddTrackedSymbolCommand(BaseModel):
 
 
 class TrackedSymbolService:
-    """CRUD on tracked_symbols; ``remove`` cascades to all data of the symbol."""
-
     def __init__(
         self,
         tracked_symbol_repository: TrackedSymbolRepository,
@@ -111,7 +101,6 @@ class TrackedSymbolService:
         }
 
     async def add(self, request: AddTrackedSymbolCommand) -> dict:
-        """Upsert composite symbol into tracked_symbols. Returns current state."""
         ts = TrackedSymbol(
             symbol=request.symbol,
             created_at=utc_now(),
@@ -125,16 +114,10 @@ class TrackedSymbolService:
             "seeded_from": ts.seeded_from,
         }
 
+    # Idempotent: each step deletes what is left, so a retry after a partial run
+    # finishes the cleanup. tracked_symbols goes first so sync jobs and the quote feed
+    # stop producing data for the symbol.
     async def remove(self, symbol: str) -> dict:
-        """Delete the symbol and every document and cache key that references it.
-
-        Idempotent: each step deletes whatever is left, so a retry after a
-        partial run (or on an already-removed symbol) finishes the cleanup and
-        reports 0 for steps already done. tracked_symbols goes first so sync
-        jobs and the quote feed stop producing data for the symbol; each
-        subscription is stopped, then removed through the strategy command path.
-        Returns per-collection deleted counts under ``deleted``.
-        """
         deleted = {"tracked_symbols": await self._repo.delete_by_symbol(symbol)}
         deleted["subscriptions"] = 0
         for sub in await self._sub_repo.list_by_symbol(symbol):
@@ -157,7 +140,6 @@ class TrackedSymbolService:
         return {"symbol": symbol, "status": "removed", "deleted": deleted}
 
     async def list_all(self) -> list[dict]:
-        """Return all tracked composite symbols."""
         symbols = await self._repo.list_all()
         return [
             {

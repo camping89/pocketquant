@@ -16,8 +16,7 @@ const SERIES_COLORS = ['#4A9782', '#C96442', '#6c8eef']
 
 const toTime = (iso: string): Time => ((parseIso(iso)?.valueOf() ?? 0) / 1000) as Time
 
-/** Normalize an equity curve to % return off the run's first point. Cross-scope
- *  runs have different price levels, so % is the only comparable axis (Q2). */
+// Cross-scope runs have different price levels, so % return is the only comparable axis.
 function toPercentSeries(run: BacktestRunResult): LineData[] {
   const curve = run.equity_curve
   if (curve.length === 0) return []
@@ -26,7 +25,6 @@ function toPercentSeries(run: BacktestRunResult): LineData[] {
   return curve.map((p) => ({ time: toTime(p.timestamp), value: (p.equity / base - 1) * 100 }))
 }
 
-/** Overlay multiple runs' equity curves, each normalized to % return. */
 export function EquityOverlay({ runs }: { runs: BacktestRunResult[] }) {
   const { mode } = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)

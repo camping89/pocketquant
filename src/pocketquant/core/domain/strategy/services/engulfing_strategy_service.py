@@ -1,20 +1,3 @@
-"""Engulfing — full-candle engulfing entries with a directional quality filter.
-
-A pattern qualifies only when the current bar covers the previous one on both
-axes: body over body AND range over range (see ``detect_engulfing``). Entry: a
-strong engulfing (rejection wick against the trade direction within
-``max_rejection_wick_pct``) opens one position.
-
-    LONG  entry=close; pattern_low=min(low_curr, low_prev); SL=pattern_low*(1-buf)
-          risk=entry-SL; tp_rr=entry+risk; key=max(prev N highs); TP=max(tp_rr, key)
-    SHORT mirror: pattern_high=max(high_curr, high_prev); SL=pattern_high*(1+buf)
-          risk=SL-entry; tp_rr=entry-risk; key=min(prev N lows); TP=min(tp_rr, key)
-
-Single TP, at most one open position. ``_open_direction`` is set when the entry
-fill is confirmed (not optimistically on signal) so a rejected/zero-size entry
-cannot wedge the cap; an opposite-side fill clears it on the round-trip close.
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -131,13 +114,9 @@ class EngulfingStrategyService(IStrategyService):
         self._prev_bar = bar
         return signal
 
+    # _open_direction is set on the confirmed fill, not on the signal, so a rejected or
+    # zero-size entry cannot wedge the one-position cap.
     async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
-        """Set the open direction on the entry fill; clear it on the close.
-
-        While flat, the next fill is the entry — record its side as the open
-        direction. While in a position, an opposite-side fill is the SL/TP
-        round-trip close.
-        """
         side = getattr(order, "side", None)
         if self._open_direction is None:
             if side == OrderSide.BUY:

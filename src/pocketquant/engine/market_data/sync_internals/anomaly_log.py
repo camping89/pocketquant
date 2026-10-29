@@ -1,10 +1,3 @@
-"""No-progress sync anomaly log emission.
-
-Single structured WARN per non-progress sync; ERROR exactly once at the moment
-the streak crosses the 3× cadence stuck threshold. Subsequent stucks stay at
-WARN to avoid alert fatigue during extended provider outages.
-"""
-
 from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import INTERVAL_SECONDS
@@ -18,6 +11,9 @@ logger = get_logger(__name__)
 _STUCK_STREAK_THRESHOLD = 3
 
 
+# ERROR fires once, when the streak crosses the stuck threshold; later stucks stay
+# WARN to avoid alert fatigue in long provider outages. Silent while the market is
+# shut: no bars out of hours is the schedule working, not an anomaly.
 def emit_no_progress(
     symbol: str,
     interval: Interval,
@@ -30,14 +26,6 @@ def emit_no_progress(
     latest_bar: Bar | None,
     calendar: ITradingCalendarPort,
 ) -> None:
-    """Emit anomaly log for a no-progress sync (inserted == 0 with existing data).
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-
-    Silent while the market is shut: no bars arriving out of hours is the
-    schedule working, not an anomaly, and warning about it once per symbol per
-    minute all night would bury the real ones.
-    """
     if not calendar.is_open(datetime.now(UTC)):
         # DEBUG, not INFO: this is a per-symbol-per-minute hot path.
         logger.debug(

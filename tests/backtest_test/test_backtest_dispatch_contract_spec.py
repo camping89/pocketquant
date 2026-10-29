@@ -1,5 +1,3 @@
-"""An ad-hoc backtest on a lot-sized CFD runs with that symbol's contract spec."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -27,8 +25,6 @@ class _FakeCalendars:
 
 
 class _CapturingRunner:
-    """Replaces BacktestAppService: records what the execution service hands the engine."""
-
     seen: dict[str, Any] = {}
 
     def __init__(self, *, broker: Any, **_: Any) -> None:

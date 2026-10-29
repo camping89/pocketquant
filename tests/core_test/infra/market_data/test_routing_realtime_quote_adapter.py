@@ -1,9 +1,6 @@
-"""Realtime routing: one owner per symbol, a merged view for reconcile.
-
-Unlike the REST path there is deliberately no fallback here. Two feeds for one
-symbol would both reach BarBuilderDomainService and double-count its ticks,
-which is worse than a missing feed because nothing reports it.
-"""
+# Unlike the REST path there is deliberately no fallback here. Two feeds for one symbol
+# would both reach BarBuilderDomainService and double-count its ticks, which is worse than a
+# missing feed because nothing reports it.
 
 from __future__ import annotations
 
@@ -60,13 +57,10 @@ async def test_subscribe_uses_only_the_provider_the_suffix_names() -> None:
     binance.subscribe.assert_not_awaited()
 
 
+# The owner is deliberately not the first-registered child, so delegating to whichever child
+# comes first would fail.
 @pytest.mark.asyncio
 async def test_unsubscribe_reaches_the_owning_provider() -> None:
-    """The owner is deliberately not the first-registered child.
-
-    With the owner registered first, delegating to "whichever child comes
-    first" would pass this while ignoring the recorded owner entirely.
-    """
     first_registered = _child()
     owner = _child()
     adapter = _adapter({"exness": first_registered, "binance": owner})
@@ -78,9 +72,9 @@ async def test_unsubscribe_reaches_the_owning_provider() -> None:
     first_registered.unsubscribe.assert_not_awaited()
 
 
+# Reconcile can ask to drop a symbol this adapter never subscribed.
 @pytest.mark.asyncio
 async def test_unsubscribing_an_unknown_symbol_reaches_no_child() -> None:
-    """Reconcile can ask to drop a symbol this adapter never subscribed."""
     child = _child()
 
     await _adapter({"exness": child}).unsubscribe("NEVER:SUBSCRIBED")
@@ -88,12 +82,10 @@ async def test_unsubscribing_an_unknown_symbol_reaches_no_child() -> None:
     child.unsubscribe.assert_not_awaited()
 
 
+# WsSubscriptionAppService._reconcile diffs against these keys; a child missing from the
+# merged view would be resubscribed every tick.
 @pytest.mark.asyncio
 async def test_subscriptions_merges_children() -> None:
-    """``WsSubscriptionAppService._reconcile`` diffs against these keys.
-
-    A child missing from the merged view would be resubscribed every tick.
-    """
     adapter = _adapter(
         {
             "exness": _child(subscriptions={"XAUUSD:EXNESS": ("k1", None)}),
@@ -119,9 +111,9 @@ async def test_last_tick_at_is_the_max_across_children() -> None:
     assert adapter.last_tick_at == newer
 
 
+# A silent child reports None, and max over it would raise.
 @pytest.mark.asyncio
 async def test_last_tick_at_ignores_a_child_that_has_never_ticked() -> None:
-    """A silent child reports ``None``; ``max`` over it would raise."""
     seen = datetime(2026, 5, 5, 12, 0, tzinfo=UTC)
     adapter = _adapter({"exness": _child(last_tick_at=None), "binance": _child(last_tick_at=seen)})
 
@@ -129,12 +121,9 @@ async def test_last_tick_at_ignores_a_child_that_has_never_ticked() -> None:
     assert _adapter({"exness": _child(last_tick_at=None)}).last_tick_at is None
 
 
+# Returning a key would make reconcile believe a feed exists.
 @pytest.mark.asyncio
 async def test_an_unknown_suffix_raises_rather_than_silently_not_subscribing() -> None:
-    """The suffix names no registered provider — reconcile must see a failure.
-
-    Returning a key would make the caller believe a feed exists.
-    """
     child = _child()
 
     with pytest.raises(UnknownDataProviderError, match="No realtime provider registered"):
@@ -162,21 +151,18 @@ async def test_is_connected_is_true_when_any_child_is() -> None:
     assert _adapter({"exness": _child(connected=False)}).is_connected() is False
 
 
+# DI resolves this structurally, so a missing member fails only at runtime. issubclass
+# cannot be used: the Protocol has non-method members, which makes it an isinstance-only
+# runtime check.
 @pytest.mark.asyncio
 async def test_the_adapter_satisfies_the_realtime_port() -> None:
-    """DI resolves this structurally; a missing member fails only at runtime.
-
-    ``issubclass`` cannot be used: the Protocol has non-method members, which
-    makes it an isinstance-only runtime check.
-    """
     adapter = _adapter({"binance": _child()})
 
     assert isinstance(adapter, IRealtimeQuoteProviderPort)
 
 
+# Runs until cancelled, like a real WS loop.
 class _BlockingChild:
-    """A child whose feed runs until cancelled, like a real WS loop."""
-
     def __init__(self) -> None:
         self.started = asyncio.Event()
         self.cancelled = False
@@ -191,17 +177,11 @@ class _BlockingChild:
 
 
 class TestRunForeverSupervisesEveryChild:
-    """Children must run concurrently, and cancellation must reach all of them."""
-
+    # A real feed's run_forever never returns, so sequential awaits would leave the second
+    # provider unstarted; on teardown stop_quote_feed cancels one task and expects every
+    # child to wind down behind it.
     @pytest.mark.asyncio
     async def test_children_run_concurrently_and_all_see_the_cancel(self) -> None:
-        """Sequential awaits would strand every child after the first.
-
-        A real feed's ``run_forever`` never returns, so awaiting them in turn
-        would leave the second provider permanently unstarted — and on
-        teardown ``stop_quote_feed`` cancels one task and expects every child
-        to wind down behind it.
-        """
         first, second = _BlockingChild(), _BlockingChild()
         adapter = _adapter({"exness": first, "binance": second})
 

@@ -1,4 +1,4 @@
-"""Leverage scales the exposure cap, so a small leveraged account reaches the minimum lot."""
+# Leverage scales the exposure cap, so a small leveraged account reaches the minimum lot.
 
 from __future__ import annotations
 

@@ -18,16 +18,10 @@ const INTERVAL_LABELS: Record<Interval, string> = {
 export interface IntervalOption {
   label: string
   value: Interval
-  /** False when no completed sync entry exists for this symbol+interval. */
+  // False when no completed sync entry exists for this symbol and interval.
   available: boolean
 }
 
-/**
- * Returns all defined intervals with an `available` flag.
- * Disabled when no sync_status entry exists with status="completed" for the composite symbol.
- *
- * @param symbol - composite symbol string e.g. "BTCUSDT:BINANCE"
- */
 export function useAvailableIntervals(symbol: string): IntervalOption[] {
   const { data: syncStatuses } = useQuery({
     queryKey: ['sync-status'],

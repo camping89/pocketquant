@@ -1,9 +1,6 @@
-"""Subscription entity — desired_state/actual_state, mongo round-trip, back-compat, errors.
-
-The control-plane contract: ``desired_state`` is what a human/handler wants;
-``actual_state`` is the reconcile loop's mirror of RAM truth. Both default
-``stopped`` and tolerate legacy docs lacking the keys.
-"""
+# Control-plane contract: desired_state is what a human or handler wants; actual_state is
+# the reconcile loop's mirror of RAM truth. Both default to stopped and tolerate legacy docs
+# lacking the keys.
 
 from __future__ import annotations
 

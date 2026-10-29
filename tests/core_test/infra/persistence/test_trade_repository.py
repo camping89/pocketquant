@@ -1,7 +1,5 @@
-"""TradeRepository CRUD + index tests against a real Mongo testcontainer.
-
-Live ``trades`` collection: ``run_id`` == ``subscription_id``, read scoped by sub.
-"""
+# In the live trades collection run_id == subscription_id, and reads are scoped by
+# subscription.
 
 from __future__ import annotations
 

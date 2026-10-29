@@ -1,9 +1,6 @@
-"""ExnessBrokerAdapter: safety rules, event mapping, trade emission and recovery.
-
-The fake client answers with the recorded shapes in
-``tests/core_test/infra/exness/fixtures`` (conditions, deals envelope, snapshot,
-events acknowledgement); close deals follow the spec schema inside that envelope.
-"""
+# The fake client answers with the recorded shapes in tests/core_test/infra/exness/fixtures
+# (conditions, deals envelope, snapshot, events acknowledgement); close deals follow the
+# spec schema inside that envelope.
 
 from __future__ import annotations
 
@@ -61,8 +58,6 @@ def _page(deals: list[dict[str, Any]], next_cursor: str | None = None) -> dict[s
 
 
 class _FakeClient:
-    """Routes ``call`` by operation id; records every call."""
-
     def __init__(self) -> None:
         self.account_id = "acc"
         self.api_key = API_KEY
@@ -126,8 +121,6 @@ class _Repo:
 
 
 class _PauseStore:
-    """Stands in for the stored entry pause."""
-
     def __init__(self) -> None:
         self.paused: bool = False
         self.error: Exception | None = None
@@ -212,9 +205,9 @@ async def _drain() -> None:
         await asyncio.sleep(0)
 
 
+# Keeps the operation watcher from outliving a test unless the test drives it.
 @pytest.fixture(autouse=True)
 def _no_watch_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the operation watcher from outliving a test unless a test drives it."""
     monkeypatch.setattr(adapter_module, "_STATUS_POLLS", 0)
     monkeypatch.setattr(adapter_module, "_FILL_TIMEOUT_S", 3600)
 
@@ -649,8 +642,8 @@ async def test_unresolved_operation_reopens_the_gate_after_a_snapshot(
     assert second.status == OrderStatus.SUBMITTED
 
 
+# Starts a snapshot rebuild and leaves it suspended inside find_open.
 async def _park_snapshot_rebuild(h: _Harness, repo: _Repo) -> asyncio.Task[None]:
-    """Start a snapshot rebuild and leave it suspended inside ``find_open``."""
     repo.gate = asyncio.Event()
     rebuild = asyncio.create_task(h.broker._reconcile_snapshot())
     await _drain()
@@ -775,10 +768,10 @@ async def test_restart_closes_repo_position_missing_from_snapshot() -> None:
     assert h.trades[0].pnl == -5.1
 
 
+# Recorded frames through ExnessStream: snapshot, order, reconnect, snapshot, fill.
 async def test_replayed_reconnect_delivers_the_fill_of_an_inflight_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Recorded frames through ``ExnessStream``: snapshot, order, reconnect, snapshot, fill."""
     monkeypatch.setattr(exness_stream, "_BACKOFF_INITIAL_S", 0)
     ack = json.dumps(_fixture("events_snapshot"))
     snapshot = {"event_type": "trading_state_snapshot", "payload": _fixture("snapshot")}

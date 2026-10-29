@@ -1,5 +1,3 @@
-"""SubscriptionRepository — MongoDB persistence for strategy subscriptions."""
-
 from pymongo.errors import DuplicateKeyError
 
 from pocketquant.core.common.logging import get_logger
@@ -14,21 +12,11 @@ logger = get_logger(__name__)
 
 
 class SubscriptionRepository(BaseRepository):
-    """MongoDB repository for Subscription persistence.
-
-    Collection: subscriptions. PK: _id = uuid7 string; dedup of
-    (strategy_code, symbol, interval) is enforced by the unique compound index
-    ``ix_subscriptions_dedup_triple``.
-    """
-
     _collection_name = "subscriptions"
 
+    # DuplicateKeyError comes from the compound triple index: two adds of one triple carry
+    # different uuid7 ids yet still collide.
     async def add(self, sub: Subscription) -> None:
-        """Insert a new subscription. Raises SubscriptionAlreadyExistsError if duplicate.
-
-        DuplicateKeyError comes from the compound triple index — two adds of the
-        same triple carry different uuid7 ids yet still collide at the DB layer.
-        """
         collection = self._collection()
         try:
             await collection.insert_one(sub.to_mongo())
@@ -39,7 +27,6 @@ class SubscriptionRepository(BaseRepository):
             ) from None
 
     async def get(self, sub_id: str) -> Subscription | None:
-        """Return a subscription by its uuid7 ID string, or None if not found."""
         collection = self._collection()
         doc = await collection.find_one({"_id": sub_id})
         if not doc:

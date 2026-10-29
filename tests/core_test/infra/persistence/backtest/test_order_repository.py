@@ -1,5 +1,3 @@
-"""BacktestOrderRepository CRUD + index tests against a real Mongo testcontainer."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -20,8 +18,8 @@ from pocketquant.core.infra.persistence.repositories.backtest_order_repository i
 NOW = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
 
 
+# PKs are UUIDs, so a short test handle maps to a deterministic uuid string.
 def _oid(name: str) -> str:
-    """Deterministic uuid string for a short test order handle (PKs are UUIDs now)."""
     return str(uuid5(NAMESPACE_OID, name))
 
 

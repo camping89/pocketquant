@@ -1,8 +1,3 @@
-"""The rate limiter caps each client, including the public safeguards read.
-
-It never limits the pause and resume writes.
-"""
-
 from __future__ import annotations
 
 from typing import Any

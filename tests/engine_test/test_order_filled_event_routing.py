@@ -1,9 +1,5 @@
-"""StrategyAppService._on_order_filled — routes fills to the owning strategy by id.
-
-Bug #1 fix: a fill reaches ``strategy.on_order_filled`` so the strategy can reset
-its open-direction and re-enter. Routing is by ``subscription_id`` (= strategy
-id); a fill for an unknown id is a no-op.
-"""
+# A fill must reach strategy.on_order_filled so the strategy can reset its open direction
+# and re-enter. Routing is by subscription_id (= strategy id).
 
 from __future__ import annotations
 

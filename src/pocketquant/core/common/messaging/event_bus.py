@@ -23,13 +23,9 @@ class EventBus:
             return True
         return False
 
+    # A raising handler does not stop the others; the first error is re-raised after all
+    # ran. The list is copied because a handler may (un)subscribe while it awaits.
     async def publish(self, event: DomainEvent) -> None:
-        """Publish event to all subscribers (FIFO order).
-
-        A raising handler does not stop the others; the first error is re-raised
-        after every handler ran. The list is copied because a handler may
-        subscribe or unsubscribe while it awaits.
-        """
         errors: list[Exception] = []
         for handler in list(self._handlers.get(type(event), [])):
             try:

@@ -1,8 +1,4 @@
-"""Settings for the market-data infra tests.
-
-A ``Settings`` built with ``_env_file=None`` gives the real type without
-reading the developer's ``.env``.
-"""
+# Settings(_env_file=None) gives the real type without reading the developer's .env.
 
 from __future__ import annotations
 

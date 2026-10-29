@@ -22,36 +22,20 @@ class Interval(str, Enum):
     DAY_1 = "1d"
     WEEK_1 = "1w"
 
+    # The 24/7 answer, kept because Continuous24x7Calendar reads this table. Anything
+    # holding a calendar asks the calendar instead.
     @property
     def periods_per_year(self) -> float:
-        """Number of bars of this interval in one calendar year (crypto, 365d).
-
-        Deprecated as an annualization source: the calendar owns annualization.
-        This is the 24/7 answer, kept because ``Continuous24x7Calendar`` reads
-        this same table. Anything holding a calendar should ask it instead.
-        """
         return _PERIODS_PER_YEAR[self.value]
 
+    # None, not an error, for a stale or queued request carrying a removed interval;
+    # callers then skip annualization (Sharpe = 0).
     @staticmethod
     def periods_per_year_for(interval: str) -> float | None:
-        """Safe lookup by raw string; returns None for an unknown interval.
-
-        Deprecated as an annualization source, for the same reason as
-        ``periods_per_year``: this is the 24/7 answer, and a symbol on a session
-        calendar has a different one. Annualization callers skip scaling
-        (Sharpe=0) rather than raise on a stale/queued request carrying an
-        interval no longer in the enum.
-        """
         return _PERIODS_PER_YEAR.get(interval)
 
 
 class AssetClass(str, Enum):
-    """What an instrument is, which determines how it trades and settles.
-
-    Drives calendar selection and contract units; see
-    ``pocketquant.core.domain.symbol.value_objects``.
-    """
-
     CRYPTO_SPOT = "crypto_spot"
     CRYPTO_PERP = "crypto_perp"
     CFD = "cfd"

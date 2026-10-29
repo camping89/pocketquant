@@ -33,8 +33,7 @@ export function useStrategyList() {
   })
 }
 
-/** Start a run, then deep-link via the run path segment so the workbench selects
- *  it and reload/back/forward work. */
+// Deep-link via the run path segment so the workbench selects it and reload/back/forward work.
 export function useRunBacktest() {
   const navigate = useNavigate()
   return useMutation({
@@ -44,7 +43,6 @@ export function useRunBacktest() {
   })
 }
 
-/** Poll a run until it reaches a terminal status; stop polling once terminal. */
 export function useBacktestRun(runId: string | null) {
   return useQuery({
     queryKey: ['backtest-run', runId],
@@ -54,7 +52,6 @@ export function useBacktestRun(runId: string | null) {
   })
 }
 
-/** History runs for one strategy scope. */
 export function useBacktestRuns(scope: BacktestRunScope | null) {
   return useQuery({
     queryKey: ['backtest-runs', scope],
@@ -63,9 +60,6 @@ export function useBacktestRuns(scope: BacktestRunScope | null) {
   })
 }
 
-/** History runs across ALL strategies (the default "All" view), optionally
- *  narrowed by symbol/interval. Fans out over the strategy registry FE-side —
- *  there is no list-all endpoint by design. */
 export function useAllBacktestRuns(scope: Omit<BacktestRunScope, 'strategy'>, enabled = true) {
   return useQuery({
     queryKey: ['backtest-runs', 'all', scope],
@@ -80,9 +74,7 @@ export interface TradesQueryOpts {
   filter: TradeFilterKey
 }
 
-/** Cursor-paged closed trades — keyed by sort/filter so changing either starts a
- *  fresh keyset walk. Lazy: only runs once ``enabled`` (Trades tab open + run
- *  terminal). Scroll-to-end drives ``fetchNextPage`` in the table. */
+// Keyed by sort/filter so changing either starts a fresh keyset walk.
 export function useBacktestTrades(
   runId: string,
   { sortKey, sortDir, filter }: TradesQueryOpts,
@@ -98,7 +90,6 @@ export function useBacktestTrades(
   })
 }
 
-/** All trades' entry/exit/direction for the chart's entry/exit arrows — lazy. */
 export function useBacktestMarkers(runId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['backtest-markers', runId],
@@ -107,7 +98,6 @@ export function useBacktestMarkers(runId: string, enabled: boolean) {
   })
 }
 
-/** Distribution + streak + profit-factor + drawdown analytics for a run — lazy. */
 export function useBacktestStats(runId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['backtest-stats', runId],
@@ -116,7 +106,6 @@ export function useBacktestStats(runId: string, enabled: boolean) {
   })
 }
 
-/** Orders for a run — lazy: only fetched once ``enabled`` (the Orders tab opens). */
 export function useBacktestOrders(runId: string, enabled: boolean) {
   return useQuery({
     queryKey: ['backtest-orders', runId],
@@ -125,8 +114,6 @@ export function useBacktestOrders(runId: string, enabled: boolean) {
   })
 }
 
-/** Set/clear a run's verdict with an optimistic cache update; revert the cached
- *  run on failure (the caller keeps the textarea text + surfaces the error). */
 export function useSetVerdict(runId: string) {
   const qc = useQueryClient()
   const key = ['backtest-run', runId]
@@ -145,9 +132,8 @@ export function useSetVerdict(runId: string) {
   })
 }
 
-/** Set/clear a run's label with an optimistic cache update; revert on failure.
- *  Also invalidates the history-list queries so the renamed run shows in the
- *  rail (list rows come from a separate query key). */
+// Also invalidates the history-list queries: list rows come from a separate query key,
+// and the renamed run must show in the rail.
 export function useSetBacktestName(runId: string) {
   const qc = useQueryClient()
   const key = ['backtest-run', runId]

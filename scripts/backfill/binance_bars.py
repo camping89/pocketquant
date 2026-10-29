@@ -1,40 +1,3 @@
-"""Backfill / re-sync OHLCV bars from Binance public klines REST API.
-
-One tool, two scopes — both fetch from Binance's free, unauthenticated
-`/api/v3/klines` endpoint with start/end pagination (beyond the 5000-bar
-request cap):
-
-- **Targeted** (`--symbol`): backfill one symbol/interval over an explicit
-  window. Insert-only by default — a surgical gap-filler.
-- **Bulk** (no `--symbol`): process every tracked BINANCE symbol (optionally
-  narrowed by `--symbols`). With `--replace` this is the full re-sync:
-  delete the window, re-fetch clean 1m, cascade-rebuild higher tfs. Resumable
-  via an on-disk checkpoint so a multi-day run skips already-done symbols.
-
-Window — pick ONE:
-    --start ISO --end ISO     explicit [start, end) range
-    --days N                  rolling: end = floor(now,1min) - 1s, start = end - N days
-
-Examples:
-    # Targeted gap-fill, dry-run
-    uv run python scripts/backfill/binance_bars.py \\
-        --symbol BTCUSDT --start 2026-04-30T08:54:00Z --end 2026-05-03T21:34:00Z --dry-run
-
-    # Bulk 2-year re-sync of all tracked symbols (delete + refetch + cascade)
-    uv run python scripts/backfill/binance_bars.py --days 730 --replace
-
-    # Re-sync a subset, no cascade
-    uv run python scripts/backfill/binance_bars.py \\
-        --days 730 --replace --symbols BTCUSDT,ETHUSDT --no-cascade
-
-MONGODB_URL is read from the environment (preferred) or --mongodb-url. On the VPS
-it holds an internal docker hostname, so prefix prod runs with
-`docker exec pocketquant-app` (see docs/deployment.md -> 2-Year Bar Re-Sync).
-
-Exit codes: 0 = success, 1 = Mongo connection failure, no data fetched, or any
-per-symbol failure in a bulk run.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -107,7 +70,6 @@ class BackfillConfig:
 
 
 def _parse_iso_utc(value: str) -> datetime:
-    """Parse ISO 8601 UTC timestamp (accepts trailing 'Z')."""
     cleaned = value.strip()
     if cleaned.endswith("Z"):
         cleaned = cleaned[:-1] + "+00:00"
@@ -117,12 +79,9 @@ def _parse_iso_utc(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+# The -1s on a minute floor excludes the in-progress minute, so a partial bar is never
+# fetched as if complete.
 def _rolling_window(days: int) -> tuple[datetime, datetime]:
-    """Rolling window: end = floor(now,1min) - 1s, start = end - days.
-
-    The -1s on a minute floor excludes the in-progress minute so a partial bar
-    is never fetched as if complete.
-    """
     now = datetime.now(UTC)
     end_dt = now.replace(second=0, microsecond=0) - timedelta(seconds=1)
     start_dt = end_dt - timedelta(days=days)
@@ -131,7 +90,36 @@ def _rolling_window(days: int) -> tuple[datetime, datetime]:
 
 def parse_args(argv: list[str] | None = None) -> BackfillConfig:
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description="""\
+Backfill or re-sync OHLCV bars from Binance public klines, beyond the 5000-bar cap.
+
+Targeted (--symbol): one symbol over an explicit window, insert-only gap-fill.
+Bulk (no --symbol): every tracked BINANCE symbol, optionally narrowed by --symbols.
+With --replace a bulk run deletes the window, refetches 1m and cascade-rebuilds
+higher timeframes. It resumes from an on-disk checkpoint.
+
+Window, pick one:
+    --start ISO --end ISO     explicit [start, end) range
+    --days N                  rolling: end = floor(now, 1min) - 1s, start = end - N days""",
+        epilog="""\
+Examples:
+    # Targeted gap-fill, dry-run
+    uv run python scripts/backfill/binance_bars.py \\
+        --symbol BTCUSDT --start 2026-04-30T08:54:00Z --end 2026-05-03T21:34:00Z --dry-run
+
+    # Bulk 2-year re-sync of all tracked symbols (delete + refetch + cascade)
+    uv run python scripts/backfill/binance_bars.py --days 730 --replace
+
+    # Re-sync a subset, no cascade
+    uv run python scripts/backfill/binance_bars.py \\
+        --days 730 --replace --symbols BTCUSDT,ETHUSDT --no-cascade
+
+MONGODB_URL is read from the environment (preferred) or --mongodb-url. On the VPS
+it holds an internal docker hostname, so prefix prod runs with
+`docker exec pocketquant-app` (see docs/deployment.md -> Two-year bar re-sync).
+
+Exit codes: 0 = success, 1 = Mongo connection failure, no data fetched, or any
+per-symbol failure in a bulk run.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--symbol", default=None, help="Single trading pair, e.g. BTCUSDT")
@@ -213,22 +201,21 @@ def parse_args(argv: list[str] | None = None) -> BackfillConfig:
 
 
 def _load_checkpoint() -> dict[str, str]:
-    """Load checkpoint map {symbol: 'done'} from disk. Empty dict if missing/corrupt."""
     try:
         return json.loads(CHECKPOINT_PATH.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
 
+# Write to .tmp, then os.replace, so a crash never leaves a half-written checkpoint.
 def _save_checkpoint(state: dict[str, str]) -> None:
-    """Write checkpoint atomically: write to .tmp then os.replace (POSIX-atomic)."""
     tmp = CHECKPOINT_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2))
     os.replace(tmp, CHECKPOINT_PATH)
 
 
+# Precedence: --mongodb-url, then the MONGODB_URL env var, then .env.
 def _build_settings(mongodb_url: str | None) -> Settings:
-    """Build Settings, applying optional MongoDB URL override (CLI > env > .env)."""
     override = mongodb_url or os.environ.get("MONGODB_URL")
     if override:
         os.environ["MONGODB_URL"] = override
@@ -265,18 +252,15 @@ async def fetch_klines(
     return resp.json()
 
 
+# Bars at or after cfg.end are dropped: a minute-floored rolling end can still surface the
+# in-progress bar, which the unique index would later refuse to overwrite with the completed
+# one, leaving a permanent partial bar.
 async def _fetch_window(
     http: httpx.AsyncClient,
     cfg: BackfillConfig,
     composite_symbol: str,
     code: str,
 ) -> list:
-    """Page Binance klines across [start, end) and map to Bar entities.
-
-    Bars at/after cfg.end are dropped: a minute-floored rolling end can still
-    surface the in-progress bar, which the unique index would later refuse to
-    overwrite with the completed one — leaving a permanent partial bar.
-    """
     binance_interval, bar_duration_ms = INTERVAL_TO_BINANCE[cfg.interval]
     start_ms = int(cfg.start.timestamp() * 1000)
     end_ms = int(cfg.end.timestamp() * 1000)
@@ -312,7 +296,6 @@ async def _process_symbol(
     http: httpx.AsyncClient,
     bar_repo: BarRepository,
 ) -> dict:
-    """Run the (optional delete ->) fetch -> insert (-> cascade) cycle for one symbol."""
     t0 = time.monotonic()
     composite_symbol = f"{code}:{cfg.exchange}"
 
@@ -351,7 +334,6 @@ async def _process_symbol(
 
 
 async def _resolve_bulk_symbols(cfg: BackfillConfig, db: Database) -> list[str]:
-    """Return tracked BINANCE symbol codes, narrowed by cfg.symbols_filter."""
     tracked_repo = TrackedSymbolRepository(db)
     all_symbols = await tracked_repo.list_all()
     codes: list[str] = []

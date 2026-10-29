@@ -1,10 +1,3 @@
-"""Core package layout contract: domain / infra / common.
-
-Domain models and services live under core.domain, concrete adapters under
-core.infra, cross-cutting utilities under core.common. Old flat adapter dirs
-and the concepts/ split must not resurrect.
-"""
-
 import importlib
 import os
 
@@ -50,7 +43,6 @@ def test_old_layout_module_gone(module: str):
 
 
 def test_no_stale_references_to_old_paths():
-    """No source/test file may reference the retired module paths (incl. string literals)."""
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     old_fragments = [
         f"core.{name}"

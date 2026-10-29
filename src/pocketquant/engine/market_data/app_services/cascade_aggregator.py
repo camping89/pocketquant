@@ -1,18 +1,3 @@
-"""Cascade aggregator — derives higher-tf OHLCV bars from 1m source bars.
-
-Pure functions (aggregate_ohlcv, compute_boundaries, tf_seconds) have no DB or IO;
-they are trivially unit-testable. cascade_for_symbol is the only DB-touching entry
-point and receives bar_repo as a parameter (no module-level state).
-
-Design:
-- Source-of-truth: 1m bars stored in MongoDB.
-- All higher tfs (5m, 15m, 1h, 4h, 1d) are derived by aggregation — not fetched from
-  provider — so cascade output is deterministic and idempotent.
-- UTC-aligned bucket starts: 5m at minute%5==0, 1h at hour boundary, 1d at midnight.
-- Partial aggregate (< expected input count): logged as warning, still persisted.
-- ``symbol`` is composite ``{code}:{exchange}`` throughout.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -46,26 +31,17 @@ _INTRADAY_CASCADE_TFS: list[Interval] = [
 ]
 
 
+# A market that never closes can cascade its daily bar across UTC midnight, where
+# its day begins. A session market's vendor builds the daily bar from its own
+# session, so a cascaded one need not match the vendor's chart; those come from the
+# provider.
 def cascade_tfs(calendar: ITradingCalendarPort) -> list[Interval]:
-    """Timeframes to derive from 1m bars for a symbol on ``calendar``.
-
-    A market that never closes can have its daily bar built by cascading 1m
-    across UTC midnight, because that is exactly where its day begins. A session
-    market's vendor builds the daily bar from its own session, so a cascaded
-    daily bar need not match the vendor's own chart. Those come from the
-    provider instead.
-    """
     if calendar.calendar_id == CALENDAR_CRYPTO_24_7:
         return CASCADE_TFS
     return _INTRADAY_CASCADE_TFS
 
 
 def tf_seconds(tf: Interval) -> int:
-    """Return the number of seconds in one bar of the given timeframe.
-
-    Supported: 1m, 5m, 15m, 1h, 4h, 1d.
-    Raises ValueError for unsupported intervals.
-    """
     mapping: dict[Interval, int] = {
         Interval.MINUTE_1: 60,
         Interval.MINUTE_5: 300,
@@ -81,13 +57,6 @@ def tf_seconds(tf: Interval) -> int:
 
 
 def aggregate_ohlcv(bars: list[Bar]) -> dict | None:
-    """Aggregate a list of 1m bars into a single OHLCV dict.
-
-    Pure function — no DB, no IO.
-    Returns None if bars is empty.
-    Always aggregates available bars even if count < expected (partial).
-    Result keys: open, high, low, close, volume.
-    """
     if not bars:
         return None
 
@@ -108,33 +77,18 @@ def aggregate_ohlcv(bars: list[Bar]) -> dict | None:
     }
 
 
+# A bucket overlaps the range when it starts before range_end and ends after
+# range_start. So a bucket that closes inside the range is re-aggregated once with
+# its complete 1m source even when its start is older than range_start; otherwise
+# 4h and 1d freeze, because sync_1m looks back only 100 minutes. Each step goes
+# through calendar.bar_start rather than a fixed number of seconds, which keeps the
+# walk correct across a session gap and a DST change.
 def compute_boundaries(
     tf: Interval,
     range_start: datetime,
     range_end: datetime,
     calendar: ITradingCalendarPort,
 ) -> list[datetime]:
-    """Return calendar-aligned bucket starts whose bucket overlaps [range_start, range_end).
-
-    A bucket [B, B + tf_seconds) overlaps the request range when both:
-      - B < range_end                     (bucket starts before the range ends)
-      - B + tf_seconds > range_start      (bucket ends after the range starts)
-
-    This guarantees that a bucket which closes inside the range is re-aggregated
-    once with its complete 1m source, even when the bucket *boundary* itself is
-    older than range_start. Without this, larger timeframes (4h, 1d) freeze the
-    moment their start instant falls outside the cron's lookback window —
-    sync_jobs.sync_1m uses lookback_minutes=100, so the just-closed 4h bucket
-    would otherwise never get a clean post-close aggregation pass.
-
-    Pure: the calendar is a parameter, never a lookup. Each step goes back
-    through ``calendar.bar_start`` rather than adding a fixed number of seconds,
-    which is what keeps the walk correct across a session gap and across a DST
-    transition. On the 24/7 calendar that reproduces the old UTC-epoch grid
-    exactly.
-
-    Both range inputs should be UTC-aware datetimes.
-    """
     secs = tf_seconds(tf)
     step = timedelta(seconds=secs)
 
@@ -159,25 +113,15 @@ def compute_boundaries(
     return boundaries
 
 
+# Higher timeframes are derived from stored 1m bars, not fetched, so the output is
+# deterministic and a re-run gives the same upserts. A partial bucket is logged and
+# still persisted.
 async def cascade_for_symbol(
     symbol: str,
     lookback_minutes: int,
     bar_repo: BarRepository,
     calendar: ITradingCalendarPort,
 ) -> dict[Interval, int]:
-    """Aggregate 1m bars from MongoDB into higher-tf bars and upsert them.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-
-    For each tf in ``cascade_tfs(calendar)``:
-      1. Determine calendar-aligned bucket boundaries within [now - lookback_minutes, now].
-      2. For each bucket: query 1m bars in [boundary, boundary + tf_seconds).
-      3. Aggregate OHLCV.
-      4. Upsert Bar with interval=tf into MongoDB.
-
-    Returns dict mapping each cascaded interval to the number of bars persisted.
-    Idempotent: re-running with the same input bars produces the same upserts.
-    """
     now = datetime.now(UTC)
     range_start = now - timedelta(minutes=lookback_minutes)
 

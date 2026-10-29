@@ -3,10 +3,9 @@ import { useSymbols } from '../../hooks/use-symbols'
 import { parseSymbol } from '../../lib/symbol-format'
 
 interface SymbolSelectorProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "XAUUSD:EXNESS" */
   value: string
   onChange: (v: string) => void
-  /** Shown when value is empty — avoids a blank button before a symbol is picked. */
+  // Avoids a blank button before a symbol is picked.
   placeholder?: string
 }
 

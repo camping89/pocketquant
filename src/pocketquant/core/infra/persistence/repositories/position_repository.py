@@ -1,5 +1,3 @@
-"""Position repository for MongoDB persistence."""
-
 from pocketquant.core.common.constants import COLLECTION_POSITIONS
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository

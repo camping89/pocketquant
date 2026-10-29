@@ -1,18 +1,9 @@
-"""Golden snapshot of crypto bucket, alignment and annualization arithmetic.
-
-Captured against the pre-calendar implementation. Threading a trading calendar
-through the pipeline must reproduce these values exactly for the 24/7 calendar;
-any drift here is crypto bars silently moving, which is the one outcome the
-calendar refactor is not allowed to have.
-
-Regenerate deliberately and never as a reaction to a failure::
-
-    POCKETQUANT_REGEN_GOLDEN=1 uv run pytest \
-        tests/app_test/market_data/test_cascade_calendar_golden.py
-
-A failing comparison means the production code changed, not that the snapshot
-is stale.
-"""
+# Captured against the pre-calendar implementation: the 24/7 calendar must reproduce these
+# values exactly, and any drift is crypto bars silently moving. A failing comparison means
+# the production code changed, not that the snapshot is stale. Regenerate deliberately,
+# never as a reaction to a failure:
+#   POCKETQUANT_REGEN_GOLDEN=1 uv run pytest \
+#       tests/app_test/market_data/test_cascade_calendar_golden.py
 
 from __future__ import annotations
 

@@ -1,9 +1,3 @@
-"""Data-provider port — REST/historical OHLCV fetch + symbol search.
-
-Neutral domain location so no concrete provider implementation (Binance,
-Exness) is implied by the module path.
-"""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -19,9 +13,7 @@ class IDataProviderPort(ABC):
         symbol: str,
         interval: Interval,
         n_bars: int = 1000,
-    ) -> list[Bar]:
-        """Fetch OHLCV bars from data provider. ``symbol`` is composite ``{code}:{exchange}``."""
-        ...
+    ) -> list[Bar]: ...
 
     @abstractmethod
     async def search_symbols(

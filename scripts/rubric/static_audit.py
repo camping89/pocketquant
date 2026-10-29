@@ -1,14 +1,6 @@
-"""Static AST audit of a strategy's SOURCE (not its DB result).
-
-Resolves the strategy class via ``STRATEGY_REGISTRY``, reads its source file, and
-parses it with ``ast`` to extract design properties: degrees of freedom (tunable
-params), SL/TP geometry shape, entry-frequency class, lookahead safety, and
-direction bias. Every field falls back to ``"unknown"`` rather than raising —
-the audit is a heuristic on a handful of strategies, not formal verification.
-
-Importing ``STRATEGY_REGISTRY`` pulls in the core domain to resolve the class
-path only; strategies are never instantiated or run.
-"""
+# A heuristic over a handful of strategies, not formal verification: every field falls back
+# to "unknown" rather than raising. Strategies are parsed from source, never instantiated or
+# run.
 
 from __future__ import annotations
 
@@ -21,7 +13,6 @@ from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 
 
 def audit_strategy(strategy_code: str) -> dict[str, Any]:
-    """Return the static audit for one strategy code."""
     cls = STRATEGY_REGISTRY.get(strategy_code)
     if cls is None:
         return _unknown(strategy_code, reason="not in STRATEGY_REGISTRY")
@@ -46,7 +37,6 @@ def audit_strategy(strategy_code: str) -> dict[str, Any]:
 
 
 def _find_defaults(tree: ast.Module) -> dict[str, Any]:
-    """Extract the module-level ``_DEFAULTS`` dict literal (keys = tunable params)."""
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
@@ -67,9 +57,6 @@ def _direction_bias(defaults: dict[str, Any]) -> str:
 
 
 def _sl_tp_geometry(tree: ast.Module) -> str:
-    """Heuristic: recognise the pattern-extreme SL + max/min(R, key-level) TP shape
-    common to these strategies. Falls back to ``custom`` when unrecognised.
-    """
     assigns_to_sl = False
     tp_uses_key_level = False
     sl_uses_buffer = False
@@ -92,10 +79,9 @@ def _sl_tp_geometry(tree: ast.Module) -> str:
     return "custom"
 
 
+# A stateful armed setup (arms, then resolves) is a rarer, more selective entry than a
+# fire-every-bar breakout.
 def _entry_frequency_class(tree: ast.Module) -> str:
-    """Heuristic: a stateful armed/deque setup (arms then resolves) is a rarer,
-    higher-selectivity entry than a fire-every-bar breakout.
-    """
     has_deque = False
     has_armed = False
     for node in ast.walk(tree):
@@ -111,9 +97,6 @@ def _entry_frequency_class(tree: ast.Module) -> str:
 
 
 def _lookahead_safety(source: str) -> str:
-    """Confirm the safe ``prev_bar`` + snapshot-before-append pattern; flag if a
-    forward index (``[i+1]``, ``[i + k]``) into a bar array appears.
-    """
     safe_markers = ("prev_bar", "_prev_bar", "snapshot", "BEFORE appending", "before append")
     has_safe = any(m in source for m in safe_markers)
     # A crude forward-index probe: "[i+" or "[i +" or "+1]" adjacent to indexing.

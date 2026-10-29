@@ -1,5 +1,3 @@
-"""QuoteAppService manages the WebSocket feed, subscriptions, and tick processing."""
-
 import asyncio
 from datetime import UTC, datetime
 from typing import Any
@@ -17,8 +15,6 @@ logger = get_logger(__name__)
 
 
 class QuoteAppService:
-    """Manages quote WebSocket feed, subscriptions, and tick processing."""
-
     def __init__(
         self,
         cache: Cache,
@@ -33,10 +29,6 @@ class QuoteAppService:
         self.close_timer_task: asyncio.Task | None = None
 
     async def on_quote_update(self, quote_data: dict[str, Any]) -> None:
-        """Handle incoming quote updates.
-
-        ``symbol`` in quote_data must be composite ``{code}:{exchange}``.
-        """
         raw_symbol = quote_data.get("symbol", "")
         if not raw_symbol or ":" not in raw_symbol:
             return
@@ -93,7 +85,6 @@ class QuoteAppService:
         )
 
     async def start(self) -> None:
-        """Start the WS feed as a background task. Idempotent — no-op if already running."""
         if self.running:
             logger.debug("quote_service.already_running")
             return

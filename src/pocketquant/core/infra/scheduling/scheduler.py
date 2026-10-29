@@ -1,13 +1,3 @@
-"""Background job scheduler — instance-based for DI container.
-
-Only one scheduler may run at a time. APScheduler 3 does not support two
-schedulers on one job store: jobs run twice or are skipped.
-
-Jobs MUST be passed as text references (e.g. "module.path:func") so they can be
-serialized into Mongo. Module-level coroutine functions only — no closures.
-History recording lives inside each job function (see sync_jobs.py).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -37,9 +27,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+# Only one scheduler may run at a time: APScheduler 3 on a shared job store runs jobs
+# twice or skips them. Jobs are text references ("module.path:func") to module-level
+# coroutines, never closures, so they serialize into Mongo.
 class JobScheduler:
-    """APScheduler wrapper. Instance-based, managed by DI container."""
-
     def __init__(self, history_repo: JobHistoryRepository | None = None) -> None:
         self._scheduler: AsyncIOScheduler | None = None
         # The listeners persist missed/skipped/failed events through history_repo.
@@ -89,9 +80,8 @@ class JobScheduler:
             self._scheduler.add_listener(self._on_error, EVENT_JOB_ERROR)
         logger.info("scheduler.started")
 
+    # Persists missed and max-instances skips so they show up in /runs.
     def _on_skip(self, event: Any) -> None:
-        """APScheduler EVENT_JOB_MISSED / EVENT_JOB_MAX_INSTANCES handler.
-        Persists a record so silent skips become visible in /runs."""
         status = "skipped_max_instances" if event.code == EVENT_JOB_MAX_INSTANCES else "missed"
         # A max-instances event is a submission event: it carries a list of run times.
         if event.code == EVENT_JOB_MAX_INSTANCES:
@@ -100,14 +90,9 @@ class JobScheduler:
             run_time = event.scheduled_run_time
         self._dispatch_skip(event.job_id, run_time, status, None)
 
+    # Catches errors raised before the job wrapper records anything. CancelledError has an
+    # empty str(), so the type name is always emitted.
     def _on_error(self, event: Any) -> None:
-        """APScheduler EVENT_JOB_ERROR handler — captures exceptions raised
-        before the wrapper records anything (rare but possible on startup).
-
-        Emits ``<ExcType>: <msg>`` or ``<ExcType>(no message)`` instead of bare
-        ``""``. Deploy-cancellations (CancelledError) carry an empty str(); the
-        old bare path masked them as "unknown failure".
-        """
         exc = event.exception
         if exc is None:
             err = "unknown_error_no_exception"
@@ -148,7 +133,6 @@ class JobScheduler:
         future.add_done_callback(_log_failure)
 
     def pause(self) -> None:
-        """Stop starting new runs; running jobs continue."""
         if self._scheduler is not None:
             self._scheduler.pause()
 
@@ -158,6 +142,8 @@ class JobScheduler:
             self._scheduler = None
             logger.info("scheduler.stopped")
 
+    # second offsets bar-aligned jobs past provider publish lag. A larger misfire_grace_time
+    # keeps a restart past the global 300s window from dropping a heavy daily run.
     def add_cron_job(
         self,
         func: Callable | str,
@@ -171,15 +157,6 @@ class JobScheduler:
         misfire_grace_time: int | None = None,
         **kwargs: Any,
     ) -> str:
-        """Register a cron job. `func` must be a text reference (see add_interval_job).
-
-        `second` defaults to 0 in APScheduler when omitted; pass an explicit value
-        (e.g. ``second=2``) to offset bar-aligned jobs past provider publish lag.
-
-        `misfire_grace_time` (seconds) overrides the global default for this job.
-        Pass a larger value (e.g. 3600) for heavy daily jobs so a restart spanning
-        the global 300s window does not silently drop the run.
-        """
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -230,6 +207,7 @@ class JobScheduler:
         )
         return job_id
 
+    # replace_existing so duplicate job_ids (concurrent run-all calls) replace safely.
     def add_one_off_job(
         self,
         func: Callable | str,
@@ -238,12 +216,6 @@ class JobScheduler:
         run_at: datetime | None = None,
         **kwargs: Any,
     ) -> str:
-        """Schedule a one-off job using DateTrigger.
-
-        Defaults to immediate execution (run_at=now). Uses replace_existing=True
-        so duplicate job_ids (e.g. concurrent run-all calls) replace safely.
-        `func` should be a text reference (e.g. "pkg.mod:func") for Mongo persistence.
-        """
         if self._scheduler is None:
             raise RuntimeError("Scheduler not initialized.")
 
@@ -258,12 +230,8 @@ class JobScheduler:
         logger.info("scheduler.registered_one_off_job", job_id=job_id, run_at=run_at)
         return job_id
 
+    # get_jobs drops the trigger for the HTTP DTOs; startup invariant checks need it.
     def get_raw_jobs(self) -> list[Any]:
-        """Registered APScheduler job objects, for callers that need the trigger.
-
-        ``get_jobs`` projects to DTOs for the HTTP surface and drops the trigger
-        object; startup invariant checks need the trigger itself.
-        """
         if self._scheduler is None:
             return []
         return list(self._scheduler.get_jobs())

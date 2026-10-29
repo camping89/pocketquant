@@ -1,11 +1,3 @@
-"""Backtest execution service — runs one ad-hoc backtest to completion.
-
-The body of the ``asyncio.create_task`` the route spawns. Lives in the
-``backtest`` layer (no fastapi import) so the route only allocates the run id,
-persists the started doc, and hands off here. Each run gets its own sandbox,
-never the live execution engine.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -71,15 +63,11 @@ class BacktestExecutionService:
         self._calendar_factory = calendar_factory
         self._symbol_lookup = symbol_lookup
 
+    # The engine catches its own errors and returns a failed result, so a failed run is
+    # seen in the returned status, not as an exception. The except here catches faults
+    # outside the engine (unknown strategy, a repo error) and flips the started doc to
+    # failed so it cannot stay stuck.
     async def execute_and_persist(self, run_id: str, config_payload: dict[str, Any]) -> None:
-        """Run the engine for ``run_id`` and let it persist the run/orders/trades.
-
-        The engine catches its own errors and RETURNS a ``failed`` result (it
-        never re-raises), so a failed engine run is detected by inspecting the
-        returned status — not by an exception. The ``except`` here only catches
-        faults OUTSIDE the engine (e.g. an unknown strategy, a transient repo
-        error), and flips the started doc to ``failed`` so it can't stay stuck.
-        """
         beat = asyncio.create_task(self._heartbeat(run_id))
         try:
             result = await self.run(config_payload, run_id=run_id)
@@ -95,8 +83,8 @@ class BacktestExecutionService:
         finally:
             beat.cancel()
 
+    # Keeps the run out of the worker's orphan sweep while this task lives.
     async def _heartbeat(self, run_id: str) -> None:
-        """Keep the run out of the worker's orphan sweep while this task lives."""
         while True:
             try:
                 await self._backtest_repo.touch_heartbeat(run_id)
@@ -104,15 +92,11 @@ class BacktestExecutionService:
                 logger.warning("backtest_execution.heartbeat_failed", run_id=run_id, exc_info=True)
             await asyncio.sleep(_HEARTBEAT_S)
 
+    # A private sandbox (own EventBus and StrategyAppService) keeps replayed bars and
+    # synthetic exit fills away from the live execution engine.
     async def run(
         self, config_payload: dict[str, Any], run_id: str | None = None
     ) -> BacktestResult:
-        """Execute one backtest and persist results to the backtest_* collections.
-
-        Runs in an isolated sandbox (own EventBus + StrategyAppService) so replayed
-        bars and synthetic exit fills never reach the live execution engine, and the
-        strategy is injected under its own id then torn down with the sandbox.
-        """
         contract_spec = await self._symbol_lookup.contract_spec(config_payload["symbol"])
         config = _config_from_dict(config_payload, contract_spec)
 

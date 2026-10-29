@@ -46,7 +46,6 @@ async function fetchInitialQuote(symbol: string): Promise<QuoteStreamPayload | n
   }
 }
 
-/** Subscribe to real-time quote updates for a composite symbol (e.g. "BTCUSDT:BINANCE"). */
 export function useRealtimeQuote(symbol: string): RealtimeQuoteState {
   const [quote, setQuote] = useState<QuoteStreamPayload | null>(null)
   const [lastUpdateTs, setLastUpdateTs] = useState<number | null>(null)

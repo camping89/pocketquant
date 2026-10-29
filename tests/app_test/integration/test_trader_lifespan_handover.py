@@ -1,8 +1,5 @@
-"""Two traders through the real lifespan: SIGTERM mid-open drains at a real 1m boundary,
-releases after the delayed ACK, and the standby trader takes over within seconds.
-
-Runs 20-80 s of real time: the lease uses the wall clock, so no simulated time here.
-"""
+# Runs 20-80 s of real time: the lease uses the wall clock, so there is no simulated time
+# here.
 
 from __future__ import annotations
 
@@ -60,9 +57,8 @@ class _AlwaysLong(IStrategyService):
         )
 
 
+# Its open is ACKed only at `ack_at`, like a venue.
 class SlowAsyncFillBroker(PaperBrokerAdapter):
-    """A venue-like paper broker whose open is ACKed only at ``ack_at``."""
-
     fills_async = True
     ack_at: datetime | None = None
     acked_at: datetime | None = None
@@ -99,8 +95,8 @@ async def _wait_for(check: Callable[[], bool], timeout_s: float) -> bool:
     return check()
 
 
+# pocketquant.app.main builds its app at import from the environment.
 def _env(monkeypatch: pytest.MonkeyPatch, settings) -> None:  # noqa: ANN001
-    """``pocketquant.app.main`` builds its app at import from the environment."""
     for name in (
         "app_name",
         "app_version",

@@ -1,8 +1,3 @@
-"""Binance data mappers — interval mapping, kline → Bar, aggTrade → quote dict.
-
-Centralises all Binance-specific field translations so client modules stay thin.
-"""
-
 from __future__ import annotations
 
 import re
@@ -35,25 +30,9 @@ def validate_symbol(symbol: str) -> str:
     return upper
 
 
+# Binance kline row is positional: [0] open time ms, [1..4] OHLC, [5] base volume,
+# [8] trade count.
 def kline_to_bar(kline: list[Any], symbol: str, interval: Interval) -> Bar:
-    """Map a Binance kline row to a Bar entity.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-
-    Binance kline positional schema:
-      [0]  open time (ms UTC)
-      [1]  open price
-      [2]  high price
-      [3]  low price
-      [4]  close price
-      [5]  base asset volume
-      [6]  close time (ms)
-      [7]  quote asset volume
-      [8]  number of trades
-      [9]  taker buy base volume
-      [10] taker buy quote volume
-      [11] ignore
-    """
     open_time_ms = int(kline[0])
     bar_dt = datetime.fromtimestamp(open_time_ms / 1000, tz=UTC)
     return Bar(
@@ -69,24 +48,8 @@ def kline_to_bar(kline: list[Any], symbol: str, interval: Interval) -> Bar:
     )
 
 
+# @aggTrade carries no bid/ask or session OHLC; downstream handlers accept None.
 def aggtrade_to_quote_dict(event: dict[str, Any], symbol: str) -> dict[str, Any]:
-    """Map a Binance @aggTrade event to the QuoteAppService callback dict.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-
-    aggTrade frame shape:
-      {"e":"aggTrade","E":<event_time_ms>,"s":"BTCUSDT",
-       "a":<agg_id>,"p":"16525.50","q":"0.05",
-       "f":<first_trade_id>,"l":<last_trade_id>,
-       "T":<trade_time_ms>,"m":<is_buyer_maker>,"M":true}
-
-    Contract:
-    - timestamp  = T (trade time ms → datetime UTC)
-    - last_price = float(p)
-    - volume     = float(q)  — per-trade delta, NOT cumulative
-    - bid/ask/open_price/high_price/low_price/prev_close/change/change_percent = None
-      (@aggTrade does not provide these; downstream handlers tolerate None)
-    """
     trade_time_ms = int(event["T"])
     timestamp = datetime.fromtimestamp(trade_time_ms / 1000, tz=UTC)
 

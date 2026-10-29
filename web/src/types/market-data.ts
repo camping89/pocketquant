@@ -17,7 +17,6 @@ export interface OHLCVResponse {
   count: number
 }
 
-/** Composite symbol string in the format "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "XAUUSD:EXNESS". */
 export type SelectedSymbol = string
 
 export interface SymbolInfo {
@@ -88,13 +87,12 @@ export interface SyncStatus {
   consecutive_empty_fetches?: number
   is_stuck?: boolean
   is_market_open?: boolean
-  /** Trading seconds the symbol's 1m feed runs behind real time; null with no 1m bars. */
+  // Trading seconds the 1m feed runs behind real time; null when there are no 1m bars.
   lag_seconds?: number | null
-  /** The feed is more than three minutes behind (delayed or stalled). */
+  // More than three minutes behind (delayed or stalled).
   is_delayed?: boolean
 }
 
-/** How far a symbol's data runs behind real time, from GET /market-data/data-lag/{symbol}. */
 export type FeedState = 'ok' | 'delayed' | 'stuck' | 'closed' | 'unknown'
 
 export interface DataLag {

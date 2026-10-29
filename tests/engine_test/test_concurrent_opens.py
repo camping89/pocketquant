@@ -1,4 +1,5 @@
-"""Venue entries run as tasks outside the bar handler, one per subscription; paper stays inline."""
+# Venue entries run as tasks outside the bar handler, one per subscription; paper stays
+# inline.
 
 from __future__ import annotations
 
@@ -36,9 +37,8 @@ _SYM = "XAUUSD:EXNESS"
 _T = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
 
 
+# submit takes `submit_s`; `hold` blocks sizing.
 class _VenueBroker(IBrokerPort):
-    """An async-fill broker whose submit takes ``submit_s``; ``hold`` blocks sizing."""
-
     fills_async = True
 
     def __init__(self, submit_s: float = 1.0, hold: asyncio.Event | None = None) -> None:
@@ -100,8 +100,6 @@ class _VenueBroker(IBrokerPort):
 
 
 class _Factory:
-    """One broker per broker type; ``paper`` builds a real paper broker."""
-
     def __init__(self, bus: EventBus, brokers: dict[str, IBrokerPort] | None = None) -> None:
         self._bus = bus
         self.brokers = brokers or {}
@@ -151,7 +149,6 @@ def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 async def _engine(
     subs: dict[str, str], brokers: dict[str, IBrokerPort] | None = None
 ) -> StrategyAppService:
-    """``subs`` maps subscription id to broker type."""
     bus = EventBus()
     engine = StrategyAppService(
         event_bus=bus,

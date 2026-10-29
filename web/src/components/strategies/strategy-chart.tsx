@@ -1,15 +1,3 @@
-/**
- * Embedded chart for the strategy operator dashboard.
- * Displays candles + live-trade markers + open-position price lines, plus the
- * shared indicator series (toggled by the parent) reused from the charts page.
- *
- * Intentionally has NO symbol/interval controls — those are locked to the
- * selected subscription's values.
- *
- * Architecture: wraps useChart + useOHLCV directly (not TradingChart) to avoid
- * pulling in backtest primitives (PositionBoxPrimitive) that are irrelevant
- * here. Indicator series are shared via indicator-series.ts (no duplicate logic).
- */
 import { useEffect, useMemo, useRef } from 'react'
 import {
   CandlestickSeries,
@@ -51,6 +39,9 @@ interface StrategyChartProps {
   indicators: IndicatorConfig
 }
 
+// No symbol/interval controls on purpose: both are locked to the selected subscription.
+// Wraps useChart + useOHLCV directly (not TradingChart) to avoid pulling in backtest
+// primitives (PositionBoxPrimitive) that are irrelevant here.
 export function StrategyChart({ symbol, interval, trades, openPosition, indicators }: StrategyChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { mode } = useTimezone()

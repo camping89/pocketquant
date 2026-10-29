@@ -1,14 +1,3 @@
-"""Universal trading value objects (source-agnostic).
-
-The trading contracts + performance summary shared by backtest and (future)
-live/forward runs:
-
-- ``Fill``               — atomic execution event
-- ``Trade``              — round-trip outcome (closed entry + exit)
-- ``EquityPoint``        — equity curve point
-- ``PerformanceMetrics`` — performance summary
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,14 +30,10 @@ class EquityPoint:
         )
 
 
+# order_id is redundant when embedded in an order, but kept so a standalone Fill
+# carries its parent reference.
 @dataclass
 class Fill:
-    """Atomic execution event (Backtrader/QC convention).
-
-    Embedded in `Order.fills[]`. `order_id` is redundant when embedded but kept
-    so a standalone Fill carries its parent reference.
-    """
-
     fill_id: UUID
     order_id: str  # FK to parent Order — reference value, stays str
     symbol: str
@@ -60,7 +45,6 @@ class Fill:
     timestamp: datetime
 
     def to_mongo(self, *, embed: bool = False) -> dict[str, Any]:
-        """Serialize. When embedded in an Order doc, drop redundant order_id."""
         doc: dict[str, Any] = {
             "fill_id": str(self.fill_id),
             "symbol": self.symbol,
@@ -95,17 +79,10 @@ class Fill:
         )
 
 
+# Flat entry_*/exit_* shape so Mongo queries need no sub-doc traversal. Order ids are
+# nullable for migrated docs that did not keep them.
 @dataclass
 class Trade:
-    """Round-trip economic outcome (Backtrader/QC convention).
-
-    Flat shape (entry_* / exit_* prefix) for Mongo query simplicity — no nested
-    sub-doc traversal in queries.
-
-    `entry_order_id` and `exit_order_id` are nullable to support migrated docs
-    where the original order ID was not preserved in the old PositionRecord shape.
-    """
-
     trade_id: UUID
     run_id: str
     strategy_code: str

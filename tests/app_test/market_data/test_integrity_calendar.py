@@ -1,10 +1,6 @@
-"""The integrity grid belongs to the symbol's calendar.
-
-A dense arithmetic grid reports every closed hour as a missing bar, which for a
-session-hours symbol means the repair job resyncing a market that was simply shut.
-These pin that the expected instants come from the calendar instead, and that
-weekly bars are declined rather than guessed at.
-"""
+# A dense arithmetic grid reports every closed hour as a missing bar, which for a
+# session-hours symbol means the repair job resyncing a market that was simply shut. Weekly
+# bars are declined rather than guessed at.
 
 from __future__ import annotations
 
@@ -29,16 +25,15 @@ EURUSD, XAUUSD, _ = EXNESS_CALENDARS
 
 
 def _empty_bar_repo() -> MagicMock:
-    """A symbol with no stored bars at all — every expected instant is missing."""
     repo = MagicMock()
     repo.find_datetimes = AsyncMock(return_value=[])
     repo.delete_many_by_ids = AsyncMock(return_value=0)
     return repo
 
 
+# Over a week, XAUUSD is shut at weekends and for an hour each weekday evening.
 @pytest.mark.asyncio
 async def test_a_session_calendar_expects_far_fewer_hours_than_a_247_one() -> None:
-    """Over a week, XAUUSD is shut at weekends and for an hour each weekday evening."""
     repo = _empty_bar_repo()
 
     continuous = await check_integrity("BTCUSDT:BINANCE", Interval.HOUR_1, repo, CALENDAR, 7)
@@ -50,10 +45,10 @@ async def test_a_session_calendar_expects_far_fewer_hours_than_a_247_one() -> No
     assert 0 < session["missing_count"] < continuous["missing_count"]
 
 
+# Any seven closed days hold one Saturday, which never trades, and one Sunday, whose evening
+# session prints its own daily bar.
 @pytest.mark.asyncio
 async def test_daily_grid_is_trading_dates_not_every_day() -> None:
-    """Any seven closed days hold one Saturday, which never trades, and one Sunday,
-    whose evening session prints its own daily bar."""
     repo = _empty_bar_repo()
 
     continuous = await check_integrity("BTCUSDT:BINANCE", Interval.DAY_1, repo, CALENDAR, 7)
@@ -64,11 +59,11 @@ async def test_daily_grid_is_trading_dates_not_every_day() -> None:
     assert session["missing_count"] == 6
 
 
+# The bar still in progress cannot be stored yet, so it is not missing.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("calendar", [CALENDAR, *EXNESS_CALENDARS])
 @pytest.mark.parametrize("interval", [Interval.DAY_1, Interval.HOUR_4])
 async def test_every_closed_bar_stored_is_no_gap(calendar: Any, interval: Interval) -> None:
-    """The bar still in progress cannot be stored yet, so it is not missing."""
     now = datetime.now(UTC)
     in_progress = calendar.bar_start(now, interval)
     # Every 15th trading minute still lands in every bar (none is that short),
@@ -117,13 +112,10 @@ async def test_weekly_repair_resyncs_nothing() -> None:
     sync_service.sync_one.assert_not_awaited()
 
 
+# Exness weeks open on Sunday 00:00 UTC. Alignment is judged before the weekly check
+# declines to build a grid, so a wrongly stamped weekly bar is still caught.
 @pytest.mark.asyncio
 async def test_misalignment_is_judged_against_the_symbols_calendar() -> None:
-    """A Monday-midnight weekly bar is aligned for crypto and misaligned for Exness.
-
-    Exness weeks open on Sunday 00:00 UTC. Alignment is judged before the weekly
-    check declines to build a grid, so a wrongly stamped weekly bar is still caught.
-    """
     repo = _empty_bar_repo()
     repo.find_datetimes = AsyncMock(
         return_value=[{"_id": "abc", "datetime": datetime(2026, 10, 12, 0, 0, tzinfo=UTC)}]
@@ -138,7 +130,6 @@ async def test_misalignment_is_judged_against_the_symbols_calendar() -> None:
 
 
 def _first_minute(calendar: Any, *, trading: bool) -> datetime:
-    """The first 1m instant in the last few days that trades, or that does not."""
     start = datetime.now(UTC).replace(second=0, microsecond=0) - timedelta(days=6)
     open_minutes = set(calendar.trading_minutes(start, start + timedelta(days=5)))
     for i in range(5 * 24 * 60):

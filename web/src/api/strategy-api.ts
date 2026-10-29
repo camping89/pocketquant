@@ -2,23 +2,20 @@ import { apiDelete, apiFetch, apiPost } from './api-client'
 
 export { ApiError } from './api-client'
 
-/** Reconcile-loop run state: desired = what the user asked for, actual = live truth. */
 export type RunState = 'running' | 'stopped'
 
 export interface Subscription {
   id: string
   strategy_code: string
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
   interval: string
   created_at: string
-  /** Target state written by start/stop; reconcile converges actual toward it. */
+  // Written by start/stop; the reconcile loop converges actual_state toward it.
   desired_state: RunState
-  /** Reconcile loop's mirror of live engine state. */
   actual_state: RunState
-  /** Derived: actual_state === 'running'. Kept for back-compat. */
+  // Same as actual_state === 'running'; kept for back-compat.
   is_running: boolean
-  /** Set at create time; `exness` sends real orders. */
+  // Fixed at create time; exness sends real orders.
   broker: 'paper' | 'exness'
 }
 

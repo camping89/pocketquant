@@ -33,13 +33,6 @@ _YIELD_EVERY = 10
 
 
 class BacktestAppService:
-    """Runs one backtest: replays stored bars on the bus, then persists the report.
-
-    Each bar sets the broker price and the simulation time, then is published as
-    a ``BarCompletedEvent``. The run, its orders and its trades are persisted in
-    the order orders → trades → run.
-    """
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -58,17 +51,9 @@ class BacktestAppService:
         self._bar_repo = bar_repository
         self._calendar = calendar
 
+    # The caller (the route) allocates run_id so the started doc, the finished doc and
+    # every persisted order and trade share one id. Without one, an id is allocated here.
     async def run(self, config: BacktestConfig, run_id: str | None = None) -> BacktestResult:
-        """Execute a single backtest run with full metrics collection.
-
-        ``run_id`` is allocated by the caller (the route) so the started doc, the
-        finished doc, and every persisted order/trade share one id; a caller
-        without a started doc leaves it None and one is allocated here.
-
-        Returns the slim BacktestResult (metrics + equity_curve + open_positions);
-        Orders and Trades are persisted to ``backtest_orders`` and ``backtest_trades``
-        respectively and must be queried via their dedicated repositories.
-        """
         run_id = run_id or generate_id_str()
         started_at = datetime.now(UTC)
 

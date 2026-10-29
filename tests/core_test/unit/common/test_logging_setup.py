@@ -1,5 +1,3 @@
-"""setup_logging keeps third-party loggers that would leak secrets quiet."""
-
 from __future__ import annotations
 
 import logging
@@ -12,10 +10,10 @@ from pocketquant.core.common.logging import setup as logging_setup
 from tests.core_test.infra.market_data.conftest import build_settings
 
 
+# Its DEBUG handshake log prints the request headers, the Exness API key included.
 def test_the_websockets_handshake_log_stays_off_at_debug(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Its DEBUG handshake log prints the request headers, the Exness API key included."""
     monkeypatch.setattr(structlog, "configure", lambda **_: None)
     monkeypatch.setattr(logging, "basicConfig", lambda **_: None)
     websockets_logger = logging.getLogger("websockets")
@@ -28,10 +26,10 @@ def test_the_websockets_handshake_log_stays_off_at_debug(
         websockets_logger.setLevel(previous)
 
 
+# Prod tracebacks reach the public deploy output, and a local can hold a secret.
 def test_console_tracebacks_print_no_local_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Prod tracebacks reach the public deploy output; a local can hold a secret."""
     captured: dict[str, Any] = {}
     monkeypatch.setattr(structlog, "configure", lambda **kwargs: captured.update(kwargs))
     monkeypatch.setattr(logging, "basicConfig", lambda **_: None)

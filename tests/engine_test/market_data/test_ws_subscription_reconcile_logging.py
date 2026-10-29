@@ -1,10 +1,7 @@
-"""The reconcile loop runs every 5s, so what it logs per tick is multiplied by it.
-
-A tracked symbol that no realtime provider serves — its suffix names no registered
-quote adapter — fails to subscribe on every tick. That is a configured state, not
-a transient fault: it must be said once at WARNING, and must not be reported as an
-INFO change on every tick either.
-"""
+# The reconcile loop runs every 5s, so its per-tick logging is multiplied. A tracked symbol
+# whose suffix names no registered quote adapter fails to subscribe on every tick. That is a
+# configured state, not a transient fault: it is said once at WARNING and is not reported as
+# an INFO change on every tick.
 
 from __future__ import annotations
 
@@ -26,8 +23,6 @@ UNSERVED = "XAUUSD:EXNESS"
 
 
 class _FakeProvider:
-    """Subscribes everything except the symbols listed as unservable."""
-
     def __init__(self, unservable: set[str]) -> None:
         self.subscriptions: dict[str, object] = {}
         self._unservable = unservable

@@ -1,11 +1,3 @@
-"""PaperBrokerAdapter commission — debited on all four fill paths + _can_afford gate.
-
-Model: futures, initial 10_000, slippage 0, commission 10 bps (0.001). Entry/exit
-commission is |fill_price*qty|*bps/10000, debited from _balance at fill. Round-trip
-net = gross_pnl − entry_commission − exit_commission. A broker with no injected
-model (default bps=0) keeps pre-R3 balances (backward compat).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

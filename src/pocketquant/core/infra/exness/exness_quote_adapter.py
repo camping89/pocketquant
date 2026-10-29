@@ -1,11 +1,3 @@
-"""Exness realtime quotes — IRealtimeQuoteProviderPort over the WS tick stream.
-
-Sends the same callback dict as Binance. An instrument the account does not
-offer never reaches the socket. When Exness is not configured the adapter idles
-instead of returning or raising, because the realtime router gathers every
-child's ``run_forever`` and one that ends would stop every feed.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -30,8 +22,6 @@ _TRADING_DISABLED_MARKERS = ("MARKET_TRADE_DISABLED", "trading_disabled")
 
 
 class ExnessQuoteAdapter:
-    """Bid/ask ticks for the ``:EXNESS`` symbols."""
-
     def __init__(self, client: ExnessClient) -> None:
         self._client = client
         # composite symbol -> (instrument name, callback)
@@ -44,8 +34,8 @@ class ExnessQuoteAdapter:
     def last_tick_at(self) -> datetime | None:
         return self._last_tick_at
 
-    async def connect(self) -> None:
-        """No-op: the connection is made inside ``run_forever``."""
+    # No-op: the connection is made inside run_forever.
+    async def connect(self) -> None: ...
 
     async def disconnect(self) -> None:
         if self._stream is not None:
@@ -70,6 +60,8 @@ class ExnessQuoteAdapter:
         # Local only: frames for instruments no longer stored are ignored.
         self._subscriptions.pop(symbol.upper(), None)
 
+    # Idles when Exness is not configured instead of returning or raising: the realtime
+    # router gathers every child's run_forever, and one that ends would stop every feed.
     async def run_forever(self) -> None:
         if not self._client.is_configured:
             logger.info("exness_ws.disabled")
@@ -103,6 +95,7 @@ class ExnessQuoteAdapter:
         )
 
     async def _resubscribe_all(self) -> None:
+        # A new connection holds no subscription, so re-send every stored one.
         names = [name for name, _ in self._subscriptions.values()]
         if names:
             await self._send_subscribe("sub-all", names)

@@ -1,10 +1,3 @@
-"""BacktestOrderRepository — MongoDB persistence for `backtest_orders` collection.
-
-Stores ``OrderRecord`` audit docs with embedded ``events[]`` and ``fills[]``. Name
-is prefixed to disambiguate from the sibling ``OrderRepository`` (live ``orders``
-collection).
-"""
-
 from __future__ import annotations
 
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_ORDERS
@@ -16,12 +9,9 @@ logger = get_logger(__name__)
 
 
 class BacktestOrderRepository(SymbolScopedRepository):
-    """Repository for backtest order records (with embedded events + fills)."""
-
     _collection_name = COLLECTION_BACKTEST_ORDERS
 
     async def save_many(self, orders: list[OrderRecord]) -> None:
-        """Upsert a batch of orders. Idempotent re-runs OK (replace_one upsert)."""
         if not orders:
             return
         collection = self._collection()

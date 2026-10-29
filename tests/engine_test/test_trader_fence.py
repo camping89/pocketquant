@@ -1,5 +1,3 @@
-"""A standby engine connects no broker; the in-flight count the trader drains on."""
-
 from __future__ import annotations
 
 import asyncio
@@ -25,8 +23,6 @@ _SYM = "BTCUSDT:BINANCE"
 
 
 class _CountingBroker(PaperBrokerAdapter):
-    """A paper broker that counts connects and reports a settable in-flight count."""
-
     connects = 0
     inflight = 0
 

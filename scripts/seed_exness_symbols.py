@@ -1,30 +1,3 @@
-"""Seed the three Exness CFDs into symbols + tracked_symbols.
-
-The suffix names the data provider (``EXNESS``). Without a seed, a symbol takes
-its provider's defaults (CFD on the Exness FX calendar), which is wrong for gold
-(daily break) and for BTCUSD (24/7), and a linear spec with no tick size.
-
-Quantity is in units of the instrument (ounces, euros, bitcoin), and
-``lot_step`` stays None so the position calculator keeps fractional sizes. With
-the recorded lot grid (0.01 lot = 1 oz, 1000 EUR, 0.01 BTC), a 10 000 USD paper
-or backtest account sizes about 0.24 oz of gold and about 894 EUR under the
-exposure cap, both below one grid step, so a grid ``lot_step`` would size every
-XAUUSD and EURUSD signal to zero. The Exness broker owns the lot grid. Tick sizes
-are ``10 ** -point_digits`` from the recorded instrument conditions.
-
-Run order: ``--apply`` before the first ``sync_1m`` reaches these symbols. No
-``POST /tracked-symbols`` call is needed: this script writes ``tracked_symbols``
-too.
-
-Usage:
-    uv run python scripts/seed_exness_symbols.py [--apply]
-
-Dry-run by default: prints what would be written and writes nothing. ``--apply``
-performs the upserts. Idempotent — safe to re-run.
-
-Exit codes: 0 = completed (or dry run); 1 = a write failed; 2 = configuration missing.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -49,6 +22,13 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 
 SEEDED_FROM = "script"
 
+# Unseeded, a symbol takes its provider's defaults (the Exness FX calendar, no tick
+# size), which is wrong for gold (daily break) and BTCUSD (24/7).
+# Quantity is in instrument units and lot_step stays None: under the exposure cap a
+# 10 000 USD account sizes about 0.24 oz of gold and 894 EUR, both below one recorded
+# lot step (1 oz, 1000 EUR), so a grid lot_step would size every signal to zero. The
+# Exness broker owns the lot grid. Tick sizes are 10 ** -point_digits from the
+# recorded instrument conditions.
 SEEDS: list[tuple[str, str, str, ContractSpec]] = [
     (
         "XAUUSD:EXNESS",
@@ -71,8 +51,8 @@ SEEDS: list[tuple[str, str, str, ContractSpec]] = [
 ]
 
 
+# One asset class spans three schedules, so the calendar is always explicit.
 def _build(composite: str, name: str, calendar_id: str, spec: ContractSpec) -> Symbol:
-    """A CFD Symbol with an explicit calendar: one asset class spans three schedules."""
     return Symbol.create(
         symbol=composite,
         name=name,
@@ -120,7 +100,14 @@ async def seed(apply: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Seed the three Exness CFDs into symbols and tracked_symbols.",
+        epilog=(
+            "Run --apply before the first sync_1m reaches these symbols. No POST"
+            " /tracked-symbols call is needed. Dry-run by default; idempotent. Exit codes:"
+            " 0 = completed (or dry run); 1 = a write failed; 2 = configuration missing."
+        ),
+    )
     parser.add_argument("--apply", action="store_true", help="write; default is a dry run")
     return asyncio.run(seed(parser.parse_args().apply))
 

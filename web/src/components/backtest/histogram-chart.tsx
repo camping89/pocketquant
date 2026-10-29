@@ -12,15 +12,13 @@ import type { HistogramBin } from '../../api/backtest-api'
 
 interface HistogramChartProps {
   bins: HistogramBin[]
-  /** Bar color resolver per bin — lets PnL color wins/losses, duration use one tone. */
   colorFor: (bin: HistogramBin, colors: ReturnType<typeof readChartColors>) => string
   height?: number
   emptyLabel?: string
 }
 
-/** Bar chart over pre-binned values. Bins map to sequential integer "time" slots
- *  (lightweight-charts needs a time axis); the visual is a value distribution,
- *  not a time series. Theme-aware via readChartColors + re-color on theme flip. */
+// lightweight-charts needs a time axis, so bins map to sequential integer "time" slots;
+// the chart shows a value distribution, not a time series.
 export function HistogramChart({ bins, colorFor, height = 200, emptyLabel = 'No data.' }: HistogramChartProps) {
   const { mode } = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)

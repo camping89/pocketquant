@@ -20,7 +20,6 @@ interface PositionsTableProps {
   onRowClick: (row: TradeRow) => void
   onRowMouseEnter?: (row: TradeRow) => void
   onRowMouseLeave?: () => void
-  /** Called when the viewport nears the loaded tail — fetch the next page. */
   onReachEnd?: () => void
   isFetchingNextPage?: boolean
 }

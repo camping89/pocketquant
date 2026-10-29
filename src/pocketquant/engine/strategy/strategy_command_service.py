@@ -1,5 +1,3 @@
-"""Strategy command service — writes desired_state and subscription docs."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -18,13 +16,9 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 )
 
 
+# Declarative: these methods write desired state and subscription docs and return
+# before the engine acts; the reconcile loop converges within one tick.
 class StrategyCommandService:
-    """Write-side strategy operations — pure Mongo writes, no engine dependency.
-
-    All mutations are declarative: desired_state is written and the app
-    control-plane (reconcile loop) converges actual_state within one tick.
-    """
-
     def __init__(
         self,
         subscription_repository: SubscriptionRepository,
@@ -36,35 +30,22 @@ class StrategyCommandService:
         self._settings = settings
 
     async def start(self, subscription_id: str) -> bool:
-        """Set desired_state=running; reconcile converges actual within one tick.
-
-        Declarative: returns before the strategy actually runs.
-        """
         modified = await self._sub_repo.update_desired_state(subscription_id, "running")
         if modified == 0:
             raise NotFoundError(f"Subscription '{subscription_id}' not found.")
         return True
 
     async def stop(self, subscription_id: str) -> bool:
-        """Set desired_state=stopped; reconcile converges actual within one tick.
-
-        Declarative: returns before the strategy actually stops.
-        """
         modified = await self._sub_repo.update_desired_state(subscription_id, "stopped")
         if modified == 0:
             raise NotFoundError(f"Subscription '{subscription_id}' not found.")
         return True
 
+    # Fail-fast checks reject junk subscriptions the reconcile loop would only reject
+    # later.
     async def add_symbol(
         self, strategy_id: str, symbol: str, interval: str, broker: str = "paper"
     ) -> dict:
-        """Persist a new subscription — no RAM instance load.
-
-        ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-        Pure Mongo write — the route handler never touches the engine; the
-        reconcile loop materializes the instance. Fail-fast checks guard against
-        junk subscriptions that reconcile would only later reject.
-        """
         symbol = symbol.upper()
         if not await self._tracked_repo.exists(symbol):
             raise NotFoundError(
@@ -105,11 +86,4 @@ class StrategyCommandService:
         }
 
     async def remove_symbol(self, sub_id: str) -> int:
-        """Cascade-delete a subscription's persisted state — pure Mongo write.
-
-        No RAM unload: the app control-plane (reconcile orphan-unload) tears down
-        the instance once the subscription doc is gone. Subscriptions no longer
-        own any backtest state (forward-testing only), so only the sub doc drops.
-        Returns the number of subscription docs deleted.
-        """
         return await self._sub_repo.delete(sub_id)

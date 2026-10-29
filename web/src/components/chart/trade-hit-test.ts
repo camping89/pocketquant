@@ -1,10 +1,8 @@
 import type { TradeMarker, TradeRow } from '../../api/backtest-api'
 import { toUTCTimestamp } from '../../api/market-data-api'
 
-/** Pick the trade whose time-span contains `timeSec`. Overlapping spans (multiple
- *  concurrent positions) are disambiguated by nearest entry price to the click.
- *  Returns null when the point falls outside every span — a click to deselect.
- *  Open trades (no exit_time) span to `lastCandleTime`. */
+// Overlapping spans (concurrent positions) resolve to the nearest entry price. null means
+// the click fell outside every span (deselect). Open trades span to lastCandleTime.
 export function pickTradeAtTime(
   markers: TradeMarker[],
   timeSec: number,
@@ -26,8 +24,7 @@ export function pickTradeAtTime(
   return best
 }
 
-/** Build the full TradeRow the chart box + table-row highlight consume from an
- *  enriched marker. `duration_seconds` is derived (the marker doesn't carry it). */
+// The marker doesn't carry duration_seconds, so it is derived here.
 export function tradeMarkerToRow(m: TradeMarker): TradeRow {
   const entry = toUTCTimestamp(m.entry_time) as number
   const exit = m.exit_time != null ? (toUTCTimestamp(m.exit_time) as number) : null

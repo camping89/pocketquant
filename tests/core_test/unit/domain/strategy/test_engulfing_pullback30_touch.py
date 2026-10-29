@@ -1,10 +1,5 @@
-"""Unit tests for EngulfingPullback30TouchStrategyService.
-
-Two-bar state machine: the engulfing bar arms (never signals); the next bar
-resolves — enter-on-touch, discard-on-miss, or skip-on-SL-breach. Direct
-``on_bar_completed`` calls (no bus); OHLCV crafted per branch with level/SL
-computed by hand and asserted via ``pytest.approx``.
-"""
+# Two-bar state machine: the engulfing bar arms and never signals; the next bar resolves it
+# (enter on touch, discard on miss, skip on SL breach).
 
 from __future__ import annotations
 
@@ -98,16 +93,14 @@ def _fill_order(side: OrderSide) -> OrderAggregate:
     )
 
 
+# Two fillers and a prev-red bar, then the strong-green pattern bar (idx 3), which arms and
+# returns None.
 async def _arm_long(
     s: EngulfingPullback30TouchStrategyService,
     *,
     filler_high: float = 100.0,
     filler_low: float = 99.0,
 ) -> Any:
-    """Feed 2 fillers + prev-red, then the strong-green pattern bar (idx 3).
-
-    Returns the pattern-bar result (must be None — armed, not signalled).
-    """
     await s.on_bar_completed(_bar(0, 100.0, filler_high, filler_low, 100.0))
     await s.on_bar_completed(_bar(1, 100.0, filler_high, filler_low, 100.0))
     await s.on_bar_completed(_bar(2, *_PREV_RED))

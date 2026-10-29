@@ -1,7 +1,3 @@
-"""Universal trading contract + metrics (source-agnostic): Trade, Fill, EquityPoint,
-PerformanceMetrics, PerformanceCalculatorDomainService, CommissionModel, trade_stats.
-"""
-
 from pocketquant.core.domain.trading.commission_model import (
     CommissionModel,
     PercentageCommissionModel,

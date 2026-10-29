@@ -1,5 +1,3 @@
-"""Bar repository for MongoDB persistence."""
-
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -13,16 +11,11 @@ logger = get_logger(__name__)
 
 
 class BarRepository(SymbolScopedRepository):
-    """Repository for bar data operations. ``symbol`` is composite ``{code}:{exchange}``."""
-
     _collection_name = COLLECTION_BARS
 
+    # One upsert per bar so an in-progress bar is refreshed; insert_many(ordered=False)
+    # silently skipped duplicates.
     async def insert_many(self, records: list[Bar], *, source: str) -> int:
-        """Upsert each bar via upsert_bar. Returns count of upserts attempted successfully.
-
-        Loop ensures in-progress bars (e.g. building 1m) get refreshed, unlike the
-        previous insert_many(ordered=False) which silently skipped duplicates.
-        """
         if not records:
             return 0
         count = 0
@@ -47,9 +40,6 @@ class BarRepository(SymbolScopedRepository):
         return count
 
     async def upsert_bar(self, bar: Bar, *, source: str) -> None:
-        """Diff-aware upsert from one ``find_one``: a new bar is inserted, an equal one is left
-        alone, a changed one gets ``$set`` with a new ``updated_at``.
-        """
         new_value = (bar.open, bar.high, bar.low, bar.close, bar.volume)
         collection = self._collection()
         now = datetime.now(UTC)
@@ -218,11 +208,6 @@ class BarRepository(SymbolScopedRepository):
         start_dt: datetime,
         end_dt: datetime,
     ) -> int:
-        """Delete bars for symbol within [start_dt, end_dt) for the given intervals.
-
-        Returns the total deleted_count. Passing an empty intervals list is a no-op (returns 0).
-        Uses $in filter so multiple intervals are deleted in a single round-trip.
-        """
         if not intervals:
             logger.warning("delete_many_by_range.no_intervals", symbol=symbol)
             return 0
@@ -252,8 +237,8 @@ class BarRepository(SymbolScopedRepository):
             unique=True,
             name="ix_ohlcv_symbol_interval_datetime",
         )
-        # Sparse: only session-aware bars carry session_date, and crypto bars
-        # written before Phase 3 never will.
+        # Sparse: only session-aware bars carry session_date; older crypto bars
+        # never will.
         await collection.create_index(
             [("symbol", 1), ("interval", 1), ("session_date", 1)],
             name="ix_ohlcv_symbol_interval_session_date",

@@ -1,5 +1,3 @@
-"""Tests for the scoring engine — bands, weakest-axis, None re-normalization."""
-
 from __future__ import annotations
 
 from scripts.rubric.scoring import (

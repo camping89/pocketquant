@@ -10,9 +10,8 @@ import type {
 import { encodeSymbolForUrl } from '../lib/symbol-format'
 import { toUTCTimestamp } from '../lib/chart-history'
 
-/** Fetch raw OHLCV bars (desc order, as the API returns them) for a composite
- * symbol. ``endDate`` (ISO string) caps the window to bars at/older than it —
- * the cursor for scroll-left pagination. */
+// Bars come back desc, as the API returns them. endDate caps the window to bars at or
+// older than it; it is the scroll-left pagination cursor.
 export async function fetchOHLCVBars(
   symbol: string,
   interval: Interval,
@@ -28,7 +27,6 @@ export async function fetchOHLCVBars(
   return res.data
 }
 
-/** Fetch all active symbols as composite strings (e.g. ["BTCUSDT:BINANCE", ...]). */
 export async function fetchSymbols(): Promise<SymbolInfo[]> {
   return apiFetch<SymbolInfo[]>('/api/v1/market-data/symbols')
 }

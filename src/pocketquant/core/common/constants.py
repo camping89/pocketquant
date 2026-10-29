@@ -1,8 +1,4 @@
 def build_bar_cache_key(symbol: str, interval: str) -> str:
-    """Build base bar cache key for pattern matching.
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-    """
     return f"ohlcv:{symbol.upper()}:{interval}"
 
 

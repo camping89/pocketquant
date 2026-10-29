@@ -1,16 +1,3 @@
-"""Unit tests for BarRepository — diff-aware upsert, insert_many loop, delete_many_by_range.
-
-Covers:
-- New doc (find_one None) → $setOnInsert created_at, $set OHLCV+updated_at+source.
-- Existing doc with same OHLCV → no write.
-- Existing doc with different OHLCV → $set OHLCV+updated_at+source, no $setOnInsert.
-- upsert_bar/insert_many without source kwarg raise TypeError.
-- insert_many calls upsert_bar once per record, forwards source, is a no-op on empty list,
-  and continues past individual upsert failures.
-- delete_many_by_range builds correct $in/$gte/$lt filter, uppercases symbol, is a no-op on
-  empty interval list, and returns the motor deleted_count.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -83,7 +70,6 @@ def _make_insert_repo() -> BarRepository:
 
 
 def _make_delete_repo(deleted_count: int = 42) -> tuple[BarRepository, MagicMock]:
-    """Return (repo, mock_collection) with delete_many pre-wired."""
     mock_result = MagicMock()
     mock_result.deleted_count = deleted_count
 
@@ -270,7 +256,6 @@ class TestDeleteManyByRangeFilter:
 class TestDeleteManyByRangeEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_intervals_returns_zero_without_db_call(self) -> None:
-        """Empty intervals list: no-op — must not call delete_many."""
         repo, mock_col = _make_delete_repo()
         result = await repo.delete_many_by_range("BTCUSDT:BINANCE", [], _START, _END)
 

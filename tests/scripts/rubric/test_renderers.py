@@ -1,7 +1,3 @@
-"""Renderer tests — synthetic ScorecardResult, no DB. Cover md/html/json shape,
-ranking, escaping, and caveat/version headers.
-"""
-
 from __future__ import annotations
 
 import dataclasses

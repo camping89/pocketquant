@@ -1,24 +1,3 @@
-"""Background sync jobs for market data — single 1m REST fetch + cascade aggregation.
-
-sync_1m runs every minute: fetches last 100 1m bars per tracked symbol via REST,
-upserts to MongoDB, then cascade-aggregates 1m → 5m/15m/1h/4h/1d (math, no extra
-API calls). Sole MongoDB writer for `bars` collection across all timeframes.
-
-sync_verify_cascade runs hourly: for every tracked symbol it fetches REST 5m
-bars, compares them with the cascade-computed 5m, and logs divergence alerts.
-
-data_lag_check runs every minute after sync_1m: measures how far each tracked
-symbol's 1m feed runs behind real time and stores the reading in Redis for the
-UI. It logs only when a symbol's feed state changes.
-
-All job entrypoints are module-level coroutines so APScheduler can serialize them
-as text references for MongoDBJobStore. Dependencies (SyncService, repos) are
-resolved at job-execution time from a module-level container reference set by
-`register_sync_jobs`.
-
-``symbol`` is composite ``{code}:{exchange}`` throughout — no separate exchange param.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -113,6 +92,9 @@ VOLUME_THRESHOLD_PCT = 0.05  # 5%
 DIVERGENCE_ALERT_FRACTION = 0.05  # alert when >5% of compared bars diverge on any field
 
 
+# Job entrypoints are module-level coroutines so APScheduler can store them as text
+# references in MongoDBJobStore; their dependencies are resolved at run time from
+# this container.
 def set_container(container: AsyncContainer) -> None:
     global _container
     _container = container
@@ -138,11 +120,6 @@ def _diff_pct(a: float, b: float) -> float:
 
 
 def compare_bar_fields(rest_bar, db_bar) -> dict[str, bool]:  # noqa: ANN001
-    """Per-field divergence map (True == divergent beyond threshold).
-
-    Pure function to keep `sync_verify_cascade` thin and unit-testable. Price
-    fields share PRICE_THRESHOLD_PCT; volume gets its looser VOLUME_THRESHOLD_PCT.
-    """
     return {
         "open": _diff_pct(rest_bar.open, db_bar.open) > PRICE_THRESHOLD_PCT,
         "high": _diff_pct(rest_bar.high, db_bar.high) > PRICE_THRESHOLD_PCT,
@@ -152,14 +129,10 @@ def compare_bar_fields(rest_bar, db_bar) -> dict[str, bool]:  # noqa: ANN001
     }
 
 
+# A failed body is recorded and logged here, not re-raised: the scheduler's error
+# hook would record the same run a second time. Only a failed start record reaches
+# the scheduler. A failed history write never fails the job.
 async def _tracked(name: str, body: Callable[[str | None], Awaitable[dict | None]]) -> None:
-    """Run one job body and write its job_history document.
-
-    A failed body is recorded here and logged, not re-raised: the scheduler's
-    error hook would record the same run a second time. Only when the start
-    record itself failed does the error reach the scheduler, which records it.
-    A failed history write is logged and never fails the job.
-    """
     task = asyncio.current_task()
     if task is not None:
         _RUNNING.add(task)
@@ -199,12 +172,14 @@ async def _tracked(name: str, body: Callable[[str | None], Awaitable[dict | None
 
 
 async def wait_running_jobs(timeout_s: float) -> int:
-    """Wait until running jobs finish or the timeout passes; return how many still run."""
     if _RUNNING:
         await asyncio.wait(set(_RUNNING), timeout=max(0.0, timeout_s))
     return len(_RUNNING)
 
 
+# Every symbol is tried and the first error is raised at the end. A shut market is
+# skipped without calling the provider: asking anyway spends rate limit on an empty
+# answer.
 async def _sync_by_intervals(
     intervals: list[Interval],
     n_bars: int,
@@ -216,14 +191,6 @@ async def _sync_by_intervals(
     source: str,
     calendar_factory: TradingCalendarFactory,
 ) -> dict:
-    """For each tracked symbol, sync the given intervals via REST provider.
-
-    Returns ``total_inserted`` and ``total_fetched`` across all sub-syncs. Every
-    symbol is tried; the first error is raised at the end.
-
-    A symbol whose market is shut is skipped without calling the provider: there
-    is nothing to fetch, and asking anyway spends rate limit on an empty answer.
-    """
     logger.debug(f"market_data.{job_name}.started")
 
     async def detail(**fields: Any) -> None:
@@ -341,12 +308,9 @@ async def _rest_sync(
 
 # APScheduler entrypoints — referenced by text as
 # "pocketquant.engine.market_data.app_services.sync_jobs:<funcname>"
+# The cascade runs even when a REST fetch failed: the symbols that did sync still
+# need their higher timeframes. The failure is recorded afterwards.
 async def sync_1m() -> None:
-    """Fetch the last 100 1m bars per symbol, then cascade them to 5m-1d.
-
-    The cascade runs even when a REST fetch failed: the symbols that did sync
-    still need their higher timeframes. The failure is recorded afterwards.
-    """
     container = _get_container()
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
@@ -398,10 +362,6 @@ async def sync_backfill() -> None:
 
 
 async def sync_integrity() -> None:
-    """Log misaligned, missing and unexpected bars per symbol and timeframe.
-
-    Each symbol is checked on its own; the run fails once all are done if any failed.
-    """
     container = _get_container()
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
@@ -439,10 +399,6 @@ async def sync_integrity() -> None:
 
 
 async def sync_repair() -> None:
-    """Delete misaligned bars and re-sync gaps per symbol and timeframe.
-
-    Each symbol is repaired on its own; the run fails once all are done if any failed.
-    """
     container = _get_container()
     sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
@@ -487,11 +443,6 @@ async def _verify_one_symbol(
     provider: IDataProviderPort,
     bar_repo: BarRepository,
 ) -> dict:
-    """Compare REST 5m bars against cascade-stored 5m bars for composite ``symbol``.
-
-    Returns a per-symbol summary dict with compared / divergence_count / sample_divergences.
-    Raises on REST/DB failures so the caller can record per-symbol error state.
-    """
     rest_bars = await provider.fetch_ohlcv(
         symbol=symbol,
         interval=Interval.MINUTE_5,
@@ -539,12 +490,6 @@ async def _verify_one_symbol(
 
 
 async def sync_verify_cascade() -> None:
-    """Hourly full-fleet sanity check: REST 5m vs cascade 5m, full OHLCV per field.
-
-    Iterates every tracked symbol. Each comparison checks O/H/L/C against
-    PRICE_THRESHOLD_PCT and V against VOLUME_THRESHOLD_PCT. Alerts when
-    divergence_count/compared > DIVERGENCE_ALERT_FRACTION for that symbol.
-    """
     container = _get_container()
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
@@ -600,16 +545,12 @@ async def sync_verify_cascade() -> None:
     await _tracked("sync_verify_cascade", body)
 
 
+# A delayed feed stays delayed all session, so logging every reading would be a
+# per-symbol-per-minute line. Entering STUCK is the one actionable change and is a
+# WARNING; the rest are a few per symbol per day and stay INFO.
 def _log_feed_transition(
     previous: dict | None, state: FeedState, symbol: str, lag_seconds: int | None
 ) -> None:
-    """Log a feed state change once, never the steady state.
-
-    A delayed feed stays delayed all session, so logging every reading would be
-    a per-symbol-per-minute line. Entering STUCK is the one actionable change and
-    is a WARNING; the rest (a session opening delayed, a feed recovering) are
-    bounded to a few per symbol per day and stay INFO.
-    """
     before = previous.get("state") if previous else FeedState.UNKNOWN.value
     if before == state.value:
         return
@@ -652,7 +593,6 @@ async def data_lag_check() -> None:
 
 
 async def backtest_orphan_sweep() -> None:
-    """Fail backtest runs whose task stopped refreshing its heartbeat."""
     backtest_repo = await _get_container().get(BacktestRepository)
 
     async def body(_: str | None) -> None:
@@ -661,29 +601,15 @@ async def backtest_orphan_sweep() -> None:
     await _tracked("backtest_orphan_sweep", body)
 
 
+# The stable _catchup job id with replace_existing replaces a pending catch-up
+# instead of adding one. A fresh DB (no success yet) needs none; the next cron tick
+# runs it. If the scheduler is not started yet, the one-off fires on its first tick.
+# The catch-up's history doc is keyed by the original job id, so the next boot sees
+# the success and does not enqueue again.
 async def enqueue_missed_catchups(
     history_repo: JobHistoryRepository,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Enqueue a one-off catch-up run for each CATCHUP_TARGETS job whose last
-    success exceeds its per-job ``max_gap``.
-
-    ``add_one_off_job`` uses ``replace_existing=True`` with a stable ``_catchup``
-    suffix, so a repeated resolve replaces the pending catch-up instead of adding
-    one. Fresh DB (``last is None``) is treated as "no catch-up needed"; the next
-    cron tick handles the first run.
-
-    Assumes ``scheduler.start()`` has already run: the worker role starts the
-    scheduler after it takes the worker lease and only then registers the jobs. If
-    that ever inverts, the one-off persists with ``next_run_time=now`` and fires
-    on the first post-start tick — harmlessly deferred, never dropped.
-
-    Note on history-doc naming: the catchup's APScheduler job_id is
-    ``<job_id>_catchup``, but the wrapper inside (``_tracked``) writes a
-    ``job_history`` doc keyed by the ORIGINAL job_id. That's intentional — the
-    next boot's ``get_last_successful_started_at(<job_id>)`` then sees the
-    recent success and skips re-enqueueing.
-    """
     now = datetime.now(UTC)
     for job_id, func_ref, max_gap in CATCHUP_TARGETS:
         last = await history_repo.get_last_successful_started_at(job_id)
@@ -706,18 +632,9 @@ async def register_sync_jobs(
     container: AsyncContainer,
     job_scheduler: JobScheduler,
 ) -> None:
-    """Register 7 sync/integrity/lag/sweep jobs as text refs.
-
-    The container reference is set at app startup (``set_container``), before
-    any job can run; ``container`` is used here only for the catch-up sweep.
-
-    Per-job ``misfire_grace_time`` matches each cadence (tight for high-frequency,
-    1h for heavy daily). After registration, scans ``job_history`` for missed
-    daily/12h runs and enqueues one-off catch-ups.
-    """
     # UTC wall-clock anchored — bar-aligned crons eliminate phase drift on restart.
     # Strategy correctness depends on bar-close events arriving on time; lag/gaps
-    # cause missed entries/exits. See debug-260505-1213-15m-freshness-delay.md.
+    # cause missed entries/exits.
     #
     # sync_1m runs at +12 s from bar close: the provider has settled the bar, and the
     # live 1m entries (timer close at +0.5 s, orders by about +2 s) are done.

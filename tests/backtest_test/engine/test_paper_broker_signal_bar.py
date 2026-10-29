@@ -1,6 +1,5 @@
-"""Replay stamps each bar event with sim time, so the paper broker does not let the
-bar that produced an entry signal close the position it just opened.
-"""
+# Replay stamps each bar event with sim time, so the paper broker does not let the bar that
+# produced an entry signal close the position it just opened.
 
 from __future__ import annotations
 

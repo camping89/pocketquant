@@ -34,14 +34,9 @@ def get_bar_start(timestamp: datetime, interval: Interval) -> datetime:
     return epoch + timedelta(seconds=aligned_seconds)
 
 
+# The grid belongs to the calendar, not the clock: a session opening at 22:00 UTC puts
+# hourly bars on another grid. Continuous24x7Calendar delegates to get_bar_start.
 def is_bar_aligned(timestamp: datetime, interval: Interval, calendar: ITradingCalendarPort) -> bool:
-    """True when ``timestamp`` is the open instant of its bar on ``calendar``.
-
-    The grid belongs to the symbol's calendar, not to the clock: a session that
-    opens at 22:00 UTC puts its hourly bars on a different grid than a market
-    that never closes. ``Continuous24x7Calendar`` delegates back to
-    ``get_bar_start``, so crypto keeps the UTC-epoch grid exactly.
-    """
     return timestamp == calendar.bar_start(timestamp, interval)
 
 
@@ -59,11 +54,6 @@ def filter_aligned_bars(
 
 @dataclass
 class BarBuilderDomainService:
-    """Builds OHLCV bars from incoming ticks. Pure domain logic, no I/O.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    """
-
     symbol: str
     interval: Interval
     bar_start: datetime
@@ -84,15 +74,9 @@ class BarBuilderDomainService:
         if self.bar_end is None:
             self.bar_end = self.bar_start + timedelta(seconds=INTERVAL_SECONDS[self.interval])
 
+    # volume must be a per-tick delta; a cumulative session total inflates bar volume.
+    # False when the tick is outside the bar range (no state change).
     def add_tick(self, price: float, volume: float | None, timestamp: datetime) -> bool:
-        """Aggregate a tick into the in-progress bar.
-
-        volume MUST be per-tick DELTA (e.g., Binance @aggTrade ``q`` field).
-        Cumulative session totals will inflate bar volume — adapters must
-        convert before calling this method.
-
-        Returns False if tick is outside bar range (rejected, no state change).
-        """
         if self.bar_end is None or timestamp < self.bar_start or timestamp >= self.bar_end:
             return False
 

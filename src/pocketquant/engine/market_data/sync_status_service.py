@@ -1,15 +1,3 @@
-"""Sync-status query service — bar-derived freshness composition.
-
-Composes API response from:
-- sync_status: command-log fields (status, error, last_sync_at, consecutive_empty_fetches)
-- bars: data-truth fields (bar_count, last_bar_at, is_stuck)
-- the symbol's 1m feed: lag_seconds / is_delayed (see ``data_lag_service``)
-
-Decouples cascade-derived bar freshness from sync_status (which only updates on
-SyncSymbolCommand). Eliminates false STUCK badges for cascade timeframes.
-``symbol`` is composite ``{code}:{exchange}`` throughout.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -45,8 +33,6 @@ _BEHIND = frozenset({FeedState.DELAYED, FeedState.STUCK})
 
 @dataclass
 class SyncStatusResult:
-    """Result of a sync status query. ``symbol`` is composite ``{code}:{exchange}``."""
-
     symbol: str
     interval: str
     status: str
@@ -70,6 +56,10 @@ class _Feed:
     state: FeedState
 
 
+# The 1m row is the feed itself, so it is stuck exactly when the feed is: behind
+# and no longer inserting bars. Every other row may be as late as a delayed feed
+# plus three of its own cadences. A stuck feed earns no allowance, or a stalled
+# feed would excuse every row built from it.
 def _is_stuck(
     latest_bar_dt: datetime | None,
     interval: str,
@@ -77,13 +67,6 @@ def _is_stuck(
     feed: _Feed,
     now: datetime,
 ) -> bool:
-    """No new bar in 3x this interval's cadence beyond what the feed delay explains.
-
-    The 1m row is the feed itself, so it is stuck exactly when the feed is: behind
-    and no longer inserting bars. Every other row may be as late as a delayed
-    feed plus three of its own cadences. A stuck feed earns no allowance, or a
-    stalled feed would excuse every row built from it.
-    """
     if interval == Interval.MINUTE_1.value:
         return feed.state is FeedState.STUCK
     if latest_bar_dt is None:
@@ -106,6 +89,8 @@ def _iso_z(dt: datetime | None) -> str | None:
     return to_utc_iso(dt)
 
 
+# Freshness comes from the bars, not from sync_status, which updates only on
+# SyncSymbolCommand; that keeps cascade timeframes from showing false STUCK badges.
 async def _enrich_with_bars(
     symbol: str,
     interval_value: str,
@@ -187,7 +172,6 @@ class SyncStatusQueryService:
         status_1m: dict[str, SyncStatus],
         now: datetime,
     ) -> dict[str, _Feed]:
-        """One 1m-feed reading per symbol, shared by all of its interval rows."""
         symbols = list(calendar_of)
         latest = await asyncio.gather(
             *(self._bar_repo.get_latest(sym, Interval.MINUTE_1) for sym in symbols),
@@ -206,7 +190,6 @@ class SyncStatusQueryService:
         return feeds
 
     async def get_symbol_sync_status(self, symbol: str, interval: str = "1d") -> SyncStatusResult:
-        """Return sync status for a single composite symbol. 404 if not found."""
         tf = Interval(interval)
 
         status = await self._sync_status_repo.find_one(symbol, tf)

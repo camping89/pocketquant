@@ -1,5 +1,3 @@
-"""Unit tests for BarAppService — throttle, no-Mongo-write, multi-tf state."""
-
 import time
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
@@ -22,7 +20,6 @@ from pocketquant.engine.market_data.app_services.quote_dto import QuoteTick
 
 @pytest.fixture
 def mock_cache():
-    """Mock Redis Cache."""
     cache = AsyncMock(spec=Cache)
     cache.set = AsyncMock()
     cache.get = AsyncMock(return_value=None)
@@ -32,7 +29,6 @@ def mock_cache():
 
 @pytest.fixture
 def mock_bar_repo():
-    """Mock BarRepository."""
     repo = AsyncMock(spec=BarRepository)
     repo.upsert_bar = AsyncMock()
     return repo
@@ -40,7 +36,6 @@ def mock_bar_repo():
 
 @pytest.fixture
 def mock_event_bus():
-    """Mock EventBus."""
     bus = AsyncMock(spec=EventBus)
     bus.publish = AsyncMock()
     return bus
@@ -48,7 +43,6 @@ def mock_event_bus():
 
 @pytest.fixture
 def bar_service(mock_cache, mock_bar_repo, mock_event_bus):
-    """BarAppService with mocked dependencies."""
     return BarAppService(
         cache=mock_cache,
         bar_repository=mock_bar_repo,
@@ -58,8 +52,6 @@ def bar_service(mock_cache, mock_bar_repo, mock_event_bus):
 
 
 class TestBarAppServiceDefaults:
-    """Test BarAppService initialization with defaults."""
-
     def test_default_intervals_all_canonical_tfs(self):
         cache = AsyncMock(spec=Cache)
         bar_repo = AsyncMock(spec=BarRepository)
@@ -97,11 +89,8 @@ class TestBarAppServiceDefaults:
 
 
 class TestThrottle:
-    """Test 200ms throttle on Redis cache writes."""
-
     @pytest.mark.asyncio
     async def test_throttle_skips_rapid_writes(self, bar_service, mock_cache):
-        """Ticks within 200ms → skip Redis write."""
         symbol_key = "BINANCE:BTC"
         interval = Interval.MINUTE_1
 
@@ -136,7 +125,6 @@ class TestThrottle:
 
     @pytest.mark.asyncio
     async def test_force_flush_bypasses_throttle(self, bar_service, mock_cache):
-        """force=True bypasses throttle (used on bar roll)."""
         from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
             BarBuilderDomainService,
         )
@@ -155,11 +143,8 @@ class TestThrottle:
 
 
 class TestNoMongoWrite:
-    """Test that BarAppService does NOT call bar_repo.upsert_bar."""
-
     @pytest.mark.asyncio
     async def test_bar_completion_no_mongo_write(self, bar_service, mock_bar_repo):
-        """On bar completion, upsert_bar is NOT called."""
         from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
             BarBuilderDomainService,
         )
@@ -181,7 +166,6 @@ class TestNoMongoWrite:
 
     @pytest.mark.asyncio
     async def test_event_bus_publishes_on_bar_completion(self, bar_service, mock_event_bus):
-        """BarCompletedEvent IS published on bar completion."""
         for ts in (
             datetime(2026, 5, 6, 12, 0, 1, tzinfo=UTC),
             datetime(2026, 5, 6, 12, 5, 1, tzinfo=UTC),
@@ -199,11 +183,8 @@ class TestNoMongoWrite:
 
 
 class TestMultiTfState:
-    """Test multi-timeframe independent state management."""
-
     @pytest.mark.asyncio
     async def test_multiple_tfs_independent_bars(self, bar_service):
-        """Each tf maintains independent in-progress bar state."""
         # Add tick for 1m and 5m simultaneously
         tick = QuoteTick(
             symbol="BINANCE:BTC",
@@ -227,7 +208,6 @@ class TestMultiTfState:
 
     @pytest.mark.asyncio
     async def test_5m_bar_rolls_only_on_5min_boundary(self, bar_service):
-        """5m bar only completes at 5-minute boundaries, not at every 1m roll."""
         # Tick at 10:00 UTC
         tick1 = QuoteTick(
             symbol="BINANCE:BTC",
@@ -259,7 +239,6 @@ class TestMultiTfState:
 
     @pytest.mark.asyncio
     async def test_active_symbols_tracks_all_tfs(self, bar_service):
-        """active_symbols lists all symbols with any in-progress bar."""
         tick = QuoteTick(
             symbol="BINANCE:BTC",
             price=100.0,
@@ -273,11 +252,8 @@ class TestMultiTfState:
 
 
 class TestCacheKeyInjection:
-    """Test that last_update is injected into Redis for staleness calc."""
-
     @pytest.mark.asyncio
     async def test_cache_includes_last_update(self, bar_service, mock_cache):
-        """Redis cache dict includes last_update (Unix seconds)."""
         from pocketquant.core.domain.bar.services.bar_builder_domain_service import (
             BarBuilderDomainService,
         )
@@ -301,8 +277,6 @@ class TestCacheKeyInjection:
 
 
 class _OneCalendar:
-    """Stands in for TradingCalendarFactory: every symbol is on ``calendar``."""
-
     def __init__(self, calendar: ITradingCalendarPort) -> None:
         self._calendar = calendar
 
@@ -310,11 +284,9 @@ class _OneCalendar:
         return self._calendar
 
 
+# The week boundary comes an hour early, as a session week's does when US clocks spring
+# forward: the second week opens 6 days 23 hours after the first.
 class _ShortWeekCalendar(Continuous24x7Calendar):
-    """Two weeks whose boundary comes an hour early, as a session week's does
-    when US clocks spring forward: the second week opens 6 days 23 hours after
-    the first. Every other interval keeps the 24/7 grid."""
-
     FIRST_WEEK = datetime(2027, 3, 7, 23, 0, tzinfo=UTC)
     SECOND_WEEK = datetime(2027, 3, 14, 22, 0, tzinfo=UTC)
 
@@ -325,8 +297,6 @@ class _ShortWeekCalendar(Continuous24x7Calendar):
 
 
 class TestSessionCalendarBuckets:
-    """Realtime bars open on the symbol's calendar grid, not on the 24/7 one."""
-
     @pytest.mark.asyncio
     async def test_exness_weekly_bar_opens_on_sunday_and_holds_the_sunday_session(
         self, mock_cache, mock_bar_repo, mock_event_bus

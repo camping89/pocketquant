@@ -1,13 +1,5 @@
-/**
- * Mutations for subscription lifecycle: create, start, stop, delete.
- *
- * Routes are split:
- *   /strategies/{strategy_code}/...     template-scoped
- *   /subscriptions/{sub_id}/...         instance-scoped
- *
- * Every mutation invalidates ['subscriptions'], the key of the one list query.
- * A longer key such as ['subscriptions', code] would not match it.
- */
+// Every mutation invalidates ['subscriptions'], the key of the one list query.
+// A longer key such as ['subscriptions', code] would not match it.
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { addSymbol, removeSubscription } from '../api/strategy-api'
 import { apiPost } from '../api/api-client'

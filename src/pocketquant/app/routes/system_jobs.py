@@ -1,13 +1,3 @@
-"""HTTP endpoints for job history observability.
-
-Exposes:
-  - GET /system/jobs/{job_id}/runs — paginated history (newest first).
-  - GET /system/jobs/{job_id}/stats — aggregated counts + p50/p95.
-
-Stats are cached in Redis (30s) to avoid hammering Mongo aggregations
-on every UI refresh.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -23,6 +13,7 @@ from pocketquant.core.infra.persistence.repositories.job_history_repository impo
 
 router = APIRouter(prefix="/system/jobs", route_class=DishkaRoute)
 
+# Stats are cached so a UI refresh does not rerun the Mongo aggregation each time.
 _STATS_CACHE_TTL = 30
 _WINDOW_DAYS = {"24h": 1, "7d": 7, "30d": 30}
 

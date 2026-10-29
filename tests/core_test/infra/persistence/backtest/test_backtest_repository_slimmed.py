@@ -1,5 +1,3 @@
-"""BacktestRepository slim-shape persistence test (post-Phase-4)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -74,7 +72,6 @@ async def test_roundtrip_preserves_open_positions(database: Database) -> None:
 
 
 def _scoped_run(strategy_code: str, symbol: str, interval: str) -> BacktestResult:
-    """A finished run carrying top-level symbol/interval for scope-filter tests."""
     run = BacktestResult.started(
         generate_id_str(),
         {"strategy_code": strategy_code, "symbol": symbol, "interval": interval},
@@ -87,7 +84,6 @@ def _scoped_run(strategy_code: str, symbol: str, interval: str) -> BacktestResul
 async def test_list_by_strategy_code_filters_by_composite_symbol_and_interval(
     database: Database,
 ) -> None:
-    """Scope filter uses the composite symbol (CODE:EXCHANGE), not the bare code."""
     repo = BacktestRepository(database)
     await repo.save(_scoped_run("hitnrun2", "BTCUSDT:BINANCE", "1m"))
     await repo.save(_scoped_run("hitnrun2", "BTCUSDT:BINANCE", "1m"))
@@ -103,7 +99,6 @@ async def test_list_by_strategy_code_filters_by_composite_symbol_and_interval(
 
 @pytest.mark.asyncio
 async def test_list_by_strategy_code_without_scope_returns_all(database: Database) -> None:
-    """Omitting symbol/interval keeps the original strategy-wide behaviour."""
     repo = BacktestRepository(database)
     await repo.save(_scoped_run("engulfing", "BTCUSDT:BINANCE", "1m"))
     await repo.save(_scoped_run("engulfing", "ETHUSDT:BINANCE", "5m"))
@@ -114,7 +109,6 @@ async def test_list_by_strategy_code_without_scope_returns_all(database: Databas
 
 @pytest.mark.asyncio
 async def test_from_mongo_tolerates_legacy_doc_with_trades_positions(database: Database) -> None:
-    """Pre-migration docs with legacy trades[]/positions[] must still deserialise."""
     coll = database.get_collection("backtest_runs")
     legacy_id = generate_id_str()
     legacy_doc = {

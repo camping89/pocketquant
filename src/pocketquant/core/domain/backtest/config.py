@@ -9,23 +9,6 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 
 @dataclass
 class BacktestConfig:
-    """Configuration for a single backtest run.
-
-    Attributes:
-        strategy_code: Unique identifier for the strategy to backtest.
-        symbol: Composite trading symbol ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-        interval: Bar interval (e.g., "5m", "1h", "1d").
-        start_date: Start datetime for historical replay (minute precision).
-        end_date: End datetime for historical replay (minute precision).
-        initial_capital: Starting capital for the backtest.
-        slippage_bps: Slippage in basis points (1 = 0.01%).
-        commission_bps: Commission in basis points (3 = 0.03%).
-        spread: Constant spread in price units; bars are bid, ask = bid + spread.
-        parameters: Strategy-specific parameters for optimization.
-        name: Optional human-readable label for the run.
-        contract_spec: The symbol's contract units; linear for crypto.
-    """
-
     strategy_code: str
     symbol: str
     interval: str
@@ -34,6 +17,7 @@ class BacktestConfig:
     initial_capital: float = 10_000.0
     slippage_bps: float = 0.5  # 0.5 bp = 0.005% default
     commission_bps: float = 3.0  # 3 bps default
+    # Bars are bid prices; ask = bid + spread.
     spread: float = 0.0
     parameters: dict[str, Any] = field(default_factory=dict)
     name: str | None = None

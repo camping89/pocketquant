@@ -1,5 +1,3 @@
-"""Order aggregate with state machine for order lifecycle — Pydantic model."""
-
 from datetime import datetime
 from typing import Any, ClassVar
 from uuid import UUID
@@ -23,12 +21,6 @@ class InvalidOrderTransitionError(Exception):
 
 
 class OrderAggregate(BaseModel):
-    """Order aggregate root with state machine.
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-    Tracks order lifecycle from creation to terminal state.
-    """
-
     id: UUID
     subscription_id: str
     symbol: str
@@ -69,7 +61,6 @@ class OrderAggregate(BaseModel):
         sl_price: float | None = None,
         tp_price: float | None = None,
     ) -> OrderAggregate:
-        """Factory method to create a new order."""
         if quantity <= 0:
             raise ValueError("Quantity must be positive")
         if order_type == OrderType.LIMIT and price is None:
@@ -108,7 +99,6 @@ class OrderAggregate(BaseModel):
         return self
 
     def fill(self, quantity: float, price: float) -> OrderAggregate:
-        """Fully fill the order."""
         if self.status == OrderStatus.PARTIALLY_FILLED:
             remaining = self.quantity - self.filled_quantity
             if quantity != remaining:
@@ -142,7 +132,6 @@ class OrderAggregate(BaseModel):
         return self
 
     def cancel(self, reason: str = "") -> OrderAggregate:
-        """Cancel the order."""
         if self.status.is_terminal:
             raise InvalidOrderTransitionError(
                 f"Cannot cancel order in terminal state: {self.status}"
@@ -159,7 +148,6 @@ class OrderAggregate(BaseModel):
         return self
 
     def reject(self, reason: str) -> OrderAggregate:
-        """Reject the order (broker rejection)."""
         self._validate_transition(OrderStatus.REJECTED)
         self.status = OrderStatus.REJECTED
         self.updated_at = utc_now()
@@ -183,7 +171,6 @@ class OrderAggregate(BaseModel):
         return events
 
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to MongoDB document."""
         return {
             "_id": str(self.id),
             "subscription_id": self.subscription_id,
@@ -203,7 +190,6 @@ class OrderAggregate(BaseModel):
 
     @classmethod
     def from_mongo(cls, doc: dict[str, Any]) -> OrderAggregate:
-        """Reconstruct from MongoDB document."""
         return cls(
             id=doc["_id"],
             subscription_id=doc["subscription_id"],

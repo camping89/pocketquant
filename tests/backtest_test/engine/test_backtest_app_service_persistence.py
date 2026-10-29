@@ -1,10 +1,3 @@
-"""End-to-end test — BacktestAppService persists to all 3 collections.
-
-Drives a minimal real backtest (synthetic bars + scripted strategy orders)
-via the real BacktestAppService against a real Mongo testcontainer and asserts
-that backtest_runs / backtest_orders / backtest_trades are populated correctly.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Generator
@@ -75,7 +68,6 @@ def _bar(
 
 @pytest.mark.asyncio
 async def test_end_to_end_persists_three_collections(database: Database) -> None:
-    """Round-trip: 1 entry + 1 exit → 1 trade, 2 orders, slim run in Mongo."""
     bus = EventBus()
     broker = PaperBrokerAdapter(
         initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus
@@ -180,13 +172,10 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     assert exit_order.resulting_trade_id == str(t.trade_id)
 
 
+# Regression: the on_event handler created a stub with placeholder side=BUY, and on_fill saw
+# an existing entry and skipped the side backfill.
 @pytest.mark.asyncio
 async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
-    """Regression: synthetic SL exit must persist with side=SELL (closes LONG).
-
-    Previously the on_event handler created a stub with placeholder side=BUY,
-    and on_fill saw an existing entry and skipped the side backfill.
-    """
     bus = EventBus()
     broker = PaperBrokerAdapter(
         initial_balance=100_000, slippage_percent=0, fill_delay_ms=0, event_bus=bus

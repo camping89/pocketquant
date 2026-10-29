@@ -1,9 +1,3 @@
-"""Binance REST data provider — implements IDataProviderPort via /api/v3/klines.
-
-Rate limits: 2 weight/call, 1200 weight/min budget.
-Inter-call sleep: 100ms. On HTTP 429: log + raise (caller handles backoff).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -27,19 +21,13 @@ from pocketquant.core.infra.binance.binance_mappers import (
 logger = get_logger(__name__)
 
 _KLINES_ENDPOINT = "/api/v3/klines"
+# Binance returns at most 1000 klines per call.
 _MAX_BARS_PER_CALL = 1000
+# A klines call costs 2 weight of the 1200 weight/min budget.
 _INTER_CALL_SLEEP_S = 0.1  # 100ms
 
 
 class BinanceAdapter(IDataProviderPort):
-    """Async REST client for Binance public klines API.
-
-    Usage:
-        client = BinanceAdapter(settings)
-        bars = await client.fetch_ohlcv("BTCUSDT:BINANCE", Interval.MINUTE_1, 500)
-        client.close()
-    """
-
     def __init__(
         self,
         settings: Settings,  # noqa: ARG002 — reserved for future auth/proxy config
@@ -54,11 +42,6 @@ class BinanceAdapter(IDataProviderPort):
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        """Fetch n_bars OHLCV bars in ascending order.
-
-        ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-        Paginates automatically when n_bars > 1000 (Binance limit per call).
-        """
         # Extract bare code from composite symbol for Binance API (BINANCE-specific boundary)
         code = symbol.split(":")[0] if ":" in symbol else symbol
         validated_symbol = validate_symbol(code)
@@ -135,7 +118,6 @@ class BinanceAdapter(IDataProviderPort):
         self,
         query: str,
     ) -> list[dict]:
-        """Stub — Binance symbol search not required for current use cases."""
         return []
 
     async def close(self) -> None:
@@ -144,6 +126,7 @@ class BinanceAdapter(IDataProviderPort):
     async def _fetch_klines(self, params: dict[str, Any]) -> list[list[Any]]:
         response = await self._http.get(_KLINES_ENDPOINT, params=params)
 
+        # No backoff here: the caller decides when to retry.
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After", "unknown")
             logger.warning(

@@ -1,5 +1,3 @@
-"""Exness request signing: body hash, signed headers, key loading, server clock."""
-
 from __future__ import annotations
 
 import base64

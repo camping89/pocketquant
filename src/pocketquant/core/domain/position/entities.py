@@ -18,13 +18,6 @@ from pocketquant.core.domain.shared.events import DomainEvent
 
 
 class PositionAggregate(BaseModel):
-    """Position aggregate root tracking entry, quantity, and P&L.
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-    Handles position lifecycle from open to close with proper
-    average price calculation on adds and realized P&L on reduces.
-    """
-
     id: UUID
     subscription_id: str
     symbol: str
@@ -42,8 +35,8 @@ class PositionAggregate(BaseModel):
     entry_order_id: str | None = None
     # Accumulated entry-side commission; reduce/close drains a proportional portion.
     entry_commission: float = 0.0
+    # Account currency per 1.0 of price move, per contract.
     multiplier: float = 1.0
-    """Account currency per 1.0 of price move per contract; 1.0 for linear instruments."""
     _events: list[DomainEvent] = PrivateAttr(default_factory=list)
 
     @classmethod
@@ -245,7 +238,6 @@ class PositionAggregate(BaseModel):
         return events
 
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to MongoDB document."""
         return {
             "_id": str(self.id),
             "subscription_id": self.subscription_id,
@@ -265,7 +257,6 @@ class PositionAggregate(BaseModel):
 
     @classmethod
     def from_mongo(cls, doc: dict[str, Any]) -> PositionAggregate:
-        """Reconstruct from MongoDB document."""
         return cls(
             id=doc["_id"],
             subscription_id=doc["subscription_id"],

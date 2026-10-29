@@ -1,15 +1,3 @@
-"""LiveTradeCollector — persists round-trip Trades during live/paper trading.
-
-EventBus subscriber. Each ``TradeClosedEvent`` (which carries its own
-``subscription_id``) is mapped to a ``Trade`` with ``run_id`` = subscription_id
-and appended to the live ``trades`` collection. Unlike the backtest collector it
-keeps no equity ledger — metrics are derived on demand (LiveMetricsQueryService).
-
-N subscriptions sharing one broker are attributed correctly: the event, not the
-broker, carries the ``subscription_id``, so a single broker→bus forward feeds
-every subscription's trades through this one handler.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -25,16 +13,9 @@ from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 logger = get_logger(__name__)
 
 
+# The event, not the broker, carries subscription_id, so subscriptions sharing one
+# broker still get their own trades through this one handler.
 class LiveTradeCollector:
-    """Bus-subscriber that turns live ``TradeClosedEvent``s into persisted Trades.
-
-    Args:
-        event_bus: Global bus the live broker forwards trade closures onto.
-        trade_repo: Live ``trades`` persistence.
-        strategy_service: In-memory config lookup for ``strategy_code`` (free —
-            no Mongo hit); keyed by the subscription id the event carries.
-    """
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -46,7 +27,6 @@ class LiveTradeCollector:
         self._strategy_service = strategy_service
 
     async def start(self) -> None:
-        """Subscribe the trade handler to the global bus (mirrors StrategyAppService)."""
         self._event_bus.subscribe(TradeClosedEvent, self._on_trade_closed)
         logger.info("live_trade_collector_started")
 

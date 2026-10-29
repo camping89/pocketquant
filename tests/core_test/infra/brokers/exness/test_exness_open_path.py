@@ -1,5 +1,3 @@
-"""ExnessBrokerAdapter open path: one open in flight per subscription, checks under one lock."""
-
 from __future__ import annotations
 
 import asyncio

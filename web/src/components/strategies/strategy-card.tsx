@@ -1,8 +1,3 @@
-/**
- * Single row in the strategy list sidebar.
- * Line 1: symbol code + exchange badge + PAPER/LIVE badge.
- * Line 2: timeframe · strategy code + one run-state pill.
- */
 import { parseSymbol } from '../../lib/symbol-format'
 import type { Subscription } from '../../api/strategy-api'
 
@@ -14,7 +9,6 @@ interface StrategyCardProps {
 
 type RowState = 'running' | 'starting' | 'stopped'
 
-/** Map forward run-state → the row's state pill. */
 function toRowState(sub: Subscription): RowState {
   if (sub.actual_state === 'running') return 'running'
   if (sub.desired_state === 'running') return 'starting'  // converging

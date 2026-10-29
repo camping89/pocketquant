@@ -31,8 +31,6 @@ APP_ROLE_NAMES = ("api", "worker", "trader")
 
 
 class Settings(BaseSettings):
-    """Application settings. All values must be provided via .env file."""
-
     model_config = SettingsConfigDict(
         env_file=_resolve_env_file(),
         env_file_encoding="utf-8",

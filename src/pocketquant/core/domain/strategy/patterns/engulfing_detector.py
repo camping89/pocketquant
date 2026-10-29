@@ -1,16 +1,3 @@
-"""Full-candle engulfing detection shared by the Python strategy and the TS chart.
-
-One definition, two consumers: ``EngulfingStrategyService`` enters only strong patterns;
-the chart toggle colors every engulfing strong/weak. Locked across both runtimes
-by the golden fixture in ``tests/core_test/.../engulfing_golden_fixture.json``.
-
-Engulfing here means the current bar covers the previous bar on BOTH axes: body
-over body (open/close) AND range over range (high/low) — the current wick must
-not sit inside the previous wick. Body-only overlap is not enough.
-
-Pure function, no state, no I/O — stdlib only so the core import contract holds.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,19 +15,9 @@ class EngulfingResult:
     rejection_wick_pct: float
 
 
+# Shared with the TS chart; a golden fixture locks both runtimes to this definition.
+# Consumers threshold rejection_wick_pct themselves.
 def detect_engulfing(prev: dict, curr: dict) -> EngulfingResult:
-    """Detect strict body engulfing between two consecutive bars.
-
-    Bars are dicts with float ``open/high/low/close``.
-
-    Bullish (→ LONG): prev red, curr green, body engulfs (``open <= prev_close``
-    and ``close >= prev_open``) AND range engulfs (``high >= prev_high`` and
-    ``low <= prev_low``). Bearish mirrors it.
-
-    ``rejection_wick_pct`` is the wick AGAINST the trade direction over the
-    bar range (upper wick for LONG, lower wick for SHORT) — a directional
-    close-location quality filter. Consumers threshold it themselves.
-    """
     prev_open = float(prev["open"])
     prev_high = float(prev["high"])
     prev_low = float(prev["low"])

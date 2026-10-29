@@ -1,18 +1,3 @@
-"""Backtest stats service — read-side analytics + paged trades for the result view.
-
-Centralizes every number the Trades tab shows so the browser loads results
-instead of computing them over the full trade list:
-
-- ``list_trades_paged`` — keyset (cursor) page of closed trades, server-side
-  filtered (all/wins/losses) and sorted. Replaces the old load-everything read.
-- ``list_markers`` — one lite row per trade for the chart's entry/exit arrows.
-- ``get_stats`` — PnL / duration histograms, win-loss streaks, profit factor by
-  direction, and worst-drawdown periods (ported verbatim from the FE).
-
-Cursor is opaque base64(JSON) of the last row's ``(sort value, trade_id)``; the
-codec lives here (app-side) so the repository stays a plain Mongo adapter.
-"""
-
 from __future__ import annotations
 
 import base64
@@ -165,12 +150,13 @@ def _trade_to_dto(t: Trade) -> TradeDto:
 
 
 def _sort_value(t: Trade, sort_key: TradeSortKey) -> Any:
-    """Raw value of the sort field on a trade, matched to the repo's Mongo field."""
     if sort_key == TradeSortKey.status:
         return t.exit_time
     return getattr(t, sort_key.value)
 
 
+# The cursor codec lives here, not in the repository, so the repository stays a
+# plain Mongo adapter.
 def _encode_cursor(t: Trade, sort_key: TradeSortKey) -> str:
     value = _sort_value(t, sort_key)
     raw = value.isoformat() if isinstance(value, datetime) else value
@@ -190,8 +176,6 @@ def _decode_cursor(cursor: str, sort_key: TradeSortKey) -> tuple[Any, str]:
 
 
 class BacktestStatsService:
-    """Read-side backtest analytics + paged trades — Mongo-backed, no engine coupling."""
-
     def __init__(
         self,
         backtest_repository: BacktestRepository,

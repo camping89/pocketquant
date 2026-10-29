@@ -1,20 +1,7 @@
-"""Contract test for the public strategy-injection API on the execution engine.
-
-``inject_prepared_strategy`` is the single entry point for registering a prepared
-strategy on the running engine. The load-bearing behavior it MUST guarantee,
-pinned here:
-
-  1. Round-trip: after injection, ``get_strategy(sid)`` returns the instance and
-     ``unload_strategy(sid)`` clears it.
-  2. The broker is **connected** after injection (connect() runs inside the lock
-     when not already connected).
-  3. ``strategy.on_start()`` fired exactly once (awaited inside the same critical
-     section).
-  4. ``get_config(sid)`` returns the registered config; unknown sid → None.
-
-A dict-only assignment that drops connect/on_start fails (2) and (3) — the
-regression this test guards.
-"""
+# Pins the inject_prepared_strategy contract: round-trip with get_strategy and
+# unload_strategy, broker connected, on_start fired exactly once inside the same critical
+# section, get_config. A dict-only assignment that drops connect() and on_start() is the
+# regression this guards.
 
 from __future__ import annotations
 
@@ -34,8 +21,6 @@ from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 
 class _FakeBroker:
-    """Minimal IBrokerPort stand-in tracking connect() invocations."""
-
     def __init__(self) -> None:
         self._connected = False
         self.connect_calls = 0
@@ -57,8 +42,6 @@ class _FakeBroker:
 
 
 class _CountingStrategy(IStrategyService):
-    """Strategy recording on_start() invocations."""
-
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         self.on_start_calls = 0
@@ -81,8 +64,8 @@ def _config(sid: str = "strat-1") -> StrategyConfig:
     )
 
 
+# Mocks only the deps the injection path never touches.
 def _service() -> StrategyAppService:
-    """Engine wired with mocks for the deps the injection path never touches."""
     return StrategyAppService(
         event_bus=EventBus(),
         broker_factory=AsyncMock(),

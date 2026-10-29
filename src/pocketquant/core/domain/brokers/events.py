@@ -1,11 +1,5 @@
-"""Broker-level lifecycle event VO + callback type.
-
-`OrderEvent` is a value object recording a single order status transition,
-delivered alongside ``OrderResult`` via a dedicated callback channel.
-
-Lives in core so both ``PaperBrokerAdapter`` (emitter) and the backtest result
-collector (consumer) can import it without crossing a dependency boundary.
-"""
+# In core so the emitter (PaperBrokerAdapter) and the consumer (backtest collector) share
+# one definition without crossing a dependency boundary.
 
 from __future__ import annotations
 

@@ -2,9 +2,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { BacktestWorkbench } from '../components/backtest/backtest-workbench'
 
-/** Run + tab live in the path (`/backtest/<runId>/<tab>`) so every view is
- *  bookmarkable and reload/back/forward safe; both segments are optional, so
- *  `/backtest` (no run) and `/backtest/<runId>` (default tab) also match. */
+// Run and tab live in the path so every view is bookmarkable and reload/back/forward safe.
+// Both segments are optional, so /backtest and /backtest/<runId> (default tab) also match.
 export const Route = createFileRoute('/backtest/{-$runId}/{-$tab}')({
   errorComponent: () => (
     <div className="empty-state empty-state--error" style={{ padding: 24 }}>

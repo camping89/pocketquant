@@ -1,9 +1,6 @@
-"""A subscription picks its broker, and a venue broker is one adapter per process.
-
-Paper pools per contract spec and retires with its last holder; an ``exness``
-broker is one account, so every ``exness`` subscription shares one adapter and
-one event stream, even across an unload.
-"""
+# An exness broker is one account, so every exness subscription shares one adapter and one
+# event stream, even across an unload. Paper pools per contract spec and retires with its
+# last holder.
 
 from __future__ import annotations
 

@@ -35,21 +35,16 @@ import { readChartColors } from '../../lib/theme-colors'
 import { makeChartTimeFormatter, type TimezoneMode } from '../../lib/datetime'
 
 interface TradingChartProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" or "XAUUSD:EXNESS" */
   symbol: string
   interval: Interval
   indicators: IndicatorConfig
-  /** Lite per-trade rows driving entry/exit arrows for every trade in the run. */
   markers?: TradeMarker[]
-  /** The clicked / hovered trade objects — draw the detail box for these only.
-   *  Passing the object (not an index) keeps the box correct across paging. */
+  // Passing the object (not an index) keeps the box correct across paging.
   highlightedTrade?: TradeRow | null
   hoveredTrade?: TradeRow | null
-  /** Click a trade's on-chart zone to select it (draws its box, highlights its
-   *  table row). Clicking outside every trade span deselects (null). */
+  // Called with null when a click lands outside every trade span.
   onSelectTrade?: (trade: TradeRow | null) => void
-  /** Anchor OHLCV to a past window end (backtest mode). When set, the chart loads
-   *  history ending at this instant and runs no realtime stream. */
+  // When set, the chart loads history ending at this instant and runs no realtime stream.
   anchorEndDate?: string
   onChartReady?: (chart: IChartApi) => void
 }

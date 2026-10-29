@@ -1,5 +1,3 @@
-"""Trade-path MAE/MFE tests — synthetic bars + trades, no DB."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -14,7 +12,6 @@ _T0 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 def _bars(highs_lows: list[tuple[float, float]], start: datetime) -> np.ndarray:
-    """Build a bar struct array from (high, low) pairs, one bar per minute."""
     arr = np.empty(len(highs_lows), dtype=_BAR_DTYPE)
     for i, (hi, lo) in enumerate(highs_lows):
         ts = (start + timedelta(minutes=i)).timestamp()

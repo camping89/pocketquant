@@ -1,10 +1,3 @@
-"""Unit tests for QuoteAppService.on_quote_update — volume delta clamping.
-
-Verifies the adapter correctly clamps per-tick delta volume before building
-QuoteTick: negative values → 0.0 with warning, None → None passthrough,
-positive/zero pass through unchanged.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -17,7 +10,6 @@ from pocketquant.engine.market_data.app_services.quote_app_service import QuoteA
 
 
 def _make_quote_data(volume: float | None, price: float = 50000.0) -> dict:
-    """Build minimal quote_data dict as produced by the Binance WS mapper."""
     return {
         "symbol": "BTCUSDT:BINANCE",
         "last_price": price,
@@ -42,18 +34,14 @@ def mock_cache() -> AsyncMock:
 
 @pytest.fixture
 def service(mock_bar_manager: AsyncMock, mock_cache: AsyncMock) -> QuoteAppService:
-    """QuoteAppService with all external dependencies mocked."""
     return QuoteAppService(cache=mock_cache, bar_manager=mock_bar_manager, provider=MagicMock())
 
 
 class TestOnQuoteUpdateVolumeClamping:
-    """on_quote_update passes clamped delta volume to QuoteTick."""
-
     @pytest.mark.asyncio
     async def test_positive_delta_passes_through(
         self, service: QuoteAppService, mock_bar_manager: AsyncMock
     ) -> None:
-        """Positive delta volume is forwarded unchanged to QuoteTick."""
         await service.on_quote_update(_make_quote_data(volume=0.05))
 
         mock_bar_manager.add_tick.assert_called_once()
@@ -64,7 +52,6 @@ class TestOnQuoteUpdateVolumeClamping:
     async def test_negative_delta_clamped_to_zero_and_warns(
         self, service: QuoteAppService, mock_bar_manager: AsyncMock
     ) -> None:
-        """Negative delta is clamped to 0.0; a warning is logged."""
         with patch(
             "pocketquant.engine.market_data.app_services.quote_app_service.logger"
         ) as mock_logger:
@@ -82,7 +69,6 @@ class TestOnQuoteUpdateVolumeClamping:
     async def test_none_volume_passes_through_as_none(
         self, service: QuoteAppService, mock_bar_manager: AsyncMock
     ) -> None:
-        """None volume means no volume data; QuoteTick.volume must be None."""
         await service.on_quote_update(_make_quote_data(volume=None))
 
         mock_bar_manager.add_tick.assert_called_once()
@@ -93,7 +79,6 @@ class TestOnQuoteUpdateVolumeClamping:
     async def test_zero_volume_is_processed(
         self, service: QuoteAppService, mock_bar_manager: AsyncMock
     ) -> None:
-        """Zero volume tick is a valid delta (no trade qty); tick still forwarded."""
         await service.on_quote_update(_make_quote_data(volume=0))
 
         mock_bar_manager.add_tick.assert_called_once()
@@ -107,7 +92,6 @@ class TestOnQuoteUpdateVolumeClamping:
 async def test_latest_quote_is_cached_for_the_latest_quote_ttl(
     service: QuoteAppService, mock_cache: AsyncMock
 ) -> None:
-    """The latest quote is cached for TTL_QUOTE_LATEST seconds, whatever the provider."""
     await service.on_quote_update(_make_quote_data(volume=1.0))
 
     assert mock_cache.set.call_args.kwargs["ttl"] == TTL_QUOTE_LATEST

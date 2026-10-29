@@ -1,9 +1,3 @@
-"""Unit tests for BinanceWebSocketAdapter @aggTrade stream.
-
-Feeds canned aggTrade frames directly into _handle_frame — no real WS connection.
-Covers: callback dispatch, volume delta semantics, reconnect backoff, sub/unsub counts.
-"""
-
 from __future__ import annotations
 
 import json
@@ -28,7 +22,6 @@ def _aggtrade_frame(
     trade_time_ms: int = 1_700_000_000_000,
     agg_id: int = 1,
 ) -> str:
-    """Build a canned @aggTrade JSON frame (single-stream format)."""
     return json.dumps(
         {
             "e": "aggTrade",
@@ -47,13 +40,10 @@ def _aggtrade_frame(
 
 
 def _combined_frame(inner: dict) -> str:
-    """Wrap an aggTrade event in combined-stream envelope."""
     return json.dumps({"stream": f"{inner['s'].lower()}@aggTrade", "data": inner})
 
 
 class TestAggTradeFrameParsing:
-    """Tests for _handle_frame parsing and callback invocation."""
-
     @pytest.mark.parametrize(
         ("frame_kwargs", "field", "expected"),
         [
@@ -74,7 +64,6 @@ class TestAggTradeFrameParsing:
     )
     @pytest.mark.asyncio
     async def test_single_aggtrade_callback_field(self, frame_kwargs, field, expected):
-        """A single aggTrade frame maps each field onto the callback payload."""
         client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
@@ -86,7 +75,6 @@ class TestAggTradeFrameParsing:
 
     @pytest.mark.asyncio
     async def test_two_consecutive_frames_produce_delta_not_cumulative(self):
-        """Two frames q=0.5 then q=0.3 → callbacks get 0.5 then 0.3 (NOT 0.5, 0.8)."""
         client = BinanceWebSocketAdapter()
         volumes: list[float] = []
 
@@ -100,7 +88,6 @@ class TestAggTradeFrameParsing:
 
     @pytest.mark.asyncio
     async def test_combined_stream_frame_dispatched_correctly(self):
-        """Combined-stream envelope (data key) is unwrapped before dispatch."""
         client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
@@ -113,7 +100,6 @@ class TestAggTradeFrameParsing:
 
     @pytest.mark.asyncio
     async def test_non_aggtrade_event_ignored(self):
-        """Frames with e != 'aggTrade' do not trigger callbacks."""
         client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
@@ -125,7 +111,6 @@ class TestAggTradeFrameParsing:
 
     @pytest.mark.asyncio
     async def test_async_callback_awaited(self):
-        """Async callbacks are awaited, not fire-and-forget."""
         client = BinanceWebSocketAdapter()
         received: list[dict] = []
 
@@ -139,7 +124,6 @@ class TestAggTradeFrameParsing:
 
     @pytest.mark.asyncio
     async def test_last_tick_at_updated_on_aggtrade(self):
-        """last_tick_at is set to a datetime on first aggTrade received."""
         client = BinanceWebSocketAdapter()
         assert client.last_tick_at is None
 
@@ -151,8 +135,6 @@ class TestAggTradeFrameParsing:
 
 
 class TestSubscriptionManagement:
-    """Tests for subscription count tracking."""
-
     @pytest.mark.asyncio
     async def test_subscribe_increments_count(self):
         client = BinanceWebSocketAdapter()
@@ -189,11 +171,8 @@ class TestSubscriptionManagement:
 
 
 class TestReconnectBackoff:
-    """Tests for exponential backoff behaviour in run_forever."""
-
     @pytest.mark.asyncio
     async def test_backoff_doubles_each_failure(self):
-        """_backoff_sleep doubles _reconnect_delay on each call."""
         client = BinanceWebSocketAdapter()
         assert client._reconnect_delay == _RECONNECT_DELAY_INITIAL  # 1.0
 
@@ -209,7 +188,6 @@ class TestReconnectBackoff:
 
     @pytest.mark.asyncio
     async def test_backoff_capped_at_max(self):
-        """Backoff delay is capped at _RECONNECT_DELAY_MAX (60s)."""
         client = BinanceWebSocketAdapter()
         client._reconnect_delay = 32.0  # near cap
 
@@ -219,7 +197,6 @@ class TestReconnectBackoff:
 
     @pytest.mark.asyncio
     async def test_backoff_never_exceeds_max(self):
-        """Multiple backoff calls never push delay above max."""
         client = BinanceWebSocketAdapter()
         with patch("asyncio.sleep", new_callable=AsyncMock):
             for _ in range(20):
@@ -228,7 +205,6 @@ class TestReconnectBackoff:
 
     @pytest.mark.asyncio
     async def test_connect_resets_backoff(self):
-        """Successful connect() resets _reconnect_delay to initial value."""
         client = BinanceWebSocketAdapter()
         client._reconnect_delay = 32.0
 
@@ -247,7 +223,6 @@ class TestReconnectBackoff:
 
     @pytest.mark.asyncio
     async def test_run_forever_reconnects_on_connection_closed(self):
-        """run_forever sleeps after ConnectionClosed then reconnects."""
         import websockets as _ws
 
         client = BinanceWebSocketAdapter()
@@ -299,11 +274,9 @@ class TestReconnectBackoff:
 
 # regression: websockets 16.0 + Python 3.14 — async for neither yields nor raises on dead socket
 class TestSilentExitAndWatchdog:
-    """Tests for silent-exit handling and stale-socket watchdog."""
-
+    # `async for` exits silently on close codes 1000/1001.
     @pytest.mark.asyncio
     async def test_silent_iterator_exit_triggers_reconnect(self):
-        """When `async for` exits silently (close 1000/1001), run_forever reconnects."""
         client = BinanceWebSocketAdapter()
         await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
 
@@ -343,7 +316,6 @@ class TestSilentExitAndWatchdog:
 
     @pytest.mark.asyncio
     async def test_watchdog_force_closes_stale_socket(self):
-        """Watchdog calls _close_ws when last_tick_at lags beyond timeout."""
         client = BinanceWebSocketAdapter()
         client._ws = MagicMock()
         client._ws.close = AsyncMock()
@@ -357,9 +329,9 @@ class TestSilentExitAndWatchdog:
         # _close_ws was invoked — ws closed and reference cleared
         assert client._ws is None
 
+    # Tripping before the first tick would kill a fresh connection.
     @pytest.mark.asyncio
     async def test_watchdog_skips_when_last_tick_is_none(self):
-        """Watchdog must not trip before any tick arrives — avoids killing fresh connection."""
         client = BinanceWebSocketAdapter()
         client._ws = MagicMock()
         client._ws.close = AsyncMock()

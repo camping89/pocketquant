@@ -7,8 +7,6 @@ function fmtDate(iso: string): string {
   return iso.replace('T', ' ').slice(0, 16)
 }
 
-/** Top-5 worst drawdown periods (computed server-side): depth, peak→trough
- *  window, recovery, duration. */
 export function DrawdownTable({ periods }: { periods: DrawdownPeriod[] }) {
   if (periods.length === 0) {
     return <div className="empty-state" style={{ padding: 16 }}>No drawdown periods — equity never dipped below its peak.</div>

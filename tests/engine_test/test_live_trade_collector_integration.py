@@ -1,15 +1,6 @@
-"""End-to-end: live trade closures flow broker → bus → LiveTradeCollector → trades.
-
-Proves the two live-only wiring points added in R8:
-  1. ``StrategyAppService._get_or_create_broker`` subscribes ``_forward_trade_to_bus``
-     on each newly-created broker (live path), so a broker closure reaches the bus.
-  2. ``LiveTradeCollector`` persists each ``TradeClosedEvent`` as a Trade keyed by
-     ``run_id`` = subscription_id.
-
-Backtest is unaffected: it injects its own broker via ``inject_prepared_strategy``
-and wires the report collector directly, never touching ``_get_or_create_broker``
-or the bus — so a backtest trade is never double-counted here.
-"""
+# Backtest injects its own broker via inject_prepared_strategy and wires the report
+# collector directly, never touching _get_or_create_broker or the bus, so a backtest trade
+# is never double-counted here.
 
 from __future__ import annotations
 
@@ -79,7 +70,6 @@ def _closed_event(subscription_id: str, *, pnl: float, commission: float) -> Tra
 
 
 async def _build_engine(bus: EventBus, db: Database) -> StrategyAppService:
-    """Real StrategyAppService with a paper broker (offline-safe)."""
     order_svc = OrderAppService(bus, OrderRepository(db))
     await order_svc.load_pending_orders()
     position_svc = PositionAppService(bus, PositionRepository(db))
@@ -131,7 +121,6 @@ async def test_broker_closure_flows_through_bus_to_trades(db: Database) -> None:
 
 @pytest.mark.asyncio
 async def test_two_subs_share_broker_with_single_forward(db: Database) -> None:
-    """N subscriptions on one broker → exactly one forward; attribution per event."""
     bus = EventBus()
     repo = TradeRepository(db)
     engine = await _build_engine(bus, db)

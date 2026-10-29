@@ -1,10 +1,3 @@
-"""Persist safety tests — the top side-effect risk (invariant a).
-
-Verifies the scorecard doc shape and that the write op touches ONLY a new
-top-level ``scorecard`` field via ``$set`` (never verdict/metrics/equity_curve),
-with no ``upsert``. Uses a fake collection — no real DB.
-"""
-
 from __future__ import annotations
 
 from scripts.rubric.run_rubric import _persist, _scorecard_doc

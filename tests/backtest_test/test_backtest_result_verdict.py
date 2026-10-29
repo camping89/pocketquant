@@ -1,6 +1,3 @@
-"""Unit — `BacktestResult.verdict` survives the mongo round-trip and tolerates
-legacy docs that predate the field (missing key → None)."""
-
 from __future__ import annotations
 
 from pocketquant.core.domain.backtest import BacktestResult

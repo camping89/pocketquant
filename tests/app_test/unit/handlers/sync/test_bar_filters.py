@@ -1,13 +1,3 @@
-"""Tests for filter_new_bars — DB-aware existence filter that fills non-contiguous gaps.
-
-Covers 4 main scenarios (continuous DB, tail gap, middle hole, empty DB)
-plus edge cases (empty records, None datetime, log emission, naive-vs-aware
-timezone equivalence).
-
-Mocks BarRepository.find_datetimes with AsyncMock; uses structlog testing
-context to assert log fields.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -48,8 +38,8 @@ def _series(start: datetime, count: int, step_minutes: int = 1) -> list[Bar]:
     return [_bar(start + timedelta(minutes=i * step_minutes)) for i in range(count)]
 
 
+# naive=True mimics tz-naive Mongo storage.
 def _existing_docs(times: list[datetime], naive: bool = True) -> list[dict]:
-    """Mock find_datetimes return shape. naive=True mimics tz-naive Mongo storage."""
     return [
         {"_id": f"id-{i}", "datetime": (t.replace(tzinfo=None) if naive else t)}
         for i, t in enumerate(times)
@@ -63,12 +53,10 @@ def bar_repo() -> AsyncMock:
     return repo
 
 
+# 99 contiguous bars stored; a 100-bar fetch over the same range plus one new tail keeps
+# only the tail.
 @pytest.mark.asyncio
 async def test_continuous_db_keeps_only_new(bar_repo: AsyncMock) -> None:
-    """DB has 99 contiguous bars; fetch 100 covering same range + 1 new tail.
-
-    Expect: 1 new bar kept, 99 existing dropped.
-    """
     base = datetime(2026, 5, 7, 2, 0, tzinfo=UTC)
     records = _series(base, 100)
     bar_repo.find_datetimes.return_value = _existing_docs(
@@ -81,12 +69,9 @@ async def test_continuous_db_keeps_only_new(bar_repo: AsyncMock) -> None:
     assert result[0].datetime == base + timedelta(minutes=99)
 
 
+# 3 bars stored at the end; a 5000-bar fetch over 3.5 days keeps the other 4997.
 @pytest.mark.asyncio
 async def test_tail_gap_keeps_all_below_latest(bar_repo: AsyncMock) -> None:
-    """DB has 3 bars at the end; fetch 5000 covering 3.5 days.
-
-    Expect: 4997 new bars kept (everything except the 3 tail bars).
-    """
     tail_base = datetime(2026, 5, 7, 3, 35, tzinfo=UTC)
     fetch_start = tail_base - timedelta(minutes=4997)
     records = _series(fetch_start, 5000)
@@ -102,13 +87,10 @@ async def test_tail_gap_keeps_all_below_latest(bar_repo: AsyncMock) -> None:
         assert ex not in kept_dts
 
 
+# Stored 02:00..02:30 and 03:00..03:38; a 100-bar fetch 02:00..03:39 keeps the 29-bar hole
+# plus the 03:39 tail.
 @pytest.mark.asyncio
 async def test_middle_hole_keeps_hole_bars(bar_repo: AsyncMock) -> None:
-    """DB has 02:00..02:30 + 03:00..03:38; fetch 100 covering 02:00..03:39.
-
-    Hole = 02:31..02:59 (29 bars). Plus 1 new tail bar 03:39.
-    Expect: 30 bars kept.
-    """
     base = datetime(2026, 5, 7, 2, 0, tzinfo=UTC)
     records = _series(base, 100)  # 02:00..03:39
 
@@ -129,7 +111,6 @@ async def test_middle_hole_keeps_hole_bars(bar_repo: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_empty_db_keeps_all(bar_repo: AsyncMock) -> None:
-    """DB empty → find_datetimes returns []; all records kept."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     records = _series(base, 100)
     bar_repo.find_datetimes.return_value = []
@@ -148,7 +129,6 @@ async def test_empty_records_returns_empty(bar_repo: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_records_with_none_datetime_passthrough(bar_repo: AsyncMock) -> None:
-    """Bars with datetime=None always pass through (downstream handles)."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     valid = _bar(base)
     invalid = Bar(
@@ -173,7 +153,6 @@ async def test_records_with_none_datetime_passthrough(bar_repo: AsyncMock) -> No
 
 @pytest.mark.asyncio
 async def test_all_none_datetimes_skip_query(bar_repo: AsyncMock) -> None:
-    """If no record has datetime, skip DB query entirely and return as-is."""
     invalid = Bar(
         symbol=SYMBOL,
         interval=Interval.MINUTE_1,
@@ -193,9 +172,9 @@ async def test_all_none_datetimes_skip_query(bar_repo: AsyncMock) -> None:
     bar_repo.find_datetimes.assert_not_called()
 
 
+# Mongo returns tz-naive datetimes while records are tz-aware.
 @pytest.mark.asyncio
 async def test_naive_mongo_datetime_matches_aware_record(bar_repo: AsyncMock) -> None:
-    """Mongo returns tz-naive; record is tz-aware. coerce_utc must reconcile."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     records = _series(base, 5)
     # Naive return (default behavior of find_datetimes against non-tz-aware client)
@@ -211,7 +190,6 @@ async def test_naive_mongo_datetime_matches_aware_record(bar_repo: AsyncMock) ->
 
 @pytest.mark.asyncio
 async def test_logs_filtered_existing_when_skipped(bar_repo: AsyncMock) -> None:
-    """Verify info log emitted with kept/skipped/existing_count fields."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     records = _series(base, 10)
     bar_repo.find_datetimes.return_value = _existing_docs(
@@ -232,7 +210,6 @@ async def test_logs_filtered_existing_when_skipped(bar_repo: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_no_log_when_nothing_skipped(bar_repo: AsyncMock) -> None:
-    """No log emitted when all records are kept (empty DB scenario)."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     records = _series(base, 5)
     bar_repo.find_datetimes.return_value = []
@@ -246,7 +223,6 @@ async def test_no_log_when_nothing_skipped(bar_repo: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_query_uses_min_max_of_record_datetimes(bar_repo: AsyncMock) -> None:
-    """Verify start_date/end_date passed to find_datetimes match record range."""
     base = datetime(2026, 5, 7, 0, 0, tzinfo=UTC)
     records = _series(base, 10)
     bar_repo.find_datetimes.return_value = []
@@ -260,8 +236,6 @@ async def test_query_uses_min_max_of_record_datetimes(bar_repo: AsyncMock) -> No
 
 
 class TestDropMisalignedBarsFollowsTheCalendar:
-    """The drop decision belongs to the symbol's calendar, not to the UTC clock."""
-
     # An Exness week opens on Sunday 00:00 UTC, so a weekly bar stamped on
     # Monday 00:00 UTC is misaligned there and aligned on 24/7, and the reverse.
     MONDAY_MIDNIGHT = datetime(2026, 10, 12, 0, 0, tzinfo=UTC)

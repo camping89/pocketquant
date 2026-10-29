@@ -1,5 +1,3 @@
-"""Quote query service — latest quote lookup from Redis cache."""
-
 from pydantic import BaseModel
 
 from pocketquant.core.common.constants import CACHE_KEY_QUOTE_LATEST
@@ -8,8 +6,6 @@ from pocketquant.engine.market_data.app_services.quote_dto import Quote
 
 
 class QuoteResponse(BaseModel):
-    """``symbol`` is composite ``{code}:{exchange}``."""
-
     symbol: str
     timestamp: str
     last_price: float
@@ -40,13 +36,10 @@ class QuoteResponse(BaseModel):
 
 
 class QuoteQueryService:
-    """Latest-quote lookup from Redis; returns None when symbol not yet published."""
-
     def __init__(self, cache: Cache) -> None:
         self._cache = cache
 
     async def get_latest(self, symbol: str) -> QuoteResponse | None:
-        """Return the latest quote for a composite symbol, or None if not in cache."""
         cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=symbol.upper())
         data = await self._cache.get(cache_key)
         if data:

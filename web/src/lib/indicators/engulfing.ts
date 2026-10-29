@@ -61,8 +61,8 @@ const COLORS = {
 } as const
 
 // Visual aid only: a fixed display threshold for strong/weak coloring. The
-// backtest reads max_rejection_wick_pct from config and may differ — see
-// docs/swing-pivot-key-level.md.
+// strategy reads max_rejection_wick_pct from its config and may differ. A
+// marker is not a strategy entry — see docs/swing-pivot-key-level.md.
 const STRONG_THRESHOLD = 0.3
 
 export function engulfingMarkers(

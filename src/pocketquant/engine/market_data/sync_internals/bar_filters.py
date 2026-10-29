@@ -1,15 +1,3 @@
-"""Bar filter helpers — split fetched records into keep/drop sets.
-
-Two concerns:
-
-- Existence filter (DB-aware): drop only bars whose datetime already exists
-  in DB for (symbol, interval). Lets non-contiguous gaps fill on
-  next sync. Insert pipeline still handles dedup via unique index as safety
-  net, but pre-filtering cuts wire/log noise.
-- Misalignment filter (pure): drop bars whose timestamps don't sit on the
-  interval grid (provider sometimes returns the in-progress open bar).
-"""
-
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time import coerce_utc
 from pocketquant.core.domain.bar.entities import Bar
@@ -21,24 +9,15 @@ from pocketquant.core.infra.persistence.repositories.bar_repository import BarRe
 logger = get_logger(__name__)
 
 
+# Drops only datetimes already stored, so non-contiguous holes fill on the next
+# sync. The unique index still dedups inserts; this filter cuts wire and log noise.
+# Bars with datetime None pass through for drop_misaligned_bars.
 async def filter_new_bars(
     records: list[Bar],
     symbol: str,
     interval: Interval,
     bar_repo: BarRepository,
 ) -> list[Bar]:
-    """Drop records whose datetime already exists in DB for this key.
-
-    ``symbol`` is composite ``{code}:{exchange}``.
-
-    Queries existing datetimes within [min(records.dt), max(records.dt)] via
-    indexed range scan and excludes them. Bars with `datetime=None` pass through
-    (drop_misaligned_bars handles them). Empty input or all-None datetimes →
-    returns input unchanged.
-
-    Correctly handles non-contiguous DB state: scattered holes get filled,
-    not assumed-already-present like the prior latest-cutoff heuristic.
-    """
     if not records:
         return records
 
@@ -70,10 +49,10 @@ async def filter_new_bars(
     return filtered
 
 
+# The provider sometimes returns the in-progress open bar off the interval grid.
 def drop_misaligned_bars(
     records: list[Bar], interval: Interval, calendar: ITradingCalendarPort
 ) -> list[Bar]:
-    """Drop bars whose timestamps don't align to the calendar's interval grid."""
     aligned, misaligned = filter_aligned_bars(records, interval, calendar)
     if misaligned:
         logger.warning(

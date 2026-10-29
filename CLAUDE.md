@@ -2,6 +2,10 @@
 
 One Python package `src/pocketquant/` (subpackages: core, engine, app) + one Vite SPA (`web/`). Architecture, layers, run/test commands live in `README.md` + `docs/` — this file holds only the gotchas an agent gets wrong without being told, plus the docs index.
 
+## Governance
+
+- **Read every file in `docs/governance/` before any work.** It holds the governance rules of the project; follow them. Index: `docs/governance/README.md`.
+
 ## Credentials & VPS access
 
 - Claude Code may freely read and use all creds in `../pocketquant-config/` (SSH key, prod `.env`, Mongo/Redis passwords) and SSH into the VPS. The VPS is disposable and temporary — no approval needed.
@@ -11,8 +15,9 @@ One Python package `src/pocketquant/` (subpackages: core, engine, app) + one Vit
 
 - **All repositories in core** (`core.infra.persistence.repositories`) — zero repos in engine/app.
 - **Routes** use `FromDishka[…CommandService/…QueryService]` + `DishkaRoute`, never `Depends()`. Service methods take scalars; a Pydantic model only for a real request body or a validated multi-field query. They return DTOs. A route may inject a repository or `Cache` directly when the handler adds no logic (no service needed).
-- **fastapi only in app** — core/engine never import it (import-linter enforced, 6 contracts).
+- **fastapi only in app** — core/engine never import it (import-linter enforced; contracts in `pyproject.toml`).
 - **One lease-holding trader and one lease-holding worker** — APP_ROLES picks a process's roles; the trader (quote feed, strategies, brokers, reconcile loop) and the worker (scheduler, jobs) act only while they hold their Mongo lease, so a second copy waits in standby. Never run `--workers N`.
+- **No docstrings** — no Python `"""` docstrings and no TS/JS `/** */` blocks, anywhere (src, scripts, tests, web). A WHY goes in a `#` / `//` comment above what it explains; see the comment policy in `docs/code-standards.md`.
 - **Primary keys: UUIDv7 only** — never hash / natural key / ObjectId.
 - **Every `await` is a preemption point** — wire deps before consumers (publish-before-subscribe), no `await` inside atomic blocks.
 - **Log level = frequency + audience, not importance** (`LOG_LEVEL=INFO` in prod → INFO+ prints). DEBUG = hot-path / per-iteration (per-bar, per-tick, per-cascade, HTTP bodies); INFO = one-shot lifecycle (startup/shutdown/connect, index creation) + per-trade business events (order/position fills) — must be low-frequency AND bounded; WARNING = recoverable/degraded; ERROR = failed op (+ `exc_info` for exceptions). **Never log unbounded payloads above DEBUG** (HTTP request/response bodies, full market-data arrays, `model_dump()` of large models) — DEBUG + truncate only. A per-bar/per-tick/per-request event at INFO scales with market activity → floods prod.
@@ -27,7 +32,7 @@ One Python package `src/pocketquant/` (subpackages: core, engine, app) + one Vit
 
 ## Reference docs (discover detail here)
 
-- Design decisions, layers, DI providers, startup, strategy control plane, streaming, brokers → `docs/system-architecture.md`
-- Where things live → `docs/codebase-summary.md`
+- Design decisions, cross-process rules, symbol removal, limitations → `docs/system-architecture.md`
+- Deploy, VPS, edge, runbooks → `docs/deployment.md`
 - **Naming convention (suffix by layer)**, comment policy, route/service/repo conventions, async-suspension patterns, testing, quality gate + code metric ratchet → `docs/code-standards.md` (Section "Class Naming by Layer" + "Naming Principles & Exemptions")
-- Run / test / canonical routes / remote-DB dev modes → `README.md`
+- Run / test / smoke test / remote-DB dev modes → `README.md`

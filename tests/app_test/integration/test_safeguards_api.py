@@ -1,7 +1,4 @@
-"""Safeguards routes: read the caps, pause and resume entries, and keep the pause across a restart.
-
-Each app built by ``make_test_app`` on the same database stands in for a restart.
-"""
+# Each app built by make_test_app on the same database stands in for a restart.
 
 from __future__ import annotations
 

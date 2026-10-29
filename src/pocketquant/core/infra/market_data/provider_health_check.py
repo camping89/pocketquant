@@ -1,20 +1,3 @@
-"""Answer "why are there no bars for this symbol" from one ``/health`` request.
-
-Reports each registered provider's session state and, per tracked symbol, the
-provider its suffix names and whether its calendar says the market is open now.
-A tracked symbol whose suffix names no registered provider is reported with
-``provider: null`` and an ``error``, never as a failed check: one bad row must
-not hide the state of every other symbol.
-
-Nothing here touches the network. Authentication is read from a cached flag,
-because the container health check polls ``/health`` every 30s and a blocking
-scraper call would time it out.
-
-``degraded`` means a provider was given credentials and holds no session. It
-never reads ``unhealthy``, so the container health check never restarts the app
-for it.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Mapping
@@ -31,19 +14,17 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 )
 
 
+# No network here: the container health check polls /health every 30s and a blocking
+# session probe would time it out. A symbol whose suffix names no provider is reported with
+# provider null and an error, never as a failed check, so one bad row hides nothing.
+# degraded (credentialed but no session) never reads unhealthy, so the container is not
+# restarted for it.
 async def check_market_data_providers(
     authenticated: Mapping[str, Callable[[], bool]],
     credentialed: Collection[str],
     calendar_factory: TradingCalendarFactory,
     tracked_symbols: TrackedSymbolRepository,
 ) -> dict[str, Any]:
-    """Provider sessions plus per-symbol routing and market state.
-
-    ``authenticated`` maps each registered provider id to a cached,
-    non-blocking session probe; ``credentialed`` names the providers that were
-    configured to log in. The payload is bounded by the tracked-symbol
-    list and never carries bars.
-    """
     now = datetime.now(UTC)
     symbols: dict[str, dict[str, Any]] = {}
     for tracked in await tracked_symbols.list_all():

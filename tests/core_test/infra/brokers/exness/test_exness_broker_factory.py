@@ -1,5 +1,3 @@
-"""BrokerFactory builds an Exness broker only when live trading is on and configured."""
-
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock

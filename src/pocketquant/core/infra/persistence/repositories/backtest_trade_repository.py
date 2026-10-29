@@ -1,8 +1,3 @@
-"""BacktestTradeRepository — MongoDB persistence for `backtest_trades` collection.
-
-Stores round-trip ``Trade`` documents (entry + exit linked by order IDs).
-"""
-
 from __future__ import annotations
 
 from pocketquant.core.common.constants import COLLECTION_BACKTEST_TRADES
@@ -17,7 +12,6 @@ class BacktestTradeRepository(SymbolScopedRepository):
     _collection_name = COLLECTION_BACKTEST_TRADES
 
     async def save_many(self, trades: list[Trade]) -> None:
-        """Upsert a batch of trades. Idempotent re-runs OK."""
         if not trades:
             return
         collection = self._collection()
@@ -60,6 +54,8 @@ class BacktestTradeRepository(SymbolScopedRepository):
             return {"pnl": {"$lt": 0}}
         return {}
 
+    # Ordered by (sort_key, _id) so ties never drop or duplicate a row across pages. The
+    # extra (limit + 1) doc only signals has_more.
     async def list_by_run_paged(
         self,
         run_id: str,
@@ -71,13 +67,6 @@ class BacktestTradeRepository(SymbolScopedRepository):
         cursor_value: object | None = None,
         cursor_id: str | None = None,
     ) -> tuple[list[Trade], bool]:
-        """Keyset page of closed trades for a run.
-
-        Ordered by ``(sort_key, _id)`` so ties on the sort field never drop or
-        duplicate a row across pages. Fetches ``limit + 1`` docs; the extra one
-        (if present) only signals ``has_more`` and is trimmed from the result.
-        Returns ``(trades, has_more)``.
-        """
         field = self._SORT_FIELDS.get(sort_key, "entry_time")
         direction = -1 if sort_dir == "desc" else 1
         op = "$lt" if direction == -1 else "$gt"
@@ -118,9 +107,8 @@ class BacktestTradeRepository(SymbolScopedRepository):
             {"run_id": run_id, **self._pnl_filter_clause(pnl_filter)}
         )
 
+    # Server-side so the footer total covers every trade, not just the loaded pages.
     async def sum_pnl_by_run(self, run_id: str, pnl_filter: str | None = None) -> float:
-        """Total PnL over the full (filtered) set — the table footer's aggregate,
-        computed server-side so it reflects every trade, not just loaded pages."""
         collection = self._collection()
         pipeline = [
             {"$match": {"run_id": run_id, **self._pnl_filter_clause(pnl_filter)}},
@@ -132,8 +120,6 @@ class BacktestTradeRepository(SymbolScopedRepository):
         return 0.0
 
     async def sum_commission_by_run(self, run_id: str, pnl_filter: str | None = None) -> float:
-        """Total commission over the full (filtered) set — footer's net-PnL uses
-        this to subtract fees from the gross ``sum_pnl_by_run`` total."""
         collection = self._collection()
         pipeline = [
             {"$match": {"run_id": run_id, **self._pnl_filter_clause(pnl_filter)}},
@@ -144,14 +130,9 @@ class BacktestTradeRepository(SymbolScopedRepository):
             return float(row["total"])
         return 0.0
 
+    # Carries the box fields so the chart can hit-test a click and draw the trade box
+    # without paging the full trades table.
     async def list_markers_by_run(self, run_id: str) -> list[dict]:
-        """Projection for chart arrows + click-to-select — one row per trade, chronological.
-
-        Carries the box fields (prices/sl/tp/pnl/qty) alongside the timing so the
-        chart can hit-test a click against a trade's time-span and draw its detail
-        box without paging the full trades table. Still a projection, not the full
-        doc (order refs, fills, commission breakdowns stay out).
-        """
         collection = self._collection()
         cursor = collection.find(
             {"run_id": run_id},

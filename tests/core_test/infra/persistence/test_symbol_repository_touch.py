@@ -1,11 +1,7 @@
-"""``touch`` must not reset a seeded symbol's asset-class metadata.
-
-``SyncService._persist_bars`` runs on every sync cycle. It used to call
-``upsert(Symbol.create(symbol))``, which sends the whole document as ``$set`` —
-and ``Symbol.create`` with no asset class produces crypto defaults. A seeded
-``XAUUSD:EXNESS`` would therefore have become crypto spot on its first 1m sync,
-silently, and every calendar decision after that would have been wrong.
-"""
+# SyncService._persist_bars runs on every sync cycle. It used to call
+# upsert(Symbol.create(symbol)), which sends the whole document as $set, and Symbol.create
+# without an asset class produces crypto defaults: a seeded XAUUSD:EXNESS silently became
+# crypto spot on its first 1m sync.
 
 from __future__ import annotations
 
@@ -61,8 +57,8 @@ async def test_touch_creates_a_missing_symbol_with_defaults(repo: SymbolReposito
     assert stored.asset_class is AssetClass.CRYPTO_SPOT
 
 
+# Seeding and migration scripts rely on upsert replacing the document.
 async def test_upsert_still_overwrites_deliberately(repo: SymbolRepository) -> None:
-    """Seeding and migration scripts rely on ``upsert`` replacing the document."""
     await repo.upsert(Symbol.create(CFD_SYMBOL, asset_class=AssetClass.CFD))
 
     await repo.upsert(Symbol.create(CFD_SYMBOL, asset_class=AssetClass.CRYPTO_SPOT))
@@ -72,10 +68,10 @@ async def test_upsert_still_overwrites_deliberately(repo: SymbolRepository) -> N
     assert stored.asset_class is AssetClass.CRYPTO_SPOT
 
 
+# A session-hours symbol synced before seeding must not become 24/7 crypto.
 async def test_touch_stamps_an_unseeded_symbol_with_its_providers_defaults(
     repo: SymbolRepository,
 ) -> None:
-    """A session-hours symbol synced before seeding must not become 24/7 crypto."""
     await repo.touch("EURUSD:EXNESS")
 
     stored = await repo.find_by_symbol("EURUSD:EXNESS")

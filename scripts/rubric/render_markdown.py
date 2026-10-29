@@ -1,10 +1,3 @@
-"""Markdown renderers: a cross-run comparison table and a per-run scorecard.
-
-Both carry the rubric version and the crypto-1m caveat in their header. The
-comparison table ranks runs by overall score (weakest first surfaces the
-sickest run). Number formatting tolerates None (metric N/A).
-"""
-
 from __future__ import annotations
 
 from scripts.rubric.scoring import RUBRIC_VERSION
@@ -33,8 +26,8 @@ def _header(title: str) -> str:
     )
 
 
+# Weakest first, so the sickest run is on top.
 def render_comparison_table(results: list[ScorecardResult]) -> str:
-    """One row per run, ranked by overall score (weakest first)."""
     ranked = sorted(results, key=lambda r: r.overall_score)
     lines = [
         _header("Backtest Rubric — Comparison"),
@@ -56,7 +49,6 @@ def render_comparison_table(results: list[ScorecardResult]) -> str:
 
 
 def render_scorecard(r: ScorecardResult) -> str:
-    """Full per-run detail: axis breakdowns, reconciliation, MAE/MFE, audit."""
     lines = [
         f"## {r.strategy_code} — {r.run_id}",
         "",
@@ -125,7 +117,6 @@ def render_scorecard(r: ScorecardResult) -> str:
 
 
 def render_scorecards_document(results: list[ScorecardResult]) -> str:
-    """Header + every per-run scorecard concatenated."""
     parts = [_header("Backtest Rubric — Per-run Scorecards"), ""]
     parts += [render_scorecard(r) for r in results]
     return "\n".join(parts)

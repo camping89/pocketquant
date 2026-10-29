@@ -1,9 +1,3 @@
-"""Route realtime subscriptions to the provider each symbol's suffix names.
-
-Satisfies ``IRealtimeQuoteProviderPort`` structurally, so
-``WsSubscriptionAppService`` and ``QuoteAppService`` need no edits.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -24,8 +18,6 @@ logger = get_logger(__name__)
 
 
 class RoutingRealtimeQuoteAdapter:
-    """Fan connect/run/disconnect across children; route each symbol to one."""
-
     def __init__(
         self,
         providers: dict[str, IRealtimeQuoteProviderPort],
@@ -33,13 +25,9 @@ class RoutingRealtimeQuoteAdapter:
         self._providers = providers
         self._owner: dict[str, str] = {}
 
+    # The port declares this read-only, which lets it be derived here instead of stored.
     @property
     def last_tick_at(self) -> datetime | None:
-        """The most recent tick across children.
-
-        The port declares this read-only, which is what lets the value be
-        derived here rather than stored and kept in sync.
-        """
         ticks = [p.last_tick_at for p in self._providers.values() if p.last_tick_at is not None]
         return max(ticks) if ticks else None
 
@@ -59,21 +47,13 @@ class RoutingRealtimeQuoteAdapter:
                     error=str(exc),
                 )
 
+    # Never a second provider: two feeds for one symbol would both reach
+    # BarBuilderDomainService and silently double-count its ticks.
     async def subscribe(
         self,
         symbol: str,
         callback: Callable[[dict[str, Any]], Any],
     ) -> str:
-        """Subscribe through the provider the suffix names — never a second one.
-
-        Two realtime feeds for one symbol would both reach
-        ``BarBuilderDomainService`` and double-count its ticks, which is worse
-        than a missing feed because it is silent.
-
-        Raises:
-            UnknownDataProviderError: when the suffix names no registered
-                provider.
-        """
         provider_id = provider_id_for(symbol)
         provider = self._providers.get(provider_id)
         if provider is None:
@@ -103,13 +83,10 @@ class RoutingRealtimeQuoteAdapter:
     def subscription_count(self) -> int:
         return sum(p.subscription_count for p in self._providers.values())
 
+    # WsSubscriptionAppService._reconcile diffs against these keys, so a child missing here
+    # would be resubscribed forever.
     @property
     def subscriptions(self) -> dict:
-        """The merged view every child holds.
-
-        ``WsSubscriptionAppService._reconcile`` diffs its desired set against
-        these keys, so a child missing from here would be resubscribed forever.
-        """
         merged: dict = {}
         for provider in self._providers.values():
             merged.update(provider.subscriptions)

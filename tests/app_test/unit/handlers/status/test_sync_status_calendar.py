@@ -1,10 +1,6 @@
-"""Freshness and anomaly gating follow the symbol's trading calendar.
-
-A market that is shut is not falling behind. Without these, the calendar
-argument threaded through `_is_stuck` and `emit_no_progress` could be ignored
-entirely and every other test would still pass, because the 24/7 calendar makes
-`previous_close` the identity and `is_open` always true.
-"""
+# The 24/7 calendar makes previous_close the identity and is_open always true, so without
+# these the calendar argument of _is_stuck and emit_no_progress could be ignored and every
+# other test would still pass.
 
 from __future__ import annotations
 
@@ -31,8 +27,6 @@ CALENDAR = Continuous24x7Calendar()
 
 
 class _ClosedCalendar(Continuous24x7Calendar):
-    """A market that is shut right now, with its last close an hour ago."""
-
     def is_open(self, instant: datetime) -> bool:
         return False
 

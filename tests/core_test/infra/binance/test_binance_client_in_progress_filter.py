@@ -1,13 +1,7 @@
-"""Tests guarding BinanceAdapter.fetch_ohlcv against in-progress bar capture.
-
-Regression: cron `sync_1m` previously persisted Binance's in-progress kline
-(only ~2s of trades) which then locked partial OHLCV in Mongo via
-filter_new_bars. fetch_ohlcv must:
-  1. Cap params["endTime"] at last_closed_open_ms - 1 (exclusive) so Binance
-     never has a chance to return the in-progress kline.
-  2. Defense-in-depth: drop any kline whose openTime >= last_closed_open_ms
-     even if Binance ignored the cap (clock skew / server off-by-one).
-"""
+# Regression: the sync_1m cron persisted Binance's in-progress kline (about 2s of trades),
+# and filter_new_bars then locked that partial OHLCV in Mongo. fetch_ohlcv caps endTime at
+# last_closed_open_ms - 1 so Binance never returns it, and still drops any kline at or after
+# last_closed_open_ms in case Binance ignores the cap (clock skew, server off-by-one).
 
 from __future__ import annotations
 
@@ -58,7 +52,6 @@ def _capture_get(klines: list[list]) -> tuple[AsyncMock, dict]:
 
 
 def _patch_now(now_ms: int):
-    """Patch the datetime.now(UTC) call inside binance_adapter to a fixed ms."""
     fake_now = datetime.fromtimestamp(now_ms / 1000, tz=UTC)
     fake_dt = MagicMock(wraps=datetime)
     fake_dt.now = MagicMock(return_value=fake_now)
@@ -70,11 +63,8 @@ def _patch_now(now_ms: int):
 
 
 class TestEndTimeCap:
-    """fetch_ohlcv must cap endTime so the in-progress bar is never requested."""
-
     @pytest.mark.asyncio
     async def test_endtime_capped_at_last_closed_open_minus_1(self) -> None:
-        """now mid-bar → endTime = floor(now/dur)*dur - 1 (exclusive)."""
         bar_dur = 60_000
         bar_open = 1_700_000_400_000  # bar boundary
         # now = 23s into the bar
@@ -95,7 +85,6 @@ class TestEndTimeCap:
 
     @pytest.mark.asyncio
     async def test_endtime_at_exact_bar_boundary(self) -> None:
-        """now == bar boundary → endTime caps at boundary - 1; previous bar still requested."""
         bar_dur = 60_000
         bar_open = 1_700_000_400_000
         now_ms = bar_open  # exact boundary
@@ -116,11 +105,8 @@ class TestEndTimeCap:
 
 
 class TestDefenseInDepthFilter:
-    """If Binance returns the in-progress bar anyway, fetch_ohlcv must drop it."""
-
     @pytest.mark.asyncio
     async def test_drops_in_progress_bar_returned_under_clock_skew(self) -> None:
-        """Binance returns kline at last_closed_open_ms — must be filtered out."""
         bar_dur = 60_000
         bar_open = 1_700_000_400_000  # boundary == in-progress bar's openTime
         now_ms = bar_open + 5_000  # 5s into the in-progress bar
@@ -141,11 +127,8 @@ class TestDefenseInDepthFilter:
 
 
 class TestPaginationConsistency:
-    """Cap is computed before the loop; multi-chunk fetches stay coherent."""
-
     @pytest.mark.asyncio
     async def test_pagination_no_duplicates_and_no_in_progress(self) -> None:
-        """1500 bars over 2 chunks: ascending, unique openTimes, none == bar_open."""
         bar_dur = 60_000
         bar_open = 1_700_000_400_000
         now_ms = bar_open + 30_000

@@ -25,8 +25,6 @@ class Signal:
 
 @dataclass
 class StrategyConfig:
-    """One strategy instance: what it trades, on which bars, through which broker."""
-
     id: str
     name: str
     symbol: str
@@ -35,4 +33,3 @@ class StrategyConfig:
     parameters: dict = field(default_factory=dict)
     risk: RiskConfig = field(default_factory=RiskConfig)
     contract_spec: ContractSpec = LINEAR_SPEC
-    """The symbol's contract units, resolved by whoever builds the config."""

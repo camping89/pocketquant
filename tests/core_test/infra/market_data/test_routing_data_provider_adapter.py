@@ -1,5 +1,3 @@
-"""REST routing: the symbol's suffix names the one provider that serves it."""
-
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -80,9 +78,9 @@ async def test_the_suffix_is_matched_case_insensitively() -> None:
     assert len(await _fetch(_adapter({"binance": binance}), "btcusdt:binance")) == 1
 
 
+# Returning nothing would look exactly like a quiet market.
 @pytest.mark.asyncio
 async def test_an_unknown_suffix_fails_loudly() -> None:
-    """Returning nothing would look exactly like a quiet market."""
     binance = _provider([_bar("XAUUSD:EXNESS")])
 
     with pytest.raises(UnknownDataProviderError, match="'exness'"):
@@ -103,25 +101,20 @@ async def test_an_unknown_suffix_is_a_value_error_for_existing_callers() -> None
         await _fetch(_adapter({"binance": _provider([])}), "XAUUSD:EXNESS")
 
 
+# A raised provider error makes sync_one log market_data.sync.failed and set the status to
+# error. Returning [] would report completed with no progress and leave fetch_with_retry
+# retrying the failure as emptiness: three calls at a venue that is rate-limiting us.
 @pytest.mark.asyncio
 async def test_an_outage_is_raised_rather_than_reported_as_an_empty_market() -> None:
-    """Swallowing the failure turns a dead venue into a successful sync.
-
-    A provider exception reaches ``sync_one``, which logs
-    ``market_data.sync.failed`` and sets the symbol's status to ``error``.
-    Returning ``[]`` instead would report ``completed`` with no progress, and
-    would leave ``fetch_with_retry`` retrying the failure as though it were
-    emptiness — three calls at a venue that is rate-limiting us.
-    """
     adapter = _adapter({"exness": _provider(RuntimeError("exness down"))})
 
     with pytest.raises(RuntimeError, match="exness down"):
         await _fetch(adapter, "XAUUSD:EXNESS")
 
 
+# Another provider's bars for the same code would be another instrument.
 @pytest.mark.asyncio
 async def test_a_failing_provider_does_not_fall_back_to_another() -> None:
-    """Another provider's bars for the same code would be another instrument."""
     binance = _provider([_bar("XAUUSD:EXNESS")])
     adapter = _adapter({"exness": _provider(RuntimeError("down")), "binance": binance})
 

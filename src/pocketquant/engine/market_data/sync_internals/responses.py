@@ -14,7 +14,6 @@ def build_success(
     total_bars: int,
     latest_bar: Bar | None,
 ) -> SyncResponse:
-    """Build a completed SyncResponse. ``symbol`` is composite ``{code}:{exchange}``."""
     return SyncResponse(
         symbol=symbol,
         interval=interval.value,

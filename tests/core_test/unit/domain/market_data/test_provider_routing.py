@@ -1,5 +1,3 @@
-"""The suffix of a composite symbol names its data provider."""
-
 from __future__ import annotations
 
 import pytest
@@ -46,8 +44,8 @@ def test_binance_defaults_to_crypto_spot_on_a_24x7_calendar() -> None:
     assert defaults.calendar_id == CALENDAR_CRYPTO_24_7
 
 
+# A gold symbol must never be assumed to trade 24/7 like crypto.
 def test_an_unregistered_provider_has_no_defaults_rather_than_crypto_ones() -> None:
-    """A gold symbol must never be assumed to trade 24/7 like crypto."""
     with pytest.raises(UnknownDataProviderError, match="'mt5'"):
         provider_defaults_for("XAUUSD:MT5")
 

@@ -1,5 +1,3 @@
-"""Exness session calendars agree with the sessions and bars the spike recorded."""
-
 from __future__ import annotations
 
 import json

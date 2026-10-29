@@ -12,7 +12,7 @@ export type TimezoneMode = 'utc' | 'local'
 
 const PLACEHOLDER = '—'
 
-/** Parse an ISO string treating naive (no Z/offset) strings as UTC. */
+// Naive strings (no Z or offset) are UTC.
 export function parseIso(iso: string | null | undefined): Dayjs | null {
   if (!iso) return null
   // If string has no `Z` and no trailing numeric offset (e.g. +07:00 / -05:30), treat as UTC.
@@ -22,7 +22,6 @@ export function parseIso(iso: string | null | undefined): Dayjs | null {
   return d.isValid() ? d : null
 }
 
-/** Returns suffix label for the current tz mode (e.g. `UTC`, `GMT+7`, `GMT-5:30`). */
 export function tzSuffix(mode: TimezoneMode): string {
   if (mode === 'utc') return 'UTC'
   // getTimezoneOffset returns minutes with INVERTED sign (positive for west of UTC).
@@ -34,7 +33,7 @@ export function tzSuffix(mode: TimezoneMode): string {
   return m === 0 ? `GMT${sign}${h}` : `GMT${sign}${h}:${String(m).padStart(2, '0')}`
 }
 
-/** Core formatter — null-safe, returns `'—'` for null/invalid. */
+// Returns '—' for null or invalid input.
 export function formatDateTime(
   iso: string | null | undefined,
   mode: TimezoneMode,
@@ -46,22 +45,19 @@ export function formatDateTime(
   return `${inMode.format(fmt)} ${tzSuffix(mode)}`
 }
 
-/** `MMM D HH:mm` — used for bar dates / next run rows. */
 export function formatBarDate(iso: string | null | undefined, mode: TimezoneMode): string {
   return formatDateTime(iso, mode, 'MMM D HH:mm')
 }
 
-/** `HH:mm:ss` — clock-style time. */
 export function formatHmsTime(iso: string | null | undefined, mode: TimezoneMode): string {
   return formatDateTime(iso, mode, 'HH:mm:ss')
 }
 
-/** Alias of formatHmsTime — kept distinct for callsite clarity. */
+// Alias of formatHmsTime, kept distinct for callsite clarity.
 export function formatNextRun(iso: string | null | undefined, mode: TimezoneMode): string {
   return formatHmsTime(iso, mode)
 }
 
-/** `YYYY-MM-DD HH:mm` — full timestamp with date. */
 export function formatFullDateTime(iso: string | null | undefined, mode: TimezoneMode): string {
   return formatDateTime(iso, mode, 'YYYY-MM-DD HH:mm')
 }
@@ -73,7 +69,6 @@ const INTERVAL_MS: Record<string, number> = {
 
 export { INTERVAL_MS }
 
-/** Elapsed since `iso`. Returns `<1m`, `5m`, `2h`, `3d`, etc. */
 export function formatAge(iso: string | null): string {
   const parsed = parseIso(iso)
   if (!parsed) return PLACEHOLDER
@@ -85,7 +80,7 @@ export function formatAge(iso: string | null): string {
   return `${Math.floor(ms / 86_400_000)}d`
 }
 
-/** A closed market is not ageing, so `isMarketOpen === false` always reads neutral. */
+// A closed market is not ageing, so isMarketOpen === false always reads neutral.
 export function ageColorClass(lastBarAt: string | null, interval: string, isMarketOpen?: boolean): string {
   if (isMarketOpen === false) return 'age-neutral'
   const parsed = parseIso(lastBarAt)
@@ -98,7 +93,7 @@ export function ageColorClass(lastBarAt: string | null, interval: string, isMark
   return 'age-stale'
 }
 
-/** Humanized "in 5m", "2h ago", etc. Tz-independent — uses elapsed only. */
+// Tz-independent: uses elapsed time only.
 export function formatHumanizedNextRun(iso: string | null): string {
   const parsed = parseIso(iso)
   if (!parsed) return PLACEHOLDER
@@ -134,7 +129,6 @@ export function formatDuration(ms: number | null): string {
   return `${m}m ${s}s`
 }
 
-/** Unix-seconds chart timestamp → formatted string for lightweight-charts. */
 export function makeChartTimeFormatter(mode: TimezoneMode): (t: number) => string {
   return (t: number) => {
     const d = dayjs.unix(t).utc()

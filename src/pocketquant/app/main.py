@@ -54,11 +54,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     container: AsyncContainer = app.state.dishka_container
 
-    # Wire the sync-job module container BEFORE any await. JobScheduler is
-    # APP-scoped and may resolve+start inside any subsequent `await
-    # container.get(...)` chain (e.g. via StrategyAppService during bootstrap).
-    # Once started, persisted MongoDBJobStore sync jobs whose next_run_time is
-    # within misfire_grace_time can dispatch and call sync_jobs._get_container().
+    # Wire the sync-job module container before the worker role starts the
+    # scheduler (app/roles.py). Once started, persisted MongoDBJobStore sync
+    # jobs whose next_run_time is within misfire_grace_time can dispatch and
+    # call sync_jobs._get_container().
     # Synchronous global assignment — no await means no preemption point.
     set_sync_container(container)
 

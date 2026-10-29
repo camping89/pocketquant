@@ -1,5 +1,3 @@
-"""Pure-math tests for reconciliation — planned R:R, realized R, edge split."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

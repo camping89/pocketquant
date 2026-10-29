@@ -1,9 +1,6 @@
-"""A clamped Exness size is normalized before the order exists, so its fill opens a position.
-
-``OrderAggregate.fill`` raises unless the fill quantity equals the order
-quantity; normalizing in the engine before order creation keeps the two equal
-when the adapter clamps 7.9 units (0.079 lots) down to the 0.01-lot minimum.
-"""
+# OrderAggregate.fill raises unless the fill quantity equals the order quantity; normalizing
+# in the engine before order creation keeps the two equal when the adapter clamps 7.9 units
+# (0.079 lots) down to the 0.01-lot minimum.
 
 from __future__ import annotations
 

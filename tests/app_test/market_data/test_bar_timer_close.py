@@ -1,5 +1,3 @@
-"""BarAppService close path: publish outside the bar lock, timer close, the closed boundary."""
-
 from __future__ import annotations
 
 import asyncio
@@ -77,8 +75,6 @@ async def test_a_slow_bar_handler_does_not_block_another_symbol() -> None:
 
 
 class _FxCalendars:
-    """Stands in for TradingCalendarFactory: every symbol is on the Exness FX calendar."""
-
     async def for_symbol(self, symbol: str) -> ITradingCalendarPort:
         return next(c for c in EXNESS_CALENDARS if c.calendar_id == CALENDAR_EXNESS_FX)
 

@@ -1,5 +1,3 @@
-"""Unit tests for cascade_aggregator — pure functions, no infra."""
-
 import threading
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -38,8 +36,6 @@ def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestTfSeconds:
-    """Test tf_seconds converter — pure function."""
-
     def test_all_supported_intervals(self):
         assert tf_seconds(Interval.MINUTE_1) == 60
         assert tf_seconds(Interval.MINUTE_5) == 300
@@ -54,8 +50,6 @@ class TestTfSeconds:
 
 
 class TestAggregateOhlcv:
-    """Test aggregate_ohlcv — pure math, no DB."""
-
     def test_empty_bars_returns_none(self):
         result = aggregate_ohlcv([])
         assert result is None
@@ -103,7 +97,6 @@ class TestAggregateOhlcv:
         assert result["volume"] == 15000.0  # sum(1000 * 1 + 1000 * 2 + ... + 1000 * 5)
 
     def test_partial_aggregate_still_works(self):
-        """Partial aggregate (3 of 5 expected) still computes correctly."""
         bars = [
             Bar(
                 symbol="BINANCE:BTC",
@@ -122,7 +115,6 @@ class TestAggregateOhlcv:
         assert result["volume"] == 3000.0
 
     def test_unsorted_bars_ordered_correctly(self):
-        """aggregate_ohlcv sorts bars by datetime before extracting first/last."""
         bars = [
             Bar(
                 symbol="BINANCE:BTC",
@@ -162,8 +154,6 @@ class TestAggregateOhlcv:
 
 
 class TestComputeBoundaries:
-    """Test compute_boundaries — overlap semantics (bucket overlaps range)."""
-
     def test_5m_boundaries(self):
         start = datetime(2026, 5, 6, 10, 2, tzinfo=UTC)
         end = datetime(2026, 5, 6, 10, 13, tzinfo=UTC)
@@ -199,7 +189,6 @@ class TestComputeBoundaries:
         ]
 
     def test_hour_boundary_spanning_edge(self):
-        """Range spanning hour edge produces correct bucket count."""
         start = datetime(2026, 5, 6, 23, 45, tzinfo=UTC)
         end = datetime(2026, 5, 7, 1, 30, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_1, start, end, CALENDAR)
@@ -211,7 +200,6 @@ class TestComputeBoundaries:
         ]
 
     def test_4h_alignment(self):
-        """4h boundaries at hour % 4 == 0; bucket containing range_start included."""
         start = datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
         end = datetime(2026, 5, 6, 20, 0, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_4, start, end, CALENDAR)
@@ -223,15 +211,14 @@ class TestComputeBoundaries:
             datetime(2026, 5, 6, 16, 0, tzinfo=UTC),
         ]
 
+    # A 1m-wide range still includes the bucket that contains it.
     def test_no_boundaries_when_range_empty(self):
-        """1m-wide range still includes the bucket that contains it."""
         start = datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
         end = datetime(2026, 5, 6, 10, 1, tzinfo=UTC)
         result = compute_boundaries(Interval.HOUR_1, start, end, CALENDAR)
         assert result == [datetime(2026, 5, 6, 10, 0, tzinfo=UTC)]
 
     def test_exclusive_end_boundary(self):
-        """A bucket starting exactly at range_end is excluded."""
         start = datetime(2026, 5, 6, 10, 0, tzinfo=UTC)
         end = datetime(2026, 5, 6, 10, 5, tzinfo=UTC)
         result = compute_boundaries(Interval.MINUTE_5, start, end, CALENDAR)
@@ -240,10 +227,9 @@ class TestComputeBoundaries:
 
     # ------- Regression coverage for the cascade-staleness bug -------
 
+    # The bucket start may be older than range_start, but it is included when its end falls
+    # inside the range: that post-close pass fixes stale 4h aggregates.
     def test_4h_just_closed_bucket_included_for_final_pass(self):
-        """4h bucket boundary may be older than range_start, but must still be
-        included when its bucket *end* falls inside the range — that's the
-        post-close pass that fixes stale 4h aggregates."""
         # Cron at 08:00 UTC, lookback 100m → range_start = 06:20.
         start = datetime(2026, 5, 8, 6, 20, tzinfo=UTC)
         end = datetime(2026, 5, 8, 8, 0, tzinfo=UTC)
@@ -253,19 +239,17 @@ class TestComputeBoundaries:
         # However our overlap rule needs B + tf_secs > range_start; 08:00 > 06:20 ✓.
         assert result == [datetime(2026, 5, 8, 4, 0, tzinfo=UTC)]
 
+    # Otherwise today's daily bar freezes about 100m past midnight, once midnight slips
+    # outside the lookback.
     def test_1d_today_bucket_kept_alive_through_the_day(self):
-        """The current-day 1d bucket must reappear on every cron run, even when
-        midnight has slipped outside lookback (otherwise today's daily bar
-        freezes ~100m past midnight)."""
         # 14:30 UTC, lookback 100m → range_start = 12:50; midnight is way before.
         start = datetime(2026, 5, 8, 12, 50, tzinfo=UTC)
         end = datetime(2026, 5, 8, 14, 30, tzinfo=UTC)
         result = compute_boundaries(Interval.DAY_1, start, end, CALENDAR)
         assert result == [datetime(2026, 5, 8, 0, 0, tzinfo=UTC)]
 
+    # Guards the strict `B + tf_secs > range_start` inequality.
     def test_bucket_ending_exactly_at_range_start_excluded(self):
-        """If a bucket ends *at* range_start, there is no overlap — exclude it.
-        Guards the strict `B + tf_secs > range_start` inequality."""
         # 4h bucket [00:00, 04:00). range starts exactly at 04:00.
         start = datetime(2026, 5, 8, 4, 0, tzinfo=UTC)
         end = datetime(2026, 5, 8, 8, 0, tzinfo=UTC)
@@ -276,11 +260,8 @@ class TestComputeBoundaries:
 
 
 class TestCascadeForSymbol:
-    """Unit tests for cascade_for_symbol — focus on empty repo behavior."""
-
     @pytest.mark.asyncio
     async def test_cascade_no_1m_bars_returns_zeros(self, mock_bar_repo):
-        """Cascade on empty 1m data produces zero counts for all tfs."""
         result = await cascade_for_symbol("BINANCE:BTC", 60, mock_bar_repo, CALENDAR)
 
         for tf in CASCADE_TFS:
@@ -297,8 +278,6 @@ class TestCascadeForSymbol:
 
 @pytest.fixture
 def mock_bar_repo():
-    """Mock BarRepository for cascade tests — in-memory storage."""
-
     class MockBarRepository:
         def __init__(self):
             self.bars: list[Bar] = []
@@ -343,13 +322,9 @@ def mock_bar_repo():
     return MockBarRepository()
 
 
+# No real calendar maps every instant onto one bucket; this drives compute_boundaries into
+# the non-advancing case, which otherwise spins a cron job forever.
 class _FrozenCalendar(ITradingCalendarPort):
-    """A calendar that maps every instant onto one bucket.
-
-    No real calendar does this; it exists to drive ``compute_boundaries`` into
-    the non-advancing case, which otherwise spins a cron job forever.
-    """
-
     FIXED = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
 
     @property
@@ -389,8 +364,6 @@ class _FrozenCalendar(ITradingCalendarPort):
 
 
 class TestBoundaryStepFallback:
-    """The loop must terminate even when the calendar refuses to advance."""
-
     def test_non_advancing_calendar_still_terminates_and_says_so(self) -> None:
         start = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
         end = datetime(2026, 6, 1, 4, 0, tzinfo=UTC)
@@ -429,14 +402,10 @@ class TestBoundaryStepFallback:
         assert [e for e in logs if e.get("event") == "cascade.boundary_step_fallback"] == []
 
 
+# An open bucket is still filling, a delayed feed fills closed buckets late, and a thin
+# market has untraded minutes. Real gaps belong to the daily integrity check, so the cascade
+# stays silent about all of them.
 class TestShortBucketsAreNotReportedByTheCascade:
-    """A short bucket is still aggregated, and never logged by the cascade.
-
-    An open bucket is still filling, a delayed feed fills closed buckets late,
-    and a thin market has untraded minutes. Real gaps belong to the daily
-    integrity check, so the cascade stays silent about all of them.
-    """
-
     # On Wednesday 2026-10-14 (EDT) XAUUSD breaks from 20:58:00 to 22:00:29 UTC:
     # zero trading minutes in 21:00-22:00, sixty on a market that never closes.
     HALT_START = datetime(2026, 10, 14, 21, 0, tzinfo=UTC)
@@ -473,7 +442,6 @@ class TestShortBucketsAreNotReportedByTheCascade:
 
     @pytest.mark.asyncio
     async def test_a_closed_bucket_short_of_bars_is_aggregated_silently(self) -> None:
-        """A finished hour holding 3 of its 60 minutes still becomes a bar."""
         past_hour = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)
 
         bar_repo, logs = await self._cascade_one_bucket(
@@ -484,9 +452,9 @@ class TestShortBucketsAreNotReportedByTheCascade:
         assert [e for e in logs if e.get("log_level") in ("warning", "error")] == []
         assert not any("partial" in str(e.get("event")) for e in logs)
 
+    # The break has no trading minutes, so only the edge headroom is fetched.
     @pytest.mark.asyncio
     async def test_a_halted_hour_bounds_the_query_by_the_calendar(self) -> None:
-        """The break has no trading minutes, so only the edge headroom is fetched."""
         bar_repo, _ = await self._cascade_one_bucket(
             "XAUUSD:EXNESS", self.HALT_START, XAUUSD, bar_count=3
         )
@@ -501,8 +469,6 @@ class TestShortBucketsAreNotReportedByTheCascade:
 
 
 class TestCascadedBarsCarryTheirCalendar:
-    """A cascaded bar records which schedule produced it."""
-
     async def _upserted(self, calendar, tf: Interval) -> Bar:
         boundary = calendar.bar_start(datetime(2026, 6, 10, 12, 0, tzinfo=UTC), tf)
         bars = [
@@ -543,8 +509,6 @@ class TestCascadedBarsCarryTheirCalendar:
 
 
 class TestCascadeTimeframesDependOnTheCalendar:
-    """Daily bars are cascaded only on the 24/7 calendar; a session market fetches its own."""
-
     def test_a_continuous_market_cascades_its_daily_bar(self) -> None:
         assert Interval.DAY_1 in cascade_tfs(CALENDAR)
         assert cascade_tfs(CALENDAR) == CASCADE_TFS

@@ -1,11 +1,3 @@
-"""Contract units and calendar references, keyed by asset class.
-
-Crypto spot is priced one-for-one in the quote currency, so the pipeline could
-treat ``price * quantity`` as notional. A lot-sized CFD cannot: one XAUUSD lot
-is 100 ounces, size moves in lot steps, and prices snap to a tick. Making
-those units data rather than an assumption is what lets one pipeline serve both.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,27 +16,22 @@ CALENDAR_EXNESS_XAUUSD = "EXNESS_XAUUSD"
 CALENDAR_EXNESS_CRYPTO = "EXNESS_CRYPTO"
 
 
+# Contract units are data, not an assumption: crypto spot can treat price * quantity as
+# notional, but one XAUUSD lot is 100 oz, size moves in lot steps and prices snap to a tick.
 @dataclass(frozen=True)
 class ContractSpec:
-    """How much one unit of an instrument is worth, and how it may be sized."""
-
+    # Account currency per 1.0 of price move, per contract.
     multiplier: float = 1.0
-    """Account currency per 1.0 of price move, per contract."""
-
+    # 0.0 means no tick rounding.
     tick_size: float = 0.0
-    """Minimum price increment; 0.0 means no tick rounding."""
-
+    # None allows fractional size; 1.0 forces whole contracts.
     lot_step: float | None = None
-    """Size increment; None allows fractional size, 1.0 forces whole contracts."""
-
     currency: str = "USD"
-
+    # None falls back to the percentage commission model.
     commission_per_contract: float | None = None
-    """None falls back to the percentage commission model."""
 
     @property
     def is_contract(self) -> bool:
-        """Whether a size is a count of contracts worth ``multiplier`` each, as futures are."""
         return self.multiplier != 1.0
 
     def to_mongo(self) -> dict[str, Any]:
@@ -56,9 +43,9 @@ class ContractSpec:
             "commission_per_contract": self.commission_per_contract,
         }
 
+    # Linear units for a pre-migration document.
     @classmethod
     def from_mongo(cls, doc: dict[str, Any] | None) -> ContractSpec:
-        """Rebuild a spec, falling back to linear units for a pre-migration document."""
         if not doc:
             return LINEAR_SPEC
         return cls(
@@ -71,7 +58,6 @@ class ContractSpec:
 
 
 LINEAR_SPEC = ContractSpec()
-"""One-for-one units: what crypto spot and perps have always implicitly used."""
 
 
 DEFAULT_CALENDAR_BY_ASSET_CLASS: dict[AssetClass, str] = {

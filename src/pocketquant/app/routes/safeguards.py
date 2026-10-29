@@ -1,11 +1,3 @@
-"""HTTP endpoints for the Exness safeguards.
-
-Exposes:
-  - GET /admin/safeguards — the caps and the entry pause; the public read is cached for one second.
-  - POST /admin/safeguards/pause and /resume — flip the stored entry pause; a failed store
-    write returns 503.
-"""
-
 from __future__ import annotations
 
 import time

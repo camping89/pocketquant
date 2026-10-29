@@ -1,5 +1,3 @@
-"""Base repository mixin for MongoDB collections."""
-
 from __future__ import annotations
 
 from pocketquant.core.common.logging import get_logger
@@ -18,13 +16,8 @@ class BaseRepository:
         return self._database.get_collection(self._collection_name)
 
 
+# A document matching any of _symbol_fields belongs to that symbol.
 class SymbolScopedRepository(BaseRepository):
-    """Collection whose documents reference a composite ``symbol``.
-
-    ``_symbol_fields`` lists every field that may hold the symbol; a document
-    matching any of them belongs to that symbol.
-    """
-
     _symbol_fields: tuple[str, ...] = ("symbol",)
 
     async def delete_by_symbol(self, symbol: str) -> int:

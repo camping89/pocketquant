@@ -16,23 +16,17 @@ export interface OhlcvHistory {
   data: ChartData | undefined
   isLoading: boolean
   error: Error | null
-  /** Fetch one older page (ending at the earliest accumulated bar). No-op while
-   * a page is in flight, when no more history exists, or before the base load. */
+  // No-op while a page is in flight, when no more history exists, or before the base load.
   loadOlder: () => void
   isLoadingOlder: boolean
-  /** False once a page older than the current earliest bar returns no new bars. */
+  // False once a page older than the current earliest bar returns no new bars.
   hasMore: boolean
 }
 
-/** OHLCV with scroll-left pagination. The base query (shared key with useOHLCV,
- * refetched on realtime rollover) supplies the latest page; loadOlder walks
- * backward via ``end_date``. All bars land in a time-keyed accumulator so the
- * sliding base window merges without dropping or duplicating boundary bars.
- *
- * ``anchorEndDate`` pins the base window to a past instant (a backtest's window
- * end) instead of "now". When set, the query key gains a 4th element so an
- * anchored chart never shares cache with the live chart of the same
- * symbol/interval, whose realtime invalidation hardcodes the 3-element key. */
+// All bars land in a time-keyed accumulator so the sliding base window (refetched on realtime
+// rollover) merges without dropping or duplicating boundary bars. anchorEndDate adds a 4th
+// query-key element so an anchored chart never shares cache with the live chart of the same
+// symbol/interval, whose realtime invalidation hardcodes the 3-element key.
 export function useOhlcvHistory(
   symbol: string,
   interval: Interval,

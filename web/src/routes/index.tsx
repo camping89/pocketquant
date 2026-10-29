@@ -9,7 +9,6 @@ import { useOHLCV } from '../hooks/use-ohlcv'
 import type { Interval, IndicatorConfig } from '../types/market-data'
 
 interface ChartSearchParams {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
 }
 
@@ -54,7 +53,6 @@ function writePersistedInterval(symbol: string, interval: Interval): void {
 }
 
 interface ChartPageInnerProps {
-  /** Composite symbol string: "{CODE}:{EXCHANGE}" e.g. "BTCUSDT:BINANCE" */
   symbol: string
   onSymbolChange: (v: string) => void
 }

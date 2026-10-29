@@ -1,11 +1,7 @@
-"""Cron triggers must carry an explicit UTC timezone, not the host's.
-
-APScheduler applies the scheduler's declared timezone only when ``add_job``
-builds the trigger from a string alias. A pre-built ``CronTrigger`` without an
-explicit ``timezone=`` falls back to ``tzlocal``, so the same job fires at a
-different instant on a VPS in UTC and a laptop in Asia/Ho_Chi_Minh — and the
-host zone is pickled into the shared Mongo jobstore.
-"""
+# APScheduler applies the scheduler's timezone only when add_job builds the trigger from a
+# string alias. A pre-built CronTrigger without timezone= falls back to tzlocal, so the same
+# job fires at a different instant on a UTC VPS and on a laptop in Asia/Ho_Chi_Minh, and the
+# host zone is pickled into the shared Mongo jobstore.
 
 from __future__ import annotations
 
@@ -17,7 +13,6 @@ from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 
 
 def _build_trigger(**cron_kwargs):
-    """Register a cron job against a mocked APScheduler and return its trigger."""
     scheduler = JobScheduler()
     scheduler_mock = MagicMock()
     scheduler._scheduler = scheduler_mock

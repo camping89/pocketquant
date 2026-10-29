@@ -1,20 +1,12 @@
-"""Exness CFD session calendars, from the ``trade_sessions`` the API publishes.
-
-Each instrument's week is a list of UTC segments (``"Mon, 20:57:59"``), each end
-inclusive to the second. Adjacent enabled segments are one session: the API
-splits a session at points such as 22:01:59/22:02:00 that are not gaps.
-
-The sessions are held in New York time because they follow the US market day:
-the UTC tables were recorded under EDT, and in UTC they move one hour later when
-US daylight saving ends. Holding them in ``America/New_York`` makes that shift
-without a code change.
-
-Bars sit on the UTC grid (the spike recorded D1 at 00:00Z and H4 at 08:00Z),
-except that a week opens on Sunday 00:00Z (a prod read returned W1 candles at
-Sunday midnight). The session date is the UTC date. ``session_open`` is the open
-of that date's D1 candle, which is midnight even on a Sunday whose first trade
-comes in the evening; integrity checks the daily grid against it.
-"""
+# The API publishes each week as UTC segments ("Mon, 20:57:59"), each end inclusive to
+# the second. Adjacent enabled segments are one session: the API splits a session at
+# points such as 22:01:59/22:02:00 that are not gaps.
+#
+# Sessions are held in America/New_York because they follow the US market day: the UTC
+# tables were recorded under EDT and move one hour later in UTC when US DST ends.
+#
+# Bars sit on the UTC grid (D1 at 00:00Z, H4 at 08:00Z), except that a week opens on
+# Sunday 00:00Z (prod returned W1 candles at Sunday midnight).
 
 from __future__ import annotations
 
@@ -90,7 +82,6 @@ _BTCUSD_SESSIONS: list[dict[str, str]] = [
 
 
 def exness_bar_start(instant: datetime, interval: Interval) -> datetime:
-    """The open of the Exness bar holding ``instant``: the UTC grid, weeks from Sunday."""
     instant = instant.astimezone(UTC)
     if interval == Interval.WEEK_1:
         midnight = instant.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -99,14 +90,12 @@ def exness_bar_start(instant: datetime, interval: Interval) -> datetime:
 
 
 def _week_offset(text: str) -> int:
-    """Seconds from Monday 00:00 for ``"Mon, 20:57:59"``."""
     day, clock = (part.strip() for part in text.split(","))
     hours, minutes, seconds = (int(p) for p in clock.split(":"))
     return _DAY_INDEX[day] * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
 def _shifted(start: int, end: int, shift: int) -> list[tuple[int, int]]:
-    """``[start, end)`` moved by ``shift`` seconds, cut at the week boundary."""
     pieces = []
     for week in (-_WEEK_SECONDS, 0, _WEEK_SECONDS):
         lo, hi = max(start + shift + week, 0), min(end + shift + week, _WEEK_SECONDS)
@@ -116,7 +105,6 @@ def _shifted(start: int, end: int, shift: int) -> list[tuple[int, int]]:
 
 
 def _monday(instant: datetime) -> datetime:
-    """Monday 00:00 of the week holding ``instant``, as naive New York wall time."""
     midnight = _wall_time(instant).replace(hour=0, minute=0, second=0, microsecond=0)
     return midnight - timedelta(days=midnight.weekday())
 
@@ -134,8 +122,6 @@ def _midnight(day: date) -> datetime:
 
 
 class ExnessSessionCalendarAdapter(ITradingCalendarPort):
-    """When one Exness instrument trades: New York sessions, answered as UTC instants."""
-
     def __init__(self, calendar_id: str, week_sessions: list[dict[str, str]]) -> None:
         self._calendar_id = calendar_id
         recorded_offset = _RECORDED_AT.astimezone(_SESSION_TZ).utcoffset() or timedelta()
@@ -161,12 +147,9 @@ class ExnessSessionCalendarAdapter(ITradingCalendarPort):
     def calendar_id(self) -> str:
         return self._calendar_id
 
+    # Merged across week boundaries, so a session running over New York Monday midnight
+    # is one span.
     def _spans(self, start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:
-        """Open spans ``[open, close)`` covering at least a week either side of the window.
-
-        Merged across week boundaries, so a session running over the New York
-        Monday midnight is one span.
-        """
         spans: list[tuple[datetime, datetime]] = []
         week, last = _monday(start) - _WEEK, _monday(end) + _WEEK
         while week <= last:
@@ -192,14 +175,14 @@ class ExnessSessionCalendarAdapter(ITradingCalendarPort):
         hi = lo + timedelta(days=1)
         return [(max(s, lo), min(e, hi)) for s, e in self._spans(lo, lo) if s < hi and e > lo]
 
+    # Midnight UTC even on a Sunday whose first trade comes in the evening: it is the open
+    # of that date's D1 candle, which the integrity check compares against.
     def session_open(self, session_date: date) -> datetime:
-        """The open of the date's D1 candle: midnight UTC, once the date trades at all."""
         if not self._day_spans(session_date):
             raise KeyError(f"{session_date.isoformat()} is not an {self._calendar_id} session")
         return _midnight(session_date)
 
     def session_close(self, session_date: date) -> datetime:
-        """The last open second of the date; segment ends are inclusive to the second."""
         spans = self._day_spans(session_date)
         if not spans:
             raise KeyError(f"{session_date.isoformat()} is not an {self._calendar_id} session")
@@ -214,13 +197,9 @@ class ExnessSessionCalendarAdapter(ITradingCalendarPort):
             raise KeyError(f"No {self._calendar_id} session before {instant.isoformat()}")
         return max(ends) - _SECOND
 
+    # An open second inside the window, not merely a date in it: a daily check at Sunday
+    # 00:00Z must not expect Sunday's candle, which exists only once Sunday trading starts.
     def sessions(self, start: datetime, end: datetime) -> list[date]:
-        """Every UTC date with an open second inside ``[start, end]``.
-
-        Inside the window, not merely on a date in it: a daily check at Sunday
-        00:00Z must not expect Sunday's candle, which only exists once Sunday
-        evening trading starts.
-        """
         start, end = start.astimezone(UTC), end.astimezone(UTC)
         days: set[date] = set()
         for span_start, span_end in self._spans(start, end):
@@ -233,12 +212,9 @@ class ExnessSessionCalendarAdapter(ITradingCalendarPort):
                 day += timedelta(days=1)
         return sorted(days)
 
+    # Overlap, not containment: 22:00 counts when trading resumes at 22:00:30, and 20:57
+    # counts when it stops at 20:57:59.
     def trading_minutes(self, start: datetime, end: datetime) -> list[datetime]:
-        """Every minute in ``[start, end)`` that overlaps a session.
-
-        Overlap, not containment: 22:00 counts when trading resumes at 22:00:30,
-        and 20:57 counts when it stops at 20:57:59.
-        """
         spans = self._spans(start, end)
         minutes: list[datetime] = []
         index = 0
@@ -253,12 +229,9 @@ class ExnessSessionCalendarAdapter(ITradingCalendarPort):
     def bar_start(self, instant: datetime, interval: Interval) -> datetime:
         return exness_bar_start(instant, interval)
 
+    # Bar opens counted in one Sunday-to-Sunday week, not divided out of open hours: FX
+    # trades about 5 days a week yet prints 6 daily bars (Sunday evening has its own).
     def periods_per_year(self, interval: Interval) -> float:
-        """Bar opens in one Sunday-to-Sunday reference week, times 52.
-
-        Counted, not divided out of the open hours: FX trades about 5 days a
-        week yet prints 6 daily bars (Sunday evening has its own) and 1 weekly.
-        """
         minutes = self.trading_minutes(_REFERENCE_WEEK, _REFERENCE_WEEK + _WEEK)
         return float(len({self.bar_start(m, interval) for m in minutes}) * 52)
 

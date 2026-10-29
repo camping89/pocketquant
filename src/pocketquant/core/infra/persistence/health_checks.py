@@ -5,7 +5,6 @@ from pocketquant.core.infra.persistence.redis import Cache
 
 
 async def check_database(database: Database) -> dict:
-    """Check MongoDB connectivity and measure latency."""
     start = time.time()
     db = database.get_database()
     await db.command("ping")
@@ -13,7 +12,6 @@ async def check_database(database: Database) -> dict:
 
 
 async def check_redis(cache: Cache) -> dict:
-    """Check Redis connectivity and measure latency."""
     start = time.time()
     client = cache.get_client()
     # redis-py types ping() as sync bool, but redis.asyncio returns an awaitable.

@@ -1,9 +1,6 @@
-"""Integration tests for SubscriptionRepository — CRUD, bulk ops, triple dedup.
-
-Dedup contract: the unique compound index on (strategy_code, symbol, interval)
-is the ONLY duplicate guard — ids are random uuid7, so two adds of the same
-triple carry different ids yet still collide at the DB layer.
-"""
+# The unique compound index on (strategy_code, symbol, interval) is the only duplicate
+# guard: ids are random uuid7, so two adds of the same triple carry different ids yet still
+# collide at the DB layer.
 
 from __future__ import annotations
 
@@ -76,8 +73,6 @@ async def test_add_get_delete_round_trip(repo):
 
 @pytest.mark.asyncio
 async def test_add_same_triple_different_id_raises(repo):
-    """Two subs with the SAME triple but DIFFERENT uuid7 ids must collide —
-    proves dedup moved from the hash PK to the compound unique index."""
     first = _make_sub("strat-dup", "ETH-USDT:OKX", Interval.MINUTE_5)
     second = _make_sub("strat-dup", "ETH-USDT:OKX", Interval.MINUTE_5)
     assert first.id != second.id
@@ -89,8 +84,6 @@ async def test_add_same_triple_different_id_raises(repo):
 
 @pytest.mark.asyncio
 async def test_concurrent_add_same_triple_one_doc_one_error(repo):
-    """Race two adds of the same triple: exactly one lands, one raises —
-    DB-enforced, no codepath pre-check involved."""
     a = _make_sub("strat-race", "BTC-USDT:BINANCE", Interval.MINUTE_5)
     b = _make_sub("strat-race", "BTC-USDT:BINANCE", Interval.MINUTE_5)
 

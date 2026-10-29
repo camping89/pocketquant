@@ -11,8 +11,6 @@ interface RunListItemProps {
 
 const pct = (n: number | undefined | null) => (n == null ? '—' : (n * 100).toFixed(1) + '%')
 
-/** Compact run row for the narrow master list. Two lines of essentials; a
- *  left accent border marks the active run; checkbox feeds the compare picker. */
 export function RunListItem({ row, active, selected, disableSelect, onSelect, onToggleSelect }: RunListItemProps) {
   const ret = row.metrics?.total_return ?? 0
   return (

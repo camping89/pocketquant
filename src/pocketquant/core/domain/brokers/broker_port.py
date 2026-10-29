@@ -12,20 +12,13 @@ TradeCallback = Callable[[TradeClosedEvent], None | Awaitable[None]]
 
 
 class IBrokerPort(ABC):
-    """Abstract broker interface for order execution.
-
-    Implementations:
-    - PaperBrokerAdapter: Simulated fills for backtesting/paper trading
-    - ExnessBrokerAdapter: Live trading via the Exness Trader API
-    """
-
     # True when fills arrive later through subscribe_order_updates rather than
     # in the submit_order result; the engine then routes them to the order service.
     fills_async: bool = False
 
+    # A trader hands over only at 0.
     @property
     def inflight_count(self) -> int:
-        """Orders sent and not yet settled; a trader hands over only at 0."""
         return 0
 
     @property
@@ -42,83 +35,35 @@ class IBrokerPort(ABC):
     @abstractmethod
     async def disconnect(self) -> None: ...
 
+    # None when the broker cannot fill the size.
     async def normalize_quantity(self, symbol: str, quantity: float) -> float | None:
-        """Round a strategy size to what the broker can fill; None when it cannot."""
         return quantity
 
+    # deadline is the trader's trading_until: the order is not sent at or after it. None
+    # means no deadline (backtests, direct calls).
     @abstractmethod
     async def submit_order(
         self, order: OrderAggregate, *, deadline: datetime | None = None
-    ) -> OrderResult:
-        """Submit order to broker.
-
-        Args:
-            order: Order aggregate to submit
-            deadline: the trader's trading_until; the order is not sent at or after it.
-                None = no deadline (backtests, direct calls).
-
-        Returns:
-            OrderResult with broker order ID and status
-        """
-        ...
+    ) -> OrderResult: ...
 
     @abstractmethod
-    async def cancel_order(self, broker_order_id: str) -> bool:
-        """Cancel order by broker order ID.
-
-        Args:
-            broker_order_id: The broker-assigned order ID
-
-        Returns:
-            True if cancellation request accepted
-        """
-        ...
+    async def cancel_order(self, broker_order_id: str) -> bool: ...
 
     @abstractmethod
-    async def get_positions(self) -> list[PositionAggregate]:
-        """Get all open positions from broker.
-
-        Returns:
-            List of position aggregates
-        """
-        ...
+    async def get_positions(self) -> list[PositionAggregate]: ...
 
     @abstractmethod
-    async def get_balance(self) -> AccountBalance:
-        """Get account balance from broker.
-
-        Returns:
-            Account balance details
-        """
-        ...
+    async def get_balance(self) -> AccountBalance: ...
 
     @abstractmethod
-    async def subscribe_order_updates(self, callback: OrderCallback) -> None:
-        """Subscribe to order status updates.
-
-        Args:
-            callback: Function to call on order updates (sync or async)
-        """
-        ...
+    async def subscribe_order_updates(self, callback: OrderCallback) -> None: ...
 
     @abstractmethod
-    async def unsubscribe_order_updates(self) -> None:
-        """Unsubscribe from order updates."""
-        ...
+    async def unsubscribe_order_updates(self) -> None: ...
+
+    # Each TradeClosedEvent is dispatched after its fill OrderResult so back-links resolve.
+    @abstractmethod
+    async def subscribe_trades(self, callback: TradeCallback) -> None: ...
 
     @abstractmethod
-    async def subscribe_trades(self, callback: TradeCallback) -> None:
-        """Subscribe to round-trip trade closures (average-cost).
-
-        Fires a ``TradeClosedEvent`` for each position reduce/close, dispatched
-        AFTER the corresponding fill ``OrderResult`` so back-links resolve.
-
-        Args:
-            callback: Function to call on trade closures (sync or async)
-        """
-        ...
-
-    @abstractmethod
-    async def unsubscribe_trades(self) -> None:
-        """Unsubscribe from trade closures."""
-        ...
+    async def unsubscribe_trades(self) -> None: ...

@@ -3,8 +3,8 @@ import type { FilterKey } from './positions-utils'
 interface PositionsFilterProps {
   filter: FilterKey
   onChange: (filter: FilterKey) => void
-  /** Active-filter total from the server; other chips show no count (a single
-   *  paged query can't know every filter's size without extra round-trips). */
+  // Only the active filter shows a count: a single paged query can't know every filter's size
+  // without extra round-trips.
   activeCount: number
 }
 

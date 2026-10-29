@@ -1,9 +1,6 @@
-"""Lease repository: one document per role name says which process may act.
-
-Acquire and renew are one conditional upsert; the unique name index makes a second
-insert fail, so two contenders never both win. Wall-clock time: all roles share one
-host clock.
-"""
+# Acquire and renew are one conditional upsert; the unique name index makes a second
+# insert fail, so two contenders never both win. Wall-clock time is safe because all
+# roles share one host clock.
 
 from __future__ import annotations
 
@@ -23,8 +20,8 @@ logger = get_logger(__name__)
 class LeaseRepository(BaseRepository):
     _collection_name = COLLECTION_LEASES
 
+    # The new expiry, or None while another owner holds it.
     async def acquire(self, name: str, owner: str, ttl_s: float) -> datetime | None:
-        """Take or renew ``name`` for ``owner``; the new expiry, or None while another holds it."""
         now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=ttl_s)
         try:

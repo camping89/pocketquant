@@ -1,15 +1,3 @@
-"""Order audit record — persisted order intent with lifecycle trail.
-
-``OrderRecord`` is the flat, persisted audit shape for the ``backtest_orders``
-collection: an order intent with embedded ``events[]`` (lifecycle transitions)
-and ``fills[]`` (executions). Distinct from ``OrderAggregate`` (the live
-state-machine entity) — this one is a snapshot record, not a behavioral root.
-
-``OrderEvent`` is defined alongside the broker port DTOs so the emitter
-(PaperBrokerAdapter) and the consumer (backtest collector) share one definition.
-``Fill`` is a universal, source-agnostic contract in ``core.domain.trading``.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,12 +16,6 @@ if TYPE_CHECKING:
 
 @dataclass
 class OrderRecord:
-    """Order intent with full lifecycle (Backtrader/QC convention).
-
-    Persisted standalone in `backtest_orders` with `events[]` + `fills[]` embedded.
-    Side / type / status typed as core enums (not bare strings) for safety.
-    """
-
     order_id: UUID
     run_id: str
     strategy_code: str

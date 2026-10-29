@@ -1,10 +1,6 @@
-"""The 24/7 calendar must reproduce today's crypto behaviour exactly.
-
-Phase 3 threads a calendar through sync, cascade, integrity and annualization.
-If any method here disagrees with what the crypto path does today, that refactor
-silently changes live bar values — so each test pins the method to the existing
-implementation rather than to a hand-written expectation.
-"""
+# The 24/7 calendar must reproduce the crypto path exactly. A method that disagrees with it
+# would silently change live bar values, so each test pins the method to the existing
+# implementation rather than to a hand-written expectation.
 
 from __future__ import annotations
 

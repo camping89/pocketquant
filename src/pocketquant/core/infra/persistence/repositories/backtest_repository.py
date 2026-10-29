@@ -57,9 +57,8 @@ class BacktestRepository(SymbolScopedRepository):
             results.append(BacktestResult.from_mongo(doc))
         return results
 
+    # For a spawn or non-engine error that aborts before the engine persisted its result.
     async def mark_failed(self, run_id: str, error_message: str) -> None:
-        """Flip a run to ``failed`` with an error — used when the spawn path or a
-        non-engine error aborts before the engine persisted its own result doc."""
         collection = self._collection()
         await collection.update_one(
             {"_id": run_id},
@@ -73,20 +72,14 @@ class BacktestRepository(SymbolScopedRepository):
         )
         logger.debug("backtest_marked_failed", run_id=run_id)
 
+    # False when no run matches, so the caller can 404.
     async def set_verdict(self, run_id: str, verdict: str | None) -> bool:
-        """Set the human-readable verdict on a run without touching metrics.
-
-        Returns False if no run matches ``run_id`` so the caller can 404.
-        """
         collection = self._collection()
         result = await collection.update_one({"_id": run_id}, {"$set": {"verdict": verdict}})
         return result.matched_count > 0
 
+    # False when no run matches, so the caller can 404.
     async def set_name(self, run_id: str, name: str | None) -> bool:
-        """Set the human-readable label on a run without touching metrics.
-
-        Returns False if no run matches ``run_id`` so the caller can 404.
-        """
         collection = self._collection()
         result = await collection.update_one({"_id": run_id}, {"$set": {"name": name}})
         return result.matched_count > 0
@@ -96,11 +89,9 @@ class BacktestRepository(SymbolScopedRepository):
             {"_id": run_id, "status": "started"}, {"$set": {"heartbeat_at": datetime.now(UTC)}}
         )
 
+    # A live run refreshes its heartbeat every 15 s; a run with no heartbeat yet falls back
+    # to started_at.
     async def mark_orphaned_started_as_failed(self) -> int:
-        """Fail runs whose task stopped refreshing its heartbeat; a live run refreshes every 15 s.
-
-        A run with no heartbeat yet falls back to ``started_at``. Returns the count updated.
-        """
         cutoff = datetime.now(UTC) - _ORPHAN_AFTER
         collection = self._collection()
         result = await collection.update_many(

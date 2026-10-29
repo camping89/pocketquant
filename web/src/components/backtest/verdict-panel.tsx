@@ -6,9 +6,8 @@ interface VerdictPanelProps {
   verdict: string | null | undefined
 }
 
-/** A run's conclusion, shown as read-mode prose that flips to an editor on
- *  demand. Save is optimistic (useSetVerdict); on failure the cached run reverts
- *  but the editor stays open with the text KEPT so the user can retry. */
+// Save is optimistic. On failure the cached run reverts but the editor stays open with
+// the text kept so the user can retry.
 export function VerdictPanel({ runId, verdict }: VerdictPanelProps) {
   const canonical = verdict ?? ''
   const [text, setText] = useState(canonical)

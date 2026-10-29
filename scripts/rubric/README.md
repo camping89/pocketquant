@@ -5,7 +5,10 @@ Offline scorecard that grades every finished backtest run on three axes —
 the trade path, and the strategy source. Read-only by default; the trading path
 is never touched.
 
-Full methodology (threshold bands, formulas, caveats): [`docs/backtest-rubric/methodology.md`](../../docs/backtest-rubric/methodology.md).
+Bands, weights and formulas live in the modules below.
+
+- The grade describes run health. It does not predict live results.
+- There is no multiple-testing correction: no deflated Sharpe, no PBO, no CSCV. A run picked as the best of many backtests is graded as if it were the only run.
 
 ## Run
 
@@ -38,12 +41,7 @@ open scripts/rubric/output/scorecards.html
 
 ## Scoring
 
-- Each metric → 0–4 via industry threshold bands.
-- metric → axis: weighted sum (N/A metrics dropped, weights re-normalized).
-- axis → overall: **min** (weakest-axis dominates — a robustness F drags the
-  whole run down even with A-grade performance).
-- Grade: A ≥ 3.5, B ≥ 2.5, C ≥ 1.5, D ≥ 0.5, F < 0.5.
-- `RUBRIC_VERSION` in `scoring.py`; bump it when any band/weight/formula changes.
+Bands, weights, grades, the aggregation rule and `RUBRIC_VERSION` live in `scoring.py`. The comment at its top says why the overall grade is the weakest axis.
 
 ## Modules
 
@@ -66,8 +64,6 @@ open scripts/rubric/output/scorecards.html
 - **Persist is scoped** — writes only a new top-level `scorecard` field via
   `$set`; never touches `verdict`/`metrics`/`equity_curve`/`config_snapshot`.
   Idempotent (re-run same version = overwrite).
-- **Crypto-1m caveat** — thresholds come from equity/daily research; on 1m crypto
-  they are directional references, not calibrated cutoffs.
 
 ## Tests
 

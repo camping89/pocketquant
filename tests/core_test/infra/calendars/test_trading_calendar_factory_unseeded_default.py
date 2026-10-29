@@ -1,9 +1,6 @@
-"""An unseeded symbol's calendar comes from the data provider its suffix names.
-
-Defaulting every unseeded symbol to 24/7 would let a session-hours instrument
-synced before seeding be read as always open: closed-market skips would never
-fire and every weekend would count as missing bars.
-"""
+# Defaulting every unseeded symbol to 24/7 would let a session-hours instrument synced
+# before seeding read as always open: closed-market skips would never fire and every weekend
+# would count as missing bars.
 
 from __future__ import annotations
 
@@ -43,9 +40,9 @@ async def test_an_unseeded_exness_symbol_gets_the_exness_fx_calendar() -> None:
     assert calendar.calendar_id == CALENDAR_EXNESS_FX
 
 
+# Better an error than a gold symbol silently trading 24/7.
 @pytest.mark.asyncio
 async def test_an_unseeded_symbol_of_an_unregistered_provider_is_refused() -> None:
-    """Better an error than a gold symbol silently trading 24/7."""
     with pytest.raises(UnknownDataProviderError, match="'mt5'"):
         await _factory(None).for_symbol("XAUUSD:MT5")
 

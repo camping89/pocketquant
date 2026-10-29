@@ -1,9 +1,3 @@
-"""Pin SyncService behavior through the feature service (ex-CQRS handlers).
-
-Covers: happy path, skip_filter bypass, misaligned-bar drop, no-progress path,
-bulk fan-out, and first-sync-no-data failure.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -300,8 +294,6 @@ async def test_provider_exception_returns_error_response() -> None:
 
 
 class TestPersistedBarsCarryTheirCalendar:
-    """Every synced bar records the schedule it was aligned against."""
-
     async def _persisted(self, interval: Interval) -> list[Bar]:
         bar = Bar(
             symbol=SYMBOL,

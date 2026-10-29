@@ -1,9 +1,5 @@
-"""Backtest VO PK representation lock — UUID in RAM, str in Mongo.
-
-Covers Fill.fill_id, OrderRecord.order_id, Trade.trade_id, BacktestResult.id. FK
-reference fields (order_id on Fill, run_id, entry/exit_order_id,
-resulting_trade_id) stay str — only document PKs flip.
-"""
+# Only document PKs are UUIDs in RAM; FK reference fields (order_id on Fill, run_id,
+# entry/exit_order_id, resulting_trade_id) stay str.
 
 from __future__ import annotations
 

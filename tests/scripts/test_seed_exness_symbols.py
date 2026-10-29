@@ -1,5 +1,3 @@
-"""seed_exness_symbols: CFD symbols on their own calendars, dry run by default."""
-
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock

@@ -1,9 +1,6 @@
-"""The symbol's contract spec reaches every live-path consumer.
-
-A lot-sized CFD subscription must size on its lot grid, fill on a broker that
-prices PnL with the XAUUSD contract size, and persist a position mirror whose
-PnL matches the broker's. Crypto keeps one shared linear paper broker.
-"""
+# A lot-sized CFD subscription must size on its lot grid, fill on a broker that prices PnL
+# with the XAUUSD contract size, and persist a position mirror whose PnL matches the
+# broker's. Crypto keeps one shared linear paper broker.
 
 from __future__ import annotations
 
@@ -39,9 +36,8 @@ XAUUSD = ContractSpec(multiplier=100.0, tick_size=0.001, lot_step=0.01, commissi
 NOW = datetime(2026, 9, 23, 14, tzinfo=UTC)
 
 
+# Only XAUUSD is seeded.
 class _FakeLookup:
-    """Stands in for SymbolLookupHelper: only XAUUSD is seeded."""
-
     async def contract_spec(self, composite: str) -> ContractSpec:
         return XAUUSD if composite == XAUUSD_SYMBOL else LINEAR_SPEC
 

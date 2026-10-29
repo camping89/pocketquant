@@ -1,5 +1,3 @@
-"""hold_lease and the worker stop, on an in-memory lease store with shrunk timings."""
-
 from __future__ import annotations
 
 import asyncio
@@ -47,8 +45,6 @@ class FakeLeaseRepo:
 
 
 class _Calls:
-    """Records the hold_lease callbacks."""
-
     def __init__(self) -> None:
         self.acquired: list[datetime] = []
         self.lost = 0

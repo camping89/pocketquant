@@ -1,10 +1,3 @@
-"""Backtest query service — read-side: get run, list runs, list orders.
-
-DTO class names are preserved from the handlers layer so call-sites that
-reference them by name require no import-path changes beyond the module prefix.
-Trade paging + analytics live in ``BacktestStatsService``.
-"""
-
 from __future__ import annotations
 
 from typing import Any
@@ -34,8 +27,6 @@ class EnqueueBacktestResponse(BaseModel):
 
 
 class BacktestQueryService:
-    """Read-side backtest operations — queries from Mongo collections."""
-
     def __init__(
         self,
         backtest_repository: BacktestRepository,
@@ -59,12 +50,9 @@ class BacktestQueryService:
             interval=query.interval,
         )
 
+    # Mapped here, not with OrderRecord.to_mongo(), so the DTO key is order_id instead
+    # of Mongo's _id.
     async def list_orders(self, run_id: str) -> list[dict[str, Any]]:
-        """Orders for a run with embedded fills + lifecycle events.
-
-        Mapped here (not via ``OrderRecord.to_mongo()``) so the DTO key is ``order_id``
-        instead of the Mongo ``_id``. FastAPI encodes the datetimes to isoformat.
-        """
         orders = await self._order_repo.list_by_run(run_id)
         return [
             {

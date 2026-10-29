@@ -1,20 +1,3 @@
-"""Feed lag — how far a symbol's market data runs behind real time.
-
-A delayed feed is not a broken one: it keeps arriving, just behind the clock.
-Lag is measured from the stored bars rather than from which provider serves the
-symbol, so a new provider (delayed or real-time) needs no change here.
-
-Only trading minutes count, so a weekend, a holiday or a daily session break is
-the market being shut, not the feed falling behind. The lag reported on a Monday
-open is the feed's delay rather than the length of the weekend.
-
-The ``data_lag_check`` job writes one snapshot per tracked symbol to Redis each
-minute; ``DataLagQueryService`` reads it back. A missing snapshot reads as
-``unknown``, never as healthy.
-
-``symbol`` is composite ``{code}:{exchange}`` throughout.
-"""
-
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -71,43 +54,32 @@ def trading_seconds_behind(
     *,
     window: timedelta = _LAG_WINDOW,
 ) -> int:
-    """Trading seconds from ``since`` to ``now``.
-
-    Minutes the calendar marks closed contribute nothing, so an overnight or
-    weekend gap is not counted as falling behind. ``window`` caps how far back
-    the count reaches.
-    """
     start = max(since, now - window)
     if start >= now:
         return 0
     return 60 * len(calendar.trading_minutes(start, now))
 
 
+# Lag is measured from stored bars, not from the provider, so a new provider needs
+# no change here. Closed minutes count for nothing: a weekend, holiday or session
+# break is the market being shut, not the feed falling behind.
 def feed_lag_seconds(
     latest_1m_start: datetime | None, calendar: ITradingCalendarPort, now: datetime
 ) -> int | None:
-    """How many trading seconds of closed 1m bars have not arrived yet.
-
-    Counts from the close of the newest stored 1m bar. ``None`` when the symbol
-    has no 1m bar at all.
-    """
     if latest_1m_start is None:
         return None
     return trading_seconds_behind(latest_1m_start + _ONE_MINUTE, calendar, now)
 
 
+# A shut market is closed whatever its lag. The sync stops shortly after the close,
+# so a delayed feed's last minutes arrive only at the next open and the lag freezes
+# at the delay; that is not something to flag all weekend.
 def classify_feed(
     lag_seconds: int | None,
     empty_syncs: int,
     market_open: bool,
     sync_age_seconds: float | None = None,
 ) -> FeedState:
-    """The feed's state from its lag and the health of the 1m sync.
-
-    A shut market is ``closed`` whatever its lag. The sync stops shortly after
-    the close, so a delayed feed's last minutes arrive only at the next open and
-    the lag freezes at the delay; that is not something to flag all weekend.
-    """
     if not market_open:
         return FeedState.CLOSED
     if lag_seconds is None:
@@ -128,7 +100,6 @@ def classify_sync_status(
     market_open: bool,
     now: datetime,
 ) -> FeedState:
-    """``classify_feed`` fed from the symbol's 1m sync-status row, if it has one."""
     if status_1m is None:
         return classify_feed(lag_seconds, 0, market_open)
     last_sync = status_1m.last_sync_at
@@ -156,7 +127,6 @@ async def compute_data_lag(
     calendar: ITradingCalendarPort,
     now: datetime | None = None,
 ) -> DataLagSnapshot:
-    """Measure one symbol's feed lag from its newest 1m bar."""
     now = now or datetime.now(UTC)
     sym = symbol.upper()
     latest = await bar_repo.get_latest(sym, Interval.MINUTE_1)
@@ -175,8 +145,6 @@ async def compute_data_lag(
 
 
 class DataLagResponse(BaseModel):
-    """``state`` is one of ``FeedState``; ``unknown`` when no check has run."""
-
     symbol: str
     state: FeedState
     lag_seconds: int | None = None
@@ -185,9 +153,8 @@ class DataLagResponse(BaseModel):
     checked_at: str | None = None
 
 
+# A missing snapshot reads as unknown, never as healthy.
 class DataLagQueryService:
-    """Reads the snapshot the ``data_lag_check`` job last wrote."""
-
     def __init__(self, cache: Cache) -> None:
         self._cache = cache
 

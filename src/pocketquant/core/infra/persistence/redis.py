@@ -1,5 +1,3 @@
-"""Redis cache manager — instance-based for DI container."""
-
 from __future__ import annotations
 
 import json
@@ -15,8 +13,6 @@ logger = get_logger(__name__)
 
 
 class Cache:
-    """Redis cache manager. Instance-based, managed by DI container."""
-
     def __init__(self) -> None:
         self.__client: redis.Redis | None = None
         self.__default_ttl: int = 3600
@@ -41,7 +37,6 @@ class Cache:
             logger.info("redis.disconnected")
 
     def get_client(self) -> redis.Redis:
-        """Get Redis client, raising if not connected."""
         if self.__client is None:
             raise RuntimeError("Cache not connected. Call Cache.connect() first.")
         return self.__client
@@ -62,7 +57,6 @@ class Cache:
             raise ValueError(f"Corrupted cache data for key '{key}'") from e
 
     async def mget(self, keys: list[str]) -> list[Any]:
-        """Get multiple values by keys. Returns list in same order (None for misses)."""
         if not keys or self.__client is None:
             return [None] * len(keys)
         client = self.get_client()

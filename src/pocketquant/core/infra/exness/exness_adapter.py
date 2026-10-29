@@ -1,12 +1,3 @@
-"""Exness REST data provider — implements IDataProviderPort over native bid candles.
-
-Pages backwards from now by the published ``max_candles_per_request``. The
-in-progress candle is dropped on the Exness bar grid: the UTC grid, with weeks
-opening on Sunday. A rate limit is retried inside ``ExnessClient``; anything it
-still raises propagates, so the sync reports an error and the next scheduled run
-fetches again.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -29,18 +20,17 @@ _SECOND = timedelta(seconds=1)
 
 
 class ExnessAdapter(IDataProviderPort):
-    """Bid OHLCV history for the ``:EXNESS`` symbols."""
-
     def __init__(self, client: ExnessClient) -> None:
         self._client = client
 
+    # ExnessClient retries a rate limit; anything it still raises propagates, so the sync
+    # reports an error and the next scheduled run fetches again.
     async def fetch_ohlcv(
         self,
         symbol: str,
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        """Closed bars, ascending, at most ``n_bars``."""
         name = instrument_name(symbol)
         if name is None:
             logger.warning("exness.unknown_instrument", symbol=symbol)
@@ -78,5 +68,5 @@ class ExnessAdapter(IDataProviderPort):
     async def search_symbols(self, query: str) -> list[dict]:
         return []
 
-    async def close(self) -> None:
-        """No-op: the client's lifetime belongs to DI."""
+    # No-op: the client's lifetime belongs to DI.
+    async def close(self) -> None: ...

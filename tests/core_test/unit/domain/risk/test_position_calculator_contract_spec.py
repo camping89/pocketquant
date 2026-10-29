@@ -1,5 +1,3 @@
-"""Contract-aware sizing: a futures signal sizes in whole contracts."""
-
 from __future__ import annotations
 
 import pytest

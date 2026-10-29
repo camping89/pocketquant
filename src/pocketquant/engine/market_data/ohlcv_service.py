@@ -1,5 +1,3 @@
-"""OHLCV query service — cached bar retrieval for a composite symbol."""
-
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -13,11 +11,6 @@ from pocketquant.core.infra.persistence.repositories.bar_repository import BarRe
 
 @dataclass
 class GetOHLCVQuery:
-    """Query to retrieve OHLCV bars for a composite symbol.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    """
-
     symbol: str
     interval: str = "1d"
     limit: int = 1000
@@ -33,8 +26,6 @@ class GetOHLCVQuery:
 
 @dataclass
 class OHLCVResponse:
-    """Result of OHLCV query. ``symbol`` is composite ``{code}:{exchange}``."""
-
     symbol: str
     interval: str
     data: list[dict[str, Any]]
@@ -42,14 +33,11 @@ class OHLCVResponse:
 
 
 class OhlcvService:
-    """Cached OHLCV retrieval for a composite symbol."""
-
     def __init__(self, cache: Cache, bar_repository: BarRepository) -> None:
         self._cache = cache
         self._bar_repo = bar_repository
 
     async def get_ohlcv(self, request: GetOHLCVQuery) -> OHLCVResponse:
-        """Return OHLCV bars for ``symbol`` at ``interval``, using cache when warm."""
         symbol = request.symbol.upper()
         interval = Interval(request.interval)
 

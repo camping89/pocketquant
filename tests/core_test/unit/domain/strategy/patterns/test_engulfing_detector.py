@@ -1,8 +1,5 @@
-"""Golden-fixture parity test for detect_engulfing.
-
-The same fixture drives the TS chart port (Phase 3 vitest), so this file is the
-Python half of the cross-runtime lock on the engulfing definition.
-"""
+# The same golden fixture drives the TS chart port, so this file is the Python half of the
+# cross-runtime lock on the engulfing definition.
 
 from __future__ import annotations
 

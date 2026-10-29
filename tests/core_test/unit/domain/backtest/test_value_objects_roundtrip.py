@@ -1,5 +1,3 @@
-"""to_mongo / from_mongo roundtrip tests for all post-Phase-1 VOs."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -150,8 +148,8 @@ def test_trade_roundtrip_flat_entry_exit_prefix() -> None:
     assert Trade.from_mongo(t.to_mongo()) == t
 
 
+# Migrated trades have None entry/exit_order_id.
 def test_trade_nullable_order_ids_round_trip() -> None:
-    """Migrated trades have None entry/exit_order_id — must round-trip cleanly."""
     t = Trade(
         trade_id=T1,
         run_id="r1",
@@ -215,7 +213,6 @@ def test_metrics_roundtrip_with_duration() -> None:
 
 
 def test_metrics_zero_second_duration_round_trips_not_none() -> None:
-    """Boundary case: 0.0 seconds must NOT round-trip to None (S5 fix)."""
     m = PerformanceMetrics.empty()
     doc = {**m.to_mongo(), "avg_trade_duration_seconds": 0.0}
     out = PerformanceMetrics.from_mongo(doc)
@@ -244,8 +241,8 @@ def test_backtest_result_roundtrip_preserves_symbol_interval() -> None:
     assert restored.interval == "1m"
 
 
+# Pre-denormalization docs lack top-level symbol and interval.
 def test_backtest_result_from_mongo_falls_back_to_config_snapshot() -> None:
-    """Pre-denormalization docs lack top-level symbol/interval — fall back to snapshot."""
     run = BacktestResult.started("0192f000-0000-7000-8000-000000000003", _RUN_CONFIG)
     doc = run.to_mongo()
     del doc["symbol"]
@@ -255,8 +252,8 @@ def test_backtest_result_from_mongo_falls_back_to_config_snapshot() -> None:
     assert restored.interval == "1m"
 
 
+# Uppercased so the scope filter matches a lowercase composite in the config.
 def test_backtest_result_started_uppercases_symbol() -> None:
-    """Lowercase composite in config → uppercased so the scope filter matches."""
     run = BacktestResult.started(
         "0192f000-0000-7000-8000-000000000005",
         {"strategy_code": "s1", "symbol": "btcusdt:binance", "interval": "1m"},
@@ -265,7 +262,6 @@ def test_backtest_result_started_uppercases_symbol() -> None:
 
 
 def test_backtest_result_from_mongo_empty_when_snapshot_also_missing() -> None:
-    """Very old docs with neither top-level nor snapshot fields → empty string, no raise."""
     run = BacktestResult.started("0192f000-0000-7000-8000-000000000004", _RUN_CONFIG)
     doc = run.to_mongo()
     del doc["symbol"]

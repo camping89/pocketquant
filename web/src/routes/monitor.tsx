@@ -12,7 +12,6 @@ export const Route = createFileRoute('/monitor')({
   component: MonitorPage,
 })
 
-/** Live HH:mm:ss clock rendered in the active tz mode. */
 function useClock(): string {
   const [now, setNow] = useState(() => new Date().toISOString())
   useEffect(() => {

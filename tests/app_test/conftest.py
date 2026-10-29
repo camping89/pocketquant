@@ -1,8 +1,3 @@
-"""Pytest fixtures for app-runtime tests.
-
-Prod-DB guard and env seeding live in the root ``tests/conftest.py``.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -17,7 +12,6 @@ def settings(
     mongo_container: MongoDbContainer,
     redis_container: RedisContainer,
 ) -> Settings:
-    """Test Settings wired to ephemeral containers."""
     redis_host = redis_container.get_container_host_ip()
     redis_port = redis_container.get_exposed_port(6379)
 

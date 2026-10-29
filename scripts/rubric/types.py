@@ -1,8 +1,5 @@
-"""Shared dataclasses for the rubric pipeline — data holders, no logic.
-
-Kept logic-free so every rubric module can import these without pulling in
-Mongo, numpy, or scoring dependencies (avoids circular imports).
-"""
+# Logic-free so every rubric module can import these without pulling in Mongo, numpy or
+# scoring, which avoids circular imports.
 
 from __future__ import annotations
 
@@ -11,16 +8,10 @@ from datetime import datetime
 from typing import Any
 
 
+# config_snapshot stores every value as a string; the loader converts them at the boundary,
+# so these fields are already typed.
 @dataclass
 class RunData:
-    """One backtest run, loaded read-only from ``backtest_runs``.
-
-    ``config_snapshot`` in Mongo stores every value as a string
-    (``"10000.0"``, ``"0.5"``, ``"{}"``); the loader converts the numeric
-    fields to float and ``parameters`` to a dict at the boundary, so the fields
-    here are already typed.
-    """
-
     run_id: str
     strategy_code: str
     symbol: str
@@ -40,10 +31,6 @@ class RunData:
 
 @dataclass
 class TradeRow:
-    """One round-trip trade. All numerics are float, times are datetime —
-    converted at the load boundary from the Mongo doc.
-    """
-
     trade_id: str
     direction: str  # "LONG" | "SHORT"
     entry_price: float
@@ -60,26 +47,15 @@ class TradeRow:
 
 @dataclass
 class AxisScore:
-    """One rubric axis: weighted 0-4 score, its letter grade, and the per-metric
-    breakdown that produced it (value → band → points) so a renderer can explain
-    every point.
-    """
-
     name: str
     score: float  # 0-4
     grade: str  # A-F
     breakdown: list[dict[str, Any]] = field(default_factory=list)
 
 
+# `aliases` are the duplicate run ids this canonical run absorbs.
 @dataclass
 class ScorecardResult:
-    """Full rubric outcome for one canonical run.
-
-    ``overall_score`` is the weakest-axis minimum of the three axis scores; the
-    axes carry their own breakdowns. ``aliases`` lists dedup'd duplicate run ids
-    that this canonical run absorbs.
-    """
-
     run_id: str
     strategy_code: str
     symbol: str

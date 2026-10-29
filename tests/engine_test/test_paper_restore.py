@@ -1,5 +1,3 @@
-"""A restarted trading process rebuilds each paper broker's cash and positions at takeover."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -108,7 +106,6 @@ def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def _process(store: _Store) -> _Process:
-    """One app process on the shared store: mirror, orders, engine and trade collector."""
     bus = EventBus()
     mirror = PositionAppService(bus, store.positions)  # type: ignore[arg-type]
     await mirror.start()
@@ -163,8 +160,8 @@ def _bar(low: float, close: float = 100.0) -> BarCompletedEvent:
     )
 
 
+# Process A closes one round trip on its SL and keeps a second LONG open.
 async def _before_restart() -> tuple[_Store, float]:
-    """Process A closes one round trip on its SL and keeps a second LONG open."""
     store = _Store()
     a = await _process(store)
     await _open(a, price=100.0, sl=95.0)

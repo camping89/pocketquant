@@ -1,13 +1,6 @@
-"""Read-only Mongo access for the rubric pipeline.
-
-Connection is LAZY: the client is created inside each loader, never at import
-time. Unit tests under ``tests/scripts/rubric/`` import this module while direnv
-has a prod ``MONGODB_URL`` in the environment; a module-level connect would trip
-the conftest prod-guard (``207.148.79.60``). The pure-math modules never call
-these loaders, so importing the package stays connection-free.
-
-Writes happen only through the persist path (Phase 8) behind ``--persist``.
-"""
+# The client is created inside each loader, never at import time. Tests under
+# tests/scripts/rubric/ import this module while direnv may hold a prod MONGODB_URL, and a
+# module-level connect would trip the conftest prod guard.
 
 from __future__ import annotations
 
@@ -39,7 +32,6 @@ _BAR_DTYPE = np.dtype(
 
 
 def _client() -> MongoClient:
-    """Build a Mongo client from ``MONGODB_URL`` (never a CLI flag / hardcode)."""
     url = os.environ.get("MONGODB_URL")
     if not url:
         raise RuntimeError("MONGODB_URL must be set in the environment")
@@ -50,8 +42,8 @@ def _db(client: MongoClient):
     return client[os.environ.get("MONGODB_DATABASE", "pocketquant")]
 
 
+# Config-snapshot and Decimal128 values arrive as str or Decimal.
 def _to_float(value: Any, default: float = 0.0) -> float:
-    """Config-snapshot and Decimal128 values arrive as str/Decimal — coerce."""
     if value is None:
         return default
     try:
@@ -70,7 +62,6 @@ def _opt_float(value: Any) -> float | None:
 
 
 def list_finished_runs() -> list[str]:
-    """Return every finished run id, oldest first."""
     client = _client()
     try:
         cursor = (
@@ -84,7 +75,6 @@ def list_finished_runs() -> list[str]:
 
 
 def load_run(run_id: str) -> RunData:
-    """Load one run's config + metrics + equity curve, typed at the boundary."""
     client = _client()
     try:
         doc = _db(client)[_RUNS].find_one({"_id": run_id})
@@ -121,7 +111,6 @@ def load_run(run_id: str) -> RunData:
 
 
 def load_trades(run_id: str) -> list[TradeRow]:
-    """Load all trades for a run, entry-time ordered, all numerics float."""
     client = _client()
     try:
         cursor = _db(client)[_TRADES].find({"run_id": run_id}).sort("entry_time", 1)
@@ -150,15 +139,11 @@ def load_trades(run_id: str) -> list[TradeRow]:
     return rows
 
 
+# Projects only the price fields (the 1m collection holds over 1M docs) and filters to the
+# run's window, so one run never scans the collection.
 def load_bars(
     symbol: str, interval: str, start: datetime, end: datetime
 ) -> np.ndarray:
-    """Load o/h/l/c/datetime for a window as a struct array, datetime-sorted.
-
-    Projects only the five price fields (the 1m collection is >1M docs) and
-    filters to the run's window so a single run never scans the collection.
-    ``datetime`` is stored as float epoch-seconds for homogeneous slicing.
-    """
     client = _client()
     try:
         cursor = (
@@ -190,14 +175,10 @@ def load_bars(
     return arr
 
 
+# Collapses double-persist duplicates. A matching meta key alone is not enough: the trade
+# entry_time sets must also be identical, so two different runs that share a trade count are
+# never merged.
 def dedup_runs(run_ids: list[str]) -> list[tuple[str, list[str]]]:
-    """Collapse double-persist duplicates into (canonical_id, [alias_ids]).
-
-    Group by (strategy_code, total_trades, rounded total_return); within a group
-    confirm the trade entry_time SET is identical before collapsing, so two
-    genuinely different runs that share a trade count are never merged. The
-    canonical is the smallest id (UUIDv7 → oldest) in the group.
-    """
     client = _client()
     try:
         db = _db(client)
@@ -239,17 +220,12 @@ def _group_by_meta(meta: dict[str, tuple[str, int, float]]) -> dict[tuple, list[
     return groups
 
 
+# The canonical is the smallest id (UUIDv7, so the oldest run). `signatures` holds
+# entry_time sets only for ids in a multi-member meta group.
 def collapse_duplicates(
     meta: dict[str, tuple[str, int, float]],
     signatures: dict[str, frozenset],
 ) -> list[tuple[str, list[str]]]:
-    """Pure dedup: group by meta key, then within a group split by identical
-    entry_time set (two runs sharing a trade count but not the same trades stay
-    separate). Canonical = smallest id (UUIDv7 → oldest). Sorted by canonical.
-
-    ``signatures`` carries entry_time sets only for ids in a multi-member meta
-    group; singletons need no signature.
-    """
     result: list[tuple[str, list[str]]] = []
     for ids in _group_by_meta(meta).values():
         if len(ids) == 1:

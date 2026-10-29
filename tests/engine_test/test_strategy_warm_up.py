@@ -1,5 +1,3 @@
-"""A started strategy is warmed up from stored bars and gets its direction from the mirror."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator

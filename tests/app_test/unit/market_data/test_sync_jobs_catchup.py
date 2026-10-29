@@ -1,11 +1,3 @@
-"""Unit tests for enqueue_missed_catchups — pure decision logic, mocked deps.
-
-Catches the three catch-up branches:
-  - no history yet (fresh DB) → skip (don't fire on first deploy)
-  - recent success (within threshold) → skip
-  - stale success (gap > max_gap) → enqueue `<job_id>_catchup` one-off
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -17,8 +9,8 @@ from pocketquant.engine.market_data.app_services.sync_jobs import (
 )
 
 
+# A fresh DB has no last success; firing would run catch-up on the first deploy.
 async def test_catchup_skips_when_no_history() -> None:
-    """Fresh DB → no last success → no catch-up enqueued."""
     repo = MagicMock()
     repo.get_last_successful_started_at = AsyncMock(return_value=None)
     scheduler = MagicMock()
@@ -28,8 +20,8 @@ async def test_catchup_skips_when_no_history() -> None:
     scheduler.add_one_off_job.assert_not_called()
 
 
+# Every threshold is above 1h.
 async def test_catchup_skips_when_recent() -> None:
-    """Last success 1h ago → all thresholds are >1h → no catch-up."""
     repo = MagicMock()
     repo.get_last_successful_started_at = AsyncMock(
         return_value=datetime.now(UTC) - timedelta(hours=1)
@@ -42,7 +34,6 @@ async def test_catchup_skips_when_recent() -> None:
 
 
 async def test_catchup_enqueues_when_stale() -> None:
-    """All targets stale (>26h since success) → one-off enqueued for each."""
     repo = MagicMock()
     # 30h gap exceeds every CATCHUP_TARGETS max_gap (largest is sync_backfill@25h).
     repo.get_last_successful_started_at = AsyncMock(
@@ -59,8 +50,8 @@ async def test_catchup_enqueues_when_stale() -> None:
     assert enqueued_ids == {f"{job_id}_catchup" for job_id, _, _ in CATCHUP_TARGETS}
 
 
+# Only sync_repair is past its threshold (>12.5h).
 async def test_catchup_partial_stale_only_enqueues_stale_ones() -> None:
-    """Mixed gaps: sync_repair stale (>12.5h), others fresh → only repair fires."""
     now = datetime.now(UTC)
 
     async def last_success(job_id: str) -> datetime | None:

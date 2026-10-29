@@ -1,9 +1,3 @@
-"""Unit tests for HitNRun2StrategyService.
-
-Synthetic OHLCV is crafted so each test exercises a single rule branch.
-Direct ``on_bar_completed`` calls — no EventBus / broker plumbing needed.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -107,8 +101,9 @@ async def test_short_entry_on_breakup_above_prev_window_high() -> None:
     assert sig.entry_price == 101.0
 
 
+# Window-min low = 50, entry = 99 -> raw SL = 50, cap = 99 * (1 - 0.01) = 98.01 -> SL =
+# 98.01.
 async def test_sl_capped_at_max_loss_pct_when_window_low_too_far() -> None:
-    """Window-min low = 50, entry=99 -> raw SL = 50, cap = 99*(1-0.01)=98.01 -> SL = 98.01."""
     s = await _strategy(direction="long", entry=5, sl=8, tp=3, max_loss=0.01)
     # 8 warmup bars: first has low=50 (extreme), rest at 99.5
     await s.on_bar_completed(_bar(0, h=51, lo=50, c=50.5, base=50.5))
@@ -119,8 +114,8 @@ async def test_sl_capped_at_max_loss_pct_when_window_low_too_far() -> None:
     assert sig.stop_loss_price == pytest.approx(99.0 * 0.99)
 
 
+# Window-min low = 98.5 is within the 1% cap (97.02) -> SL = 98.5.
 async def test_sl_uses_technical_when_within_cap() -> None:
-    """Window-min low = 98.5 within 1% cap (97.02) -> SL = 98.5."""
     s = await _strategy(direction="long", entry=5, sl=8, tp=3, max_loss=0.02)
     await s.on_bar_completed(_bar(0, h=99.0, lo=98.5, c=98.7, base=98.7))
     for i in range(1, 8):
@@ -131,8 +126,9 @@ async def test_sl_uses_technical_when_within_cap() -> None:
     assert sig.stop_loss_price == pytest.approx(98.5)
 
 
+# Window-max high = 100.5, entry = 99 -> raw TP = 100.5, cap = 99 * 1.02 = 100.98 -> TP =
+# 100.98.
 async def test_tp_uses_min_profit_pct_when_window_high_too_close() -> None:
-    """Window-max high = 100.5, entry=99 -> raw TP=100.5, cap=99*1.02=100.98 -> TP=100.98."""
     s = await _strategy(direction="long", entry=5, sl=8, tp=3, min_profit=0.02)
     for i in range(8):
         await s.on_bar_completed(_bar(i, h=100.5, lo=99.5, c=100.0, base=100.0))
@@ -141,8 +137,9 @@ async def test_tp_uses_min_profit_pct_when_window_high_too_close() -> None:
     assert sig.take_profit_price == pytest.approx(99.0 * 1.02)
 
 
+# Window-max high = 105 (within the last 3 bars), entry = 99 -> TP = 105, above the 100.98
+# cap.
 async def test_tp_uses_technical_when_above_min_target() -> None:
-    """Window-max high = 105 (within last 3 bars), entry=99 -> TP=105 (above cap 100.98)."""
     s = await _strategy(direction="long", entry=5, sl=8, tp=3, min_profit=0.02)
     # First 7 bars at base=100 ; bar idx=7 spikes high=105 so prev_highs_tp[-3:] includes 105.
     for i in range(7):
@@ -201,7 +198,6 @@ async def test_on_fill_short_close_resets_state() -> None:
 
 
 async def test_on_fill_same_side_does_not_reset() -> None:
-    """A BUY-side fill while LONG (scale-in) must NOT reset _open_direction."""
     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
     for i in range(8):
         await s.on_bar_completed(_bar(i))
@@ -211,7 +207,6 @@ async def test_on_fill_same_side_does_not_reset() -> None:
 
 
 async def test_current_bar_low_excluded_from_prev_window() -> None:
-    """Current bar must not contribute to prev-window snapshot."""
     s = await _strategy(direction="long", entry=5, sl=8, tp=3)
     # 8 warm bars at 100 +/- 0.5 -> prev_lows = 99.5
     for i in range(8):

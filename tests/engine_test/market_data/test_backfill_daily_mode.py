@@ -1,10 +1,6 @@
-"""A session-calendar daily backfill must go direct, never through the cascade.
-
-The vendor builds a session calendar's daily bar from its own session (Exness
-publishes its own D1 candles), so ``cascade_tfs`` omits DAY_1 for a session
-calendar: a cascade backfill would persist 1m bars and build no daily bar at all.
-Crypto on the 24/7 calendar is unaffected and still cascades.
-"""
+# The vendor builds a session calendar's daily bar from its own session (Exness publishes
+# its own D1 candles), so cascade_tfs omits DAY_1 for a session calendar: a cascade backfill
+# would persist 1m bars and build no daily bar at all.
 
 from __future__ import annotations
 
@@ -39,8 +35,6 @@ def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class _RecordingProvider:
-    """Records which intervals were asked for; returns nothing."""
-
     def __init__(self) -> None:
         self.requested: list[Interval] = []
 
@@ -88,7 +82,6 @@ async def test_session_calendar_daily_backfill_goes_direct() -> None:
 
 
 async def test_crypto_daily_backfill_still_cascades() -> None:
-    """The 24/7 path is unchanged — this is the G5 half of the override."""
     provider = _RecordingProvider()
     result = await _service(provider, CALENDAR_CRYPTO_24_7).run(
         BackfillTrackedSymbolCommand(symbol="BTCUSDT:BINANCE", interval=Interval.DAY_1, n=10)
@@ -98,14 +91,10 @@ async def test_crypto_daily_backfill_still_cascades() -> None:
     assert provider.requested == [Interval.MINUTE_1]
 
 
+# Honouring the cascade would persist 1m bars, build no daily bar and still report success.
+# Overriding without a word would be the other kind of silence, so the override is logged
+# when it contradicts the caller.
 async def test_an_explicit_cascade_is_overridden_audibly() -> None:
-    """An explicit cascade is overridden, and says so.
-
-    Honouring it would be the silent failure: ``cascade_tfs`` omits DAY_1 for a
-    session calendar, so the request would persist 1m bars, build no daily bar,
-    and still report success. Overriding without a word would be the other kind
-    of silence, so the override is logged when it contradicts the caller.
-    """
     provider = _RecordingProvider()
     with structlog.testing.capture_logs() as logs:
         result = await _service(provider, CALENDAR_EXNESS_FX).run(
@@ -123,7 +112,6 @@ async def test_an_explicit_cascade_is_overridden_audibly() -> None:
 
 
 async def test_auto_mode_is_overridden_silently() -> None:
-    """Nothing was contradicted, so nothing is warned about."""
     provider = _RecordingProvider()
     with structlog.testing.capture_logs() as logs:
         await _service(provider, CALENDAR_EXNESS_FX).run(

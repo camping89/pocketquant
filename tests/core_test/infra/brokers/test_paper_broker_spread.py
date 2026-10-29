@@ -1,6 +1,5 @@
-"""Unit tests for the PaperBrokerAdapter constant spread: bars are bid prices and
-ask = bid + spread, so BUY fills and SHORT SL/TP triggers use the ask side.
-"""
+# Bars are bid prices and ask = bid + spread, so BUY fills and SHORT SL/TP triggers use the
+# ask side.
 
 from __future__ import annotations
 

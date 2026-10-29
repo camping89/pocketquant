@@ -1,5 +1,3 @@
-"""Pure-math tests for robustness — PSR (erf CDF) + sequencing bootstrap."""
-
 from __future__ import annotations
 
 import numpy as np

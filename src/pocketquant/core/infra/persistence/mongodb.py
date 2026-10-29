@@ -1,5 +1,3 @@
-"""MongoDB connection manager — instance-based for DI container."""
-
 from __future__ import annotations
 
 from datetime import UTC
@@ -14,28 +12,6 @@ logger = get_logger(__name__)
 
 
 class Database:
-    """MongoDB connection manager. Instance-based, managed by DI container.
-
-    Public surface (in order of preference for app code):
-    - get_collection(name) — preferred for repositories and CQRS handlers.
-    - database (property) — raw AsyncDatabase for migrations, admin ops,
-      and one-offs (rename_collection, list_collection_names, drop_index,
-      bulk aggregations). Avoid in app/repository code.
-    - get_database() — kept as alias of the `database` property for
-      backward compatibility with existing call sites.
-
-    Architecture notes:
-    - __client: server-level connection (pool, auth, network). Kept private
-      for disconnect() — accessing it via __database.client violates Law of
-      Demeter.
-    - __database: reference to one specific database on the server.
-      Repositories receive this class and call get_collection() — they
-      should not reach for `database` (Principle of Least Privilege).
-
-    Hierarchy: client (server) → database (one DB) → collection (one table)
-    Only collections are used for CRUD; client/database handle lifecycle.
-    """
-
     def __init__(self) -> None:
         self.__client: AsyncMongoClient | None = None
         self.__database: AsyncDatabase | None = None
@@ -71,6 +47,7 @@ class Database:
             self.__database = None
             logger.info("mongodb.disconnected")
 
+    # Raw database for migrations and admin ops; repositories use get_collection().
     @property
     def database(self) -> AsyncDatabase:
         if self.__database is None:

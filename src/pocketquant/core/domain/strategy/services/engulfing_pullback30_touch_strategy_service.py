@@ -1,28 +1,5 @@
-"""Engulfing pullback-30 touch — deferred entry on an intrabar retrace.
-
-Variant of ``engulfing``: the qualifying engulfing bar does NOT enter. It arms a
-one-bar setup; the very next bar enters at market (its close) only if price
-retraces intrabar to ``pullback_pct`` of the engulfing body without first
-breaching the stop. Reuses ``detect_engulfing`` and the parent's key-level and
-fill-driven position-cap machinery; only the entry timing differs.
-
-    Arm (LONG, bullish) at bar N:
-      level = close_N - pullback_pct*(close_N - open_N)
-      pattern_low = min(low_N, low_prev); SL = pattern_low*(1-buf)
-      key_high = max(prev N highs)   # snapshot at bar N, excludes bar N
-    Resolve at bar N+1:
-      touch  = low(N+1) <= level; sl_hit = low(N+1) <= SL
-      enter iff touch and not sl_hit and entry > SL, with entry = close(N+1)
-      TP = max(entry + (entry - SL), key_high)
-    SHORT mirrors: level = close_N + pullback_pct*(open_N - close_N);
-      pattern_high = max(high_N, high_prev); SL = pattern_high*(1+buf);
-      touch = high(N+1) >= level; sl_hit = high(N+1) >= SL; enter iff entry < SL;
-      TP = min(entry - (SL - entry), key_low).
-
-The setup lives for exactly one bar: a miss or SL breach discards it, and the
-resolve bar never re-arms (it is spent resolving, not detecting). Single TP, at
-most one open position via the fill-confirmed ``_open_direction`` cap.
-"""
+# The setup lives for exactly one bar; the resolve bar never re-arms, since it is spent
+# resolving, not detecting.
 
 from __future__ import annotations
 
@@ -192,12 +169,6 @@ class EngulfingPullback30TouchStrategyService(IStrategyService):
         return self._mk_signal(Direction.SHORT, bar, entry, sl, tp, "bearish")
 
     async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
-        """Set the open direction on the entry fill; clear it on the close.
-
-        While flat, the next fill is the entry — record its side as the open
-        direction. While in a position, an opposite-side fill is the SL/TP
-        round-trip close.
-        """
         side = getattr(order, "side", None)
         if self._open_direction is None:
             if side == OrderSide.BUY:

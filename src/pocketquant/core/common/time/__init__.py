@@ -10,12 +10,11 @@ _UTC_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def utc_now() -> datetime:
-    """Return the current UTC datetime (timezone-aware)."""
     return datetime.now(UTC)
 
 
+# A naive datetime is taken as UTC.
 def coerce_utc(value: datetime | None) -> datetime | None:
-    """Ensure a datetime is UTC. Naive → UTC attached; aware → converted."""
     if value is None:
         return None
     if value.tzinfo is None:
@@ -24,7 +23,6 @@ def coerce_utc(value: datetime | None) -> datetime | None:
 
 
 def to_utc_iso(dt: datetime | None) -> str | None:
-    """Format a datetime as UTC ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ), or None."""
     if dt is None:
         return None
     return dt.astimezone(UTC).strftime(_UTC_FMT)

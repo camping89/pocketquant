@@ -1,8 +1,3 @@
-"""Safeguards repository: one document holds the entry pause of the Exness safeguards.
-
-No index; the collection holds one document.
-"""
-
 from datetime import UTC, datetime
 
 from pocketquant.core.common.constants import COLLECTION_SAFEGUARDS

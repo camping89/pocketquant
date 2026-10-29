@@ -1,8 +1,3 @@
-/**
- * Center bottom panel showing symbol/interval/template params for the
- * selected subscription. Start/Stop sits in the header; Delete sits alone
- * in the footer so no two red buttons share a group.
- */
 import { parseSymbol } from '../../lib/symbol-format'
 import { moneyHint } from '../../lib/money-hint'
 import { StartStopButton } from './start-stop-button'
@@ -34,6 +29,7 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: '0.05em',
 }
 
+// Delete sits alone in the footer so no two red buttons share a group.
 export function StrategyConfigCard({ sub, onDeleted }: StrategyConfigCardProps) {
   const { code, exchange } = parseSymbol(sub.symbol)
   const isRunning = sub.is_running

@@ -15,10 +15,8 @@ const td: CSSProperties = { padding: '6px 10px', borderBottom: '1px solid var(--
 
 type OrderRole = { action: 'Entry' | 'Exit' | '—'; direction: 'LONG' | 'SHORT' | null }
 
-/** Classify a raw order as opening (Entry) or closing (Exit) its trade, using the
- *  trade's direction: a LONG is opened by a BUY and closed by a SELL; a SHORT is
- *  the reverse. Orders with no resulting trade (cancelled/rejected/unfilled) stay
- *  unclassified — the raw side is still visible in the detail drawer. */
+// Orders with no resulting trade (cancelled, rejected, unfilled) stay unclassified;
+// the raw side is still visible in the detail drawer.
 function deriveRole(
   o: BacktestOrder,
   dirByTrade: Map<string, 'LONG' | 'SHORT'>,
@@ -29,9 +27,8 @@ function deriveRole(
   return { action: isEntry ? 'Entry' : 'Exit', direction: dir }
 }
 
-/** Orders for a run — fetched lazily once ``active`` (the tab is open). Row opens
- *  a drawer with fills + events. Entry/Exit + Long/Short are derived by joining
- *  each order to its trade's direction (trade-markers, shared with the chart). */
+// Entry/Exit and Long/Short come from joining each order to its trade's direction
+// (the trade markers shared with the chart).
 export function OrdersTable({ runId, active }: { runId: string; active: boolean }) {
   const { data: orders, isLoading, error } = useBacktestOrders(runId, active)
   const { data: markers } = useBacktestMarkers(runId, active)

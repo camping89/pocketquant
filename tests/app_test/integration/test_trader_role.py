@@ -1,6 +1,3 @@
-"""The trader role on a real Mongo: standby while another holds the lease, takeover after
-a release or an expiry, and exit after a lost renewal."""
-
 from __future__ import annotations
 
 import asyncio

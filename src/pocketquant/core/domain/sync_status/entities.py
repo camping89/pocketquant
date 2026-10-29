@@ -1,5 +1,3 @@
-"""SyncStatus entity — Pydantic model with MongoDB persistence."""
-
 from datetime import datetime as dt
 from typing import Any
 
@@ -10,11 +8,6 @@ from pocketquant.core.common.uuid import UUID, generate_id
 
 
 class SyncStatus(BaseModel):
-    """Tracks data sync status for a (symbol, interval) pair.
-
-    ``symbol`` stores composite identifier ``{code}:{exchange}``.
-    """
-
     id: UUID = Field(default_factory=generate_id)
     symbol: str = ""
     interval: str = ""
@@ -28,7 +21,6 @@ class SyncStatus(BaseModel):
     consecutive_empty_fetches: int = 0
 
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to MongoDB document."""
         return {
             "_id": str(self.id),
             "symbol": self.symbol,
@@ -43,7 +35,6 @@ class SyncStatus(BaseModel):
 
     @classmethod
     def from_mongo(cls, doc: dict[str, Any]) -> SyncStatus:
-        """Reconstruct from MongoDB document."""
         raw_id = doc.get("_id", "")
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),

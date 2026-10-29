@@ -1,29 +1,3 @@
-"""Audit OHLCV bar quality metrics across tracked symbols.
-
-Runs a MongoDB aggregation pipeline to count flat bars (O==H==L==C),
-zero-volume bars, and abnormal-volume bars per (symbol, exchange, interval).
-Outputs a Markdown table to plans/reports/audit-{YYYYMMDD}-bar-quality.md.
-
-Usage:
-    uv run python scripts/audit_bar_quality.py [--days 730] [--output PATH]
-    uv run python scripts/audit_bar_quality.py --symbol BTCUSDT --exchange BINANCE
-
-Exit codes: 0 = success, 1 = Mongo connection failure.
-
-MONGODB_URL must be set in environment (never passed as CLI flag). In prod it
-holds the internal docker hostname (mongodb:27017), so run via the container:
-`docker exec pocketquant-app python scripts/audit_bar_quality.py ...`.
-
-Production run order (on the VPS):
-    1. mongodump the bars collection to an archive (backup before resync)
-    2. audit_bar_quality.py --days 730              # pre-resync baseline
-    3. backfill/binance_bars.py --days 730 --replace --dry-run
-    4. backfill/binance_bars.py --days 730 --replace
-    5. audit_bar_quality.py --days 730              # post-resync comparison
-
-All commands run inside the app container: `docker exec pocketquant-app python <script>`.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -46,7 +20,23 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description=(
+            "Count flat, zero-volume and abnormal-volume bars per symbol, exchange and"
+            " interval. Writes a Markdown report; no database writes."
+        ),
+        epilog="""\
+MONGODB_URL must be set in the environment (never a CLI flag). In prod it holds
+the internal docker hostname, so run inside the app container:
+    docker exec pocketquant-app python scripts/audit_bar_quality.py ...
+
+Production run order (on the VPS):
+    1. mongodump the bars collection to an archive (backup before resync)
+    2. audit_bar_quality.py --days 730              # pre-resync baseline
+    3. backfill/binance_bars.py --days 730 --replace --dry-run
+    4. backfill/binance_bars.py --days 730 --replace
+    5. audit_bar_quality.py --days 730              # post-resync comparison
+
+Exit codes: 0 = success, 1 = Mongo connection failure.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -68,7 +58,6 @@ def _build_pipeline(
     symbol: str | None,
     exchange: str | None,
 ) -> list[dict]:
-    """Build MongoDB aggregation pipeline for bar quality metrics."""
     match_filter: dict = {"datetime": {"$gte": start_dt, "$lt": end_dt}}
     if symbol:
         match_filter["symbol"] = symbol.upper()
@@ -111,7 +100,6 @@ def _build_pipeline(
 
 
 def _render_markdown(rows: list[dict], start_dt: datetime, end_dt: datetime, days: int) -> str:
-    """Render aggregation results as Markdown table."""
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         "# Bar Quality Audit",

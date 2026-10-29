@@ -1,22 +1,3 @@
-"""HitNRun2 — 1m breakdown buy / breakup sell with technical SL/TP and account caps.
-
-Entry rules (LONG):
-    On a closed bar, if ``close`` breaks below ``min(prev_lows[-entry_lookback:])``
-    (excluding the current bar), emit a LONG signal at ``close``.
-
-Entry rules (SHORT): mirror — break above the prior-window high.
-
-SL/TP per side are the **looser** of the technical level and the account cap:
-    LONG  SL = MAX( min(prev_lows[-sl_lookback:]), entry * (1 - max_loss_pct) )
-    LONG  TP = MAX( max(prev_highs[-tp_lookback:]), entry * (1 + min_profit_pct) )
-    SHORT SL = MIN( max(prev_highs[-sl_lookback:]), entry * (1 + max_loss_pct) )
-    SHORT TP = MIN( min(prev_lows[-tp_lookback:]),  entry * (1 - min_profit_pct) )
-
-At most one open position. State is reset by ``on_order_filled`` when an
-opposite-side fill closes the open direction; the PaperBrokerAdapter SL/TP auto-fill
-drives this.
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -114,12 +95,8 @@ class HitNRun2StrategyService(IStrategyService):
 
         return None
 
+    # Broker SL/TP auto-fill emits the opposite side, so any opposite-side fill is the close.
     async def on_order_filled(self, order: FilledOrder, fill_price: float) -> None:
-        """Reset open-direction when the broker closes our position.
-
-        Broker SL/TP auto-fill emits the opposite side (SELL closes LONG,
-        BUY closes SHORT). Treat any opposite-side fill as the round-trip close.
-        """
         side = getattr(order, "side", None)
         if self._open_direction == Direction.LONG and side == OrderSide.SELL:
             self._open_direction = None
@@ -127,7 +104,6 @@ class HitNRun2StrategyService(IStrategyService):
             self._open_direction = None
 
     async def on_order_rejected(self, reason: str) -> None:
-        """Re-arm entries when the signalled order never filled."""
         self._open_direction = None
 
     def _mk_signal(

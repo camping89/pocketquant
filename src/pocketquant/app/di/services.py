@@ -1,11 +1,3 @@
-"""Services provider: app services, the execution engine and the feature services routes inject.
-
-OrderAppService and PositionAppService need async post-init (load state from DB).
-StrategyAppService uses a generator factory for start/stop lifecycle.
-The ``/backtest/run`` route allocates a run id, persists the started doc, then
-spawns ``BacktestExecutionService.execute_and_persist`` as an asyncio task.
-"""
-
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide

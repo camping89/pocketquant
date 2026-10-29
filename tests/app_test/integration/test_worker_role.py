@@ -1,5 +1,3 @@
-"""Two workers on one Mongo: only the worker lease holder runs a scheduler."""
-
 from __future__ import annotations
 
 import asyncio

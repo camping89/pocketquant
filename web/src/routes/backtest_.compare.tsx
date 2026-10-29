@@ -6,8 +6,7 @@ interface CompareSearch {
   runs: string[]
 }
 
-/** Parse ``?runs=a,b,c`` into ≤3 ids; the comma-joined form keeps the URL short
- *  and shareable. RunCompareView is filled in Phase 4. */
+// The comma-joined ?runs=a,b,c form keeps the URL short and shareable.
 function parseRuns(raw: unknown): string[] {
   const csv = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.join(',') : ''
   return csv

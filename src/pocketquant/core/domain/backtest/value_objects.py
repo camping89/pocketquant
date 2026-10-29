@@ -1,11 +1,3 @@
-"""Backtest-run value objects (Backtrader / QuantConnect naming).
-
-- ``OpenLot``  — still-open lot snapshot at run-end
-
-The order audit record (``OrderRecord``) lives in ``core.domain.order`` and the
-round-trip ``Trade`` / atomic ``Fill`` in ``core.domain.trading``.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,19 +5,10 @@ from datetime import datetime
 from typing import Any
 
 
+# entry_order_id is nullable for migrated docs whose order id could not be rebuilt.
+# entry_commission_portion is commission scaled by qty_remaining / qty_original.
 @dataclass
 class OpenLot:
-    """Snapshot of a still-open lot at end of run.
-
-    Embedded in `backtest_runs.open_positions[]`. Differs from `Trade` in that
-    there is no exit yet — only entry-side information.
-
-    `entry_order_id` is nullable to support migrated docs where the original
-    order ID could not be reconstructed from old PositionRecord shape.
-    `entry_commission_portion` is the commission attributable to the still-open
-    quantity (commission scaled by qty_remaining / qty_original).
-    """
-
     symbol: str
     direction: str  # "LONG" | "SHORT"
     entry_price: float

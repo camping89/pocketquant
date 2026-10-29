@@ -1,9 +1,3 @@
-"""PerformanceCalculatorDomainService Sharpe/Sortino — per-interval annualization.
-
-Pins the keyword-only ``periods_per_year`` contract and known-curve → known-value
-math, and that cagr stays calendar-based (unaffected by the interval change).
-"""
-
 from __future__ import annotations
 
 import inspect

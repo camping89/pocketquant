@@ -1,9 +1,3 @@
-/**
- * 3-pane CSS Grid wrapper for the strategies operator dashboard.
- * The Exness strip sits above the panes on every width.
- * Desktop: 240px sidebar | 1fr main | 360px dashboard
- * Mobile <768px: tab-controlled single pane view.
- */
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ExnessStrip } from './exness-strip'
@@ -67,13 +61,8 @@ export function StrategiesPageLayout() {
   const { data: rawTrades = [] } = useStrategyTrades(selectedSub?.id ?? null)
   const { data: apiPosition = null } = useOpenPosition(selectedSub?.id ?? null)
 
-  /**
-   * Adapt StrategyTrade[] (table shape from recent-trades-table) to Trade[]
-   * (chart marker shape). The table shape uses direction/entry_price/exit_price;
-   * we emit one entry marker and one exit marker per closed trade.
-   * TODO(backend): once the /trades endpoint returns Trade shape directly,
-   * remove this adapter and type rawTrades as Trade[].
-   */
+  // TODO(backend): once the /trades endpoint returns the Trade shape directly, drop this
+  // adapter and type rawTrades as Trade[].
   const trades = useMemo<Trade[]>(() => {
     const result: Trade[] = []
     for (const t of rawTrades) {
@@ -97,10 +86,6 @@ export function StrategiesPageLayout() {
     return result
   }, [rawTrades])
 
-  /**
-   * Adapt API OpenPosition (direction: 'LONG'|'SHORT') to chart OpenPosition
-   * (side: 'long'|'short'). Returns null when no open position.
-   */
   const openPos = useMemo<ChartOpenPosition | null>(() => {
     if (!apiPosition) return null
     return {

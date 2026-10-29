@@ -1,10 +1,3 @@
-"""Domain exceptions and global HTTP exception handling.
-
-Starlette-only (like the sibling tracing and rate_limit middleware) so
-core honours the "fastapi only in app" import contract. Callers pass their
-framework's request-validation error class at registration time.
-"""
-
 from typing import Any, Protocol, cast
 
 from starlette.applications import Starlette
@@ -30,9 +23,7 @@ class NotFoundError(AppError):
 
 
 class DomainError(AppError):
-    def __init__(
-        self, message: str, *, error_code: str = "DOMAIN_ERROR", status_code: int = 400
-    ):
+    def __init__(self, message: str, *, error_code: str = "DOMAIN_ERROR", status_code: int = 400):
         super().__init__(message, status_code=status_code, error_code=error_code)
 
 
@@ -47,14 +38,9 @@ def _error_response(status_code: int, error_code: str, message: str) -> JSONResp
     )
 
 
+# Starlette-only so core keeps the fastapi-only-in-app import contract; the caller
+# injects its request-validation error class, which must expose .errors().
 def register_exception_handlers(app: Starlette, *, validation_error_cls: type[Exception]) -> None:
-    """Register global exception handlers on the ASGI app.
-
-    Routes no longer need manual try/except → HTTPException conversion.
-    ``validation_error_cls`` is the framework's request-validation error
-    (must expose ``.errors()``), injected so this module stays fastapi-free.
-    """
-
     async def handle_app_error(_request: Request, exc: Exception) -> Response:
         err = cast(AppError, exc)
         logger.warning("app_error", error_code=err.error_code, message=err.message)

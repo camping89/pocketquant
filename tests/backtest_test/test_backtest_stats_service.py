@@ -1,5 +1,3 @@
-"""BacktestStatsService — paged trades (cursor roundtrip), markers, stats shape."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

@@ -1,6 +1,3 @@
-"""ExnessClient: signing, access-point routing, errors, secret hygiene, live gate,
-pacing, transport retries, the 429 rule and the URL and limits helpers."""
-
 from __future__ import annotations
 
 import base64
@@ -72,8 +69,6 @@ def _decoded_data(request: httpx.Request) -> dict[str, Any]:
 
 
 class _Exness:
-    """A mock Exness: discovery and limits answered, other calls scripted."""
-
     def __init__(self, answers: Sequence[Answer] | None = None) -> None:
         self.requests: list[httpx.Request] = []
         self.access_point: Answer = httpx.Response(

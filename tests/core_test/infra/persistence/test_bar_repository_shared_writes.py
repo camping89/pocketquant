@@ -1,4 +1,4 @@
-"""BarRepository writes decide from Mongo alone, so another process's delete is written over."""
+# BarRepository writes decide from Mongo alone, so another process's delete is written over.
 
 from __future__ import annotations
 

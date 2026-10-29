@@ -1,17 +1,9 @@
-"""HTTP API for the research workbench reads.
-
-Covers two additive endpoints:
-- ``GET /backtest/{run_id}/orders`` — orders with embedded fills + events, keyed
-  by ``order_id`` (NOT the Mongo ``_id`` leak).
-- ``GET /backtest/strategy/{id}?symbol=&interval=`` — history scoped by the
-  composite symbol; the DTO carries symbol/interval/date_range.
-
-Seeds documents straight through the repositories so the tests stay independent
-of the engine replay path.
-"""
+# Seeds documents through the repositories, so the tests are independent of the engine
+# replay path.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -23,7 +15,7 @@ from pocketquant.core.config import Settings
 from pocketquant.core.domain.backtest import BacktestResult
 from pocketquant.core.domain.brokers.events import OrderEvent
 from pocketquant.core.domain.order import OrderRecord, OrderSide, OrderStatus, OrderType
-from pocketquant.core.domain.trading import Fill
+from pocketquant.core.domain.trading import EquityPoint, Fill
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
     BacktestOrderRepository,
@@ -35,6 +27,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 pytestmark = pytest.mark.asyncio
 
 NOW = datetime(2026, 1, 5, 10, 0, 0, tzinfo=UTC)
+UTC_ISO_Z = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def _finished_run(strategy_code: str, symbol: str, interval: str) -> BacktestResult:
@@ -165,3 +158,22 @@ async def test_strategy_history_filters_by_composite_symbol(
     assert "date_range" in row
     assert {"start", "end"} <= set(row["date_range"].keys())
     assert "verdict" in row
+    assert UTC_ISO_Z.match(row["started_at"]), row["started_at"]
+    assert UTC_ISO_Z.match(row["completed_at"]), row["completed_at"]
+
+
+async def test_equity_endpoint_sends_utc_z_timestamps(
+    app_client: AsyncClient, settings: Settings
+) -> None:
+    run = _finished_run("equity_format_strat", "BTCUSDT:BINANCE", "1m")
+    run.equity_curve = [EquityPoint(timestamp=NOW, equity=1000.0, drawdown=0.0)]
+    db = Database()
+    await db.connect(settings)
+    try:
+        await BacktestRepository(db).save(run)
+    finally:
+        await db.disconnect()
+
+    resp = await app_client.get(f"{settings.api_prefix}/backtest/{run.id}/equity")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["equity_curve"][0]["timestamp"] == "2026-01-05T10:00:00Z"

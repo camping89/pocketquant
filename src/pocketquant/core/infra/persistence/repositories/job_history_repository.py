@@ -1,17 +1,3 @@
-"""MongoDB repository for job execution history.
-
-Two write paths:
-  - Wrapper path (`record_start` + `record_finish`): keyed by generated UUID;
-    used by sync_jobs._tracked. Writes "running" → "completed"|"failed".
-  - Listener path (`record_skip`): keyed by (job_id, scheduled_run_time);
-    used by APScheduler EVENT_JOB_MISSED/MAX_INSTANCES/ERROR. Idempotent
-    upsert so multi-instance races converge.
-
-`details[]` capacity note: documents store per-(symbol, interval) sub-records
-inline; threshold ~50 entries per doc (1 symbol × 5 intervals = 5/doc today).
-Beyond that, split to a child collection — deferred follow-up.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -73,6 +59,8 @@ class JobHistoryRepository(BaseRepository):
             update["total_fetched"] = total_fetched
         await self._collection().update_one({"_id": doc_id}, {"$set": update})
 
+    # Idempotent upsert keyed by (job_id, scheduled_run_time), so multi-instance races
+    # converge.
     async def record_skip(
         self,
         *,
@@ -81,8 +69,6 @@ class JobHistoryRepository(BaseRepository):
         status: str,
         error: str | None = None,
     ) -> None:
-        """Idempotent upsert keyed by (job_id, scheduled_run_time).
-        Status: 'missed' | 'skipped_max_instances' | 'failed'."""
         await self._collection().update_one(
             {"job_id": job_id, "scheduled_run_time": scheduled_run_time},
             {
@@ -103,6 +89,7 @@ class JobHistoryRepository(BaseRepository):
             upsert=True,
         )
 
+    # details[] is stored inline on the run doc; that holds up to about 50 entries per doc.
     async def record_detail(
         self,
         doc_id: str,
@@ -116,10 +103,6 @@ class JobHistoryRepository(BaseRepository):
         status: str,
         error: str | None = None,
     ) -> None:
-        """Append a per-(symbol, interval) detail to the parent run doc.
-
-        ``symbol`` is composite ``{code}:{exchange}``.
-        """
         await self._collection().update_one(
             {"_id": doc_id},
             {
@@ -139,20 +122,10 @@ class JobHistoryRepository(BaseRepository):
             },
         )
 
+    # A process killed between record_start() and record_finish() leaves a forever-running
+    # row. The started_at age filter keeps a wrapper finishing mid-sweep safe: record_finish()
+    # writes by _id, and a completed doc no longer matches.
     async def reconcile_orphan_running(self, max_age_seconds: int = 600) -> int:
-        """Flip stale ``status="running"`` docs to ``"failed"`` on startup.
-
-        Orphan rows arise when a job's wrapper writes ``record_start()`` but the
-        process is killed before ``record_finish()`` runs (e.g. mid-deploy
-        CancelledError). Without this sweep, dashboards show forever-running jobs.
-
-        Filter is ``status="running" AND started_at < now - max_age_seconds`` so
-        a wrapper that legitimately completes mid-reconcile is safe: its
-        ``record_finish()`` writes against ``_id`` (not status), and the doc is
-        already excluded from this filter once status flips to ``completed``.
-
-        Returns count of docs updated.
-        """
         cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
         result = await self._collection().update_many(
             {"status": "running", "started_at": {"$lt": cutoff}},
@@ -166,19 +139,8 @@ class JobHistoryRepository(BaseRepository):
         )
         return result.modified_count
 
+    # None (no successful run yet) means no catch-up; the next cron tick handles it.
     async def get_last_successful_started_at(self, job_id: str) -> datetime | None:
-        """Return ``started_at`` of the most recent ``completed`` run for ``job_id``.
-
-        Used by startup catch-up logic to decide whether the gap since the last
-        success exceeds the per-job cadence. Returns ``None`` if the job has no
-        successful history (e.g. fresh DB) — caller should treat as "no catch-up
-        needed" and let the next cron tick handle it.
-
-        ``coerce_utc`` wrap: motor returns naive datetimes from Mongo. The caller
-        in ``enqueue_missed_catchups`` subtracts against ``datetime.now(UTC)``,
-        which raises ``TypeError: can't subtract offset-naive and offset-aware
-        datetimes`` without this coercion.
-        """
         doc = await self._collection().find_one(
             {"job_id": job_id, "status": "completed"},
             sort=[("started_at", -1)],
@@ -241,12 +203,8 @@ class JobHistoryRepository(BaseRepository):
             rows.append(_serialize(d))
         return rows
 
+    # $median / $percentile need Mongo 7+; without them only the counts are returned.
     async def aggregate_stats(self, job_id: str, since: datetime) -> dict[str, Any]:
-        """Counts by status + p50/p95 duration over [since, now].
-
-        Uses Mongo 7+ `$median` / `$percentile`. Falls back gracefully if the
-        operators aren't supported by returning counts only.
-        """
         coll = self._collection()
         # Status counts (always available)
         count_pipeline: list[dict[str, Any]] = [
@@ -304,10 +262,6 @@ class JobHistoryRepository(BaseRepository):
         return {"by_status": by_status, "p50_ms": p50_ms, "p95_ms": p95_ms}
 
     async def remove_symbol_details(self, symbol: str) -> int:
-        """Pull ``symbol``'s ``details[]`` entries from every run doc; runs stay.
-
-        Returns the number of run docs modified.
-        """
         result = await self._collection().update_many(
             {"details.symbol": symbol}, {"$pull": {"details": {"symbol": symbol}}}
         )
@@ -315,7 +269,6 @@ class JobHistoryRepository(BaseRepository):
         return result.modified_count
 
     async def ensure_indexes(self) -> None:
-        """Create compound + TTL + idempotency indexes."""
         coll = self._collection()
         await coll.create_index(
             [("job_id", 1), ("started_at", -1)],

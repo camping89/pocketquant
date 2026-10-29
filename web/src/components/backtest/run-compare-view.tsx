@@ -12,8 +12,7 @@ const sectionTitle = {
   margin: '12px 0 6px',
 }
 
-/** Compare 2–3 runs (validation Q2: cross-scope allowed). Fixed 3 hook slots keep
- *  the Rules of Hooks intact; absent run ids resolve to disabled queries. */
+// Fixed 3 hook slots keep the Rules of Hooks intact; absent run ids resolve to disabled queries.
 export function RunCompareView({ runIds }: { runIds: string[] }) {
   const q0 = useBacktestRun(runIds[0] ?? null)
   const q1 = useBacktestRun(runIds[1] ?? null)

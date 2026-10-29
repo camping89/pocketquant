@@ -1,15 +1,11 @@
-/**
- * Account-level strip above the strategies page: the Exness caps and the
- * entry pause from GET /admin/safeguards. Pause is one click; Resume confirms.
- * The query and both mutations live here because this is their only caller.
- */
+// The query and both mutations live here because this is their only caller.
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, apiPost } from '../../api/api-client'
 import { moneyHint } from '../../lib/money-hint'
 import { ConfirmDialog } from './start-stop-button'
 
-/** Mirrors the backend `Safeguards` dataclass. */
+// Mirrors the backend Safeguards dataclass.
 interface Safeguards {
   live_trading: boolean
   daily_loss_cap: number | null

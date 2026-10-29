@@ -1,12 +1,6 @@
-"""The backtest report annualizes on the symbol's calendar, not on the interval.
-
-The interval table answers for a market that never closes. An Exness XAUUSD 1h
-series has 5980 bars a year, not 8760, and Sharpe scales by the square root of
-that, so reading the wrong source overstates a gold Sharpe by roughly 21%.
-
-Every other backtest test runs on crypto, where the two sources agree exactly —
-which is why the wrong source would otherwise go unnoticed.
-"""
+# An Exness XAUUSD 1h series has 5980 bars a year, not 8760, so reading the interval table
+# overstates a gold Sharpe by roughly 21%. Every other backtest test runs on crypto, where
+# the two sources agree exactly.
 
 from __future__ import annotations
 

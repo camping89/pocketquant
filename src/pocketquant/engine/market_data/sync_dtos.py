@@ -1,21 +1,12 @@
-"""Sync operation DTOs — shared between SyncService and sync_internals helpers.
-
-Kept in a standalone module to avoid circular imports between sync_service and
-sync_internals/responses (which builds SyncResponse instances).
-"""
-
 from pydantic import BaseModel, Field
 
 from pocketquant.core.common.constants import LIMIT_SYNC_MAX_BARS
 from pocketquant.core.domain.shared.enums import Interval as DomainInterval
 
 
+# These DTOs live in their own module to avoid an import cycle between sync_service
+# and sync_internals/responses.
 class SyncSymbolCommand(BaseModel):
-    """Sync historical OHLCV data for a single composite symbol.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    """
-
     symbol: str = Field(..., description="Composite symbol (e.g., BTCUSDT:BINANCE)")
     interval: DomainInterval = Field(default=DomainInterval.DAY_1, description="Time interval")
     n_bars: int = Field(
@@ -35,12 +26,6 @@ class SyncSymbolCommand(BaseModel):
 
 
 class BulkSyncCommand(BaseModel):
-    """Sync multiple composite symbols in sequence.
-
-    Each entry in ``symbols`` must be a composite ``{code}:{exchange}`` string
-    (e.g. ``"BTCUSDT:BINANCE"``).
-    """
-
     symbols: list[str] = Field(
         ...,
         description="List of composite symbol strings, e.g. ['BTCUSDT:BINANCE']",
@@ -56,8 +41,6 @@ class BulkSyncCommand(BaseModel):
 
 
 class SyncResponse(BaseModel):
-    """Result of sync operation. ``symbol`` is composite ``{code}:{exchange}``."""
-
     symbol: str
     interval: str
     status: str

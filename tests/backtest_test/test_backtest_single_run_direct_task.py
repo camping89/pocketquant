@@ -1,10 +1,3 @@
-"""Direct-task single-run — started doc, shared run_id, fail-by-inspect, sweep.
-
-Exercises the phase-2 trigger path (BacktestCommandService.run save-started +
-BacktestExecutionService.execute_and_persist) end to end against real repos, the
-slice the characterization test (engine-only) doesn't cover.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Generator
@@ -105,8 +98,8 @@ async def _seed_bars(database: Database, bars: list[Bar]) -> None:
     await coll.insert_many([b.to_mongo() for b in bars])
 
 
+# Each run builds its own isolated sandbox, so the service needs only repos.
 def _execution(database: Database) -> BacktestExecutionService:
-    """Each run builds its own isolated sandbox, so the service needs only repos."""
     symbol_lookup = SymbolLookupHelper(SymbolRepository(database))
     return BacktestExecutionService(
         bar_repository=BarRepository(database),
@@ -170,7 +163,6 @@ async def test_run_saves_started_doc_then_execute_finishes_same_run_id(
 async def test_engine_failure_marks_failed_via_inspect_not_exception(
     database: Database,
 ) -> None:
-    """C1 — engine returns a failed result (no raise); doc still ends ``failed``."""
     await _seed_bars(database, _engulfing_bars())
     backtest_repo = BacktestRepository(database)
 
@@ -188,7 +180,6 @@ async def test_engine_failure_marks_failed_via_inspect_not_exception(
 
 @pytest.mark.asyncio
 async def test_orphan_started_with_stale_start_is_swept_to_failed(database: Database) -> None:
-    """A run left ``started`` by a killed task, with no heartbeat, is failed after 60 s."""
     backtest_repo = BacktestRepository(database)
     run_id, _ = await _cmd_svc(database).run(_command())
     await backtest_repo._collection().update_one(
@@ -240,15 +231,11 @@ class _StubBrokerFactory:
         return self._broker
 
 
+# If a backtest leaked replayed bars onto a shared bus, this engine's injected strategy
+# would emit orders; an empty live order book after the run is the isolation proof.
 async def _build_live_engine() -> tuple[
     StrategyAppService, PaperBrokerAdapter, _InMemoryOrderRepo, _InMemoryPositionRepo
 ]:
-    """A live engine on its own bus with an engulfing strategy listening.
-
-    If a backtest leaked replayed bars onto a shared bus, this engine's injected
-    strategy would emit orders — an empty live order book after the run is the
-    isolation proof.
-    """
     bus = EventBus()
     order_repo = _InMemoryOrderRepo()
     position_repo = _InMemoryPositionRepo()
@@ -286,8 +273,6 @@ async def _build_live_engine() -> tuple[
 
 @pytest.mark.asyncio
 async def test_backtest_sandbox_does_not_leak_to_live_engine(database: Database) -> None:
-    """Replaying historical bars in a backtest must never drive a live engine
-    subscribed to the same bar/fill events — each run builds its own bus."""
     await _seed_bars(database, _engulfing_bars(cycles=3))
     _engine, live_broker, live_orders, live_positions = await _build_live_engine()
 

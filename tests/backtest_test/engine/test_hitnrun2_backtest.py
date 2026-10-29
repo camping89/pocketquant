@@ -1,11 +1,3 @@
-"""Integration tests for hitnrun2 over BacktestAppService with in-memory repos.
-
-Drives the real BacktestAppService + PaperBrokerAdapter +
-StrategyAppService wiring. Substitutes only persistence with in-memory fakes.
-
-No MongoDB / Redis required.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Generator
@@ -111,8 +103,6 @@ class _FakeBarRepo:
 
 
 class _StubBrokerFactory:
-    """Returns whatever broker the test has already wired; StrategyAppService never asks again."""
-
     def __init__(self, broker: IBrokerPort) -> None:
         self._broker = broker
 
@@ -134,7 +124,6 @@ def _ohlcv_bar(idx: int, *, o: float, h: float, lo: float, c: float, t0: datetim
 
 
 def _downtrend_bars(n_warm: int = 30, n_trend: int = 20, start_price: float = 100.0) -> list[Bar]:
-    """Flat warm-up at start_price, then steady step-down that breaks below window low."""
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     bars: list[Bar] = []
     for i in range(n_warm):
@@ -185,14 +174,10 @@ def _choppy_bars(n: int = 60, base: float = 100.0) -> list[Bar]:
     return [_ohlcv_bar(i, o=base, h=base + 0.2, lo=base - 0.2, c=base, t0=t0) for i in range(n)]
 
 
+# Each cycle dips to a fresh lower low (LONG breakdown entry), then a recovery bar's HIGH
+# clears the TP. Multiple trades happen only if on_order_filled resets the open direction
+# and the broker reopens after close.
 def _oscillating_bars(cycles: int = 4) -> list[Bar]:
-    """Repeated: new-low breakdown entry, then a bar whose HIGH pops up to hit TP.
-
-    Each cycle dips to a fresh lower low (LONG breakdown entry), then a recovery
-    bar's HIGH clears the TP so the position round-trips. Drives multiple trades
-    only if on_order_filled resets the open-direction AND the broker reopens after
-    close (Bug #1 + closed-position re-entry).
-    """
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     bars: list[Bar] = []
     idx = 0
@@ -222,7 +207,6 @@ async def _run_backtest(
     min_profit_pct: float = 0.005,
     max_exposure_percent: float | None = None,
 ) -> tuple[BacktestResult, PaperBrokerAdapter, StrategyAppService]:
-    """Wire pipeline and return result + handles for assertion."""
     bus = EventBus()
     order_repo = _InMemoryOrderRepo()
     position_repo = _InMemoryPositionRepo()
@@ -326,12 +310,9 @@ async def test_backtest_no_trades_on_choppy_market() -> None:
     assert (await broker.get_positions()) == []
 
 
+# Without the on_order_filled reset the open direction never clears, so at most one trade
+# happens. A wide max_exposure lets the one-position cap, not risk, govern.
 async def test_backtest_multi_trade_after_fill_reset() -> None:
-    """Bug #1: with on_order_filled reset wired, repeated round-trips → many trades.
-
-    Before the fix, the strategy's open-direction never reset → at most 1 trade.
-    Uses a wide max_exposure RiskConfig so the one-position cap (not risk) governs.
-    """
     bars = _oscillating_bars(cycles=4)
     result, broker, _ = await _run_backtest(
         bars,
@@ -346,7 +327,6 @@ async def test_backtest_multi_trade_after_fill_reset() -> None:
 
 
 async def test_backtest_sharpe_bounded_and_realized_metrics_present() -> None:
-    """Per-bar MTM annualization yields a finite Sharpe; realized metrics intact."""
     bars = _oscillating_bars(cycles=4)
     result, _, _ = await _run_backtest(
         bars,

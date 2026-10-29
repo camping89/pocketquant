@@ -1,5 +1,3 @@
-"""RequestLoggingMiddleware passes server-sent event streams through unread."""
-
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +7,7 @@ import pytest
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from pocketquant.core.common.tracing.request_logging import RequestLoggingMiddleware
+from pocketquant.app.middleware.request_logging_middleware import RequestLoggingMiddleware
 
 
 def _request(path: str) -> Request:
@@ -25,9 +23,9 @@ def _request(path: str) -> Request:
     )
 
 
+# Any SSE route, not only the bars stream: the quote stream was once held back.
 @pytest.mark.asyncio
 async def test_an_endless_event_stream_is_returned_without_reading_it() -> None:
-    """Any SSE route, not only the bars stream: the quote stream was once held back."""
     chunks_read = 0
 
     async def endless():
@@ -52,7 +50,6 @@ async def test_an_endless_event_stream_is_returned_without_reading_it() -> None:
 
 @pytest.mark.asyncio
 async def test_a_body_is_not_read_when_debug_is_off(caplog: pytest.LogCaptureFixture) -> None:
-    """At INFO the middleware must pass the response through untouched."""
     chunks_read = 0
 
     async def body():
@@ -65,7 +62,7 @@ async def test_a_body_is_not_read_when_debug_is_off(caplog: pytest.LogCaptureFix
     async def call_next(_: Request) -> StreamingResponse:
         return plain
 
-    caplog.set_level(logging.INFO, logger="pocketquant.core.common.tracing.request_logging")
+    caplog.set_level(logging.INFO, logger="pocketquant.app.middleware.request_logging_middleware")
     middleware = RequestLoggingMiddleware(app=None)  # pyright: ignore[reportArgumentType]
     response = await middleware.dispatch(_request("/api/v1/symbols"), call_next)
 

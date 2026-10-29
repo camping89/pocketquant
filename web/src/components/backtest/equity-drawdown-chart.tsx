@@ -30,8 +30,7 @@ const baseChartOptions = (height: number) => {
 
 const toTime = (iso: string): Time => ((parseIso(iso)?.valueOf() ?? 0) / 1000) as Time
 
-/** Full-width equity line + underwater (drawdown) area. Two stacked charts share
- *  the time axis; drawdown comes per-point from the run doc so it stays exact. */
+// Drawdown comes per point from the run doc so it stays exact.
 export function EquityDrawdownChart({ equityCurve }: EquityDrawdownChartProps) {
   const { mode } = useTheme()
   const equityRef = useRef<HTMLDivElement>(null)

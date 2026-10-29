@@ -1,7 +1,3 @@
-"""AST audit tests — run on the 3 real strategies. Imports STRATEGY_REGISTRY to
-resolve source files; strategies are parsed, never instantiated or run (no DB).
-"""
-
 from __future__ import annotations
 
 import pytest

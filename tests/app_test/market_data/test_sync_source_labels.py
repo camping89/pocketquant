@@ -1,5 +1,3 @@
-"""Tests asserting source/provenance labels propagate through cascade, repair, and sync jobs."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -104,8 +102,6 @@ async def test_repair_integrity_sends_command_with_source() -> None:
 
 
 class _FakeContainer:
-    """Minimal Dishka-like container for sync_jobs tests."""
-
     def __init__(self, mapping: dict):
         self._mapping = mapping
 

@@ -1,10 +1,6 @@
-"""Unit tests for JobScheduler._on_error exception formatting.
-
-Regression for the empty ``error=""`` rows that appeared in job_history when
-APScheduler dispatched a CancelledError during a deploy. The old path called
-``str(exc) if exc else None``, which collapsed empty-message exceptions to
-``None`` and made bare ``""`` rows look like "unknown failure" in the dashboard.
-"""
+# Regression for empty error="" rows in job_history when APScheduler dispatched a
+# CancelledError during a deploy: `str(exc) if exc else None` collapsed empty-message
+# exceptions, so the dashboard showed them as unknown failures.
 
 from __future__ import annotations
 

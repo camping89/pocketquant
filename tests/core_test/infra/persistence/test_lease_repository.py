@@ -1,5 +1,3 @@
-"""LeaseRepository against a real Mongo: one winner, renewal, expiry and release."""
-
 from __future__ import annotations
 
 import asyncio

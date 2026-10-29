@@ -1,5 +1,3 @@
-"""Pin OhlcvService behavior (ex-GetOHLCVHandler)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

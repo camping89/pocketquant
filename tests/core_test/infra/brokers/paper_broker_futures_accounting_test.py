@@ -1,18 +1,7 @@
-"""Tests pinning PaperBrokerAdapter futures/margin accounting (the correct model).
-
-These tests assert the post-fix futures behavior and are written tests-first:
-each one FAILS on the current spot-style code with a known arithmetic cause
-(captured in the per-test ``current`` vs ``expected`` comments) and PASSES once
-``_execute_fill`` stops debiting/crediting balance by notional and instead moves
-cash only by realized-pnl delta, plus per-bar mark-to-market in
-``_on_bar_completed``.
-
-Accounting model (futures, 1x leverage, initial 10_000, no commission/slippage):
-    total_equity      = balance + Σ unrealized_pnl(open)
-    available_balance = balance
-    open / add        : balance unchanged
-    close / reduce    : balance += Δrealized (delta of THIS reduce, not cumulative)
-"""
+# Futures accounting model (1x leverage, initial 10_000, no commission or slippage):
+# total_equity = balance + sum of open unrealized_pnl; available_balance = balance; open and
+# add leave balance unchanged; close and reduce add the realized delta of that reduce, not
+# the cumulative realized pnl.
 
 from __future__ import annotations
 

@@ -14,14 +14,9 @@ SKIP_PATHS = {"/health", "/favicon.ico"}
 MAX_BODY_LOG_SIZE = 10_000
 
 
+# DEBUG only: a per-request INFO line scales with traffic (the SPA polls every few
+# seconds). A body is read only when it will be printed: it costs a rebuilt response.
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """One DEBUG line per request; bodies are read only when DEBUG is on.
-
-    A request line at INFO would scale with traffic (the SPA polls every few
-    seconds), so the whole middleware is DEBUG. Reading a body costs a full
-    buffer and a rebuilt response, so it happens only when it will be printed.
-    """
-
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.url.path in SKIP_PATHS:
             return await call_next(request)

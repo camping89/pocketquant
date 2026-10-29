@@ -1,14 +1,6 @@
-/**
- * Fetch the open position for a subscription instance.
- * Backend: GET /api/v1/subscriptions/{sub_id}/positions — returns an array
- * (empty when no open position).
- */
 import { useQuery } from '@tanstack/react-query'
 
-/**
- * API response shape from GET /api/v1/subscriptions/{sub_id}/positions.
- * Uses uppercase direction to match backend enum; adapted to chart OpenPosition in strategies-page-layout.
- */
+// Uppercase direction matches the backend enum; strategies-page-layout adapts it to the chart OpenPosition.
 export interface OpenPosition {
   symbol: string
   direction: 'LONG' | 'SHORT'
@@ -17,7 +9,6 @@ export interface OpenPosition {
   unrealized_pnl: number
   entry_time: string
   leverage?: number
-  /** Liquidation price if available from the exchange. */
   liq_price?: number | null
 }
 

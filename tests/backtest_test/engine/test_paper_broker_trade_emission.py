@@ -1,11 +1,5 @@
-"""PaperBrokerAdapter forwards TradeClosedEvent via subscribe_trades.
-
-Model: futures, initial 10_000, slippage 0, commission 10 bps (0.001). A trade
-closure fires on every reduce/close, carrying chunk pnl (non-cumulative), the
-entry-portion + exit commission, direction as PositionSide.name, and the entry/
-exit order ids. Ordering contract: the fill OrderResult is delivered BEFORE the
-TradeClosedEvent so a subscriber can back-link the exit order.
-"""
+# Ordering contract: the fill OrderResult is delivered before the TradeClosedEvent, so a
+# subscriber can back-link the exit order.
 
 from __future__ import annotations
 

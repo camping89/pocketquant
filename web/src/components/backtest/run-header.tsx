@@ -28,9 +28,7 @@ function Stat({ label, value, tone = 'neutral' }: { label: string; value: string
   )
 }
 
-/** At-a-glance run summary: identity row (status · name/strategy · symbol · runId)
- *  above scannable metric tiles. The run label is inline-editable here; the full
- *  verdict lives in its own card, deliberately NOT crammed into this header. */
+// The full verdict lives in its own card on purpose, not in this header.
 export function RunHeader({ runId, status, errorMsg, strategyCode, name, symbol, interval, metrics }: RunHeaderProps) {
   const [copied, setCopied] = useState(false)
 

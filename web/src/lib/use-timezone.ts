@@ -17,7 +17,6 @@ export function useTimezone(): TimezoneContextValue {
   return ctx
 }
 
-/** Mode-bound formatters. Closures recompute when `mode` changes. */
 export function useFmt() {
   const { mode, suffix } = useTimezone()
   return useMemo(() => ({
@@ -27,7 +26,6 @@ export function useFmt() {
     hmsTime: (iso: string | null | undefined) => formatHmsTime(iso, mode),
     nextRun: (iso: string | null | undefined) => formatNextRun(iso, mode),
     fullDateTime: (iso: string | null | undefined) => formatFullDateTime(iso, mode),
-    /** Format with arbitrary dayjs format string (e.g. 'HH:mm'). */
     format: (iso: string | null | undefined, fmt: string) => formatDateTime(iso, mode, fmt),
   }), [mode, suffix])
 }

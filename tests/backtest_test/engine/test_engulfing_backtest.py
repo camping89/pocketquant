@@ -1,11 +1,3 @@
-"""Integration tests for engulfing over BacktestAppService with in-memory repos.
-
-Drives the real BacktestAppService + PaperBrokerAdapter +
-StrategyAppService wiring (only persistence is faked). Confirms the fill-driven
-``_open_direction`` lifecycle round-trips: repeated engulfing entries hit TP,
-reset, and re-enter → many trades.
-"""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Generator
@@ -136,13 +128,10 @@ def _flat(idx: int) -> Bar:
     return _bar(idx, o=100.0, h=100.2, lo=99.8, c=100.0)
 
 
+# Each cycle: red bar, strong-green engulfing entry (close=101), a spike bar whose high
+# clears the ~102.8 TP, then enough flat fillers to roll the spike high out of the lookback
+# window so the next key level is calm again.
 def _engulfing_long_cycle_bars(cycles: int = 3, lookback: int = 5) -> list[Bar]:
-    """Warmup, then repeated bullish-engulfing → TP round trips.
-
-    Each cycle: red bar, strong-green engulfing entry (close=101), a spike bar
-    whose high clears the ~102.8 TP, then enough flat fillers to roll the spike
-    high out of the lookback window so the next entry's key-level is calm again.
-    """
     bars: list[Bar] = []
     idx = 0
     for _ in range(lookback + 1):

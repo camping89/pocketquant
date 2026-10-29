@@ -1,14 +1,3 @@
-"""Backfill historical bars for a tracked symbol.
-
-Two modes:
-  direct  — REST-fetch the requested tf directly, upsert to Mongo.
-  cascade — REST-fetch 1m bars (n * tf_minutes worth), upsert 1m, then cascade
-             to the requested tf and all higher tfs within the lookback window.
-
-Needs direct access to provider + bar_repo + cascade_aggregator — route injects
-the service via DI and calls ``run()``.
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
@@ -41,16 +30,6 @@ _CASCADE_DEFAULT_TFS = {
 
 
 class BackfillTrackedSymbolCommand(BaseModel):
-    """Backfill historical bars for one composite symbol.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-
-    mode=cascade  — REST-fetch 1m bars (n * tf_minutes), upsert, then cascade aggregate.
-                    Default for tfs >= 5m.
-    mode=direct   — REST-fetch the requested tf directly and upsert.
-                    Default for 1m; always used when tf=1m regardless of mode param.
-    """
-
     symbol: str = Field(
         ...,
         min_length=3,
@@ -84,8 +63,6 @@ class BackfillTrackedSymbolCommand(BaseModel):
 
 
 class TrackedSymbolBackfillService:
-    """Execute a backfill request for one composite symbol."""
-
     def __init__(
         self,
         provider: IDataProviderPort,

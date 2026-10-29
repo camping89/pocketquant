@@ -1,8 +1,3 @@
-/**
- * Primary action button for starting/stopping a strategy subscription.
- * Stop always confirms; Start confirms only on Exness (real orders).
- * Paper Start is one click. The dialog copy depends on the broker.
- */
 import { useId, useState, type ReactNode } from 'react'
 import { moneyHint, type Broker } from '../../lib/money-hint'
 
@@ -12,11 +7,12 @@ interface StartStopButtonProps {
   onStart: () => void
   onStop: () => void
   broker: Broker
-  /** "<code> · <interval>", used in the dialog copy. */
+  // "<code> · <interval>"
   label: string
   disabled?: boolean
 }
 
+// Start confirms only on Exness because it sends real orders; Stop always confirms.
 export function StartStopButton({
   isRunning,
   isLoading,
@@ -130,7 +126,6 @@ interface ConfirmDialogProps {
   onCancel: () => void
 }
 
-/** Modal with Cancel, then the money chip just left of the confirm button. Shared with the Exness strip. */
 export function ConfirmDialog({ heading, children, chip, confirm, onCancel }: ConfirmDialogProps) {
   const headingId = useId()
   return (

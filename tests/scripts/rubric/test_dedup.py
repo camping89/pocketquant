@@ -1,5 +1,3 @@
-"""Pure dedup tests for collapse_duplicates — no DB."""
-
 from __future__ import annotations
 
 from scripts.rubric.data_access import collapse_duplicates

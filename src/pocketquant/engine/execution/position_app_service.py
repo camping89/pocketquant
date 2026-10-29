@@ -33,16 +33,15 @@ class PositionAppService:
         self._event_bus.subscribe(OrderFilledEvent, self._on_order_filled)
         logger.info("position_tracker_started")
 
+    # Every open row is kept: a venue still holds its position, and the trading process
+    # restores paper brokers from theirs.
     async def load_open_positions(self) -> None:
-        """Every open row is kept: a venue still holds its position, and the trading
-        process restores paper brokers from theirs."""
         positions = await self._position_repo.find_open()
         async with self._lock:
             self._positions = {p.subscription_id: p for p in positions}
         logger.info("loaded_open_positions", count=len(positions))
 
     async def drop(self, subscription_id: str) -> None:
-        """Forget a paper subscription's open position, in memory and in Mongo."""
         async with self._lock:
             self._positions.pop(subscription_id, None)
             await self._position_repo.delete_open_by_subscription(subscription_id)

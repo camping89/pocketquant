@@ -1,8 +1,5 @@
-"""Exness Trader API request signing: Ed25519 over a canonical JSON payload.
-
-The signed payload carries the method, the path with its query (never the host)
-and a hash of the exact body bytes, so a request must be sent exactly as signed.
-"""
+# The signed payload carries the method, the path with its query (never the host) and a
+# hash of the exact body bytes, so a request must be sent exactly as signed.
 
 from __future__ import annotations
 

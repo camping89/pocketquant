@@ -1,9 +1,3 @@
-/**
- * Right pane of the strategies dashboard — forward-testing only.
- * Composes: PnlBadge (unrealized) + live closed-trades table for the selected
- * subscription. Backtest now lives on its own /backtest page, decoupled from
- * subscriptions.
- */
 import { useOpenPosition } from '../../hooks/use-open-position'
 import { useStrategyTrades } from '../../hooks/use-strategy-trades'
 import { PnlBadge } from './pnl-badge'

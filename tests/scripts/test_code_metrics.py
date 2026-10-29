@@ -1,5 +1,3 @@
-"""Unit tests for code_metrics.py: population, measured set, delegations, CLI."""
-
 from __future__ import annotations
 
 import json

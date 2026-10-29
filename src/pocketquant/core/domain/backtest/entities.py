@@ -9,17 +9,10 @@ from pocketquant.core.domain.backtest.value_objects import OpenLot
 from pocketquant.core.domain.trading import EquityPoint, PerformanceMetrics
 
 
+# open_positions keeps the still-open lots on the run doc so a UI snapshot needs no
+# cross-collection join.
 @dataclass
 class BacktestResult:
-    """Slim backtest run record — metrics + equity curve + open-lot snapshots.
-
-    Storage layout: per-order audit (fills + lifecycle events) lives in
-    ``backtest_orders.fills[]`` and round-trip outcomes in ``backtest_trades``.
-    ``open_positions`` carries the still-open lots at run-end so the run doc
-    remains self-contained for quick UI snapshots without a cross-collection
-    join.
-    """
-
     id: UUID
     strategy_code: str
     config_snapshot: dict[str, Any]  # Serialized BacktestConfig
@@ -38,15 +31,10 @@ class BacktestResult:
     verdict: str | None = None  # Human-readable conclusion (set post-run via PATCH)
     name: str | None = None  # Optional run label (set at creation, editable via PATCH)
 
+    # Placeholder persisted before the engine task spawns. Zeroed metrics keep from_mongo
+    # round-tripping while the FE polls; the engine overwrites the same run_id on finish.
     @classmethod
     def started(cls, run_id: str, config_snapshot: dict[str, Any]) -> BacktestResult:
-        """Placeholder doc the route persists before spawning the engine task.
-
-        Zeroed metrics keep ``from_mongo`` round-tripping while FE polls — the
-        engine overwrites this same ``run_id`` with the real result on finish.
-        ``completed_at`` mirrors ``started_at`` so the slim doc stays well-formed
-        until then.
-        """
         now = datetime.now(UTC)
         return cls(
             id=UUID(run_id),
@@ -87,9 +75,9 @@ class BacktestResult:
             "name": self.name,
         }
 
+    # Ignores legacy keys from pre-migration docs.
     @classmethod
     def from_mongo(cls, data: dict[str, Any]) -> BacktestResult:
-        """Create from MongoDB document. Tolerates pre-migration shape (ignores legacy keys)."""
         snapshot = data.get("config_snapshot", {})
         return cls(
             id=UUID(data["_id"]),

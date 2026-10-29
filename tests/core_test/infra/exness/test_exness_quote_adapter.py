@@ -1,5 +1,3 @@
-"""ExnessQuoteAdapter: callback contract, instrument validation, subscribe and idle path."""
-
 from __future__ import annotations
 
 import asyncio

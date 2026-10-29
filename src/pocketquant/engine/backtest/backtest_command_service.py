@@ -1,9 +1,3 @@
-"""Backtest command service — write-side: start a single ad-hoc run.
-
-DTO class names are preserved from the handlers layer so call-sites that
-reference them by name require no import-path changes beyond the module prefix.
-"""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -21,11 +15,6 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 
 
 class RunBacktestCommand(BaseModel):
-    """Command to execute a single backtest run.
-
-    ``symbol`` is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
-    """
-
     strategy_id: str = Field(..., description="Strategy identifier")
     symbol: str = Field(..., description="Composite symbol (e.g. BTCUSDT:BINANCE)")
     interval: str = Field(..., description="Bar interval (e.g. 5m, 1h)")
@@ -57,13 +46,9 @@ class BacktestCommandService:
     def __init__(self, backtest_repository: BacktestRepository) -> None:
         self._backtest_repo = backtest_repository
 
+    # The started doc lets the frontend poll at once; the engine overwrites this same id
+    # when the run finishes or fails.
     async def run(self, cmd: RunBacktestCommand) -> tuple[str, dict[str, Any]]:
-        """Allocate the run id, persist the ``started`` doc, return (id, config).
-
-        The route spawns ``BacktestExecutionService.execute_and_persist`` against
-        the returned id/config — the started doc lets FE poll immediately while
-        the engine runs and overwrites this same id on finish/fail.
-        """
         run_id = generate_id_str()
         config = {
             "strategy_code": cmd.strategy_id,
@@ -82,13 +67,11 @@ class BacktestCommandService:
         return run_id, config
 
     async def set_verdict(self, run_id: str, verdict: str | None) -> None:
-        """Set the run's verdict; raise NotFoundError if the run does not exist."""
         matched = await self._backtest_repo.set_verdict(run_id, verdict)
         if not matched:
             raise NotFoundError(f"Backtest not found: {run_id}")
 
     async def set_name(self, run_id: str, name: str | None) -> None:
-        """Set the run's label; raise NotFoundError if the run does not exist."""
         matched = await self._backtest_repo.set_name(run_id, name)
         if not matched:
             raise NotFoundError(f"Backtest not found: {run_id}")

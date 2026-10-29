@@ -1,10 +1,3 @@
-"""Short-lived symbol cache for per-bar callers.
-
-Calendar resolution happens once per bar on every sync and cascade path, and
-a symbol's asset class changes about as often as never. A 60-second TTL keeps
-that off the database without making a re-seeded symbol wait for a restart.
-"""
-
 from __future__ import annotations
 
 from collections.abc import MutableMapping
@@ -22,9 +15,9 @@ logger = get_logger(__name__)
 _CACHE = cast("MutableMapping[str, Symbol | None]", TTLCache(maxsize=500, ttl=60))
 
 
+# Calendar resolution runs once per bar on every sync and cascade path. A 60s TTL keeps
+# that off the database without making a re-seeded symbol wait for a restart.
 class SymbolLookupHelper:
-    """Read-through cache over ``SymbolRepository.find_by_symbol``."""
-
     def __init__(self, symbol_repository: SymbolRepository) -> None:
         self._repo = symbol_repository
 
@@ -40,7 +33,7 @@ class SymbolLookupHelper:
         logger.debug("symbol_lookup.miss", symbol=key, found=symbol is not None)
         return symbol
 
+    # Linear units for an unseeded symbol.
     async def contract_spec(self, composite: str) -> ContractSpec:
-        """The symbol's contract units; linear for an unseeded symbol."""
         symbol = await self.get(composite)
         return symbol.contract_spec if symbol else LINEAR_SPEC

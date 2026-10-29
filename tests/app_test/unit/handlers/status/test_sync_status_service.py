@@ -1,5 +1,3 @@
-"""Tests for SyncStatusQueryService — bar-derived freshness composition (list + single-symbol)."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -24,7 +22,6 @@ NOW = datetime.now(UTC).replace(microsecond=0)
 
 
 def _status(interval: str, last_bar_age_seconds: int, bar_count: int = 1000) -> SyncStatus:
-    """Build SyncStatus with last_bar_at set to NOW - age."""
     return SyncStatus(
         symbol=SYMBOL,
         interval=interval,
@@ -66,14 +63,9 @@ def calendar_factory() -> AsyncMock:
     return factory
 
 
+# Without it, the one bar a test configures would also stand in for the symbol's 1m feed and
+# make every row look delayed.
 class _FreshFeedBarRepo:
-    """Serves a just-closed 1m bar for the feed-lag lookup and delegates the rest.
-
-    These tests are about each row's own bars. Without this, the one bar a test
-    configures would also stand in for the symbol's 1m feed and make every row
-    look delayed.
-    """
-
     def __init__(self, inner: AsyncMock) -> None:
         self._inner = inner
         self.count = inner.count
@@ -92,10 +84,10 @@ def handler(sync_status_repo, bar_repo, calendar_factory) -> SyncStatusQueryServ
 # get_sync_status — list of all tracked symbols/intervals
 
 
+# sync_status.last_bar_at is 1h old (stuck at a 5m cadence), but bar_repo.get_latest is 1m
+# old.
 @pytest.mark.asyncio
 async def test_cascade_fresh_bars_show_not_stuck(handler, sync_status_repo, bar_repo) -> None:
-    """sync_status.last_bar_at stale (1h old, 5m cadence → would be stuck);
-    bar_repo.get_latest fresh (1m old) → is_stuck=False."""
     sync_status_repo.find_all.return_value = [
         _status("5m", last_bar_age_seconds=3600, bar_count=100),
     ]
@@ -109,9 +101,9 @@ async def test_cascade_fresh_bars_show_not_stuck(handler, sync_status_repo, bar_
     assert result[0].bar_count == 150  # ← from bars, not sync_status (100)
 
 
+# Stuck means bar age above 3x the cadence.
 @pytest.mark.asyncio
 async def test_all_stuck_when_bars_old(handler, sync_status_repo, bar_repo) -> None:
-    """Bar age > 3× cadence → is_stuck=True."""
     sync_status_repo.find_all.return_value = [_status("5m", last_bar_age_seconds=60)]
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=2000), Interval.MINUTE_5)
     bar_repo.count.return_value = 10
@@ -124,7 +116,6 @@ async def test_all_stuck_when_bars_old(handler, sync_status_repo, bar_repo) -> N
 
 @pytest.mark.asyncio
 async def test_no_bars_yet_returns_not_stuck(handler, sync_status_repo, bar_repo) -> None:
-    """get_latest returns None → is_stuck=False (matches existing semantic)."""
     sync_status_repo.find_all.return_value = [_status("5m", last_bar_age_seconds=60)]
     bar_repo.get_latest.return_value = None
     bar_repo.count.return_value = 0
@@ -138,7 +129,6 @@ async def test_no_bars_yet_returns_not_stuck(handler, sync_status_repo, bar_repo
 
 @pytest.mark.asyncio
 async def test_count_overrides_status_count(handler, sync_status_repo, bar_repo) -> None:
-    """sync_status.bar_count is ignored; bars actual count wins."""
     sync_status_repo.find_all.return_value = [_status("1h", last_bar_age_seconds=60, bar_count=999)]
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=60), Interval.HOUR_1)
     bar_repo.count.return_value = 5907
@@ -154,7 +144,6 @@ async def test_per_row_exception_isolated_with_fallback(
     sync_status_repo,
     bar_repo,
 ) -> None:
-    """1 row's enrichment raises → that row falls back to sync_status fields; others succeed."""
     sync_status_repo.find_all.return_value = [
         _status("5m", last_bar_age_seconds=60, bar_count=10),
         _status("15m", last_bar_age_seconds=60, bar_count=20),
@@ -197,7 +186,6 @@ async def test_empty_status_list_returns_empty(handler, sync_status_repo, bar_re
 
 @pytest.mark.asyncio
 async def test_last_sync_at_still_from_sync_status(handler, sync_status_repo, bar_repo) -> None:
-    """last_sync_at is COMMAND-log field; should remain from sync_status, not bars."""
     sync_dt = NOW - timedelta(hours=2)
     s = _status("5m", last_bar_age_seconds=60)
     s.last_sync_at = sync_dt
@@ -215,8 +203,6 @@ async def test_last_sync_at_still_from_sync_status(handler, sync_status_repo, ba
 
 @pytest.mark.asyncio
 async def test_returns_is_stuck_field_populated(handler, sync_status_repo, bar_repo) -> None:
-    """Previously the handler did not populate is_stuck (defaulted False).
-    Now should reflect actual bar freshness."""
     sync_status_repo.find_one.return_value = _status("5m", last_bar_age_seconds=3600)
     bar_repo.get_latest.return_value = _bar(NOW - timedelta(seconds=2000), Interval.MINUTE_5)
     bar_repo.count.return_value = 100
@@ -232,7 +218,6 @@ async def test_returns_is_stuck_field_populated(handler, sync_status_repo, bar_r
 
 @pytest.mark.asyncio
 async def test_uses_bars_for_count_and_last_bar(handler, sync_status_repo, bar_repo) -> None:
-    """bar_count and last_bar_at come from bars, not sync_status."""
     fresh_dt = NOW - timedelta(seconds=60)
     sync_status_repo.find_one.return_value = _status("1h", last_bar_age_seconds=7200, bar_count=999)
     bar_repo.get_latest.return_value = _bar(fresh_dt, Interval.HOUR_1)
@@ -250,7 +235,6 @@ async def test_uses_bars_for_count_and_last_bar(handler, sync_status_repo, bar_r
 
 @pytest.mark.asyncio
 async def test_not_found_raises(handler, sync_status_repo, bar_repo) -> None:
-    """If sync_status row missing, NotFoundError as before."""
     sync_status_repo.find_one.return_value = None
 
     with pytest.raises(NotFoundError):
@@ -285,7 +269,6 @@ async def test_no_bars_yet_returns_not_stuck_single_symbol(
 
 @pytest.mark.asyncio
 async def test_status_and_error_from_sync_status(handler, sync_status_repo, bar_repo) -> None:
-    """status/error_message are command-log fields; come from sync_status."""
     s = _status("5m", last_bar_age_seconds=60)
     s.status = "error"
     s.error_message = "TV REST timeout"

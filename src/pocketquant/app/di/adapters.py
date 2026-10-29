@@ -1,12 +1,3 @@
-"""Adapters provider: the venue adapters behind the ports.
-
-Each routing adapter maps a provider id to its venue adapter. The key is the
-provider id a symbol's suffix names (BTCUSDT:BINANCE -> "binance",
-XAUUSD:EXNESS -> "exness"). Adding a provider is one entry in each router here
-and one in DATA_PROVIDER_DEFAULTS; the routing adapters implement the same
-ports, so every consumer above them is unchanged. ``BrokerFactory`` builds the broker adapters.
-"""
-
 from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
@@ -41,9 +32,9 @@ from pocketquant.core.infra.persistence.repositories.safeguards_repository impor
 
 
 class AdaptersProvider(Provider):
+    # Only the env caps; the entry pause is read from the store on every open.
     @provide(scope=Scope.APP)
     def get_safeguards(self, settings: Settings) -> Safeguards:
-        """The env caps; the entry pause is read from the store on every open."""
         return Safeguards(
             live_trading=settings.exness_live_trading,
             daily_loss_cap=settings.exness_daily_loss_cap,
@@ -71,7 +62,6 @@ class AdaptersProvider(Provider):
 
     @provide(scope=Scope.APP)
     async def get_exness_client(self, settings: Settings) -> AsyncIterator[ExnessClient]:
-        """One signed client for history and quotes; it sends nothing until used."""
         client = ExnessClient(settings)
         yield client
         await client.close()

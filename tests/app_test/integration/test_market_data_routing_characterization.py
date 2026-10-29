@@ -1,12 +1,6 @@
-"""Pin how a crypto symbol is routed, synced and described, end to end.
-
-These assertions describe production as it runs today — every tracked symbol is
-``…:BINANCE`` — so they must hold no matter how routing picks a provider. The
-routing adapters are built in one helper each, so a change to how they are
-constructed touches the helpers and never the assertions.
-
-Real Mongo and Redis; stub children stand in for Binance and Exness.
-"""
+# Describes production as it runs today (every tracked symbol is ...:BINANCE), so these must
+# hold however routing picks a provider. The routing adapters are built in one helper each,
+# so a construction change touches the helpers, never the assertions.
 
 from __future__ import annotations
 
@@ -113,9 +107,9 @@ async def _health(
     )
 
 
+# Nothing is seeded: the symbol arrives unseeded.
 @pytest_asyncio.fixture
 async def env(settings: Settings):
-    """Real Mongo + Redis with nothing seeded: the symbol arrives unseeded."""
     database = Database()
     await database.connect(settings)
     cache = Cache()

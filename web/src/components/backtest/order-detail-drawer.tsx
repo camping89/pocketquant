@@ -11,8 +11,6 @@ function fmtTime(iso: string): string {
   return iso.replace('T', ' ').slice(0, 19)
 }
 
-/** Side drawer for one order — its fills[] and lifecycle events[], plus a link
- *  hint to the resulting trade. Keyed by order_id (Phase 1 DTO). */
 export function OrderDetailDrawer({ order, onClose }: OrderDetailDrawerProps) {
   const closeRef = useRef<HTMLButtonElement>(null)
 

@@ -1,5 +1,3 @@
-"""Helpers for main.py. A process runs the roles in APP_ROLES; see roles.py."""
-
 import asyncio
 import os
 import time
@@ -16,11 +14,12 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from pocketquant.app.middleware.admin_auth_middleware import verify_admin_token
+from pocketquant.app.middleware.correlation_id_middleware import CorrelationIDMiddleware
+from pocketquant.app.middleware.request_logging_middleware import RequestLoggingMiddleware
 from pocketquant.core.common.exceptions import register_exception_handlers
 from pocketquant.core.common.health import HealthCoordinator
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.rate_limit import RateLimitMiddleware
-from pocketquant.core.common.tracing import CorrelationIDMiddleware, RequestLoggingMiddleware
 from pocketquant.core.domain.market_data.realtime_quote_provider_port import (
     IRealtimeQuoteProviderPort,
 )
@@ -69,14 +68,10 @@ from pocketquant.engine.market_data.app_services.ws_subscription_app_service imp
 logger = get_logger(__name__)
 
 
+# Bars, cron triggers and session calendars are UTC instants by construction. On a
+# non-UTC process they look right on the VPS and wrong everywhere else, so fail fast
+# rather than persist skewed data.
 def assert_utc_runtime() -> None:
-    """Refuse to start unless the process timezone is UTC.
-
-    Bars, cron triggers and session calendars are all UTC instants by
-    construction, not by convention. On a non-UTC process they look correct on
-    the VPS and wrong everywhere else, so fail fast rather than persist skewed
-    data. Logs one INFO line when the zone is correct.
-    """
     tz_env = os.environ.get("TZ")
     prefix = f"Process timezone must be UTC, got TZ={tz_env!r} tzname={time.tzname!r}"
 
@@ -117,23 +112,15 @@ _REPO_TYPES: list[type] = [
 
 
 async def ensure_all_indexes(container: AsyncContainer) -> None:
-    """Ensure MongoDB indexes for all repository collections."""
     repos = [await container.get(rt) for rt in _REPO_TYPES]
     await asyncio.gather(*(repo.ensure_indexes() for repo in repos))
     logger.info("database_indexes_ensured")
 
 
+# A job killed between record_start() and record_finish() (e.g. CancelledError
+# mid-deploy) leaves a row stuck at running. This runs when the worker takes its
+# lease, before the scheduler starts, so new runs do not race the sweep.
 async def recover_orphan_jobs(container: AsyncContainer) -> None:
-    """Mark any job_history docs stuck at status='running' as 'failed' on startup.
-
-    Orphan rows arise when a job's wrapper writes record_start() but the
-    process is killed before record_finish() runs (e.g. mid-deploy
-    CancelledError). Without this sweep, dashboards show forever-running jobs.
-    Safe to call repeatedly — idempotent. Logs once if any docs were updated.
-
-    Runs when the worker takes its lease, before the scheduler starts, so new
-    runs do not race the sweep.
-    """
     repo = await container.get(JobHistoryRepository)
     n = await repo.reconcile_orphan_running(max_age_seconds=600)
     if n:
@@ -141,20 +128,11 @@ async def recover_orphan_jobs(container: AsyncContainer) -> None:
 
 
 async def bootstrap_live_instances(container: AsyncContainer) -> None:
-    """Load one strategy instance per persisted subscription on startup.
-
-    Strategy instances live in-process and vanish on every container restart,
-    but their subscriptions are durable in MongoDB. Delegates to
-    ``StrategyReconcileAppService.bootstrap`` — the same load-per-subscription
-    pass the reconcile loop runs each tick — so the boot path and the
-    steady-state path can never drift. Runs in the trader role only.
-    """
     svc = await container.get(StrategyReconcileAppService)
     await svc.bootstrap()
 
 
 async def cancel_task(task: asyncio.Task | None) -> None:
-    """Cancel a background task and wait up to 5 s for it to finish."""
     if task and not task.done():
         task.cancel()
         try:
@@ -182,7 +160,6 @@ async def _run_loop_lag_probe(app: FastAPI) -> None:
 
 
 def start_loop_lag_probe(app: FastAPI) -> None:
-    """Sample loop lag every 0.5 s; ``/health`` reports the 60 s maximum."""
     app.state.loop_lag_max_s = 0.0
     app.state.loop_lag_task = asyncio.create_task(_run_loop_lag_probe(app))
 
@@ -192,13 +169,6 @@ async def stop_loop_lag_probe(app: FastAPI) -> None:
 
 
 async def start_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
-    """Start WS feed + subscription reconcile loop as background tasks.
-
-    Stores task handles on app.state for lifespan cleanup:
-      app.state.ws_task          — IRealtimeQuoteProviderPort.run_forever()
-      app.state.close_timer_task — BarAppService.run_close_timer()
-      app.state.subscription_task — WsSubscriptionAppService.run()
-    """
     quote_svc = await container.get(QuoteAppService)
     sub_mgr = await container.get(WsSubscriptionAppService)
 
@@ -220,30 +190,23 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
     logger.info("quote_feed.stopped")
 
 
+# Must run before the quote feed stops and container.close(), so reconcile never
+# starts or stops strategies on an engine that is shutting down.
 async def stop_reconcile_loop(app: FastAPI) -> None:
-    """Cancel the reconcile task. Must run BEFORE quote-feed stop + container.close
-    so reconcile never issues start/stop against an engine that is shutting down."""
     await cancel_task(getattr(app.state, "reconcile_task", None))
     logger.info("reconcile_loop.stopped")
 
 
+# asyncio only weak-references tasks, so without this set a run could be GC'd
+# mid-flight. The route adds each task and discards it on completion.
 def init_backtest_tasks(app: FastAPI) -> None:
-    """Hold strong refs to in-flight ``/backtest/run`` tasks.
-
-    asyncio only weak-references tasks, so without this set a run could be GC'd
-    mid-flight. The route adds each task and discards it on completion.
-    """
     app.state.backtest_tasks = set()
 
 
+# Drain, not cancel: cancelling mid-write risks a half-persisted run, and
+# CancelledError is a BaseException the engine's except Exception would miss. Runs
+# still started past the timeout are left for the orphan sweep to fail.
 async def drain_backtest_tasks(app: FastAPI, timeout: float = 10.0) -> None:
-    """Let in-flight backtests finish persisting before container.close().
-
-    Drain (await) rather than cancel: cancelling mid-write risks a half-persisted
-    run, and ``CancelledError`` is a ``BaseException`` the engine's ``except
-    Exception`` would miss. Runs still ``started`` past the timeout are left for
-    the next boot's orphan sweep to flip to ``failed``.
-    """
     tasks: set[asyncio.Task] = getattr(app.state, "backtest_tasks", set())
     pending = {t for t in tasks if not t.done()}
     if not pending:
@@ -293,16 +256,11 @@ def configure_middleware(app: FastAPI, settings) -> None:
     app.add_middleware(CorrelationIDMiddleware)
 
 
+# func_ref sits inside the pickled APScheduler payload, so only the stable raw
+# fields are read, never deserialised; job_history supplies the last-run data.
 async def _list_jobs_from_mongo(
     database: Database, history_repo: JobHistoryRepository
 ) -> list[dict[str, Any]]:
-    """Read apscheduler_jobs + job_history directly from Mongo.
-
-    apscheduler_jobs stores serialised APScheduler job docs. We read raw Mongo
-    docs and project only the stable fields (id, next_run_time). The func_ref
-    is stored inside the pickled payload — we skip deserialisation and expose
-    only the last-run enrichment from job_history instead.
-    """
     coll = database.database["apscheduler_jobs"]
     raw_jobs = await coll.find({}, {"_id": 1, "next_run_time": 1}).to_list(length=200)
 

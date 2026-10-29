@@ -1,9 +1,4 @@
-"""PATCH /backtest/{run_id}/name over the HTTP API.
-
-Sets a human-readable label on a run without touching metrics, and 404s on an
-unknown run. Seeds the run doc straight through the repository so the test is
-independent of the engine path.
-"""
+# Seeds the run doc through the repository, so the test is independent of the engine path.
 
 from __future__ import annotations
 

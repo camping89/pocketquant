@@ -1,8 +1,5 @@
-"""With EXNESS_LIVE_TRADING false, the production container cannot trade on Exness.
-
-Two independent locks hold: ``BrokerFactory`` refuses the ``exness`` broker, and
-the client refuses every order call before any network use.
-"""
+# Two independent locks: BrokerFactory refuses the exness broker, and the client refuses
+# every order call before any network use.
 
 from __future__ import annotations
 

@@ -1,5 +1,3 @@
-"""Pin tracked_symbols behavior through the feature service (ex-CQRS handlers)."""
-
 import fnmatch
 from datetime import UTC, datetime
 
@@ -44,8 +42,6 @@ class FakeTrackedSymbolRepo:
 
 
 class FakeScopedRepo:
-    """Holds one symbol string per stored document."""
-
     def __init__(self, symbols: list[str]) -> None:
         self.docs = list(symbols)
 

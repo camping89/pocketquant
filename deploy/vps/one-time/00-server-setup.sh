@@ -149,4 +149,4 @@ echo "3. git push from pocketquant-config, then push to pocketquant (or: gh work
 echo ""
 echo "CI/CD fetches host, SSH key, prod .env, Docker Hub + Portainer creds from"
 echo "pocketquant-config via the POCKETQUANT_CONFIG_DEPLOY_KEY secret. No per-host"
-echo "GitHub secrets/vars to set here — see docs/deployment.md → 'VPS Migration (new VPS)'."
+echo "GitHub secrets/vars to set here — see docs/deployment.md → 'VPS Migration'."

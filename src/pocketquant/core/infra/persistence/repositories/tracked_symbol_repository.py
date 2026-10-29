@@ -6,17 +6,13 @@ from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepos
 
 
 class TrackedSymbolRepository(SymbolScopedRepository):
-    """Repository for tracked_symbols — uuid7 ``_id``, unique index on composite ``symbol``."""
-
     _collection_name = COLLECTION_TRACKED_SYMBOLS
 
     async def list_all(self) -> list[TrackedSymbol]:
-        """Return all tracked symbols sorted by composite symbol."""
         cursor = self._collection().find({}).sort([("symbol", 1)])
         return [TrackedSymbol.from_mongo(doc) async for doc in cursor]
 
     async def upsert(self, ts: TrackedSymbol) -> None:
-        """Insert or update a tracked symbol. Idempotent."""
         collection = self._collection()
         doc = ts.to_mongo()
         doc_id = doc.pop("_id")
@@ -33,7 +29,6 @@ class TrackedSymbolRepository(SymbolScopedRepository):
         )
 
     async def exists(self, symbol: str) -> bool:
-        """Return True if composite ``symbol`` is in the collection."""
         doc = await self._collection().find_one(
             {"symbol": symbol},
             {"_id": 1},
@@ -41,7 +36,6 @@ class TrackedSymbolRepository(SymbolScopedRepository):
         return doc is not None
 
     async def ensure_indexes(self) -> None:
-        """Create unique index on composite ``symbol``."""
         await self._collection().create_index(
             [("symbol", 1)],
             unique=True,

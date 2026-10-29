@@ -1,16 +1,7 @@
-"""End-to-end: declarative control plane survives a restart.
-
-The success metric of SP1: a subscription with desired_state="running" auto-runs
-without any manual start call, and stays running across a process restart. We
-prove it by composing the real pieces (real SubscriptionRepository on an
-ephemeral Mongo, real StrategyAppService with a PaperBrokerAdapter, real
-StrategyReconcileAppService) and driving _reconcile() directly for determinism — no
-live loop, no sleeps.
-
-Restart is simulated by discarding engine A and building a fresh engine B, then
-re-running the rehydrate path (load_strategy per sub, instances start stopped)
-before reconciling again. Zero ``start_strategy`` calls appear in the test body.
-"""
+# Composes the real pieces and drives _reconcile() directly for determinism: no live loop,
+# no sleeps. A restart is simulated by discarding engine A, building a fresh engine B and
+# re-running the rehydrate path before reconciling again. The test body makes no
+# start_strategy call.
 
 from __future__ import annotations
 
@@ -64,7 +55,6 @@ async def db(settings):
 
 
 async def _build_engine(db: Database) -> StrategyAppService:
-    """Construct a real StrategyAppService with a paper broker (offline-safe)."""
     event_bus = EventBus()
     order_svc = OrderAppService(event_bus, OrderRepository(db))
     await order_svc.load_pending_orders()
@@ -85,8 +75,8 @@ async def _build_engine(db: Database) -> StrategyAppService:
     return engine
 
 
+# Mirrors the boot rehydrate: one stopped instance per subscription.
 async def _rehydrate(engine: StrategyAppService, sub: Subscription) -> None:
-    """Mirror boot rehydrate: load one stopped instance per subscription."""
     strategy_class = STRATEGY_REGISTRY[sub.strategy_code]
     await engine.load_strategy(
         StrategyConfig(

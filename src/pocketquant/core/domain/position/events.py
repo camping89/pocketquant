@@ -36,15 +36,10 @@ class PositionClosedEvent(DomainEvent):
     realized_pnl: float = 0.0
 
 
+# pnl is the realized delta of this chunk, not cumulative; commission is the chunk's
+# entry portion plus its exit commission. The broker layer adds run_id/strategy_code.
 @dataclass(frozen=True, eq=False)
 class TradeClosedEvent(DomainEvent):
-    """Round-trip chunk closed on a position reduce/close.
-
-    Economic-only: carries no run_id/strategy_code (broker layer back-links those).
-    ``pnl`` is the realized delta of THIS chunk (not cumulative); ``commission`` is
-    the entry portion for the chunk plus its exit commission.
-    """
-
     position_id: str = ""
     subscription_id: str = ""
     symbol: str = ""

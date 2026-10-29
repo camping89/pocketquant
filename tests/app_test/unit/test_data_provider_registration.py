@@ -1,11 +1,6 @@
-"""Every provider the routers register has unseeded defaults, and nothing more.
-
-A symbol's suffix names its data provider, so the provider ids registered in
-the two routing adapters are the suffixes that can be synced and streamed. A
-registered provider missing from ``DATA_PROVIDER_DEFAULTS`` would make its
-unseeded symbols fail on their first ``touch``; a default with no registered
-provider would describe symbols that can never be synced.
-"""
+# A registered provider missing from DATA_PROVIDER_DEFAULTS would make its unseeded symbols
+# fail on their first touch; a default with no registered provider would describe symbols
+# that can never be synced.
 
 from __future__ import annotations
 
@@ -37,8 +32,6 @@ from tests.core_test.infra.market_data.conftest import build_settings
 
 
 class _Stubs(Provider):
-    """What the two routers need, without a database behind it."""
-
     @provide(scope=Scope.APP)
     def settings(self) -> Settings:
         return build_settings()

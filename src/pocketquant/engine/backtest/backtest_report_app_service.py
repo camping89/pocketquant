@@ -1,21 +1,3 @@
-"""Report collector — records Orders + Trades + equity during backtest replay.
-
-Subscribes to PaperBrokerAdapter via three channels:
-- ``on_fill(OrderResult)``  → upsert OrderRecord, append Fill (commission stamped
-                              on the Fill doc; balance debit owned by the broker)
-- ``on_event(order_id, OrderEvent)`` → append OrderEvent to the OrderRecord, mirror
-                                       OrderRecord.status / last_updated_at
-- ``on_trade(TradeClosedEvent)`` → build one ``Trade`` per round-trip closure
-                                    (average-cost, broker-emitted), record the
-                                    realized equity point from ``broker.get_balance()``
-
-Equity is sourced from ``IBrokerPort.get_balance()`` (single source of truth) —
-the collector keeps no shadow ledger of its own. At ``finalize()`` it returns
-``CollectedResults(run, orders, trades)`` where ``run`` is the slimmed
-``BacktestResult`` (metrics + equity_curve + open_positions) and ``orders``/
-``trades`` are persisted to dedicated collections by the caller.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -52,22 +34,15 @@ _MAX_PERSISTED_EQUITY_POINTS = 5000
 
 @dataclass
 class CollectedResults:
-    """What ``finalize`` returns: the slim run plus the orders and trades to persist."""
-
     run: BacktestResult
     orders: list[OrderRecord] = field(default_factory=list)
     trades: list[Trade] = field(default_factory=list)
 
 
+# Equity is read from broker.get_balance(): the broker's ledger is the only source,
+# so this collector keeps none of its own. Commission is stamped on the Fill; the
+# broker owns the balance debit.
 class BacktestReportAppService:
-    """Records Orders + Trades + equity snapshots during backtest, then computes metrics.
-
-    Realized equity is recorded on each trade closure (``on_trade``) by reading
-    ``broker.get_balance().available_balance`` — the broker's post-close ledger is
-    the single source of truth. Commission is read from ``OrderResult.commission``
-    and stamped on the Fill doc; the broker owns the balance debit.
-    """
-
     def __init__(
         self,
         config: BacktestConfig,
@@ -115,16 +90,10 @@ class BacktestReportAppService:
         order = self._upsert_order(result, fill_price, fill_qty, commission, timestamp)
         self._append_fill(order, result, fill_price, fill_qty, commission, timestamp)
 
+    # Runs after the exit fill's on_fill (broker dispatch order), so the exit OrderRecord
+    # already exists for the resulting_trade_id back-link. The broker updates its balance
+    # under its lock before it dispatches, so get_balance() here is the post-close balance.
     async def on_trade(self, event: TradeClosedEvent) -> None:
-        """PaperBrokerAdapter trade-closure callback — build a Trade + record equity.
-
-        Fires after the exit fill's ``on_fill`` (broker dispatch order), so the
-        exit OrderRecord already exists for the ``resulting_trade_id`` back-link.
-        The broker updated ``_balance`` (realized pnl + commission) under its lock
-        BEFORE dispatching this event (dispatch is outside the lock), so
-        ``get_balance().available_balance`` is the post-close truth — recorded as
-        the realized equity point at ``exit_time``.
-        """
         exit_time = event.exit_time or get_current_time()
         trade = Trade(
             trade_id=generate_id(),
@@ -155,7 +124,6 @@ class BacktestReportAppService:
                 exit_order.resulting_trade_id = str(trade.trade_id)
 
     async def on_event(self, order_id: str, event: OrderEvent) -> None:
-        """PaperBrokerAdapter lifecycle event callback. Mirror status into OrderRecord."""
         order = self._orders_by_id.get(order_id)
         if order is None:
             # OrderRecord seen first via event before any fill — create a stub from event data.
@@ -173,16 +141,11 @@ class BacktestReportAppService:
         commission: float,
         timestamp: datetime,
     ) -> OrderRecord:
-        """Create or update an OrderRecord from a fill result.
-
-        If a stub already exists (created via on_event before on_fill), backfill
-        the authoritative side / quantity / sl_price / tp_price from this fill.
-        Stubs are detected by their placeholder ``quantity == 0.0``.
-        """
         side = result.side or OrderSide.BUY  # broker sets side on every fill
         existing = self._orders_by_id.get(result.order_id)
         if existing is not None:
             # Backfill stub fields the on_event handler couldn't know.
+            # A stub created by on_event is recognised by its placeholder quantity of 0.0.
             if existing.quantity == 0.0:
                 existing.side = side
                 existing.quantity = fill_qty
@@ -210,11 +173,6 @@ class BacktestReportAppService:
         return order
 
     def _upsert_order_status(self, result: Any) -> None:
-        """Mirror a non-fill terminal status (CANCELLED / EXPIRED / REJECTED) onto the OrderRecord.
-
-        Backfills `side` from the result when the existing entry is a stub
-        (created via on_event before on_fill).
-        """
         order = self._orders_by_id.get(result.order_id)
         if order is None:
             # Event callback may have created the stub already; if not, skip.
@@ -225,7 +183,6 @@ class BacktestReportAppService:
         order.last_updated_at = get_current_time()
 
     def _create_stub_order(self, order_id: str, event: OrderEvent) -> OrderRecord:
-        """Create a minimal OrderRecord from an early-arriving event (no fill yet)."""
         return OrderRecord(
             order_id=UUID(order_id),
             run_id=self._run_id,
@@ -271,33 +228,16 @@ class BacktestReportAppService:
         # (``_with_drawdown``); the realized point only carries the equity value.
         self._equity_curve.append(EquityPoint(timestamp=timestamp, equity=equity, drawdown=0.0))
 
+    # Read-only accounting: this feeds only the MTM curve behind the per-bar
+    # Sharpe/Sortino returns. The realized curve is untouched, so total_return and
+    # cagr stay realized-only.
     def mark_to_market(self, timestamp: datetime, total_equity: float) -> None:
-        """Append a per-bar mark-to-market equity point — READ-ONLY accounting.
-
-        ``total_equity`` is ``broker.get_balance().total_equity`` (realized
-        balance + unrealized PnL), the broker's single source of truth. This
-        feeds the per-bar return series Sharpe/Sortino annualize. It flows only
-        into ``_mtm_curve`` — the realized curve (``_equity_curve``, trade-keyed
-        from ``on_trade`` broker reads) is untouched, so ``total_return``/``cagr``
-        stay realized-only. Drawdown is recomputed against a running peak at
-        persist time (``_with_drawdown``).
-
-        Points carrying a trade (fill/exit, recorded via ``_record_equity_point``)
-        are preserved at persist time; MTM points fill the gaps for even
-        sampling.
-        """
         self._mtm_curve.append(EquityPoint(timestamp=timestamp, equity=total_equity, drawdown=0.0))
 
+    # Over the cap the curve is strided down but keeps trade timestamps, the equity
+    # break points. The cap is hard so the persisted doc stays inside Mongo's size
+    # budget even with very many trades.
     def _downsample_equity_curve(self) -> list[EquityPoint]:
-        """Curve to persist: per-bar MTM series (with drawdown), hard-capped at 5000.
-
-        Uses the MTM curve when present (even per-bar sampling FE plots),
-        otherwise the realized curve. Drawdown is recomputed across the chosen
-        source. When the source exceeds the cap it is strided down while
-        preferentially keeping trade-carrying timestamps (the equity break
-        points). The result is then hard-sliced to the cap so the persisted doc
-        can never exceed Mongo's size budget even with very many trades.
-        """
         source = self._mtm_curve if self._mtm_curve else self._equity_curve
         with_dd = self._with_drawdown(source)
         if len(with_dd) <= _MAX_PERSISTED_EQUITY_POINTS:
@@ -324,7 +264,6 @@ class BacktestReportAppService:
 
     @staticmethod
     def _with_drawdown(curve: list[EquityPoint]) -> list[EquityPoint]:
-        """Return ``curve`` with drawdown recomputed against a running peak."""
         out: list[EquityPoint] = []
         peak = float("-inf")
         for p in curve:

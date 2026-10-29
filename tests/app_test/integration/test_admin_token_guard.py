@@ -1,9 +1,3 @@
-"""X-Admin-Token guard on the ``api`` router.
-
-Every mutation route under the API prefix carries the guard; safe methods never
-need the token; production without a token fails closed with 503.
-"""
-
 from __future__ import annotations
 
 import pytest

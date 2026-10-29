@@ -1,5 +1,3 @@
-"""Strategy query service — read-side: list templates, subscriptions, positions, trades."""
-
 from __future__ import annotations
 
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
@@ -12,8 +10,6 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
 
 
 class StrategyQueryService:
-    """Read-side strategy operations — all reads from Mongo/RAM registries."""
-
     def __init__(
         self,
         subscription_repository: SubscriptionRepository,
@@ -32,19 +28,11 @@ class StrategyQueryService:
         return {
             "strategy_code": strategy_code,
             "class_name": strategy_class.__name__,
-            "description": (strategy_class.__doc__ or "").strip().split("\n")[0]
-            if strategy_class.__doc__
-            else "",
         }
 
+    # actual_state is the reconcile loop's mirror of live engine state, so no RAM read.
+    # is_running is derived for FE back-compat.
     async def list_symbols(self, strategy_code: str | None = None) -> list[dict]:
-        """List subscriptions filtered by strategy_code (or all if None).
-
-        Run-state is sourced from the DB: ``actual_state`` is the reconcile
-        loop's mirror of live engine state, so no RAM read is needed.
-        ``is_running`` is derived (``actual_state == "running"``) for FE
-        back-compat; ``desired_state`` exposes the transitional (converging) state.
-        """
         if strategy_code is None:
             subs = await self._sub_repo.list_all()
         else:
@@ -84,12 +72,8 @@ class StrategyQueryService:
             for p in positions
         ]
 
+    # Closed positions are the canonical completed trade, so the FE never pairs raw fills.
     async def get_trades(self, subscription_id: str, limit: int = 100) -> list[dict]:
-        """Return closed positions as the FE-consumed StrategyTrade shape.
-
-        Closed positions are the canonical 'completed trade' record (entry +
-        exit + realized PnL). Returning them avoids pairing raw fills client-side.
-        """
         closed = await self._position_repo.find_closed_by_subscription(subscription_id, limit=limit)
         return [
             {

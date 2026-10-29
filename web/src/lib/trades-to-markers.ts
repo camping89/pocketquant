@@ -1,17 +1,6 @@
-/**
- * Pure helper: converts live-strategy Trade events into lightweight-charts
- * SeriesMarker objects for rendering on the chart.
- *
- * - Entry LONG  → arrowUp  belowBar  emerald  "L+{qty}"
- * - Entry SHORT → arrowDown aboveBar rose     "S-{qty}"
- * - Exit        → square   aboveBar  slate    "X"
- *
- * No side-effects; safe to unit-test in isolation.
- */
 import { type SeriesMarker, type UTCTimestamp } from 'lightweight-charts'
 import type { Trade } from '../types/strategy'
 
-/** Parse ISO timestamp → UTCTimestamp (unix seconds). */
 function toUTC(iso: string): UTCTimestamp {
   return Math.floor(new Date(iso).getTime() / 1000) as UTCTimestamp
 }

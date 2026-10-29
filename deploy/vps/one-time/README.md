@@ -4,7 +4,7 @@ Scripts that run **once per environment**, not on every deploy.
 
 ## Contents
 
-- `00-server-setup.sh` — fresh-VPS provisioning (Docker, deploy user, firewall, fail2ban, SSH hardening). Run once as root on a new VPS. See [deployment.md → VPS Migration (new VPS)](../../../docs/deployment.md).
+- `00-server-setup.sh` — fresh-VPS provisioning (Docker, deploy user, firewall, fail2ban, SSH hardening). Run once as root on a new VPS. See [deployment.md → VPS Migration](../../../docs/deployment.md#vps-migration).
 - `one_time_<name>.py` / `one_time_<name>.sh` — idempotent data/schema migrations, invoked from `deploy/vps/10-deploy.sh` after the app container becomes healthy.
 
 ## Migration script convention

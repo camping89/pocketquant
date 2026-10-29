@@ -1,5 +1,3 @@
-"""RiskCheckHandler accepts only entry signals and never divides by zero equity."""
-
 from datetime import UTC, datetime
 
 import pytest

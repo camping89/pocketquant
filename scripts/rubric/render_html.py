@@ -1,9 +1,5 @@
-"""Self-contained HTML report — inline CSS, no framework, opens via file://.
-
-A comparison table (ranked, weakest first) plus a collapsible section per run
-with the full breakdown. Grade drives colour (A green → F red). All dynamic text
-is escaped. KISS: static editorial + <details>, no chart library.
-"""
+# Self-contained so it opens via file://: inline CSS, no framework, no chart library. All
+# dynamic text is escaped.
 
 from __future__ import annotations
 

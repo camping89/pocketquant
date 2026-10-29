@@ -1,9 +1,3 @@
-"""Route REST history to the provider each symbol's suffix names.
-
-Implements ``IDataProviderPort`` itself, so the fetch path above it is
-unchanged: ``fetch_with_retry`` still sees one provider and one coroutine.
-"""
-
 from __future__ import annotations
 
 from pocketquant.core.common.logging import get_logger
@@ -22,8 +16,6 @@ DEFAULT_SEARCH_PROVIDER_ID = "binance"
 
 
 class RoutingDataProviderAdapter(IDataProviderPort):
-    """Send each fetch to the one provider the symbol's suffix names."""
-
     def __init__(
         self,
         providers: dict[str, IDataProviderPort],
@@ -32,48 +24,28 @@ class RoutingDataProviderAdapter(IDataProviderPort):
         self._providers = providers
         self._search_provider_id = search_provider_id
 
+    # No fallback: another provider's bars for the same code are a different instrument.
+    # A failure propagates instead of reading as an empty market, because an outage and a
+    # quiet venue are different events. This runs inside fetch_with_retry's loop, so a caller
+    # that can reach a legitimately empty market gates on the trading calendar first.
     async def fetch_ohlcv(
         self,
         symbol: str,
         interval: Interval,
         n_bars: int = 1000,
     ) -> list[Bar]:
-        """Bars from the provider ``symbol`` names.
-
-        There is no fallback: another provider's bars for the same code would
-        be a different instrument's prices. A provider failure propagates
-        rather than being reported as an empty market, because an outage and a
-        quiet venue are different events and only the caller can tell that
-        difference to a human.
-
-        This call is nested inside ``fetch_with_retry``'s retry loop, so a
-        caller that can reach a legitimately empty market must gate on the
-        trading calendar before arriving here — see
-        ``sync_jobs._sync_by_intervals``.
-
-        Raises:
-            UnknownDataProviderError: when the suffix names no registered
-                provider.
-        """
         provider = self._provider_for(symbol)
         return await provider.fetch_ohlcv(symbol=symbol, interval=interval, n_bars=n_bars)
 
+    # Single-provider: merging two venues' results needs a dedup rule nothing asks for.
     async def search_symbols(self, query: str) -> list[dict]:
-        """Delegate to the default search provider.
-
-        Symbol search stays single-provider: merging two venues' results needs a
-        dedup rule that nothing asks for yet.
-        """
         provider = self._providers.get(self._search_provider_id)
         if provider is None:
             return []
         return await provider.search_symbols(query)
 
+    # One child failing to close must not leave the others' sockets open.
     async def close(self) -> None:
-        """Close every child, then re-raise the first failure.
-
-        One child failing to close must not leave the others' sockets open.
-        """
         first: Exception | None = None
         for provider_id, provider in self._providers.items():
             try:

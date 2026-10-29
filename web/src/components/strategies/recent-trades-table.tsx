@@ -1,7 +1,3 @@
-/**
- * Compact table showing last N trades for the selected strategy subscription.
- * Accepts a generic trade shape; renders direction, entry/exit price, pnl.
- */
 import { useFmt } from '../../lib/use-timezone'
 
 export interface StrategyTrade {

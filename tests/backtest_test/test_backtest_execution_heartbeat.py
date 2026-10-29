@@ -1,5 +1,3 @@
-"""A running backtest refreshes its heartbeat and stops refreshing once it ends."""
-
 from __future__ import annotations
 
 import asyncio

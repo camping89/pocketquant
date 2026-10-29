@@ -1,9 +1,6 @@
-"""The REST sync job does not call a provider for a market that is shut.
-
-Fetching out of hours spends provider rate limit on an empty answer and then
-records a no-progress streak for a symbol that is behaving correctly. One
-interval of grace after the close keeps the session's final bar reachable.
-"""
+# Fetching out of hours spends provider rate limit on an empty answer and records a
+# no-progress streak for a symbol that is behaving correctly. One interval of grace after
+# the close keeps the session's final bar reachable.
 
 from __future__ import annotations
 
@@ -20,8 +17,6 @@ SYMBOL = "XAUUSD:EXNESS"
 
 
 class _ClosedSince(Continuous24x7Calendar):
-    """Shut, having last closed ``ago`` before now."""
-
     def __init__(self, ago: timedelta) -> None:
         self._ago = ago
 
@@ -73,7 +68,6 @@ async def test_a_long_closed_market_is_not_fetched_at_all() -> None:
 
 @pytest.mark.asyncio
 async def test_a_market_just_closed_is_still_fetched_once() -> None:
-    """Within one interval of the close, the final bar is still reachable."""
     sync_service, _ = await _run(_ClosedSince(timedelta(seconds=30)))
 
     sync_service.sync_one.assert_awaited_once()

@@ -1,10 +1,3 @@
-"""Symbol entity - Pydantic model with MongoDB persistence.
-
-Composite symbol format ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``) is the
-single identity field. Exchange is encoded as opaque postfix; business logic
-never decomposes it. Decomposition is presentation-layer-only.
-"""
-
 from __future__ import annotations
 
 import re
@@ -32,11 +25,6 @@ COMPOSITE_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9._!-]{1,32}:[A-Z0-9._-]{1,32}$")
 
 
 class Symbol(BaseModel):
-    """Tradeable instrument - persisted to MongoDB.
-
-    ``symbol`` stores composite identifier ``{code}:{exchange}``.
-    """
-
     model_config = ConfigDict(populate_by_name=True)
 
     id: UUID = Field(default_factory=generate_id)
@@ -68,6 +56,8 @@ class Symbol(BaseModel):
     def __hash__(self) -> int:
         return hash(self.id)
 
+    # calendar_id is derived rather than defaulted so the two fields cannot disagree; an
+    # explicit value still wins for a venue needing a non-default calendar.
     @classmethod
     def create(
         cls,
@@ -77,12 +67,6 @@ class Symbol(BaseModel):
         calendar_id: str | None = None,
         contract_spec: ContractSpec | None = None,
     ) -> Symbol:
-        """Create a symbol, deriving its calendar from its asset class.
-
-        ``calendar_id`` is derived rather than defaulted so the two fields cannot
-        silently disagree. An explicit value still wins, for a venue that needs a
-        non-default calendar for the same asset class.
-        """
         return cls(
             symbol=symbol.upper(),
             name=name,
@@ -92,7 +76,6 @@ class Symbol(BaseModel):
         )
 
     def to_mongo(self) -> dict[str, Any]:
-        """Serialize to MongoDB document."""
         return {
             "_id": str(self.id),
             "symbol": self.symbol,
@@ -106,7 +89,6 @@ class Symbol(BaseModel):
 
     @classmethod
     def from_mongo(cls, doc: dict[str, Any]) -> Symbol:
-        """Reconstruct from MongoDB document."""
         raw_id = doc.get("_id", "")
         return cls(
             id=UUID(str(raw_id)) if raw_id else generate_id(),

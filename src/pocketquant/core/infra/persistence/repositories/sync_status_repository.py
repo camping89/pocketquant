@@ -1,5 +1,3 @@
-"""Sync status repository for MongoDB persistence."""
-
 from datetime import UTC, datetime
 
 from pymongo import ReturnDocument
@@ -12,8 +10,6 @@ from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepos
 
 
 class SyncStatusRepository(SymbolScopedRepository):
-    """Repository for sync status tracking. ``symbol`` is composite ``{code}:{exchange}``."""
-
     _collection_name = COLLECTION_SYNC_STATUS
 
     async def upsert(
@@ -54,14 +50,8 @@ class SyncStatusRepository(SymbolScopedRepository):
         cursor = collection.find()
         return [SyncStatus.from_mongo(doc) async for doc in cursor]
 
+    # Despite the name, counts any non-progress sync (inserted == 0 with existing data).
     async def bump_empty_fetch(self, symbol: str, interval: Interval) -> int:
-        """Atomic $inc on consecutive_empty_fetches.
-
-        Despite the legacy name, this counter tracks any non-progress sync
-        (``inserted == 0`` with existing data), including all-misaligned and
-        fully-filtered-existing cases. Reset by ``reset_empty_fetch`` on
-        successful insert. Returns the new count.
-        """
         res = await self._collection().find_one_and_update(
             {
                 "symbol": symbol.upper(),

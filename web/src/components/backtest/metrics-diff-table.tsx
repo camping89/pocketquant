@@ -27,8 +27,7 @@ const th: CSSProperties = { textAlign: 'right', padding: '6px 10px', color: 'var
 const td: CSSProperties = { textAlign: 'right', padding: '6px 10px', borderBottom: '1px solid var(--border-color)' }
 const bestCell: CSSProperties = { ...td, background: 'color-mix(in srgb, var(--up-color) 18%, transparent)', fontWeight: 600 }
 
-/** Find which run indexes hold the best value for a row's direction. Ties share
- *  the highlight; neutral rows never highlight; null values are skipped. */
+// Ties share the highlight; neutral rows never highlight; null values are skipped.
 function bestIndexes(values: (number | null)[], dir: Direction): Set<number> {
   if (dir === 'neutral') return new Set()
   const valid = values.map((v, i) => ({ v, i })).filter((x): x is { v: number; i: number } => x.v != null && isFinite(x.v))
@@ -40,7 +39,6 @@ function bestIndexes(values: (number | null)[], dir: Direction): Set<number> {
   return new Set(valid.filter((x) => x.v === best).map((x) => x.i))
 }
 
-/** Side-by-side metric comparison (columns = runs); best cell per row highlighted. */
 export function MetricsDiffTable({ runs }: { runs: BacktestRunResult[] }) {
   return (
     <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', color: 'var(--text-primary)' }}>

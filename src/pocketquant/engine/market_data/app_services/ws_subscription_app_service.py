@@ -1,11 +1,3 @@
-"""WsSubscriptionAppService — reconciles WS subscriptions against tracked_symbols every 5s.
-
-Runs as a background task (asyncio.Task) spawned in lifespan.
-Idempotent: subscribe/unsubscribe only diffs (desired vs current).
-Cancel-safe: CancelledError propagates cleanly so lifespan teardown works.
-``symbol`` keys are composite ``{code}:{exchange}`` throughout.
-"""
-
 import asyncio
 
 from pocketquant.core.common.logging import get_logger
@@ -23,15 +15,6 @@ _SUBSCRIBE_DELAY_S = 0.02
 
 
 class WsSubscriptionAppService:
-    """Reconciles live WS subscriptions against the tracked_symbols collection.
-
-    Args:
-        provider: Realtime WS client (singleton, shared with QuoteAppService).
-        tracked_symbol_repo: MongoDB repository for tracked symbols.
-        quote_app_service: Provides the on_quote_update callback registered per symbol.
-        interval_s: Reconcile interval in seconds (default 5.0).
-    """
-
     def __init__(
         self,
         provider: IRealtimeQuoteProviderPort,
@@ -50,7 +33,6 @@ class WsSubscriptionAppService:
         self._warned_subscribe_failed: set[str] = set()
 
     async def run(self) -> None:
-        """Async reconcile loop. Runs until cancelled by lifespan shutdown."""
         logger.info("ws_subscription_manager.started", interval_s=self._interval_s)
 
         while True:

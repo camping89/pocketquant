@@ -19,9 +19,6 @@ function clampRail(w: number) {
   return Math.min(RAIL_MAX, Math.max(RAIL_MIN, w))
 }
 
-/** Master-detail workbench. The selected run + active tab live in the path
- *  (`/backtest/<runId>/<tab>`, reload/back/forward safe); selecting a run
- *  navigates and, on mobile, flips to the Detail tab. */
 export function BacktestWorkbench({
   selectedRun,
   activeTab,

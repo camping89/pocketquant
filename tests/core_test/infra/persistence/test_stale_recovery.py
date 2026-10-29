@@ -1,8 +1,5 @@
-"""Integration tests for BacktestRepository.mark_orphaned_started_as_failed.
-
-A ``started`` run is an orphan once its heartbeat is older than 60 s; a run with no
-heartbeat yet falls back to ``started_at``. A live run refreshes every 15 s.
-"""
+# A started run is an orphan once its heartbeat is older than 60 s; a run with no heartbeat
+# yet falls back to started_at. A live run refreshes every 15 s.
 
 from __future__ import annotations
 

@@ -1,11 +1,3 @@
-"""One reconnecting, signed Exness WebSocket stream on the account's access point.
-
-Shaped like ``BinanceWebSocketAdapter``: exponential backoff from 1 s to 30 s,
-and a circuit breaker that pauses for 300 s after 10 consecutive failures. A
-handler exception never kills the stream, and ``run_forever`` raises nothing
-but ``CancelledError``, because the realtime router gathers every child feed.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -32,9 +24,9 @@ _BREAKER_PAUSE_S = 300.0
 _WATCHDOG_INTERVAL_S = 5.0
 
 
+# A handler exception never kills the stream, and run_forever raises nothing but
+# CancelledError, because the realtime router gathers every child feed.
 class ExnessStream:
-    """A signed WS stream that reconnects until closed."""
-
     def __init__(
         self,
         client: ExnessClient,
@@ -121,7 +113,6 @@ class ExnessStream:
         self._delay = min(self._delay * 2, _BACKOFF_MAX_S)
 
     async def _watchdog(self) -> None:
-        """Close the socket when no frame arrived for ``stale_after_s``."""
         assert self._stale_after_s is not None
         while True:
             await asyncio.sleep(_WATCHDOG_INTERVAL_S)

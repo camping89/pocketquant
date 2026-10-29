@@ -1,22 +1,3 @@
-"""Rubric CLI — load → metric → score → render → (optional) persist.
-
-Runs the full offline rubric over one or all finished runs and writes four
-artifacts (comparison md, per-run scorecards md, json, html) into ``--out``.
-``--dry-run`` is the default and mutates nothing; ``--persist`` writes an
-idempotent top-level ``scorecard`` field on each canonical run doc.
-
-Usage:
-    uv run python scripts/rubric/run_rubric.py --all-finished
-    uv run python scripts/rubric/run_rubric.py --run-id <id> [--run-id <id> ...]
-    uv run python scripts/rubric/run_rubric.py --all-finished --persist
-
-MONGODB_URL must be set in the environment (never a CLI flag). Read-only by
-default; persist only touches the new ``scorecard`` field — never ``verdict``,
-``metrics``, ``equity_curve`` or ``config_snapshot``.
-
-Exit codes: 0 = all selected runs scored; 1 = one or more runs failed.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -65,7 +46,22 @@ _CAVEAT = (
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        description="""\
+Offline rubric over one or all finished backtest runs: load, metric, score, render,
+and optionally persist. Writes comparison md, per-run scorecards md, json and html
+into --out. Read-only unless --persist is passed.""",
+        epilog="""\
+Examples:
+    uv run python scripts/rubric/run_rubric.py --all-finished
+    uv run python scripts/rubric/run_rubric.py --run-id <id> [--run-id <id> ...]
+    uv run python scripts/rubric/run_rubric.py --all-finished --persist
+
+MONGODB_URL must be set in the environment (never a CLI flag). --persist writes only
+a top-level scorecard field; it never touches verdict, metrics, equity_curve or
+config_snapshot.
+
+Exit codes: 0 = all selected runs scored; 1 = one or more runs failed.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--run-id", action="append", dest="run_ids", default=None)
     p.add_argument("--all-finished", action="store_true")
@@ -82,7 +78,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _score_one(canonical: str, aliases: list[str], seed: int) -> ScorecardResult:
-    """Full pipeline for one canonical run."""
     run = load_run(canonical)
     trades = load_trades(canonical)
     metrics = compute_metrics(run, trades)
@@ -139,7 +134,6 @@ def _write_artifacts(results: list[ScorecardResult], out_dir: Path) -> None:
 
 
 def _scorecard_doc(result: ScorecardResult) -> dict:
-    """The nested ``scorecard`` object persisted on the canonical run doc."""
     return {
         "rubric_version": result.rubric_version,
         "generated_note": _CAVEAT,
@@ -158,12 +152,9 @@ def _scorecard_doc(result: ScorecardResult) -> dict:
     }
 
 
+# Only the scorecard field is $set, so verdict, metrics, equity_curve and config_snapshot
+# stay untouched and a re-run overwrites the same field instead of appending.
 def _persist(results: list[ScorecardResult]) -> int:
-    """Idempotent ``$set`` of the ``scorecard`` field on canonical + alias-ref.
-
-    Never touches verdict/metrics/equity_curve/config_snapshot. Re-running with
-    the same version overwrites the same field (no append). Returns count written.
-    """
     url = os.environ.get("MONGODB_URL")
     if not url:
         raise RuntimeError("MONGODB_URL must be set to persist")

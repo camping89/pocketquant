@@ -1,9 +1,5 @@
-"""GET /system/jobs reads raw APScheduler Mongo docs without a scheduler.
-
-MongoDBJobStore persists ``next_run_time`` as a UTC float timestamp
-(datetime_to_utc_timestamp), not a datetime — the route must convert it,
-and tolerate None (paused job).
-"""
+# MongoDBJobStore persists next_run_time as a UTC float timestamp, not a datetime, so the
+# route must convert it and tolerate None (a paused job).
 
 from __future__ import annotations
 

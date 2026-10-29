@@ -1,15 +1,7 @@
-"""Integration tests for JobHistoryRepository — guards two prod-only bug classes.
-
-Bug class #1 — `sparse=True` unique index treats `null` as a value, so legacy
-docs with `scheduled_run_time=null` collide on index build.
-Guard: `record_skip` must coexist with `record_start`-written rows; index build
-must succeed even when many `null` rows already exist.
-
-Bug class #2 — pymongo 4.16 `AsyncCollection.aggregate()` returns a coroutine
-that resolves to a cursor; callers MUST `await` before `async for`.
-Guard: every aggregate-using method (`get_latest_by_job_ids`, `aggregate_stats`)
-must run end-to-end against a real Mongo and return data.
-"""
+# Guards two prod-only bug classes. A sparse=True unique index treats null as a value, so
+# legacy docs with scheduled_run_time=null collide on index build. pymongo 4.16
+# AsyncCollection.aggregate() is a coroutine resolving to a cursor; a caller that does not
+# await it before async for raises TypeError.
 
 from __future__ import annotations
 
@@ -37,12 +29,10 @@ async def repo(settings):
     await db.disconnect()
 
 
+# Wrapper-written rows carry scheduled_run_time=null; partialFilterExpression keeps them out
+# of the unique index.
 @pytest.mark.asyncio
 async def test_idempotency_index_tolerates_legacy_null_rows(repo):
-    """Multiple wrapper-written rows have scheduled_run_time=null. They must
-    NOT trigger the unique constraint (partialFilterExpression filters them
-    out). Regression for bug #1: previously sparse=True, which treats null as
-    a value and crashed index build."""
     # Wrapper-path inserts (null scheduled_run_time) — many per job_id.
     for _ in range(5):
         await repo.record_start("sync_5m")
@@ -65,9 +55,6 @@ async def test_idempotency_index_tolerates_legacy_null_rows(repo):
 
 @pytest.mark.asyncio
 async def test_get_latest_by_job_ids_awaits_aggregate(repo):
-    """Regression for bug #2: `aggregate()` is a coroutine in pymongo 4.16.
-    If it isn't awaited, `async for` raises TypeError. This test exercises
-    the real cursor path — would have caught the bug before deploy."""
     now = datetime.now(UTC)
     doc_id_old = await repo.record_start("sync_5m")
     await repo.record_finish(doc_id_old, status="completed", duration_ms=100)
@@ -89,16 +76,12 @@ async def test_get_latest_by_job_ids_awaits_aggregate(repo):
     assert "p50_ms" in stats and "p95_ms" in stats
 
 
+# BSON stores milliseconds, so a fast job can write two runs whose started_at compare equal,
+# and sorting on that alone leaves $first free to return either. The rows are written
+# directly so the tie is reproduced on purpose; it surfaced as an intermittent failure three
+# times before it was pinned.
 @pytest.mark.asyncio
 async def test_latest_run_is_decided_when_two_runs_share_a_started_at(repo):
-    """Two runs starting inside one millisecond must still resolve to the later.
-
-    BSON stores milliseconds, so a fast job can write two runs whose
-    ``started_at`` compare equal; sorting on that alone leaves ``$first`` free
-    to return either. The rows are written directly here so the tie is
-    reproduced on purpose rather than waited for — this surfaced as an
-    intermittent failure three times before it was pinned.
-    """
     shared = datetime(2026, 5, 5, 12, 0, 0, tzinfo=UTC)
     # UUIDv7 is monotonic within a millisecond, so the greater id is the later
     # run. Inserted oldest-first on purpose: with equal started_at values the
@@ -121,7 +104,6 @@ async def test_latest_run_is_decided_when_two_runs_share_a_started_at(repo):
 
 @pytest.mark.asyncio
 async def test_record_detail_appends_to_run(repo):
-    """Smoke: per-(symbol, interval) detail records flow into details[]."""
     doc_id = await repo.record_start("sync_5m")
     await repo.record_detail(
         doc_id,
@@ -144,13 +126,6 @@ async def test_record_detail_appends_to_run(repo):
 
 @pytest.mark.asyncio
 async def test_reconcile_orphan_running_flips_only_stale_running(repo):
-    """Only docs with status='running' AND started_at < cutoff are flipped.
-
-    Guards against false positives:
-      - recent 'running' doc (within grace) MUST stay running
-      - already-'completed' doc MUST be left untouched
-      - stale 'running' doc MUST flip to failed + error='orphan_running_recovered'
-    """
     now = datetime.now(UTC)
     coll = repo._collection()
     await coll.insert_many(
@@ -196,7 +171,6 @@ async def test_reconcile_orphan_running_flips_only_stale_running(repo):
 
 @pytest.mark.asyncio
 async def test_get_last_successful_started_at_returns_latest_completed(repo):
-    """Most-recent completed row wins. Non-completed statuses are ignored."""
     now = datetime.now(UTC)
     older_success = now - timedelta(days=2)
     recent_success = now - timedelta(hours=1)
@@ -240,6 +214,5 @@ async def test_get_last_successful_started_at_returns_latest_completed(repo):
 
 @pytest.mark.asyncio
 async def test_get_last_successful_started_at_returns_none_for_no_history(repo):
-    """Fresh DB / no successful run yet → None so caller skips catch-up."""
     result = await repo.get_last_successful_started_at("never_ran")
     assert result is None

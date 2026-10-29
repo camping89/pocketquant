@@ -1,10 +1,3 @@
-"""TradeRepository — MongoDB persistence for the live ``trades`` collection.
-
-Stores round-trip ``Trade`` documents emitted by ``LiveTradeCollector`` during
-paper/live trading. Live subscriptions reuse the ``Trade`` shape and set
-``run_id`` to the ``subscription_id``, so reads scope by subscription.
-"""
-
 from __future__ import annotations
 
 from pocketquant.core.common.constants import COLLECTION_TRADES
@@ -19,7 +12,6 @@ class TradeRepository(SymbolScopedRepository):
     _collection_name = COLLECTION_TRADES
 
     async def save_many(self, trades: list[Trade]) -> None:
-        """Upsert a batch of trades keyed by ``trade_id``. Idempotent."""
         if not trades:
             return
         collection = self._collection()
@@ -29,14 +21,13 @@ class TradeRepository(SymbolScopedRepository):
             )
         logger.debug("trades_saved", count=len(trades))
 
+    # Live trades set run_id to the subscription_id.
     async def list_by_subscription(self, subscription_id: str, limit: int = 500) -> list[Trade]:
-        """Closed trades for one subscription, oldest-first (``run_id`` == sub id)."""
         collection = self._collection()
         cursor = collection.find({"run_id": subscription_id}).sort("entry_time", 1).limit(limit)
         return [Trade.from_mongo(doc) async for doc in cursor]
 
     async def realized_net(self, run_ids: list[str]) -> float:
-        """Net realized PnL (gross pnl minus commission) of these subscriptions' closed trades."""
         cursor = await self._collection().aggregate(
             [
                 {"$match": {"run_id": {"$in": run_ids}}},

@@ -1,9 +1,3 @@
-"""Unit tests for SyncProgressTrackerDomainService — the binary reset-vs-bump rule.
-
-Pure logic, no DB. Pins: inserted_count > 0 → RESET; inserted_count == 0 → BUMP.
-No tri-state (had_existing/no_existing) — those branches must not exist.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -24,7 +18,6 @@ def test_zero_insert_bumps() -> None:
 
 
 def test_decision_is_binary_only() -> None:
-    """Exactly two outcomes — guards against a fabricated tri-state."""
     assert set(SyncProgressDecision) == {
         SyncProgressDecision.RESET,
         SyncProgressDecision.BUMP,

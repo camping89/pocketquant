@@ -3,7 +3,7 @@
 
 import type { FeedState } from '../types/market-data'
 
-/** "12 min", "1 h 5 min" — lag is whole minutes, so seconds are dropped. */
+// Lag is whole minutes, so seconds are dropped.
 export function formatLag(seconds: number): string {
   const minutes = Math.max(1, Math.round(seconds / 60))
   if (minutes < 60) return `${minutes} min`
@@ -12,7 +12,6 @@ export function formatLag(seconds: number): string {
   return rest ? `${hours} h ${rest} min` : `${hours} h`
 }
 
-/** Short badge text, or null when there is nothing to flag. */
 export function dataLagLabel(state: FeedState, lagSeconds: number | null): string | null {
   if (lagSeconds === null) return null
   if (state === 'delayed') return `Delayed ~${formatLag(lagSeconds)}`
@@ -20,7 +19,6 @@ export function dataLagLabel(state: FeedState, lagSeconds: number | null): strin
   return null
 }
 
-/** The explanation shown on hover, or null when the data is current. */
 export function dataLagMessage(
   code: string,
   state: FeedState,

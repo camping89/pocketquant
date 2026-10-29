@@ -1,13 +1,9 @@
-"""Order repository for MongoDB persistence."""
-
 from pocketquant.core.common.constants import COLLECTION_ORDERS
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.infra.persistence.base_repository import SymbolScopedRepository
 
 
 class OrderRepository(SymbolScopedRepository):
-    """MongoDB repository for order persistence."""
-
     _collection_name = COLLECTION_ORDERS
 
     async def save(self, order: OrderAggregate) -> None:

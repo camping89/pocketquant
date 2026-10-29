@@ -1,20 +1,3 @@
-"""Paper broker implementation for simulated trading + backtesting.
-
-Only MARKET orders fill; every order is terminal when ``submit_order`` returns.
-
-Order lifecycle: SUBMITTED → FILLED | REJECTED
-   - MARKET           : SUBMITTED → FILLED  (immediate)
-   - REJECT           : SUBMITTED → REJECTED (``insufficient_balance`` / etc.)
-
-Every transition emits an ``OrderEvent`` to subscribers via
-``subscribe_order_event``. ``OrderResult`` callbacks continue to fire on every
-*fill* (terminal or partial) for backward-compat with existing collectors.
-
-Threading contract: subscriber callbacks are dispatched OUTSIDE ``self._lock``
-so they may freely re-enter broker methods without deadlock. State mutations
-(positions, balance) happen inside the lock.
-"""
-
 import asyncio
 from datetime import datetime
 
@@ -62,27 +45,9 @@ _StatusEvents = list[tuple[OrderStatus | None, OrderStatus, str, datetime]]
 _FillOutcome = tuple[OrderResult, _StatusEvents, list[TradeClosedEvent]]
 
 
+# Callers must not use one broker from several concurrent tasks. Subscriber callbacks
+# run outside self._lock so they may re-enter broker methods without deadlock.
 class PaperBrokerAdapter(IBrokerPort):
-    """Simulated broker for paper trading and backtesting.
-
-    Features:
-    - Configurable slippage simulation
-    - Fill delay simulation
-    - In-memory position tracking
-    - Order callback subscription (fill results)
-    - Order *event* (lifecycle) callback subscription — paper-broker only
-    - Optional SL/TP auto-fill: when an ``event_bus`` is supplied, the broker
-      subscribes to ``BarCompletedEvent`` on ``connect()`` and emits synthetic
-      exit fills when ``bar.high``/``bar.low`` crosses a tracked position's
-      ``sl_price`` / ``tp_price``. A level the bar opens past fills at the open
-      (gap); when both SL and TP are hit inside one bar, **SL fires first**
-      (deterministic worst-case contract).
-
-    Single-task assumption: callers must not invoke broker methods from
-    multiple concurrent tasks. Lock is held only for short state mutations;
-    callbacks fire after release.
-    """
-
     def __init__(
         self,
         initial_balance: float = 10_000.0,
@@ -154,11 +119,6 @@ class PaperBrokerAdapter(IBrokerPort):
     async def submit_order(
         self, order: OrderAggregate, *, deadline: datetime | None = None
     ) -> OrderResult:
-        """Fill a MARKET order at the current price; reject anything else.
-
-        Lock is held only for state mutation; ``OrderEvent`` and ``OrderResult``
-        callbacks fire after release so subscribers may re-enter the broker.
-        """
         if self._fill_delay > 0:
             await asyncio.sleep(self._fill_delay / 1000)
         broker_order_id = generate_id_str()
@@ -261,25 +221,20 @@ class PaperBrokerAdapter(IBrokerPort):
                 trades,
             )
 
+    # Nothing to cancel: a paper order is terminal when submit_order returns.
     async def cancel_order(self, broker_order_id: str) -> bool:
-        """Nothing to cancel: a paper order is terminal when ``submit_order`` returns."""
         return True
 
+    # Used on unload, when no one is left to manage the position. Opening a paper position
+    # moves no cash, so the balance stays as it is.
     def drop_positions(self, subscription_id: str) -> int:
-        """Forget a subscription's positions without a fill; return how many.
-
-        Opening a paper position moves no cash, so dropping one leaves the
-        balance as it is. Used when the subscription is unloaded: no one is
-        left to manage the position.
-        """
         keys = [k for k, p in self._positions.items() if p.subscription_id == subscription_id]
         for key in keys:
             del self._positions[key]
         return len(keys)
 
+    # Copies, because the mirror reduces its own row on an exit fill.
     def restore(self, positions: list[PositionAggregate], realized_net: float) -> None:
-        """Rebuild cash and open positions after a restart. Copies, because the mirror
-        reduces its own row on an exit fill."""
         self._positions.clear()
         entry_commissions = 0.0
         for row in positions:
@@ -305,31 +260,24 @@ class PaperBrokerAdapter(IBrokerPort):
             )
 
     def get_order_events(self, order_id: str) -> list[OrderEvent]:
-        """Return the full lifecycle event log for an order (copy)."""
         return list(self._order_events.get(order_id, []))
 
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
-        """Add order *fill / status-result* callback."""
         self._order_callbacks.append(callback)
 
     async def unsubscribe_order_updates(self) -> None:
-        """Clear all order callbacks."""
         self._order_callbacks.clear()
 
     async def subscribe_trades(self, callback: TradeCallback) -> None:
-        """Add round-trip trade-closure callback."""
         self._trade_callbacks.append(callback)
 
     async def unsubscribe_trades(self) -> None:
-        """Clear all trade callbacks."""
         self._trade_callbacks.clear()
 
     async def subscribe_order_event(self, callback: OrderEventCallback) -> None:
-        """Add order *lifecycle event* callback (paper broker only)."""
         self._event_callbacks.append(callback)
 
     async def unsubscribe_order_event(self) -> None:
-        """Clear all order event callbacks."""
         self._event_callbacks.clear()
 
     def set_current_price(self, symbol: str, price: float) -> None:
@@ -375,21 +323,12 @@ class PaperBrokerAdapter(IBrokerPort):
         # Price-unit notional on purpose: the shipped margin model, not contract value.
         return fill_price * order.quantity + commission <= self._balance
 
+    # Call under lock. Futures/margin model: opening moves no cash; balance moves by the
+    # realized-pnl delta on a reduce. reduce_quantity accumulates position.realized_pnl, so
+    # crediting the cumulative value would multi-count partial closes.
     def _execute_fill(
         self, order: OrderAggregate, fill_price: float, commission: float
     ) -> list[TradeClosedEvent]:
-        """Apply a fill under the futures/margin model. MUST be called under lock.
-
-        Opening or adding to a position does not move cash (no notional debit);
-        balance changes only by realized-pnl delta when a position is reduced or
-        closed. ``reduce_quantity`` accumulates into ``position.realized_pnl``, so
-        each reduce credits the delta since the prior call — crediting the
-        cumulative value would multi-count on partial closes.
-
-        ``commission`` is threaded as entry-side (open/add) or exit-side (reduce)
-        per the single fill's role, then the mutated position is drained and its
-        ``TradeClosedEvent`` closures returned for the caller to forward.
-        """
         position_key = f"{order.subscription_id}:{order.symbol}"
         order_id = str(order.id)
 
@@ -445,16 +384,11 @@ class PaperBrokerAdapter(IBrokerPort):
             multiplier=self._contract_spec.multiplier,
         )
 
+    # Call under lock. The single debit point for every fill path, so none can skip
+    # commission. Computed before the fill so it is threaded in as entry or exit cost.
     def _execute_fill_with_commission(
         self, order: OrderAggregate, fill_price: float
     ) -> tuple[float, list[TradeClosedEvent]]:
-        """Apply a fill then debit its commission. MUST be called under lock.
-
-        Single debit point for all four fill paths so no path can silently skip
-        commission. Commission computed BEFORE the fill so it can be threaded into
-        the position as entry/exit cost. Returns ``(commission, trades)`` so
-        callers stamp OrderResult and forward trade closures after the fill notify.
-        """
         commission = self._commission(fill_price, order.quantity)
         trades = self._execute_fill(order, fill_price, commission)
         self._balance -= commission
@@ -478,6 +412,7 @@ class PaperBrokerAdapter(IBrokerPort):
         )
         self._balance += position.realized_pnl - before
 
+    # when defaults to simulation time so backtest events carry the replay timestamp.
     async def _emit_event(
         self,
         order_id: str,
@@ -486,11 +421,6 @@ class PaperBrokerAdapter(IBrokerPort):
         reason: str,
         when: datetime | None = None,
     ) -> None:
-        """Append an OrderEvent to the per-order log and dispatch to subscribers.
-
-        ``when`` defaults to simulation time so persisted events carry the
-        bar's replay timestamp during backtests, not wall-clock.
-        """
         event = OrderEvent(
             timestamp=when or get_current_time(),
             from_status=from_status,
@@ -535,15 +465,11 @@ class PaperBrokerAdapter(IBrokerPort):
         if errors:
             raise errors[0]
 
+    # Only bars of the finest interval seen for the symbol act, and only on positions that
+    # existed when the bar was published: the broker subscribes last, so a position opened
+    # on the signal bar is checked from the next bar. A level the bar opens past fills at
+    # the open; when SL and TP both hit inside one bar, SL fills first (worst case).
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        """Fill SL/TP exits as the bar resolves.
-
-        Only bars of the finest interval seen for the symbol act. A bar acts
-        only on positions and orders that existed when it was published, so a
-        position a strategy opens on its signal bar is checked from the next
-        bar (strategy handlers run first: the broker subscribes LAST, see
-        ``connect``).
-        """
         secs = INTERVAL_SECONDS[event.interval]
         finest = min(secs, self._finest_interval_s.get(event.symbol, secs))
         self._finest_interval_s[event.symbol] = finest

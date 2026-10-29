@@ -1,6 +1,3 @@
-"""drain_trader on simulated time: release at a boundary once its bars are published and
-nothing is in flight, one retry at the next boundary, then a bounded timeout."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -20,9 +17,8 @@ T0 = datetime(2026, 10, 28, 10, 0, 20, tzinfo=UTC)
 B = datetime(2026, 10, 28, 10, 1, tzinfo=UTC)
 
 
+# Publishes every boundary's bars `delays.get(boundary, 0.6)` seconds after it.
 class _Bars:
-    """Publishes every boundary's bars ``delays.get(boundary, 0.6)`` seconds after it."""
-
     def __init__(self, delays: dict[datetime, float] | None = None) -> None:
         self._delays = delays or {}
 
@@ -37,9 +33,8 @@ class _Bars:
         return None
 
 
+# In flight until `busy_until` (None = always).
 class _Engine:
-    """In flight until ``busy_until`` (None = always)."""
-
     def __init__(self, busy_until: datetime | None = T0) -> None:
         self.trading_until: datetime | None = datetime.max.replace(tzinfo=UTC)
         self._busy_until = busy_until

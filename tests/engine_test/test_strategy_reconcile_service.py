@@ -1,14 +1,5 @@
-"""Unit tests for StrategyReconcileAppService — pure fakes, no DB/containers.
-
-The reconcile loop owns instance lifecycle (load missing, unload orphan) AND
-converges run-state: it diffs desired_state (Mongo) vs actual run-state (RAM),
-calls start/stop, then mirrors observed actual back on drift. Tests pin: the
-four-combo decision table, idempotency (no churn writes), per-sub error
-isolation, cancel-safety, instance-lifecycle specifics (load missing / unload
-orphan / anti-clobber against synthetic backtest ids and legacy 16-hex keys),
-and the load-bearing invariant that injected backtest strategies (synthetic
-id, no sub row) are never unloaded.
-"""
+# Load-bearing invariant: injected backtest strategies (synthetic id, no sub row) are never
+# unloaded.
 
 from __future__ import annotations
 
@@ -58,8 +49,6 @@ class _FakeStrategy:
 
 
 class _FakeStrategyService:
-    """Records start/stop/load/unload; mutates fake instances for idempotency."""
-
     def __init__(self) -> None:
         self._instances: dict[str, _FakeStrategy] = {}
         self.start_calls: list[str] = []
@@ -181,8 +170,6 @@ async def test_stable_stopped_is_idempotent_no_calls_no_writes() -> None:
 
 @pytest.mark.asyncio
 async def test_missing_instance_desired_running_loads_then_starts() -> None:
-    """Sub with valid template but no RAM instance: ensure-instance loads it,
-    then converge starts it — the control-plane now owns lifecycle."""
     svc = _FakeStrategyService()  # no instance loaded yet
     sub = _sub(desired="running", actual="stopped")
     sid = str(sub.id)
@@ -197,8 +184,6 @@ async def test_missing_instance_desired_running_loads_then_starts() -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_template_skips_load_no_start() -> None:
-    """Sub whose template is not in the registry is skipped (warn), not loaded,
-    so it never starts and drifts to stopped."""
     svc = _FakeStrategyService()
     sub = Subscription(
         id=generate_id(),
@@ -278,7 +263,6 @@ async def test_unknown_template_not_loaded() -> None:
 
 @pytest.mark.asyncio
 async def test_instance_with_live_sub_doc_not_unloaded() -> None:
-    """A RAM instance whose subscription doc still exists is never an orphan."""
     sub = _sub()
     svc = _FakeStrategyService()
     svc.load(str(sub.id), running=False)
@@ -290,14 +274,10 @@ async def test_instance_with_live_sub_doc_not_unloaded() -> None:
     assert svc.get_strategy(str(sub.id)) is not None
 
 
+# If the shape guard matched only the legacy 16-hex id, this unload would never fire and
+# every removed subscription would leak a running instance forever.
 @pytest.mark.asyncio
 async def test_unloads_orphan_instance_when_sub_deleted() -> None:
-    """A RAM instance keyed by a uuid7 sub id, but with no sub doc, is unloaded.
-
-    Locks the shape-guard against silent no-op: if the guard regex still
-    matched only the legacy 16-hex shape, this unload would never fire and
-    every removed subscription would leak a running instance forever.
-    """
     sub = _sub()
     svc = _FakeStrategyService()
     svc.load(str(sub.id), running=True)  # instance present...
@@ -311,7 +291,6 @@ async def test_unloads_orphan_instance_when_sub_deleted() -> None:
 
 @pytest.mark.asyncio
 async def test_load_then_converge_running_in_one_tick() -> None:
-    """A desired=running sub with no instance is loaded AND started in one tick."""
     svc = _FakeStrategyService()
     sub = _sub(desired="running", actual="stopped")
     recon, _sub_repo = _service([sub], svc)

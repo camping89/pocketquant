@@ -1,12 +1,4 @@
-"""Unit tests for Bar entity audit fields (updated_at, source).
-
-Covers:
-- to_mongo() does NOT serialize updated_at / source (repository is single writer).
-- from_mongo() parses updated_at + source when present.
-- from_mongo() handles legacy docs missing audit fields (both → None).
-- to_dict() includes updated_at + source for API surface.
-- SOURCE_* constants exist with expected string values.
-"""
+# to_mongo() does not serialize updated_at or source: the repository is their single writer.
 
 from __future__ import annotations
 

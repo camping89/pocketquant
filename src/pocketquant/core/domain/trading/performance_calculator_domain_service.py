@@ -17,44 +17,17 @@ RISK_FREE_RATE = 0.0
 
 
 class PerformanceCalculatorDomainService:
-    """Static methods for calculating backtest performance metrics.
-
-    All methods handle edge cases gracefully (empty data, division by zero).
-    Uses NumPy for efficient vectorized calculations.
-    """
-
     @staticmethod
     def total_return(initial_equity: float, final_equity: float) -> float:
-        """Calculate total return as percentage.
-
-        Returns:
-            Total return (e.g., 0.25 for 25% gain, -0.10 for 10% loss).
-        """
         if initial_equity <= 0:
             return 0.0
         return (final_equity - initial_equity) / initial_equity
 
+    # Wall-clock days per year on purpose, not a calendar's session count: 312 daily bars
+    # for Exness FX would stretch one real year into 1.17 and report a doubling as 81%.
+    # Sharpe and Sortino count return observations, so they do take periods_per_year.
     @staticmethod
     def cagr(initial_equity: float, final_equity: float, days: int) -> float:
-        """Calculate Compound Annual Growth Rate.
-
-        Deliberately calendar-time, not session-time, and deliberately not
-        parameterized by a trading calendar. ``days`` is wall-clock days, so the
-        divisor must be wall-clock days per year: substituting a session count
-        (312 daily bars for Exness FX) would stretch one real year into 1.17 and
-        report a doubling as 81% growth.
-
-        Sharpe and Sortino are the opposite case — they count return
-        observations, so they do take the calendar's periods per year.
-
-        Args:
-            initial_equity: Starting equity.
-            final_equity: Ending equity.
-            days: Number of calendar days in backtest period.
-
-        Returns:
-            CAGR as decimal (e.g., 0.15 for 15% annual growth).
-        """
         if initial_equity <= 0 or final_equity <= 0 or days <= 0:
             return 0.0
 
@@ -64,6 +37,8 @@ class PerformanceCalculatorDomainService:
 
         return (final_equity / initial_equity) ** (1 / years) - 1
 
+    # periods_per_year is keyword-only so it never collides with risk_free_rate. Flat bars
+    # are in the curve, so this measures whole-period capital efficiency, not active risk.
     @staticmethod
     def sharpe_ratio(
         equity_curve: np.ndarray,
@@ -71,28 +46,6 @@ class PerformanceCalculatorDomainService:
         periods_per_year: float,
         risk_free_rate: float = RISK_FREE_RATE,
     ) -> float:
-        """Calculate annualized Sharpe ratio from a per-bar equity curve.
-
-        Sharpe = (mean return - risk free rate) / volatility, annualized by the
-        number of bars per year for the backtest interval.
-
-        ``periods_per_year`` is **keyword-only** so it never positionally
-        collides with ``risk_free_rate``.
-
-        Caveat (per-bar definition): the equity curve carries one point per bar,
-        including flat bars with no open position. Those flat bars dilute the
-        return std, so this Sharpe measures whole-period **capital efficiency**,
-        not active-position risk. This is the industry-standard per-bar
-        definition and is comparable across strategies on the same interval.
-
-        Args:
-            equity_curve: Array of equity values, one per bar.
-            periods_per_year: Bars per year for the interval (Interval.periods_per_year).
-            risk_free_rate: Annual risk-free rate (default 0).
-
-        Returns:
-            Annualized Sharpe ratio.
-        """
         if len(equity_curve) < 2:
             return 0.0
 
@@ -126,21 +79,6 @@ class PerformanceCalculatorDomainService:
         periods_per_year: float,
         risk_free_rate: float = RISK_FREE_RATE,
     ) -> float:
-        """Calculate annualized Sortino ratio from a per-bar equity curve.
-
-        Sortino = (mean return - risk free rate) / downside volatility, annualized
-        by the number of bars per year for the backtest interval. Only penalizes
-        negative returns (downside deviation). ``periods_per_year`` is
-        keyword-only (see ``sharpe_ratio``).
-
-        Args:
-            equity_curve: Array of equity values, one per bar.
-            periods_per_year: Bars per year for the interval (Interval.periods_per_year).
-            risk_free_rate: Annual risk-free rate (default 0).
-
-        Returns:
-            Annualized Sortino ratio.
-        """
         if len(equity_curve) < 2:
             return 0.0
 
@@ -179,16 +117,6 @@ class PerformanceCalculatorDomainService:
 
     @staticmethod
     def max_drawdown(equity_curve: np.ndarray) -> float:
-        """Calculate maximum drawdown from equity curve.
-
-        Max drawdown is the largest peak-to-trough decline.
-
-        Args:
-            equity_curve: Array of equity values over time.
-
-        Returns:
-            Maximum drawdown as negative decimal (e.g., -0.20 for 20% drawdown).
-        """
         if len(equity_curve) < 2:
             return 0.0
 
@@ -200,14 +128,6 @@ class PerformanceCalculatorDomainService:
 
     @staticmethod
     def drawdown_series(equity_curve: np.ndarray) -> np.ndarray:
-        """Calculate drawdown at each point in equity curve.
-
-        Args:
-            equity_curve: Array of equity values over time.
-
-        Returns:
-            Array of drawdown values (negative decimals).
-        """
         if len(equity_curve) < 1:
             return np.array([])
 
@@ -217,41 +137,18 @@ class PerformanceCalculatorDomainService:
 
     @staticmethod
     def win_rate(winning_trades: int, total_trades: int) -> float:
-        """Calculate win rate.
-
-        Returns:
-            Win rate as decimal (e.g., 0.55 for 55% win rate).
-        """
         if total_trades == 0:
             return 0.0
         return winning_trades / total_trades
 
     @staticmethod
     def profit_factor(gross_profit: float, gross_loss: float) -> float:
-        """Calculate profit factor (gross profit / gross loss).
-
-        Args:
-            gross_profit: Sum of all winning trade P&L (positive).
-            gross_loss: Sum of all losing trade P&L (should be positive for calculation).
-
-        Returns:
-            Profit factor. Returns 0 if no losses, infinity capped at 100.
-        """
         if gross_loss <= 0:
             return 100.0 if gross_profit > 0 else 0.0
         return min(gross_profit / gross_loss, 100.0)
 
     @staticmethod
     def average_win_loss(pnl_list: list[float]) -> tuple[float, float, int, int]:
-        """Calculate average win and loss from P&L list.
-
-        Args:
-            pnl_list: List of individual trade P&L values.
-
-        Returns:
-            Tuple of (avg_win, avg_loss, winning_count, losing_count).
-            avg_loss is returned as negative.
-        """
         if not pnl_list:
             return 0.0, 0.0, 0, 0
 
@@ -263,6 +160,9 @@ class PerformanceCalculatorDomainService:
 
         return avg_win, avg_loss, len(wins), len(losses)
 
+    # equity_curve (realized) drives total_return/cagr/max_drawdown; returns_curve (per-bar
+    # mark-to-market) drives Sharpe/Sortino so they annualize on evenly sampled returns.
+    # periods_per_year None skips annualization (Sharpe/Sortino = 0).
     @staticmethod
     def build(
         closed_trades: list[Trade],
@@ -275,12 +175,6 @@ class PerformanceCalculatorDomainService:
         periods_per_year: float | None,
         returns_curve: list[EquityPoint] | None = None,
     ) -> PerformanceMetrics:
-        """Build metrics. ``equity_curve`` (realized, trade-keyed) drives
-        total_return/cagr/max_drawdown; ``returns_curve`` (per-bar mark-to-market,
-        when supplied) drives Sharpe/Sortino so they annualize on evenly-sampled
-        returns. ``periods_per_year`` of None (unknown interval) skips annualization
-        → Sharpe/Sortino = 0.
-        """
         if not closed_trades:
             return PerformanceMetrics.empty()
 

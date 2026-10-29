@@ -1,12 +1,3 @@
-"""Tests for no-progress tracking.
-
-Mocks SyncStatusRepository, BarRepository, SymbolRepository, Cache, and
-IDataProviderPort. Patches `fetch_with_retry` so service uses scripted
-provider responses without retry overhead.
-
-Each test asserts which sync_status_repo method was called (bump vs reset).
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -51,7 +42,6 @@ def _build_service(
     insert_count: int = 0,
     bump_returns: int = 1,
 ) -> tuple[SyncService, dict[str, AsyncMock]]:
-    """Wire a SyncService with mocks pre-configured for a given scenario."""
     provider = AsyncMock()
     cache = AsyncMock()
     cache.delete_pattern = AsyncMock()
@@ -118,7 +108,6 @@ def _command() -> SyncSymbolCommand:
 
 @pytest.mark.asyncio
 async def test_empty_fetch_with_existing_data_bumps_streak() -> None:
-    """Provider returned [] but DB has bars → bump only, no reset."""
     svc, mocks = _build_service(
         fetch_records=[],
         existing_count=10,
@@ -136,7 +125,6 @@ async def test_empty_fetch_with_existing_data_bumps_streak() -> None:
 
 @pytest.mark.asyncio
 async def test_all_misaligned_bumps_streak() -> None:
-    """Provider returned only misaligned bar → all dropped → bump only."""
     svc, mocks = _build_service(
         fetch_records=[_misaligned()],
         existing_count=10,
@@ -154,7 +142,6 @@ async def test_all_misaligned_bumps_streak() -> None:
 
 @pytest.mark.asyncio
 async def test_all_existing_filtered_bumps_streak() -> None:
-    """Aligned bars but all already exist → insert_count=0 → bump."""
     svc, mocks = _build_service(
         fetch_records=[_aligned()],
         existing_count=10,
@@ -172,7 +159,6 @@ async def test_all_existing_filtered_bumps_streak() -> None:
 
 @pytest.mark.asyncio
 async def test_successful_insert_resets_streak() -> None:
-    """inserted_count > 0 → reset only, no bump."""
     svc, mocks = _build_service(
         fetch_records=[_aligned()],
         existing_count=10,
@@ -190,7 +176,6 @@ async def test_successful_insert_resets_streak() -> None:
 
 @pytest.mark.asyncio
 async def test_first_sync_no_data_fails_no_bump_or_reset() -> None:
-    """fetched=0 AND no existing bars → _fail; no bump, no reset."""
     svc, mocks = _build_service(
         fetch_records=[],
         existing_count=0,

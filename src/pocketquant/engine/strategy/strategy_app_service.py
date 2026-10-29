@@ -54,14 +54,6 @@ def _direction_of(position: PositionAggregate | None) -> Direction | None:
 
 
 class StrategyAppService:
-    """Engine for managing and executing trading strategies.
-
-    Subscribes to market events and dispatches to registered strategies.
-    Coordinates signal processing through risk checks and order submission.
-    Warm-up reads the bar repository, the successor check the calendar, the paper
-    restore the trade repository; the backtest sandbox passes no-op versions.
-    """
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -113,12 +105,9 @@ class StrategyAppService:
     def is_running(self) -> bool:
         return self._running
 
+    # A broker subscribes to BarCompletedEvent when it connects, which is after this,
+    # so strategies see a bar before the broker checks SL/TP.
     async def start(self) -> None:
-        """Subscribe handlers to the event bus and mark running.
-
-        A broker subscribes to ``BarCompletedEvent`` when it connects, which is
-        after this, so strategies see a bar before the broker checks SL/TP.
-        """
         if self._running:
             return
 
@@ -129,9 +118,8 @@ class StrategyAppService:
 
         logger.info("strategy_engine_started")
 
+    # timeout_s is what is left of the caller's shutdown grace.
     async def stop(self, timeout_s: float) -> None:
-        """Waits at most ``timeout_s`` for signal tasks: the caller passes what is left of its
-        shutdown grace."""
         if not self._running:
             return
 
@@ -152,9 +140,8 @@ class StrategyAppService:
         self._running = False
         logger.info("strategy_engine_stopped")
 
+    # Runs once per process, before bars flow.
     async def take_over(self) -> None:
-        """Load what a trading process owns and connect its brokers. Runs once per process,
-        before bars flow."""
         async with self._lock:
             await self._order_app_service.load_pending_orders()
             await self._position_app_service.load_open_positions()
@@ -203,15 +190,6 @@ class StrategyAppService:
         config: StrategyConfig,
         strategy_class: type[IStrategyService] | None = None,
     ) -> str:
-        """Load a strategy from configuration.
-
-        Args:
-            config: Strategy configuration
-            strategy_class: Optional custom strategy class
-
-        Returns:
-            Strategy ID
-        """
         async with self._lock:
             if config.id in self._strategies:
                 raise ValueError(f"Strategy already loaded: {config.id}")
@@ -236,12 +214,9 @@ class StrategyAppService:
 
             return config.id
 
+    # Warm-up replays up to 500 stored bars; their signals are rejected, never sent.
+    # A standby engine does not connect the broker.
     async def start_strategy(self, strategy_id: str) -> None:
-        """Start a strategy warmed up from up to 500 stored bars, with its stored direction.
-
-        Signals of replayed bars are rejected, never sent. A standby engine does not
-        connect the broker.
-        """
         async with self._lock:
             if strategy_id not in self._strategies:
                 raise ValueError(f"Strategy not found: {strategy_id}")
@@ -310,7 +285,6 @@ class StrategyAppService:
     async def _closed_bars(
         self, symbol: str, interval: Interval, step: timedelta, now: datetime
     ) -> list[Bar]:
-        """Stored bars that closed by ``now``, oldest first."""
         found = await self._bar_repository.find(symbol, interval, end_date=now, limit=_WARMUP_BARS)
         return [b for b in reversed(found) if b.datetime is not None and b.datetime + step <= now]
 
@@ -325,14 +299,11 @@ class StrategyAppService:
 
             logger.info("strategy_stopped", strategy_id=strategy_id)
 
+    # A paper broker simulates the position, so the subscription's position is dropped
+    # and a broker with no other holder is disconnected; otherwise it keeps checking
+    # SL/TP for no one. A venue keeps its position under its own SL/TP, so that one is
+    # only logged.
     async def unload_strategy(self, strategy_id: str) -> None:
-        """Stop and forget a strategy, and retire what only it held.
-
-        A paper broker simulates the position, so the subscription's position is
-        dropped and a broker with no other holder is disconnected; otherwise it
-        keeps checking SL/TP for no one. A venue keeps its position under its own
-        SL/TP, so that one is only logged.
-        """
         await self.stop_strategy(strategy_id)
 
         async with self._lock:
@@ -356,6 +327,10 @@ class StrategyAppService:
                         broker=broker.name,
                     )
 
+    # Registration, broker connection and on_start() must share one critical section:
+    # start_strategy also takes _lock, so a split would race unload_strategy and could
+    # leave a strategy never started or a broker never connected (silent zero-trade
+    # backtests).
     async def inject_prepared_strategy(
         self,
         sid: str,
@@ -363,15 +338,6 @@ class StrategyAppService:
         broker: IBrokerPort,
         config: StrategyConfig,
     ) -> None:
-        """Register an externally-prepared strategy+broker pair under ``sid``.
-
-        Backtest callers build their own PaperBrokerAdapter and strategy instance (to
-        bypass the broker-factory lookup) and inject them directly. Registration,
-        broker connection, and ``on_start()`` MUST all happen inside the same
-        critical section: ``start_strategy`` also takes ``_lock``, so a lock-split
-        would race ``unload_strategy`` and could leave a strategy registered but
-        never started, or a broker never connected (silent zero-trade backtests).
-        """
         async with self._lock:
             self._strategies[sid] = strategy
             self._brokers[sid] = broker
@@ -381,34 +347,20 @@ class StrategyAppService:
             await strategy.on_start()
 
     def get_config(self, sid: str) -> StrategyConfig | None:
-        """Return the in-memory StrategyConfig registered under ``sid`` (or None).
-
-        ``sid`` is the registration key — a live ``strategy_code`` for the
-        subscription-backtest read path, or a synthetic per-job id for injected
-        backtests. Caller picks the keyspace.
-        """
         return self._configs.get(sid)
 
     def get_strategy(self, strategy_id: str) -> IStrategyService | None:
         return self._strategies.get(strategy_id)
 
+    # Keys are subscription ids in the live engine and strategy codes in a backtest
+    # sandbox; an engine only ever holds one kind.
     def loaded_strategy_ids(self) -> list[str]:
-        """Return all currently-loaded instance keys (snapshot, lock-free read).
-
-        Keys are subscription ids in the live engine and strategy codes in a
-        backtest sandbox; each engine only ever holds one kind.
-        """
         return list(self._strategies.keys())
 
+    # An entry on a stale, gapped or non-successor live bar, or while the last entry is
+    # still in flight, is skipped; the strategy still sees the bar. A venue entry runs
+    # as a task so one slow venue call never holds the bar; a paper entry fills inline.
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
-        """Feed the bar to each matching strategy and send its signal unless a guard skips it.
-
-        A bar already seen is ignored. An entry on a stale, gapped or non-successor live
-        bar, or while the subscription's last entry is still in flight, is skipped; the
-        strategy still sees the bar, and exits (paper SL/TP) run in the broker's own
-        handler. A venue (async-fill) entry runs as a task so one slow venue call never
-        holds the bar; a paper entry fills inline.
-        """
         published_at = get_current_time()
         self._running_bar_handlers += 1
         try:
@@ -484,18 +436,17 @@ class StrategyAppService:
         if self._signal_tasks.get(strategy_id) is task:
             del self._signal_tasks[strategy_id]
 
+    # The trader hands over only at 0.
     def inflight_count(self) -> int:
-        """Venue signal tasks and bar handlers still running plus orders the brokers have
-        not settled; the trader hands over at 0."""
         return (
             sum(not t.done() for t in self._signal_tasks.values())
             + self._running_bar_handlers
             + sum(b.inflight_count for b in set(self._brokers.values()))
         )
 
+    # Called on a lost lease. A task already at the broker is stopped by the order
+    # deadline check there.
     def cancel_pending_signals(self) -> int:
-        """A lost lease calls this: tasks that have not reached the broker stop now; a task
-        at the broker is stopped by the order deadline check there."""
         self._discard_reason = "lease"
         cancelled = 0
         for strategy_id, task in self._signal_tasks.items():
@@ -506,15 +457,10 @@ class StrategyAppService:
             cancelled += 1
         return cancelled
 
+    # event.subscription_id equals the strategy's registration key (Signal ->
+    # Order -> OrderFilledEvent). Entry, synthetic SL/TP exit and live broker fills
+    # all flow through this one handler.
     async def _on_order_filled(self, event: OrderFilledEvent) -> None:
-        """Route a fill to its owning strategy by subscription_id.
-
-        ``event.subscription_id`` equals the strategy's registration key
-        (Signal.subscription_id = strategy.id propagates through Order →
-        OrderFilledEvent). The strategy uses the fill's ``side`` to reset its
-        open-direction on a round-trip close. Entry, synthetic SL/TP exit, and
-        live broker fills all flow through this one handler.
-        """
         strategy = self._strategies.get(event.subscription_id)
         if strategy is None or not strategy.is_running:
             return
@@ -528,7 +474,6 @@ class StrategyAppService:
             )
 
     async def _on_order_cancelled(self, event: OrderCancelledEvent) -> None:
-        """Tell the owning strategy that a broker cancelled its submitted order."""
         strategy = self._strategies.get(event.subscription_id)
         if strategy is None or not strategy.is_running:
             return
@@ -545,7 +490,6 @@ class StrategyAppService:
             )
 
     def _find_strategies(self, symbol: str, interval: str) -> list[IStrategyService]:
-        """Find running strategies on this composite symbol and interval."""
         matches = []
         for strategy in self._strategies.values():
             if not strategy.is_running:
@@ -557,6 +501,7 @@ class StrategyAppService:
             matches.append(strategy)
         return matches
 
+    # No entry leaves while trading_until is None or past.
     async def _process_signal(
         self,
         strategy: IStrategyService,
@@ -565,7 +510,6 @@ class StrategyAppService:
         signal_at: datetime,
         published_at: datetime,
     ) -> None:
-        """Size and send one entry; no entry leaves while ``trading_until`` is None or past."""
         try:
             if self.trading_until is None:
                 reason = self._discard_reason
@@ -706,13 +650,9 @@ class StrategyAppService:
             tp_price=signal.take_profit_price,
         )
 
+    # Backtests bypass this (their collector is wired to their own broker), so a
+    # backtest trade never reaches the live collector and is never double-counted.
     async def _forward_trade_to_bus(self, event: TradeClosedEvent) -> None:
-        """Republish a broker trade-closure onto the bus for the live collector.
-
-        Backtest bypasses this — it wires the collector directly onto its own
-        broker via ``inject_prepared_strategy`` — so the two trade channels never
-        cross and a backtest trade is never double-counted.
-        """
         await self._event_bus.publish(event)
 
     async def _get_or_create_broker(
@@ -740,7 +680,5 @@ class StrategyAppService:
 
 
 class _DefaultStrategy(IStrategyService):
-    """Default pass-through strategy that never generates signals."""
-
     async def on_bar_completed(self, bar: dict) -> Signal | None:
         return None

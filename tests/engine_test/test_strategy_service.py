@@ -1,16 +1,3 @@
-"""Pin StrategyCommandService + StrategyQueryService behavior.
-
-Covers the same scenarios as the old handlers so the net behavior is preserved:
-  - start/stop write desired_state declaratively
-  - add_symbol: fail-fast 404 for untracked symbol or unknown template
-  - add_symbol: persists desired_state="stopped", no auto-start
-  - remove_symbol: deletes the subscription (forward-testing only, no backtest state)
-  - delete_strategy: cascade-deletes all subs + ad-hoc backtest runs
-  - get_all / get_one return from STRATEGY_REGISTRY
-  - list_symbols: maps subscriptions + derives is_running (no backtest join)
-  - get_positions / get_trades: map repo entities to FE shapes
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

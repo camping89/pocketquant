@@ -1,5 +1,3 @@
-"""Integration tests for TrackedSymbolRepository — upsert idempotency, uuid7 _id, dedup."""
-
 from __future__ import annotations
 
 import pytest

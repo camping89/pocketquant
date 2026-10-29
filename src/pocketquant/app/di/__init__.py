@@ -1,14 +1,3 @@
-"""Dishka DI: three providers (infrastructure, adapters, services).
-
-Adding a new service:
-  1. Add a @provide method or a `provide(...)` line in the owning provider
-  2. Dishka auto-resolves constructor deps via type hints
-  3. Use generator factories (yield) for services needing cleanup
-
-STRICT_VALIDATION rejects a type registered twice, so every type has exactly
-one provider.
-"""
-
 from dishka import STRICT_VALIDATION, AsyncContainer, make_async_container
 
 from pocketquant.app.di.adapters import AdaptersProvider
@@ -24,6 +13,8 @@ __all__ = [
 ]
 
 
+# STRICT_VALIDATION rejects a type registered twice, so every type has exactly one
+# provider.
 def create_container(settings: Settings | None = None) -> AsyncContainer:
     return make_async_container(
         InfrastructureProvider(),

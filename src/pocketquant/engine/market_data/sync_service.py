@@ -53,7 +53,6 @@ class SyncService:
         self._calendar_factory = calendar_factory
 
     async def sync_one(self, request: SyncSymbolCommand) -> SyncResponse:
-        """Sync OHLCV bars for a single composite symbol."""
         symbol = request.symbol.upper()
         interval = request.interval
 
@@ -142,7 +141,6 @@ class SyncService:
             return await self._fail(symbol, interval, str(e))
 
     async def sync_bulk(self, request: BulkSyncCommand) -> list[SyncResponse]:
-        """Sync multiple composite symbols sequentially."""
         results: list[SyncResponse] = []
         for symbol in request.symbols:
             sync_cmd = SyncSymbolCommand(

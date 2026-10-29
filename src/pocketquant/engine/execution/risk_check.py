@@ -9,8 +9,9 @@ logger = structlog.get_logger(__name__)
 
 
 class RiskCheckHandler:
-    """Validates an entry signal against the balance and the exposure cap."""
-
+    # Only LONG and SHORT open an order: the order path maps every other direction to
+    # SELL, so EXIT and FLAT are rejected here. An entry against an open position is
+    # rejected because exits are SL/TP only.
     def validate(
         self,
         signal: Signal,
@@ -18,12 +19,6 @@ class RiskCheckHandler:
         position: PositionAggregate | None,
         config: RiskConfig | None = None,
     ) -> tuple[bool, str]:
-        """Return (is_valid, rejection_reason).
-
-        Only LONG and SHORT open an order: the order path maps every other
-        direction to SELL, so EXIT and FLAT are rejected here. An entry against
-        an open position is rejected: exits are SL/TP only.
-        """
         if account.available_balance <= 0:
             return False, "Insufficient balance"
 

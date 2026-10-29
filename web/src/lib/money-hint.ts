@@ -20,7 +20,7 @@ const REAL_TITLES: Record<MoneyAction, string> = {
 
 const PAPER_TITLE = 'Paper only, no real orders'
 
-/** Pause and resume act on the Exness account, so they are real money whatever the broker. */
+// Pause and resume act on the Exness account, so they are real money whatever the broker.
 export function moneyHint(broker: Broker, action: MoneyAction): MoneyHint {
   const real = broker === 'exness' || action === 'pause' || action === 'resume'
   return real

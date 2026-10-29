@@ -1,7 +1,3 @@
-"""Unit tests for PaperBrokerAdapter MARKET/LIMIT entry fills and SL/TP auto-fill on
-BarCompletedEvent.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -82,7 +78,6 @@ async def _broker(
 
 
 async def test_no_event_bus_no_auto_fill() -> None:
-    """PaperBrokerAdapter(event_bus=None) skips bar subscription; positions never auto-close."""
     b, _ = await _broker(with_bus=False)
     await b.submit_order(_order(OrderSide.BUY, sl=98.0, tp=104.0))
     # Direct handler call — should still close because logic is independent of subscription.
@@ -118,8 +113,8 @@ async def test_long_tp_fills_when_bar_high_above_tp() -> None:
     assert callbacks[-1].filled_price == pytest.approx(104.0)
 
 
+# Worst-case contract: SL wins when one bar covers both SL and TP.
 async def test_long_both_hit_in_same_bar_sl_wins() -> None:
-    """SL takes precedence when a single bar covers both SL and TP (worst-case contract)."""
     b, bus = await _broker()
     assert bus is not None
     callbacks: list = []
@@ -183,7 +178,6 @@ async def test_order_with_no_sl_tp_skipped() -> None:
 
 
 async def test_slippage_applied_to_synthetic_exit() -> None:
-    """With non-zero slippage, SELL exit price = trigger * (1 - slippage)."""
     b, bus = await _broker(slippage=0.001)
     assert bus is not None
     callbacks: list = []
@@ -205,12 +199,9 @@ async def test_disconnect_unsubscribes() -> None:
     assert len(positions) == 1  # still open
 
 
+# The strategy's on_order_filled reset depends on this exit event reaching the bus: entry
+# fills publish via order_app_service, synthetic exits do not.
 async def test_synthetic_exit_publishes_order_filled_event() -> None:
-    """SL/TP synthetic exit publishes OrderFilledEvent carrying sub_id + side.
-
-    The strategy's on_order_filled reset depends on this exit event reaching the
-    bus (entry fills publish via order_app_service; synthetic exits do not).
-    """
     b, bus = await _broker()
     assert bus is not None
     events: list[OrderFilledEvent] = []
@@ -225,13 +216,10 @@ async def test_synthetic_exit_publishes_order_filled_event() -> None:
     assert ev.filled_price == pytest.approx(98.0)
 
 
+# A closed position lingers in the broker's dict under its key; without the closed-position
+# guard the re-entry BUY raises 'Cannot add to closed position' and the multi-trade loop
+# breaks.
 async def test_reentry_after_close_opens_fresh_position() -> None:
-    """A re-entry fill after the position closed must open fresh, not raise.
-
-    A closed position lingers in the broker's dict under its key; without the
-    closed-position guard, the re-entry BUY raises 'Cannot add to closed
-    position' and the round-trip → re-entry loop (multi-trade) breaks.
-    """
     b, bus = await _broker()
     assert bus is not None
     # Open long, then SL closes it.
@@ -248,7 +236,6 @@ async def test_reentry_after_close_opens_fresh_position() -> None:
 
 
 async def test_short_reentry_after_close_opens_fresh_position() -> None:
-    """Symmetric to the long case — a SHORT re-entry after close opens fresh."""
     b, bus = await _broker()
     assert bus is not None
     await b.submit_order(_order(OrderSide.SELL, sl=102.0, tp=96.0))
@@ -319,8 +306,8 @@ async def _fills(b: PaperBrokerAdapter) -> list:
     return fills
 
 
+# A 4h bar's range predates an entry made inside it, so only the 1m stream exits.
 async def test_coarser_bar_does_not_close_but_next_1m_does() -> None:
-    """A 4h bar's range predates an entry made inside it, so only the 1m stream exits."""
     b, bus = await _broker()
     assert bus is not None
     fills = await _fills(b)
@@ -335,8 +322,8 @@ async def test_coarser_bar_does_not_close_but_next_1m_does() -> None:
     assert fills[-1].filled_price == pytest.approx(98.0)
 
 
+# A symbol that only gets 15m bars still exits while another symbol streams 1m.
 async def test_finest_interval_is_per_symbol() -> None:
-    """A symbol that only gets 15m bars still exits while another symbol streams 1m."""
     b, bus = await _broker()
     assert bus is not None
     other = "ETHUSDT:BINANCE"
@@ -356,8 +343,8 @@ async def test_finest_interval_is_per_symbol() -> None:
     assert await b.get_positions() == []
 
 
+# The bar that triggered an entry predates it; the next bar checks the position.
 async def test_signal_bar_does_not_close_entry_made_by_its_handler() -> None:
-    """The bar that triggered an entry predates it; the next bar checks the position."""
     b, bus = await _broker()
     assert bus is not None
     entered: list[bool] = []
@@ -397,8 +384,8 @@ async def test_long_tp_gap_fills_at_open() -> None:
     assert fills[-1].filled_price == pytest.approx(106.0)
 
 
+# The open is the first trade, so a TP it already passed fills before a later SL touch.
 async def test_open_past_tp_beats_intrabar_sl() -> None:
-    """The open is the first trade; a TP it already passed fills before a later SL touch."""
     b, bus = await _broker()
     assert bus is not None
     fills = await _fills(b)
@@ -418,8 +405,8 @@ async def test_long_sl_inside_range_fills_at_level() -> None:
     assert fills[-1].filled_price == pytest.approx(98.0)
 
 
+# ES SHORT at the 2026-10-25 CME reopen: the bar opened at 7690, past SL 7680.92.
 async def test_short_sl_reopen_gap_matches_prod() -> None:
-    """ES SHORT at the 2026-10-25 CME reopen: the bar opened at 7690, past SL 7680.92."""
     b, bus = await _broker(slippage=0.00005)
     assert bus is not None
     fills = await _fills(b)
@@ -429,7 +416,6 @@ async def test_short_sl_reopen_gap_matches_prod() -> None:
 
 
 async def test_a_limit_order_is_rejected() -> None:
-    """Paper fills market orders only; any other type is rejected at submit."""
     b, _ = await _broker()
 
     result = await b.submit_order(_order(OrderSide.BUY, OrderType.LIMIT, price=90.0))

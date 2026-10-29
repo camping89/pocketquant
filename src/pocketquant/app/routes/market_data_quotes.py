@@ -1,5 +1,3 @@
-"""Quotes routes — latest quote lookup, current bar, and SSE stream."""
-
 from typing import Any
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
@@ -55,7 +53,6 @@ async def get_current_bar(
 
 
 def _make_payload(quote: dict[str, Any]) -> dict[str, Any]:
-    """Build SSE payload from Redis quote:latest dict (written by QuoteAppService)."""
     return {
         "symbol": quote.get("symbol"),
         "last_price": quote.get("last_price"),
@@ -73,11 +70,6 @@ async def stream_quote(
     symbol: str,
     cache: FromDishka[Cache],
 ) -> StreamingResponse:
-    """SSE stream — polls Redis quote:latest every 500ms, emits on last_price or volume change.
-
-    ``{symbol}`` path param is URL-encoded composite (e.g. ``BTCUSDT%3ABINANCE``).
-    Validates composite format (400 on mismatch).
-    """
     symbol = validate_composite_symbol(symbol)
     cache_key = CACHE_KEY_QUOTE_LATEST.format(symbol=symbol)
     return poll_stream(

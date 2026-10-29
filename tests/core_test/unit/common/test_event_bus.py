@@ -1,5 +1,3 @@
-"""Tests for EventBus."""
-
 from dataclasses import dataclass
 
 import pytest
@@ -10,14 +8,11 @@ from pocketquant.core.domain.shared.events import DomainEvent
 
 @dataclass(frozen=True, eq=False)
 class TestEvent(DomainEvent):
-    """Test domain event."""
-
     data: str = ""
 
 
 @pytest.mark.asyncio
 async def test_event_bus_delivers_to_subscribers():
-    """Test event bus delivers events to all subscribers."""
     bus = EventBus()
     received = []
 
@@ -35,7 +30,6 @@ async def test_event_bus_delivers_to_subscribers():
 
 @pytest.mark.asyncio
 async def test_event_bus_delivers_to_multiple_subscribers():
-    """Test event bus delivers to all registered subscribers."""
     bus = EventBus()
     received1 = []
     received2 = []
@@ -58,7 +52,6 @@ async def test_event_bus_delivers_to_multiple_subscribers():
 
 @pytest.mark.asyncio
 async def test_raising_handler_does_not_stop_later_handlers():
-    """Every handler runs; the first error is re-raised afterwards."""
     bus = EventBus()
     received = []
 
@@ -76,7 +69,6 @@ async def test_raising_handler_does_not_stop_later_handlers():
 
 @pytest.mark.asyncio
 async def test_event_bus_unsubscribe():
-    """An unsubscribed handler no longer receives events."""
     bus = EventBus()
     received = []
     bus.subscribe(TestEvent, received.append)

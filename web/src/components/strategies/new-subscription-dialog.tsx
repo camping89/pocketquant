@@ -1,7 +1,3 @@
-/**
- * Modal dialog for creating a new strategy subscription.
- * Symbol selector + interval picker + strategy template selector + submit.
- */
 import { useMemo, useState, type FormEvent } from 'react'
 import { useStrategiesList } from '../../hooks/use-strategies'
 import { useCreateSubscription } from '../../hooks/use-strategy-mutations'

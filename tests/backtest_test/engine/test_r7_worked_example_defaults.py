@@ -1,11 +1,5 @@
-"""R7 worked-example verify — design §6 on the real shared sim engine.
-
-Drives ``PaperBrokerAdapter`` directly (same engine backing backtest + paper) with
-the R7 defaults: initial_balance and currency come from the adapter defaults
-(10 000 / USD) so the test also pins those; commission bps=4 and slippage 0.001 are
-the §6 scenario values. Asserts the exact §6 arithmetic plus the structural
-invariants (per-fill commission formula, net = gross − Σ fee, balance identity).
-"""
+# Drives PaperBrokerAdapter directly, the engine behind both backtest and paper. Balance and
+# currency come from the adapter defaults, so the test also pins them.
 
 from __future__ import annotations
 
