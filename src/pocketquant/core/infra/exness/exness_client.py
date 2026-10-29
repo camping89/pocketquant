@@ -19,12 +19,14 @@ import re
 import time
 import urllib.parse
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.exness.exness_signer import (
     ServerClock,
@@ -237,12 +239,14 @@ class ExnessClient:
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
         idempotency_key: str = "",
+        deadline: datetime | None = None,
     ) -> dict[str, Any]:
-        """Send operation ``op`` and return its JSON body.
+        """Send operation ``op`` and return its JSON body; never send it at or after ``deadline``.
 
         Raises:
             ExnessApiError: not configured, live trading off for an order call,
-                transport failure, exhausted 429 retries, or any non-2xx answer.
+                deadline passed, transport failure, exhausted 429 retries, or any non-2xx
+                answer.
         """
         if not self.is_configured:
             raise ExnessApiError(0, "NOT_CONFIGURED", "exness settings missing or invalid")
@@ -257,7 +261,9 @@ class ExnessClient:
         target = f"{path}?{urllib.parse.urlencode(params)}" if params else path
         body = b"" if json_body is None else json.dumps(json_body, separators=(",", ":")).encode()
         try:
-            response = await self._send_paced(op, method, base + target, body, idempotency_key)
+            response = await self._send_paced(
+                op, method, base + target, body, idempotency_key, deadline
+            )
         except ExnessApiError as e:
             if e.code == "TRANSPORT":
                 self._access_point = None
@@ -277,12 +283,15 @@ class ExnessClient:
         url: str,
         body: bytes,
         idempotency_key: str,
+        deadline: datetime | None,
     ) -> httpx.Response:
         pacer = await self._pacer_for(op)
         attempt = 0
         while True:
             await pacer.wait()
-            response = await self._send(method, url, body, idempotency_key)
+            if deadline is not None and get_current_time() >= deadline:
+                raise ExnessApiError(0, "ORDER_DEADLINE", f"{op} deadline passed before send")
+            response = await self._send(method, url, body, idempotency_key, deadline)
             if response.status_code != 429:
                 return response
             # The published limits are cluster-wide, so a 429 can arrive under them.
@@ -296,9 +305,12 @@ class ExnessClient:
             await asyncio.sleep(delay)
 
     async def _send(
-        self, method: str, url: str, body: bytes, idempotency_key: str
+        self, method: str, url: str, body: bytes, idempotency_key: str, deadline: datetime | None
     ) -> httpx.Response:
-        """One signed request; transport failures retried with the same idempotency key."""
+        """One signed request.
+
+        Transport failures retried with the same idempotency key, never after the deadline.
+        """
         headers = {"Content-Type": "application/json"} if body else {}
         for attempt in range(_TRANSPORT_ATTEMPTS):
             request = self._http.build_request(method, url, content=body or None, headers=headers)
@@ -311,6 +323,8 @@ class ExnessClient:
                 if attempt == _TRANSPORT_ATTEMPTS - 1:
                     raise ExnessApiError(0, "TRANSPORT", type(exc).__name__) from exc
                 await asyncio.sleep(2**attempt)
+                if deadline is not None and get_current_time() >= deadline:
+                    raise ExnessApiError(0, "TRANSPORT", type(exc).__name__) from exc
                 continue
             if date := response.headers.get("date"):
                 self._clock.update_from_date_header(date)

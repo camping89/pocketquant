@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
+import structlog
+
+from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.domain.order import OrderStatus
+from pocketquant.core.infra.brokers.exness import exness_broker_adapter as adapter_module
 from pocketquant.core.infra.exness.exness_client import ExnessApiError
 from tests.core_test.infra.brokers.exness.test_exness_broker_adapter import (
     _deal,
@@ -159,3 +165,49 @@ async def test_a_close_during_the_deals_read_keeps_the_cache_stale() -> None:
     await h.broker._refresh_caches()
 
     assert h.broker._realized is None
+
+
+# ── deadline ────────────────────────────────────────────────────────────────
+
+T = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
+
+
+async def test_an_order_whose_deadline_passes_inside_the_open_lock_is_not_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
+    monkeypatch.setattr(adapter_module, "logger", structlog.get_logger("test.exness_open_path"))
+    h = await _Harness().start()
+    original = h.broker._loss_cap_reason
+
+    async def late_check() -> str | None:
+        set_simulation_time(T + timedelta(seconds=2))
+        return await original()
+
+    h.broker._loss_cap_reason = late_check  # type: ignore[method-assign]
+    try:
+        set_simulation_time(T)
+        with structlog.testing.capture_logs() as logs:
+            result = await h.broker.submit_order(_order(), deadline=T + timedelta(seconds=1))
+    finally:
+        clear_simulation_time()
+
+    assert result.status == OrderStatus.REJECTED
+    assert result.error_message == "order deadline passed"
+    assert h.client.ops("openPosition") == []
+    assert h.broker._inflight == {}
+    rejected = [e for e in logs if e["event"] == "exness.order_rejected_presubmit"]
+    assert len(rejected) == 1
+    assert rejected[0]["reason"] == "deadline"
+
+
+async def test_an_order_inside_its_deadline_is_sent() -> None:
+    h = await _Harness().start()
+    try:
+        set_simulation_time(T)
+        result = await h.broker.submit_order(_order(), deadline=T + timedelta(seconds=60))
+    finally:
+        clear_simulation_time()
+
+    assert result.status == OrderStatus.SUBMITTED
+    assert len(h.client.ops("openPosition")) == 1

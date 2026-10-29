@@ -70,7 +70,9 @@ class _FakeBroker:
     async def normalize_quantity(self, symbol: str, quantity: float) -> float | None:
         return self._normalized
 
-    async def submit_order(self, order: OrderAggregate) -> OrderResult:
+    async def submit_order(
+        self, order: OrderAggregate, *, deadline: datetime | None = None
+    ) -> OrderResult:
         self.submitted.append(order)
         return OrderResult(
             order_id=str(order.id),

@@ -151,7 +151,9 @@ class PaperBrokerAdapter(IBrokerPort):
             self._event_bus.unsubscribe(BarCompletedEvent, self._on_bar_completed)
             self._bar_subscribed = False
 
-    async def submit_order(self, order: OrderAggregate) -> OrderResult:
+    async def submit_order(
+        self, order: OrderAggregate, *, deadline: datetime | None = None
+    ) -> OrderResult:
         """Fill a MARKET order at the current price; reject anything else.
 
         Lock is held only for state mutation; ``OrderEvent`` and ``OrderResult``

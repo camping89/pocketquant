@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
 from pocketquant.core.domain.order import OrderAggregate
@@ -41,11 +42,15 @@ class IBrokerPort(ABC):
         return quantity
 
     @abstractmethod
-    async def submit_order(self, order: OrderAggregate) -> OrderResult:
+    async def submit_order(
+        self, order: OrderAggregate, *, deadline: datetime | None = None
+    ) -> OrderResult:
         """Submit order to broker.
 
         Args:
             order: Order aggregate to submit
+            deadline: the trader's trading_until; the order is not sent at or after it.
+                None = no deadline (backtests, direct calls).
 
         Returns:
             OrderResult with broker order ID and status

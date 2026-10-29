@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -18,6 +19,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import SecretStr
 
+from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.exness import exness_client
 from pocketquant.core.infra.exness.exness_client import (
@@ -304,6 +306,58 @@ async def test_a_transport_error_is_retried_with_the_same_idempotency_key(
     assert second.headers["EXN-IDEMPOTENCY-KEY"] == "order-00001"
     assert _decoded_data(second)["body_hash"] == body_hash(second.content)
     assert second.headers["Content-Type"] == "application/json"
+
+
+T = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
+
+
+async def test_an_order_whose_deadline_passes_during_the_pacer_wait_is_not_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exness = _Exness()
+    client = _client(exness, monkeypatch, exness_live_trading=True)
+    pacer = await client._pacer_for("openPosition")
+
+    async def late_wait() -> None:
+        set_simulation_time(T + timedelta(seconds=2))
+
+    monkeypatch.setattr(pacer, "wait", late_wait)
+    try:
+        set_simulation_time(T)
+        with pytest.raises(ExnessApiError) as exc:
+            await client.call(
+                "openPosition",
+                json_body={"instrument": "XAUUSD"},
+                idempotency_key="k",
+                deadline=T + timedelta(seconds=1),
+            )
+    finally:
+        clear_simulation_time()
+
+    assert exc.value.code == "ORDER_DEADLINE"
+    assert [r for r in exness.other() if r.method == "POST"] == []
+
+
+async def test_a_transport_error_is_not_resent_after_the_deadline(
+    monkeypatch: pytest.MonkeyPatch, sleeps: AsyncMock
+) -> None:
+    exness = _Exness([httpx.ConnectError("boom"), httpx.Response(202, json={"ok": True})])
+    client = _client(exness, monkeypatch, exness_live_trading=True)
+    sleeps.side_effect = lambda _s: set_simulation_time(T + timedelta(seconds=2))
+    try:
+        set_simulation_time(T)
+        with pytest.raises(ExnessApiError) as exc:
+            await client.call(
+                "openPosition",
+                json_body={"instrument": "XAUUSD"},
+                idempotency_key="k",
+                deadline=T + timedelta(seconds=1),
+            )
+    finally:
+        clear_simulation_time()
+
+    assert exc.value.code == "TRANSPORT"
+    assert len([r for r in exness.other() if r.method == "POST"]) == 1
 
 
 async def test_a_rate_limited_data_call_is_retried_with_backoff(

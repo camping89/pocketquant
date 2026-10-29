@@ -27,6 +27,7 @@ from typing import Any
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
+from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort, OrderCallback, TradeCallback
 from pocketquant.core.domain.brokers.value_objects import AccountBalance, OrderResult
@@ -212,12 +213,14 @@ class ExnessBrokerAdapter(IBrokerPort):
             max_lots=Decimal(str(max_lots)) if max_lots else None,
         )
 
-    async def submit_order(self, order: OrderAggregate) -> OrderResult:
+    async def submit_order(
+        self, order: OrderAggregate, *, deadline: datetime | None = None
+    ) -> OrderResult:
         if order.order_type != OrderType.MARKET:
             return _rejected(order, "exness adapter supports market orders only")
-        return await self._submit_open(order)
+        return await self._submit_open(order, deadline)
 
-    async def _submit_open(self, order: OrderAggregate) -> OrderResult:
+    async def _submit_open(self, order: OrderAggregate, deadline: datetime | None) -> OrderResult:
         # One account-wide lock over the checks and the registration only: two opens never
         # interleave their checks, yet their sends overlap.
         async with self._open_lock:
@@ -276,10 +279,18 @@ class ExnessBrokerAdapter(IBrokerPort):
             }
             if order.tp_price:
                 body["take_profit_price"] = format_price(order.tp_price, digits)
+            if deadline is not None and get_current_time() >= deadline:
+                logger.warning(
+                    "exness.order_rejected_presubmit",
+                    reason="deadline",
+                    subscription_id=order.subscription_id,
+                    symbol=order.symbol,
+                )
+                return _rejected(order, "order deadline passed")
             rid = str(order.id)
             self._inflight[rid] = _Inflight(order, name, datetime.now(UTC))
             self._pending_ack.add(rid)
-        return await self._send_tracked(order, body)
+        return await self._send_tracked(order, body, deadline)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
         if self._safeguards.daily_loss_cap is None:
@@ -378,11 +389,15 @@ class ExnessBrokerAdapter(IBrokerPort):
             None,
         )
 
-    async def _send_tracked(self, order: OrderAggregate, json_body: dict[str, Any]) -> OrderResult:
+    async def _send_tracked(
+        self, order: OrderAggregate, json_body: dict[str, Any], deadline: datetime | None
+    ) -> OrderResult:
         rid = str(order.id)
         name = instrument_name(order.symbol) or ""
         try:
-            ack = await self._client.call("openPosition", json_body=json_body, idempotency_key=rid)
+            ack = await self._client.call(
+                "openPosition", json_body=json_body, idempotency_key=rid, deadline=deadline
+            )
         except ExnessApiError as e:
             if rid not in self._early:
                 if e.code in ("TRANSPORT", "REQUEST_RATE_LIMIT"):

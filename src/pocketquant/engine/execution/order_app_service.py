@@ -1,6 +1,7 @@
 """Order manager - handles order lifecycle and broker submission."""
 
 import asyncio
+from datetime import datetime
 
 import structlog
 
@@ -34,12 +35,15 @@ class OrderAppService:
         self._pending: dict[str, OrderAggregate] = {}
         self._lock = asyncio.Lock()
 
-    async def submit(self, order: OrderAggregate, broker: IBrokerPort) -> OrderResult:
+    async def submit(
+        self, order: OrderAggregate, broker: IBrokerPort, *, deadline: datetime | None = None
+    ) -> OrderResult:
         """Submit order to broker and track status.
 
         Args:
             order: Order to submit
             broker: Broker to submit to
+            deadline: passed to the broker; the order is not sent at or after it
 
         Returns:
             OrderResult from broker
@@ -50,7 +54,7 @@ class OrderAppService:
         await self._order_repo.save(order)
 
         try:
-            result = await broker.submit_order(order)
+            result = await broker.submit_order(order, deadline=deadline)
         except Exception as e:
             async with self._lock:
                 order.reject(str(e))

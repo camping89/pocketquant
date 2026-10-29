@@ -65,7 +65,9 @@ class _AsyncFillBroker(IBrokerPort):
     async def disconnect(self) -> None:
         return None
 
-    async def submit_order(self, order: OrderAggregate) -> OrderResult:
+    async def submit_order(
+        self, order: OrderAggregate, *, deadline: datetime | None = None
+    ) -> OrderResult:
         return OrderResult(
             order_id=str(order.id),
             broker_order_id="op1",
