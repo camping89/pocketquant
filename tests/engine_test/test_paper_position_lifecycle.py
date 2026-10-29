@@ -139,7 +139,7 @@ async def test_unload_keeps_a_shared_broker_and_the_other_position() -> None:
 
 
 @pytest.mark.asyncio
-async def test_boot_deletes_paper_rows_and_keeps_the_rest() -> None:
+async def test_boot_keeps_paper_and_venue_rows() -> None:
     def row(sid: str) -> PositionAggregate:
         return PositionAggregate.open(
             subscription_id=sid, symbol=_SYM, side=PositionSide.LONG, entry_price=1.0, quantity=1.0
@@ -148,10 +148,10 @@ async def test_boot_deletes_paper_rows_and_keeps_the_rest() -> None:
     repo = _Repo([row("paper-sub"), row("venue-sub")])
     mirror = PositionAppService(EventBus(), repo)  # type: ignore[arg-type]
 
-    await mirror.start(frozenset({"paper-sub"}))
+    await mirror.start()
 
-    assert [p.subscription_id for p in repo.rows.values()] == ["venue-sub"]
-    assert mirror.get("paper-sub") is None
+    assert sorted(p.subscription_id for p in repo.rows.values()) == ["paper-sub", "venue-sub"]
+    assert mirror.get("paper-sub") is not None
     assert mirror.get("venue-sub") is not None
 
 

@@ -116,7 +116,7 @@ async def _engine(
 ) -> tuple[StrategyAppService, EventBus, list[OrderFilledEvent]]:
     bus = EventBus()
     mirror = PositionAppService(bus, _Repo(rows))  # type: ignore[arg-type]
-    await mirror.load_open_positions(frozenset())
+    await mirror.load_open_positions()
     engine = StrategyAppService(
         event_bus=bus,
         broker_factory=_Factory(bus),  # type: ignore[arg-type]

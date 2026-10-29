@@ -152,6 +152,52 @@ class StrategyAppService:
         self._running = False
         logger.info("strategy_engine_stopped")
 
+    async def take_over(self) -> None:
+        """Load what a trading process owns and connect its brokers. Runs once per process,
+        before bars flow."""
+        async with self._lock:
+            await self._order_app_service.load_pending_orders()
+            await self._position_app_service.load_open_positions()
+            restored = dropped = 0
+            papers = {id(b): b for b in self._brokers.values() if isinstance(b, PaperBrokerAdapter)}
+            for broker in papers.values():
+                ids = [sid for sid, b in self._brokers.items() if b is broker]
+                rows = []
+                for sid in ids:
+                    row = self._position_app_service.get(sid)
+                    if row is None:
+                        continue
+                    if row.sl_price is None and row.tp_price is None:
+                        logger.warning(
+                            "paper_position_dropped_no_exits",
+                            subscription_id=sid,
+                            symbol=row.symbol,
+                        )
+                        await self._position_app_service.drop(sid)
+                        dropped += 1
+                        continue
+                    rows.append(row)
+                realized = await self._trade_repository.realized_net(ids)
+                broker.restore(rows, realized)
+                restored += len(rows)
+
+            for sid, strategy in self._strategies.items():
+                if not strategy.is_running:
+                    continue
+                strategy.restore_direction(_direction_of(self._position_app_service.get(sid)))
+                broker = self._brokers[sid]
+                if not broker.is_connected:
+                    await broker.connect()
+            # From now on a None switch means a drain, unless a lost lease marks it.
+            self._discard_reason = "drain"
+            logger.info(
+                "strategy_engine.took_over",
+                strategies=len(self._strategies),
+                paper_brokers=len(papers),
+                paper_positions=restored,
+                paper_dropped=dropped,
+            )
+
     async def load_strategy(
         self,
         config: StrategyConfig,

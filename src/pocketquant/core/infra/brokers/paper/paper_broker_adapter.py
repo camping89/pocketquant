@@ -277,6 +277,19 @@ class PaperBrokerAdapter(IBrokerPort):
             del self._positions[key]
         return len(keys)
 
+    def restore(self, positions: list[PositionAggregate], realized_net: float) -> None:
+        """Rebuild cash and open positions after a restart. Copies, because the mirror
+        reduces its own row on an exit fill."""
+        self._positions.clear()
+        entry_commissions = 0.0
+        for row in positions:
+            commission = self._commission(row.entry_price, row.quantity)
+            entry_commissions += commission
+            self._positions[f"{row.subscription_id}:{row.symbol}"] = row.model_copy(
+                deep=True, update={"entry_commission": commission}
+            )
+        self._balance = self._initial_balance + realized_net - entry_commissions
+
     async def get_positions(self) -> list[PositionAggregate]:
         async with self._lock:
             return [p for p in self._positions.values() if not p.is_closed]

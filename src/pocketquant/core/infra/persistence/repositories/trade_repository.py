@@ -35,6 +35,23 @@ class TradeRepository(SymbolScopedRepository):
         cursor = collection.find({"run_id": subscription_id}).sort("entry_time", 1).limit(limit)
         return [Trade.from_mongo(doc) async for doc in cursor]
 
+    async def realized_net(self, run_ids: list[str]) -> float:
+        """Net realized PnL (gross pnl minus commission) of these subscriptions' closed trades."""
+        cursor = await self._collection().aggregate(
+            [
+                {"$match": {"run_id": {"$in": run_ids}}},
+                {
+                    "$group": {
+                        "_id": None,
+                        "total": {"$sum": {"$subtract": ["$pnl", "$commission"]}},
+                    }
+                },
+            ]
+        )
+        async for row in cursor:
+            return float(row["total"])
+        return 0.0
+
     async def ensure_indexes(self) -> None:
         collection = self._collection()
         await collection.create_index("run_id", name="ix_trades_run_id")

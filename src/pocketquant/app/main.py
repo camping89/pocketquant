@@ -31,6 +31,7 @@ from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.market_data.app_services.sync_jobs import (
     set_container as set_sync_container,
 )
+from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await recover_orphan_backtests(container)
         await recover_orphan_jobs(container)
         await bootstrap_live_instances(container)
+        await (await container.get(StrategyAppService)).take_over()
         await register_health_checks(container, app)
         await start_quote_feed(container, app)
         await start_jobs(container, app)

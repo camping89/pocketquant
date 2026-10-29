@@ -5,6 +5,7 @@ Live ``trades`` collection: ``run_id`` == ``subscription_id``, read scoped by su
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_OID, UUID, uuid5
 
@@ -85,3 +86,19 @@ async def test_ensure_indexes_creates_expected(database: Database) -> None:
     indexes = await coll.index_information()
     expected = {"ix_trades_run_id", "ix_trades_entry_time", "ix_trades_run_entry"}
     assert expected.issubset(set(indexes))
+
+
+@pytest.mark.asyncio
+async def test_realized_net_sums_pnl_minus_commission(database: Database) -> None:
+    repo = TradeRepository(database)
+    rows = [("t1", "a", 50.0, 2.0), ("t2", "a", -20.0, 2.0), ("t3", "b", 7.0, 1.0)]
+    await repo.save_many(
+        [
+            replace(_trade(trade_id=tid, run_id=run_id, pnl=pnl), commission=commission)
+            for tid, run_id, pnl, commission in rows
+        ]
+    )
+
+    assert await repo.realized_net(["a"]) == 26.0
+    assert await repo.realized_net(["a", "b"]) == 32.0
+    assert await repo.realized_net(["zzz"]) == 0.0
