@@ -11,6 +11,14 @@ set -uo pipefail
 # cd to deploy/ (one level up from vps/) so .env, reports/ resolve relatively
 cd "$(dirname "$0")/.."
 source .env 2>/dev/null || true
+dc() { docker compose -f compose.prod.yml --env-file .env "$@"; }
+# Role containers have no fixed names: every deploy rolls them.
+role_name() { dc ps --format '{{.Name}}' "$1" 2>/dev/null | head -1; }
+API=$(role_name api); WORKER=$(role_name worker); TRADER=$(role_name trader)
+API=${API:-api-missing}; WORKER=${WORKER:-worker-missing}; TRADER=${TRADER:-trader-missing}
+# Console logs: strip ANSI colours so the level token reads "[error".
+role_logs() { for c in "$API" "$WORKER" "$TRADER"; do docker logs "$c" --tail "$1" 2>&1; done | sed 's/\x1b\[[0-9;]*m//g'; }
+ERROR_PATTERN='\[error\|\[critical\|Traceback'
 
 REPORT_DIR="./reports"
 mkdir -p "$REPORT_DIR"
@@ -64,7 +72,7 @@ EOF
 
 # ─── 1. Container running checks ───────────────────────────
 
-CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-portainer pocketquant-cloudflared"
+CONTAINERS="$API $WORKER $TRADER pocketquant-mongodb pocketquant-redis pocketquant-portainer pocketquant-cloudflared"
 for c in $CONTAINERS; do
   running=$(container_running "$c")
   if [ "$running" = "true" ]; then
@@ -76,7 +84,7 @@ done
 
 # ─── 2. Docker health status ───────────────────────────────
 
-HEALTH_CONTAINERS="pocketquant-app pocketquant-mongodb pocketquant-redis pocketquant-cloudflared"
+HEALTH_CONTAINERS="$API $WORKER $TRADER pocketquant-mongodb pocketquant-redis pocketquant-cloudflared"
 for c in $HEALTH_CONTAINERS; do
   health=$(container_health "$c")
   if [ "$health" = "healthy" ]; then
@@ -90,7 +98,7 @@ done
 
 # ─── 3. App HTTP healthcheck (container-internal) ──────────────────────────
 
-app_health=$(docker exec pocketquant-app curl -sf http://localhost:41921/health 2>/dev/null || echo "")
+app_health=$(docker exec "$API" curl -sf http://localhost:41921/health 2>/dev/null || echo "")
 if [ -n "$app_health" ]; then
   app_status=$(echo "$app_health" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
   if [ "$app_status" = "healthy" ]; then
@@ -107,7 +115,7 @@ fi
 # ─── 3a. API route probe — /health alone can't tell a routeless backend apart
 # from a working one (an image without feature routes still reports healthy).
 
-api_http=$(docker exec pocketquant-app curl -s -o /dev/null -w "%{http_code}" "http://localhost:41921/api/v1/market-data/symbols" 2>/dev/null || echo "000")
+api_http=$(docker exec "$API" curl -s -o /dev/null -w "%{http_code}" "http://localhost:41921/api/v1/market-data/symbols" 2>/dev/null || echo "000")
 if [ "$api_http" = "200" ]; then
   check "API /api/v1 probe" "$PASS" "HTTP 200"
 else
@@ -117,13 +125,29 @@ fi
 # ─── 3b. Web container: SPA routes ─────────────────────────
 
 for path in "/" "/strategies" "/monitor"; do
-  http=$(docker exec pocketquant-app curl -s -o /dev/null -w "%{http_code}" "http://web:80${path}" || echo "000")
+  http=$(docker exec "$API" curl -s -o /dev/null -w "%{http_code}" "http://web:80${path}" || echo "000")
   if [ "$http" = "200" ]; then
     check "Web ${path}" "$PASS" "HTTP 200"
   else
     check "Web ${path}" "$FAIL" "HTTP ${http}"
   fi
 done
+
+# ─── 3c. Roles and leases ──────────────────────────────────
+
+for svc in api worker trader; do
+  n=$(dc ps -q "$svc" 2>/dev/null | wc -l)
+  if [ "$n" -eq 1 ]; then check "$svc containers" "$PASS" "1 running"; else check "$svc containers" "$FAIL" "$n running"; fi
+done
+for c in "$WORKER" "$TRADER"; do
+  lease=$(docker exec "$c" curl -sf http://localhost:41921/health 2>/dev/null | grep -o '"lease":"[^"]*"' | cut -d'"' -f4)
+  if [ "$lease" = "held" ]; then check "$c lease" "$PASS" "held"; else check "$c lease" "$FAIL" "${lease:-no answer}"; fi
+done
+leases=$(bash vps/leases.sh 2>/dev/null)
+case "$leases" in
+  *"unexpired=2 owners_match=yes") check "Leases" "$PASS" "$leases" ;;
+  *) check "Leases" "$FAIL" "${leases:-no answer}" ;;
+esac
 
 # ─── 4. MongoDB direct check ───────────────────────────────
 
@@ -169,12 +193,12 @@ fi
 
 # ─── 9. Image tag ──────────────────────────────────────────
 
-current_image=$(docker inspect --format='{{.Config.Image}}' pocketquant-app 2>/dev/null || echo "unknown")
+current_image=$(docker inspect --format='{{.Config.Image}}' "$API" 2>/dev/null || echo "unknown")
 check "Image" "$PASS" "$current_image"
 
 # ─── 10. Recent errors in app logs ─────────────────────────
 
-error_count=$(docker logs pocketquant-app --tail 100 2>&1 | grep -ci '"levelname":"ERROR"\|"level":"error"\|Traceback' || true)
+error_count=$(role_logs 100 | grep -ci "$ERROR_PATTERN" || true)
 if [ "$error_count" -eq 0 ]; then
   check "App logs (last 100)" "$PASS" "no errors"
 else
@@ -184,8 +208,8 @@ fi
 # ─── 11. Boot integrity (hard fail on fatal startup signatures) ─
 # Generic signatures that any release would emit on lifespan/migration failure.
 # Not tied to specific endpoints or domain logic so this check survives feature churn.
-BOOT_PATTERNS='"levelname":"CRITICAL"|"level":"critical"|Startup Failed|Application startup failed|lifespan.*(failed|error)|RuntimeError.*lifespan|migration\.failed|migration_failed'
-boot_failures=$(docker logs pocketquant-app --tail 200 2>&1 | grep -cE "$BOOT_PATTERNS" || true)
+BOOT_PATTERNS='"levelname":"CRITICAL"|"level":"critical"|Startup Failed|Application startup failed|lifespan.*(failed|error)|RuntimeError.*lifespan|migration\.failed|migration_failed|\[critical'
+boot_failures=$(role_logs 200 | grep -cE "$BOOT_PATTERNS" || true)
 if [ "$boot_failures" -eq 0 ]; then
   check "Boot integrity" "$PASS" "no fatal startup signatures"
 else
@@ -225,7 +249,7 @@ if [ "$error_count" -gt 0 ]; then
 ## Recent Errors (last 100 log lines)
 
 \`\`\`
-$(docker logs pocketquant-app --tail 100 2>&1 | grep -i '"levelname":"ERROR"\|"level":"error"\|Traceback' | tail -10)
+$(role_logs 100 | grep -i "$ERROR_PATTERN" | tail -10)
 \`\`\`
 EOF
 fi
@@ -237,7 +261,7 @@ if [ "$boot_failures" -gt 0 ]; then
 ## Fatal Startup Signatures (last 200 log lines)
 
 \`\`\`
-$(docker logs pocketquant-app --tail 200 2>&1 | grep -E "$BOOT_PATTERNS" | tail -20)
+$(role_logs 200 | grep -E "$BOOT_PATTERNS" | tail -20)
 \`\`\`
 EOF
 fi
