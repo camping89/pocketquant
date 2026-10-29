@@ -175,6 +175,7 @@ EOF
 7. `engine/market_data/app_services/quote_app_service.py`: delete the comment and the `self._quote_ttl` line (`:32-34`) and pass `ttl=TTL_QUOTE_LATEST` at `:71`.
 8. Docstrings: `core/domain/market_data/data_provider_port.py:4` and `realtime_quote_provider_port.py:4` list `(Binance, Exness)`; in `core/infra/market_data/provider_health_check.py:13-19` replace the paragraph with "``degraded`` means a provider was given credentials and holds no session. It never reads ``unhealthy``, so the container health check never restarts the app for it."; `engine/market_data/data_lag_service.py:3-10`: replace the TradingView/CME sentences with "A delayed feed is not a broken one: it keeps arriving, just behind the clock." and "Only trading minutes count, so a weekend, a holiday or a daily session break is the market being shut, not the feed falling behind."
 9. `scripts/README.md`: delete the `seed_index_futures.py` bullet (`:12-16`). `scripts/backfill/binance_bars.py:4`: drop the TradingView comparison from the comment.
+10. Added 2026-10-29 (pre-run review): `core/common/constants.py:38` `LIMIT_TVDATAFEED_MAX_BARS = 5000` becomes `LIMIT_SYNC_MAX_BARS = 5000` and its five uses in `engine/market_data/sync_dtos.py` (`:9,22,24,51,53`) follow. After step 7, `QuoteAppService.__init__` has no use for `settings`: delete the parameter and `self.settings`, and drop `settings=` at `app/di/services.py:94-96` (and the provider parameter if it becomes unused). Anchors in `app/main_extensions.py` moved after the previous phase: import `:67`, `_tradingview_credentialed` `:304-307`, health block `:315-328`.
 
 **Success criteria:** no TradingView text in `src` or `scripts`.
 
@@ -191,7 +192,7 @@ EOF
 2. `trading_calendar_factory.py`: delete the import (`:15`) and `CmeGlobexCalendarAdapter()` from the tuple (`:29`). `calendars/__init__.py`: docstring becomes `"""Exchange-calendar adapters behind ``ITradingCalendarPort``."""`.
 3. `core/domain/shared/enums.py`: delete `INDEX_FUTURE = "index_future"` (`:58`). `core/domain/symbol/value_objects.py`: delete `CALENDAR_CME_GLOBEX_EQUITY` (`:21`) and the `INDEX_FUTURE` map entry (`:82`); reword the comment (`:16-19`) to "the schedule rules stay in code behind ITradingCalendarPort, because venue holidays and session changes are code, not data." `core/domain/symbol/__init__.py`: delete `CALENDAR_CME_GLOBEX_EQUITY` from the import (`:3`) and from `__all__` (`:11`).
 4. Comments that use CME as the calendar example: reword each to the equivalent Exness example (`EXNESS_FX` weekday sessions, or `EXNESS_XAUUSD` with its daily break) and keep the sentence's point: `core/domain/market_data/trading_calendar_port.py:5,9`, `core/domain/trading/performance_calculator_domain_service.py:44`, `engine/market_data/app_services/bar_app_service.py:67`, `engine/market_data/app_services/integrity_jobs.py:102`, `engine/market_data/tracked_symbols_backfill.py:104`, `engine/backtest/backtest_report_app_service.py:363`. Leave `core/domain/trading/commission_model.py:17` (a fee convention, not a calendar).
-5. `pyproject.toml`: delete `"pandas-market-calendars>=5.4.0",` (`:13`), the `tvdatafeed` comment and pin (`:27-30`), the `[tool.hatch.metadata]` table with `allow-direct-references` and its comment (`:53-56`), and both contracts (`:141-176`, `pandas_market_calendars confined ...` and `tvDatafeed confined ...`).
+5. `pyproject.toml`: delete `"pandas-market-calendars>=5.4.0",` (`:13`), `"pandas>=2.1.0",` (`:12`; added 2026-10-29: only the two deleted modules import it), the `tvdatafeed` comment and pin (`:27-30`), the `[tool.hatch.metadata]` table with `allow-direct-references` and its comment (`:53-56`), and both contracts (`:141-176`, `pandas_market_calendars confined ...` and `tvDatafeed confined ...`).
 6. `uv lock && uv sync`.
 7. `CLAUDE.md:14`: change `8 contracts` to `6 contracts`.
 
@@ -241,7 +242,7 @@ EOF
 3. `docs/deployment.md`: delete the three `TRADINGVIEW_*` rows `:104-106`.
 4. `docs/codebase-summary.md`: delete the `tradingview/` tree line `:21`; `:24` becomes `# trading calendars (Exness sessions)`.
 5. `docs/project-overview-pdr.md`: `:7` reads "crypto and CFDs"; `:20` lists "Binance (crypto spot), Exness (CFDs)".
-6. `docs/code-standards.md`: drop `ES1!:TRADINGVIEW` from `:136` and `TRADINGVIEW` from `:139`; `:152` points at `scripts/seed_exness_symbols.py`; drop `TradingView` from the list at `:248`; at `:299` drop the two clauses about `pandas_market_calendars` and `tvDatafeed`.
+6. `docs/code-standards.md`: drop `ES1!:TRADINGVIEW` from `:136` and `TRADINGVIEW` from `:139`; at `:142` drop the `TRADINGVIEW_EXCHANGE_BY_CODE` clause (added 2026-10-29); `:152` points at `scripts/seed_exness_symbols.py`; drop `TradingView` from the list at `:248`; at `:299` drop the two clauses about `pandas_market_calendars` and `tvDatafeed`.
 7. Run the D28 gate.
 
 **Success criteria:** the gate prints nothing.
@@ -256,7 +257,7 @@ EOF
 
 **Steps:**
 1. `docker ps`; if it fails, start `"/c/Program Files/Docker/Docker/Docker Desktop.exe"` in the background, wait 10 s and retry.
-2. `uv run ruff check src tests` prints `All checks passed!`; `uv run ruff format --check src tests` reports nothing to reformat; `uv run pyright` prints `0 errors`.
+2. `uv run ruff check src tests` prints `All checks passed!`; `uv run ruff format --check` on the touched files reports nothing to reformat; `uv run pyright` reports no more than the 34 errors and `ruff format --check src tests` no more than the 12 files that were already red at HEAD before this phase (amended 2026-10-29: those are pre-existing in untouched files; CI runs neither tool).
 3. `uv run python scripts/code_metrics.py --ratchet; echo "rc=$?"` prints `rc=0`. If a ceiling trips only because of this change, raise it in `pyproject.toml` `[tool.code-metrics]` in its own commit `chore(metrics): raise the code-metrics ceiling` and say so in the phase summary.
 4. `just test` (fallback `uv run python -m pytest tests/ -q`): the only red is `4 failed, 4 errors` in `tests/core_test/unit/common/test_utc_runtime_guard.py` and `tests/core_test/infra/scheduling/test_cron_trigger_timezone.py`.
 5. `git add -A src tests scripts web/src docs README.md CLAUDE.md pyproject.toml uv.lock && git commit -m "refactor: remove TradingView and the CME calendar"`.
