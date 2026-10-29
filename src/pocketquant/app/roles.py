@@ -127,8 +127,11 @@ def start_worker(container: AsyncContainer, app: FastAPI, owner: str) -> None:
         await register_sync_jobs(container=container, job_scheduler=scheduler)
 
     async def on_lost() -> None:
-        (await container.get(JobScheduler)).shutdown(wait=False)
-        os.kill(os.getpid(), signal.SIGTERM)
+        # The exit runs even when the stop fails: a lost role must never sit behind a healthy app.
+        try:
+            (await container.get(JobScheduler)).shutdown(wait=False)
+        finally:
+            os.kill(os.getpid(), signal.SIGTERM)
 
     async def run() -> None:
         repo = await container.get(LeaseRepository)
@@ -218,10 +221,14 @@ def start_trader_lease(container: AsyncContainer, app: FastAPI, owner: str) -> N
             engine.trading_until = None
             engine.cancel_pending_signals()
             bars.publishes_current = False
-            await stop_reconcile_loop(app)
-            # A send already under way gets the margin for its ACK.
-            await engine.stop(ORDER_MARGIN_S)
-            os.kill(os.getpid(), signal.SIGTERM)
+            # The exit runs even when the stop fails: a lost role must never sit behind a
+            # healthy app.
+            try:
+                await stop_reconcile_loop(app)
+                # A send already under way gets the margin for its ACK.
+                await engine.stop(ORDER_MARGIN_S)
+            finally:
+                os.kill(os.getpid(), signal.SIGTERM)
 
         await hold_lease(
             repo, "trader", owner, app.state.lease_state, take_over, on_lost, on_renewed
