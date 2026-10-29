@@ -300,34 +300,6 @@ class TestCacheKeyInjection:
         assert before <= bar_dict["last_update"] <= after
 
 
-class TestFlushAllBars:
-    """Test flush_all_bars cleanup on shutdown."""
-
-    @pytest.mark.asyncio
-    async def test_flush_clears_state(self, bar_service, mock_event_bus):
-        """flush_all_bars clears in-memory state."""
-        tick = QuoteTick(
-            symbol="BINANCE:BTC",
-            price=100.0,
-            volume=1.0,
-            timestamp=datetime.fromtimestamp(1000.0, tz=UTC),
-        )
-        await bar_service.add_tick(tick)
-
-        # Verify state exists
-        assert len(bar_service._bars) > 0
-        assert len(bar_service._last_flush_ts) > 0
-
-        # Flush
-        count = await bar_service.flush_all_bars()
-
-        # State cleared
-        assert len(bar_service._bars) == 0
-        assert len(bar_service._last_flush_ts) == 0
-        # Events published for any non-empty bars
-        assert count > 0
-
-
 class _OneCalendar:
     """Stands in for TradingCalendarFactory: every symbol is on ``calendar``."""
 

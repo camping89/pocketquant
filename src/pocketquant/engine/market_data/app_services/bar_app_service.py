@@ -1,7 +1,7 @@
 import asyncio
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pocketquant.core.common.constants import CACHE_KEY_BAR_CURRENT
@@ -30,6 +30,9 @@ _TIMER_CLOSE_GRACE_S = 0.5
 _TIMER_TICK_S = 0.25
 # Only bars up to 1h are cut at the session close.
 _SESSION_CUT_MAX_INTERVAL_S = 3600
+# More trading seconds than this without a tick (or uncovered at the bucket start) is a gap.
+_GAP_AFTER_S = 60.0
+_MINUTE = timedelta(minutes=1)
 
 # All canonical timeframes tracked in-memory per symbol
 _DEFAULT_INTERVALS = [
@@ -41,6 +44,22 @@ _DEFAULT_INTERVALS = [
     Interval.DAY_1,
     Interval.WEEK_1,
 ]
+
+
+def _trading_seconds(calendar: ITradingCalendarPort, a: datetime, b: datetime) -> float:
+    """The part of ``[a, b)`` inside trading minutes; the wall gap when it is 60 s or less."""
+    wall = (b - a).total_seconds()
+    if wall <= _GAP_AFTER_S:
+        return wall
+    # trading_minutes steps from its start, so both bounds are minute-aligned.
+    start = a.replace(second=0, microsecond=0)
+    end = b.replace(second=0, microsecond=0)
+    if end < b:
+        end += _MINUTE
+    return sum(
+        (min(m + _MINUTE, b) - max(m, a)).total_seconds()
+        for m in calendar.trading_minutes(start, end)
+    )
 
 
 def _ttl_for_interval(tf: Interval) -> int:
@@ -58,7 +77,9 @@ class BarAppService:
     In-memory state: _bars[symbol_key][interval] = BarBuilderDomainService (running OHLCV).
     symbol_key is composite ``{code}:{exchange}`` (e.g. ``BTCUSDT:BINANCE``).
     Cron sync_1m + cascade is the sole MongoDB writer — no upsert_bar here.
-    On bar close: publish BarCompletedEvent (at-least-once) + force-flush Redis.
+    On bar close: publish ``BarCompletedEvent`` after the bar lock is released, at most
+    once. A restart or a feed gap loses a bar or sets ``gap``; consumers skip entries on
+    gapped bars.
     BarRepository kept for get_current_bar DB fallback (SSE endpoint).
     """
 
@@ -160,11 +181,12 @@ class BarAppService:
                 current_bar.last_tick_at = bar_start
                 current_bar.coverage_start = bar_start
             else:
-                # Hydrate from Mongo when a bar already exists at this bucket
-                # (e.g. after mid-bucket restart with cascade-populated in-progress
-                # bar). Prevents the first post-restart tick price from overwriting
-                # the true bucket-open and causing a visible chart gap.
-                await self._seed_builder_from_mongo(current_bar)
+                await self._seed_from_redis(current_bar, calendar, tick.timestamp)
+            assert current_bar.coverage_start is not None
+            # One rule for every path: a seeded builder inherits the late start of the
+            # process that wrote the seed.
+            if _trading_seconds(calendar, bar_start, current_bar.coverage_start) > _GAP_AFTER_S:
+                current_bar.gap = True
             self._bars[symbol_key][interval] = current_bar
 
         # A later bucket closes the current bar. On a uniform grid this is the
@@ -182,6 +204,9 @@ class BarAppService:
             await self._cache_current_bar(symbol_key, interval, current_bar, force=True)
             return event
 
+        last = current_bar.last_tick_at
+        if last is not None and _trading_seconds(calendar, last, tick.timestamp) > _GAP_AFTER_S:
+            current_bar.gap = True
         current_bar.add_tick(tick.price, tick.volume, tick.timestamp)
         await self._cache_current_bar(symbol_key, interval, current_bar)
         return None
@@ -262,7 +287,12 @@ class BarAppService:
         if bar.open is None or bar.high is None or bar.low is None or bar.close is None:
             return None
 
-        # Emit event — at-least-once delivery; strategy subscribers must be idempotent
+        if (
+            bar.last_tick_at is not None
+            and _trading_seconds(calendar, bar.last_tick_at, bar.bar_end) > _GAP_AFTER_S
+        ):
+            bar.gap = True
+        # At most once: a bar is never re-published.
         # bar.symbol is composite ``{code}:{exchange}``
         event = BarCompletedEvent(
             symbol=bar.symbol,
@@ -292,34 +322,46 @@ class BarAppService:
             await self._cache.delete(exact_key)
         return event
 
-    async def _seed_builder_from_mongo(self, bar: BarBuilderDomainService) -> None:
-        """Hydrate ``bar`` from Mongo if an aggregated bar exists at ``bar.bar_start``.
+    async def _seed_from_redis(
+        self, bar: BarBuilderDomainService, calendar: ITradingCalendarPort, first_tick: datetime
+    ) -> None:
+        """Restore ``bar`` from its ``bar:current`` key when that seed covers ``first_tick``.
 
-        Recovers the true bucket-open after a mid-bucket app restart where the
-        BarBuilderDomainService would otherwise pick the first incoming tick price as the
-        open. The Mongo source-of-truth is populated by the cascade aggregator.
+        A covering seed has the same bucket, a ``coverage_start`` (older images write none)
+        and a ``last_update`` at most 60 trading seconds before the first tick. Otherwise
+        coverage starts at the first tick.
         """
+        key = CACHE_KEY_BAR_CURRENT.format(symbol=bar.symbol, interval=bar.interval.value)
         try:
-            existing = await self._bar_repo.get_latest(bar.symbol, bar.interval)
+            seed = await self._cache.get(key)
         except Exception as exc:
             logger.error("bar_app_service.seed_failed", error=str(exc))
+            seed = None
+        updated = seed.get("last_update") if isinstance(seed, dict) else None
+        if (
+            not isinstance(seed, dict)
+            or seed.get("bar_start") != bar.bar_start.isoformat()
+            or not seed.get("coverage_start")
+            or not isinstance(updated, int | float)
+            or _trading_seconds(calendar, datetime.fromtimestamp(updated, UTC), first_tick)
+            > _GAP_AFTER_S
+        ):
+            bar.coverage_start = first_tick
             return
-
-        if existing is None or existing.datetime != bar.bar_start:
-            return
-
-        bar.open = existing.open
-        bar.high = existing.high
-        bar.low = existing.low
-        bar.close = existing.close
-        bar.volume = existing.volume
+        bar.open = seed["open"]
+        bar.high = seed["high"]
+        bar.low = seed["low"]
+        bar.close = seed["close"]
+        bar.volume = seed["volume"]
+        bar.tick_count = seed["tick_count"]
+        bar.gap = bool(seed.get("gap"))
+        bar.coverage_start = datetime.fromisoformat(seed["coverage_start"])
+        bar.last_tick_at = datetime.fromtimestamp(updated, UTC)
         logger.info(
-            "bar_app_service.seeded_from_mongo",
+            "bar_app_service.seeded_from_redis",
             symbol=bar.symbol,
             interval=bar.interval.value,
             bar_start=bar.bar_start.isoformat(),
-            open=bar.open,
-            close=bar.close,
         )
 
     async def _cache_current_bar(
@@ -383,36 +425,6 @@ class BarAppService:
             "volume": bar.volume,
             "tick_count": 0,
         }
-
-    async def flush_all_bars(self) -> int:
-        """Clear in-memory bars on shutdown. No Mongo write — cron handles persistence.
-
-        Emits BarCompletedEvent for any non-empty in-progress bars so strategies
-        see the partial close signal before process exits.
-        """
-        cleared_count = 0
-        events: list[BarCompletedEvent] = []
-
-        async with self._lock:
-            for _symbol_key, intervals in self._bars.items():
-                for _interval, bar in intervals.items():
-                    if not bar.is_empty():
-                        event = await self._complete_bar(
-                            bar, self._default_calendar, closed_by="tick", closing_tick_at=None
-                        )
-                        if event is not None:
-                            events.append(event)
-                        cleared_count += 1
-
-            self._bars.clear()
-            self._last_flush_ts.clear()
-            if events:
-                self._publishes_running += 1
-        if events:
-            await self._publish(events)
-
-        logger.info("bar_manager.bars_cleared", bars_cleared=cleared_count)
-        return cleared_count
 
     @property
     def active_symbols(self) -> list[str]:
