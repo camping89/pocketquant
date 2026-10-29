@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, MongoDsn, RedisDsn, SecretStr
+from pydantic import Field, MongoDsn, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +25,9 @@ def _resolve_env_file() -> str:
         return str(_find_project_root() / ".env")
     except FileNotFoundError:
         return ""
+
+
+APP_ROLE_NAMES = ("api", "worker", "trader")
 
 
 class Settings(BaseSettings):
@@ -54,7 +57,11 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     log_format: Literal["json", "console"]
 
-    enable_jobs: bool = True
+    # Roles this process runs: api (routes, backtests), worker (scheduler and jobs under
+    # the worker lease), trader (quote feed, strategies, brokers under the trader lease).
+    # The default takes no lease, so a copied local profile never contends for a prod
+    # lease; compose sets the roles per service.
+    app_roles: str = "api"
 
     # Exness Trader API (optional). Every order call is refused while
     # exness_live_trading is false, which is the default.
@@ -89,6 +96,27 @@ class Settings(BaseSettings):
     paper_slippage_bps: float = 0.5  # 0.5 bp = 0.005%
     paper_commission_bps: float = 3.0  # 3 bps
     reconcile_interval_seconds: float = 5.0
+
+    @field_validator("app_roles")
+    @classmethod
+    def _canonical_roles(cls, value: str) -> str:
+        names = {r.strip() for r in value.split(",") if r.strip()}
+        if not names or names - set(APP_ROLE_NAMES):
+            raise ValueError(f"APP_ROLES must list api, worker or trader; got {value!r}")
+        return ",".join(r for r in APP_ROLE_NAMES if r in names)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_retired_job_switch(cls, data: object) -> object:
+        # A silently ignored ENABLE_JOBS=false would let a local process take a prod lease.
+        keys = {str(k).lower() for k in data} if isinstance(data, dict) else set()
+        if "enable_jobs" in keys or "enable_jobs" in {k.lower() for k in os.environ}:
+            raise ValueError("ENABLE_JOBS is retired; set APP_ROLES (api, worker, trader) instead")
+        return data
+
+    @property
+    def roles(self) -> frozenset[str]:
+        return frozenset(self.app_roles.split(","))
 
 
 @lru_cache

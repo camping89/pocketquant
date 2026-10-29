@@ -31,9 +31,9 @@ down:
 reset:
     docker compose -f deploy/compose.local.yml --env-file .env down -v
 
-# Start backend: full runtime (scheduler, WS feed, reconcile, backtest worker) + all API routes (port 41921).
-# Single worker only — scheduler/WS/broker are in-process singletons; --workers N would duplicate them.
-# Route iteration tip: ENABLE_JOBS=false just be — skips the trading runtime so --reload restarts stay light.
+# Start backend on port 41921 with the roles in APP_ROLES (default api: routes only).
+# Never --workers N: the worker and the trader act only while they hold their Mongo lease.
+# Full runtime on a local database: APP_ROLES=api,worker,trader in .env (all-local profile only).
 be:
     # The app asserts a UTC process timezone at startup, so pin it here too.
     TZ=UTC {{python}} -m uvicorn pocketquant.app.main:app --reload --host 127.0.0.1 --port 41921

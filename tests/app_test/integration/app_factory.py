@@ -1,7 +1,7 @@
 """Shared test app factory for pocketquant-app integration tests.
 
 Exported as a plain module (not conftest) so it can be imported by test files
-that need to build a custom app instance (e.g. with enable_jobs=True).
+that need to build a custom app instance (e.g. with other `app_roles`).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def make_test_app(settings: Settings) -> FastAPI:
     """Build a fully-wired FastAPI test app using testcontainer settings.
 
     Identical lifecycle to production: indexes, stale recovery, health checks,
-    background jobs (enabled only if settings.enable_jobs=True).
+    background jobs belong to the worker role and do not run here.
     """
     container = create_container(settings)
 

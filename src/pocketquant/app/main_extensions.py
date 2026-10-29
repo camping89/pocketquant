@@ -165,8 +165,7 @@ async def bootstrap_live_instances(container: AsyncContainer) -> None:
     but their subscriptions are durable in MongoDB. Delegates to
     ``StrategyReconcileAppService.bootstrap`` — the same load-per-subscription
     pass the reconcile loop runs each tick — so the boot path and the
-    steady-state path can never drift. Runs unconditionally (independent of
-    ``enable_jobs``); only the reconcile loop itself is gated.
+    steady-state path can never drift. Runs in the trader role only.
     """
     svc = await container.get(StrategyReconcileAppService)
     await svc.bootstrap()
@@ -242,17 +241,18 @@ async def stop_quote_feed(container: AsyncContainer, app: FastAPI) -> None:
 async def start_jobs(container: AsyncContainer, app: FastAPI) -> None:
     """Register the sync jobs, subscribe the live trade collector, start reconcile.
 
-    All three are gated on ``enable_jobs``, so the test/CLI profile runs none of
-    them. The collector subscribes before the reconcile loop starts strategies,
-    so no trade closure is published before its handler exists. Call it after
-    ``bootstrap_live_instances``, so the loop's first tick finds every instance.
+    All three run only in the worker role, so the test/CLI profile
+    (``APP_ROLES=api``) runs none of them. The collector subscribes before the
+    reconcile loop starts strategies, so no trade closure is published before its
+    handler exists. Call it after ``bootstrap_live_instances``, so the loop's first
+    tick finds every instance.
 
     The sync_jobs module-level container is wired at the top of lifespan() in
     main.py, before any ``await``, to win the race against persisted
     MongoDBJobStore jobs that may dispatch during early Dishka resolves.
     """
     settings = await container.get(Settings)
-    if not settings.enable_jobs:
+    if "worker" not in settings.roles:
         logger.info("background_jobs_disabled")
         return
 
@@ -412,7 +412,7 @@ def register_routes(app: FastAPI, settings) -> None:
         history_repo: FromDishka[JobHistoryRepository],
     ) -> list[dict]:
         # Read the APScheduler Mongo store directly — no scheduler API coupling,
-        # and the route works identically when enable_jobs=false.
+        # and the route works in every role.
         return await _list_jobs_from_mongo(database, history_repo)
 
     from pocketquant.app.routes.safeguards import router as safeguards_router

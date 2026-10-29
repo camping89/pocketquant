@@ -2,7 +2,7 @@
 
 POST start must only flip ``desired_state`` in Mongo — the reconcile loop (not
 the request handler) is what changes ``actual_state``. The test app runs with
-``enable_jobs=False`` so no reconcile loop is live, making the boundary
+``app_roles="api"`` so no reconcile loop is live, making the boundary
 observable: after the POST, ``actual_state`` is still ``stopped``.
 """
 
@@ -28,9 +28,7 @@ _STRATEGY = "hitnrun2"
 _SYMBOL = "BTCUSDT:BINANCE"
 
 
-async def test_start_writes_desired_state_only(
-    app_client: AsyncClient, settings: Settings
-) -> None:
+async def test_start_writes_desired_state_only(app_client: AsyncClient, settings: Settings) -> None:
     db = Database()
     await db.connect(settings)
     try:

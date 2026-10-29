@@ -94,15 +94,12 @@ class InfrastructureProvider(Provider):
 
     @provide(scope=Scope.APP)
     async def get_job_scheduler(
-        self, settings: Settings, history_repo: JobHistoryRepository
+        self, history_repo: JobHistoryRepository
     ) -> AsyncIterator[JobScheduler]:
+        # The worker role starts the scheduler after it takes the worker lease.
         scheduler = JobScheduler(history_repo=history_repo)
-        if settings.enable_jobs:
-            scheduler.initialize(settings)
-            scheduler.start()
         yield scheduler
-        if settings.enable_jobs:
-            scheduler.shutdown(wait=True)
+        scheduler.shutdown(wait=True)
 
     @provide(scope=Scope.APP)
     def get_health_coordinator(self) -> HealthCoordinator:

@@ -37,7 +37,7 @@ def settings(
         redis_cache_ttl=3600,
         log_level="DEBUG",
         log_format="console",
-        enable_jobs=False,
+        app_roles="api",
     )
 
 

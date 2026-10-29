@@ -75,8 +75,7 @@ class StrategyReconcileAppService:
     async def bootstrap(self) -> None:
         """Load one RAM instance per persisted subscription, once at startup.
 
-        Runs unconditionally — even when the reconcile loop is gated off
-        (``enable_jobs=false``) — so instances exist before the first tick and it
+        Runs once at startup, so instances exist before the first tick and it
         never logs spurious ``missing_instance`` warnings. Reuses
         ``_ensure_instances`` (the loop's own load-per-subscription pass) so the
         boot path and the steady-state path can never drift.
