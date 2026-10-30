@@ -2,6 +2,8 @@
 
 Owner decision 2026-10-30T15:40Z: the same-tag re-rolls left on 2026-10-30 run without a per-roll [ASK], only when the previous row is PASS, the session check prints `in-session`, the deploy lock is free and 70 min have passed since the last deploy. A FAIL or an OOM_STOP stops them. From 2026-11-02 each re-roll is asked again.
 
+Owner decision 2026-10-30T17:19Z (replaces the last sentence above): every remaining Phase 10 same-tag re-roll runs without a per-roll [ASK], under the same conditions. A FAIL row, an OOM_STOP or any other owner decision in the phase still stops the run.
+
 ## Row 0 machine measurements (cutover D-5; D25, record only per D31)
 
 Deploy: `develop:master` at 659120ef, pushed 2026-10-30 03:02 UTC after the owner approved. The CI run succeeded (tests, build-app, build-web, deploy, cleanup-tags).
@@ -74,4 +76,5 @@ Task 9.9 Verify: 0 `pocketquant-app`, 3 role containers, 1 `trader.takeover`, 1 
 | 2 | 2026-10-30T08:11:16Z | re-roll | 20261030T081114Z | 0 | 0.612 | 0 | 230 | 20 | 0 | lease:0 drain:0 | 200:282 | worker=ec051671e147:1 trader=024de5e5ebdb:1 unexpired=2 owners_match=yes | 1 | PASS |
 | 3 | 2026-10-30T14:09:39Z | re-roll | 20261030T140937Z | 0 | 0.817 | 0 | 475 | 25 | 0 | lease:0 drain:0 | 200:283 | worker=d855575e485c:1 trader=78f59af84888:1 unexpired=2 owners_match=yes | 1 | PASS |
 | 4 | 2026-10-30T15:20:02Z | re-roll | 20261030T152000Z | 0 | 0.808 | 0 | 98 | 22 | 0 | lease:0 drain:0 | 200:238 | worker=2cc6ff183267:1 trader=5cf855a29804:1 unexpired=2 owners_match=yes | 1 | PASS |
-| 5 | 2026-10-30T17:12:54Z | re-roll | 20261030T171251Z | pending | | | | | | | | | 1 | pending |
+| 5 | 2026-10-30T17:12:54Z | re-roll | 20261030T171251Z | 0 | 0.609 | 0 | 257 | 21 | 0 | lease:0 drain:0 | 200:219 | worker=02a44c11c8ea:1 trader=d8aaae563350:1 unexpired=2 owners_match=yes | 1 | PASS |
+| 6 | 2026-10-30T18:23:15Z | re-roll | 20261030T182314Z | pending | | | | | | | | | 1 | pending |
