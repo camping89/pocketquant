@@ -77,4 +77,5 @@ Task 9.9 Verify: 0 `pocketquant-app`, 3 role containers, 1 `trader.takeover`, 1 
 | 3 | 2026-10-30T14:09:39Z | re-roll | 20261030T140937Z | 0 | 0.817 | 0 | 475 | 25 | 0 | lease:0 drain:0 | 200:283 | worker=d855575e485c:1 trader=78f59af84888:1 unexpired=2 owners_match=yes | 1 | PASS |
 | 4 | 2026-10-30T15:20:02Z | re-roll | 20261030T152000Z | 0 | 0.808 | 0 | 98 | 22 | 0 | lease:0 drain:0 | 200:238 | worker=2cc6ff183267:1 trader=5cf855a29804:1 unexpired=2 owners_match=yes | 1 | PASS |
 | 5 | 2026-10-30T17:12:54Z | re-roll | 20261030T171251Z | 0 | 0.609 | 0 | 257 | 21 | 0 | lease:0 drain:0 | 200:219 | worker=02a44c11c8ea:1 trader=d8aaae563350:1 unexpired=2 owners_match=yes | 1 | PASS |
-| 6 | 2026-10-30T18:23:15Z | re-roll | 20261030T182314Z | pending | | | | | | | | | 1 | pending |
+| 6 | 2026-10-30T18:23:15Z | re-roll | 20261030T182314Z | 0 | 0.854 | 0 | 89 | 27 | 0 | lease:0 drain:0 | 200:192 | worker=288b17068c36:1 trader=b099bd1e3dd2:1 unexpired=2 owners_match=yes | 1 | PASS |
+| 7 | 2026-10-30T19:35:08Z | re-roll | 20261030T193507Z | pending | | | | | | | | | 1 | pending |
