@@ -123,41 +123,12 @@ roll() {  # roll <service> <health-timeout-s>: start a second copy, wait healthy
   docker rm "$old"
 }
 
-oom_ok() {  # the only machine stop: a new OOM since the recorded baseline
-  local r
-  r=$(bash /opt/pocketquant/bin/oom-check.sh $(cat /opt/pocketquant/bin/oom-baseline 2>/dev/null) 2>&1 || true)
-  [ "$r" = OOM_OK ] && return 0
-  echo "ERROR: ${r:-no answer from oom-check.sh}"
-  return 1
-}
-
-if docker ps -a --format '{{.Names}}' | grep -qx pocketquant-app; then
-  # One-time cutover from the single-backend compose: the new services wait in
-  # standby while the old container holds both leases, then take them over.
-  echo "=== One-time cutover: app -> api, worker, trader ==="
-  dc up -d --no-deps api worker trader
-  wait_healthy api "$(dc ps -q api)" 120
-  wait_healthy worker "$(dc ps -q worker)" 120
-  wait_healthy trader "$(dc ps -q trader)" 240
-  if ! oom_ok; then         # four runtimes overlap now; the old app still holds both leases
-    echo "ERROR: OOM stop before the cutover; removing the new services, the old app keeps trading"
-    dc rm -sf api worker trader
-    exit 1
-  fi
-  dc up -d --no-deps web      # new nginx proxies api
-  docker stop pocketquant-app # 180 s grace: drains the trader at a boundary, releases both leases
-  save_logs app pocketquant-app
-  docker rm pocketquant-app
-  wait_lease worker 60
-  wait_lease trader 60
-else
-  echo "=== Rolling api, worker, trader ==="
-  roll api 120
-  roll worker 120
-  wait_lease worker 60
-  roll trader 240
-  wait_lease trader 60
-fi
+echo "=== Rolling api, worker, trader ==="
+roll api 120
+roll worker 120
+wait_lease worker 60
+roll trader 240
+wait_lease trader 60
 
 dc up -d --no-deps web cloudflared
 dc up -d --remove-orphans
