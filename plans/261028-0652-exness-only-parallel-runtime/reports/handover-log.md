@@ -51,6 +51,21 @@ New trader: `trader.standby warmup_s=2.6`. Old app drain: no `trader.drain_retry
 
 Heavy jobs: none was running at the push. The precondition read 0 running rows after the 03:00 `sync_backfill` completed in 116 s. The new worker logged no `orphan_jobs_interrupted` and no catch-up.
 
+## Row 1 notes (D-6)
+
+Deploy: `develop:master` at ee298e78, pushed after the owner approved. Capture stamp `20261030T064424Z`, start `2026-10-30T06:44:27Z`. CI run 41015889660 succeeded with one `0 failures` verdict.
+
+Worker stop and catch-up lines (old and new worker):
+
+```text
+2026-10-30T06:49:20.021265Z [info     ] worker.lease_released          [pocketquant.app.roles] running=0
+```
+
+No `job_row` line: no job was running at the deploy start. `interrupted_heavy_now 0`. No heavy job was cut, so this deploy did not exercise the heavy-job resume.
+
+Task 9.9 Verify: 0 `pocketquant-app`, 3 role containers, 1 `trader.takeover`, 1 `trader.takeover_complete`, `worker=cb95de09e0a8:1 trader=e28052cfc510:1 unexpired=2 owners_match=yes`, `RestartCount` 0 for `pocketquant-prod-api-2`, `-worker-2` and `-trader-2`, 0 `job_history.idempotency_drop_failed`. The capture stop printed `oom=0` on the same boot id and `OOM_OK`.
+
 | # | UTC start | kind | stamp | inflight | offset_s | drain_timeout | handover_gap_ms | takeover_ms | gap_skips | discarded | probe | leases | verify | verdict |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | 2026-10-30T03:02:46Z | cutover D-5 (image deploy, web recreated) | 20261030T030247Z | 0 | 0.61 | 0 | 421 | 45 | 0 | lease:0 drain:0 | 2/546 recorded (D27) | 2/2 owners_match=yes | Boot integrity FAIL | PASS |
+| 1 | 2026-10-30T06:44:27Z | image | 20261030T064424Z | pending | | | | | | | | | 1 | pending |
