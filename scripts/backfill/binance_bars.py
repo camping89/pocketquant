@@ -115,8 +115,8 @@ Examples:
         --days 730 --replace --symbols BTCUSDT,ETHUSDT --no-cascade
 
 MONGODB_URL is read from the environment (preferred) or --mongodb-url. On the VPS
-it holds an internal docker hostname, so prefix prod runs with
-`docker exec pocketquant-app` (see docs/deployment.md -> Two-year bar re-sync).
+it holds an internal docker hostname, so run prod runs inside the api service
+(see docs/deployment.md -> Data Runbooks).
 
 Exit codes: 0 = success, 1 = Mongo connection failure, no data fetched, or any
 per-symbol failure in a bulk run.""",

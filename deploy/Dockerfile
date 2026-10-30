@@ -53,5 +53,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 41921
 
-# One uvicorn worker per container; the worker and trader roles act only while they hold their Mongo lease.
+# Never --workers N: the worker and trader roles act only while they hold their Mongo lease.
 CMD ["uvicorn", "pocketquant.app.main:app", "--host", "0.0.0.0", "--port", "41921"]

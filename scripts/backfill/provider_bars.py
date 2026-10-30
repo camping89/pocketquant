@@ -40,7 +40,7 @@ Example:
     uv run python scripts/backfill/provider_bars.py \\
         --symbol XAUUSD:EXNESS --interval 1m --days 30 [--rate-fraction 0.5] [--dry-run]
 
-On the VPS: docker exec pocketquant-app python scripts/backfill/provider_bars.py ...
+On the VPS: cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api python scripts/backfill/provider_bars.py ...
 
 Uses --rate-fraction of the Exness request rate, shared with the running app.
 Refuses to run while EXNESS_LIVE_TRADING is true.

@@ -16,6 +16,8 @@ This doc covers production only. For local development, see the [README](../READ
 
 To redeploy without a code change, run `gh workflow run cicd.yml --ref master`.
 
+A deploy rolls `api`, `worker` and `trader` one at a time, so no role stops before its replacement is healthy. The order, the deploy lock and the health waits live in `deploy/vps/10-deploy.sh`.
+
 ## Verify
 
 The `deploy` job runs `deploy/vps/11-verify.sh` and uploads its report as the `verify-report` artifact. A green run needs no extra check.
@@ -38,10 +40,10 @@ Check the VPS by hand only when a run looks wrong, or after a risky change:
 
 ```bash
 ssh -i "$KEY" "$HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep pocketquant"
-ssh -i "$KEY" "$HOST" "docker exec pocketquant-app curl -s http://localhost:41921/health"
+ssh -i "$KEY" "$HOST" "cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api curl -s http://localhost:41921/health"
 ```
 
-After a good deploy, `app` and `web` show a short uptime and `(healthy)`. `mongodb` and `redis` keep a long uptime. The deploy must not recreate the stateful containers. Anything else: see [Rollback](#rollback).
+After a good deploy, `api`, `worker`, `trader` and `web` show a short uptime and `(healthy)`. `mongodb` and `redis` keep a long uptime. The deploy must not recreate the stateful containers. Anything else: see [Rollback](#rollback).
 
 ## Platform and Edge
 
@@ -109,8 +111,8 @@ That secret is the only one this repo needs. For a brand-new VPS, see [VPS Migra
 The tunnel is the only public path to the SPA. Pause entries over SSH. The token stays inside the container.
 
 ```bash
-ssh -i "$KEY" "$HOST" 'docker exec -i pocketquant-app sh -s' <<'EOF'
-curl -s -X POST -H "X-Admin-Token: $ADMIN_TOKEN" http://localhost:41921/api/v1/admin/safeguards/pause
+ssh -i "$KEY" "$HOST" 'cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api sh -s' <<'EOF'
+printf 'X-Admin-Token: %s\n' "$ADMIN_TOKEN" | curl -s -H @- -X POST http://localhost:41921/api/v1/admin/safeguards/pause
 EOF
 ```
 
@@ -118,15 +120,18 @@ Then close any open position in the Exness app. The pause is stored and survives
 
 ## Restart while live
 
-Use this for every planned restart (deploy, rollback, config change) while an `exness` subscription exists. The pause survives a restart. Strategy state (warmup, open direction) does not.
+Use this for every planned deploy, rollback or config change while an `exness` subscription exists. A deploy does not stop the subscriptions. The new trader warms up in standby, takes over at a bar boundary, and restores each open direction from the open positions (`StrategyAppService.take_over`). The pause survives a restart.
 
 1. Pause entries (Exness strip, or the SSH command above).
-2. Stop each `exness` subscription: `POST /api/v1/subscriptions/{id}/stop` with the token.
-3. Confirm the account is flat (`GET /api/v1/subscriptions/{id}/positions` is empty for each). Or accept that the venue SL/TP protects the open position.
-4. Deploy.
-5. After the health check, `GET /api/v1/admin/safeguards` shows `"entries_paused":true`.
-6. Start each `exness` subscription again.
-7. Resume entries only with a fresh approval.
+2. Deploy.
+3. After the health check, `GET /api/v1/admin/safeguards` shows `"entries_paused":true`.
+4. Resume entries only with a fresh approval.
+
+Do not restart the trader container by hand. It has no standby, so no trader runs while it warms up. Re-roll the running tag instead:
+
+```bash
+ssh -i "$KEY" "$HOST" "cd /opt/pocketquant && IMAGE_TAG=<running tag> bash deploy/vps/10-deploy.sh"
+```
 
 ## Rollback
 
@@ -136,7 +141,7 @@ Standard: revert and push. CI redeploys from the reverted HEAD.
 git revert <bad-sha> && git push origin master
 ```
 
-Emergency: pin a known-good image on the VPS. CI tags every image `:sha-<short>`. The `cleanup-tags` job prunes old tags, so an old SHA may be gone. The pin lasts until the next CI deploy, which pulls `:latest`.
+Emergency: pin a known-good image on the VPS. CI tags every image `:sha-<short>`. The `cleanup-tags` job prunes old tags, so an old SHA may be gone. The pin lasts until the next CI deploy, which pulls `:latest`. The image guard in `10-deploy.sh` refuses an image built before the role leases. To go back that far, revert the code, compose file and scripts together and push.
 
 ```bash
 ssh -i "$KEY" "$HOST" "cd /opt/pocketquant && \
@@ -188,7 +193,7 @@ The DB on a new VPS starts empty. Backups stay on the old VPS, so copy the ones 
 
 ## Data Runbooks
 
-The scripts ship in the app image under `/app/scripts`. Run each one with `ssh -i "$KEY" "$HOST" "docker exec pocketquant-app python scripts/<path>"`. Each script's `--help` lists its flags.
+The scripts ship in the app image under `/app/scripts`. Run each one in the `api` service with `ssh -i "$KEY" "$HOST" "cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api python scripts/<path>"`. Each script's `--help` lists its flags.
 
 ### Two-year bar re-sync
 
@@ -209,14 +214,14 @@ Exness keeps limited history. A window older than that fails with an Exness erro
 
 ### Sync gap repair
 
-Check for bar-data gaps when `job_history` shows `missed` events for `sync_backfill`, or when a deploy overlaps that job's window. The schedule is in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.py`). The web `/monitor` page shows the same audit for all symbols.
+Check for bar-data gaps when `job_history` shows `missed` events for `sync_backfill`. A deploy that cuts the job leaves no gap, because the next worker resumes it ([System Architecture](system-architecture.md#decisions)). The schedule is in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.py`). The web `/monitor` page shows the same audit for all symbols.
 
 Audit first. Run the repair only if the audit shows gaps. The repair deletes misaligned bars and re-syncs the gap ranges.
 
 ```bash
-ssh -i "$KEY" "$HOST" 'docker exec -i pocketquant-app sh -s' <<'EOF'
+ssh -i "$KEY" "$HOST" 'cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api sh -s' <<'EOF'
 body='{"symbol":"BTCUSDT:BINANCE","interval":"1m","days_back":7}'
-curl -s -X POST -H "X-Admin-Token: $ADMIN_TOKEN" -H 'Content-Type: application/json' -d "$body" http://localhost:41921/api/v1/market-data/integrity/check
+printf 'X-Admin-Token: %s\n' "$ADMIN_TOKEN" | curl -s -H @- -X POST -H 'Content-Type: application/json' -d "$body" http://localhost:41921/api/v1/market-data/integrity/check
 # only if gaps: same call with /integrity/repair
 EOF
 ```
