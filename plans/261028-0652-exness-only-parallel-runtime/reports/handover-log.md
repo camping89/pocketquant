@@ -69,4 +69,5 @@ Task 9.9 Verify: 0 `pocketquant-app`, 3 role containers, 1 `trader.takeover`, 1 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | 2026-10-30T03:02:46Z | cutover D-5 (image deploy, web recreated) | 20261030T030247Z | 0 | 0.61 | 0 | 421 | 45 | 0 | lease:0 drain:0 | 2/546 recorded (D27) | 2/2 owners_match=yes | Boot integrity FAIL | PASS |
 | 1 | 2026-10-30T06:44:27Z | image | 20261030T064424Z | 0 | 0.831 | 0 | 499 | 58 | 0 | lease:0 drain:0 | 000:1 200:583 (image, recorded only, D27) | worker=cb95de09e0a8:1 trader=e28052cfc510:1 unexpired=2 owners_match=yes | 1 | PASS |
-| 2 | 2026-10-30T08:11:16Z | re-roll | 20261030T081114Z | pending | | | | | | | | | 1 | pending |
+| 2 | 2026-10-30T08:11:16Z | re-roll | 20261030T081114Z | 0 | 0.612 | 0 | 230 | 20 | 0 | lease:0 drain:0 | 200:282 | worker=ec051671e147:1 trader=024de5e5ebdb:1 unexpired=2 owners_match=yes | 1 | PASS |
+| 3 | 2026-10-30T14:09:39Z | re-roll | 20261030T140937Z | pending | | | | | | | | | 1 | pending |
