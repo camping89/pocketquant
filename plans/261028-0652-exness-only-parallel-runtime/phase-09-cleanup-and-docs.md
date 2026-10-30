@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Cleanup and docs"
-status: pending
+status: done
 priority: P1
 effort: "about 3h + one image deploy (D-6, handover 1 of 10)"
 dependencies: [8]

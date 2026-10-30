@@ -89,8 +89,8 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 | 06 | [Strategy runtime and restart state: guards, signal tasks, latency, warm-up, paper restore](./phase-06-strategy-runtime-and-restart-state.md) | D-3 | 05 | Done |
 | 07 | [Roles and leases inside one process (Deploy A)](./phase-07-roles-and-leases-deploy-a.md) | D-4 | 01 (spike PASS), 06 | Done |
 | 08 | [Topology and cutover to api/worker/trader (Deploy B)](./phase-08-topology-and-cutover-deploy-b.md) | D-5 | 07 | Done |
-| 09 | [Cleanup and docs](./phase-09-cleanup-and-docs.md) | D-6 (handover 1/10) | 08 | Pending |
-| 10 | [Prod verification: 10 handovers, 14 days paper, machine limits](./phase-10-prod-verification.md) | re-rolls | 09 | Pending |
+| 09 | [Cleanup and docs](./phase-09-cleanup-and-docs.md) | D-6 (handover 1/10) | 08 | Done |
+| 10 | [Prod verification: 10 handovers, 14 days paper, machine limits](./phase-10-prod-verification.md) | re-rolls | 09 | In progress |
 | 11 | [Re-arm live gate](./phase-11-re-arm-live-gate.md) | per go-live plan | 10 | Pending |
 
 ## Acceptance criteria

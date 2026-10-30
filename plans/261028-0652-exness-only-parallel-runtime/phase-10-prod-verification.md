@@ -27,6 +27,7 @@ Run this phase once per UTC day after 01:00Z, and again the same day for another
 <!-- Red team 2026-10-28: #11 #15 -->
 - Prod logs are console-rendered with ANSI colours (`../pocketquant-config/vps/default/.env:27`, `core/common/logging/setup.py:62-71`); each structlog line starts with an ISO UTC timestamp (`setup.py:55`), stdlib lines carry none (`setup.py:82-86`). A role's history is its saved logs (`/opt/pocketquant/logs/<svc>-<id12>-<ts>.log.gz`, written by `roll` after `docker stop` and before `docker rm`) plus the live container's log; the commands below join them, strip colours and give an untimestamped line the time of the line before it. Container logs use the json-file driver with `max-size: "10m"`, `max-file: "3"` (the backend block at `deploy/compose.prod.yml:87-91` on 453e8e90, which Phase 08 moves into the shared backend block), so a live container keeps at most about 30 MB of log; the deploy script keeps saved logs for 30 days. Do not leave day rows unwritten for long.
 <!-- Red team 2026-10-28: #11 #15 -->
+- `leases.sh` calls `docker exec -i`, so inside a piped `bash -s` script it must read `< /dev/null`, or it swallows the rest of the script.
 - VPS helpers (Phase 08, `/opt/pocketquant/bin/`; output shapes in the shared contract): `snapshot.sh <label>` (one line `label= ts= mem_used_mb= mem_available_mb= swap_used_mb= load1= psi_some_avg10= oom= boot_id=`), `sample.sh start|stop <file>` (`docker stats --no-stream` every 2 s, only while a roll runs, D34), `probe.sh start|stop <file>` (web probe every 0.5 s), `leases.sh` (`worker=<owner> trader=<owner> unexpired=<n> owners_match=<yes|no>`), `oom-check.sh <boot_id> <count>` (`OOM_OK` or `OOM_STOP <reason>`). This phase installs no script on the VPS; capture files go to `/opt/pocketquant/logs/verify/<name>-<T>.txt` and daily latency samples to `/opt/pocketquant/logs/verify/lat-<D>.txt`.
 <!-- Red team 2026-10-28: #2 -->
 - OOM rule (`plan.md` Conventions): every check passes the single `oom_baseline=<boot_id> <oom_kill>` line of `reports/machine-baseline.md` to `oom-check.sh`; never compare an absolute count.
@@ -141,7 +142,7 @@ for r in api worker trader; do
   echo "lag_max_$r ${m:-<0.25}"
 done
 m=$(echo "$OLDL" | grep 'event_loop\.lag' | grep -o 'lag_s=[0-9.]*' | cut -d= -f2 | sort -n | tail -1); echo "lag_max_old_trader ${m:-<0.25}"
-bash /opt/pocketquant/bin/leases.sh
+bash /opt/pocketquant/bin/leases.sh < /dev/null
 cat "$V/snap-$T.txt"; echo "oom_at_capture $(cat "$V/oom-$T.txt" 2>/dev/null || echo n/a)"
 awk '{n = ""; c = ""; m = ""; for (i = 1; i <= NF; i++) { if (n == "" && $i ~ /^pocketquant/) n = $i; if (c == "" && $i ~ /%$/) c = $i; if (m == "" && $(i + 1) == "/") m = $i }
   if (n == "" || m == "") next; sub(/%/, "", c); v = m + 0; if (m ~ /GiB/) v *= 1024; else if (m ~ /KiB/) v /= 1024; else if (m !~ /MiB/) v /= 1048576
@@ -197,7 +198,7 @@ echo "lease_lost $(grep -cE 'lease\.(lost|takeover_failed)' /tmp/pq-day-all.log)
 echo "entry_skipped $(grep 'strategy\.entry_skipped' /tmp/pq-day-trader.log | grep -o 'reason=[a-z_]*' | sort | uniq -c | awk '{printf "%s:%s ", $2, $1}')"
 grep 'live\.signal_latency' /tmp/pq-day-trader.log | grep 'interval=1m' | grep ':EXNESS' | grep -o 't0_t5_ms=[0-9.]*' | cut -d= -f2 > "$V/lat-$D.txt"
 echo "t0_t5_1m_exness $(sort -n "$V/lat-$D.txt" | awk '{a[NR] = $1} END {if (NR < 5) print "n/a n=" NR; else {i = int(0.95 * NR); if (i < 0.95 * NR) i++; print "p95=" a[i] " n=" NR}}')"
-bash /opt/pocketquant/bin/leases.sh
+bash /opt/pocketquant/bin/leases.sh < /dev/null
 rm -f /tmp/pq-day-*.log
 EOF
 ```
@@ -248,7 +249,7 @@ EOF
 **Goal:** add one handover deploy per run until 10 PASS rows exist, at least 5 of them re-rolls.
 **Target files and symbols:** VPS `deploy/vps/10-deploy.sh`, `deploy/vps/11-verify.sh`; capture files; `handover-log.md`.
 **Steps:**
-1. Skip when: 10 PASS rows without `(off-session)` with ≥ 5 `re-roll` rows among them exist, or a row is pending, or the last deploy started less than 70 min ago, or the Context session check with `S=$(date -u +%FT%TZ)` prints `off-session` (D36: the row would not count).
+1. Skip when: 10 PASS rows numbered ≥ 1 (row 0 is the cutover and does not count) without `(off-session)` with ≥ 5 `re-roll` rows among them exist, or a row is pending, or the last deploy started less than 70 min ago, or the Context session check with `S=$(date -u +%FT%TZ)` prints `off-session` (D36: the row would not count).
 <!-- Red team 2026-10-28: #7 #11 -->
 2. Lock (no time check; plan.md Conventions): `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'flock -n /opt/pocketquant/deploy.lock true && echo lock-free'`. No `lock-free` (a CI deploy is running) -> skip this task in this run.
 3. Tag: `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "docker inspect -f '{{.Config.Image}}' pocketquant-web | sed 's/.*://'"`; write it down as `<tag>`.
@@ -282,7 +283,7 @@ EOF
 **Steps:**
 <!-- Red team 2026-10-28: #2 -->
 1. OOM step (D31, the only machine stop): if any check printed `OOM_STOP`, append the rows so far, commit and push them (steps 5-6), then ask: "Recommended: 1 — nâng cấp host (D5: 8 vCPU / 16 GB) vì máy 2 vCPU / 3 GB đã có OOM khi chạy thử. Số liệu: <dòng OOM_STOP>, <dòng D25 liên quan>. Lựa chọn (chỉ là thông tin, không phải cổng tự động): 1) nâng host; 2) giới hạn cache WiredTiger của MongoDB (`--wiredTigerCacheSizeGB 0.5`, một dòng compose); 3) đặt `mem_limit` cho từng container theo RSS đỉnh đã đo. Trả lời 1, 2, 3 hoặc `tiếp tục`." Record the answer in `machine-limits.md`, `rm -f .cache/ssh/vps_key`, and end with the `NOT_YET` block (`NOT_YET: OOM seen; owner chose <answer>`); the chosen lever is a new change outside this phase.
-2. Done when all hold: ≥ 10 PASS handover rows after the last fix whose kind has no `(off-session)` (D36), ≥ 5 of them `re-roll`; 14 consecutive PASS daily rows; weekly rows 1 and 2 PASS; pooled 14-day latency has ≥ 5 samples (sum of `n` over the two weekly rows). If pooled samples are fewer than 5 at day 14, ask: "Recommended: tiếp tục — chạy thêm ngày cho tới khi có ≥ 5 mẫu `t0_t5_ms` 1m Exness (hiện có <n>). Trả lời `tiếp tục` hoặc `bỏ qua tiêu chí độ trễ`." and record the answer.
+2. Done when all hold: ≥ 10 PASS handover rows numbered ≥ 1 (row 0 does not count) whose kind has no `(off-session)` (D36), ≥ 5 of them `re-roll`; 14 consecutive PASS daily rows; weekly rows 1 and 2 PASS; pooled 14-day latency has ≥ 5 samples (sum of `n` over the two weekly rows). If pooled samples are fewer than 5 at day 14, ask: "Recommended: tiếp tục — chạy thêm ngày cho tới khi có ≥ 5 mẫu `t0_t5_ms` 1m Exness (hiện có <n>). Trả lời `tiếp tục` hoặc `bỏ qua tiêu chí độ trễ`." and record the answer.
 3. Not done: commit and push (steps 5-6), `rm -f .cache/ssh/vps_key`, end with the `NOT_YET` block (`NOT_YET: <k>/10 handover rows, <d>/14 days`, resume after the next UTC day 01:00Z, or 70 min from now when a re-roll is still owed).
 <!-- Red team 2026-10-28: #4 #15 -->
 4. Done: append to `machine-limits.md` a section `## Machine limits summary for the owner` with: `nproc` and total RAM (`free -m` total, one SSH call); per container the max peak RSS and CPU% over all handover rows (sampled only during rolls); host used max, available min and swap max over all snapshots (point samples before and after each roll and once per run day, not continuous peaks); PSI max; load1 max against `nproc`; loop lag max per role; warm-up s min/median/max; `takeover_ms` and `handover_gap_ms` max; the summed `strategy.signal_discarded` counts by reason; every OOM check `OOM_OK`; then one paragraph labelled "Inference" on where the machine runs short first (memory headroom at the overlap or CPU), and the three levers as information: a bigger host (D5), a WiredTiger cache cap (`--wiredTigerCacheSizeGB 0.5`; MongoDB's default is about half of RAM minus 1 GB, about 1 GB here [I]), measured `mem_limit` values. Append `Verification verdict: PASS <UTC>` as the last line of `paper-daily.md`. Record in the summary that trader lag ≥ 0.5 s days (the Stalls criterion) are reported, not judged, per D31.
