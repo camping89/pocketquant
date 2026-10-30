@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pymongo.asynchronous.collection import AsyncCollection
 
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.job_history_repository import (
@@ -51,6 +52,38 @@ async def test_idempotency_index_tolerates_legacy_null_rows(repo):
     coll = repo._collection()
     rows = await coll.count_documents({"job_id": "sync_5m", "scheduled_run_time": sched})
     assert rows == 1, "record_skip must be idempotent on (job_id, scheduled_run_time)"
+
+
+# api, worker and trader run ensure_indexes at the same moment on a cutover; a drop
+# of a matching index would abort another container's build of it.
+@pytest.mark.asyncio
+async def test_ensure_indexes_never_drops_a_matching_index(repo, monkeypatch):
+    dropped: list[str] = []
+    real_drop = AsyncCollection.drop_index
+
+    async def spy(self, index, *args, **kwargs):
+        dropped.append(index)
+        return await real_drop(self, index, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncCollection, "drop_index", spy)
+
+    await repo.ensure_indexes()
+
+    assert "idx_skip_idempotency" not in dropped
+
+
+@pytest.mark.asyncio
+async def test_a_drifted_idempotency_index_is_rebuilt(repo):
+    coll = repo._collection()
+    await coll.drop_index("idx_skip_idempotency")
+    await coll.create_index(
+        [("job_id", 1), ("scheduled_run_time", 1)], name="idx_skip_idempotency", sparse=True
+    )
+
+    await repo.ensure_indexes()
+
+    info = await coll.index_information()
+    assert info["idx_skip_idempotency"].get("unique") is True
 
 
 @pytest.mark.asyncio

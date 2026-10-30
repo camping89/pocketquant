@@ -317,11 +317,17 @@ class JobHistoryRepository(BaseRepository):
         # Idempotency for listener-written rows. partialFilterExpression keeps
         # legacy + wrapper rows (which have scheduled_run_time=null/missing)
         # OUT of the unique constraint — sparse alone treats null as a value.
+        # Dropped only when its spec drifted: role containers start at once, and one
+        # container's drop aborts another's index build.
+        partial = {"scheduled_run_time": {"$type": "date"}}
         try:
             existing = await coll.index_information()
         except Exception:
             existing = {}
-        if "idx_skip_idempotency" in existing:
+        current = existing.get("idx_skip_idempotency")
+        if current and not (
+            current.get("unique") and current.get("partialFilterExpression") == partial
+        ):
             try:
                 await coll.drop_index("idx_skip_idempotency")
             except Exception:
@@ -330,7 +336,7 @@ class JobHistoryRepository(BaseRepository):
             [("job_id", 1), ("scheduled_run_time", 1)],
             name="idx_skip_idempotency",
             unique=True,
-            partialFilterExpression={"scheduled_run_time": {"$type": "date"}},
+            partialFilterExpression=partial,
         )
         logger.info("job_history.indexes_ensured")
 
