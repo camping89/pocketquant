@@ -117,14 +117,14 @@ async def ensure_all_indexes(container: AsyncContainer) -> None:
     logger.info("database_indexes_ensured")
 
 
-# A job killed between record_start() and record_finish() (e.g. CancelledError
-# mid-deploy) leaves a row stuck at running. This runs when the worker takes its
-# lease, before the scheduler starts, so new runs do not race the sweep.
+# A job killed between record_start() and record_finish() leaves a row stuck at
+# running. This runs when the worker takes its lease, before the scheduler starts, so
+# new runs do not race the sweep; the catch-up then resumes a cut heavy job.
 async def recover_orphan_jobs(container: AsyncContainer) -> None:
     repo = await container.get(JobHistoryRepository)
-    n = await repo.reconcile_orphan_running(max_age_seconds=600)
+    n = await repo.interrupt_orphan_running()
     if n:
-        logger.info("orphan_jobs_recovered", marked_failed=n)
+        logger.info("orphan_jobs_interrupted", count=n)
 
 
 async def bootstrap_live_instances(container: AsyncContainer) -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from pocketquant.core.common.constants import COLLECTION_JOB_HISTORY
@@ -18,11 +18,14 @@ _TTL_SECONDS = 30 * 86400
 class JobHistoryRepository(BaseRepository):
     _collection_name = COLLECTION_JOB_HISTORY
 
+    # Returns the run id. Every later write of this run filters on it, and a resume gives
+    # the row a new one, so a late write from a stopped process changes nothing.
     async def record_start(self, job_id: str) -> str:
         doc_id = generate_id_str()
         await self._collection().insert_one(
             {
                 "_id": doc_id,
+                "run_id": doc_id,
                 "job_id": job_id,
                 "started_at": datetime.now(UTC),
                 "finished_at": None,
@@ -30,6 +33,7 @@ class JobHistoryRepository(BaseRepository):
                 "status": "running",
                 "error": None,
                 "details": [],
+                "done_symbols": [],
                 "total_inserted": 0,
                 "total_fetched": 0,
             }
@@ -38,7 +42,7 @@ class JobHistoryRepository(BaseRepository):
 
     async def record_finish(
         self,
-        doc_id: str,
+        run_id: str,
         *,
         status: str,
         duration_ms: int | None = None,
@@ -57,7 +61,41 @@ class JobHistoryRepository(BaseRepository):
             update["total_inserted"] = total_inserted
         if total_fetched is not None:
             update["total_fetched"] = total_fetched
-        await self._collection().update_one({"_id": doc_id}, {"$set": update})
+        await self._collection().update_one({"run_id": run_id}, {"$set": update})
+
+    async def mark_symbol_done(self, run_id: str, symbol: str) -> None:
+        await self._collection().update_one(
+            {"run_id": run_id}, {"$addToSet": {"done_symbols": symbol}}
+        )
+
+    # Claims the newest run a handover cut after `since` under a new run id, so the run
+    # skips its finished symbols; every older cut run of the job is closed. Returns
+    # (run_id, finished symbols) or None.
+    async def resume_interrupted(self, job_id: str, since: datetime) -> tuple[str, set[str]] | None:
+        run_id = generate_id_str()
+        doc = await self._collection().find_one_and_update(
+            {"job_id": job_id, "status": "interrupted", "started_at": {"$gte": since}},
+            {"$set": {"run_id": run_id, "status": "running", "finished_at": None, "error": None}},
+            sort=[("started_at", -1)],
+            projection={"done_symbols": 1},
+        )
+        await self.close_interrupted(job_id)
+        return (run_id, set(doc.get("done_symbols") or [])) if doc else None
+
+    # A fresh run supersedes every cut run of the job, so a later resume cannot skip
+    # symbols an older cycle finished.
+    async def close_interrupted(self, job_id: str) -> None:
+        await self._collection().update_many(
+            {"job_id": job_id, "status": "interrupted"},
+            {"$set": {"status": "failed", "error": "superseded"}},
+        )
+
+    async def has_interrupted(self, job_id: str, since: datetime) -> bool:
+        doc = await self._collection().find_one(
+            {"job_id": job_id, "status": "interrupted", "started_at": {"$gte": since}},
+            projection={"_id": 1},
+        )
+        return doc is not None
 
     # Idempotent upsert keyed by (job_id, scheduled_run_time), so multi-instance races
     # converge.
@@ -92,7 +130,7 @@ class JobHistoryRepository(BaseRepository):
     # details[] is stored inline on the run doc; that holds up to about 50 entries per doc.
     async def record_detail(
         self,
-        doc_id: str,
+        run_id: str,
         *,
         symbol: str,
         interval: str,
@@ -104,7 +142,7 @@ class JobHistoryRepository(BaseRepository):
         error: str | None = None,
     ) -> None:
         await self._collection().update_one(
-            {"_id": doc_id},
+            {"run_id": run_id},
             {
                 "$push": {
                     "details": {
@@ -122,16 +160,15 @@ class JobHistoryRepository(BaseRepository):
             },
         )
 
-    # A process killed between record_start() and record_finish() leaves a forever-running
-    # row. The started_at age filter keeps a wrapper finishing mid-sweep safe: record_finish()
-    # writes by _id, and a completed doc no longer matches.
-    async def reconcile_orphan_running(self, max_age_seconds: int = 600) -> int:
-        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
+    # A process killed between record_start() and record_finish() leaves a running row.
+    # Called by a worker that just took the lease, before its scheduler starts. A stopped
+    # process that still writes uses its old run id, which a resume replaces.
+    async def interrupt_orphan_running(self) -> int:
         result = await self._collection().update_many(
-            {"status": "running", "started_at": {"$lt": cutoff}},
+            {"status": "running"},
             {
                 "$set": {
-                    "status": "failed",
+                    "status": "interrupted",
                     "finished_at": datetime.now(UTC),
                     "error": "orphan_running_recovered",
                 }
@@ -274,6 +311,7 @@ class JobHistoryRepository(BaseRepository):
             [("job_id", 1), ("started_at", -1)],
             name="idx_job_started",
         )
+        await coll.create_index([("run_id", 1)], name="idx_run_id")
         # TTL: drop & recreate if expireAfterSeconds drifted.
         await self._ensure_ttl_index(coll)
         # Idempotency for listener-written rows. partialFilterExpression keeps

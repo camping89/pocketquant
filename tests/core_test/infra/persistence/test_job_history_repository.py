@@ -90,10 +90,24 @@ async def test_latest_run_is_decided_when_two_runs_share_a_started_at(repo):
     older, newer = "0196c0de-0000-7000-8000-00000000000a", "0196c0de-0000-7000-8000-00000000000b"
     await repo._collection().insert_many(
         [
-            {"_id": older, "job_id": "sync_5m", "started_at": shared, "status": "completed",
-             "duration_ms": 100, "finished_at": shared, "error": None},
-            {"_id": newer, "job_id": "sync_5m", "started_at": shared, "status": "completed",
-             "duration_ms": 200, "finished_at": shared, "error": None},
+            {
+                "_id": older,
+                "job_id": "sync_5m",
+                "started_at": shared,
+                "status": "completed",
+                "duration_ms": 100,
+                "finished_at": shared,
+                "error": None,
+            },
+            {
+                "_id": newer,
+                "job_id": "sync_5m",
+                "started_at": shared,
+                "status": "completed",
+                "duration_ms": 200,
+                "finished_at": shared,
+                "error": None,
+            },
         ]
     )
 
@@ -125,48 +139,104 @@ async def test_record_detail_appends_to_run(repo):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_orphan_running_flips_only_stale_running(repo):
+async def test_interrupt_orphan_running_flips_every_running_row(repo):
     now = datetime.now(UTC)
     coll = repo._collection()
     await coll.insert_many(
         [
-            # Recent running — within grace, must NOT flip.
             {
-                "_id": "recent_running",
-                "job_id": "sync_5m",
+                "_id": "recent",
+                "job_id": "sync_repair",
                 "status": "running",
                 "started_at": now - timedelta(seconds=30),
             },
-            # Stale running — must flip.
             {
-                "_id": "stale_running",
-                "job_id": "sync_5m",
+                "_id": "old",
+                "job_id": "sync_1m",
                 "status": "running",
                 "started_at": now - timedelta(minutes=15),
             },
-            # Completed — must be left untouched (filter excludes it).
             {
                 "_id": "completed",
-                "job_id": "sync_5m",
+                "job_id": "sync_repair",
                 "status": "completed",
                 "started_at": now - timedelta(hours=1),
             },
         ]
     )
 
-    n = await repo.reconcile_orphan_running(max_age_seconds=600)
-    assert n == 1
+    assert await repo.interrupt_orphan_running() == 2
 
-    stale = await coll.find_one({"_id": "stale_running"})
-    assert stale["status"] == "failed"
-    assert stale["error"] == "orphan_running_recovered"
-    assert stale["finished_at"] is not None
+    for doc_id in ("recent", "old"):
+        doc = await coll.find_one({"_id": doc_id})
+        assert doc["status"] == "interrupted"
+        assert doc["error"] == "orphan_running_recovered"
+        assert doc["finished_at"] is not None
+    assert (await coll.find_one({"_id": "completed"}))["status"] == "completed"
 
-    # Negative-control: recent + completed docs untouched.
-    recent = await coll.find_one({"_id": "recent_running"})
-    assert recent["status"] == "running"
-    done = await coll.find_one({"_id": "completed"})
-    assert done["status"] == "completed"
+
+@pytest.mark.asyncio
+async def test_resume_interrupted_claims_the_newest_cut_run_once(repo):
+    now = datetime.now(UTC)
+    coll = repo._collection()
+    await coll.insert_many(
+        [
+            {
+                "_id": "too_old",
+                "job_id": "sync_repair",
+                "status": "interrupted",
+                "started_at": now - timedelta(hours=20),
+                "done_symbols": ["A"],
+            },
+            {
+                "_id": "cut",
+                "job_id": "sync_repair",
+                "status": "interrupted",
+                "started_at": now - timedelta(minutes=3),
+                "done_symbols": ["A", "B"],
+            },
+        ]
+    )
+
+    assert await repo.has_interrupted("sync_repair", now - timedelta(hours=12)) is True
+    claimed = await repo.resume_interrupted("sync_repair", now - timedelta(hours=12))
+    assert claimed is not None
+    run_id, done = claimed
+    assert done == {"A", "B"}
+    cut = await coll.find_one({"_id": "cut"})
+    assert (cut["status"], cut["run_id"]) == ("running", run_id)
+    old = await coll.find_one({"_id": "too_old"})
+    assert (old["status"], old["error"]) == ("failed", "superseded")
+    assert await repo.resume_interrupted("sync_repair", now - timedelta(hours=24)) is None
+    assert await repo.has_interrupted("sync_repair", now - timedelta(hours=24)) is False
+
+
+# A stopped process that writes late still holds the old run id; once the row is
+# resumed under a new one, those writes change nothing.
+@pytest.mark.asyncio
+async def test_a_late_write_under_the_old_run_id_misses_a_resumed_row(repo):
+    old_run = await repo.record_start("sync_backfill")
+    await repo.mark_symbol_done(old_run, "A")
+    await repo.mark_symbol_done(old_run, "A")
+    await repo.record_finish(old_run, status="interrupted")
+    claimed = await repo.resume_interrupted("sync_backfill", datetime.now(UTC) - timedelta(hours=1))
+    assert claimed is not None
+    new_run, done = claimed
+    assert done == {"A"}
+
+    await repo.record_finish(old_run, status="completed")
+    await repo.mark_symbol_done(old_run, "B")
+    doc = await repo._collection().find_one({"_id": old_run})
+    assert (doc["status"], doc["done_symbols"]) == ("running", ["A"])
+
+    await repo.mark_symbol_done(new_run, "B")
+    await repo.record_finish(new_run, status="completed", total_inserted=2)
+    doc = await repo._collection().find_one({"_id": old_run})
+    assert (doc["status"], doc["done_symbols"], doc["total_inserted"]) == (
+        "completed",
+        ["A", "B"],
+        2,
+    )
 
 
 @pytest.mark.asyncio

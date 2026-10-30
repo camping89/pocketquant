@@ -32,6 +32,7 @@ class _FakeContainer:
         repo = AsyncMock()
         # Catch-up sweep calls this; None means "no last success, skip catch-up".
         repo.get_last_successful_started_at = AsyncMock(return_value=None)
+        repo.has_interrupted = AsyncMock(return_value=False)
         return repo
 
 

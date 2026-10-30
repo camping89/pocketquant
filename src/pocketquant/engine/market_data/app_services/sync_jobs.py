@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -76,12 +77,16 @@ CATCHUP_TARGETS: list[tuple[str, str, int]] = [
     ("sync_integrity", f"{_MODULE}:sync_integrity", 86400 + 3600),
     ("sync_repair", f"{_MODULE}:sync_repair", 43200 + 1800),  # 12h + 30min
 ]
+# A heavy job cut by a worker handover is resumed by its catch-up within its max gap
+# and skips the symbols it finished.
+_RESUME_GAP_S = {job_id: max_gap for job_id, _, max_gap in CATCHUP_TARGETS}
 
 # Module-level container reference. Set once at startup by register_sync_jobs.
 # Job functions resolve their dependencies via this container at execution time.
 _container: AsyncContainer | None = None
-# Job bodies running now; the worker waits for them before it releases its lease.
-_RUNNING: set[asyncio.Task] = set()
+# Job bodies running now, by job name; the worker stops them before it releases its
+# lease. A catch-up and its cron share a name, so they never run at once.
+_RUNNING: dict[str, asyncio.Task] = {}
 
 # Verify cascade thresholds (per-field).
 # Price relative threshold catches scale-aware drift across assets:
@@ -132,23 +137,56 @@ def compare_bar_fields(rest_bar, db_bar) -> dict[str, bool]:  # noqa: ANN001
 # A failed body is recorded and logged here, not re-raised: the scheduler's error
 # hook would record the same run a second time. Only a failed start record reaches
 # the scheduler. A failed history write never fails the job.
-async def _tracked(name: str, body: Callable[[str | None], Awaitable[dict | None]]) -> None:
+# The body gets the run id and, for a heavy job, the set of symbols this run already
+# finished (None for every other job, which marks nothing). Only a catch-up resumes.
+async def _tracked(
+    name: str,
+    body: Callable[[str | None, set[str] | None], Awaitable[dict | None]],
+    resume: bool = False,
+) -> None:
+    running = _RUNNING.get(name)
+    if running is not None and not running.done():
+        logger.warning("job.already_running", job_id=name)
+        return
     task = asyncio.current_task()
     if task is not None:
-        _RUNNING.add(task)
+        _RUNNING[name] = task
     try:
         history_repo = await _get_container().get(JobHistoryRepository)
         started = datetime.now(UTC)
         doc_id: str | None = None
+        done: set[str] | None = set() if name in _RESUME_GAP_S else None
         try:
-            doc_id = await history_repo.record_start(name)
+            resumed = None
+            if done is not None and resume:
+                since = started - timedelta(seconds=_RESUME_GAP_S[name])
+                resumed = await history_repo.resume_interrupted(name, since)
+            elif done is not None:
+                await history_repo.close_interrupted(name)
+            if resumed:
+                doc_id, done = resumed
+                logger.info("job.resumed", job_id=name, done_symbols=len(done))
+            else:
+                doc_id = await history_repo.record_start(name)
         except Exception:
             logger.warning("job_history.record_start_failed", job_id=name, exc_info=True)
 
         totals: dict = {}
         error: str | None = None
         try:
-            totals = await body(doc_id) or {}
+            totals = await body(doc_id, done) or {}
+        except asyncio.CancelledError:
+            # A stop cancelled this task (worker stop, lost lease, shutdown). Returning
+            # ends it without an APScheduler error; a catch-up resumes the row.
+            if task is None or not task.cancelling():
+                raise
+            if doc_id is not None:
+                with contextlib.suppress(Exception):
+                    await history_repo.record_finish(
+                        doc_id, status="interrupted", duration_ms=_ms_since(started)
+                    )
+            logger.warning("job.interrupted", job_id=name)
+            return
         except Exception as exc:
             if doc_id is None:
                 raise
@@ -167,14 +205,38 @@ async def _tracked(name: str, body: Callable[[str | None], Awaitable[dict | None
         except Exception:
             logger.warning("job_history.record_finish_failed", job_id=name, exc_info=True)
     finally:
-        if task is not None:
-            _RUNNING.discard(task)
+        if task is not None and _RUNNING.get(name) is task:
+            del _RUNNING[name]
 
 
-async def wait_running_jobs(timeout_s: float) -> int:
+# Waits for running jobs, then cancels the rest so none outlives the lease release.
+# Returns how many were cancelled.
+async def stop_running_jobs(timeout_s: float) -> int:
     if _RUNNING:
-        await asyncio.wait(set(_RUNNING), timeout=max(0.0, timeout_s))
-    return len(_RUNNING)
+        await asyncio.wait(set(_RUNNING.values()), timeout=max(0.0, timeout_s))
+    left = set(_RUNNING.values())
+    for task in left:
+        task.cancel()
+    if left:
+        await asyncio.wait(left, timeout=5.0)
+    alive = sum(not t.done() for t in left)
+    if alive:
+        logger.error("jobs.not_stopped", count=alive)
+    return len(left)
+
+
+async def _mark_done(
+    history_repo: JobHistoryRepository, doc_id: str | None, done: set[str] | None, symbol: str
+) -> None:
+    if done is None or doc_id is None:
+        return
+    done.add(symbol)
+    try:
+        await history_repo.mark_symbol_done(doc_id, symbol)
+    except Exception:
+        logger.warning(
+            "job_history.mark_symbol_done_failed", run_id=doc_id, symbol=symbol, exc_info=True
+        )
 
 
 # Every symbol is tried and the first error is raised at the end. A shut market is
@@ -190,6 +252,7 @@ async def _sync_by_intervals(
     doc_id: str | None,
     source: str,
     calendar_factory: TradingCalendarFactory,
+    done: set[str] | None = None,
 ) -> dict:
     logger.debug(f"market_data.{job_name}.started")
 
@@ -214,6 +277,8 @@ async def _sync_by_intervals(
     grace = timedelta(seconds=INTERVAL_SECONDS[max(intervals, key=lambda i: INTERVAL_SECONDS[i])])
 
     for symbol in symbols:
+        if done and symbol in done:
+            continue
         calendar = await calendar_factory.for_symbol(symbol)
         now = datetime.now(UTC)
         if not (calendar.is_open(now) or (now - calendar.previous_close(now)) <= grace):
@@ -233,8 +298,10 @@ async def _sync_by_intervals(
                 status="skipped",
                 error="closed",
             )
+            await _mark_done(history_repo, doc_id, done, symbol)
             continue
 
+        errors_before = errors
         for interval in intervals:
             command = SyncSymbolCommand(
                 symbol=symbol, interval=interval, n_bars=n_bars, source=source
@@ -277,6 +344,8 @@ async def _sync_by_intervals(
                 synced += 1
             else:
                 errors += 1
+        if errors == errors_before:
+            await _mark_done(history_repo, doc_id, done, symbol)
 
     logger.debug(
         f"market_data.{job_name}.completed",
@@ -290,7 +359,12 @@ async def _sync_by_intervals(
 
 
 async def _rest_sync(
-    name: str, intervals: list[Interval], n_bars: int, source: str, doc_id: str | None
+    name: str,
+    intervals: list[Interval],
+    n_bars: int,
+    source: str,
+    doc_id: str | None,
+    done: set[str] | None = None,
 ) -> dict:
     container = _get_container()
     return await _sync_by_intervals(
@@ -303,6 +377,7 @@ async def _rest_sync(
         doc_id,
         source=source,
         calendar_factory=await container.get(TradingCalendarFactory),
+        done=done,
     )
 
 
@@ -316,7 +391,7 @@ async def sync_1m() -> None:
     bar_repo = await container.get(BarRepository)
     calendar_factory = await container.get(TradingCalendarFactory)
 
-    async def body(doc_id: str | None) -> dict:
+    async def body(doc_id: str | None, _done: set[str] | None) -> dict:
         # A cancellation (shutdown) is a BaseException: it skips the cascade.
         sync_error: Exception | None = None
         totals: dict = {}
@@ -352,25 +427,29 @@ async def sync_1m() -> None:
     await _tracked("sync_1m", body)
 
 
-async def sync_backfill() -> None:
+async def sync_backfill(resume: bool = False) -> None:
     await _tracked(
         "sync_backfill",
-        lambda doc_id: _rest_sync(
-            "sync_backfill", SYNC_INTERVALS, 5000, SOURCE_REST_BACKFILL, doc_id
+        lambda doc_id, done: _rest_sync(
+            "sync_backfill", SYNC_INTERVALS, 5000, SOURCE_REST_BACKFILL, doc_id, done
         ),
+        resume,
     )
 
 
-async def sync_integrity() -> None:
+async def sync_integrity(resume: bool = False) -> None:
     container = _get_container()
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
     calendar_factory = await container.get(TradingCalendarFactory)
+    history_repo = await container.get(JobHistoryRepository)
 
-    async def body(_: str | None) -> None:
+    async def body(doc_id: str | None, done: set[str] | None) -> None:
         tracked = await tracked_symbol_repo.list_all()
         failed = 0
         for ts in tracked:
+            if done and ts.symbol in done:
+                continue
             try:
                 calendar = await calendar_factory.for_symbol(ts.symbol)
                 for interval in SYNC_INTERVALS:
@@ -392,23 +471,28 @@ async def sync_integrity() -> None:
             except Exception:
                 failed += 1
                 logger.error("integrity.symbol_failed", symbol=ts.symbol, exc_info=True)
+                continue
+            await _mark_done(history_repo, doc_id, done, ts.symbol)
         if failed:
             raise RuntimeError(f"{failed} of {len(tracked)} symbols failed")
 
-    await _tracked("sync_integrity", body)
+    await _tracked("sync_integrity", body, resume)
 
 
-async def sync_repair() -> None:
+async def sync_repair(resume: bool = False) -> None:
     container = _get_container()
     sync_service = await container.get(SyncService)
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
     calendar_factory = await container.get(TradingCalendarFactory)
+    history_repo = await container.get(JobHistoryRepository)
 
-    async def body(_: str | None) -> None:
+    async def body(doc_id: str | None, done: set[str] | None) -> None:
         tracked = await tracked_symbol_repo.list_all()
         failed = 0
         for ts in tracked:
+            if done and ts.symbol in done:
+                continue
             try:
                 calendar = await calendar_factory.for_symbol(ts.symbol)
                 for interval in SYNC_INTERVALS:
@@ -431,10 +515,12 @@ async def sync_repair() -> None:
             except Exception:
                 failed += 1
                 logger.error("integrity.repair_failed", symbol=ts.symbol, exc_info=True)
+                continue
+            await _mark_done(history_repo, doc_id, done, ts.symbol)
         if failed:
             raise RuntimeError(f"{failed} of {len(tracked)} symbols failed")
 
-    await _tracked("sync_repair", body)
+    await _tracked("sync_repair", body, resume)
 
 
 async def _verify_one_symbol(
@@ -495,7 +581,7 @@ async def sync_verify_cascade() -> None:
     bar_repo = await container.get(BarRepository)
     provider = await container.get(IDataProviderPort)
 
-    async def body(_: str | None) -> None:
+    async def body(_doc: str | None, _done: set[str] | None) -> None:
         tracked = await tracked_symbol_repo.list_all()
         if not tracked:
             logger.warning("sync_verify_cascade.skipped", reason="no_tracked_symbols")
@@ -572,7 +658,7 @@ async def data_lag_check() -> None:
     calendar_factory = await container.get(TradingCalendarFactory)
     cache = await container.get(Cache)
 
-    async def body(_: str | None) -> None:
+    async def body(_doc: str | None, _done: set[str] | None) -> None:
         now = datetime.now(UTC)
         for ts in await tracked_symbol_repo.list_all():
             symbol = ts.symbol.upper()
@@ -595,7 +681,7 @@ async def data_lag_check() -> None:
 async def backtest_orphan_sweep() -> None:
     backtest_repo = await _get_container().get(BacktestRepository)
 
-    async def body(_: str | None) -> None:
+    async def body(_doc: str | None, _done: set[str] | None) -> None:
         await backtest_repo.mark_orphaned_started_as_failed()
 
     await _tracked("backtest_orphan_sweep", body)
@@ -613,18 +699,16 @@ async def enqueue_missed_catchups(
     now = datetime.now(UTC)
     for job_id, func_ref, max_gap in CATCHUP_TARGETS:
         last = await history_repo.get_last_successful_started_at(job_id)
-        if last is None:
-            continue
-        gap = (now - last).total_seconds()
-        if gap > max_gap:
-            job_scheduler.add_one_off_job(
-                func_ref,
-                job_id=f"{job_id}_catchup",
-            )
+        gap = (now - last).total_seconds() if last else None
+        stale = gap is not None and gap > max_gap
+        cut = await history_repo.has_interrupted(job_id, now - timedelta(seconds=max_gap))
+        if stale or cut:
+            job_scheduler.add_one_off_job(func_ref, job_id=f"{job_id}_catchup", resume=True)
             logger.info(
                 "scheduler.catchup_enqueued",
                 job_id=job_id,
-                gap_seconds=int(gap),
+                gap_seconds=int(gap) if gap is not None else None,
+                interrupted=cut,
             )
 
 

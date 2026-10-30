@@ -12,6 +12,7 @@ from pocketquant.engine.market_data.app_services.sync_jobs import (
 # A fresh DB has no last success; firing would run catch-up on the first deploy.
 async def test_catchup_skips_when_no_history() -> None:
     repo = MagicMock()
+    repo.has_interrupted = AsyncMock(return_value=False)
     repo.get_last_successful_started_at = AsyncMock(return_value=None)
     scheduler = MagicMock()
 
@@ -23,6 +24,7 @@ async def test_catchup_skips_when_no_history() -> None:
 # Every threshold is above 1h.
 async def test_catchup_skips_when_recent() -> None:
     repo = MagicMock()
+    repo.has_interrupted = AsyncMock(return_value=False)
     repo.get_last_successful_started_at = AsyncMock(
         return_value=datetime.now(UTC) - timedelta(hours=1)
     )
@@ -35,6 +37,7 @@ async def test_catchup_skips_when_recent() -> None:
 
 async def test_catchup_enqueues_when_stale() -> None:
     repo = MagicMock()
+    repo.has_interrupted = AsyncMock(return_value=False)
     # 30h gap exceeds every CATCHUP_TARGETS max_gap (largest is sync_backfill@25h).
     repo.get_last_successful_started_at = AsyncMock(
         return_value=datetime.now(UTC) - timedelta(hours=30)
@@ -60,6 +63,7 @@ async def test_catchup_partial_stale_only_enqueues_stale_ones() -> None:
         return now - timedelta(hours=2)  # well within 25h threshold
 
     repo = MagicMock()
+    repo.has_interrupted = AsyncMock(return_value=False)
     repo.get_last_successful_started_at = AsyncMock(side_effect=last_success)
     scheduler = MagicMock()
 
@@ -68,3 +72,23 @@ async def test_catchup_partial_stale_only_enqueues_stale_ones() -> None:
     assert scheduler.add_one_off_job.call_count == 1
     call = scheduler.add_one_off_job.call_args
     assert call.kwargs.get("job_id") == "sync_repair_catchup"
+
+
+# A run cut by a handover is resumed at once, even right after a success.
+async def test_catchup_enqueues_an_interrupted_heavy_job() -> None:
+    repo = MagicMock()
+    repo.get_last_successful_started_at = AsyncMock(
+        return_value=datetime.now(UTC) - timedelta(hours=1)
+    )
+
+    async def interrupted(job_id: str, since: datetime) -> bool:
+        return job_id == "sync_integrity"
+
+    repo.has_interrupted = AsyncMock(side_effect=interrupted)
+    scheduler = MagicMock()
+
+    await enqueue_missed_catchups(repo, scheduler)
+
+    assert scheduler.add_one_off_job.call_count == 1
+    kwargs = scheduler.add_one_off_job.call_args.kwargs
+    assert (kwargs.get("job_id"), kwargs.get("resume")) == ("sync_integrity_catchup", True)

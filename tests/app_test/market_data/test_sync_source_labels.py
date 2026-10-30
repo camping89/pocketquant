@@ -129,6 +129,8 @@ def _wire_container(monkeypatch: pytest.MonkeyPatch, *, sync_service) -> None:
     history_repo.record_start = AsyncMock(return_value="hist-1")
     history_repo.record_detail = AsyncMock()
     history_repo.record_finish = AsyncMock()
+    history_repo.resume_interrupted = AsyncMock(return_value=None)
+    history_repo.mark_symbol_done = AsyncMock()
 
     bar_repo = MagicMock()
 

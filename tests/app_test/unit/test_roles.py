@@ -260,34 +260,35 @@ async def test_worker_stop_waits_for_a_running_job_then_releases() -> None:
         events.append("job_done")
 
     running = asyncio.create_task(job())
-    sync_jobs._RUNNING.add(running)
+    sync_jobs._RUNNING["job"] = running
     try:
         with structlog.testing.capture_logs() as logs:
             await roles.stop_worker(container, app, "w:1", get_current_time())  # type: ignore[arg-type]
     finally:
-        sync_jobs._RUNNING.discard(running)
+        sync_jobs._RUNNING.pop("job", None)
 
     assert events == ["pause", "job_done", "shutdown", "release"]
     assert len([e for e in logs if e["event"] == "worker.lease_released"]) == 1
     assert app.state.lease_state["worker"] == "released"
 
 
-async def test_worker_stop_releases_when_a_job_outlives_the_bound() -> None:
+async def test_worker_stop_cancels_a_job_that_outlives_the_bound_then_releases() -> None:
     events: list[str] = []
     container = _Container(_FakeScheduler(events), FakeLeaseRepo(events))
     app = _worker_app()
     running = asyncio.create_task(asyncio.Event().wait())
-    sync_jobs._RUNNING.add(running)
+    sync_jobs._RUNNING["job"] = running
     started = get_current_time()
     try:
         with structlog.testing.capture_logs() as logs:
             await roles.stop_worker(container, app, "w:1", started)  # type: ignore[arg-type]
         released_after = (get_current_time() - started).total_seconds()
     finally:
-        sync_jobs._RUNNING.discard(running)
+        sync_jobs._RUNNING.pop("job", None)
         await _stop(running)
 
     assert released_after < 0.5
     assert events[-1] == "release"
-    [still] = [e for e in logs if e["event"] == "worker.jobs_still_running"]
-    assert still["count"] == 1
+    assert running.cancelled()
+    [cut] = [e for e in logs if e["event"] == "worker.jobs_interrupted"]
+    assert cut["count"] == 1

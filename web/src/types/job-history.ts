@@ -1,6 +1,7 @@
 export type JobRunStatus =
   | 'completed'
   | 'running'
+  | 'interrupted'
   | 'missed'
   | 'skipped_max_instances'
   | 'failed'

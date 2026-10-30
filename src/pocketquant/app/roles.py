@@ -27,7 +27,7 @@ from pocketquant.engine.live.strategy_reconcile_app_service import StrategyRecon
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.engine.market_data.app_services.sync_jobs import (
     register_sync_jobs,
-    wait_running_jobs,
+    stop_running_jobs,
 )
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
@@ -142,11 +142,11 @@ async def stop_worker(
         return
     scheduler = await container.get(JobScheduler)
     scheduler.pause()
-    left = await wait_running_jobs(
+    left = await stop_running_jobs(
         (started + timedelta(seconds=WORKER_STOP_S) - get_current_time()).total_seconds()
     )
     if left:
-        logger.warning("worker.jobs_still_running", count=left)
+        logger.warning("worker.jobs_interrupted", count=left)
     # Renewal runs until here; stopped before the release so it cannot take the lease back.
     await cancel_task(task)
     scheduler.shutdown(wait=False)
