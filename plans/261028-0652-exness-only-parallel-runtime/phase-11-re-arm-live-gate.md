@@ -99,7 +99,7 @@ Each run starts at Task 11.1 and skips any task whose record already exists.
 **Steps:**
 1. Skip when `grep -c "^Re-armed:" plans/261028-0652-exness-only-parallel-runtime/reports/re-arm-log.md 2>/dev/null` prints `1`.
 <!-- Red team 2026-10-28: #11 -->
-2. Window (the **Deploy window** rule in `plan.md` Conventions): `D=$(date -u +%u); H=$(date -u +%H%M); [ "$D" -le 5 ] && { { [ "$H" -ge 0600 ] && [ "$H" -lt 1120 ]; } || { [ "$H" -ge 1250 ] && [ "$H" -lt 1930 ]; }; } && echo in-window`. No `in-window` -> end with the `NOT_YET` block (`NOT_YET: outside the deploy window`).
+2. No time check (plan.md Conventions: no deploy window).
 <!-- Red team 2026-10-28: #13 -->
 3. Pause (no gate; the token stays inside the container and off every command line):
 ```bash

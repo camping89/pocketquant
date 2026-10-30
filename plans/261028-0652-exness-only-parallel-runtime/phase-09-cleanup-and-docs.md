@@ -29,7 +29,7 @@ Delete the one-time `app` -> `api`/`worker`/`trader` cutover branch, describe th
 <!-- Red team 2026-10-28: #11 -->
 - Measurement helpers: Phase 08 installs `/opt/pocketquant/bin/{snapshot,sample,probe,leases,oom-check}.sh` (names and output in `reports/red-team-shared-contract.md`). This phase reuses them and installs nothing on the VPS. Capture files for one deploy go to `/opt/pocketquant/logs/verify/<name>-<T>.txt`.
 - The old trader's log needs no follow: Phase 08's `roll` saves it after `docker stop` and before `docker rm` to `/opt/pocketquant/logs/trader-<id12>-<ts>.log.gz` (`<id12>` = the first 12 characters of the container id), so the drain and release lines are in that file. The deploy script also prunes saved logs older than 30 days.
-- OOM rule and deploy window: `plan.md` Conventions. The baseline is the single `oom_baseline=<boot_id> <oom_kill>` line in `reports/machine-baseline.md`.
+- OOM rule: `plan.md` Conventions. The baseline is the single `oom_baseline=<boot_id> <oom_kill>` line in `reports/machine-baseline.md`.
 - The memory note "ES paper subscription" is deleted by Phase 03; this phase only checks it is gone.
 
 ## Entry gate
@@ -171,7 +171,7 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 **Target files and symbols:** `develop:master` push; CI run; VPS capture files `/opt/pocketquant/logs/verify/*-<T>.txt`; `plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md`.
 **Steps:**
 <!-- Red team 2026-10-28: #11 -->
-1. Window (the **Deploy window** rule in `plan.md` Conventions): `D=$(date -u +%u); H=$(date -u +%H%M); [ "$D" -le 5 ] && { { [ "$H" -ge 0600 ] && [ "$H" -lt 1120 ]; } || { [ "$H" -ge 1250 ] && [ "$H" -lt 1930 ]; }; } && echo in-window`. No `in-window` -> end with the `NOT_YET` block (`NOT_YET: outside the deploy window`, resume at the next window start).
+1. No time check (plan.md Conventions: no deploy window).
 2. Ask the owner (only an explicit yes counts): "Recommended: có — đẩy develop lên master ngay bây giờ (deploy ảnh mới D-6, tính là handover 1/10). Thay đổi: xoá nhánh cutover một lần trong 10-deploy.sh và cập nhật tài liệu cho api/worker/trader. Live đang tắt (EXNESS_LIVE_TRADING=false), chỉ có paper. web sẽ được tạo lại, SPA gián đoạn vài giây (D27, chỉ ghi nhận). Trả lời `có` hoặc `chưa`." A "chưa" ends with the `NOT_YET` block (`NOT_YET: owner deferred D-6`).
 3. Stamp: `date -u +%Y%m%dT%H%M%SZ`; write it down as `<T>` and use it literally below.
 <!-- Red team 2026-10-28: #11 #15 -->
@@ -218,7 +218,7 @@ EOF
 ## Rollback
 
 - Before D-6: `git revert` the two commits on `develop` and push; nothing ran in prod.
-- After D-6: the deleted branch was dead (no `pocketquant-app` exists) and the docs change no behaviour, so a revert plus a `develop:master` push [ASK] inside the **Deploy window** of plan.md Conventions restores the files only. An emergency image pin (same [ASK] and window) uses a lease-aware tag: `ssh ... "cd /opt/pocketquant && IMAGE_TAG=sha-<Deploy B short sha> bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh"`.
+- After D-6: the deleted branch was dead (no `pocketquant-app` exists) and the docs change no behaviour, so a revert plus a `develop:master` push [ASK] of plan.md Conventions restores the files only. An emergency image pin (same [ASK] and window) uses a lease-aware tag: `ssh ... "cd /opt/pocketquant && IMAGE_TAG=sha-<Deploy B short sha> bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh"`.
 <!-- Red team 2026-10-28: #11 -->
 - A run interrupted between Task 9.8 steps 4 and 7 leaves the sampler and the probe running: run the step 7 capture-stop command for that `<T>` first. Capture files live only under `/opt/pocketquant/logs/verify/`; `rm -rf /opt/pocketquant/logs/verify` removes them. The Phase 08 helpers in `/opt/pocketquant/bin/` stay.
 - Always `rm -f .cache/ssh/vps_key`.

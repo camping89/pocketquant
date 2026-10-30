@@ -11,7 +11,7 @@ dependencies: [7]
 
 ## Goal
 
-Replace the single `app` service with `api`, `worker` and `trader` from one image, make nginx re-resolve `api`, and give `10-deploy.sh` a locked rolling deploy (image guard, log capture, lease wait) plus a one-time cutover branch. The cutover starts the three services in standby beside the Deploy A `app`, re-checks the OOM stop, recreates `web`, then stops `app`, which drains the trader at a 1m boundary and releases both leases to the new containers. Install the one VPS helper set that Phases 08-11 reuse. Rehearse it on Docker Desktop first (including a drain retry and the OOM abort), then run it in prod as D-5 and record row 0 of the handover log with the D25 measurements (record only, D31).
+Replace the single `app` service with `api`, `worker` and `trader` from one image, make nginx re-resolve `api`, and give `10-deploy.sh` a locked rolling deploy (image guard, log capture, lease wait) plus a one-time cutover branch. The cutover starts the three services in standby beside the Deploy A `app`, re-checks the OOM stop, recreates `web`, then stops `app`, which drains the trader at a 1m boundary and releases both leases to the new containers. Install the one VPS helper set that Phases 08-11 reuse. Rehearse it on Docker Desktop first (including a drain retry and the OOM abort), make the heavy data jobs resume per symbol after a worker handover (so a deploy needs no time window), then run it in prod as D-5 and record row 0 of the handover log with the D25 measurements (record only, D31).
 
 ## Context (verified on `develop` @ 453e8e90)
 
@@ -49,12 +49,12 @@ Status: BLOCKED
 NOT_YET: <which gate line missed>
 Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261028-0652-exness-only-parallel-runtime --from 08 after <UTC time>
 ```
-**Resume rule.** On a resumed run, run each task's Verify first; a task whose Verify already passes is done and is skipped. Task 8.5 is done when `plans/261028-0652-exness-only-parallel-runtime/reports/cutover-rehearsal.md` holds `Rehearsal: PASS` (its own Verify reads rehearsal containers that its step 10 removes). Every `NOT_YET` exit of this phase (Task 8.7 steps 1-3) happens before the `develop:master` push, so `pocketquant-app` still runs and gate line 6 holds on a resume.
+**Resume rule.** On a resumed run, run each task's Verify first; a task whose Verify already passes is done and is skipped. Task 8.5 is done when `plans/261028-0652-exness-only-parallel-runtime/reports/cutover-rehearsal.md` holds `Rehearsal: PASS` (its own Verify reads rehearsal containers that its step 10 removes). Every `NOT_YET` exit of this phase (Task 8.8 steps 1-3) happens before the `develop:master` push, so `pocketquant-app` still runs and gate line 6 holds on a resume.
 
 ## Files to create/modify
 
 <!-- Red team 2026-10-28: #7 #11 -->
-Modify: `deploy/compose.prod.yml`, `web/nginx.conf`, `deploy/vps/10-deploy.sh`, `deploy/vps/11-verify.sh`, `.github/workflows/cicd.yml`.
+Modify: `deploy/compose.prod.yml`, `web/nginx.conf`, `deploy/vps/10-deploy.sh`, `deploy/vps/11-verify.sh`, `.github/workflows/cicd.yml`; Task 8.6: `src/pocketquant/core/infra/persistence/repositories/job_history_repository.py`, `src/pocketquant/engine/market_data/app_services/sync_jobs.py`, `src/pocketquant/app/roles.py`, `src/pocketquant/app/main_extensions.py` and their tests.
 Create: `deploy/vps/leases.sh`, `plans/261028-0652-exness-only-parallel-runtime/reports/cutover-rehearsal.md`, `plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md`.
 Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sources), `.cache/rehearsal/`, `.cache/vps-versions.txt`. VPS only: `/opt/pocketquant/bin/` (the helper set), `/opt/pocketquant/deploy.lock`, `/opt/pocketquant/logs/` (saved container logs, failed tails), `/opt/pocketquant/logs/cutover/`.
 
@@ -70,6 +70,7 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 - Task 8.3 target: `10-deploy.sh` `:43-78` becomes `:43-79`.
 - Phase 07 facts this phase relies on are unchanged: the lease names `worker` and `trader`, the `/health` fields `role`, `lease` and `lease_renewed_age_s`, the owner `hostname:pid`, and `app_roles` defaulting to `api`. `LeaseRepository.acquire` now treats an expiry equal to now as free (`$lte`); no step here depends on that.
 - The tracing middleware moved from `core/common/tracing` to `app/middleware/` (`correlation_id_middleware.py`, `request_logging_middleware.py`) in d5c45781; no Phase 08 step names those files.
+- Added 2026-10-30 (owner decision): Task 8.6 makes the heavy jobs resume per symbol after a worker handover, and the deploy window and blackouts are removed from plan.md Conventions. The old Tasks 8.6-8.8 are now 8.7-8.9. Evidence: `reports/kongming-deploy-window-first-principles.md` and the prod durations in Task 8.6.
 - Open item, not in scope here: on every trader start, the first Binance WS connect is rejected with HTTP 400 and reconnects after 1 s (`reports/kongming-phase-07-checkpoint.md` Q2). It predates Phase 07 and is scheduled for Phase 09. After Task 8.4 it shows as WARN in `11-verify.sh`, never FAIL.
 
 ### Task 8.1 — Three services from one image
@@ -283,7 +284,7 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 
 ### Task 8.4 — `11-verify.sh` follows the roles; the VPS helper set
 
-**Goal:** the post-deploy verify finds the rolled containers by service, counts console-format errors, and checks one copy per role, held leases and lease owners that are the role containers; the one helper set that Phases 08-11 use exists in `.cache/vps-bin/` (installed on the VPS in Task 8.7).
+**Goal:** the post-deploy verify finds the rolled containers by service, counts console-format errors, and checks one copy per role, held leases and lease owners that are the role containers; the one helper set that Phases 08-11 use exists in `.cache/vps-bin/` (installed on the VPS in Task 8.8).
 **Target files and symbols:** `deploy/vps/11-verify.sh` lines `13`, `67`, `79`, `93`, `110`, `120`, `126`, `172`, `177`, `187`, `188`, `228`, `240`; new `deploy/vps/leases.sh`; `.cache/vps-bin/{snapshot,sample,probe,oom-check}.sh`.
 **Steps:**
 <!-- Red team 2026-10-28: #5 #11 -->
@@ -337,7 +338,7 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
    esac
    ```
 <!-- Red team 2026-10-28: #2 #7 #11 -->
-5. Write the helper sources (gitignored; Task 8.5 rehearses `probe.sh` and Task 8.7 installs all four in `/opt/pocketquant/bin/` beside a `leases.sh` symlink to `/opt/pocketquant/deploy/vps/leases.sh`). Each `start` detaches and returns at once, the background loop ends itself after 1 h, and `stop` ends it:
+5. Write the helper sources (gitignored; Task 8.5 rehearses `probe.sh` and Task 8.8 installs all four in `/opt/pocketquant/bin/` beside a `leases.sh` symlink to `/opt/pocketquant/deploy/vps/leases.sh`). Each `start` detaches and returns at once, the background loop ends itself after 1 h, and `stop` ends it:
    ```bash
    mkdir -p .cache/vps-bin
    cat > .cache/vps-bin/snapshot.sh <<'SH'
@@ -509,7 +510,37 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 **Success criteria:** the abort run removes the new services and leaves the old app holding its leases; cutover and roll exit 0; the old app and the rolled-out trader each logged one `trader.drain_retry` and released with `inflight=0`; no drain timeout; the new trader logged both takeover events; 0 non-200 on the same-tag roll (the cutover probe is recorded only).
 **Verify** (run before step 10): `L=.cache/rehearsal/new/logs; S='s/\x1b\[[0-9;]*m//g'; zcat $L/app-*.log.gz | sed "$S" | grep -c "trader\.drain_retry"; zcat $L/app-*.log.gz | sed "$S" | grep "trader\.lease_released" | grep -c "inflight=0"; zcat $L/trader-*.log.gz | sed "$S" | grep -c "trader\.drain_retry"; zcat $L/trader-*.log.gz | sed "$S" | grep "trader\.lease_released" | grep -c "inflight=0"; zcat $L/*.log.gz | sed "$S" | grep -c "trader\.drain_timeout"; docker logs "$(docker ps -q --filter label=com.docker.compose.project=pqrehearsal --filter label=com.docker.compose.service=trader)" 2>&1 | sed "$S" | grep -cE "trader\.takeover( |$)|trader\.takeover_complete"; grep -vc ' 200$' $L/probe-roll.txt; grep -c "OOM stop before the cutover" $L/deploy-abort.txt` → `1`, `1`, `1`, `1`, `0`, `2`, `0`, `1`.
 
-### Task 8.6 — Gates, commit, push `develop`
+### Task 8.6 — Heavy jobs resume per symbol after a worker handover
+
+**Goal:** a deploy at any time loses no heavy job run. When the worker stops, a heavy job (`sync_backfill`, `sync_integrity`, `sync_repair`) still running after the stop wait is cancelled and its history row ends `interrupted` before the lease is released. The next worker resumes that row at once and runs only the symbols it has not finished.
+**Why (prod, read 2026-10-30 02:16 UTC from `job_history`):** `sync_repair` ran 52-106 s, `sync_backfill` about 157 s and `sync_integrity` about 406 s; the worker stop wait is 90 s (`roles.py` `WORKER_STOP_S`). A cut run never ran again: the catch-up fires only when the last success is older than period + grace. This replaces the deploy window and the blackouts (owner decision 2026-10-30).
+**Target files and symbols:**
+- `job_history_repository.py`: every run write (`record_finish`, `record_detail`, new `mark_symbol_done`) filters on a `run_id` that `record_start` sets (index `idx_run_id`); `mark_symbol_done` does `$addToSet` on `done_symbols`. New `resume_interrupted(job_id, since)` claims the newest `interrupted` row started at or after `since` under a new `run_id`, sets it `running`, closes the job's other interrupted rows and returns `(run_id, done_symbols)` or `None`, so a late write from a stopped process under the old id changes nothing. New `close_interrupted(job_id)` marks the job's interrupted rows `failed` with error `superseded`, and `has_interrupted(job_id, since)` checks for one. `reconcile_orphan_running` becomes `interrupt_orphan_running()`: every `running` row becomes `interrupted`; it runs at the worker takeover before the scheduler starts.
+- `sync_jobs.py`: `_RUNNING` is keyed by job name, and a second run of a running job logs WARNING `job.already_running` and returns (a catch-up and its cron have different APScheduler ids). Only a catch-up resumes: the three heavy jobs take `resume: bool = False`, and `enqueue_missed_catchups` passes `resume=True`. It enqueues a heavy job whose last success is stale or whose newest row inside its max gap is `interrupted`. A fresh heavy run closes the job's interrupted rows first. `_tracked` passes the finished-symbol set to the body (`None` for every other job, which marks nothing). When the task was cancelled (`task.cancelling()`), it records `interrupted` and returns, so APScheduler logs no error; any other `CancelledError` propagates. The three loops skip finished symbols and mark each symbol that finished without error. `stop_running_jobs(timeout_s)` replaces `wait_running_jobs`: it waits, then cancels what is left, waits up to 5 s and logs ERROR `jobs.not_stopped count=` for any task still alive.
+- `roles.py` `stop_worker` calls `stop_running_jobs` and logs WARNING `worker.jobs_interrupted count=` instead of `worker.jobs_still_running`; `main_extensions.py` `recover_orphan_jobs` calls `interrupt_orphan_running` and logs `orphan_jobs_interrupted`.
+- `web/src/types/job-history.ts`: `JobRunStatus` adds `'interrupted'`.
+- Tests: `tests/core_test/infra/persistence/test_job_history_repository.py`, `tests/app_test/unit/market_data/test_sync_jobs_tracked.py`, `tests/app_test/unit/market_data/test_sync_jobs_catchup.py`, `tests/app_test/unit/test_roles.py`. Review: `reports/code-reviewer-resumable-heavy-jobs.md`.
+**Steps:**
+1. Write the tests first:
+   - an interrupted row is claimed once, only inside `since`, under a new `run_id`; the job's other cut rows end `superseded`;
+   - a late write under the old `run_id` changes nothing;
+   - every `running` row becomes `interrupted`;
+   - a cancelled job records `interrupted` and returns, and a stray `CancelledError` propagates;
+   - a resumed `sync_repair` repairs only the unfinished symbol and marks it;
+   - a cron run starts fresh and closes cut rows;
+   - a second run of a running job returns at once;
+   - a symbol that raised is not marked;
+   - a non-heavy job gets `None` and writes no marks;
+   - the catch-up enqueues an interrupted heavy job with `resume=True` even after a recent success;
+   - `stop_running_jobs` cuts a repair after its finished symbols;
+   - `stop_worker` cancels a job that outlives the bound, logs `worker.jobs_interrupted count=1` and then releases.
+2. Implement; format only the touched `.py` files.
+3. Gates: `uv run python -m pytest tests/ -q > .cache/pytest-full.txt 2>&1`; `uv run lint-imports`; `PYRIGHT_PYTHON_FORCE_VERSION=1.1.408 uv run pyright`; `uv run ruff check src tests`.
+4. Commit `feat(jobs): resume heavy data jobs per symbol after a worker handover`, push `develop`, CI green (the Task 8.7 commands).
+**Success criteria:** the new tests pass; known local red only; pyright at its baseline; CI green.
+**Verify:** `uv run python -m pytest tests/core_test/infra/persistence/test_job_history_repository.py tests/app_test/unit/market_data/test_sync_jobs_tracked.py tests/app_test/unit/market_data/test_sync_jobs_catchup.py tests/app_test/unit/test_roles.py -q 2>&1 | tail -1; git grep -c -E "wait_running_jobs|reconcile_orphan_running|jobs_still_running" -- src tests | wc -l` → a line with `passed` and no `failed` or `error`, then `0`.
+
+### Task 8.7 — Gates, commit, push `develop`
 
 **Goal:** the topology change is on `develop` with CI green.
 **Target files and symbols:** the six changed files.
@@ -520,13 +551,13 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 **Success criteria:** known local red only; CI run succeeds.
 **Verify:** `grep -E "^(FAILED|ERROR) " .cache/pytest-full.txt | grep -vcE "test_utc_runtime_guard|test_cron_trigger_timezone"; tail -1 .cache/pytest-full.txt; uv run lint-imports | tail -1; grep -c "^Rehearsal: PASS$" plans/261028-0652-exness-only-parallel-runtime/reports/cutover-rehearsal.md; test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo pushed` → `0`, a line starting `4 failed` and containing `4 errors`, `Contracts: 6 kept, 0 broken.`, `1`, `pushed`; the background `gh run watch` exited 0.
 
-### Task 8.7 — Install the helpers, cutover deploy D-5 with measurement
+### Task 8.8 — Install the helpers, cutover deploy D-5 with measurement
 
 **Goal:** the helper set is on the VPS, the OOM stop is checked before and during the cutover, and prod moves from `app` to `api`/`worker`/`trader` with no trading gap, measured while it happens.
 **Target files and symbols:** prod VPS; `/opt/pocketquant/bin/`; `/opt/pocketquant/logs/cutover/`.
 **Steps:**
 <!-- Red team 2026-10-28: #11 -->
-1. Window: `D=$(date -u +%u); M=$((10#$(date -u +%H)*60+10#$(date -u +%M))); if [ $D -le 5 ] && { { [ $M -ge 360 ] && [ $M -lt 680 ]; } || { [ $M -ge 770 ] && [ $M -lt 1170 ]; }; }; then echo OK; else echo OUTSIDE; fi` (the **Deploy window** rule in plan.md Conventions: Mon-Fri 06:00-11:20 or 12:50-19:30 UTC). On `OUTSIDE`: `rm -f .cache/ssh/vps_key` and exit with the NOT_YET block (Resume at the next window start).
+1. Precondition (the old `app` predates Task 8.6, so it cannot hand a running heavy job over): `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'docker exec -i pocketquant-app python -c "from pymongo import MongoClient; from pocketquant.core.config import get_settings; s=get_settings(); print(MongoClient(str(s.mongodb_url))[s.mongodb_database].job_history.count_documents({\"status\": \"running\", \"job_id\": {\"\$regex\": \"^sync_(backfill|integrity|repair)\"}}))"'` → `0`. Otherwise wait for the run to finish (at most about 8 min) and check again. There is no time window (plan.md Conventions).
 2. [ASK] (only an explicit yes counts):
    > Recommended: đồng ý — đã diễn tập cutover, roll và nhánh hủy do OOM trên Docker Desktop (reports/cutover-rehearsal.md: Rehearsal: PASS), có trình tự rollback; live trading vẫn tắt. Câu hỏi: Cho phép đẩy `develop:master` để chuyển prod từ `app` sang `api`/`worker`/`trader` ngay bây giờ (<UTC time>)? Trader mới chờ ở standby, `app` cũ xả lệnh tại mốc phút rồi nhường lease; `web` được tạo lại nên SPA gián đoạn vài giây (D27, chỉ ghi nhận).
 <!-- Red team 2026-10-28: #2 #11 -->
@@ -546,12 +577,12 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
    → `leases.sh oom-baseline oom-check.sh probe.sh sample.sh snapshot.sh `, `OOM_OK`, `OOM_STOP oom_kill -1 -> <n>`. If the second line is `OOM_STOP ...`, the plan stops (D31): record it, `rm -f .cache/ssh/vps_key`, and exit with the NOT_YET block (`NOT_YET: OOM_STOP <reason>; owner decides`).
 4. Before (record in `reports/handover-log.md` notes): `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'free -m; bash /opt/pocketquant/bin/snapshot.sh cutover-before'`.
 5. Start the sampler and the probe (each returns at once and ends itself after 1 h): `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'D=/opt/pocketquant/logs/cutover; bash /opt/pocketquant/bin/sample.sh start $D/stats.txt; bash /opt/pocketquant/bin/probe.sh start $D/probe.txt; ls $D/*.pid | wc -l'` → `2`. Note the UTC start time.
-6. Release: `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop develop:master && git fetch origin`; then in background mode the Task 8.6 `gh run watch` command with `--branch master` (the deploy step can take up to about 8 minutes: standby warm-up plus the old trader's drain). The deploy script re-runs `oom-check.sh` after the new services are healthy and, on `OOM_STOP`, removes them and exits 1 while `app` keeps trading (Rollback: "D-5 stopped before `docker stop pocketquant-app`").
+6. Release: `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop develop:master && git fetch origin`; then in background mode the Task 8.7 `gh run watch` command with `--branch master` (the deploy step can take up to about 8 minutes: standby warm-up plus the old trader's drain). The deploy script re-runs `oom-check.sh` after the new services are healthy and, on `OOM_STOP`, removes them and exits 1 while `app` keeps trading (Rollback: "D-5 stopped before `docker stop pocketquant-app`").
 7. After: `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'free -m; bash /opt/pocketquant/bin/snapshot.sh cutover-after; D=/opt/pocketquant/logs/cutover; bash /opt/pocketquant/bin/sample.sh stop $D/stats.txt; bash /opt/pocketquant/bin/probe.sh stop $D/probe.txt'`, recorded as "after".
 **Success criteria:** the helper set is installed and the stop path works; the deploy run succeeded; samples and probe files exist and both loops stopped.
 **Verify:** `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'D=/opt/pocketquant/logs/cutover; test -s $D/stats.txt && test -s $D/probe.txt && echo files-ok; ls $D/*.pid 2>/dev/null | wc -l; ls /opt/pocketquant/logs/app-*.log.gz | wc -l; bash /opt/pocketquant/bin/leases.sh | grep -c "owners_match=yes"'; GH_TOKEN=$(gh auth token --user camping89) gh run list --branch master --workflow cicd.yml --limit 1 --json conclusion -q '.[0].conclusion'` → `files-ok`, `0`, `1`, `1`, `success`.
 
-### Task 8.8 — Verify the cutover and write row 0
+### Task 8.9 — Verify the cutover and write row 0
 
 **Goal:** the three roles run, each lease has one holder that is its role container, the old trader released cleanly, and row 0 carries the handover and D25 values.
 **Target files and symbols:** `reports/handover-log.md`.
@@ -587,15 +618,15 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 
 ## Rollback
 
-- **Before D-5:** `git revert --no-edit HEAD` (the Task 8.6 commit) on `develop` and push `develop`; nothing ran in prod. The helper files in `/opt/pocketquant/bin/` are inert and may stay.
+- **Before D-5:** `git revert --no-edit HEAD` (the topology commits 17026288..c137af42) on `develop` and push `develop`; nothing ran in prod. The helper files in `/opt/pocketquant/bin/` are inert and may stay.
 <!-- Red team 2026-10-28: #2 -->
 - **D-5 stopped before `docker stop pocketquant-app`** (an OOM stop, which already removed the new services, or a `wait_healthy` timeout): prod still trades on `app`, which holds both leases; after a timeout the new containers wait in standby. Remove them: `ssh ... 'cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env rm -sf api worker trader'`, then roll back the files as below. The failed tail is in `/opt/pocketquant/logs/failed-<svc>-<ts>.log`.
 - **Cutover rollback sequence (after `app` was stopped):**
   1. Record `free -m` on the VPS.
-  2. `git revert --no-edit <Task 8.6 commit>` on `develop`; push `develop`; CI green.
-  3. [ASK] (Vietnamese, starts with `Recommended: ...`), then push `develop:master` inside the **Deploy window** of plan.md Conventions. CI rsyncs the reverted compose and scripts; the reverted `10-deploy.sh` runs `up -d --remove-orphans`, which stops `api`, `worker` and `trader` with their grace periods (the trader drains and releases) and creates `pocketquant-app` from the Deploy A image line, which takes both leases (at most the 30 s TTL if a release was missed). Expect a gap of about one `app` warm-up for paper; live is off.
+  2. `git revert --no-edit 17026288^..c137af42` on `develop`; push `develop`; CI green.
+  3. [ASK] (Vietnamese, starts with `Recommended: ...`), then push `develop:master`. CI rsyncs the reverted compose and scripts; the reverted `10-deploy.sh` runs `up -d --remove-orphans`, which stops `api`, `worker` and `trader` with their grace periods (the trader drains and releases) and creates `pocketquant-app` from the Deploy A image line, which takes both leases (at most the 30 s TTL if a release was missed). Expect a gap of about one `app` warm-up for paper; live is off.
   4. Check: `docker ps --format '{{.Names}}' | grep -cx pocketquant-app` prints `1` and the Task 7.8 lease one-liner prints `2 trader,worker 2 <h>` with `<h>` the `app` hostname. Record `free -m` after.
-  5. Without CI (emergency, still after the step 3 [ASK] and inside the same deploy window): after the local revert, `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); scp -i .cache/ssh/vps_key deploy/compose.prod.yml "$HOST:/opt/pocketquant/deploy/" && scp -i .cache/ssh/vps_key deploy/vps/10-deploy.sh deploy/vps/11-verify.sh "$HOST:/opt/pocketquant/deploy/vps/"`, then `ssh ... 'cd /opt/pocketquant && bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh'`.
+  5. Without CI (emergency, still after the step 3 [ASK]): after the local revert, `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); scp -i .cache/ssh/vps_key deploy/compose.prod.yml "$HOST:/opt/pocketquant/deploy/" && scp -i .cache/ssh/vps_key deploy/vps/10-deploy.sh deploy/vps/11-verify.sh "$HOST:/opt/pocketquant/deploy/vps/"`, then `ssh ... 'cd /opt/pocketquant && bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh'`.
 - **A stuck lock:** the lock is held only while a `10-deploy.sh` process runs (`flock` on fd 9 ends with it); `ssh ... 'fuser /opt/pocketquant/deploy.lock'` names the holder.
 - **Image guard rule:** never pin `IMAGE_TAG=sha-<x>` under the split compose when `<x>` predates Deploy A; the guard exits 1 before touching any container. To go back that far, first revert `compose.prod.yml` and `deploy/vps/` together (sequence above), then pin inside the single-`app` topology.
 - `/opt/pocketquant/logs/cutover/` can be deleted after Phase 10; `/opt/pocketquant/logs/*.log.gz` stay for Phase 10 counts (the deploy prunes them after 30 days); `/opt/pocketquant/bin/` stays for Phases 09-11.

@@ -33,7 +33,6 @@ Run this phase once per UTC day after 01:00Z, and again the same day for another
 - `job_history` fields: `job_id`, `status` (`completed` on success), `started_at`, `duration_ms` (`core/infra/persistence/repositories/job_history_repository.py:35-74`, `engine/market_data/app_services/sync_jobs.py:177-182`); skip rows have `status` `skipped_max_instances` (`job_history_repository.py:76-96`).
 - Subscriptions: `GET /api/v1/subscriptions/` lists `id`, `strategy_code`, `symbol`, `interval`, `broker`, `actual_state`; start is `POST /api/v1/subscriptions/{id}/start` (`app/routes/strategy.py:87-92`). Prod had XAUUSD 1m stopped on 2026-10-28 (`plans/reports/kongming-261028-1020-parallel-exness-only-reanalysis.md:27`).
 <!-- Red team 2026-10-28: #11 -->
-- Deploy window and blackout: the **Deploy window** rule in `plan.md` Conventions.
 
 ## Entry gate
 
@@ -245,7 +244,7 @@ EOF
 **Steps:**
 1. Skip when: 10 PASS rows with ≥ 5 `re-roll` rows exist, or a row is pending, or the last deploy started less than 70 min ago.
 <!-- Red team 2026-10-28: #7 #11 -->
-2. Window (the **Deploy window** rule in `plan.md` Conventions) and lock: `D=$(date -u +%u); H=$(date -u +%H%M); [ "$D" -le 5 ] && { { [ "$H" -ge 0600 ] && [ "$H" -lt 1120 ]; } || { [ "$H" -ge 1250 ] && [ "$H" -lt 1930 ]; }; } && echo in-window; HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'flock -n /opt/pocketquant/deploy.lock true && echo lock-free'`. No `in-window` or no `lock-free` (a CI deploy is running) -> skip this task in this run.
+2. Lock (no time check; plan.md Conventions): `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'flock -n /opt/pocketquant/deploy.lock true && echo lock-free'`. No `lock-free` (a CI deploy is running) -> skip this task in this run.
 3. Tag: `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "docker inspect -f '{{.Config.Image}}' pocketquant-web | sed 's/.*://'"`; write it down as `<tag>`.
 4. Ask (only an explicit yes counts): "Recommended: có — chạy 1 lần re-roll cùng tag (`IMAGE_TAG=<tag>`) ngay bây giờ để đo handover thứ <n>/10 (đã có <k> re-roll PASS, cần ≥ 5). Live đang tắt, chỉ paper; web không bị tạo lại nên probe phải 0 lỗi. Trả lời `có` hoặc `chưa`." A `chưa` skips to Task 10.7, which ends the run with the `NOT_YET` block.
 <!-- Red team 2026-10-28: #11 #15 -->
@@ -267,7 +266,7 @@ bash /opt/pocketquant/bin/oom-check.sh "$1" "$2" | tee "$V/oom-$T.txt"
 EOF
 ```
    `OOM_STOP` -> do the Task 10.7 OOM step now.
-9. Any `master` push during this phase (a fix) runs only when no row is pending, after an [ASK] and inside the **Deploy window** of plan.md Conventions (step 2 check), uses steps 5, 7 and 8 around it with kind `image`, and takes the CI verdict count from `gh run view "$RUN_ID" --log | grep "=== Verdict:" | grep -c ", 0 failures)"`.
+9. Any `master` push during this phase (a fix) runs only when no row is pending, after an [ASK] and the step 2 lock check, uses steps 5, 7 and 8 around it with kind `image`, and takes the CI verdict count from `gh run view "$RUN_ID" --log | grep "=== Verdict:" | grep -c ", 0 failures)"`.
 **Success criteria:** the deploy exits 0; the verify verdict has 0 failures; a pending row exists; the capture is stopped.
 **Verify:** the step 6 output is `deploy_exit 0` then `1`; the step 8 output ends with `OOM_OK`; `grep -c "| <T> | pending |" plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md` prints `1`.
 

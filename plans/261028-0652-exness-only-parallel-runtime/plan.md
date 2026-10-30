@@ -51,13 +51,13 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 - **[ASK]** = stop and ask the owner. The question is in Vietnamese (owner preference), leads with `Recommended: <reply>` and a one-line reason, then the facts. Only an explicit yes counts; a "no" or "wait" ends the phase with the `NOT_YET` block. No approval carries forward to a later gate.
 - **[USER]** = the owner acts and replies with a stated token.
 - **Resume** after a `NOT_YET` exit: re-run the phase from its entry gate. Each entry gate also accepts the state this phase's own finished tasks left (it says so where that differs). Skip every task whose Verify already passes, and never repeat a prod data step whose recorded result already exists (for example the TradingView counts in `reports/tv-removal-counts.md`).
-- Every `develop:master` push deploys prod and is an [ASK]. Deploy blackout (UTC): 23:50-00:50, 02:50-04:50, 11:50-12:50.
+- Every `develop:master` push deploys prod and is an [ASK].
 - **Failure Protocol**: each phase file carries the literal block. A failed Verify stops the phase and goes to `kongming`; a `NOT_YET` exit does not.
 - Report paths are written from the repo root as `plans/261028-0652-exness-only-parallel-runtime/reports/<file>`. Every Verify is one self-contained command run from `D:/w/_me/algotrading/pocketquant`.
 - No plan ids, phase numbers or finding codes in code, comments, test names, log events or commit messages. Commits use conventional format, English, no AI references.
 - Code follows `CLAUDE.md`: a flow reads in ≤ 3 files, ≤ 2 hops to I/O, a new class/flag/config key needs a second real caller today, dead code is deleted in the same change, log level = frequency.
 - Any phase that deploys records `free -m` on the VPS before and after the deploy in its report.
-- **Deploy window** (one rule for every deploy and re-roll): Mon-Fri 06:00-11:20 or 12:50-19:30 UTC, never in the blackout above. The Phase 01 spike has its own window (it is not a deploy).
+- **No deploy window** (owner decision 2026-10-30): a deploy or re-roll runs at any time after its [ASK]. A heavy job cut by a worker handover resumes from its last finished symbol (Phase 08 Task 8.6). A step that still names the window has no time check. The Phase 01 spike had its own window (it is not a deploy).
 - **Search** uses `git grep`, because `rg` is not installed in the local Git Bash: `git grep -n -i -E "<pattern>" -- <paths> ':!docs/journals' ':!plans'`; counts pipe to `wc -l`.
 - **Prod logs** are `LOG_FORMAT=console` with ANSI colours. Strip them with `sed 's/\x1b\[[0-9;]*m//g'` and parse `key=value`; never parse JSON.
 - **OOM rule** (the only machine stop, D31): Phase 02 writes exactly one line `oom_baseline=<boot_id> <oom_kill>` to `reports/machine-baseline.md`, read on the VPS with `echo "$(cat /proc/sys/kernel/random/boot_id) $(awk '/^oom_kill /{print $2}' /proc/vmstat)"`. A later reading stops the plan when the boot id differs or the counter is higher, or when `docker inspect -f '{{.State.OOMKilled}}'` is `true` for any backend container.
