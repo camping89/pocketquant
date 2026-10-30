@@ -11,7 +11,7 @@ dependencies: [9]
 
 ## Goal
 
-Prove the split in prod with live off: 10 handover deploys (D-6 plus at least 5 same-tag re-rolls), 14 consecutive clean paper days, 2 weekly rows with the 7-day job metrics, and a D25 table that shows the owner the limits of the current 2 vCPU / 3 GB machine. Measurements are record-only (D31); the only machine stop is the OOM rule in `plan.md` Conventions. Machine load is sampled only during a roll; each run day adds one light snapshot (D34).
+Prove the split in prod with live off: 10 handover deploys that count under D36 (D-6 is row 1; at least 5 same-tag re-rolls), 14 consecutive clean paper days, 2 weekly rows with the 7-day job metrics, and a D25 table that shows the owner the limits of the current 2 vCPU / 3 GB machine. Measurements are record-only (D31); the only machine stop is the OOM rule in `plan.md` Conventions. Machine load is sampled only during a roll; each run day adds one light snapshot (D34).
 
 ## Re-run rule
 
@@ -31,6 +31,11 @@ Run this phase once per UTC day after 01:00Z, and again the same day for another
 <!-- Red team 2026-10-28: #2 -->
 - OOM rule (`plan.md` Conventions): every check passes the single `oom_baseline=<boot_id> <oom_kill>` line of `reports/machine-baseline.md` to `oom-check.sh`; never compare an absolute count.
 - `job_history` fields: `job_id`, `status` (`completed` on success), `started_at`, `duration_ms` (`core/infra/persistence/repositories/job_history_repository.py:35-74`, `engine/market_data/app_services/sync_jobs.py:177-182`); skip rows have `status` `skipped_max_instances` (`job_history_repository.py:76-96`).
+- Session check (D36, plan.md): a handover row counts only when the `XAUUSD:EXNESS` calendar is open at the deploy start and for the 15 min after it. The check uses the code's calendar (`EXNESS_CALENDARS` in `core/infra/calendars/exness_session_calendar_adapter.py`, id `EXNESS_XAUUSD`, `is_open`), so it follows the session table and the US DST shift. It tests every minute from `S` to `S` + 15 min; the shortest XAUUSD close (the daily break) lasts about 62 min, so no close falls between two tests. `S` is a UTC time such as `2026-10-30T05:00:00Z` (a row's start, or `$(date -u +%FT%TZ)` for now):
+```bash
+S=<UTC time>; HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T trader python -c 'import sys; from datetime import datetime, timedelta; from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS; c = next(x for x in EXNESS_CALENDARS if x.calendar_id == \"EXNESS_XAUUSD\"); t = datetime.fromisoformat(sys.argv[1]); print(\"in-session\" if all(c.is_open(t + timedelta(minutes=m)) for m in range(16)) else \"off-session\")' $S"
+```
+  It prints `in-session` or `off-session`. It is a counting rule, not a deploy permission (plan.md Conventions: no deploy window).
 - Subscriptions: `GET /api/v1/subscriptions/` lists `id`, `strategy_code`, `symbol`, `interval`, `broker`, `actual_state`; start is `POST /api/v1/subscriptions/{id}/start` (`app/routes/strategy.py:87-92`). Prod had XAUUSD 1m stopped on 2026-10-28 (`plans/reports/kongming-261028-1020-parallel-exness-only-reanalysis.md:27`).
 <!-- Red team 2026-10-28: #11 -->
 
@@ -148,15 +153,16 @@ EOF
 3. OOM check now: `B=$(sed -n 's/^oom_baseline=//p' plans/261028-0652-exness-only-parallel-runtime/reports/machine-baseline.md); HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "bash /opt/pocketquant/bin/oom-check.sh $B"`. `OOM_STOP` in this output or in `oom_at_capture` -> do the Task 10.7 OOM step now.
 <!-- Red team 2026-10-28: #1 #4 #15 -->
 4. Verdict PASS when all hold: `release_lines 1`, `inflight 0`, `0 ≤ offset_s ≤ 30`, `drain_timeout 0`, `trader_containers 1`, `handover_gap_ms` present and ≤ 2000, `takeover_ms` present and ≤ 5000, `gap_skips 0` (only skips whose `bar_start` is within one interval of the release `boundary`), the `leases.sh` line ends with `unexpired=2 owners_match=yes`, the row's `verify` cell ≥ 1, and for `re-roll` rows `probe_non200 0` (for `image` rows the probe is recorded only, D27). Recorded, not judged: `drain_retry`, `discarded`, `warmup_s`, the lag values and every D25 value. A 4h, 1d or 1w bar that contains the boundary may close after the row is judged; its `reason=gap` skips appear in the daily `entry_skipped` counts.
-5. Replace the pending line with the full row: `| <#> | <start> | <kind> | <T> | <inflight> | <offset_s> | <drain_timeout> | <handover_gap_ms> | <takeover_ms> | <gap_skips> | lease:<a> drain:<b> | <probe> | <leases.sh line> | <verify> | PASS or FAIL |`.
+5. Session (D36): run the Context session check with `S=<start>`. On `off-session` write the kind as `<kind> (off-session)`; the row is judged as usual but does not count toward the ten.
+6. Replace the pending line with the full row: `| <#> | <start> | <kind> | <T> | <inflight> | <offset_s> | <drain_timeout> | <handover_gap_ms> | <takeover_ms> | <gap_skips> | lease:<a> drain:<b> | <probe> | <leases.sh line> | <verify> | PASS or FAIL |`.
 <!-- Red team 2026-10-28: #2 #15 -->
-6. If `machine-limits.md` does not exist, create it with `# Machine limits (2 vCPU / 3 GB VPS, D25)` and the header:
+7. If `machine-limits.md` does not exist, create it with `# Machine limits (2 vCPU / 3 GB VPS, D25)` and the header:
 ```
 | row | UTC | source | snapshot before | snapshot after | peak RSS MiB / CPU% per container (during the roll) | loop lag max s api/worker/trader (old trader) | warm-up s | takeover_ms | handover_gap_ms | OOM check |
 |---|---|---|---|---|---|---|---|---|---|---|
 ```
    A snapshot cell is `used/avail/swap MiB, load1, psi, oom=` from one `snapshot.sh` line.
-7. Append the D25 row `| h<#> | <start> | handover <#> (<kind>) | ...` from the same output (every `peak` line goes into one cell as `name rss/cpu; ...`; the OOM cell holds `oom_at_capture` and the step 3 result).
+8. Append the D25 row `| h<#> | <start> | handover <#> (<kind>) | ...` from the same output (every `peak` line goes into one cell as `name rss/cpu; ...`; the OOM cell holds `oom_at_capture` and the step 3 result).
 **Success criteria:** no row older than 65 min stays pending; each judged row has its D25 row.
 **Verify:** `grep "| pending |" plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md | cut -d"|" -f3; date -u +%FT%TZ` prints only start times less than 65 min before the last line (the current time), or only the current time; and `grep -cE "^\| [0-9]+ \|.*\| FAIL \|$" plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md` prints `0`. A FAIL row stops the phase (Failure Protocol); after its fix ships, only rows after the fix count toward the 10.
 
@@ -203,7 +209,7 @@ EOF
 |---|---|---|---|---|---|---|---|---|---|---|---|
 ```
 <!-- Red team 2026-10-28: #2 #15 -->
-6. Day snapshot (D34; once per run day, skipped when `machine-limits.md` already has a row starting `| s<today> |`): `B=$(sed -n 's/^oom_baseline=//p' plans/261028-0652-exness-only-parallel-runtime/reports/machine-baseline.md); HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "bash /opt/pocketquant/bin/snapshot.sh day; bash /opt/pocketquant/bin/oom-check.sh $B"`. Append `| s<today> | <ts> | day snapshot | <snapshot cell> | n/a | n/a | n/a | n/a | n/a | n/a | <OOM_OK or OOM_STOP line> |` to `machine-limits.md` (create it with the Task 10.3 step 6 header if absent).
+6. Day snapshot (D34; once per run day, skipped when `machine-limits.md` already has a row starting `| s<today> |`): `B=$(sed -n 's/^oom_baseline=//p' plans/261028-0652-exness-only-parallel-runtime/reports/machine-baseline.md); HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "bash /opt/pocketquant/bin/snapshot.sh day; bash /opt/pocketquant/bin/oom-check.sh $B"`. Append `| s<today> | <ts> | day snapshot | <snapshot cell> | n/a | n/a | n/a | n/a | n/a | n/a | <OOM_OK or OOM_STOP line> |` to `machine-limits.md` (create it with the Task 10.3 step 7 header if absent).
 7. OOM stop: `OOM_STOP` -> do the Task 10.7 OOM step now.
 **Success criteria:** every completed day has one row; this run day has one snapshot row.
 **Verify:** `grep -cE "^\| 20[0-9]{2}-[0-9]{2}-[0-9]{2} \|.*\| FAIL \|$" plans/261028-0652-exness-only-parallel-runtime/reports/paper-daily.md; grep -c "^| s$(date -u +%F) |" plans/261028-0652-exness-only-parallel-runtime/reports/machine-limits.md` prints `0` then `1`. A FAIL day stops the phase (Failure Protocol) and resets the 14-day count to 0 after the fix ships.
@@ -242,7 +248,7 @@ EOF
 **Goal:** add one handover deploy per run until 10 PASS rows exist, at least 5 of them re-rolls.
 **Target files and symbols:** VPS `deploy/vps/10-deploy.sh`, `deploy/vps/11-verify.sh`; capture files; `handover-log.md`.
 **Steps:**
-1. Skip when: 10 PASS rows with ≥ 5 `re-roll` rows exist, or a row is pending, or the last deploy started less than 70 min ago.
+1. Skip when: 10 PASS rows without `(off-session)` with ≥ 5 `re-roll` rows among them exist, or a row is pending, or the last deploy started less than 70 min ago, or the Context session check with `S=$(date -u +%FT%TZ)` prints `off-session` (D36: the row would not count).
 <!-- Red team 2026-10-28: #7 #11 -->
 2. Lock (no time check; plan.md Conventions): `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'flock -n /opt/pocketquant/deploy.lock true && echo lock-free'`. No `lock-free` (a CI deploy is running) -> skip this task in this run.
 3. Tag: `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "docker inspect -f '{{.Config.Image}}' pocketquant-web | sed 's/.*://'"`; write it down as `<tag>`.
@@ -276,8 +282,8 @@ EOF
 **Steps:**
 <!-- Red team 2026-10-28: #2 -->
 1. OOM step (D31, the only machine stop): if any check printed `OOM_STOP`, append the rows so far, commit and push them (steps 5-6), then ask: "Recommended: 1 — nâng cấp host (D5: 8 vCPU / 16 GB) vì máy 2 vCPU / 3 GB đã có OOM khi chạy thử. Số liệu: <dòng OOM_STOP>, <dòng D25 liên quan>. Lựa chọn (chỉ là thông tin, không phải cổng tự động): 1) nâng host; 2) giới hạn cache WiredTiger của MongoDB (`--wiredTigerCacheSizeGB 0.5`, một dòng compose); 3) đặt `mem_limit` cho từng container theo RSS đỉnh đã đo. Trả lời 1, 2, 3 hoặc `tiếp tục`." Record the answer in `machine-limits.md`, `rm -f .cache/ssh/vps_key`, and end with the `NOT_YET` block (`NOT_YET: OOM seen; owner chose <answer>`); the chosen lever is a new change outside this phase.
-2. Done when all hold: ≥ 10 PASS handover rows after the last fix, ≥ 5 of them `re-roll`; 14 consecutive PASS daily rows; weekly rows 1 and 2 PASS; pooled 14-day latency has ≥ 5 samples (sum of `n` over the two weekly rows). If pooled samples are fewer than 5 at day 14, ask: "Recommended: tiếp tục — chạy thêm ngày cho tới khi có ≥ 5 mẫu `t0_t5_ms` 1m Exness (hiện có <n>). Trả lời `tiếp tục` hoặc `bỏ qua tiêu chí độ trễ`." and record the answer.
-3. Not done: commit and push (steps 5-6), `rm -f .cache/ssh/vps_key`, end with the `NOT_YET` block (`NOT_YET: <k>/10 handover rows, <d>/14 days`, resume after the next UTC day 01:00Z, or 70 min from now when a re-roll is still owed and the window is open).
+2. Done when all hold: ≥ 10 PASS handover rows after the last fix whose kind has no `(off-session)` (D36), ≥ 5 of them `re-roll`; 14 consecutive PASS daily rows; weekly rows 1 and 2 PASS; pooled 14-day latency has ≥ 5 samples (sum of `n` over the two weekly rows). If pooled samples are fewer than 5 at day 14, ask: "Recommended: tiếp tục — chạy thêm ngày cho tới khi có ≥ 5 mẫu `t0_t5_ms` 1m Exness (hiện có <n>). Trả lời `tiếp tục` hoặc `bỏ qua tiêu chí độ trễ`." and record the answer.
+3. Not done: commit and push (steps 5-6), `rm -f .cache/ssh/vps_key`, end with the `NOT_YET` block (`NOT_YET: <k>/10 handover rows, <d>/14 days`, resume after the next UTC day 01:00Z, or 70 min from now when a re-roll is still owed).
 <!-- Red team 2026-10-28: #4 #15 -->
 4. Done: append to `machine-limits.md` a section `## Machine limits summary for the owner` with: `nproc` and total RAM (`free -m` total, one SSH call); per container the max peak RSS and CPU% over all handover rows (sampled only during rolls); host used max, available min and swap max over all snapshots (point samples before and after each roll and once per run day, not continuous peaks); PSI max; load1 max against `nproc`; loop lag max per role; warm-up s min/median/max; `takeover_ms` and `handover_gap_ms` max; the summed `strategy.signal_discarded` counts by reason; every OOM check `OOM_OK`; then one paragraph labelled "Inference" on where the machine runs short first (memory headroom at the overlap or CPU), and the three levers as information: a bigger host (D5), a WiredTiger cache cap (`--wiredTigerCacheSizeGB 0.5`; MongoDB's default is about half of RAM minus 1 GB, about 1 GB here [I]), measured `mem_limit` values. Append `Verification verdict: PASS <UTC>` as the last line of `paper-daily.md`. Record in the summary that trader lag ≥ 0.5 s days (the Stalls criterion) are reported, not judged, per D31.
 5. `git add plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md plans/261028-0652-exness-only-parallel-runtime/reports/paper-daily.md plans/261028-0652-exness-only-parallel-runtime/reports/machine-limits.md && git commit -m "docs(plans): record prod verification rows"`.
@@ -288,7 +294,7 @@ EOF
 ## Rollback
 
 <!-- Red team 2026-10-28: #11 #13 #15 -->
-Observation only; nothing in the repo changes. A re-roll that fails mid-way is recovered by the roll script (it stops and removes the new copy on a health timeout) or by `cd /opt/pocketquant && IMAGE_TAG=<tag> bash deploy/vps/10-deploy.sh` again once the deploy lock is free and the time is inside the **Deploy window** of plan.md Conventions. A run interrupted between Task 10.6 steps 5 and 8 is closed by Task 10.1 step 3 (the capture-stop command for that `<T>`). To undo Task 10.2, stop the subscription with the same heredoc admin call and `/stop`. There is no long-running sampler to stop. Always `rm -f .cache/ssh/vps_key`.
+Observation only; nothing in the repo changes. A re-roll that fails mid-way is recovered by the roll script (it stops and removes the new copy on a health timeout) or by `cd /opt/pocketquant && IMAGE_TAG=<tag> bash deploy/vps/10-deploy.sh` again once the deploy lock is free (no time check; plan.md Conventions). A run interrupted between Task 10.6 steps 5 and 8 is closed by Task 10.1 step 3 (the capture-stop command for that `<T>`). To undo Task 10.2, stop the subscription with the same heredoc admin call and `/stop`. There is no long-running sampler to stop. Always `rm -f .cache/ssh/vps_key`.
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.

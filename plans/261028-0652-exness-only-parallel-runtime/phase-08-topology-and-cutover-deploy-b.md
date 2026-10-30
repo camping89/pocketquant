@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Topology and cutover to api/worker/trader (Deploy B)"
-status: pending
+status: done
 priority: P1
 effort: "1d code + Docker Desktop rehearsal + 1 deploy (D-5)"
 dependencies: [7]
@@ -71,7 +71,7 @@ Local scratch (gitignored, `.gitignore:42`): `.cache/vps-bin/` (the helper sourc
 - Phase 07 facts this phase relies on are unchanged: the lease names `worker` and `trader`, the `/health` fields `role`, `lease` and `lease_renewed_age_s`, the owner `hostname:pid`, and `app_roles` defaulting to `api`. `LeaseRepository.acquire` now treats an expiry equal to now as free (`$lte`); no step here depends on that.
 - The tracing middleware moved from `core/common/tracing` to `app/middleware/` (`correlation_id_middleware.py`, `request_logging_middleware.py`) in d5c45781; no Phase 08 step names those files.
 - Added 2026-10-30 (owner decision): Task 8.6 makes the heavy jobs resume per symbol after a worker handover, and the deploy window and blackouts are removed from plan.md Conventions. The old Tasks 8.6-8.8 are now 8.7-8.9. Evidence: `reports/kongming-deploy-window-first-principles.md` and the prod durations in Task 8.6.
-- Open item, not in scope here: on every trader start, the first Binance WS connect is rejected with HTTP 400 and reconnects after 1 s (`reports/kongming-phase-07-checkpoint.md` Q2). It predates Phase 07 and is scheduled for Phase 09. After Task 8.4 it shows as WARN in `11-verify.sh`, never FAIL.
+- Open item, not in scope here: on every trader start, the first Binance WS connect is rejected with HTTP 400 and reconnects after 1 s (`reports/kongming-phase-07-checkpoint.md` Q2). It predates Phase 07. The fix is Phase 09 Task 9.5 and ships with D-6 (owner decision 2026-10-30). After Task 8.4 it shows as WARN in `11-verify.sh`, never FAIL.
 
 ### Task 8.1 — Three services from one image
 

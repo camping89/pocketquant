@@ -11,7 +11,7 @@ dependencies: [8]
 
 ## Goal
 
-Delete the one-time `app` -> `api`/`worker`/`trader` cutover branch, describe the role split, the leases, the trader handover and the rolling deploy in the docs as they are, and ship both as D-6. D-6 is an image deploy and counts as handover deploy 1 of 10; this phase captures its raw measurements, and Phase 10 turns them into row 1.
+Delete the one-time `app` -> `api`/`worker`/`trader` cutover branch, fix the rejected first Binance WS connect, describe the role split, the leases, the trader handover and the rolling deploy in the docs as they are, and ship them as D-6. D-6 also carries the idempotency index fix already on `develop` (6142249f). D-6 is an image deploy and counts as handover deploy 1 of 10; this phase captures its raw measurements, and Phase 10 turns them into row 1.
 
 ## Context
 
@@ -31,6 +31,8 @@ Delete the one-time `app` -> `api`/`worker`/`trader` cutover branch, describe th
 - The old trader's log needs no follow: Phase 08's `roll` saves it after `docker stop` and before `docker rm` to `/opt/pocketquant/logs/trader-<id12>-<ts>.log.gz` (`<id12>` = the first 12 characters of the container id), so the drain and release lines are in that file. The deploy script also prunes saved logs older than 30 days.
 - OOM rule: `plan.md` Conventions. The baseline is the single `oom_baseline=<boot_id> <oom_kill>` line in `reports/machine-baseline.md`.
 - The memory note "ES paper subscription" is deleted by Phase 03; this phase only checks it is gone.
+- `develop` @ 2ff298b1 carries 6142249f (`fix(jobs): keep a matching idempotency index so role containers can start together`), which is not on `master`. D-6 ships it; the Task 9.9 Verify proves it (`RestartCount` 0 on `api`, `worker`, `trader`; 0 `job_history.idempotency_drop_failed` lines).
+- Binance WS HTTP 400 (`reports/kongming-phase-07-checkpoint.md` Q2): `QuoteAppService.start()` starts `BinanceWebSocketAdapter.run_forever` before the quote feed subscribes, so the first `connect()` uses the placeholder URL `wss://stream.binance.com:9443/ws/`; Binance answers HTTP 400, the adapter logs ERROR `binance_ws.error` and reconnects after 1 s. Task 9.5 fixes it (owner decision 2026-10-30: it ships with D-6).
 
 ## Entry gate
 
@@ -55,6 +57,7 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 ## Files to create/modify
 
 - Modify: `deploy/vps/10-deploy.sh`, `docs/system-architecture.md`, `docs/deployment.md`, `docs/codebase-summary.md`, `docs/project-overview-pdr.md`, `README.md`, `justfile` (comments), `scripts/audit_bar_quality.py`, `scripts/backfill/binance_bars.py`, `scripts/backfill/provider_bars.py` (docstrings), `deploy/vps/one-time/README.md`.
+- Modify (Task 9.5): `src/pocketquant/core/infra/binance/binance_websocket_adapter.py`, `tests/core_test/infra/binance/test_binance_websocket_client.py`.
 - Modify only if the Task 9.4 gate still hits them: comments in `deploy/compose.prod.yml`, `deploy/Dockerfile`, `web/nginx.conf`.
 - Create/append: `plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md` (row 1, pending).
 <!-- Red team 2026-10-28: #11 -->
@@ -69,8 +72,9 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 1. `grep -n "pocketquant-app" deploy/vps/10-deploy.sh` and read the block around each hit.
 2. Delete the whole conditional block. For each function it calls, run `grep -n "<function>" deploy/vps/10-deploy.sh`; if the only other hit is its definition, delete the function too.
 3. Keep `dc`, `roll`, the deploy lock, the image guard, the log capture and pruning, and the main roll sequence unchanged. Delete comments that describe the cutover.
-**Success criteria:** no `pocketquant-app` in either VPS script; the script parses; the three role rolls remain.
-**Verify:** `grep -c "pocketquant-app" deploy/vps/10-deploy.sh deploy/vps/11-verify.sh; bash -n deploy/vps/10-deploy.sh && echo syntax-ok; grep -oE "roll (api|worker|trader) [0-9]+" deploy/vps/10-deploy.sh | wc -l` prints `deploy/vps/10-deploy.sh:0`, `deploy/vps/11-verify.sh:0`, `syntax-ok`, `3`.
+4. Step 2 also deletes `oom_ok`: its only caller is the cutover branch. Do not add an `oom_ok` call to the rolling path. State in the phase summary: after this phase the deploy script runs no OOM check; the check is the capture stop (Phase 10 Task 10.6 step 8, also Task 9.9 step 7) and the Phase 10 day snapshot (D31, D34).
+**Success criteria:** no `pocketquant-app` in either VPS script; no `oom_ok`; the script parses; the three role rolls remain.
+**Verify:** `grep -c "pocketquant-app" deploy/vps/10-deploy.sh deploy/vps/11-verify.sh; grep -c "oom_ok" deploy/vps/10-deploy.sh; bash -n deploy/vps/10-deploy.sh && echo syntax-ok; grep -oE "roll (api|worker|trader) [0-9]+" deploy/vps/10-deploy.sh | wc -l` prints `deploy/vps/10-deploy.sh:0`, `deploy/vps/11-verify.sh:0`, `0`, `syntax-ok`, `3`.
 
 ### Task 9.2 — `docs/system-architecture.md`
 **Goal:** the architecture doc states the three roles as they are.
@@ -88,7 +92,8 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
    - Takeover: `trader.takeover handover_gap_ms=` is logged right after `lease.acquired`, before any takeover I/O; the value is the time from the previous holder's release to this acquire, and it is empty when the previous holder lost the lease instead. Then the trader reloads positions and pending orders, restores paper brokers and directions, connects brokers, starts the collector and the reconcile loop, and logs `trader.takeover_complete takeover_ms=` after the reconcile task starts.
    - Drain on SIGTERM: the deadline counts from the start of lifespan shutdown. The trader picks the next 1m boundary B and releases only when every bar of B is published and `inflight_count` is 0. `inflight_count` counts Exness opens in flight and pending acks, running signal tasks and running bar handlers; a pending snapshot is not counted, it re-triggers a snapshot. The trader waits up to B + 30 s, logs `trader.drain_retry boundary=` and retries once at the next boundary; the hard deadline is shutdown start + 150 s with ERROR `trader.drain_timeout inflight=`; then `trader.lease_released inflight= boundary= offset_s=`. Lease renewal keeps running until the engine has stopped and the lease is released; the engine's wait for signal tasks is bounded by the remaining grace (trader grace 180 s).
    - Signals dropped by the lease fence or the drain log INFO `strategy.signal_discarded reason=lease|drain`; standby drops stay DEBUG.
-   - Worker stop: pause the scheduler, wait for running jobs within the grace, shut the scheduler down, release the lease.
+   - Worker stop (`stop_worker` in `app/roles.py`): pause the scheduler; wait for running jobs until stop start + 90 s (`WORKER_STOP_S`); cancel what is left (`stop_running_jobs`) and log WARNING `worker.jobs_interrupted count=`; stop lease renewal; shut the scheduler down; release the lease; log `worker.lease_released running=`.
+   - Heavy-job resume: a cancelled run of `sync_backfill`, `sync_integrity` or `sync_repair` ends its `job_history` row `interrupted`. Each run has a `run_id`, and every later write of the run filters on it. A worker that takes the lease marks rows stuck at `running` as `interrupted` before its scheduler starts (`orphan_jobs_interrupted count=`). The catch-up then resumes the newest recent interrupted row under a new `run_id` and skips the symbols in its `done_symbols`. A fresh cron run of the job closes its interrupted rows as `failed` with error `superseded`. A second run of a job that is still running logs WARNING `job.already_running` and returns.
    - `/health` fields: `role`, `lease`, `lease_renewed_age_s`, `event_loop_lag_max_s`. Rate fractions: `api` 0.05, `worker` 0.3, `trader` 0.6.
 4. Same section, money-path facts that run in the trader: the entry pause is read from the store on every open (a failed read refuses the open; the pause route returns 503 when the store write fails); opposite-side entries are rejected on paper and Exness, exits are SL/TP only; bars of every interval close on a timer 0.5 s after their end (bars up to 1h end at the session close when it comes first; 4h/1d/1w end at the bucket end); an entry is skipped with one WARNING `strategy.entry_skipped` when the bar is stale (budgets 1m 10 s, 5m 30 s, 15m 60 s, 1h 120 s, 4h 300 s, 1d and 1w 600 s) or gapped (non-successor bucket, more than 60 s trading-time silence, uncovered mid-bucket start), SL/TP always run; Exness opens run as tasks, paper fills inline; order calls use their own pacer lane; `live.signal_latency` logs `t0_t5_ms` and `t0_t6_ms` per signal.
 <!-- Red team 2026-10-28: #5 -->
@@ -98,15 +103,15 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 8. Delete every sentence the steps above contradict. No history, no "now", no "previously".
 **Success criteria:** no old-topology wording; the new section exists; the file stays under 800 lines.
 <!-- Red team 2026-10-28: #10 -->
-**Verify:** `grep -c -i -E "pocketquant-app|enable_jobs=|single uvicorn|single worker|single process|single backend|app container|one process,|one uvicorn worker" docs/system-architecture.md; grep -c -E "APP_ROLES|trader\.lease_released|trader\.takeover_complete|strategy\.signal_discarded|leases" docs/system-architecture.md; wc -l < docs/system-architecture.md` prints `0`, then a number ≥ 4, then a number ≤ 800.
+**Verify:** `grep -c -i -E "pocketquant-app|enable_jobs=|single uvicorn|single worker|single process|single backend|app container|one process,|one uvicorn worker" docs/system-architecture.md; grep -c -E "APP_ROLES|trader\.lease_released|trader\.takeover_complete|strategy\.signal_discarded|leases" docs/system-architecture.md; grep -c "interrupted" docs/system-architecture.md; wc -l < docs/system-architecture.md` prints `0`, then a number ≥ 4, then a number ≥ 1, then a number ≤ 800.
 
 ### Task 9.3 — `docs/deployment.md`
 **Goal:** the deploy and runbook doc matches the three services and the rolling deploy.
-**Target files and symbols:** `docs/deployment.md` sections Deploy (flow diagram), Verify, Platform & URLs, Environment & Credentials, Stop real-money entries, Restart while live, Rollback, Troubleshooting, Local access, Data Runbooks.
+**Target files and symbols:** `docs/deployment.md` sections Deploy (flow diagram), Verify, Platform & URLs, Environment & Credentials, Stop real-money entries, Restart while live, Rollback, Troubleshooting, Local access, Data Runbooks (including Sync gap repair).
 **Steps:**
 1. Container lookup used everywhere in this doc: `ssh <VPS> "cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api <cmd>"` (use `trader` for broker and strategy logs, `worker` for job logs). Replace every `docker exec pocketquant-app` and `docker logs pocketquant-app` with it.
 <!-- Red team 2026-10-28: #7 -->
-2. Deploy flow: `10-deploy.sh` holds `flock -n /opt/pocketquant/deploy.lock` for the whole run, so a second deploy exits at once; CI does not cancel a running `master` deploy. Then: pull, image guard (the image must contain the lease repository, else exit 1), roll `api`, `worker`, `trader` one at a time. `roll` refuses unless exactly one copy of the service runs; it starts a second copy and waits until healthy; for `api` it disconnects the old copy from the backend network and waits 6 s so nginx stops sending to it; it stops the old copy with its grace period, saves its log to `/opt/pocketquant/logs/<svc>-<id12>-<ts>.log.gz` and removes it. A failed health wait writes the log tail to `/opt/pocketquant/logs/failed-<svc>-<ts>.log` and prints only that path. Then `web`/`cloudflared`, `--remove-orphans`, image prune, and deletion of saved `*.log.gz` older than 30 days. State the grace periods (`api` 30 s, `worker` 120 s, `trader` 180 s) from the compose file. State that `web` is recreated on an image deploy with a few seconds of SPA gap, and is not recreated on a same-tag re-roll.
+2. Deploy flow: `10-deploy.sh` holds `flock -n /opt/pocketquant/deploy.lock` for the whole run, so a second deploy exits at once; CI does not cancel a running `master` deploy. Then: pull, image guard (the image must contain the lease repository, else exit 1), roll `api`, `worker`, `trader` one at a time. `roll` refuses unless exactly one copy of the service runs; it starts a second copy and waits until healthy; for `api` it disconnects the old copy from the backend network and waits 6 s so nginx stops sending to it; it stops the old copy with its grace period, saves its log to `/opt/pocketquant/logs/<svc>-<id12>-<ts>.log.gz` and removes it. A failed health wait writes the log tail to `/opt/pocketquant/logs/failed-<svc>-<ts>.log` and prints only that path. Then `web`/`cloudflared`, `--remove-orphans`, image prune, and deletion of saved `*.log.gz` older than 30 days. State the grace periods (`api` 30 s, `worker` 120 s, `trader` 180 s) from the compose file. State that the worker waits for running jobs up to 90 s from stop start (`WORKER_STOP_S`), inside its 120 s grace, then cancels the rest. State that `web` is recreated on an image deploy with a few seconds of SPA gap, and is not recreated on a same-tag re-roll.
 <!-- Red team 2026-10-28: #5 -->
 3. Platform: "8 containers: api, worker, trader (one image, internal :41921), web, cloudflared, MongoDB, Redis, Portainer"; networks: `backend` lists `api`, `worker`, `trader`; port map and the health row use the lookup from step 1. `env_file: .env` is shared by the three roles; each sets `APP_ROLES` and `EXNESS_RATE_FRACTION` in compose, and `api` and `worker` set `EXNESS_LIVE_TRADING: "false"`, so only the trader can send a live order.
 <!-- Red team 2026-10-28: #13 -->
@@ -117,9 +122,10 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 <!-- Red team 2026-10-28: #5 -->
 7. Local access: replace the three `ENABLE_JOBS` bullets with `APP_ROLES=api` (the code default and the `remote-db.env` value): routes only, no scheduler, no feed, no strategy, no broker; mutation routes need no token and write prod Mongo; startup fails when `ENABLE_JOBS` is set, so delete it from old local `.env` files; for bar building go fully local with all roles (`all-local.env` default).
 8. Data runbooks: scripts run in `api` (`exec -T api python scripts/...`); the backfill uses `--rate-fraction 0.05` while the worker and the trader run (fractions sum ≤ 1).
+9. Sync gap repair: rewrite the sentence that ends "or when a deploy overlaps that job's window" (`docs/deployment.md:212` on 2ff298b1; locate by text). A deploy may cut a heavy job; its row ends `interrupted` and the next worker's catch-up resumes it per symbol. There is no deploy window.
 **Success criteria:** no fixed backend name and no `ENABLE_JOBS=` setting; the file stays under 800 lines.
 <!-- Red team 2026-10-28: #10 -->
-**Verify:** `grep -c -i -E "pocketquant-app|enable_jobs=|single uvicorn|single worker|single process|single backend|app container|6 containers|one process,|one uvicorn worker" docs/deployment.md; grep -c -E "exec -T (api|trader|worker)" docs/deployment.md; grep -c "deploy.lock" docs/deployment.md; wc -l < docs/deployment.md` prints `0`, then a number ≥ 5, then a number ≥ 1, then a number ≤ 800.
+**Verify:** `grep -c -i -E "pocketquant-app|enable_jobs=|single uvicorn|single worker|single process|single backend|app container|6 containers|one process,|one uvicorn worker" docs/deployment.md; grep -c -E "exec -T (api|trader|worker)" docs/deployment.md; grep -c "deploy.lock" docs/deployment.md; grep -c "overlaps that job's window" docs/deployment.md; wc -l < docs/deployment.md` prints `0`, then a number ≥ 5, then a number ≥ 1, then `0`, then a number ≤ 800.
 
 ### Task 9.4 — README, justfile, PDR, codebase summary, script docstrings
 **Goal:** no other surface describes the single-process topology.
@@ -137,9 +143,22 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 <!-- Red team 2026-10-28: #10 -->
 **Verify:** `git grep -n -i -E "pocketquant-app|enable_jobs=|single uvicorn|single worker|single process|single backend|app container|6 containers|one process,|one uvicorn worker" -- README.md CLAUDE.md justfile docs scripts deploy web/nginx.conf ':!docs/journals' ':!plans'` prints nothing.
 
-### Task 9.5 — Gates, commits, push `develop`
-**Goal:** both changes on `develop` with CI green.
-**Target files and symbols:** the files of Tasks 9.1-9.4.
+### Task 9.5 — Binance WS: connect only after the first subscription
+**Goal:** a trader start no longer gets HTTP 400 on the first Binance WS connect; the first connect uses a real stream URL.
+**Target files and symbols:** `src/pocketquant/core/infra/binance/binance_websocket_adapter.py` (`BinanceWebSocketAdapter.run_forever`, `_build_url`); `tests/core_test/infra/binance/test_binance_websocket_client.py`. Fix shape: `reports/kongming-phase-07-checkpoint.md` Q2. Locate code by text, not by line.
+**Steps:**
+1. `grep -n -E "def run_forever|def _build_url|No subscriptions yet" src/pocketquant/core/infra/binance/binance_websocket_adapter.py` and read both methods.
+2. `run_forever`: in the `if self._ws is None:` branch, before `await self.connect()`, wait while `self._running` is true and `self._subscriptions` is empty (a short `asyncio.sleep` poll; no new flag, event, class or config key). When the wait ends because `_running` became false, do not connect.
+3. `_build_url`: delete the placeholder branch (the comment "No subscriptions yet" and `return f"{_WS_BASE}/ws/"`). Keep the one-stream URL; the multi-stream URL becomes the final return.
+4. Add one test to the same test file, in the style of `test_run_forever_reconnects_on_connection_closed` (patch `websockets.connect` in `_WS_MODULE`): run `run_forever` as a task with no subscription and assert `websockets.connect` is not called; subscribe `BTCUSDT:BINANCE`; assert the first connect URL ends with `/ws/btcusdt@aggTrade`; stop the adapter and await the task. Name it for the behaviour, for example `test_run_forever_waits_for_a_subscription_before_connecting`.
+5. Run the test file, then the full suite (`just test`; only the expected local red from plan.md Ops recipe).
+6. `git add src/pocketquant/core/infra/binance/binance_websocket_adapter.py tests/core_test/infra/binance/test_binance_websocket_client.py && git commit -m "fix(binance): connect the websocket only after the first subscription"`.
+**Success criteria:** no placeholder URL in `src`; the new test passes; the full suite shows only the expected local red; the fix is its own `fix(binance)` commit. CI on `develop` is green before the D-6 push (Task 9.6 Verify runs before Task 9.9).
+**Verify:** `git grep -n -F 'f"{_WS_BASE}/ws/"' -- src | wc -l; uv run python -m pytest tests/core_test/infra/binance/test_binance_websocket_client.py -q 2>&1 | tail -1; git log -1 --format=%s -- src/pocketquant/core/infra/binance/binance_websocket_adapter.py` prints `0`, a line starting `21 passed` (20 on 2ff298b1 plus the new test), then `fix(binance): connect the websocket only after the first subscription`.
+
+### Task 9.6 — Gates, commits, push `develop`
+**Goal:** the cleanup, the docs and the Binance fix on `develop` with CI green.
+**Target files and symbols:** the files of Tasks 9.1-9.4 (Task 9.5 already committed its fix).
 **Steps:**
 <!-- Red team 2026-10-28: #10 -->
 1. TV gate (D28): `git grep -n -i -E "tradingview|cme_globex|pandas_market_calendars|seed_index_futures" -- src tests web/src docs pyproject.toml ':!docs/journals' ':!plans'` prints nothing.
@@ -151,7 +170,7 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 **Success criteria:** pushed; the `develop` CI run is green.
 **Verify:** `test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && sleep 15 && RUN_ID=$(GH_TOKEN=$(gh auth token --user camping89) gh run list --branch develop --limit 1 --json databaseId -q '.[0].databaseId') && GH_TOKEN=$(gh auth token --user camping89) gh run watch "$RUN_ID" --exit-status > /dev/null && echo ci-green` prints `ci-green`.
 
-### Task 9.6 — Memory note is gone
+### Task 9.7 — Memory note is gone
 **Goal:** the stale "ES paper subscription" note no longer exists (Phase 03 deleted it).
 **Target files and symbols:** `C:/Users/evele/.claude/projects/D--w--me-algotrading/memory/pocketquant-es-paper-subscription-kept.md`, `.../memory/MEMORY.md`.
 **Steps:** run the Verify; edit nothing.
@@ -159,20 +178,20 @@ prints `0`, `3`, `5` (else `NOT_YET: the cutover or the Phase 08 helpers are not
 **Verify:** `test -e "C:/Users/evele/.claude/projects/D--w--me-algotrading/memory/pocketquant-es-paper-subscription-kept.md"; echo $?; grep -c "pocketquant-es-paper-subscription-kept" "C:/Users/evele/.claude/projects/D--w--me-algotrading/memory/MEMORY.md"` prints `1` then `0`.
 
 <!-- Red team 2026-10-28: #2 #11 -->
-### Task 9.7 — Machine and lease check before D-6
+### Task 9.8 — Machine and lease check before D-6
 **Goal:** no OOM since the baseline and both leases held by the compose containers before the first handover deploy.
 **Target files and symbols:** `/opt/pocketquant/bin/oom-check.sh`, `/opt/pocketquant/bin/leases.sh` (Phase 08); `reports/machine-baseline.md` line `oom_baseline=`.
 **Steps:** run the Verify; install nothing. `OOM_STOP` is the plan's machine stop (`plan.md` OOM rule) and goes to the Failure Protocol with the printed reason.
 **Success criteria:** `OOM_OK`; two unexpired leases whose owners match their containers.
 **Verify:** `B=$(sed -n 's/^oom_baseline=//p' plans/261028-0652-exness-only-parallel-runtime/reports/machine-baseline.md); HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" "bash /opt/pocketquant/bin/oom-check.sh $B; bash /opt/pocketquant/bin/leases.sh"` prints `OOM_OK`, then a line that ends with `unexpired=2 owners_match=yes`.
 
-### Task 9.8 — [ASK] Deploy D-6 (handover 1 of 10, image deploy)
-**Goal:** the cleanup and docs run in prod; the first handover is captured.
+### Task 9.9 — [ASK] Deploy D-6 (handover 1 of 10, image deploy)
+**Goal:** the cleanup, the docs and both fixes run in prod; the first handover is captured.
 **Target files and symbols:** `develop:master` push; CI run; VPS capture files `/opt/pocketquant/logs/verify/*-<T>.txt`; `plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md`.
 **Steps:**
 <!-- Red team 2026-10-28: #11 -->
 1. No time check (plan.md Conventions: no deploy window).
-2. Ask the owner (only an explicit yes counts): "Recommended: có — đẩy develop lên master ngay bây giờ (deploy ảnh mới D-6, tính là handover 1/10). Thay đổi: xoá nhánh cutover một lần trong 10-deploy.sh và cập nhật tài liệu cho api/worker/trader. Live đang tắt (EXNESS_LIVE_TRADING=false), chỉ có paper. web sẽ được tạo lại, SPA gián đoạn vài giây (D27, chỉ ghi nhận). Trả lời `có` hoặc `chưa`." A "chưa" ends with the `NOT_YET` block (`NOT_YET: owner deferred D-6`).
+2. Ask the owner (only an explicit yes counts): "Recommended: có — đẩy develop lên master ngay bây giờ (deploy ảnh mới D-6, tính là handover 1/10). Thay đổi: xoá nhánh cutover một lần trong 10-deploy.sh; cập nhật tài liệu cho api/worker/trader; sửa index idempotency để các container role khởi động cùng lúc không bị restart (6142249f); sửa lần kết nối Binance WS đầu tiên bị HTTP 400. Hàng này chỉ tính vào 10 handover khi phiên XAUUSD:EXNESS mở từ lúc deploy tới 15 phút sau (D36); deploy vẫn chạy được bất cứ lúc nào. Live đang tắt (EXNESS_LIVE_TRADING=false), chỉ có paper. web sẽ được tạo lại, SPA gián đoạn vài giây (D27, chỉ ghi nhận). Trả lời `có` hoặc `chưa`." A "chưa" ends with the `NOT_YET` block (`NOT_YET: owner deferred D-6`).
 3. Stamp: `date -u +%Y%m%dT%H%M%SZ`; write it down as `<T>` and use it literally below.
 <!-- Red team 2026-10-28: #11 #15 -->
 4. Capture start (the old trader id, a snapshot, the `docker stats` sampler and the web probe; the sampler runs only until step 7):
@@ -200,12 +219,32 @@ EOF
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 ```
    If `handover-log.md` has no line starting `| # | UTC start | kind | stamp |`, append `## Handover deploys`, a blank line and these two lines. If it has the header without `| discarded |`, replace the header and separator lines with these two and insert a `n/a` cell after the `gap_skips` cell of each existing row.
-9. Append the pending row: `| 1 | <content of start-<T>.txt> | image | <T> | pending | | | | | | | | | <verdict count from step 6> | pending |`. Phase 10 completes it no earlier than 65 min after the deploy.
-**Success criteria:** CI verdict 0 failures; three role containers; no `pocketquant-app`; one takeover and one completed takeover by the new trader; two held leases owned by their containers; no OOM; the pending row exists.
+9. Append the pending row: `| 1 | <content of start-<T>.txt> | image | <T> | pending | | | | | | | | | <verdict count from step 6> | pending |`. Phase 10 completes it no earlier than 65 min after the deploy and applies the D36 session rule to it.
+10. Row-1 notes (read-only; if a heavy job was running at D-6, this is the first prod run of the heavy-job resume). Replace `<T>`:
+```bash
+HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'bash -s' <<'EOF'
+T=<T>; V=/opt/pocketquant/logs/verify; cd /opt/pocketquant/deploy
+dc() { docker compose -f compose.prod.yml --env-file .env "$@"; }
+START=$(cat "$V/start-$T.txt"); OW=$(ls -t /opt/pocketquant/logs/worker-*.log.gz | head -1)
+{ zcat "$OW"; docker logs "$(dc ps -q worker)"; } 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'worker\.(jobs_interrupted|lease_released)|job\.(interrupted|resumed)|orphan_jobs_interrupted|scheduler\.catchup_enqueued'
+dc exec -T api python - "$START" <<'PY'
+import sys
+from datetime import datetime
+from pymongo import MongoClient
+from pocketquant.core.config import get_settings
+s = get_settings(); db = MongoClient(str(s.mongodb_url))[s.mongodb_database]; t = datetime.fromisoformat(sys.argv[1])
+for x in db.job_history.find({"started_at": {"$lt": t}, "$or": [{"finished_at": None}, {"finished_at": {"$gte": t}}]}):
+    print("job_row", x["job_id"], x["status"], x.get("error"), "done_symbols", len(x.get("done_symbols") or []))
+print("interrupted_heavy_now", db.job_history.count_documents({"status": "interrupted", "job_id": {"$in": ["sync_backfill", "sync_integrity", "sync_repair"]}}))
+PY
+EOF
+```
+   It prints the old and new worker's stop, interrupt, orphan and catch-up lines, one `job_row` line per job that was running at the deploy start, then `interrupted_heavy_now <n>`. Recorded, not judged: `interrupted_heavy_now` is expected to be `0` (with no heavy job running nothing is cut; a cut heavy job's row turns `running` again when the catch-up resumes it). Write the output as a section `## Row 1 notes (D-6)` directly above the table header line, so later rows still append to the table.
+**Success criteria:** CI verdict 0 failures; three role containers; no `pocketquant-app`; one takeover and one completed takeover by the new trader; two held leases owned by their containers; no restart of a new role container; no `job_history.idempotency_drop_failed` line; no OOM; the pending row exists; the row-1 notes exist.
 <!-- Red team 2026-10-28: #1 #2 #11 -->
-**Verify:** `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'cd /opt/pocketquant/deploy; docker ps -a --format "{{.Names}}" | grep -cx pocketquant-app; docker compose -f compose.prod.yml --env-file .env ps -q api worker trader | wc -l; L=$(docker logs "$(docker compose -f compose.prod.yml --env-file .env ps -q trader)" 2>&1 | sed "s/\x1b\[[0-9;]*m//g"); echo "$L" | grep -cE "trader\.takeover( |$)"; echo "$L" | grep -c "trader\.takeover_complete"; bash /opt/pocketquant/bin/leases.sh'; grep -c "| <T> | pending |" plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md` prints `0`, `3`, `1`, `1`, a line that ends with `unexpired=2 owners_match=yes`, then `1`; the step 6 count is ≥ 1; the step 7 output ends with `OOM_OK`.
+**Verify:** `HOST=$(head -1 ../pocketquant-config/vps/default/host | tr -d '\r'); ssh -i .cache/ssh/vps_key "$HOST" 'cd /opt/pocketquant/deploy; docker ps -a --format "{{.Names}}" | grep -cx pocketquant-app; docker compose -f compose.prod.yml --env-file .env ps -q api worker trader | wc -l; L=$(docker logs "$(docker compose -f compose.prod.yml --env-file .env ps -q trader)" 2>&1 | sed "s/\x1b\[[0-9;]*m//g"); echo "$L" | grep -cE "trader\.takeover( |$)"; echo "$L" | grep -c "trader\.takeover_complete"; bash /opt/pocketquant/bin/leases.sh; for c in $(docker compose -f compose.prod.yml --env-file .env ps -q api worker trader); do docker inspect -f "{{.Name}} {{.RestartCount}}" "$c"; done; for c in $(docker compose -f compose.prod.yml --env-file .env ps -q api worker trader); do docker logs "$c" 2>&1; done | grep -c "job_history\.idempotency_drop_failed"'; grep -c "| <T> | pending |" plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md; grep -c "^## Row 1 notes (D-6)" plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md` prints `0`, `3`, `1`, `1`, a line that ends with `unexpired=2 owners_match=yes`, three lines (`api`, `worker`, `trader` containers) each ending with ` 0`, `0`, then `1`, then `1`; the step 6 count is ≥ 1; the step 7 output ends with `OOM_OK`.
 
-### Task 9.9 — Record, push, remove the key
+### Task 9.10 — Record, push, remove the key
 **Goal:** the pending row is on `develop`; no key copy remains.
 **Target files and symbols:** `plans/261028-0652-exness-only-parallel-runtime/reports/handover-log.md`; `.cache/ssh/vps_key`.
 **Steps:**
@@ -217,10 +256,10 @@ EOF
 
 ## Rollback
 
-- Before D-6: `git revert` the two commits on `develop` and push; nothing ran in prod.
-- After D-6: the deleted branch was dead (no `pocketquant-app` exists) and the docs change no behaviour, so a revert plus a `develop:master` push [ASK] of plan.md Conventions restores the files only. An emergency image pin (same [ASK] and window) uses a lease-aware tag: `ssh ... "cd /opt/pocketquant && IMAGE_TAG=sha-<Deploy B short sha> bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh"`.
+- Before D-6: `git revert` the three commits of this phase on `develop` and push; nothing ran in prod.
+- After D-6: the deleted branch was dead (no `pocketquant-app` exists), the docs change no behaviour, and the Binance fix only delays the first connect until a subscription exists, so a revert plus a `develop:master` push [ASK] of plan.md Conventions restores the files only. An emergency image pin (same [ASK]) uses a lease-aware tag: `ssh ... "cd /opt/pocketquant && IMAGE_TAG=sha-<Deploy B short sha> bash deploy/vps/10-deploy.sh && bash deploy/vps/11-verify.sh"`.
 <!-- Red team 2026-10-28: #11 -->
-- A run interrupted between Task 9.8 steps 4 and 7 leaves the sampler and the probe running: run the step 7 capture-stop command for that `<T>` first. Capture files live only under `/opt/pocketquant/logs/verify/`; `rm -rf /opt/pocketquant/logs/verify` removes them. The Phase 08 helpers in `/opt/pocketquant/bin/` stay.
+- A run interrupted between Task 9.9 steps 4 and 7 leaves the sampler and the probe running: run the step 7 capture-stop command for that `<T>` first. Capture files live only under `/opt/pocketquant/logs/verify/`; `rm -rf /opt/pocketquant/logs/verify` removes them. The Phase 08 helpers in `/opt/pocketquant/bin/` stay.
 - Always `rm -f .cache/ssh/vps_key`.
 
 ## Failure Protocol

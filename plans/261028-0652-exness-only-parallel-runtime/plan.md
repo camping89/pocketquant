@@ -42,6 +42,7 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 | D33 | Before go-live is declared, 3 same-tag re-rolls run during the D12 canary while an Exness subscription is running; each logs `trader.lease_released inflight=0` (after any `trader.drain_retry`) and 0 `trader.drain_timeout`. |
 | D34 | No all-day sampler. The `docker stats` sampler runs only during a roll; each Phase 10 day records one light snapshot (`free -m`, load, OOM counter). |
 | D35 | Every interval closes on a timer at its end (+0.5 s); 4h/1d/1w end at the bucket end, so long bars after a market close are not stale and their entries are not skipped. |
+| D36 | A handover row counts toward the ten only when the `XAUUSD:EXNESS` calendar (the Phase 10 paper symbol) is open at the deploy start and for the 15 min after it (owner, 2026-10-30). A row outside this gets `(off-session)` appended to its `kind` and does not count. It is a counting rule, not a deploy permission: deploys run at any time (Conventions, "No deploy window"). The check is the session check in Phase 10 Context. |
 
 ## Conventions (every phase follows these)
 
@@ -80,14 +81,14 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 
 | # | Phase | Deploy | Depends on | Status |
 |---|---|---|---|---|
-| 01 | [Spike: two ticks sessions on one key](./phase-01-spike-two-tick-sessions.md) | none | — | Pending |
-| 02 | [Observe and correct: KISS rule, loop-lag probe, skip listener, docstrings, machine baseline](./phase-02-observe-and-correct.md) | D-1 | — | Pending |
-| 03 | [Delete TradingView and the CME calendar (prod data first, then code)](./phase-03-delete-tradingview-and-cme.md) | D-2 | 02 | Pending |
-| 04 | [Exness order path: stored pause, opposite rejection, in-flight guard, caches, order pacer lane](./phase-04-exness-order-path.md) | none (CI) | 03 | Pending |
-| 05 | [Bar path: publish outside the lock, timer close, gap facts, Redis seed](./phase-05-bar-path.md) | none (CI) | 04 | Pending |
-| 06 | [Strategy runtime and restart state: guards, signal tasks, latency, warm-up, paper restore](./phase-06-strategy-runtime-and-restart-state.md) | D-3 | 05 | Pending |
-| 07 | [Roles and leases inside one process (Deploy A)](./phase-07-roles-and-leases-deploy-a.md) | D-4 | 01 (spike PASS), 06 | Pending |
-| 08 | [Topology and cutover to api/worker/trader (Deploy B)](./phase-08-topology-and-cutover-deploy-b.md) | D-5 | 07 | Pending |
+| 01 | [Spike: two ticks sessions on one key](./phase-01-spike-two-tick-sessions.md) | none | — | Done |
+| 02 | [Observe and correct: KISS rule, loop-lag probe, skip listener, docstrings, machine baseline](./phase-02-observe-and-correct.md) | D-1 | — | Done |
+| 03 | [Delete TradingView and the CME calendar (prod data first, then code)](./phase-03-delete-tradingview-and-cme.md) | D-2 | 02 | Done |
+| 04 | [Exness order path: stored pause, opposite rejection, in-flight guard, caches, order pacer lane](./phase-04-exness-order-path.md) | none (CI) | 03 | Done |
+| 05 | [Bar path: publish outside the lock, timer close, gap facts, Redis seed](./phase-05-bar-path.md) | none (CI) | 04 | Done |
+| 06 | [Strategy runtime and restart state: guards, signal tasks, latency, warm-up, paper restore](./phase-06-strategy-runtime-and-restart-state.md) | D-3 | 05 | Done |
+| 07 | [Roles and leases inside one process (Deploy A)](./phase-07-roles-and-leases-deploy-a.md) | D-4 | 01 (spike PASS), 06 | Done |
+| 08 | [Topology and cutover to api/worker/trader (Deploy B)](./phase-08-topology-and-cutover-deploy-b.md) | D-5 | 07 | Done |
 | 09 | [Cleanup and docs](./phase-09-cleanup-and-docs.md) | D-6 (handover 1/10) | 08 | Pending |
 | 10 | [Prod verification: 10 handovers, 14 days paper, machine limits](./phase-10-prod-verification.md) | re-rolls | 09 | Pending |
 | 11 | [Re-arm live gate](./phase-11-re-arm-live-gate.md) | per go-live plan | 10 | Pending |
@@ -110,7 +111,7 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 | Direction and exits (D9, D11, D30) | CI: a LONG mirror row gives direction LONG after start; an opposite entry is rejected on paper and Exness and never becomes a close; `closePosition` is absent from `src`; hitnrun2 with 481 stored bars signals on the first qualifying live bar. |
 | Paper restore (D13) | CI: after a closed paper round trip a rebuilt broker shows the pre-restart balance; a restored open paper position keeps SL/TP and exits on the next crossing bar. |
 | Orphan sweep (D18) | CI: the sweep fails only `started` runs whose heartbeat is older than 60 s. |
-| Handover (D8, D29) | Over 10 deploys in market hours (at least 5 same-tag re-rolls): every `trader.lease_released` has `inflight=0` and an offset of 0-30 s after a 1m boundary; 0 `trader.drain_timeout`; `handover_gap_ms` ≤ 2000; `takeover_ms` ≤ 5000; 0 `reason=gap` on bars within one interval of the boundary; the web probe shows 0 non-200 on the same-tag re-rolls (image deploys: recorded only, D27). |
+| Handover (D8, D29) | Over 10 deploys that count under D36 (the `XAUUSD:EXNESS` calendar is open from the deploy start until 15 min after it; at least 5 same-tag re-rolls): every `trader.lease_released` has `inflight=0` and an offset of 0-30 s after a 1m boundary; 0 `trader.drain_timeout`; `handover_gap_ms` ≤ 2000; `takeover_ms` ≤ 5000; 0 `reason=gap` on bars within one interval of the boundary; the web probe shows 0 non-200 on the same-tag re-rolls (image deploys: recorded only, D27). |
 | Rate budget (D19) | 0 terminal `exness.rate_limited` on order operations; `exness.rate_limited_retry` ≤ 72 per rolling 7 days. |
 
 ## Risks
