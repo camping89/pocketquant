@@ -26,6 +26,7 @@ _RECONNECT_DELAY_MAX = 60.0
 # nor raises after the underlying socket has died.
 _STALE_TICK_TIMEOUT_S = 30.0
 _WATCHDOG_INTERVAL_S = 5.0
+_SUBSCRIPTION_POLL_S = 0.1
 
 
 class BinanceWebSocketAdapter:
@@ -83,6 +84,12 @@ class BinanceWebSocketAdapter:
             watchdog: asyncio.Task[None] | None = None
             try:
                 if self._ws is None:
+                    # The URL names the subscribed streams; Binance rejects one with
+                    # none (HTTP 400), so the first connect waits for a subscription.
+                    while self._running and not self._subscriptions:
+                        await asyncio.sleep(_SUBSCRIPTION_POLL_S)
+                    if not self._running:
+                        break
                     await self.connect()
                     # Reset baseline so the watchdog doesn't trip immediately
                     self.last_tick_at = datetime.now(UTC)
@@ -140,10 +147,7 @@ class BinanceWebSocketAdapter:
         streams = [f"{code.lower()}@aggTrade" for code, _cb in self._subscriptions.values()]
         if len(streams) == 1:
             return f"{_WS_BASE}/ws/{streams[0]}"
-        if len(streams) > 1:
-            return f"{_WS_BASE}/stream?streams={'/'.join(streams)}"
-        # No subscriptions yet — use a placeholder; connect() called before subscribe
-        return f"{_WS_BASE}/ws/"
+        return f"{_WS_BASE}/stream?streams={'/'.join(streams)}"
 
     async def _handle_frame(self, raw_frame: str | bytes) -> None:
         text = raw_frame if isinstance(raw_frame, str) else raw_frame.decode()

@@ -222,6 +222,34 @@ class TestReconnectBackoff:
         assert client._reconnect_delay == _RECONNECT_DELAY_INITIAL
 
     @pytest.mark.asyncio
+    async def test_run_forever_waits_for_a_subscription_before_connecting(self):
+        import asyncio
+
+        client = BinanceWebSocketAdapter()
+        urls: list[str] = []
+
+        async def _mock_connect(url, *args, **kwargs):
+            urls.append(url)
+            client._running = False
+
+            async def _empty_iter():
+                return
+                yield  # pragma: no cover — async generator sentinel
+
+            mock_ws = MagicMock()
+            mock_ws.__aiter__ = lambda self: _empty_iter()
+            mock_ws.close = AsyncMock()
+            return mock_ws
+
+        with patch(f"{_WS_MODULE}.websockets.connect", side_effect=_mock_connect):
+            task = asyncio.create_task(client.run_forever())
+            await asyncio.sleep(0.3)
+            assert urls == []
+            await client.subscribe("BTCUSDT:BINANCE", lambda _: None)
+            await asyncio.wait_for(task, timeout=2)
+
+        assert urls == ["wss://stream.binance.com:9443/ws/btcusdt@aggTrade"]
+
     async def test_run_forever_reconnects_on_connection_closed(self):
         import websockets as _ws
 
