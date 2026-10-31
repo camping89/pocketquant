@@ -10,3 +10,5 @@ Config: `pocketquant-config` commit e7cc081 sets `EXNESS_LIVE_TRADING=true` in `
 Flag per role (container env): `api` false, `worker` false, `trader` true. Compose pins the flag off for `api` and `worker`, so only the trader can build the Exness broker and send an order. The api's `GET /api/v1/admin/safeguards` and the SPA Exness strip therefore show `live_trading` off while the trader is armed. The strip's `Entries paused` chip and its Pause and Resume buttons are correct.
 
 Known follow-ups (not blockers): the SPA strip shows the api's flag, not the trader's; the api-side `BROKER_DISABLED` check in `StrategyCommandService.add_symbol` refuses every exness subscription create on the split runtime, so the create runs through the trader (Substitutions table).
+
+Disarmed: 2026-10-31T06:00Z, run 41174376031 (verify 0 failures), `pocketquant-config` 76acb5e; container env api, worker and trader all `EXNESS_LIVE_TRADING=false`; trader safeguards `"live_trading":false,"entries_paused":true`; OOM_OK. Plan closed (D38).

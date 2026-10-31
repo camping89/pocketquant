@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "Re-arm live gate"
-status: pending
+status: done
 priority: P1
 effort: "per go-live plan (about 1h attention plus calendar days)"
 dependencies: [10]
