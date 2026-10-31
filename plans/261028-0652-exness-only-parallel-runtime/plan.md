@@ -43,6 +43,7 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 | D34 | No all-day sampler. The `docker stats` sampler runs only during a roll; each Phase 10 day records one light snapshot (`free -m`, load, OOM counter). |
 | D35 | Every interval closes on a timer at its end (+0.5 s); 4h/1d/1w end at the bucket end, so long bars after a market close are not stale and their entries are not skipped. |
 | D36 | A handover row counts toward the ten only when the `XAUUSD:EXNESS` calendar (the Phase 10 paper symbol) is open at the deploy start and for the 15 min after it (owner, 2026-10-30). A row outside this gets `(off-session)` appended to its `kind` and does not count. It is a counting rule, not a deploy permission: deploys run at any time (Conventions, "No deploy window"). The check is the session check in Phase 10 Context. |
+| D37 | Phase 10 closed early on the evidence at 2026-10-31T02:33Z (owner, 2026-10-31): 7 counted handover rows PASS (6 re-rolls), about 19 h of paper since 2026-10-30T07:10Z with 0 errors, 0 listener errors, 0 lost leases, 2 rate-limit retries and 1m Exness `t0_t5_ms` p95 699 ms over 26 samples. The 10-handover, 14-day and weekly-row criteria are waived, not met. Not observed: memory over several days, a Monday open, the 7-day limits. |
 
 ## Conventions (every phase follows these)
 
@@ -90,7 +91,7 @@ The plan runs on the current prod VPS (2 vCPU, 3 GB RAM, D25) and measures its l
 | 07 | [Roles and leases inside one process (Deploy A)](./phase-07-roles-and-leases-deploy-a.md) | D-4 | 01 (spike PASS), 06 | Done |
 | 08 | [Topology and cutover to api/worker/trader (Deploy B)](./phase-08-topology-and-cutover-deploy-b.md) | D-5 | 07 | Done |
 | 09 | [Cleanup and docs](./phase-09-cleanup-and-docs.md) | D-6 (handover 1/10) | 08 | Done |
-| 10 | [Prod verification: 10 handovers, 14 days paper, machine limits](./phase-10-prod-verification.md) | re-rolls | 09 | In progress |
+| 10 | [Prod verification: 10 handovers, 14 days paper, machine limits](./phase-10-prod-verification.md) | re-rolls | 09 | Done (D37) |
 | 11 | [Re-arm live gate](./phase-11-re-arm-live-gate.md) | per go-live plan | 10 | Pending |
 
 ## Acceptance criteria

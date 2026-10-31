@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Prod verification: 10 handovers, 14 days paper, machine limits"
-status: pending
+status: done
 priority: P1
 effort: "about 20-40 min per run; 14+ calendar days"
 dependencies: [9]

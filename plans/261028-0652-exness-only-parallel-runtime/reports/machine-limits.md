@@ -10,3 +10,25 @@
 | h5 | 2026-10-30T17:12:54Z | handover 5 (re-roll) | used 1918 / avail 1706 / swap 132 MiB, load1 1.03, psi 0.18, oom=0 | used 1919 / avail 1706 / swap 142 MiB, load1 2.80, psi 0.14, oom=0 | pocketquant-mongodb 1485/94.2; pocketquant-prod-trader-6 113/89.5; pocketquant-prod-trader-5 97/40.5; pocketquant-prod-api-5 99/8.2; pocketquant-prod-api-6 99/85.1; pocketquant-prod-worker-5 102/28.7; pocketquant-prod-worker-6 98/107.5; pocketquant-cloudflared 46/23.9; pocketquant-portainer 25/0.1; pocketquant-redis 8/7.3; pocketquant-web 8/13.4 | <0.25/<0.25/<0.25 (<0.25) | 14 | 21 | 257 | capture OOM_OK; now OOM_OK |
 | h6 | 2026-10-30T18:23:15Z | handover 6 (re-roll) | used 1924 / avail 1700 / swap 142 MiB, load1 0.65, psi 0.00, oom=0 | used 1939 / avail 1685 / swap 142 MiB, load1 2.11, psi 0.00, oom=0 | pocketquant-mongodb 1480/123.0; pocketquant-prod-trader-7 134/96.2; pocketquant-prod-trader-6 96/21.0; pocketquant-prod-api-6 96/1.9; pocketquant-prod-api-7 97/101.7; pocketquant-prod-worker-6 99/9.2; pocketquant-prod-worker-7 97/97.4; pocketquant-cloudflared 45/7.9; pocketquant-portainer 25/1.1; pocketquant-redis 7/8.0; pocketquant-web 8/14.6 | <0.25/<0.25/0.253 (<0.25) | 11 | 27 | 89 | capture OOM_OK; now OOM_OK |
 | h7 | 2026-10-30T19:35:08Z | handover 7 (re-roll) | used 1921 / avail 1704 / swap 142 MiB, load1 0.78, psi 0.00, oom=0 | used 1919 / avail 1705 / swap 142 MiB, load1 2.38, psi 0.00, oom=0 | pocketquant-mongodb 1483/123.8; pocketquant-prod-trader-8 120/98.6; pocketquant-prod-trader-7 96/15.5; pocketquant-prod-api-7 95/6.9; pocketquant-prod-api-8 95/98.3; pocketquant-prod-worker-7 98/41.7; pocketquant-prod-worker-8 98/95.3; pocketquant-cloudflared 45/1.5; pocketquant-portainer 25/0.1; pocketquant-redis 10/4.3; pocketquant-web 9/16.1 | <0.25/0.641/<0.25 (0.253) | 11 | 22 | 311 | capture OOM_OK; now OOM_OK |
+
+## Machine limits summary for the owner
+
+Machine: `nproc` 2, `free -m` total 3905 MiB. Data: handover rows h1-h7 (the `docker stats` sampler runs only during a roll) and point snapshots before and after each roll, once on 2026-10-30 and once at 2026-10-31T02:33Z. These are not continuous peaks.
+
+| Measure | Value |
+|---|---|
+| Peak RSS MiB / CPU% during rolls | mongodb 1546 / 144.0; trader 134 / 153.5; api 106 / 101.7; worker 106 / 107.5; cloudflared 56 / 34.8; portainer 26 / 1.1; web 10 / 24.5; redis 10 / 15.4 |
+| Host used max / available min / swap max | 2049 / 1576 / 142 MiB (the 2026-10-31T02:33Z snapshot) |
+| PSI some avg10 max | 0.18 |
+| load1 max | 2.86 on 2 vCPU (right after a roll) |
+| Loop lag max s | api 0.423, worker 0.641, trader 0.253; an old trader 0.821 (h1) |
+| Warm-up s min / median / max | 11 / 12 / 32 |
+| takeover_ms max / handover_gap_ms max | 58 / 499 |
+| `strategy.signal_discarded` | lease 0, drain 0 |
+| OOM checks | every one `OOM_OK` |
+
+Trader lag of 0.5 s or more per day (the Stalls criterion) is reported, not judged (D31). No daily row exists after the early close (D37).
+
+Inference: memory runs short first. MongoDB holds about 1.5 GB, a roll adds one role copy of about 100-130 MiB for a few minutes, and the lowest available value seen is 1576 MiB. Host used memory rose 138 MiB from 2026-10-30T07:10Z to 2026-10-31T02:33Z. Whether that is cache growth or a leak is not known; several days of snapshots would show it. CPU reaches the two cores only during a roll.
+
+Levers, as information: a bigger host (D5); a WiredTiger cache cap (`--wiredTigerCacheSizeGB 0.5`; MongoDB's default is about half of RAM minus 1 GB [I]); per-container `mem_limit` values from the peaks above.
