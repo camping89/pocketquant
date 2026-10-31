@@ -5,7 +5,7 @@ cd "$(dirname "$(readlink -f "$0")")/.." || exit 1
 dc() { docker compose -f compose.prod.yml --env-file .env "$@"; }
 hosts() { for c in $(dc ps -q "$1"); do docker inspect -f '{{.Config.Hostname}}' "$c"; done; }
 t=$(dc ps -q trader | head -1)
-read -r w tr n < <(docker exec -i "$t" python -c 'from datetime import UTC, datetime
+read -r w tr n < <(docker exec "$t" python -c 'from datetime import UTC, datetime
 from pymongo import MongoClient
 from pocketquant.core.config import get_settings
 s = get_settings(); db = MongoClient(str(s.mongodb_url), tz_aware=True)[s.mongodb_database]
