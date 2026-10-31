@@ -5,3 +5,4 @@
 - paper_sub_id: 01a15754-3ab5-7258-b46b-ad98e1f3471f
 - baseline: balance 211.47 at 2026-10-22T01:54:45.180826+00:00
 - called off: 2026-10-22T01:56:07Z, 11.5 answered no (no profitable strategy yet); paper subscription kept, entries paused
+- round_trip: DONE 2026-10-31T04:12:31Z (called off 2026-10-22 at 11.5; no order sent; closed so a new run can start)
