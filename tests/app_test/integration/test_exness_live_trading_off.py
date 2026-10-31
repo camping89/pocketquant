@@ -1,5 +1,5 @@
 # Two independent locks: BrokerFactory refuses the exness broker, and the client refuses
-# every order call before any network use.
+# every order call before any network use. The trader flag in the store never opens them.
 
 from __future__ import annotations
 
@@ -14,6 +14,9 @@ from pocketquant.core.domain.market_data.data_provider_port import IDataProvider
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.exness.exness_adapter import ExnessAdapter
 from pocketquant.core.infra.exness.exness_client import ExnessApiError, ExnessClient
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -35,6 +38,8 @@ async def test_live_trading_off_blocks_every_exness_order_path(settings: Setting
     )
     container = create_container(configured)
     try:
+        store = await container.get(SafeguardsRepository)
+        await store.save_live_trading(True)
         client = await container.get(ExnessClient)
         requests: list[httpx.Request] = []
 
@@ -55,4 +60,5 @@ async def test_live_trading_off_blocks_every_exness_order_path(settings: Setting
         assert raised.value.code == "LIVE_TRADING_DISABLED"
         assert not any("/positions" in r.url.path for r in requests)
     finally:
+        await (await container.get(SafeguardsRepository)).save_live_trading(False)
         await container.close()

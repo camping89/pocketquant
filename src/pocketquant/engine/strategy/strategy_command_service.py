@@ -4,10 +4,12 @@ from datetime import UTC, datetime
 
 from pocketquant.core.common.exceptions import DomainError, NotFoundError
 from pocketquant.core.common.uuid import generate_id
-from pocketquant.core.config import Settings
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.subscription import Subscription
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
+)
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
@@ -23,11 +25,11 @@ class StrategyCommandService:
         self,
         subscription_repository: SubscriptionRepository,
         tracked_symbol_repository: TrackedSymbolRepository,
-        settings: Settings,
+        safeguards_repository: SafeguardsRepository,
     ) -> None:
         self._sub_repo = subscription_repository
         self._tracked_repo = tracked_symbol_repository
-        self._settings = settings
+        self._safeguards_repo = safeguards_repository
 
     async def start(self, subscription_id: str) -> bool:
         modified = await self._sub_repo.update_desired_state(subscription_id, "running")
@@ -56,9 +58,10 @@ class StrategyCommandService:
         if strategy_id not in STRATEGY_REGISTRY:
             raise NotFoundError(f"Strategy template '{strategy_id}' not found in registry.")
 
-        if broker == "exness" and not self._settings.exness_live_trading:
+        # The trader's flag, not this process's: compose pins the api's own flag off.
+        if broker == "exness" and not await self._safeguards_repo.load_live_trading():
             raise DomainError(
-                "exness broker is disabled: EXNESS_LIVE_TRADING is false",
+                "exness broker is disabled: the trader's EXNESS_LIVE_TRADING is false",
                 error_code="BROKER_DISABLED",
             )
 

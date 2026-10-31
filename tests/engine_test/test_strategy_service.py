@@ -32,7 +32,7 @@ def _cmd_svc(
     return StrategyCommandService(
         subscription_repository=sub_repo,
         tracked_symbol_repository=tracked_repo,
-        settings=MagicMock(exness_live_trading=False),
+        safeguards_repository=MagicMock(load_live_trading=AsyncMock(return_value=False)),
     )
 
 
@@ -148,7 +148,7 @@ async def test_add_symbol_persists_stopped_state() -> None:
 
 
 @pytest.mark.asyncio
-async def test_add_symbol_accepts_exness_only_while_live_trading_is_on() -> None:
+async def test_add_symbol_accepts_exness_only_while_the_trader_flag_is_on() -> None:
     sub_repo = MagicMock()
     sub_repo.add = AsyncMock()
     tracked_repo = MagicMock()
@@ -158,7 +158,7 @@ async def test_add_symbol_accepts_exness_only_while_live_trading_is_on() -> None
         return StrategyCommandService(
             subscription_repository=sub_repo,
             tracked_symbol_repository=tracked_repo,
-            settings=MagicMock(exness_live_trading=live_trading),
+            safeguards_repository=MagicMock(load_live_trading=AsyncMock(return_value=live_trading)),
         )
 
     with pytest.raises(DomainError) as exc:

@@ -5,7 +5,8 @@ import { apiFetch, apiPost } from '../../api/api-client'
 import { moneyHint } from '../../lib/money-hint'
 import { ConfirmDialog } from './start-stop-button'
 
-// Mirrors the backend Safeguards dataclass.
+// Mirrors GET /admin/safeguards: the env caps plus the trader's stored live flag and
+// the entry pause.
 interface Safeguards {
   live_trading: boolean
   daily_loss_cap: number | null

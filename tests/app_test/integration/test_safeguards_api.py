@@ -42,7 +42,7 @@ async def test_pause_and_resume_flip_the_entry_pause(
     initial = await app_client.get(_path(settings))
     assert initial.status_code == 200
     assert initial.json() == {
-        "live_trading": settings.exness_live_trading,
+        "live_trading": False,
         "daily_loss_cap": settings.exness_daily_loss_cap,
         "max_lots": settings.exness_max_lots,
         "leverage": settings.exness_leverage,
@@ -110,6 +110,19 @@ async def test_a_failed_pause_write_returns_503(
         assert response.status_code == 503
         assert response.json() == {"detail": "pause not stored"}
         assert (await client.get(_path(settings))).json()["entries_paused"] is False
+
+
+@pytest.mark.asyncio
+async def test_live_trading_reads_the_trader_flag_from_the_store(settings: Settings) -> None:
+    async with _client(settings.model_copy(update={"exness_live_trading": False})) as (client, app):
+        repo = await app.state.dishka_container.get(SafeguardsRepository)
+        await repo.save_live_trading(True)
+        try:
+            assert (await client.get(_path(settings))).json()["live_trading"] is True
+            assert (await client.post(_path(settings, "/pause"))).json()["live_trading"] is True
+            assert (await client.post(_path(settings, "/resume"))).json()["live_trading"] is True
+        finally:
+            await repo.save_live_trading(False)
 
 
 def test_safeguards_has_no_entries_paused_field() -> None:

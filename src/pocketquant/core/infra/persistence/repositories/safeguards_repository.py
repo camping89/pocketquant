@@ -13,10 +13,22 @@ class SafeguardsRepository(BaseRepository):
         return bool(doc and doc.get("entries_paused"))
 
     async def save_entries_paused(self, paused: bool) -> None:
+        await self._save({"entries_paused": paused})
+
+    # The trader's EXNESS_LIVE_TRADING, written at takeover, for display and the
+    # subscription create check only. No order path reads it.
+    async def load_live_trading(self) -> bool:
+        doc = await self._collection().find_one({})
+        return bool(doc and doc.get("live_trading"))
+
+    async def save_live_trading(self, live: bool) -> None:
+        await self._save({"live_trading": live})
+
+    async def _save(self, fields: dict[str, bool]) -> None:
         await self._collection().update_one(
             {},
             {
-                "$set": {"entries_paused": paused, "updated_at": datetime.now(UTC)},
+                "$set": fields | {"updated_at": datetime.now(UTC)},
                 "$setOnInsert": {"_id": generate_id_str()},
             },
             upsert=True,

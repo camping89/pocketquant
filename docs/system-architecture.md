@@ -11,6 +11,7 @@ This file holds the decisions, cross-process rules and limits that no single sou
 - **A symbol's suffix names its data provider.** The execution broker is a separate setting on each subscription. There is no fallback provider, because the same code on another provider is a different instrument.
 - **Exits are SL/TP only.** The risk check rejects EXIT and FLAT signals and any entry against an open position. A paper position closes at its SL or TP. An Exness position closes only at the venue's SL, TP or a stop-out. Unloading a subscription leaves a venue position open under its own SL/TP.
 - **Real money is opt-in.** While `EXNESS_LIVE_TRADING` is false, `BrokerFactory` refuses to build the Exness broker and `ExnessClient` refuses every order call. Each check stands on its own.
+- **Only the trader's live flag counts.** Compose pins `EXNESS_LIVE_TRADING` off for api and worker, so the trader writes its own flag to the safeguards store at takeover. The Exness strip and the exness subscription create read it there. No order path reads the stored flag. Rejected: passing the flag to the api under a second env var, which reports the env file instead of the running trader.
 - **The paper broker uses margin accounting, not spot.** An open does not debit the notional. Equity is the balance plus unrealized pnl. Rejected: spot cash accounting. An all-in spot open drops equity to about zero, which zeroes Sharpe and fakes a -100% drawdown. Margin equity is also correct for shorts without a signed market value.
 
 ## Cross-Process Rules

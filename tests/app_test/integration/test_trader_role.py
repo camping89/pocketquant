@@ -18,6 +18,9 @@ from pocketquant.app.main_extensions import stop_reconcile_loop
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.infra.persistence.mongodb import Database
 from pocketquant.core.infra.persistence.repositories.lease_repository import LeaseRepository
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
+)
 from pocketquant.engine.market_data.app_services.bar_app_service import BarAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
@@ -121,6 +124,20 @@ async def test_trader_takes_over_after_release_and_logs_both_takeover_events(
     assert isinstance(takeover["handover_gap_ms"], int) and takeover["handover_gap_ms"] >= 0
     assert complete["event"] == "trader.takeover_complete"
     assert isinstance(complete["takeover_ms"], int) and complete["takeover_ms"] >= 0
+
+
+async def test_takeover_stores_the_trader_live_flag(trader: SimpleNamespace) -> None:
+    store = await trader.container.get(SafeguardsRepository)
+    await store.save_live_trading(True)
+    try:
+        trader.start()
+        await asyncio.sleep(0.2)
+        await trader.repo.release("trader", "other:1")
+        assert await _wait_for(_held(trader), 2.0)
+
+        assert await store.load_live_trading() is False
+    finally:
+        await store.save_live_trading(False)
 
 
 async def test_takeover_after_a_lost_holder_logs_an_empty_gap(trader: SimpleNamespace) -> None:

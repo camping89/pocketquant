@@ -26,11 +26,15 @@ async def get_safeguards(
 ) -> dict[str, Any]:
     # The read is public: at most one store read per second per process, so a flood
     # cannot load the store the open path reads.
-    cached = getattr(request.app.state, "entries_paused_read", None)
+    cached = getattr(request.app.state, "safeguards_read", None)
     if cached is None or time.monotonic() - cached[0] > _READ_CACHE_S:
-        cached = (time.monotonic(), await repo.load_entries_paused())
-        request.app.state.entries_paused_read = cached
-    return asdict(safeguards) | {"entries_paused": cached[1]}
+        cached = (
+            time.monotonic(),
+            await repo.load_entries_paused(),
+            await repo.load_live_trading(),
+        )
+        request.app.state.safeguards_read = cached
+    return _body(safeguards, paused=cached[1], live=cached[2])
 
 
 @router.post("/pause")
@@ -55,8 +59,14 @@ async def _set_entries_paused(
     except Exception:
         logger.warning("exness.safeguards.pause_store_failed", paused=paused)
         raise HTTPException(status_code=503, detail="pause not stored") from None
-    request.app.state.entries_paused_read = (time.monotonic(), paused)
+    live = await repo.load_live_trading()
+    request.app.state.safeguards_read = (time.monotonic(), paused, live)
     logger.warning(
         "exness.safeguards.entries_paused" if paused else "exness.safeguards.entries_resumed"
     )
-    return asdict(safeguards) | {"entries_paused": paused}
+    return _body(safeguards, paused=paused, live=live)
+
+
+# live_trading is the trader's flag from the store: compose pins this process's flag off.
+def _body(safeguards: Safeguards, *, paused: bool, live: bool) -> dict[str, Any]:
+    return asdict(safeguards) | {"live_trading": live, "entries_paused": paused}

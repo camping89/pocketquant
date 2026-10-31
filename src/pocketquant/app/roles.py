@@ -21,6 +21,9 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.config import Settings
 from pocketquant.core.infra.persistence.repositories.lease_repository import LeaseRepository
+from pocketquant.core.infra.persistence.repositories.safeguards_repository import (
+    SafeguardsRepository,
+)
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
@@ -187,6 +190,13 @@ def start_trader_lease(container: AsyncContainer, app: FastAPI, owner: str) -> N
                 else None
             )
             logger.info("trader.takeover", handover_gap_ms=gap_ms)
+            # Written before anything arms, so a failed write aborts the takeover and the
+            # store never reads off while a holder trades live. Never written on loss: a
+            # late write from a lost holder could overwrite its successor's flag.
+            settings = await container.get(Settings)
+            await (await container.get(SafeguardsRepository)).save_live_trading(
+                settings.exness_live_trading
+            )
             bars.publishes_current = True
             # Before take_over() connects the paper brokers, so no paper exit closes unrecorded.
             await (await container.get(LiveTradeCollector)).start()
