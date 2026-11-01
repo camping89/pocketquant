@@ -31,7 +31,7 @@ This file holds the decisions, cross-process rules and limits that no single sou
 
 - The EventBus is in memory. Events are lost on a crash, and there is no outbox.
 - Rate-limit buckets live in Redis and reset when Redis restarts.
-- A strategy that adds to a position sizes each add against the full paper balance. No current strategy adds; each holds at most one position.
+- A strategy that adds to a position sizes each add against the full paper balance.
 - MetaTrader 5 is not built. No code exists, and `:MT5` is not a registered provider suffix. The `MetaTrader5` Python package ships only Windows wheels and works through a running MT5 terminal (checked on PyPI). Exness API keys work only for Exness-platform accounts, not MT5 accounts (checked in the Exness help center). An MT5 account cannot reuse the Exness client.
 
 ### One take-profit per entry, closed in full

@@ -1,5 +1,5 @@
 {
-  "_doc": "Canonical engulfing detector fixture. Source of truth for BOTH the Python detector (detect_engulfing) and the TS chart port (web/src/lib/indicators/engulfing.ts). Phase 3 keeps a byte-identical copy at web/src/lib/indicators/__fixtures__/; Phase 5 diffs them. rejection_wick_pct is ALWAYS a float (sentinel 1.0 for non-engulfing or zero-range).",
+  "_doc": "Golden fixture for detectEngulfing (web/src/lib/indicators/engulfing.ts). rejection_wick_pct is ALWAYS a float (sentinel 1.0 for non-engulfing or zero-range).",
   "cases": [
     {
       "name": "bullish_strong_small_upper_wick",

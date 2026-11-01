@@ -44,7 +44,7 @@ def _order_with_fill_and_event(run_id: str, symbol: str) -> OrderRecord:
     return OrderRecord(
         order_id=order_id,
         run_id=run_id,
-        strategy_code="hitnrun2",
+        strategy_code="probe",
         symbol=symbol,
         side=OrderSide.BUY,
         order_type=OrderType.MARKET,
@@ -84,7 +84,7 @@ async def _seed_run_with_orders(settings: Settings, *, with_orders: bool) -> str
     db = Database()
     await db.connect(settings)
     try:
-        run = _finished_run("hitnrun2", "BTCUSDT:BINANCE", "1m")
+        run = _finished_run("probe", "BTCUSDT:BINANCE", "1m")
         run_id = str(run.id)
         await BacktestRepository(db).save(run)
         if with_orders:

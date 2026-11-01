@@ -1,4 +1,4 @@
-# hitnrun2 arms _open_direction when it emits a signal and clears it only on an opposite
+# A strategy arms _open_direction when it emits a signal and clears it only on an opposite
 # fill, so a signal that never filled used to silence it for good.
 
 from __future__ import annotations
@@ -19,9 +19,6 @@ from pocketquant.core.domain.order import (
     OrderType,
 )
 from pocketquant.core.domain.risk import PositionCalculation, PositionCalculatorDomainService
-from pocketquant.core.domain.strategy.services.hitnrun2_strategy_service import (
-    HitNRun2StrategyService,
-)
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
@@ -31,6 +28,7 @@ from pocketquant.engine.backtest.backtest_sandbox_app_service import (
 )
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import ScriptedStrategy
 
 _SYM = "BTCUSDT:BINANCE"
 _NOW = datetime(2026, 10, 1, tzinfo=UTC)
@@ -113,18 +111,18 @@ def _engine(risk: _Risk, bus: EventBus | None = None, orders=None) -> StrategyAp
     )
 
 
-async def _armed(engine: StrategyAppService) -> HitNRun2StrategyService:
-    await engine.load_strategy(_config(), HitNRun2StrategyService)
+async def _armed(engine: StrategyAppService) -> ScriptedStrategy:
+    await engine.load_strategy(_config(), ScriptedStrategy)
     await engine.start_strategy("s1")
     strategy = engine._strategies["s1"]
-    assert isinstance(strategy, HitNRun2StrategyService)
+    assert isinstance(strategy, ScriptedStrategy)
     strategy._open_direction = Direction.LONG
     return strategy
 
 
 @pytest.mark.asyncio
-async def test_hitnrun2_on_order_rejected_clears_open_direction() -> None:
-    strategy = HitNRun2StrategyService(_config())
+async def test_on_order_rejected_clears_open_direction() -> None:
+    strategy = ScriptedStrategy(_config())
     strategy._open_direction = Direction.SHORT
 
     await strategy.on_order_rejected("x")

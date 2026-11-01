@@ -25,9 +25,9 @@ from pocketquant.engine.live.strategy_reconcile_app_service import (
 )
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("probe_registry")]
 
-_STRATEGY = "hitnrun2"
+_STRATEGY = "probe"
 _SYMBOL = "BTCUSDT:BINANCE"
 
 

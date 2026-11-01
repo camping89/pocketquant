@@ -5,8 +5,8 @@ from scripts.rubric.data_access import collapse_duplicates
 
 def test_singletons_pass_through():
     meta = {
-        "a": ("engulfing", 100, 0.1),
-        "b": ("hitnrun2", 200, -0.2),
+        "a": ("reversal", 100, 0.1),
+        "b": ("breakout", 200, -0.2),
     }
     out = collapse_duplicates(meta, {})
     assert out == [("a", []), ("b", [])]
@@ -15,8 +15,8 @@ def test_singletons_pass_through():
 def test_double_persist_collapses_to_canonical_plus_alias():
     # same strategy, same trade count + return, IDENTICAL entry_time set → merge.
     meta = {
-        "019f1780-6b52": ("hitnrun2", 5406, -0.031),
-        "019f1780-546f": ("hitnrun2", 5406, -0.031),
+        "019f1780-6b52": ("breakout", 5406, -0.031),
+        "019f1780-546f": ("breakout", 5406, -0.031),
     }
     sig = frozenset({1, 2, 3})
     signatures = {"019f1780-6b52": sig, "019f1780-546f": sig}
@@ -31,8 +31,8 @@ def test_double_persist_collapses_to_canonical_plus_alias():
 def test_same_count_different_trades_not_merged():
     # identical meta key but DIFFERENT entry_time sets → must stay separate.
     meta = {
-        "x": ("hitnrun2", 5406, -0.031),
-        "y": ("hitnrun2", 5406, -0.031),
+        "x": ("breakout", 5406, -0.031),
+        "y": ("breakout", 5406, -0.031),
     }
     signatures = {"x": frozenset({1, 2, 3}), "y": frozenset({4, 5, 6})}
     out = collapse_duplicates(meta, signatures)

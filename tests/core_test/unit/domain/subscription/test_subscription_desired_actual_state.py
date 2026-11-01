@@ -18,7 +18,7 @@ NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
 def _sub(**overrides) -> Subscription:
     base: dict[str, Any] = dict(
         id=generate_id(),
-        strategy_code="hitnrun2",
+        strategy_code="probe",
         symbol="BTCUSDT:BINANCE",
         interval=Interval.MINUTE_5,
         created_at=NOW,
@@ -42,7 +42,7 @@ def test_to_mongo_writes_both_state_keys() -> None:
 def test_from_mongo_legacy_doc_without_keys_defaults_stopped() -> None:
     legacy = {
         "_id": str(generate_id()),
-        "strategy_code": "hitnrun2",
+        "strategy_code": "probe",
         "symbol": "BTCUSDT:BINANCE",
         "interval": Interval.MINUTE_5.value,
         "created_at": NOW,
@@ -75,7 +75,7 @@ def test_replace_state_keeps_id_stable() -> None:
 def test_to_from_mongo_roundtrip() -> None:
     sub = Subscription(
         id=generate_id(),
-        strategy_code="hitnrun2",
+        strategy_code="probe",
         symbol="BTCUSDT:binance",
         interval=Interval.MINUTE_5,
         created_at=NOW,
@@ -88,8 +88,8 @@ def test_to_from_mongo_roundtrip() -> None:
 
 
 def test_already_exists_error_carries_code_and_triple() -> None:
-    err = SubscriptionAlreadyExistsError("hitnrun2", "BTCUSDT:BINANCE", "5m")
+    err = SubscriptionAlreadyExistsError("probe", "BTCUSDT:BINANCE", "5m")
     assert err.error_code == "SUBSCRIPTION_ALREADY_EXISTS"
     assert err.status_code == 409
-    for part in ("hitnrun2", "BTCUSDT:BINANCE", "5m"):
+    for part in ("probe", "BTCUSDT:BINANCE", "5m"):
         assert part in str(err)

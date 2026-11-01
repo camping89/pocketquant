@@ -116,7 +116,7 @@ async def test_long_sl_triggers_on_bid_low(spread: float) -> None:
 
 def test_config_from_dict_reads_spread() -> None:
     payload = {
-        "strategy_code": "hitnrun2",
+        "strategy_code": "probe",
         "symbol": _SYM,
         "interval": "1m",
         "start_date": "2026-01-01T00:00:00+00:00",

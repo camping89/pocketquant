@@ -1,9 +1,7 @@
 import type { SeriesMarker, Time } from 'lightweight-charts'
 import type { CandlestickData } from '../../types/market-data'
 
-// Mirror of the Python detector in
-// src/pocketquant/core/domain/strategy/patterns/engulfing_detector.py.
-// Locked to it by the shared golden fixture (engulfing.test.ts).
+// Chart overlay only; no strategy trades on it. Locked by its golden fixture (engulfing.test.ts).
 
 const NO_SIGNAL_REJECTION = 1.0
 
@@ -60,9 +58,7 @@ const COLORS = {
   bearishWeak: '#fca5a5',
 } as const
 
-// Visual aid only: a fixed display threshold for strong/weak coloring. The
-// strategy reads max_rejection_wick_pct from its config and may differ. A
-// marker is not a strategy entry — see docs/swing-pivot-key-level.md.
+// Visual aid only: a fixed display threshold for strong/weak coloring.
 const STRONG_THRESHOLD = 0.3
 
 export function engulfingMarkers(

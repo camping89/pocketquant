@@ -17,6 +17,8 @@ from pocketquant.engine.strategy.strategy_query_service import (
     StrategyQueryService,
 )
 
+pytestmark = pytest.mark.usefixtures("probe_registry")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -137,7 +139,7 @@ async def test_add_symbol_persists_stopped_state() -> None:
     tracked_repo.exists = AsyncMock(return_value=True)
 
     svc = _cmd_svc(sub_repo=sub_repo, tracked_repo=tracked_repo)
-    result = await svc.add_symbol("hitnrun2", "BTCUSDT:BINANCE", "1h")
+    result = await svc.add_symbol("probe", "BTCUSDT:BINANCE", "1h")
 
     sub_repo.add.assert_awaited_once()
     persisted = sub_repo.add.await_args.args[0]
@@ -162,11 +164,11 @@ async def test_add_symbol_accepts_exness_only_while_the_trader_flag_is_on() -> N
         )
 
     with pytest.raises(DomainError) as exc:
-        await svc(False).add_symbol("hitnrun2", "XAUUSD:EXNESS", "5m", broker="exness")
+        await svc(False).add_symbol("probe", "XAUUSD:EXNESS", "5m", broker="exness")
     assert exc.value.error_code == "BROKER_DISABLED"
     sub_repo.add.assert_not_called()
 
-    result = await svc(True).add_symbol("hitnrun2", "XAUUSD:EXNESS", "5m", broker="exness")
+    result = await svc(True).add_symbol("probe", "XAUUSD:EXNESS", "5m", broker="exness")
     assert sub_repo.add.await_args.args[0].broker == "exness"
     assert result["broker"] == "exness"
 
@@ -179,7 +181,7 @@ async def test_add_symbol_404_when_symbol_not_tracked() -> None:
     svc = _cmd_svc(tracked_repo=tracked_repo)
 
     with pytest.raises(NotFoundError) as exc:
-        await svc.add_symbol("hitnrun2", "BTCUSDT:BINANCE", "1h")
+        await svc.add_symbol("probe", "BTCUSDT:BINANCE", "1h")
     assert exc.value.error_code == "SYMBOL_NOT_TRACKED"
 
 
@@ -258,7 +260,7 @@ async def test_list_symbols_derives_is_running_from_actual_state(
 
     sub = MagicMock()
     sub.id = "sub-abc"
-    sub.strategy_code = "hitnrun2"
+    sub.strategy_code = "probe"
     sub.symbol = "BTCUSDT:BINANCE"
     sub.interval = Interval.HOUR_1
     sub.created_at = datetime(2026, 1, 1, tzinfo=UTC)

@@ -1,8 +1,7 @@
 import { detectEngulfing } from './engulfing'
 import fixture from './__fixtures__/engulfing_golden_fixture.json'
 
-// Same fixture as the Python detector test. Keep the two copies byte-identical;
-// no check diffs them.
+// The web owns this golden fixture; detectEngulfing and the fixture change together.
 
 interface OHLC {
   open: number

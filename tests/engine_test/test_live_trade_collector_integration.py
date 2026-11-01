@@ -33,9 +33,9 @@ from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.live.live_trade_collector import LiveTradeCollector
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("probe_registry")]
 
-STRATEGY_CODE = "hitnrun2"
+STRATEGY_CODE = "probe"
 SYMBOL = "BTCUSDT:BINANCE"
 
 

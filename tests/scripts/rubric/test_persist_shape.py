@@ -13,7 +13,7 @@ def _result(run_id: str, aliases=None) -> ScorecardResult:
     }
     return ScorecardResult(
         run_id=run_id,
-        strategy_code="engulfing",
+        strategy_code="probe",
         symbol="BTCUSDT:BINANCE",
         interval="1m",
         name=None,

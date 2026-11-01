@@ -15,7 +15,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 
 pytestmark = pytest.mark.asyncio
 
-_CONFIG = {"strategy_code": "engulfing", "symbol": "BTCUSDT:BINANCE", "interval": "1m"}
+_CONFIG = {"strategy_code": "probe", "symbol": "BTCUSDT:BINANCE", "interval": "1m"}
 
 
 async def _seed_finished_run(settings: Settings) -> str:

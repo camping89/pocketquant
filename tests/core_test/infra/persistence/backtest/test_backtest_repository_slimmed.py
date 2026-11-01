@@ -85,13 +85,13 @@ async def test_list_by_strategy_code_filters_by_composite_symbol_and_interval(
     database: Database,
 ) -> None:
     repo = BacktestRepository(database)
-    await repo.save(_scoped_run("hitnrun2", "BTCUSDT:BINANCE", "1m"))
-    await repo.save(_scoped_run("hitnrun2", "BTCUSDT:BINANCE", "1m"))
-    await repo.save(_scoped_run("hitnrun2", "ETHUSDT:BINANCE", "1m"))
-    await repo.save(_scoped_run("hitnrun2", "BTCUSDT:BINANCE", "5m"))
+    await repo.save(_scoped_run("breakout", "BTCUSDT:BINANCE", "1m"))
+    await repo.save(_scoped_run("breakout", "BTCUSDT:BINANCE", "1m"))
+    await repo.save(_scoped_run("breakout", "ETHUSDT:BINANCE", "1m"))
+    await repo.save(_scoped_run("breakout", "BTCUSDT:BINANCE", "5m"))
 
     scoped = await repo.list_by_strategy_code(
-        "hitnrun2", symbol="BTCUSDT:BINANCE", interval="1m"
+        "breakout", symbol="BTCUSDT:BINANCE", interval="1m"
     )
     assert len(scoped) == 2
     assert all(r.symbol == "BTCUSDT:BINANCE" and r.interval == "1m" for r in scoped)
@@ -100,10 +100,10 @@ async def test_list_by_strategy_code_filters_by_composite_symbol_and_interval(
 @pytest.mark.asyncio
 async def test_list_by_strategy_code_without_scope_returns_all(database: Database) -> None:
     repo = BacktestRepository(database)
-    await repo.save(_scoped_run("engulfing", "BTCUSDT:BINANCE", "1m"))
-    await repo.save(_scoped_run("engulfing", "ETHUSDT:BINANCE", "5m"))
+    await repo.save(_scoped_run("reversal", "BTCUSDT:BINANCE", "1m"))
+    await repo.save(_scoped_run("reversal", "ETHUSDT:BINANCE", "5m"))
 
-    allruns = await repo.list_by_strategy_code("engulfing")
+    allruns = await repo.list_by_strategy_code("reversal")
     assert len(allruns) == 2
 
 

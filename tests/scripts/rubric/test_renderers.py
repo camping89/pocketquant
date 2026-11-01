@@ -79,21 +79,21 @@ def _result(code: str, overall: float, diagnosis: str, aliases=None) -> Scorecar
 
 def _sample() -> list[ScorecardResult]:
     return [
-        _result("hitnrun2", 0.30, "cost-killed", aliases=["alias-1"]),
-        _result("engulfing", 0.15, "no directional edge"),
+        _result("breakout", 0.30, "cost-killed", aliases=["alias-1"]),
+        _result("reversal", 0.15, "no directional edge"),
         _result("pullback", 1.20, "net-negative after costs"),
     ]
 
 
 def test_comparison_table_ranks_weakest_first():
     md = render_comparison_table(_sample())
-    assert md.index("engulfing") < md.index("hitnrun2")  # 0.15 before 0.30
+    assert md.index("reversal") < md.index("breakout")  # 0.15 before 0.30
     assert "RUBRIC_VERSION = 1.0.0" in md
     assert "Caveat" in md
 
 
 def test_scorecard_shows_breakdown_and_aliases():
-    r = _result("hitnrun2", 0.30, "cost-killed", aliases=["alias-1"])
+    r = _result("breakout", 0.30, "cost-killed", aliases=["alias-1"])
     md = render_scorecard(r)
     assert "alias-1" in md
     assert "cost_to_edge" in md
@@ -103,7 +103,7 @@ def test_scorecard_shows_breakdown_and_aliases():
 
 def test_scorecards_document_has_all_runs():
     doc = render_scorecards_document(_sample())
-    for code in ("hitnrun2", "engulfing", "pullback"):
+    for code in ("breakout", "reversal", "pullback"):
         assert code in doc
 
 
@@ -132,7 +132,7 @@ def test_json_roundtrip_via_asdict():
 
 
 def test_none_value_renders_as_dash():
-    r = _result("engulfing", 0.15, "no directional edge")
+    r = _result("reversal", 0.15, "no directional edge")
     md = render_scorecard(r)
     # mar has value None in the breakdown → rendered as em-dash, not "None"
     assert "| mar | — |" in md

@@ -16,8 +16,10 @@ from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
 
+pytestmark = pytest.mark.usefixtures("probe_registry")
+
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
-_STRATEGY = "hitnrun2"  # must be in STRATEGY_REGISTRY
+_STRATEGY = "probe"  # must be in STRATEGY_REGISTRY
 
 
 def _sub(

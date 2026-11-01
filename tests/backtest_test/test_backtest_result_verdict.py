@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pocketquant.core.domain.backtest import BacktestResult
 
-_CONFIG = {"strategy_code": "engulfing", "symbol": "BTCUSDT:BINANCE", "interval": "1m"}
+_CONFIG = {"strategy_code": "probe", "symbol": "BTCUSDT:BINANCE", "interval": "1m"}
 
 
 def _started() -> BacktestResult:

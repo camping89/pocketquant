@@ -30,6 +30,8 @@ from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
+pytestmark = pytest.mark.usefixtures("probe_registry")
+
 XAUUSD_SYMBOL = "XAUUSD:EXNESS"
 # 100 oz per lot in 0.01-lot steps; the per-lot fee exercises the per-contract model.
 XAUUSD = ContractSpec(multiplier=100.0, tick_size=0.001, lot_step=0.01, commission_per_contract=2.5)
@@ -158,7 +160,7 @@ async def test_reconcile_loads_a_contract_subscription_with_its_spec() -> None:
     subs = [
         Subscription(
             id=generate_id(),
-            strategy_code="hitnrun2",
+            strategy_code="probe",
             symbol=symbol,
             interval=Interval.MINUTE_5,
             created_at=NOW,
@@ -238,7 +240,7 @@ async def test_reconcile_gives_futures_paper_subscriptions_the_futures_risk() ->
     subs = [
         Subscription(
             id=generate_id(),
-            strategy_code="engulfing",
+            strategy_code="probe",
             symbol=symbol,
             interval=Interval.MINUTE_15,
             created_at=NOW,

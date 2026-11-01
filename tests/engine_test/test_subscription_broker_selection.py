@@ -24,6 +24,8 @@ from pocketquant.engine.backtest.backtest_sandbox_app_service import (
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
 
+pytestmark = pytest.mark.usefixtures("probe_registry")
+
 NOW = datetime(2026, 10, 21, tzinfo=UTC)
 GOLD = ContractSpec(multiplier=100.0, tick_size=0.01, lot_step=0.01)
 
@@ -31,7 +33,7 @@ GOLD = ContractSpec(multiplier=100.0, tick_size=0.01, lot_step=0.01)
 def _sub(broker: str = "paper") -> Subscription:
     return Subscription(
         id=generate_id(),
-        strategy_code="hitnrun2",
+        strategy_code="probe",
         symbol="XAUUSD:EXNESS",
         interval=Interval.MINUTE_5,
         created_at=NOW,

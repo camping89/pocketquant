@@ -14,9 +14,6 @@ from pocketquant.core.domain.order import OrderFilledEvent, OrderSide
 from pocketquant.core.domain.position import PositionAggregate, PositionSide
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy import Direction, Signal
-from pocketquant.core.domain.strategy.services.hitnrun2_strategy_service import (
-    HitNRun2StrategyService,
-)
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
@@ -29,6 +26,7 @@ from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.strategy import strategy_app_service as engine_module
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import ScriptedStrategy
 
 _SYM = "XAUUSD:EXNESS"
 # Bucket T opens at 12:00; the clock is at second 25 of it, so the start never waits.
@@ -113,6 +111,7 @@ async def _engine(
     bars: list[Bar],
     strategy_class: type[IStrategyService],
     rows: list[PositionAggregate] | None = None,
+    parameters: dict | None = None,
 ) -> tuple[StrategyAppService, EventBus, list[OrderFilledEvent]]:
     bus = EventBus()
     mirror = PositionAppService(bus, _Repo(rows))  # type: ignore[arg-type]
@@ -130,7 +129,9 @@ async def _engine(
     fills: list[OrderFilledEvent] = []
     bus.subscribe(OrderFilledEvent, fills.append)
     await engine.start()
-    config = StrategyConfig(id="a", name="t", symbol=_SYM, interval="1m", broker="paper")
+    config = StrategyConfig(
+        id="a", name="t", symbol=_SYM, interval="1m", broker="paper", parameters=parameters or {}
+    )
     await engine.load_strategy(config, strategy_class)
     await engine.start_strategy("a")
     return engine, bus, fills
@@ -153,11 +154,13 @@ def _live(start: datetime, close: float) -> BarCompletedEvent:
     )
 
 
-async def test_hitnrun2_signals_on_the_first_live_bar_after_481_stored_bars() -> None:
-    engine, bus, fills = await _engine(_flat(481, _T - _MINUTE), HitNRun2StrategyService)
+async def test_a_strategy_signals_on_the_first_live_bar_after_its_warm_up() -> None:
+    engine, bus, fills = await _engine(
+        _flat(481, _T - _MINUTE), ScriptedStrategy, parameters={"min_bars": 481}
+    )
     strategy = engine.get_strategy("a")
-    assert isinstance(strategy, HitNRun2StrategyService)
-    assert len(strategy._closes) == 481
+    assert isinstance(strategy, ScriptedStrategy)
+    assert len(strategy.bars) == 481
     assert fills == []
 
     set_simulation_time(_T + _MINUTE + timedelta(seconds=1))
@@ -167,12 +170,12 @@ async def test_hitnrun2_signals_on_the_first_live_bar_after_481_stored_bars() ->
 
 
 async def test_a_replayed_signal_sends_nothing() -> None:
-    bars = _flat(481, _T - 2 * _MINUTE)
-    breakdown = _flat(1, _T - _MINUTE)[0].model_copy(update={"low": 89.0, "close": 90.0})
-    engine, _, fills = await _engine([*bars, breakdown], HitNRun2StrategyService)
+    engine, _, fills = await _engine(
+        _flat(482, _T - _MINUTE), ScriptedStrategy, parameters={"min_bars": 481}
+    )
 
     strategy = engine.get_strategy("a")
-    assert isinstance(strategy, HitNRun2StrategyService)
+    assert isinstance(strategy, ScriptedStrategy)
     assert fills == []
     assert strategy._open_direction is None
 
@@ -181,10 +184,10 @@ async def test_a_long_mirror_row_restores_direction_long() -> None:
     row = PositionAggregate.open(
         subscription_id="a", symbol=_SYM, side=PositionSide.LONG, entry_price=1.0, quantity=1.0
     )
-    engine, _, _ = await _engine(_flat(10, _T - _MINUTE), HitNRun2StrategyService, [row])
+    engine, _, _ = await _engine(_flat(10, _T - _MINUTE), ScriptedStrategy, [row])
 
     strategy = engine.get_strategy("a")
-    assert isinstance(strategy, HitNRun2StrategyService)
+    assert isinstance(strategy, ScriptedStrategy)
     assert strategy._open_direction == Direction.LONG
 
 

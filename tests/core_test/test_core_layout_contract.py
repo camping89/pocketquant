@@ -8,7 +8,6 @@ NEW_MODULES = [
     # ex-concepts merged into domain
     "pocketquant.core.domain.risk",
     "pocketquant.core.domain.strategy",
-    "pocketquant.core.domain.strategy.services.hitnrun2_strategy_service",
     # adapters gathered under infra
     "pocketquant.core.infra.brokers.paper",
     "pocketquant.core.infra.binance",

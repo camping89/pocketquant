@@ -136,7 +136,7 @@ async def test_sigterm_mid_open_drains_releases_and_the_next_trader_takes_over(
         return broker
 
     monkeypatch.setattr(BrokerFactory, "create", create)
-    monkeypatch.setitem(STRATEGY_REGISTRY, "hitnrun2", _AlwaysLong)
+    monkeypatch.setitem(STRATEGY_REGISTRY, "probe", _AlwaysLong)
     # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
     monkeypatch.setattr(roles, "logger", structlog.get_logger("test.trader_handover"))
 
@@ -148,7 +148,7 @@ async def test_sigterm_mid_open_drains_releases_and_the_next_trader_takes_over(
     await subs.ensure_indexes()
     sub = Subscription(
         id=generate_id(),
-        strategy_code="hitnrun2",
+        strategy_code="probe",
         symbol=_SYM,
         interval=Interval.MINUTE_1,
         created_at=datetime.now(UTC),

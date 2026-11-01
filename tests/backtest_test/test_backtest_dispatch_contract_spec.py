@@ -9,6 +9,8 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.engine.backtest import backtest_execution_service
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 
+pytestmark = pytest.mark.usefixtures("probe_registry")
+
 XAUUSD_SYMBOL = "XAUUSD:EXNESS"
 # 100 oz per lot in 0.01-lot steps; the per-lot fee exercises the per-contract model.
 XAUUSD = ContractSpec(multiplier=100.0, tick_size=0.001, lot_step=0.01, commission_per_contract=2.5)
@@ -54,7 +56,7 @@ async def test_backtest_config_and_broker_carry_the_symbol_spec(
 
     await execution.run(
         {
-            "strategy_code": "hitnrun2",
+            "strategy_code": "probe",
             "symbol": symbol,
             "interval": "1h",
             "start_date": "2026-09-01T00:00:00+00:00",

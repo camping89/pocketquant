@@ -20,7 +20,7 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
 
 pytestmark = pytest.mark.asyncio
 
-_STRATEGY = "hitnrun2"
+_STRATEGY = "probe"
 _SYMBOL = "BTCUSDT:BINANCE"
 
 

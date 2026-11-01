@@ -106,7 +106,7 @@ def _ts(symbol: str) -> TrackedSymbol:
 def _sub(symbol: str, state: str = "running") -> Subscription:
     return Subscription(
         id=generate_id(),
-        strategy_code="engulfing",
+        strategy_code="probe",
         symbol=symbol,
         interval=Interval.HOUR_1,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),

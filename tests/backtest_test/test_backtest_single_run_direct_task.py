@@ -43,6 +43,9 @@ from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import ScriptedStrategy
+
+pytestmark = pytest.mark.usefixtures("probe_registry")
 
 _SYM = "BTCUSDT:BINANCE"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -73,7 +76,7 @@ def _flat(idx: int) -> Bar:
     return _bar(idx, o=100.0, h=100.2, lo=99.8, c=100.0)
 
 
-def _engulfing_bars(cycles: int = 2, lookback: int = 5) -> list[Bar]:
+def _cycle_bars(cycles: int = 2, lookback: int = 5) -> list[Bar]:
     bars: list[Bar] = []
     idx = 0
     for _ in range(lookback + 1):
@@ -117,7 +120,7 @@ def _cmd_svc(database: Database) -> BacktestCommandService:
 
 def _command(**overrides) -> RunBacktestCommand:
     base = {
-        "strategy_id": "engulfing",
+        "strategy_id": "probe",
         "symbol": _SYM,
         "interval": "1m",
         "start_date": "2026-01-01",
@@ -125,7 +128,7 @@ def _command(**overrides) -> RunBacktestCommand:
         "initial_capital": 10_000.0,
         "slippage_bps": 0.0,
         "commission_bps": 0.0,
-        "parameters": {"direction": "long", "key_level_lookback_bars": 5},
+        "parameters": {},
     }
     base.update(overrides)
     return RunBacktestCommand(**base)
@@ -135,7 +138,7 @@ def _command(**overrides) -> RunBacktestCommand:
 async def test_run_saves_started_doc_then_execute_finishes_same_run_id(
     database: Database,
 ) -> None:
-    await _seed_bars(database, _engulfing_bars())
+    await _seed_bars(database, _cycle_bars())
     backtest_repo = BacktestRepository(database)
 
     run_id, config = await _cmd_svc(database).run(_command())
@@ -163,7 +166,7 @@ async def test_run_saves_started_doc_then_execute_finishes_same_run_id(
 async def test_engine_failure_marks_failed_via_inspect_not_exception(
     database: Database,
 ) -> None:
-    await _seed_bars(database, _engulfing_bars())
+    await _seed_bars(database, _cycle_bars())
     backtest_repo = BacktestRepository(database)
 
     # Unknown strategy → the execution service raises BEFORE the engine's
@@ -259,26 +262,26 @@ async def _build_live_engine() -> tuple[
     await engine.start()
 
     live_cfg = StrategyConfig(
-        id="engulfing-live",
-        name="engulfing",
+        id="probe-live",
+        name="probe",
         symbol=_SYM,
         interval="1m",
         broker="paper",
-        parameters={"direction": "long", "key_level_lookback_bars": 5},
+        parameters={},
     )
-    live_strategy = STRATEGY_REGISTRY["engulfing"](live_cfg)
+    live_strategy = ScriptedStrategy(live_cfg)
     await engine.inject_prepared_strategy(live_strategy.id, live_strategy, broker, live_cfg)
     return engine, broker, order_repo, position_repo
 
 
 @pytest.mark.asyncio
 async def test_backtest_sandbox_does_not_leak_to_live_engine(database: Database) -> None:
-    await _seed_bars(database, _engulfing_bars(cycles=3))
+    await _seed_bars(database, _cycle_bars(cycles=3))
     _engine, live_broker, live_orders, live_positions = await _build_live_engine()
 
     result = await _execution(database).run(
         {
-            "strategy_code": "engulfing",
+            "strategy_code": "probe",
             "symbol": _SYM,
             "interval": "1m",
             "start_date": "2026-01-01",
@@ -286,7 +289,7 @@ async def test_backtest_sandbox_does_not_leak_to_live_engine(database: Database)
             "initial_capital": 10_000.0,
             "slippage_bps": 0.0,
             "commission_bps": 0.0,
-            "parameters": {"direction": "long", "key_level_lookback_bars": 5},
+            "parameters": {},
         },
     )
 

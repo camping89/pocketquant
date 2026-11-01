@@ -24,7 +24,7 @@ def _guard_settings(
 
 def _create_sub_path(settings: Settings) -> str:
     # Empty body → 422 once past the guard; never touches a broker.
-    return f"{settings.api_prefix}/strategies/engulfing/subscriptions"
+    return f"{settings.api_prefix}/strategies/probe/subscriptions"
 
 
 def _list_subs_path(settings: Settings) -> str:

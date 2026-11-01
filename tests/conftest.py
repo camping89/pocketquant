@@ -76,3 +76,14 @@ def mongo_container() -> Iterator[MongoDbContainer]:
 def redis_container() -> Iterator[RedisContainer]:
     with RedisContainer("redis:7.2-alpine") as redis:
         yield redis
+
+
+# Registers the shared test strategy under "probe" for tests that reach a registry
+# lookup (backtest run, add-symbol, reconcile). Imports stay local so collecting the
+# conftest never imports pocketquant before pytest_configure seeds the env.
+@pytest.fixture
+def probe_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
+    from tests.strategy_doubles import ScriptedStrategy
+
+    monkeypatch.setitem(STRATEGY_REGISTRY, "probe", ScriptedStrategy)
