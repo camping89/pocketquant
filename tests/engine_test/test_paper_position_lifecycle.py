@@ -77,7 +77,7 @@ async def _engine() -> tuple[StrategyAppService, _Factory, PositionAppService, O
 
 
 def _config(sid: str) -> StrategyConfig:
-    return StrategyConfig(id=sid, name="t", symbol=_SYM, interval="1m", broker="paper")
+    return StrategyConfig(id=sid, name="t", symbol=_SYM, intervals=["1m"], broker="paper")
 
 
 async def _open(

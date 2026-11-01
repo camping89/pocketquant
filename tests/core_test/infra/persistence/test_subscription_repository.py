@@ -1,10 +1,11 @@
-# The unique compound index on (strategy_code, symbol, interval) is the only duplicate
-# guard: ids are random uuid7, so two adds of the same triple carry different ids yet still
+# The unique index on (strategy_code, symbol, intervals_key) is the only duplicate guard:
+# ids are random uuid7, so two adds of one interval set carry different ids yet still
 # collide at the DB layer.
 
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -40,13 +41,14 @@ async def repo(settings):
 # Helpers
 
 
-def _make_sub(strategy_code: str, symbol: str, interval: Interval) -> Subscription:
+def _make_sub(strategy_code: str, symbol: str, *intervals: Interval, **overrides) -> Subscription:
     return Subscription(
         id=generate_id(),
         strategy_code=strategy_code,
         symbol=symbol.upper(),
-        interval=interval,
+        intervals=intervals,
         created_at=datetime.now(UTC),
+        **overrides,
     )
 
 
@@ -55,7 +57,9 @@ def _make_sub(strategy_code: str, symbol: str, interval: Interval) -> Subscripti
 
 @pytest.mark.asyncio
 async def test_add_get_delete_round_trip(repo):
-    sub = _make_sub("strat-1", "BTC-USDT:BINANCE", Interval.HOUR_1)
+    sub = _make_sub(
+        "strat-1", "BTC-USDT:BINANCE", Interval.HOUR_1, Interval.HOUR_4, parameters={"min_bars": 2}
+    )
     await repo.add(sub)
 
     fetched = await repo.get(str(sub.id))
@@ -63,7 +67,8 @@ async def test_add_get_delete_round_trip(repo):
     assert fetched.id == sub.id
     assert fetched.strategy_code == sub.strategy_code
     assert fetched.symbol == sub.symbol
-    assert fetched.interval == sub.interval
+    assert fetched.intervals == sub.intervals
+    assert fetched.parameters == {"min_bars": 2}
 
     deleted = await repo.delete(str(sub.id))
     assert deleted == 1
@@ -96,12 +101,51 @@ async def test_concurrent_add_same_triple_one_doc_one_error(repo):
 
 
 @pytest.mark.asyncio
-async def test_dedup_triple_unique_index_exists(repo):
+async def test_dedup_intervals_unique_index_exists(repo):
     coll = repo._collection()
     info = await coll.index_information()
-    idx = info["ix_subscriptions_dedup_triple"]
+    idx = info["ix_subscriptions_dedup_intervals"]
     assert idx.get("unique") is True
-    assert idx["key"] == [("strategy_code", 1), ("symbol", 1), ("interval", 1)]
+    assert idx["key"] == [("strategy_code", 1), ("symbol", 1), ("intervals_key", 1)]
+
+
+@pytest.mark.asyncio
+async def test_two_interval_sets_sharing_the_entry_interval_coexist(repo):
+    await repo.add(_make_sub("strat-sets", "BTC-USDT:BINANCE", Interval.MINUTE_15, Interval.HOUR_1))
+    await repo.add(_make_sub("strat-sets", "BTC-USDT:BINANCE", Interval.MINUTE_15, Interval.HOUR_4))
+    assert len(await repo.list_by_strategy_code("strat-sets")) == 2
+
+
+@pytest.mark.asyncio
+async def test_update_config_changes_only_a_stopped_subscription(repo):
+    stopped = _make_sub("strat-edit", "BTC-USDT:BINANCE", Interval.MINUTE_15)
+    running = _make_sub("strat-edit", "ETH-USDT:BINANCE", Interval.MINUTE_15)
+    running = replace(running, desired_state="running")
+    await repo.add(stopped)
+    await repo.add(running)
+
+    new_config = {"intervals": (Interval.MINUTE_15, Interval.HOUR_1), "parameters": {"min_bars": 2}}
+    assert await repo.update_config(replace(stopped, **new_config)) == 1
+    fetched = await repo.get(str(stopped.id))
+    assert fetched is not None
+    assert fetched.intervals == (Interval.MINUTE_15, Interval.HOUR_1)
+    assert fetched.parameters == {"min_bars": 2}
+
+    assert await repo.update_config(replace(running, **new_config)) == 0
+    unchanged = await repo.get(str(running.id))
+    assert unchanged is not None
+    assert unchanged.intervals == (Interval.MINUTE_15,)
+    assert unchanged.parameters == {}
+
+
+@pytest.mark.asyncio
+async def test_update_config_onto_an_existing_set_conflicts(repo):
+    taken = _make_sub("strat-clash", "BTC-USDT:BINANCE", Interval.MINUTE_15, Interval.HOUR_1)
+    other = _make_sub("strat-clash", "BTC-USDT:BINANCE", Interval.MINUTE_15)
+    await repo.add(taken)
+    await repo.add(other)
+    with pytest.raises(SubscriptionAlreadyExistsError):
+        await repo.update_config(replace(other, intervals=taken.intervals))
 
 
 @pytest.mark.asyncio

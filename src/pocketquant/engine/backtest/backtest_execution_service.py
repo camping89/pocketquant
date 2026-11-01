@@ -111,7 +111,7 @@ class BacktestExecutionService:
             id=config.strategy_code,
             name=config.strategy_code,
             symbol=config.symbol,
-            interval=config.interval,
+            intervals=[config.interval],
             broker="paper",
             parameters={**config.parameters},
             contract_spec=config.contract_spec,

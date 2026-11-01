@@ -7,9 +7,11 @@ from uuid import NAMESPACE_OID, uuid5
 import pytest
 
 from pocketquant.core.common.exceptions import DomainError, NotFoundError
-from pocketquant.core.common.uuid import UUID
+from pocketquant.core.common.uuid import UUID, generate_id
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
+from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.subscription import Subscription
 from pocketquant.engine.strategy.strategy_command_service import (
     StrategyCommandService,
 )
@@ -28,6 +30,8 @@ def _cmd_svc(
     *,
     sub_repo: object | None = None,
     tracked_repo: object | None = None,
+    position_repo: object | None = None,
+    order_repo: object | None = None,
 ) -> StrategyCommandService:
     sub_repo = sub_repo or MagicMock()
     tracked_repo = tracked_repo or MagicMock()
@@ -35,7 +39,43 @@ def _cmd_svc(
         subscription_repository=sub_repo,
         tracked_symbol_repository=tracked_repo,
         safeguards_repository=MagicMock(load_live_trading=AsyncMock(return_value=False)),
+        position_repository=position_repo or MagicMock(),
+        order_repository=order_repo or MagicMock(),
     )
+
+
+def _tracked() -> MagicMock:
+    return MagicMock(exists=AsyncMock(return_value=True))
+
+
+def _stored_sub(**overrides) -> Subscription:
+    base: dict = dict(
+        id=generate_id(),
+        strategy_code="probe",
+        symbol="BTCUSDT:BINANCE",
+        intervals=(Interval.HOUR_1,),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    base.update(overrides)
+    return Subscription(**base)
+
+
+def _edit_svc(
+    sub: Subscription | None,
+    *,
+    positions: list | None = None,
+    pending: list | None = None,
+    matched: int = 1,
+) -> tuple[StrategyCommandService, MagicMock]:
+    sub_repo = MagicMock(
+        get=AsyncMock(return_value=sub), update_config=AsyncMock(return_value=matched)
+    )
+    svc = _cmd_svc(
+        sub_repo=sub_repo,
+        position_repo=MagicMock(find_open_by_subscription=AsyncMock(return_value=positions or [])),
+        order_repo=MagicMock(find_pending=AsyncMock(return_value=pending or [])),
+    )
+    return svc, sub_repo
 
 
 def _query_svc(
@@ -139,7 +179,7 @@ async def test_add_symbol_persists_stopped_state() -> None:
     tracked_repo.exists = AsyncMock(return_value=True)
 
     svc = _cmd_svc(sub_repo=sub_repo, tracked_repo=tracked_repo)
-    result = await svc.add_symbol("probe", "BTCUSDT:BINANCE", "1h")
+    result = await svc.add_symbol("probe", "BTCUSDT:BINANCE", ["1h"], {})
 
     sub_repo.add.assert_awaited_once()
     persisted = sub_repo.add.await_args.args[0]
@@ -161,14 +201,16 @@ async def test_add_symbol_accepts_exness_only_while_the_trader_flag_is_on() -> N
             subscription_repository=sub_repo,
             tracked_symbol_repository=tracked_repo,
             safeguards_repository=MagicMock(load_live_trading=AsyncMock(return_value=live_trading)),
+            position_repository=MagicMock(),
+            order_repository=MagicMock(),
         )
 
     with pytest.raises(DomainError) as exc:
-        await svc(False).add_symbol("probe", "XAUUSD:EXNESS", "5m", broker="exness")
+        await svc(False).add_symbol("probe", "XAUUSD:EXNESS", ["5m"], {}, broker="exness")
     assert exc.value.error_code == "BROKER_DISABLED"
     sub_repo.add.assert_not_called()
 
-    result = await svc(True).add_symbol("probe", "XAUUSD:EXNESS", "5m", broker="exness")
+    result = await svc(True).add_symbol("probe", "XAUUSD:EXNESS", ["5m"], {}, broker="exness")
     assert sub_repo.add.await_args.args[0].broker == "exness"
     assert result["broker"] == "exness"
 
@@ -181,7 +223,7 @@ async def test_add_symbol_404_when_symbol_not_tracked() -> None:
     svc = _cmd_svc(tracked_repo=tracked_repo)
 
     with pytest.raises(NotFoundError) as exc:
-        await svc.add_symbol("probe", "BTCUSDT:BINANCE", "1h")
+        await svc.add_symbol("probe", "BTCUSDT:BINANCE", ["1h"], {})
     assert exc.value.error_code == "SYMBOL_NOT_TRACKED"
 
 
@@ -196,8 +238,104 @@ async def test_add_symbol_404_when_unknown_template() -> None:
     svc = _cmd_svc(sub_repo=sub_repo, tracked_repo=tracked_repo)
 
     with pytest.raises(NotFoundError):
-        await svc.add_symbol("does-not-exist", "BTCUSDT:BINANCE", "1h")
+        await svc.add_symbol("does-not-exist", "BTCUSDT:BINANCE", ["1h"], {})
     sub_repo.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_add_symbol_rejects_an_unsorted_interval_list() -> None:
+    sub_repo = MagicMock(add=AsyncMock())
+    svc = _cmd_svc(sub_repo=sub_repo, tracked_repo=_tracked())
+    with pytest.raises(DomainError) as exc:
+        await svc.add_symbol("probe", "BTCUSDT:BINANCE", ["1h", "15m"], {})
+    assert exc.value.error_code == "INVALID_INTERVALS"
+    sub_repo.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_add_symbol_rejects_an_unknown_parameter() -> None:
+    sub_repo = MagicMock(add=AsyncMock())
+    svc = _cmd_svc(sub_repo=sub_repo, tracked_repo=_tracked())
+    with pytest.raises(DomainError) as exc:
+        await svc.add_symbol("probe", "BTCUSDT:BINANCE", ["1h"], {"x": 1})
+    assert exc.value.error_code == "INVALID_PARAMETERS"
+    sub_repo.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_add_symbol_returns_intervals_and_parameters() -> None:
+    sub_repo = MagicMock(add=AsyncMock())
+    svc = _cmd_svc(sub_repo=sub_repo, tracked_repo=_tracked())
+    result = await svc.add_symbol("probe", "BTCUSDT:BINANCE", ["15m", "1h"], {"min_bars": 2})
+    persisted = sub_repo.add.await_args.args[0]
+    assert persisted.intervals == (Interval.MINUTE_15, Interval.HOUR_1)
+    assert result["intervals"] == ["15m", "1h"]
+    assert result["parameters"] == {"min_bars": 2}
+
+
+# ---------------------------------------------------------------------------
+# StrategyCommandService — edit
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_edit_404_when_the_subscription_is_missing() -> None:
+    svc, sub_repo = _edit_svc(None)
+    with pytest.raises(NotFoundError):
+        await svc.edit("missing", ["1h"], {})
+    sub_repo.update_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_edit_refuses_a_running_subscription() -> None:
+    svc, sub_repo = _edit_svc(_stored_sub(desired_state="running"))
+    with pytest.raises(DomainError) as exc:
+        await svc.edit("sub-1", ["1h"], {})
+    assert (exc.value.error_code, exc.value.status_code) == ("SUBSCRIPTION_RUNNING", 409)
+    sub_repo.update_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_edit_refuses_an_open_position() -> None:
+    sub = _stored_sub()
+    svc, sub_repo = _edit_svc(sub, positions=[_open_position(str(sub.id))])
+    with pytest.raises(DomainError) as exc:
+        await svc.edit(str(sub.id), ["1h"], {})
+    assert (exc.value.error_code, exc.value.status_code) == ("SUBSCRIPTION_HAS_EXPOSURE", 409)
+    sub_repo.update_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_edit_refuses_a_pending_order() -> None:
+    sub = _stored_sub()
+    other = MagicMock(subscription_id="another-sub")
+    mine = MagicMock(subscription_id=str(sub.id))
+    svc, sub_repo = _edit_svc(sub, pending=[other, mine])
+    with pytest.raises(DomainError) as exc:
+        await svc.edit(str(sub.id), ["1h"], {})
+    assert (exc.value.error_code, exc.value.status_code) == ("SUBSCRIPTION_HAS_EXPOSURE", 409)
+    sub_repo.update_config.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_edit_writes_the_new_config() -> None:
+    sub = _stored_sub()
+    svc, sub_repo = _edit_svc(sub, pending=[MagicMock(subscription_id="another-sub")])
+    result = await svc.edit(str(sub.id), ["15m", "1h"], {"min_bars": 2})
+    written = sub_repo.update_config.await_args.args[0]
+    assert written.id == sub.id
+    assert written.intervals == (Interval.MINUTE_15, Interval.HOUR_1)
+    assert written.parameters == {"min_bars": 2}
+    assert result["intervals"] == ["15m", "1h"]
+    assert result["parameters"] == {"min_bars": 2}
+
+
+@pytest.mark.asyncio
+async def test_edit_refuses_when_the_subscription_started_meanwhile() -> None:
+    svc, _ = _edit_svc(_stored_sub(), matched=0)
+    with pytest.raises(DomainError) as exc:
+        await svc.edit("sub-1", ["1h"], {})
+    assert exc.value.error_code == "SUBSCRIPTION_RUNNING"
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +376,13 @@ async def test_get_one_returns_none_for_unknown_code() -> None:
     assert result is None
 
 
+@pytest.mark.asyncio
+async def test_get_one_serves_the_default_parameters() -> None:
+    result = await _query_svc().get_one("probe")
+    assert result is not None
+    assert result["parameters"] == {"min_bars": 0}
+
+
 # ---------------------------------------------------------------------------
 # StrategyQueryService — list_symbols
 # ---------------------------------------------------------------------------
@@ -256,13 +401,12 @@ async def test_get_one_returns_none_for_unknown_code() -> None:
 async def test_list_symbols_derives_is_running_from_actual_state(
     actual_state, expected_is_running
 ) -> None:
-    from pocketquant.core.domain.shared.enums import Interval
-
     sub = MagicMock()
     sub.id = "sub-abc"
     sub.strategy_code = "probe"
     sub.symbol = "BTCUSDT:BINANCE"
-    sub.interval = Interval.HOUR_1
+    sub.intervals = (Interval.HOUR_1, Interval.HOUR_4)
+    sub.parameters = {"min_bars": 2}
     sub.created_at = datetime(2026, 1, 1, tzinfo=UTC)
     sub.desired_state = "running"
     sub.actual_state = actual_state
@@ -277,6 +421,8 @@ async def test_list_symbols_derives_is_running_from_actual_state(
     assert rows[0]["is_running"] is expected_is_running
     assert rows[0]["desired_state"] == "running"
     assert rows[0]["actual_state"] == actual_state
+    assert rows[0]["intervals"] == ["1h", "4h"]
+    assert rows[0]["parameters"] == {"min_bars": 2}
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@ from typing import Literal
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.engine.live.live_metrics_query_service import LiveMetricsQueryService
@@ -12,8 +12,14 @@ from pocketquant.engine.strategy.strategy_query_service import StrategyQueryServ
 
 class CreateSubscriptionBody(BaseModel):
     symbol: str
-    interval: str
+    intervals: list[str]
+    parameters: dict = Field(default_factory=dict)
     broker: Literal["paper", "exness"] = "paper"
+
+
+class EditSubscriptionBody(BaseModel):
+    intervals: list[str]
+    parameters: dict = Field(default_factory=dict)
 
 
 # strategy_router  — /strategies prefix
@@ -49,7 +55,9 @@ async def create_subscription(
     body: CreateSubscriptionBody,
     cmd_svc: FromDishka[StrategyCommandService],
 ) -> dict:
-    return await cmd_svc.add_symbol(strategy_code, body.symbol, body.interval, body.broker)
+    return await cmd_svc.add_symbol(
+        strategy_code, body.symbol, body.intervals, body.parameters, body.broker
+    )
 
 
 # subscription_router  — /subscriptions prefix
@@ -65,6 +73,15 @@ async def list_subscriptions(
     strategy_code: str | None = None,
 ) -> list:
     return await query_svc.list_symbols(strategy_code)
+
+
+@subscription_router.patch("/{sub_id}")
+async def edit_subscription(
+    sub_id: str,
+    body: EditSubscriptionBody,
+    cmd_svc: FromDishka[StrategyCommandService],
+) -> dict:
+    return await cmd_svc.edit(sub_id, body.intervals, body.parameters)
 
 
 @subscription_router.post("/{sub_id}/start")

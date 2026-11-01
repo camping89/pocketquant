@@ -162,7 +162,7 @@ async def _engine(
     )
     await engine.start()
     for sid, broker_type in subs.items():
-        config = StrategyConfig(id=sid, name="t", symbol=_SYM, interval="1m", broker=broker_type)
+        config = StrategyConfig(id=sid, name="t", symbol=_SYM, intervals=["1m"], broker=broker_type)
         await engine.load_strategy(config, _AlwaysLong)
         await engine.start_strategy(sid)
     return engine

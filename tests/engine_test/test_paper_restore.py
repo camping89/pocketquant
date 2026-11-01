@@ -125,7 +125,7 @@ async def _process(store: _Store) -> _Process:
     await LiveTradeCollector(bus, store.trades, engine).start()  # type: ignore[arg-type]
     fills: list[OrderFilledEvent] = []
     bus.subscribe(OrderFilledEvent, fills.append)
-    config = StrategyConfig(id="a", name="t", symbol=_SYM, interval="1m", broker="paper")
+    config = StrategyConfig(id="a", name="t", symbol=_SYM, intervals=["1m"], broker="paper")
     await engine.load_strategy(config)
     await engine.start_strategy("a")
     return _Process(engine, bus, orders, fills)

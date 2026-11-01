@@ -108,7 +108,7 @@ def _sub(symbol: str, state: str = "running") -> Subscription:
         id=generate_id(),
         strategy_code="probe",
         symbol=symbol,
-        interval=Interval.HOUR_1,
+        intervals=(Interval.HOUR_1,),
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
         desired_state=state,  # type: ignore[arg-type]
         actual_state=state,  # type: ignore[arg-type]

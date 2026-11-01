@@ -82,7 +82,7 @@ class _FakeBroker:
 
 
 def _config() -> StrategyConfig:
-    return StrategyConfig(id="s1", name="s1", symbol=_SYM, interval="1m")
+    return StrategyConfig(id="s1", name="s1", symbol=_SYM, intervals=["1m"])
 
 
 def _signal() -> Signal:

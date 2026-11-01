@@ -108,7 +108,7 @@ class _StubFactory:
 
 
 def _config(broker: str) -> StrategyConfig:
-    return StrategyConfig(id="s1", name="s1", symbol=_SYM, interval="1m", broker=broker)
+    return StrategyConfig(id="s1", name="s1", symbol=_SYM, intervals=["1m"], broker=broker)
 
 
 def _engine(

@@ -150,7 +150,7 @@ async def test_sigterm_mid_open_drains_releases_and_the_next_trader_takes_over(
         id=generate_id(),
         strategy_code="probe",
         symbol=_SYM,
-        interval=Interval.MINUTE_1,
+        intervals=(Interval.MINUTE_1,),
         created_at=datetime.now(UTC),
         desired_state="running",
         actual_state="stopped",

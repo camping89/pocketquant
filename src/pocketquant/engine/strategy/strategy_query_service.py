@@ -28,6 +28,7 @@ class StrategyQueryService:
         return {
             "strategy_code": strategy_code,
             "class_name": strategy_class.__name__,
+            "parameters": dict(strategy_class.DEFAULTS),
         }
 
     # actual_state is the reconcile loop's mirror of live engine state, so no RAM read.
@@ -46,7 +47,8 @@ class StrategyQueryService:
                 "id": str(sub.id),
                 "strategy_code": sub.strategy_code,
                 "symbol": sub.symbol,
-                "interval": sub.interval.value,
+                "intervals": [i.value for i in sub.intervals],
+                "parameters": dict(sub.parameters),
                 "created_at": sub.created_at.isoformat(),
                 "desired_state": sub.desired_state,
                 "actual_state": sub.actual_state,

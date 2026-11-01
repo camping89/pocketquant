@@ -64,7 +64,7 @@ async def test_app_reconcile_runs_desired_running_without_http(
         id=generate_id(),
         strategy_code=_STRATEGY,
         symbol=_SYMBOL,
-        interval=Interval.MINUTE_1,
+        intervals=(Interval.MINUTE_1,),
         created_at=datetime.now(UTC),
         desired_state="running",
         actual_state="stopped",
@@ -79,7 +79,10 @@ async def test_app_reconcile_runs_desired_running_without_http(
 
     await engine.load_strategy(
         StrategyConfig(
-            id=str(sub.id), name=sub.strategy_code, symbol=sub.symbol, interval=sub.interval.value
+            id=str(sub.id),
+            name=sub.strategy_code,
+            symbol=sub.symbol,
+            intervals=[i.value for i in sub.intervals],
         ),
         strategy_class=STRATEGY_REGISTRY[sub.strategy_code],
     )

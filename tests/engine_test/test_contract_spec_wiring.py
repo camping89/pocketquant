@@ -87,7 +87,7 @@ def _config(sid: str, symbol: str, spec: ContractSpec, risk: RiskConfig | None =
         id=sid,
         name=sid,
         symbol=symbol,
-        interval="1m",
+        intervals=["1m"],
         risk=risk or RiskConfig(),
         contract_spec=spec,
     )
@@ -162,7 +162,7 @@ async def test_reconcile_loads_a_contract_subscription_with_its_spec() -> None:
             id=generate_id(),
             strategy_code="probe",
             symbol=symbol,
-            interval=Interval.MINUTE_5,
+            intervals=(Interval.MINUTE_5,),
             created_at=NOW,
         )
         for symbol in (XAUUSD_SYMBOL, "BTCUSDT:BINANCE")
@@ -242,7 +242,7 @@ async def test_reconcile_gives_futures_paper_subscriptions_the_futures_risk() ->
             id=generate_id(),
             strategy_code="probe",
             symbol=symbol,
-            interval=Interval.MINUTE_15,
+            intervals=(Interval.MINUTE_15,),
             created_at=NOW,
         )
         for symbol in (XAUUSD_SYMBOL, "BTCUSDT:BINANCE")

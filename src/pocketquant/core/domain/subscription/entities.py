@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -14,35 +14,40 @@ RunState = Literal["running", "stopped"]
 BROKERS = ("paper", "exness")
 
 
-# Carries the triple, not the id: ids are random uuid7, so only the triple says which
-# subscription collided. HTTP 409: a duplicate is a conflict, not a malformed request.
+# Carries the code, symbol and intervals key, not the id: ids are random uuid7, so only
+# those say which subscription collided. HTTP 409: a duplicate is a conflict, not a
+# malformed request.
 class SubscriptionAlreadyExistsError(DomainError):
-    def __init__(self, strategy_code: str, symbol: str, interval: str) -> None:
+    def __init__(self, strategy_code: str, symbol: str, intervals_key: str) -> None:
         super().__init__(
-            f"Subscription for '{strategy_code}' on '{symbol}' @ '{interval}' already exists.",
+            f"Subscription for '{strategy_code}' on '{symbol}' @ '{intervals_key}' already exists.",
             error_code="SUBSCRIPTION_ALREADY_EXISTS",
             status_code=409,
         )
 
 
-# Uniqueness of (strategy_code, symbol, interval) is the DB compound index, not the id.
+# Uniqueness is the DB index on (strategy_code, symbol, intervals_key), where the key is
+# the comma-joined intervals written by to_mongo; the id plays no part.
 @dataclass(frozen=True)
 class Subscription:
     id: UUID
     strategy_code: str
     symbol: str
-    interval: Interval
+    intervals: tuple[Interval, ...]
     created_at: datetime
     desired_state: RunState = "stopped"
     actual_state: RunState = "stopped"
     broker: str = "paper"
+    parameters: dict = field(default_factory=dict)
 
     def to_mongo(self) -> dict:
         return {
             "_id": str(self.id),
             "strategy_code": self.strategy_code,
             "symbol": self.symbol,
-            "interval": self.interval.value,
+            "intervals": [i.value for i in self.intervals],
+            "intervals_key": ",".join(i.value for i in self.intervals),
+            "parameters": dict(self.parameters),
             "created_at": self.created_at,
             "desired_state": self.desired_state,
             "actual_state": self.actual_state,
@@ -62,9 +67,10 @@ class Subscription:
             id=UUID(str(doc["_id"])),
             strategy_code=doc["strategy_code"],
             symbol=doc["symbol"],
-            interval=Interval(doc["interval"]),
+            intervals=tuple(Interval(i) for i in doc["intervals"]),
             created_at=doc["created_at"],
             desired_state=doc.get("desired_state", "stopped"),
             actual_state=doc.get("actual_state", "stopped"),
             broker=broker,
+            parameters=dict(doc["parameters"]),
         )

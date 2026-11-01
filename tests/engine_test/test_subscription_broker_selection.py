@@ -35,7 +35,7 @@ def _sub(broker: str = "paper") -> Subscription:
         id=generate_id(),
         strategy_code="probe",
         symbol="XAUUSD:EXNESS",
-        interval=Interval.MINUTE_5,
+        intervals=(Interval.MINUTE_5,),
         created_at=NOW,
         broker=broker,
     )
@@ -125,7 +125,7 @@ def _config(sid: str, broker: str, spec: ContractSpec) -> StrategyConfig:
         id=sid,
         name=sid,
         symbol="XAUUSD:EXNESS",
-        interval="5m",
+        intervals=["5m"],
         broker=broker,
         contract_spec=spec,
     )

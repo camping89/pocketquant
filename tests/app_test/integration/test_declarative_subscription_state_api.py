@@ -36,7 +36,7 @@ async def test_start_writes_desired_state_only(app_client: AsyncClient, settings
             id=generate_id(),
             strategy_code=_STRATEGY,
             symbol=_SYMBOL,
-            interval=Interval.MINUTE_1,
+            intervals=(Interval.MINUTE_1,),
             created_at=datetime.now(UTC),
             desired_state="stopped",
             actual_state="stopped",
@@ -68,7 +68,7 @@ async def test_serves_seeded_read(app_client: AsyncClient, settings: Settings) -
             id=generate_id(),
             strategy_code=_STRATEGY,
             symbol=_SYMBOL,
-            interval=Interval.MINUTE_1,
+            intervals=(Interval.MINUTE_1,),
             created_at=datetime.now(UTC),
         )
         await repo.add(sub)

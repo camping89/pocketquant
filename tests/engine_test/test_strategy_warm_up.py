@@ -130,7 +130,7 @@ async def _engine(
     bus.subscribe(OrderFilledEvent, fills.append)
     await engine.start()
     config = StrategyConfig(
-        id="a", name="t", symbol=_SYM, interval="1m", broker="paper", parameters=parameters or {}
+        id="a", name="t", symbol=_SYM, intervals=["1m"], broker="paper", parameters=parameters or {}
     )
     await engine.load_strategy(config, strategy_class)
     await engine.start_strategy("a")

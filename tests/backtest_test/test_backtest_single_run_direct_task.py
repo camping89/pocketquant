@@ -265,7 +265,7 @@ async def _build_live_engine() -> tuple[
         id="probe-live",
         name="probe",
         symbol=_SYM,
-        interval="1m",
+        intervals=["1m"],
         broker="paper",
         parameters={},
     )

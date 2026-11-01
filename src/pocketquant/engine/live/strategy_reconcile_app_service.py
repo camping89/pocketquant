@@ -116,7 +116,12 @@ class StrategyReconcileAppService:
         loaded = 0
         for sub in subs:
             sub_id = str(sub.id)
-            if self._strategy_service.get_strategy(sub_id) is not None:
+            existing = self._strategy_service.get_strategy(sub_id)
+            if existing is not None and (
+                existing.is_running
+                or (existing.config.intervals, existing.config.parameters)
+                == ([i.value for i in sub.intervals], dict(sub.parameters))
+            ):
                 continue
             strategy_class = STRATEGY_REGISTRY.get(sub.strategy_code)
             if strategy_class is None:
@@ -141,12 +146,17 @@ class StrategyReconcileAppService:
                     sub.broker == "paper" and contract_spec.is_contract and self._futures_paper_risk
                 ):
                     risk = self._futures_paper_risk
+                # The config was edited: an edit is allowed only while stopped and flat, so
+                # dropping the stale instance loses nothing.
+                if existing is not None:
+                    await self._strategy_service.unload_strategy(sub_id)
                 await self._strategy_service.load_strategy(
                     StrategyConfig(
                         id=sub_id,
                         name=sub.strategy_code,
                         symbol=sub.symbol,
-                        interval=sub.interval.value,
+                        intervals=[i.value for i in sub.intervals],
+                        parameters=dict(sub.parameters),
                         contract_spec=contract_spec,
                         broker=sub.broker,
                         risk=risk,

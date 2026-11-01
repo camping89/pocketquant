@@ -79,7 +79,7 @@ async def _seed(container, symbol: str) -> None:
             id=generate_id(),
             strategy_code="cascade-test",
             symbol=symbol,
-            interval=Interval.HOUR_1,
+            intervals=(Interval.HOUR_1,),
             created_at=datetime.now(UTC),
             desired_state="running",
             actual_state="running",

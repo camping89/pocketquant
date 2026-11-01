@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,7 +26,7 @@ _STRATEGY = "probe"  # must be in STRATEGY_REGISTRY
 def _sub(
     *,
     symbol: str = "BTCUSDT:BINANCE",
-    interval: Interval = Interval.MINUTE_5,
+    intervals: tuple[Interval, ...] = (Interval.MINUTE_5,),
     strategy_code: str = _STRATEGY,
     desired: RunState = "stopped",
     actual: RunState = "stopped",
@@ -34,7 +35,7 @@ def _sub(
         id=generate_id(),
         strategy_code=strategy_code,
         symbol=symbol,
-        interval=interval,
+        intervals=intervals,
         created_at=NOW,
         desired_state=desired,
         actual_state=actual,
@@ -42,8 +43,9 @@ def _sub(
 
 
 class _FakeStrategy:
-    def __init__(self, running: bool) -> None:
+    def __init__(self, running: bool, config) -> None:
         self._running = running
+        self.config = config
 
     @property
     def is_running(self) -> bool:
@@ -59,8 +61,11 @@ class _FakeStrategyService:
         self.unload_calls: list[str] = []
         self.start_raises_for: set[str] = set()
 
-    def load(self, sub_id: str, running: bool) -> None:
-        self._instances[sub_id] = _FakeStrategy(running)
+    def load(self, sub: Subscription, running: bool) -> None:
+        config = SimpleNamespace(
+            intervals=[i.value for i in sub.intervals], parameters=dict(sub.parameters)
+        )
+        self._instances[str(sub.id)] = _FakeStrategy(running, config)
 
     def get_strategy(self, sub_id: str):
         return self._instances.get(sub_id)
@@ -70,7 +75,7 @@ class _FakeStrategyService:
 
     async def load_strategy(self, config, strategy_class=None) -> str:
         self.load_calls.append(config.id)
-        self._instances[config.id] = _FakeStrategy(running=False)
+        self._instances[config.id] = _FakeStrategy(running=False, config=config)
         return config.id
 
     async def unload_strategy(self, sub_id: str) -> None:
@@ -117,7 +122,7 @@ async def test_running_desired_stopped_actual_starts_and_writes() -> None:
     sub = _sub(desired="running", actual="stopped")
     sid = str(sub.id)
     svc = _FakeStrategyService()
-    svc.load(sid, running=False)
+    svc.load(sub, running=False)
     recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
@@ -132,7 +137,7 @@ async def test_stopped_desired_running_actual_stops_and_writes() -> None:
     sub = _sub(desired="stopped", actual="running")
     sid = str(sub.id)
     svc = _FakeStrategyService()
-    svc.load(sid, running=True)
+    svc.load(sub, running=True)
     recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
@@ -146,7 +151,7 @@ async def test_stopped_desired_running_actual_stops_and_writes() -> None:
 async def test_stable_running_is_idempotent_no_calls_no_writes() -> None:
     sub = _sub(desired="running", actual="running")
     svc = _FakeStrategyService()
-    svc.load(str(sub.id), running=True)
+    svc.load(sub, running=True)
     recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
@@ -160,7 +165,7 @@ async def test_stable_running_is_idempotent_no_calls_no_writes() -> None:
 async def test_stable_stopped_is_idempotent_no_calls_no_writes() -> None:
     sub = _sub(desired="stopped", actual="stopped")
     svc = _FakeStrategyService()
-    svc.load(str(sub.id), running=False)
+    svc.load(sub, running=False)
     recon, sub_repo = _service([sub], svc)
 
     await recon._reconcile()
@@ -191,7 +196,7 @@ async def test_unknown_template_skips_load_no_start() -> None:
         id=generate_id(),
         strategy_code="does-not-exist",
         symbol="BTCUSDT:BINANCE",
-        interval=Interval.MINUTE_5,
+        intervals=(Interval.MINUTE_5,),
         created_at=NOW,
         desired_state="running",
         actual_state="running",  # DB stale → must drift to stopped
@@ -211,8 +216,8 @@ async def test_per_sub_error_isolation_other_subs_still_reconcile() -> None:
     good = _sub(desired="running", actual="stopped")
     bad_id, good_id = str(bad.id), str(good.id)
     svc = _FakeStrategyService()
-    svc.load(bad_id, running=False)
-    svc.load(good_id, running=False)
+    svc.load(bad, running=False)
+    svc.load(good, running=False)
     svc.start_raises_for.add(bad_id)
     recon, sub_repo = _service([bad, good], svc)
 
@@ -267,7 +272,7 @@ async def test_unknown_template_not_loaded() -> None:
 async def test_instance_with_live_sub_doc_not_unloaded() -> None:
     sub = _sub()
     svc = _FakeStrategyService()
-    svc.load(str(sub.id), running=False)
+    svc.load(sub, running=False)
     recon, _sub_repo = _service([sub], svc)
 
     await recon._reconcile()
@@ -282,7 +287,7 @@ async def test_instance_with_live_sub_doc_not_unloaded() -> None:
 async def test_unloads_orphan_instance_when_sub_deleted() -> None:
     sub = _sub()
     svc = _FakeStrategyService()
-    svc.load(str(sub.id), running=True)  # instance present...
+    svc.load(sub, running=True)  # instance present...
     recon, _sub_repo = _service([], svc)  # ...but NO subscription rows
 
     await recon._reconcile()
@@ -308,7 +313,7 @@ async def test_load_then_converge_running_in_one_tick() -> None:
 async def test_existing_instance_not_reloaded() -> None:
     svc = _FakeStrategyService()
     sub = _sub(desired="stopped")
-    svc.load(str(sub.id), running=False)
+    svc.load(sub, running=False)
     recon, _sub_repo = _service([sub], svc)
 
     await recon._reconcile()
@@ -328,3 +333,32 @@ async def test_bootstrap_starts_running_subscriptions_without_writing_actual_sta
     assert started is not None and started.is_running
     assert idle is not None and not idle.is_running
     assert sub_repo.actual_writes == []
+
+
+@pytest.mark.asyncio
+async def test_an_edited_stopped_subscription_reloads_its_config() -> None:
+    loaded = _sub(desired="stopped")
+    loaded = replace(loaded, parameters={"min_bars": 0})
+    sid = str(loaded.id)
+    svc = _FakeStrategyService()
+    svc.load(loaded, running=False)
+    recon, _ = _service([replace(loaded, parameters={"min_bars": 2})], svc)
+
+    await recon._reconcile()
+
+    assert svc.unload_calls == [sid]
+    assert svc.load_calls == [sid]
+    assert svc.get_strategy(sid).config.parameters == {"min_bars": 2}
+
+
+@pytest.mark.asyncio
+async def test_a_running_subscription_is_never_reloaded() -> None:
+    loaded = replace(_sub(desired="running", actual="running"), parameters={"min_bars": 0})
+    svc = _FakeStrategyService()
+    svc.load(loaded, running=True)
+    recon, _ = _service([replace(loaded, parameters={"min_bars": 2})], svc)
+
+    await recon._reconcile()
+
+    assert svc.unload_calls == []
+    assert svc.load_calls == []

@@ -114,7 +114,7 @@ async def _engine(
         trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
     await engine.start()
-    config = StrategyConfig(id="a", name="t", symbol=_SYM, interval=interval, broker="paper")
+    config = StrategyConfig(id="a", name="t", symbol=_SYM, intervals=[interval], broker="paper")
     await engine.load_strategy(config, _AlwaysLong)
     await engine.start_strategy("a")
     return engine, bus, factory.created[0], orders
@@ -205,7 +205,7 @@ async def test_a_non_successor_bar_skips_the_entry() -> None:
 async def test_paper_sl_still_fills_on_a_stale_bar() -> None:
     engine, bus, broker, orders = await _engine()
     await engine.load_strategy(
-        StrategyConfig(id="b", name="t", symbol=_SYM, interval="1m", broker="paper")
+        StrategyConfig(id="b", name="t", symbol=_SYM, intervals=["1m"], broker="paper")
     )
     held = OrderAggregate.create(
         subscription_id="b",

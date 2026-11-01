@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.strategy.enums import Direction
@@ -14,6 +14,9 @@ class FilledOrder(Protocol):
 
 
 class IStrategyService(ABC):
+    # Every accepted parameter and its default; the value types are the type contract.
+    DEFAULTS: ClassVar[dict] = {}
+
     def __init__(self, config: StrategyConfig) -> None:
         self.config = config
         self.id = config.id

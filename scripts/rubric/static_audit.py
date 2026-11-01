@@ -24,7 +24,7 @@ def audit_strategy(strategy_code: str) -> dict[str, Any]:
     except (OSError, SyntaxError, TypeError) as exc:
         return _unknown(strategy_code, reason=f"parse failed: {exc}")
 
-    defaults = _find_defaults(tree)
+    defaults = dict(cls.DEFAULTS)
     return {
         "strategy_code": strategy_code,
         "degrees_of_freedom": len(defaults),
@@ -34,21 +34,6 @@ def audit_strategy(strategy_code: str) -> dict[str, Any]:
         "entry_frequency_class": _entry_frequency_class(tree),
         "lookahead_safety": _lookahead_safety(source),
     }
-
-
-def _find_defaults(tree: ast.Module) -> dict[str, Any]:
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "_DEFAULTS":
-                if isinstance(node.value, ast.Dict):
-                    return {
-                        _literal(k): _literal(v)
-                        for k, v in zip(node.value.keys, node.value.values, strict=False)
-                        if isinstance(k, ast.Constant)
-                    }
-    return {}
 
 
 def _direction_bias(defaults: dict[str, Any]) -> str:
@@ -106,15 +91,6 @@ def _lookahead_safety(source: str) -> str:
     if has_safe:
         return "safe"
     return "unknown"
-
-
-def _literal(node: ast.expr) -> Any:
-    if isinstance(node, ast.Constant):
-        return node.value
-    try:
-        return ast.literal_eval(node)
-    except (ValueError, SyntaxError):
-        return None
 
 
 def _unknown(strategy_code: str, reason: str) -> dict[str, Any]:

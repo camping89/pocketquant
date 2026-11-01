@@ -28,7 +28,8 @@ class StrategyConfig:
     id: str
     name: str
     symbol: str
-    interval: str
+    # Ascending; intervals[0] is the entry interval the strategy decides on.
+    intervals: list[str]
     broker: str = "paper"
     parameters: dict = field(default_factory=dict)
     risk: RiskConfig = field(default_factory=RiskConfig)

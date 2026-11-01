@@ -90,9 +90,9 @@ Class and file names encode the layer. Domain concepts (entities, value objects,
 Two ids must never be confused:
 
 - `strategy_code` names a strategy class in `STRATEGY_REGISTRY`.
-- `subscription_id` is the UUIDv7 of one `(strategy_code, symbol, interval)` binding. It keys the in-memory strategy instance, orders, positions and trades.
+- `subscription_id` is the UUIDv7 of one `(strategy_code, symbol, intervals)` binding. It keys the in-memory strategy instance, orders, positions and trades.
 
-The only duplicate guard for a subscription is the unique index `ix_subscriptions_dedup_triple`. The index is case-sensitive, so `add_symbol` upper-cases `symbol` before it stores it. No test pins that upper-case. Do not remove it.
+The only duplicate guard for a subscription is the unique index on the joined `intervals_key` (`SubscriptionRepository.ensure_indexes`). A unique index on the `intervals` list itself would be multikey and reject two lists that share one interval. The index is case-sensitive, so `add_symbol` upper-cases `symbol` before it stores it. No test pins that upper-case. Do not remove it.
 
 ## Async Suspension Points — "Await Is Preemption"
 

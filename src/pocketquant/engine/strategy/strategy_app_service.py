@@ -232,8 +232,8 @@ class StrategyAppService:
                 await broker.connect()
 
             config = strategy.config
-            interval = Interval(config.interval)
-            step = timedelta(seconds=INTERVAL_SECONDS[config.interval])
+            interval = Interval(config.intervals[0])
+            step = timedelta(seconds=INTERVAL_SECONDS[config.intervals[0]])
             calendar = await self._calendar_factory.for_symbol(config.symbol)
             bars = await self._closed_bars(config.symbol, interval, step, now)
             last = bars[-1].datetime if bars else None
@@ -253,7 +253,7 @@ class StrategyAppService:
                 signal = await strategy.on_bar_completed(
                     {
                         "symbol": config.symbol,
-                        "interval": config.interval,
+                        "interval": config.intervals[0],
                         "open": stored.open,
                         "high": stored.high,
                         "low": stored.low,
@@ -496,7 +496,7 @@ class StrategyAppService:
                 continue
             if strategy.config.symbol != symbol:
                 continue
-            if strategy.config.interval != interval:
+            if strategy.config.intervals[0] != interval:
                 continue
             matches.append(strategy)
         return matches

@@ -84,7 +84,7 @@ async def _standby_engine() -> tuple[StrategyAppService, _CountingBroker]:
     )
     await engine.start()
     engine.trading_until = None
-    config = StrategyConfig(id="a", name="t", symbol=_SYM, interval="1m", broker="paper")
+    config = StrategyConfig(id="a", name="t", symbol=_SYM, intervals=["1m"], broker="paper")
     await engine.load_strategy(config, _AlwaysLong)
     await engine.start_strategy("a")
     return engine, factory.created[0]

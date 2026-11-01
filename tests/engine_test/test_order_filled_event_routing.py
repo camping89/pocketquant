@@ -59,7 +59,7 @@ def _config(sid: str) -> StrategyConfig:
         id=sid,
         name=sid,
         symbol="BTCUSDT:BINANCE",
-        interval="1m",
+        intervals=["1m"],
         broker="paper",
     )
 

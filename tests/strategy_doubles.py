@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.strategy.enums import Direction
 from pocketquant.core.domain.strategy.strategy_service_interface import (
@@ -11,9 +13,13 @@ from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfi
 
 # Signals LONG with a 1% stop and target on every bar after `min_bars` bars while flat.
 class ScriptedStrategy(IStrategyService):
+    DEFAULTS: ClassVar[dict] = {"min_bars": 0}
+
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         self.min_bars = int((config.parameters or {}).get("min_bars", 0))
+        if self.min_bars < 0:
+            raise ValueError(f"min_bars must be >= 0, got {self.min_bars}")
         self.bars: list[dict] = []
 
     async def on_start(self) -> None:

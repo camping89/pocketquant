@@ -99,7 +99,7 @@ async def test_broker_closure_flows_through_bus_to_trades(db: Database) -> None:
 
     sub_id = str(generate_id())
     await engine.load_strategy(
-        StrategyConfig(id=sub_id, name=STRATEGY_CODE, symbol=SYMBOL, interval="1m"),
+        StrategyConfig(id=sub_id, name=STRATEGY_CODE, symbol=SYMBOL, intervals=["1m"]),
         strategy_class=STRATEGY_REGISTRY[STRATEGY_CODE],
     )
 
@@ -130,7 +130,7 @@ async def test_two_subs_share_broker_with_single_forward(db: Database) -> None:
     sub_a, sub_b = str(generate_id()), str(generate_id())
     for sid in (sub_a, sub_b):
         await engine.load_strategy(
-            StrategyConfig(id=sid, name=STRATEGY_CODE, symbol=SYMBOL, interval="1m"),
+            StrategyConfig(id=sid, name=STRATEGY_CODE, symbol=SYMBOL, intervals=["1m"]),
             strategy_class=STRATEGY_REGISTRY[STRATEGY_CODE],
         )
 

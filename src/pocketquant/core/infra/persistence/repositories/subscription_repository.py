@@ -14,17 +14,39 @@ logger = get_logger(__name__)
 class SubscriptionRepository(BaseRepository):
     _collection_name = "subscriptions"
 
-    # DuplicateKeyError comes from the compound triple index: two adds of one triple carry
-    # different uuid7 ids yet still collide.
+    # DuplicateKeyError comes from the unique intervals-key index: two adds of one interval
+    # set carry different uuid7 ids yet still collide.
     async def add(self, sub: Subscription) -> None:
-        collection = self._collection()
+        doc = sub.to_mongo()
         try:
-            await collection.insert_one(sub.to_mongo())
+            await self._collection().insert_one(doc)
             logger.debug("subscription_added", sub_id=str(sub.id), strategy_code=sub.strategy_code)
         except DuplicateKeyError:
             raise SubscriptionAlreadyExistsError(
-                sub.strategy_code, sub.symbol, sub.interval.value
+                sub.strategy_code, sub.symbol, doc["intervals_key"]
             ) from None
+
+    # The filter refuses a running subscription, so the caller's stopped check cannot race
+    # a start; the return is matched_count, as in update_desired_state.
+    async def update_config(self, sub: Subscription) -> int:
+        doc = sub.to_mongo()
+        try:
+            result = await self._collection().update_one(
+                {"_id": str(sub.id), "desired_state": "stopped", "actual_state": "stopped"},
+                {
+                    "$set": {
+                        "intervals": doc["intervals"],
+                        "intervals_key": doc["intervals_key"],
+                        "parameters": doc["parameters"],
+                    }
+                },
+            )
+        except DuplicateKeyError:
+            raise SubscriptionAlreadyExistsError(
+                sub.strategy_code, sub.symbol, doc["intervals_key"]
+            ) from None
+        logger.debug("subscription_config_updated", sub_id=str(sub.id))
+        return result.matched_count
 
     async def get(self, sub_id: str) -> Subscription | None:
         collection = self._collection()
@@ -74,11 +96,12 @@ class SubscriptionRepository(BaseRepository):
             "strategy_code",
             name="ix_subscriptions_strategy_code",
         )
-        # Sole duplicate guard — ids are random uuid7, so without this index
-        # two adds of the same triple would both land.
+        # Sole duplicate guard — ids are random uuid7, so without this index two adds of
+        # one interval set would both land. The key is a scalar because a unique index on
+        # the list would be multikey and reject two lists that share one interval.
         await collection.create_index(
-            [("strategy_code", 1), ("symbol", 1), ("interval", 1)],
+            [("strategy_code", 1), ("symbol", 1), ("intervals_key", 1)],
             unique=True,
-            name="ix_subscriptions_dedup_triple",
+            name="ix_subscriptions_dedup_intervals",
         )
         logger.info("subscription_indexes_created")
