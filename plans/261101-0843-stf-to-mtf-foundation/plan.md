@@ -43,6 +43,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | D7 | `closePosition` and `cancelPendingOrder` are not fenced by the live-trading flag (they only reduce exposure); `openPosition` and `placePendingOrder` stay fenced. Every attempt to apply a manual action clears it and records its outcome (`accepted` or `rejected:<code>`); the owner retries if needed. Checked in the Exness spec 2026-11-01: close and cancel are unavailable only when the instrument `trade_mode` is `trading_disabled`; a close may still fail asynchronously with `MARKET_SESSION_CLOSED` or `MARKET_NO_QUOTES`. |
 | D8 | The new reads (`GET /subscriptions/{id}/snapshot`, `GET /subscriptions/{id}/orders`, the enriched subscription list) and the existing positions and trades reads require the admin token; the web sends the token on these reads. |
 | D9 | No freshness column in the subscription row. |
+| D10 | Backtest context cost (spike S4, asked 2026-11-01): a backtest loads each higher interval from Mongo once for the run and slices it in memory, as warm-up does, and keeps the bound `t_mtf_s <= 2 * t_stf_s`. Phase 08 Task 08.3 builds and tests it. The live path is unchanged. |
 
 ## Design verdicts (from the synthesis; do not re-decide in a phase)
 
@@ -97,7 +98,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 |---|---|---|---|---|
 | 01 | [Spike A: worktree, cascade-lag measurement, subscription key, context in three paths, backtest cost](./phase-01-spike-a-data-path.md) | none | — | Complete |
 | 02 | [Spike B: paper EXIT, resting stop, manual action, snapshot to UI, Exness spec; go/no-go table](./phase-02-spike-b-money-path-and-ui.md) | none | 01 | Complete |
-| 03 | [1d cascade for session calendars](./phase-03-1d-cascade-session-calendars.md) | D-1 [ASK] | 02 | Pending |
+| 03 | [1d cascade for session calendars](./phase-03-1d-cascade-session-calendars.md) | D-1 [ASK] | 02 | Complete |
 | 04 | [Web gate: fix `tsc`, add the CI web job](./phase-04-web-gate.md) | none (CI) | 03 | Pending |
 | 05 | [Delete STF code, tests, docs, web comments; shared test doubles](./phase-05-delete-stf-code.md) | none (CI) | 04 | Pending |
 | 06 | [Subscription contract: intervals, parameters, edit, defaults, reload](./phase-06-subscription-contract.md) | none (CI) | 05 | Pending |

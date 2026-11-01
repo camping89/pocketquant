@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "1d cascade for session calendars"
-status: pending
+status: completed
 priority: P1
 effort: 0.5d + D-1 deploy
 dependencies: [2]

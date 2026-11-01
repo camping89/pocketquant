@@ -11,7 +11,7 @@ dependencies: [7]
 
 ## Goal
 
-A backtest runs on an ordered `intervals` list that is validated before the run. Its sandbox engine reads real stored bars through the real calendar and tracks positions as live does, and a test proves the backtest hands the strategy the same higher-timeframe context as live at every bucket boundary and across a gap.
+A backtest runs on an ordered `intervals` list that is validated before the run. Its sandbox engine reads real stored bars through the real calendar and tracks positions as live does, and a test proves the backtest hands the strategy the same higher-timeframe context as live at every bucket boundary and across a gap. A multi-timeframe backtest reads each higher interval from Mongo once per run and is at most twice as slow as the same run on the entry interval alone (plan.md D10).
 
 ## Context
 
@@ -23,6 +23,7 @@ A backtest runs on an ordered `intervals` list that is validated before the run.
 - Test doubles: the stubs move to `tests/strategy_doubles.py` (Phase 05 created it), not a second file (synthesis §3). Importers: `git grep -l -E "NoStoredBars|Continuous24x7CalendarFactory" -- tests` prints 18 files on `e4a998b8` and 15 after Phase 05 deletes the three STF backtest tests. `NoClosedTrades` stays in src (the sandbox uses it). <!-- Red team 2026-11-01: #9 -->
 - <!-- Red team 2026-11-01: #15 --> One strategy double (plan.md verdict): the backtest risk test uses `ScriptedStrategy` from `tests/strategy_doubles.py` (Phase 05), registered as `"probe"` by the `probe_registry` fixture; no local strategy class. This phase is the first that needs a per-bar script, so it adds the script mode to `ScriptedStrategy` (Task 08.2 step 1). Later phases extend that mode instead of adding a second one.
 - <!-- Red team 2026-11-01: #9 --> Five `BacktestConfig(interval=...)` sites in four test files build the config directly and match neither Files grep: `tests/backtest_test/engine/test_backtest_app_service_persistence.py:117,213`, `test_paper_broker_signal_bar.py:91`, `test_report_annualization_source.py:25`, `test_result_collector_mark_to_market.py:51`. After Phase 05, `git grep -n "BacktestConfig(" -- tests` lists exactly these five.
+- Backtest context cost (plan.md D10; `reports/spike-go-no-go.md` rows S4 and `### S4 diagnosis`): the spike measured `find_calls=900 rollovers=900 t_mtf_s=9.57 t_stf_s=1.17` on 30 days of 1m bars with intervals `1m,1h,4h`. A cProfile put 8.6 s of 9.6 s in the per-rollover context read: each rollover re-reads up to `_WARMUP_BARS` (500) bars through `BarRepository.find` and re-parses them, and one Mongo round trip (about 3 ms) already exceeds the 1.3 ms per rollover the bound allows. The owner chose to keep the bound and fix it here: the backtest loads each higher interval once before the replay and slices it in memory, as warm-up does (Phase 07 Task 07.2). The live and warm-up paths keep their behaviour.
 
 ## Entry gate
 
@@ -44,9 +45,10 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 
 ## Files
 
-- Modify (src): `src/pocketquant/core/domain/backtest/config.py`, `src/pocketquant/core/domain/backtest/entities.py`, `src/pocketquant/engine/backtest/backtest_command_service.py`, `src/pocketquant/engine/backtest/backtest_execution_service.py`, `src/pocketquant/engine/backtest/backtest_app_service.py`, `src/pocketquant/engine/backtest/backtest_report_app_service.py`, `src/pocketquant/engine/backtest/backtest_sandbox_app_service.py`, `src/pocketquant/app/routes/backtest.py`.
+- Modify (src): `src/pocketquant/core/domain/backtest/config.py`, `src/pocketquant/core/domain/backtest/entities.py`, `src/pocketquant/engine/backtest/backtest_command_service.py`, `src/pocketquant/engine/backtest/backtest_execution_service.py`, `src/pocketquant/engine/backtest/backtest_app_service.py`, `src/pocketquant/engine/backtest/backtest_report_app_service.py`, `src/pocketquant/engine/backtest/backtest_sandbox_app_service.py`, `src/pocketquant/app/routes/backtest.py`, `src/pocketquant/engine/strategy/strategy_app_service.py` (Task 08.3 only).
 - Modify (tests): `tests/strategy_doubles.py`, `tests/backtest_test/test_higher_timeframe_context.py`, `tests/backtest_test/test_backtest_single_run_direct_task.py`, `tests/app_test/integration/test_backtest_orders_api.py`, `tests/backtest_test/engine/test_backtest_app_service_persistence.py`, `tests/backtest_test/engine/test_paper_broker_signal_bar.py`, `tests/backtest_test/engine/test_report_annualization_source.py`, `tests/backtest_test/engine/test_result_collector_mark_to_market.py` (the `BacktestConfig(` sites), <!-- Red team 2026-11-01: #9 --> every file listed by `git grep -l -E "NoStoredBars|Continuous24x7CalendarFactory" -- tests`, and every payload site listed by `git grep -n -E "\"interval\": ?\"" -- tests/backtest_test tests/app_test` that feeds `_config_from_dict` or `RunBacktestCommand`.
-- Create / Delete: none.
+- Create: `tests/backtest_test/test_backtest_context_cost.py` (Task 08.3).
+- Delete: none.
 
 ## Tasks
 
@@ -94,7 +96,23 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 
 **Verify:** `uv run python -m pytest tests/backtest_test tests/engine_test -q 2>&1 | tail -1` contains `passed` and no `failed`, and `uv run python -m pytest tests/backtest_test/test_higher_timeframe_context.py -q 2>&1 | tail -1` contains `11 passed`.
 
-### Task 08.3 — CLOSE
+### Task 08.3 — Backtest context loaded once per run
+
+**Goal:** a backtest makes one `BarRepository.find` per higher interval for the whole run, serves every rollover from memory with the same `closed_before` rule, and stays within `t_mtf_s <= 2 * t_stf_s`.
+
+**Target files and symbols:** `StrategyAppService` (`_refresh_context`, `_closed_bars`, a new method that preloads a run's higher bars) in `src/pocketquant/engine/strategy/strategy_app_service.py`; `BacktestExecutionService.run` (where it starts the strategy, after Task 08.2 step 6); new `tests/backtest_test/test_backtest_context_cost.py`.
+
+**Steps:**
+1. Test first, in the new file. Seed 30 days of 1m bars (43,200) for `BTCUSDT:BINANCE` from 2026-01-01 with their 1h (720) and 4h (180) aggregates, as the spike did. Wrap the repository the execution service uses in a `find` counter per interval (the `_CountingBars` pattern from `tests/backtest_test/test_higher_timeframe_context.py`). Use the `probe_registry` fixture and `monkeypatch.setattr(ScriptedStrategy, "SCRIPT", ())`, so the probe returns no signal on every bar and both runs measure replay cost only. Time `BacktestCommandService.run` plus `execute_and_persist` once with intervals `["1m","1h","4h"]` and once with `["1m"]` (`time.perf_counter`). Print one line `context_cost find_1h=<n> find_4h=<n> t_mtf_s=<x> t_stf_s=<y>`. Assert `finds["1h"] == 1`, `finds["4h"] == 1` and `t_mtf_s <= 2 * t_stf_s`. Name it `test_a_multi_timeframe_backtest_reads_each_higher_interval_once`.
+2. Run `uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py -q -s 2>&1 | tail -3`. Expected red: the find counts are about 720 and 180, and the time bound fails.
+3. Implement. `StrategyAppService` gains one method the backtest calls once per run, after the strategy is loaded and before the first replayed bar. For each name in `config.intervals[1:]` it reads the higher bars once, from `_WARMUP_BARS` bars before the run start through the run end, and keeps them in memory per `(symbol, interval)`. When that preload exists for a key, `_refresh_context` takes the window's bars from it with `closed_before(preloaded, step, instant)` (keep at most `_WARMUP_BARS` of them, as `_closed_bars` does), instead of calling `_closed_bars`. Slice by start time (for example `bisect` over the sorted starts) rather than re-filtering the whole run list on every bar. Keep the completeness check and the WARNING exactly as Phase 07 wrote them. `_context_at` and `closed_before` stay unchanged, so no look-ahead rule moves. Live and warm-up never call the new method and keep their Mongo reads. Put one `#` WHY comment above the new method: a backtest replays thousands of rollovers, and one Mongo round trip per rollover costs more than the whole replay of a bar.
+4. Run the new test and the context tests from Task 08.2.
+
+**Success criteria:** the cost test passes with `find_1h=1 find_4h=1` and the time bound met; `test_backtest_contexts_equal_live_contexts_at_every_boundary` still passes unchanged, so the preloaded contexts equal live at every boundary and across the gap.
+
+**Verify:** `uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py tests/backtest_test/test_higher_timeframe_context.py -q 2>&1 | tail -1` contains `12 passed` and no `failed`, and `uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py -q -s 2>&1 | grep -c "^context_cost find_1h=1 find_4h=1 "` prints `1`.
+
+### Task 08.4 — CLOSE
 
 **Goal:** the phase lands on `develop` with every gate green; nothing deploys.
 
@@ -117,7 +135,7 @@ Nothing is deployed. Run `git revert --no-edit <phase-commit>` (plus the metric 
 
 ## Report
 
-`reports/phase-08-backtest-intervals-backend.md` holds: the commit SHAs; the new and changed test names with pass counts; the number of importer files moved to `tests.strategy_doubles` (15 expected); the five `BacktestConfig(` sites changed; the FULLSUITE tail line; the CI run id and conclusion; any metric ceiling change. It ends with `Result: PASS`.
+`reports/phase-08-backtest-intervals-backend.md` holds: the commit SHAs; the new and changed test names with pass counts; the number of importer files moved to `tests.strategy_doubles` (15 expected); the five `BacktestConfig(` sites changed; the `context_cost` line from Task 08.3 verbatim; the FULLSUITE tail line; the CI run id and conclusion; any metric ceiling change. It ends with `Result: PASS`.
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.
