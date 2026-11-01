@@ -55,6 +55,34 @@ jobs:
       - name: Run pytest (full suite)
         run: uv run pytest tests/ -q
 
+  web:
+    # vite build runs no type check, so the web gate is its own job.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc -b
+
+      - name: Unit tests
+        run: npm test
+
   build-app:
     runs-on: ubuntu-latest
     needs: [tests]
@@ -103,7 +131,7 @@ jobs:
 
   build-web:
     runs-on: ubuntu-latest
-    needs: [tests]
+    needs: [tests, web]
     if: github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v5
