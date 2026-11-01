@@ -43,7 +43,8 @@ _FALLBACK_SL_PCT = 0.01
 _STALE_AFTER_S = {"1m": 10, "5m": 30, "15m": 60, "1h": 120, "4h": 300, "1d": 600, "1w": 600}
 # Stored bars replayed into a strategy when it starts.
 _WARMUP_BARS = 500
-# sync_1m stores the last closed 1m bar at second 12; a start before second 20 waits for it.
+# sync_1m settles the last bucket of every cascaded interval at second 12; a start with stored
+# entry bars before second 20 waits for it.
 _WARMUP_READY_SECOND = 20
 
 
@@ -51,6 +52,23 @@ def _direction_of(position: PositionAggregate | None) -> Direction | None:
     if position is None:
         return None
     return Direction.LONG if position.side == PositionSide.LONG else Direction.SHORT
+
+
+def closed_before(bars: list[Bar], step: timedelta, instant: datetime) -> list[Bar]:
+    return [b for b in bars if b.datetime is not None and b.datetime + step <= instant]
+
+
+def _bar_dict(symbol: str, interval: str, source: Bar | BarCompletedEvent, start: datetime) -> dict:
+    return {
+        "symbol": symbol,
+        "interval": interval,
+        "open": source.open,
+        "high": source.high,
+        "low": source.low,
+        "close": source.close,
+        "volume": source.volume,
+        "timestamp": start,
+    }
 
 
 class StrategyAppService:
@@ -100,6 +118,8 @@ class StrategyAppService:
         # Why a None switch discards: standby before take_over(), drain after it, lease
         # after cancel_pending_signals().
         self._discard_reason = "standby"
+        # Process lifetime in live, one run in a backtest; one entry per (symbol, higher interval).
+        self._context: dict[tuple[str, str], tuple[datetime, list[Bar], bool]] = {}
 
     @property
     def is_running(self) -> bool:
@@ -237,30 +257,23 @@ class StrategyAppService:
             calendar = await self._calendar_factory.for_symbol(config.symbol)
             bars = await self._closed_bars(config.symbol, interval, step, now)
             last = bars[-1].datetime if bars else None
-            if (
-                now.second < _WARMUP_READY_SECOND
-                and last is not None
-                and last + step < calendar.bar_start(now, interval)
-            ):
+            # A cascaded interval stores its in-progress bar, so before sync_1m settles the
+            # last bucket at second 12 the newest stored entry and higher bars may be
+            # partial; wait for it.
+            if now.second < _WARMUP_READY_SECOND and bars:
                 await asyncio.sleep(_WARMUP_READY_SECOND - now.second - now.microsecond / 1e6)
                 now = get_current_time()
                 bars = await self._closed_bars(config.symbol, interval, step, now)
                 last = bars[-1].datetime if bars else None
 
+            await self._refresh_context(config, now)
+
             # No I/O from here to the direction restore.
             await strategy.on_start()
             for stored in bars:
-                signal = await strategy.on_bar_completed(
-                    {
-                        "symbol": config.symbol,
-                        "interval": config.intervals[0],
-                        "open": stored.open,
-                        "high": stored.high,
-                        "low": stored.low,
-                        "close": stored.close,
-                        "volume": stored.volume,
-                        "timestamp": stored.datetime,
-                    }
+                assert stored.datetime is not None
+                signal = await self._decide(
+                    strategy, _bar_dict(config.symbol, config.intervals[0], stored, stored.datetime)
                 )
                 if signal:
                     await strategy.on_order_rejected("warmup")
@@ -286,7 +299,55 @@ class StrategyAppService:
         self, symbol: str, interval: Interval, step: timedelta, now: datetime
     ) -> list[Bar]:
         found = await self._bar_repository.find(symbol, interval, end_date=now, limit=_WARMUP_BARS)
-        return [b for b in reversed(found) if b.datetime is not None and b.datetime + step <= now]
+        return closed_before(list(reversed(found)), step, now)
+
+    # A window is re-read until its previous bucket is stored or has no trading minutes.
+    async def _refresh_context(self, config: StrategyConfig, instant: datetime) -> None:
+        if len(config.intervals) < 2:
+            return
+        calendar = await self._calendar_factory.for_symbol(config.symbol)
+        for name in config.intervals[1:]:
+            interval = Interval(name)
+            step = timedelta(seconds=INTERVAL_SECONDS[name])
+            window = calendar.bar_start(instant, interval)
+            cached = self._context.get((config.symbol, name))
+            if cached is not None and cached[0] == window and cached[2]:
+                continue
+            bars = await self._closed_bars(config.symbol, interval, step, instant)
+            complete = (bool(bars) and bars[-1].datetime == window - step) or not (
+                calendar.trading_minutes(window - step, window)
+            )
+            logger.debug(
+                "strategy.context_loaded",
+                symbol=config.symbol,
+                interval=name,
+                window=window.isoformat(),
+                bars=len(bars),
+            )
+            if not complete and (cached is None or cached[0] != window):
+                logger.warning(
+                    "strategy.context_previous_bucket_missing",
+                    symbol=config.symbol,
+                    interval=name,
+                    window=window.isoformat(),
+                )
+            self._context[(config.symbol, name)] = (window, bars, complete)
+
+    # The instant is the entry bar's start, so an entry bar never reads its own higher
+    # bucket (docs/governance/no-look-ahead-rules.md).
+    def _context_at(self, config: StrategyConfig, instant: datetime) -> dict[str, list[Bar]]:
+        return {
+            n: closed_before(
+                self._context[(config.symbol, n)][1],
+                timedelta(seconds=INTERVAL_SECONDS[n]),
+                instant,
+            )
+            for n in config.intervals[1:]
+        }
+
+    async def _decide(self, strategy: IStrategyService, bar: dict) -> Signal | None:
+        bar["context"] = self._context_at(strategy.config, bar["timestamp"])
+        return await strategy.on_bar_completed(bar)
 
     async def stop_strategy(self, strategy_id: str) -> None:
         async with self._lock:
@@ -377,18 +438,11 @@ class StrategyAppService:
                     step = timedelta(seconds=INTERVAL_SECONDS[event.interval])
                     successor = not calendar.trading_minutes(last + step, event.bar_start)
 
-                bar = {
-                    "symbol": event.symbol,
-                    "interval": event.interval,
-                    "open": event.open,
-                    "high": event.high,
-                    "low": event.low,
-                    "close": event.close,
-                    "volume": event.volume,
-                    "timestamp": event.bar_start,
-                }
                 try:
-                    signal = await strategy.on_bar_completed(bar)
+                    await self._refresh_context(strategy.config, event.bar_start)
+                    signal = await self._decide(
+                        strategy, _bar_dict(event.symbol, event.interval, event, event.bar_start)
+                    )
                 except Exception as e:
                     logger.error("strategy_on_bar_error", strategy_id=strategy.id, error=str(e))
                     continue
