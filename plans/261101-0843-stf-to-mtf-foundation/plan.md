@@ -96,7 +96,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | # | Phase | Deploy | Depends on | Status |
 |---|---|---|---|---|
 | 01 | [Spike A: worktree, cascade-lag measurement, subscription key, context in three paths, backtest cost](./phase-01-spike-a-data-path.md) | none | — | Complete |
-| 02 | [Spike B: paper EXIT, resting stop, manual action, snapshot to UI, Exness spec; go/no-go table](./phase-02-spike-b-money-path-and-ui.md) | none | 01 | Pending |
+| 02 | [Spike B: paper EXIT, resting stop, manual action, snapshot to UI, Exness spec; go/no-go table](./phase-02-spike-b-money-path-and-ui.md) | none | 01 | Complete |
 | 03 | [1d cascade for session calendars](./phase-03-1d-cascade-session-calendars.md) | D-1 [ASK] | 02 | Pending |
 | 04 | [Web gate: fix `tsc`, add the CI web job](./phase-04-web-gate.md) | none (CI) | 03 | Pending |
 | 05 | [Delete STF code, tests, docs, web comments; shared test doubles](./phase-05-delete-stf-code.md) | none (CI) | 04 | Pending |

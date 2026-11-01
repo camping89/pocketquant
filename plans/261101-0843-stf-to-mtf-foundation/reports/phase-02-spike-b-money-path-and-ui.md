@@ -8,6 +8,7 @@ S5-S10 are `go`. The stop-rule rows S2, S3, S5, S6 and S10 are all `go`, so no s
 - Spike base: `../pocketquant-spike` on `spike/mtf` at `1430946b`, with the Phase 01 diff still in place. Phase 02 added rough code on top and new tests under `tests/spike_test/`. Nothing was committed, cherry-picked or copied from it.
 - Exness spec read on 2026-11-01 from `https://www.exness-api.com/exness_api.yaml` into `.cache/exness_api.yaml` (4503 lines; data only, never executed). The facts are in `spike-go-no-go.md` under `## Exness spec`.
 - Worktree removed with `git worktree remove --force ../pocketquant-spike`; branch deleted (`Deleted branch spike/mtf (was 1430946b)`).
+- Report commit: `c28809f1` (`docs(plans): record the money-path spike and the go/no-go table`), pushed to `origin/develop`. 02.7 Verify: `wt=0 br=0 dirty=0 synced=yes`.
 
 ## Verify outputs (Tasks 02.1-02.6)
 

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Spike B: paper EXIT, resting stop, manual action, snapshot to UI, Exness spec; go/no-go table"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: [1]
