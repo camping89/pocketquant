@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROPOSED mockup - generic MTF subscription UI</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--mute:#8b949e;--ok:#3fb950;--bad:#f85149;--warn:#d29922;--live:#da3633;--accent:#58a6ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header.top{position:sticky;top:0;z-index:5;background:#010409;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  header.top b{font-size:15px}
+  header.top a{color:var(--accent);text-decoration:none}
+  .banner{background:#3d2a00;color:#f0c674;padding:8px 20px;border-bottom:1px solid #6b4f00}
+  main{max-width:1280px;margin:0 auto;padding:20px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:28px}
+  h2{margin:0 0 12px;font-size:17px}
+  h3{margin:16px 0 8px;font-size:14px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+  .scroll{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;min-width:1100px}
+  th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;white-space:nowrap}
+  th{color:var(--mute);font-weight:600;font-size:12px}
+  td.reason{white-space:normal;min-width:200px}
+  .chip{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:0 7px;margin-right:3px;font-size:12px;background:#21262d}
+  .chip.entry{border-color:var(--accent);color:var(--accent)}
+  .badge{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700}
+  .paper{background:#30363d;color:#c9d1d9}
+  .live{background:var(--live);color:#fff}
+  .run{color:var(--ok)} .stop{color:var(--mute)}
+  .fresh span{display:inline-block;margin-right:6px;font-size:12px}
+  .stale{color:var(--warn)}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .na{color:var(--mute)}
+  button{background:#21262d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button[disabled]{opacity:.4;cursor:not-allowed}
+  button.danger{border-color:#6e2a28;color:#ffa198}
+  button.primary{background:#238636;border-color:#2ea043}
+  .assume{color:var(--warn);font-size:11px;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .box{border:1px solid var(--line);border-radius:6px;padding:12px;background:#0d1117}
+  .box .k{color:var(--mute);font-size:12px}
+  .confirm{margin-top:8px;border:1px dashed var(--live);border-radius:6px;padding:8px;font-size:12px;color:#ffa198}
+  .drawer-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+  ul.plain{list-style:none;margin:0;padding:0}
+  ul.plain li{border-bottom:1px solid var(--line);padding:5px 0;font-size:13px}
+  ul.plain li time{color:var(--mute);margin-right:8px;font-variant-numeric:tabular-nums}
+  .tabs{display:flex;gap:4px;margin-bottom:6px}
+  .tabs button.on{border-color:var(--accent);color:var(--accent)}
+  .chart{height:220px;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--mute);background:repeating-linear-gradient(90deg,#0d1117 0 39px,#161b22 39px 40px)}
+  form .row{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:start;margin-bottom:12px}
+  label.l{color:var(--mute);padding-top:5px}
+  select,input[type=text],input[type=number],textarea{background:#0d1117;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit}
+  .ms{display:flex;flex-wrap:wrap;gap:6px}
+  .ms label{border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer}
+  .ms input{margin-right:4px}
+  .hint{color:var(--mute);font-size:12px;margin-top:4px}
+  .params td{white-space:normal}
+  footer{color:var(--mute);text-align:center;padding:10px 0 30px}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <b>PocketQuant</b>
+  <a href="#list">1. Subscriptions</a>
+  <a href="#detail">2. Detail drawer</a>
+  <a href="#create">3. New / edit subscription</a>
+</header>
+<div class="banner">PROPOSED END STATE - mockup only, not built. Strategy-agnostic: every strategy-specific value comes from the generic snapshot. Items marked <span class="assume">[assumption]</span> are open.</div>
+<main>
+
+<section id="list">
+  <h2>1. Strategies - subscriptions</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th>Strategy code</th><th>Symbol</th><th>Intervals</th><th>Broker</th><th>State</th>
+      <th>Position</th><th>Pending order</th><th>Last decision</th>
+      <th>Freshness <span class="assume">[assumption]</span></th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td>mtf_alpha</td><td>XAUUSD:EXNESS</td>
+        <td><span class="chip entry">1h</span><span class="chip">1d</span><span class="chip">1w</span></td>
+        <td><span class="badge paper">PAPER</span></td><td class="run">● running</td>
+        <td>LONG 0.10 · SL 2,611.4 · TP 2,688.0</td><td>-</td>
+        <td class="reason">hold - position open</td>
+        <td class="fresh"><span class="ok">1h 10:00</span><span class="ok">1d 31 Oct</span><span class="ok">1w 27 Oct</span></td>
+        <td><button disabled>Start</button> <button>Stop</button> <button disabled title="Stop first">Edit</button> <button class="danger">Delete</button></td>
+      </tr>
+      <tr>
+        <td>mtf_beta</td><td>BTCUSDT:EXNESS</td>
+        <td><span class="chip entry">15m</span><span class="chip">1h</span><span class="chip">4h</span></td>
+        <td><span class="badge live">LIVE</span></td><td class="run">● running</td>
+        <td>-</td><td>BUY STOP @ 71,250</td>
+        <td class="reason">entry armed - waiting for price to reach trigger</td>
+        <td class="fresh"><span class="ok">15m 10:45</span><span class="ok">1h 10:00</span><span class="stale">4h 04:00 stale</span></td>
+        <td><button disabled>Start</button> <button>Stop</button> <button disabled title="Stop first">Edit</button> <button class="danger">Delete</button></td>
+      </tr>
+      <tr>
+        <td>mtf_alpha</td><td>EURUSD:EXNESS</td>
+        <td><span class="chip entry">4h</span><span class="chip">1d</span></td>
+        <td><span class="badge paper">PAPER</span></td><td class="stop">○ stopped</td>
+        <td>-</td><td>-</td>
+        <td class="reason">skip - top interval not aligned</td>
+        <td class="fresh"><span class="na">4h -</span><span class="na">1d -</span></td>
+        <td><button>Start</button> <button disabled>Stop</button> <button>Edit</button> <button class="danger">Delete</button></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Click a row to open its detail drawer. Delete warns when a position or pending order is still open. Lowest interval (blue chip) is the entry interval.</p>
+</section>
+
+<section id="detail">
+  <h2>2. Subscription detail drawer</h2>
+  <div class="drawer-head">
+    <b>mtf_beta</b> · BTCUSDT:EXNESS · <span class="chip entry">15m</span><span class="chip">1h</span><span class="chip">4h</span>
+    <span class="badge live">LIVE</span> <span class="run">● running</span>
+  </div>
+
+  <h3>Readings (from the strategy's snapshot)</h3>
+  <div class="scroll">
+  <table style="min-width:520px">
+    <thead><tr><th>Interval</th><th>Name</th><th>Value</th><th>OK</th></tr></thead>
+    <tbody>
+      <tr><td>4h</td><td>trend</td><td>up</td><td class="ok">✔</td></tr>
+      <tr><td>1h</td><td>pullback</td><td>-1.8</td><td class="ok">✔</td></tr>
+      <tr><td>1h</td><td>volatility filter</td><td>0.42</td><td class="ok">✔</td></tr>
+      <tr><td>15m</td><td>trigger</td><td>71,250</td><td class="na">–</td></tr>
+      <tr><td>15m</td><td>spread check</td><td>3.1</td><td class="bad">✘</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Names and values are whatever the strategy reports; the UI never knows which strategy it is.</p>
+
+  <div class="grid">
+    <div class="box">
+      <div class="k">Decision</div>
+      <div><b>arm entry</b> - pullback done in trend direction</div>
+      <div class="k">bar 01 Nov 10:45 (15m)</div>
+    </div>
+    <div class="box">
+      <div class="k">Pending order</div>
+      <div><b>BUY STOP</b> @ 71,250 · qty 0.01 · SL 70,610</div>
+      <button class="danger" style="margin-top:8px">Cancel pending</button>
+      <div class="confirm">Confirm: "This cancels a real-money order on Exness." [Cancel order] [Keep]</div>
+    </div>
+    <div class="box">
+      <div class="k">Open position</div>
+      <div class="na">none</div>
+      <button class="danger" style="margin-top:8px" disabled>Close at market</button>
+      <div class="hint">When a LIVE position exists, closing asks the same real-money confirmation.</div>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:14px">
+    <div class="box">
+      <div class="k">Recent decisions <span class="assume">[assumption] bounded ring in Redis, not persisted</span></div>
+      <ul class="plain">
+        <li><time>10:45</time>arm entry - pullback done in trend direction</li>
+        <li><time>10:30</time>skip - spread above limit</li>
+        <li><time>10:15</time>skip - no pullback yet</li>
+        <li><time>10:00</time>skip - no pullback yet</li>
+      </ul>
+    </div>
+    <div class="box">
+      <div class="k">Orders &amp; trades</div>
+      <ul class="plain">
+        <li><time>10:45</time>pending BUY STOP placed @ 71,250</li>
+        <li><time>31 Oct 22:15</time>EXIT by strategy · SHORT closed @ 69,980 · +142.0</li>
+        <li><time>31 Oct 14:30</time>SHORT filled @ 70,550 · SL 71,020</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Chart</h3>
+  <div class="tabs"><button class="on">15m</button><button>1h</button><button>4h</button></div>
+  <div class="chart">existing chart, interval switcher over this subscription's intervals - no strategy overlays</div>
+</section>
+
+<section id="create">
+  <h2>3. New subscription</h2>
+  <form onsubmit="return false">
+    <div class="row"><label class="l">Strategy code</label>
+      <div><select><option>mtf_alpha</option><option>mtf_beta</option></select></div></div>
+    <div class="row"><label class="l">Symbol</label>
+      <div><select><option>XAUUSD:EXNESS</option><option>BTCUSDT:EXNESS</option><option>EURUSD:EXNESS</option></select>
+      <div class="hint">The suffix names the data provider.</div></div></div>
+    <div class="row"><label class="l">Intervals</label>
+      <div>
+        <div class="ms">
+          <label><input type="checkbox">1m</label><label><input type="checkbox">5m</label><label><input type="checkbox">15m</label>
+          <label><input type="checkbox" checked>1h</label><label><input type="checkbox">4h</label>
+          <label><input type="checkbox" checked>1d</label><label><input type="checkbox" checked>1w</label>
+        </div>
+        <div class="hint">Selected, lowest first: <span class="chip entry">1h</span><span class="chip">1d</span><span class="chip">1w</span> - the lowest is the entry interval. Each higher interval must be a multiple of the lowest.</div>
+      </div></div>
+    <div class="row"><label class="l">Broker</label>
+      <div><label><input type="radio" name="b" checked> PAPER</label> &nbsp; <label><input type="radio" name="b"> LIVE</label>
+      <div class="hint">LIVE places real-money orders and needs the trader's live flag on.</div></div></div>
+    <div class="row"><label class="l">Parameters</label>
+      <div>
+        <table class="params" style="min-width:0;width:auto">
+          <thead><tr><th>Key</th><th>Default</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>entry_type</td><td>market</td><td><select><option>market</option><option>stop</option></select></td></tr>
+            <tr><td>exit_mode</td><td>sl_tp</td><td><select><option>sl_tp</option><option>strategy</option></select></td></tr>
+            <tr><td>risk_reward</td><td>2.0</td><td><input type="number" value="2.0" step="0.1" style="width:90px"></td></tr>
+          </tbody>
+        </table>
+        <div class="hint">Rows are generated from the defaults the strategy declares. <a href="#create" style="color:var(--accent)">Edit as raw JSON</a></div>
+      </div></div>
+    <div class="row"><span></span><div><button class="primary">Create (stopped)</button></div></div>
+  </form>
+  <p class="hint"><b>Edit</b> uses the same form, enabled only while the subscription is stopped. Start re-runs warm-up.</p>
+</section>
+
+</main>
+<footer>Mockup of the proposed end state - assumptions marked - not existing code.</footer>
+</body>
+</html>
