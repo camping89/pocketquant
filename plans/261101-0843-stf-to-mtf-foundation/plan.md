@@ -100,7 +100,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 02 | [Spike B: paper EXIT, resting stop, manual action, snapshot to UI, Exness spec; go/no-go table](./phase-02-spike-b-money-path-and-ui.md) | none | 01 | Complete |
 | 03 | [1d cascade for session calendars](./phase-03-1d-cascade-session-calendars.md) | D-1 [ASK] | 02 | Complete |
 | 04 | [Web gate: fix `tsc`, add the CI web job](./phase-04-web-gate.md) | none (CI) | 03 | Complete |
-| 05 | [Delete STF code, tests, docs, web comments; shared test doubles](./phase-05-delete-stf-code.md) | none (CI) | 04 | Pending |
+| 05 | [Delete STF code, tests, docs, web comments; shared test doubles](./phase-05-delete-stf-code.md) | none (CI) | 04 | Complete |
 | 06 | [Subscription contract: intervals, parameters, edit, defaults, reload](./phase-06-subscription-contract.md) | none (CI) | 05 | Pending |
 | 07 | [Higher-timeframe context: live and warm-up](./phase-07-htf-context-live-and-warmup.md) | none (CI) | 06 | Pending |
 | 08 | [Backtest intervals, real sandbox wiring, backtest-path context test](./phase-08-backtest-intervals-backend.md) | none (CI) | 07 | Pending |

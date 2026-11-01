@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Delete STF code, tests, docs, web comments; shared test doubles"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: [4]
