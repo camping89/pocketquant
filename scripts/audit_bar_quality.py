@@ -27,7 +27,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         epilog="""\
 MONGODB_URL must be set in the environment (never a CLI flag). In prod it holds
 the internal docker hostname, so run inside the api service:
-    cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api python scripts/audit_bar_quality.py ...
+    cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env \\
+        exec -T api python scripts/audit_bar_quality.py ...
 
 Production run order (on the VPS):
     1. mongodump the bars collection to an archive (backup before resync)
