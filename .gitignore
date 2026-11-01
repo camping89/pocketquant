@@ -1,6 +1,3 @@
-# TanStack Router generated
-routeTree.gen.ts
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
