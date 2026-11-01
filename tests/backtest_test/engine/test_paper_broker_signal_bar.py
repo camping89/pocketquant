@@ -91,7 +91,7 @@ async def test_replay_signal_bar_does_not_close_its_entry() -> None:
     config = BacktestConfig(
         strategy_code="t",
         symbol=_SYM,
-        interval="1m",
+        intervals=["1m"],
         start_date=_T0,
         end_date=_T0 + timedelta(days=365),
         initial_capital=1_000_000.0,

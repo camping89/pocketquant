@@ -33,7 +33,7 @@ def _config_from_dict(payload: dict[str, Any], contract_spec: ContractSpec) -> B
     return BacktestConfig(
         strategy_code=payload["strategy_code"],
         symbol=payload["symbol"],
-        interval=payload["interval"],
+        intervals=list(payload["intervals"]),
         start_date=datetime.fromisoformat(payload["start_date"]),
         end_date=datetime.fromisoformat(payload["end_date"]),
         initial_capital=payload.get("initial_capital", 10_000.0),
@@ -111,13 +111,15 @@ class BacktestExecutionService:
             id=config.strategy_code,
             name=config.strategy_code,
             symbol=config.symbol,
-            intervals=[config.interval],
+            intervals=list(config.intervals),
             broker="paper",
             parameters={**config.parameters},
             contract_spec=config.contract_spec,
         )
 
-        sandbox = await build_backtest_sandbox()
+        sandbox = await build_backtest_sandbox(
+            bar_repository=self._bar_repo, calendar_factory=self._calendar_factory
+        )
         try:
             broker = sandbox.create_broker(
                 initial_balance=config.initial_capital,
@@ -129,6 +131,9 @@ class BacktestExecutionService:
             strategy_instance = strategy_class(strategy_cfg)
             await sandbox.strategy_app_service.inject_prepared_strategy(
                 strategy_instance.id, strategy_instance, broker, strategy_instance.config
+            )
+            await sandbox.strategy_app_service.preload_context(
+                strategy_cfg, config.start_date, config.end_date
             )
 
             runner = BacktestAppService(

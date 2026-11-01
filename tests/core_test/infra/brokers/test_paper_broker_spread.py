@@ -118,7 +118,7 @@ def test_config_from_dict_reads_spread() -> None:
     payload = {
         "strategy_code": "probe",
         "symbol": _SYM,
-        "interval": "1m",
+        "intervals": ["1m"],
         "start_date": "2026-01-01T00:00:00+00:00",
         "end_date": "2026-01-02T00:00:00+00:00",
     }

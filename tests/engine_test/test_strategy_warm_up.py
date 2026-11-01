@@ -18,7 +18,6 @@ from pocketquant.core.domain.strategy.strategy_service_interface import IStrateg
 from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
 )
 from pocketquant.engine.execution.order_app_service import OrderAppService
@@ -26,7 +25,7 @@ from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.strategy import strategy_app_service as engine_module
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
-from tests.strategy_doubles import ScriptedStrategy
+from tests.strategy_doubles import Continuous24x7CalendarFactory, ScriptedStrategy
 
 _SYM = "XAUUSD:EXNESS"
 # Bucket T opens at 12:00; the clock is at second 25 of it, so the start never waits.

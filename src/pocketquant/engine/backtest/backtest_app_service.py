@@ -101,7 +101,7 @@ class BacktestAppService:
                 # ``stream`` is end-inclusive (``$lte end``), so a minute-precise
                 # end keeps the bar at that exact minute and excludes later bars.
                 async for bar in self._bar_repo.stream(
-                    config.symbol, Interval(config.interval), config.start_date, config.end_date
+                    config.symbol, Interval(config.intervals[0]), config.start_date, config.end_date
                 ):
                     self._broker.set_current_price(config.symbol, bar.close)
                     if bar.datetime is None:
@@ -110,7 +110,7 @@ class BacktestAppService:
                     await self._event_bus.publish(
                         BarCompletedEvent(
                             symbol=bar.symbol,
-                            interval=config.interval,
+                            interval=config.intervals[0],
                             bar_start=bar.datetime,
                             open=bar.open,
                             high=bar.high,

@@ -22,13 +22,11 @@ from pocketquant.core.domain.risk import PositionCalculation, PositionCalculator
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
-    NoStoredBars,
 )
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
-from tests.strategy_doubles import ScriptedStrategy
+from tests.strategy_doubles import Continuous24x7CalendarFactory, NoStoredBars, ScriptedStrategy
 
 _SYM = "BTCUSDT:BINANCE"
 _NOW = datetime(2026, 10, 1, tzinfo=UTC)

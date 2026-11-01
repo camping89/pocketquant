@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
-from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
-from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
-from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.order import OrderAggregate
 from pocketquant.core.domain.position import PositionAggregate
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
@@ -17,6 +15,10 @@ from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+
+if TYPE_CHECKING:
+    from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+    from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 
 logger = get_logger(__name__)
 
@@ -55,19 +57,9 @@ class _InMemoryPositionRepo:
         return len(gone)
 
 
-class NoStoredBars:
-    async def find(self, *args: object, **kwargs: object) -> list[Bar]:
-        return []
-
-
 class NoClosedTrades:
     async def realized_net(self, run_ids: list[str]) -> float:
         return 0.0
-
-
-class Continuous24x7CalendarFactory:
-    async def for_symbol(self, symbol: str) -> ITradingCalendarPort:
-        return Continuous24x7Calendar()
 
 
 # StrategyAppService asks the factory only in load_strategy (the live path).
@@ -118,22 +110,26 @@ class BacktestSandboxAppService:
 
 
 # A backtest must not share the live EventBus: replayed bars or synthetic exit fills
-# would drive live handlers (phantom positions, bars sent to unrelated strategies)
-# and let concurrent runs cross-talk. The position tracker is deliberately not
-# started, so it registers no handlers: the paper broker is the position source of
-# truth during a backtest.
-async def build_backtest_sandbox() -> BacktestSandboxAppService:
+# would drive live handlers and let concurrent runs cross-talk. The position tracker
+# runs on the private bus, so risk and EXIT read the run's own position as live does.
+# Bars and calendars are the real ones, so higher-timeframe context matches live.
+async def build_backtest_sandbox(
+    *, bar_repository: BarRepository, calendar_factory: TradingCalendarFactory
+) -> BacktestSandboxAppService:
     bus = EventBus()
     placeholder_broker = PaperBrokerAdapter(event_bus=bus)
+    positions = PositionAppService(bus, _InMemoryPositionRepo())  # type: ignore[arg-type]
     engine = StrategyAppService(
         event_bus=bus,
         broker_factory=_SingleBrokerFactory(placeholder_broker),  # type: ignore[arg-type]
         order_app_service=OrderAppService(bus, _InMemoryOrderRepo()),  # type: ignore[arg-type]
-        position_app_service=PositionAppService(bus, _InMemoryPositionRepo()),  # type: ignore[arg-type]
+        position_app_service=positions,
         risk_check_handler=RiskCheckHandler(),
-        bar_repository=NoStoredBars(),  # type: ignore[arg-type]
-        calendar_factory=Continuous24x7CalendarFactory(),  # type: ignore[arg-type]
+        bar_repository=bar_repository,
+        calendar_factory=calendar_factory,
         trade_repository=NoClosedTrades(),  # type: ignore[arg-type]
     )
+    # Strategies subscribe to BarCompletedEvent first; the tracker only to fills.
     await engine.start()
+    await positions.start()
     return BacktestSandboxAppService(event_bus=bus, strategy_app_service=engine)

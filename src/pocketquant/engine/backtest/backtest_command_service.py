@@ -9,6 +9,7 @@ from pocketquant.core.common.exceptions import NotFoundError
 from pocketquant.core.common.time import coerce_utc, to_utc_iso
 from pocketquant.core.common.uuid import generate_id_str
 from pocketquant.core.domain.backtest import BacktestResult
+from pocketquant.core.domain.strategy.services import check_strategy_inputs
 from pocketquant.core.infra.persistence.repositories.backtest_repository import (
     BacktestRepository,
 )
@@ -17,7 +18,7 @@ from pocketquant.core.infra.persistence.repositories.backtest_repository import 
 class RunBacktestCommand(BaseModel):
     strategy_id: str = Field(..., description="Strategy identifier")
     symbol: str = Field(..., description="Composite symbol (e.g. BTCUSDT:BINANCE)")
-    interval: str = Field(..., description="Bar interval (e.g. 5m, 1h)")
+    intervals: list[str] = Field(..., description="Ordered intervals, entry first")
     start_date: datetime = Field(..., description="Backtest start datetime (minute precision)")
     end_date: datetime = Field(..., description="Backtest end datetime (minute precision)")
     initial_capital: float = Field(default=10_000.0, ge=100, description="Starting capital")
@@ -49,11 +50,14 @@ class BacktestCommandService:
     # The started doc lets the frontend poll at once; the engine overwrites this same id
     # when the run finishes or fails.
     async def run(self, cmd: RunBacktestCommand) -> tuple[str, dict[str, Any]]:
+        check_strategy_inputs(cmd.strategy_id, cmd.intervals, cmd.parameters or {})
         run_id = generate_id_str()
         config = {
             "strategy_code": cmd.strategy_id,
             "symbol": cmd.symbol,
-            "interval": cmd.interval,
+            "intervals": list(cmd.intervals),
+            # The entry interval keeps the history index and the chart anchor.
+            "interval": cmd.intervals[0],
             "start_date": to_utc_iso(cmd.start_date),
             "end_date": to_utc_iso(cmd.end_date),
             "initial_capital": cmd.initial_capital,

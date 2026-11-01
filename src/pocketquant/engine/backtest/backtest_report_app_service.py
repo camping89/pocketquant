@@ -305,12 +305,12 @@ class BacktestReportAppService:
         # longer an Interval member, and that still skips scaling rather than
         # raising.
         try:
-            interval = Interval(self._config.interval)
+            interval = Interval(self._config.intervals[0])
         except ValueError:
             periods_per_year = None
             logger.warning(
                 "unknown interval %r — skipping Sharpe/Sortino annualization",
-                self._config.interval,
+                self._config.intervals[0],
             )
         else:
             periods_per_year = self._calendar.periods_per_year(interval)
@@ -333,7 +333,8 @@ class BacktestReportAppService:
         config_snapshot = {
             "strategy_code": self._config.strategy_code,
             "symbol": self._config.symbol,
-            "interval": self._config.interval,
+            "intervals": list(self._config.intervals),
+            "interval": self._config.intervals[0],
             "start_date": to_utc_iso(self._config.start_date),
             "end_date": to_utc_iso(self._config.end_date),
             "initial_capital": self._config.initial_capital,
@@ -356,7 +357,8 @@ class BacktestReportAppService:
             completed_at=completed_at,
             status=status,
             symbol=self._config.symbol.upper(),
-            interval=self._config.interval,
+            interval=self._config.intervals[0],
+            intervals=list(self._config.intervals),
             error_message=error_message,
             parameters=self._config.parameters,
             name=self._config.name,

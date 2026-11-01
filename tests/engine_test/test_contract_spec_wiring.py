@@ -22,13 +22,12 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.infra.brokers.broker_factory import BrokerFactory
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
-    NoStoredBars,
 )
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import Continuous24x7CalendarFactory, NoStoredBars
 
 pytestmark = pytest.mark.usefixtures("probe_registry")
 

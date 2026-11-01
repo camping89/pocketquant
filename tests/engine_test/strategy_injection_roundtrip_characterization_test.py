@@ -13,11 +13,10 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
-    NoStoredBars,
 )
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import Continuous24x7CalendarFactory, NoStoredBars
 
 
 class _FakeBroker:

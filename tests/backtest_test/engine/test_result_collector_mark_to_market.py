@@ -51,7 +51,7 @@ def _config() -> BacktestConfig:
     return BacktestConfig(
         strategy_code="s1",
         symbol="BTCUSDT:OKX",
-        interval="1m",
+        intervals=["1m"],
         start_date=datetime(2024, 1, 1, tzinfo=UTC),
         end_date=datetime(2024, 1, 31, tzinfo=UTC),
         initial_capital=10_000.0,

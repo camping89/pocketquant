@@ -11,7 +11,7 @@ from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 class BacktestConfig:
     strategy_code: str
     symbol: str
-    interval: str
+    intervals: list[str]
     start_date: datetime
     end_date: datetime
     initial_capital: float = 10_000.0

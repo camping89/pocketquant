@@ -17,12 +17,11 @@ from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 from pocketquant.core.domain.subscription import Subscription
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
-    NoStoredBars,
 )
 from pocketquant.engine.live.strategy_reconcile_app_service import StrategyReconcileAppService
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import Continuous24x7CalendarFactory, NoStoredBars
 
 pytestmark = pytest.mark.usefixtures("probe_registry")
 

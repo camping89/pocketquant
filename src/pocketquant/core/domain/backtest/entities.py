@@ -25,6 +25,7 @@ class BacktestResult:
     # interval) with an index. symbol is composite CODE:EXCHANGE (e.g. BTCUSDT:BINANCE).
     symbol: str = ""
     interval: str = ""
+    intervals: list[str] = field(default_factory=list)
     error_message: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)  # For optimizer
     open_positions: list[OpenLot] = field(default_factory=list)
@@ -49,6 +50,7 @@ class BacktestResult:
             # (which also uppercases) matches without a casing mismatch.
             symbol=config_snapshot.get("symbol", "").upper(),
             interval=config_snapshot.get("interval", ""),
+            intervals=list(config_snapshot.get("intervals", [])),
             parameters=config_snapshot.get("parameters", {}),
             name=config_snapshot.get("name"),
         )
@@ -62,6 +64,7 @@ class BacktestResult:
             "strategy_code": self.strategy_code,
             "symbol": self.symbol,
             "interval": self.interval,
+            "intervals": self.intervals,
             "config_snapshot": self.config_snapshot,
             "metrics": self.metrics.to_mongo(),
             "equity_curve": [p.to_mongo() for p in self.equity_curve],
@@ -94,6 +97,7 @@ class BacktestResult:
             # keeps it consistent with the scope filter's normalization.
             symbol=(data.get("symbol") or snapshot.get("symbol", "")).upper(),
             interval=data.get("interval") or snapshot.get("interval", ""),
+            intervals=data.get("intervals", []),
             error_message=data.get("error_message"),
             parameters=data.get("parameters", {}),
             verdict=data.get("verdict"),

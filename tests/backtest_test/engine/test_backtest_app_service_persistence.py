@@ -117,7 +117,7 @@ async def test_end_to_end_persists_three_collections(database: Database) -> None
     config = BacktestConfig(
         strategy_code="scripted",
         symbol=_SYM,
-        interval="1m",
+        intervals=["1m"],
         start_date=datetime(2026, 1, 1, tzinfo=UTC),
         end_date=datetime(2026, 1, 31, tzinfo=UTC),
         initial_capital=100_000.0,
@@ -213,7 +213,7 @@ async def test_sl_auto_exit_order_records_sell_side(database: Database) -> None:
     config = BacktestConfig(
         strategy_code="sl-test",
         symbol=_SYM,
-        interval="1m",
+        intervals=["1m"],
         start_date=datetime(2026, 1, 1, tzinfo=UTC),
         end_date=datetime(2026, 1, 31, tzinfo=UTC),
         initial_capital=100_000.0,

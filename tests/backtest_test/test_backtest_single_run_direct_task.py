@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from pocketquant.core.common.exceptions import AppError
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import clear_simulation_time
 from pocketquant.core.domain.bar.entities import Bar
@@ -35,15 +36,13 @@ from pocketquant.engine.backtest.backtest_command_service import (
 )
 from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
-    NoStoredBars,
 )
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
-from tests.strategy_doubles import ScriptedStrategy
+from tests.strategy_doubles import Continuous24x7CalendarFactory, NoStoredBars, ScriptedStrategy
 
 pytestmark = pytest.mark.usefixtures("probe_registry")
 
@@ -122,7 +121,7 @@ def _command(**overrides) -> RunBacktestCommand:
     base = {
         "strategy_id": "probe",
         "symbol": _SYM,
-        "interval": "1m",
+        "intervals": ["1m"],
         "start_date": "2026-01-01",
         "end_date": "2026-01-31",
         "initial_capital": 10_000.0,
@@ -170,15 +169,51 @@ async def test_engine_failure_marks_failed_via_inspect_not_exception(
     backtest_repo = BacktestRepository(database)
 
     # Unknown strategy → the execution service raises BEFORE the engine's
-    # own try/except, surfacing through execute_and_persist's outer guard.
+    # own try/except, surfacing through execute_and_persist's outer guard. The command
+    # rejects an unknown code, so the payload is changed after the started doc is saved.
     assert "definitely-not-a-strategy" not in STRATEGY_REGISTRY
-    run_id, config = await _cmd_svc(database).run(_command(strategy_id="definitely-not-a-strategy"))
+    run_id, config = await _cmd_svc(database).run(_command())
+    config["strategy_code"] = "definitely-not-a-strategy"
     await _execution(database).execute_and_persist(run_id, config)
 
     failed = await backtest_repo.get(run_id)
     assert failed is not None
     assert failed.status == "failed"
     assert failed.error_message
+
+
+@pytest.mark.asyncio
+async def test_run_rejects_unsorted_intervals_before_saving(database: Database) -> None:
+    with pytest.raises(AppError) as err:
+        await _cmd_svc(database).run(_command(intervals=["5m", "1m"]))
+
+    assert err.value.error_code == "INVALID_INTERVALS"
+    assert err.value.status_code == 422
+    assert await database.get_collection("backtest_runs").count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_run_rejects_a_parameter_of_the_wrong_type_before_saving(
+    database: Database,
+) -> None:
+    with pytest.raises(AppError) as err:
+        await _cmd_svc(database).run(_command(parameters={"min_bars": "3"}))
+
+    assert err.value.error_code == "INVALID_PARAMETERS"
+    assert err.value.status_code == 422
+    assert await database.get_collection("backtest_runs").count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_run_stores_intervals_and_the_entry_interval(database: Database) -> None:
+    run_id, _ = await _cmd_svc(database).run(_command(intervals=["1m", "5m"]))
+
+    doc = await database.get_collection("backtest_runs").find_one({"_id": run_id})
+    assert doc is not None
+    assert doc["intervals"] == ["1m", "5m"]
+    assert doc["interval"] == "1m"
+    assert doc["config_snapshot"]["intervals"] == ["1m", "5m"]
+    assert doc["config_snapshot"]["interval"] == "1m"
 
 
 @pytest.mark.asyncio
@@ -283,7 +318,7 @@ async def test_backtest_sandbox_does_not_leak_to_live_engine(database: Database)
         {
             "strategy_code": "probe",
             "symbol": _SYM,
-            "interval": "1m",
+            "intervals": ["1m"],
             "start_date": "2026-01-01",
             "end_date": "2026-01-31",
             "initial_capital": 10_000.0,

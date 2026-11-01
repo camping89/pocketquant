@@ -26,9 +26,7 @@ from pocketquant.core.infra.persistence.repositories.subscription_repository imp
     SubscriptionRepository,
 )
 from pocketquant.engine.backtest.backtest_sandbox_app_service import (
-    Continuous24x7CalendarFactory,
     NoClosedTrades,
-    NoStoredBars,
 )
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
@@ -37,6 +35,7 @@ from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import Continuous24x7CalendarFactory, NoStoredBars
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("probe_registry")]
 

@@ -180,6 +180,7 @@ async def list_backtests(
             "name": r.name,
             "symbol": r.symbol,
             "interval": r.interval,
+            "intervals": r.intervals,
             "status": r.status,
             "metrics": r.metrics.to_dict(),
             "date_range": {

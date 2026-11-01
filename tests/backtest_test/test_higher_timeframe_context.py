@@ -4,6 +4,7 @@ import asyncio
 from collections import Counter
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import ClassVar
 
 import pytest
 import structlog
@@ -15,19 +16,40 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
+from pocketquant.core.domain.order import OrderSide
 from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.domain.strategy.enums import Direction
+from pocketquant.core.domain.strategy.services import STRATEGY_REGISTRY
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Signal, StrategyConfig
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.core.infra.calendars.exness_session_calendar_adapter import EXNESS_CALENDARS
+from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.mongodb import Database
+from pocketquant.core.infra.persistence.repositories.backtest_order_repository import (
+    BacktestOrderRepository,
+)
+from pocketquant.core.infra.persistence.repositories.backtest_repository import (
+    BacktestRepository,
+)
+from pocketquant.core.infra.persistence.repositories.backtest_trade_repository import (
+    BacktestTradeRepository,
+)
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
+from pocketquant.core.infra.persistence.repositories.symbol_repository import SymbolRepository
+from pocketquant.core.infra.persistence.symbol_lookup_helper import SymbolLookupHelper
+from pocketquant.engine.backtest.backtest_command_service import (
+    BacktestCommandService,
+    RunBacktestCommand,
+)
+from pocketquant.engine.backtest.backtest_execution_service import BacktestExecutionService
 from pocketquant.engine.backtest.backtest_sandbox_app_service import NoClosedTrades
 from pocketquant.engine.execution.order_app_service import OrderAppService
 from pocketquant.engine.execution.position_app_service import PositionAppService
 from pocketquant.engine.execution.risk_check import RiskCheckHandler
 from pocketquant.engine.strategy import strategy_app_service as engine_module
 from pocketquant.engine.strategy.strategy_app_service import StrategyAppService
+from tests.strategy_doubles import ScriptedStrategy
 
 _BTC = "BTCUSDT:BINANCE"
 _XAU = "XAUUSD:EXNESS"
@@ -58,6 +80,9 @@ class _Calendars:
 
 
 class _Recorder(IStrategyService):
+    # A backtest builds its own instance, so a test reads what it saw here.
+    runs: ClassVar[list[tuple]] = []
+
     def __init__(self, config: StrategyConfig) -> None:
         super().__init__(config)
         self.seen: list[tuple] = []
@@ -65,6 +90,7 @@ class _Recorder(IStrategyService):
     async def on_bar_completed(self, bar: dict) -> Signal | None:
         context = {k: [(b.datetime, b.close) for b in v[-3:]] for k, v in bar["context"].items()}
         self.seen.append((bar["timestamp"], bar["close"], context))
+        self.runs.append(self.seen[-1])
         return None
 
 
@@ -186,6 +212,46 @@ async def _main_seed(bars: BarRepository) -> None:
     await _seed(bars, _BTC, "1h", hours, [98.0, 99.0, 100.0, 101.0, 102.0, 999.0])
 
 
+async def _live_seen(bars: BarRepository) -> list[tuple]:
+    engine = _engine(bars, Continuous24x7Calendar())
+    live = await _start(engine, "a", _BTC, ["1m", "1h"], _DAY + _AT_25)
+    for start in _minutes():
+        await _publish(engine, _BTC, "1m", start, _minute_close(start))
+    return live.seen
+
+
+async def _backtest(
+    database: Database,
+    bars: BarRepository,
+    code: str,
+    intervals: list[str],
+    end: datetime,
+    start: datetime = _DAY,
+) -> str:
+    lookup = SymbolLookupHelper(SymbolRepository(database))
+    execution = BacktestExecutionService(
+        bar_repository=bars,
+        backtest_repository=BacktestRepository(database),
+        backtest_order_repository=BacktestOrderRepository(database),
+        backtest_trade_repository=BacktestTradeRepository(database),
+        calendar_factory=TradingCalendarFactory(lookup),
+        symbol_lookup=lookup,
+    )
+    command = RunBacktestCommand(
+        strategy_id=code,
+        symbol=_BTC,
+        intervals=intervals,
+        start_date=start,
+        end_date=end,
+        slippage_bps=0.0,
+        commission_bps=0.0,
+        parameters={},
+    )
+    run_id, config = await BacktestCommandService(BacktestRepository(database)).run(command)
+    await execution.execute_and_persist(run_id, config)
+    return run_id
+
+
 def _context_at(recorder: _Recorder, start: datetime, interval: str) -> list[tuple]:
     return next(ctx[interval] for ts, _, ctx in recorder.seen if ts == start)
 
@@ -305,13 +371,10 @@ async def test_warm_up_contexts_equal_live_contexts(bars) -> None:
         ["1m", "1h"],
         _DAY + 3 * _HOUR + 10 * _MINUTE + _AT_25,
     )
-    engine = _engine(bars, Continuous24x7Calendar())
-    live = await _start(engine, "a", _BTC, ["1m", "1h"], _DAY + _AT_25)
-    for start in _minutes():
-        await _publish(engine, _BTC, "1m", start, _minute_close(start))
+    live = await _live_seen(bars)
 
     assert len(warm.seen) == len(_minutes())
-    assert warm.seen == live.seen
+    assert warm.seen == live
 
 
 async def test_a_start_before_second_20_waits_and_replays_the_final_bar(
@@ -342,3 +405,40 @@ async def test_a_start_before_second_20_waits_and_replays_the_final_bar(
     assert [close for ts, close, _ in recorder.seen if ts == quarters[-1]] == [2.0]
     assert _context_at(recorder, noon, "1h")[-1] == (noon - _HOUR, 2.0)
     assert bars.finds["1h"] == 1
+
+
+async def test_backtest_contexts_equal_live_contexts_at_every_boundary(
+    bars, database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _main_seed(bars)
+    monkeypatch.setitem(STRATEGY_REGISTRY, "recorder", _Recorder)
+    monkeypatch.setattr(_Recorder, "runs", [])
+
+    await _backtest(database, bars, "recorder", ["1m", "1h"], _DAY + 3 * _HOUR + 9 * _MINUTE)
+    backtest = list(_Recorder.runs)
+    live = await _live_seen(bars)
+
+    assert len(backtest) == len(_minutes())
+    assert backtest == live
+    on_the_hour = {ts: ctx["1h"][-1] for ts, _, ctx in backtest if ts.minute == 0}
+    assert on_the_hour == {
+        _DAY: (_DAY - _HOUR, 99.0),
+        _DAY + _HOUR: (_DAY, 100.0),
+        _DAY + 2 * _HOUR: (_DAY + _HOUR, 101.0),
+        _DAY + 3 * _HOUR: (_DAY + 2 * _HOUR, 102.0),
+    }
+
+
+@pytest.mark.usefixtures("probe_registry")
+async def test_backtest_rejects_an_entry_against_its_open_position(
+    bars, database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    short = {"direction": Direction.SHORT, "stop_loss_price": 101.0, "take_profit_price": 99.0}
+    monkeypatch.setattr(ScriptedStrategy, "SCRIPT", ({}, short))
+    minutes = [_DAY + i * _MINUTE for i in range(6)]
+    await _seed(bars, _BTC, "1m", minutes, [100.0] * 6)
+
+    run_id = await _backtest(database, bars, "probe", ["1m"], minutes[-1])
+
+    orders = await BacktestOrderRepository(database).list_by_run(run_id)
+    assert [o.side for o in orders] == [OrderSide.BUY]

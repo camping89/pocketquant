@@ -58,7 +58,7 @@ async def test_backtest_config_and_broker_carry_the_symbol_spec(
         {
             "strategy_code": "probe",
             "symbol": symbol,
-            "interval": "1h",
+            "intervals": ["1h"],
             "start_date": "2026-09-01T00:00:00+00:00",
             "end_date": "2026-09-20T00:00:00+00:00",
         },

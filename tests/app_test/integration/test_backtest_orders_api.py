@@ -33,7 +33,12 @@ UTC_ISO_Z = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 def _finished_run(strategy_code: str, symbol: str, interval: str) -> BacktestResult:
     run = BacktestResult.started(
         generate_id_str(),
-        {"strategy_code": strategy_code, "symbol": symbol, "interval": interval},
+        {
+            "strategy_code": strategy_code,
+            "symbol": symbol,
+            "interval": interval,
+            "intervals": [interval],
+        },
     )
     run.status = "finished"
     return run
@@ -155,6 +160,7 @@ async def test_strategy_history_filters_by_composite_symbol(
     row = rows[0]
     assert row["symbol"] == "BTCUSDT:BINANCE"
     assert row["interval"] == "1m"
+    assert row["intervals"] == ["1m"]
     assert "date_range" in row
     assert {"start", "end"} <= set(row["date_range"].keys())
     assert "verdict" in row

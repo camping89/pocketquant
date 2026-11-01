@@ -110,7 +110,7 @@ async def test_app_backtest_execution_runs_without_http(app_container) -> None:
     config = {
         "strategy_code": "does-not-exist",
         "symbol": _SYMBOL,
-        "interval": "1m",
+        "intervals": ["1m"],
         "start_date": "2026-01-01",
         "end_date": "2026-01-02",
     }

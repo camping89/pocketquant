@@ -1,4 +1,5 @@
 import asyncio
+from bisect import bisect_right
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING
@@ -120,6 +121,8 @@ class StrategyAppService:
         self._discard_reason = "standby"
         # Process lifetime in live, one run in a backtest; one entry per (symbol, higher interval).
         self._context: dict[tuple[str, str], tuple[datetime, list[Bar], bool]] = {}
+        # A backtest's higher bars for the whole run, oldest first, with their starts.
+        self._preloaded: dict[tuple[str, str], tuple[list[datetime], list[Bar]]] = {}
 
     @property
     def is_running(self) -> bool:
@@ -301,19 +304,41 @@ class StrategyAppService:
         found = await self._bar_repository.find(symbol, interval, end_date=now, limit=_WARMUP_BARS)
         return closed_before(list(reversed(found)), step, now)
 
+    # A backtest replays thousands of rollovers, and one Mongo round trip per rollover costs
+    # more than the whole replay of a bar, so a run reads each higher interval once.
+    async def preload_context(self, config: StrategyConfig, start: datetime, end: datetime) -> None:
+        for name in config.intervals[1:]:
+            step = timedelta(seconds=INTERVAL_SECONDS[name])
+            # Newest first: every bar the run can reach plus the warm-up window before it.
+            limit = max(0, int((end - start) / step)) + 1 + _WARMUP_BARS
+            found = await self._bar_repository.find(
+                config.symbol, Interval(name), end_date=end, limit=limit
+            )
+            bars = [b for b in reversed(found) if b.datetime is not None]
+            self._preloaded[(config.symbol, name)] = ([b.datetime for b in bars], bars)  # type: ignore[misc]
+
     # A window is re-read until its previous bucket is stored or has no trading minutes.
     async def _refresh_context(self, config: StrategyConfig, instant: datetime) -> None:
         if len(config.intervals) < 2:
             return
-        calendar = await self._calendar_factory.for_symbol(config.symbol)
         for name in config.intervals[1:]:
-            interval = Interval(name)
             step = timedelta(seconds=INTERVAL_SECONDS[name])
-            window = calendar.bar_start(instant, interval)
             cached = self._context.get((config.symbol, name))
-            if cached is not None and cached[0] == window and cached[2]:
+            # Every calendar bucket is exactly one step long, so an instant inside a complete
+            # cached window needs no calendar call; a backtest runs this on every replayed bar.
+            if cached is not None and cached[2] and cached[0] <= instant < cached[0] + step:
                 continue
-            bars = await self._closed_bars(config.symbol, interval, step, instant)
+            interval = Interval(name)
+            calendar = await self._calendar_factory.for_symbol(config.symbol)
+            window = calendar.bar_start(instant, interval)
+            preloaded = self._preloaded.get((config.symbol, name))
+            if preloaded is None:
+                bars = await self._closed_bars(config.symbol, interval, step, instant)
+            else:
+                # The same slice _closed_bars reads: the newest bars that start by the instant.
+                starts, stored = preloaded
+                end = bisect_right(starts, instant)
+                bars = closed_before(stored[max(0, end - _WARMUP_BARS) : end], step, instant)
             complete = (bool(bars) and bars[-1].datetime == window - step) or not (
                 calendar.trading_minutes(window - step, window)
             )
@@ -336,14 +361,17 @@ class StrategyAppService:
     # The instant is the entry bar's start, so an entry bar never reads its own higher
     # bucket (docs/governance/no-look-ahead-rules.md).
     def _context_at(self, config: StrategyConfig, instant: datetime) -> dict[str, list[Bar]]:
-        return {
-            n: closed_before(
-                self._context[(config.symbol, n)][1],
-                timedelta(seconds=INTERVAL_SECONDS[n]),
-                instant,
-            )
-            for n in config.intervals[1:]
-        }
+        out = {}
+        for n in config.intervals[1:]:
+            cached = self._context[(config.symbol, n)][1]
+            step = timedelta(seconds=INTERVAL_SECONDS[n])
+            # Cached bars are oldest first, so when the newest is closed at the instant all are
+            # (live and backtest); warm-up replays earlier instants and filters.
+            if closed_before(cached[-1:], step, instant):
+                out[n] = list(cached)
+            else:
+                out[n] = closed_before(cached, step, instant)
+        return out
 
     async def _decide(self, strategy: IStrategyService, bar: dict) -> Signal | None:
         bar["context"] = self._context_at(strategy.config, bar["timestamp"])
