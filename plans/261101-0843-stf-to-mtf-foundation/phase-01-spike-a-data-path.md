@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Spike A: worktree, cascade-lag measurement, subscription key, context in three paths, backtest cost"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: []
