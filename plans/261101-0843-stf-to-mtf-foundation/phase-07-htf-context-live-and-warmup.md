@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Higher-timeframe context: live and warm-up"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: [6]
