@@ -3,6 +3,7 @@ import type { JobRunStatus } from '../../types/job-history'
 const STATUS_COLOR: Record<JobRunStatus, string> = {
   completed: '#10b981',
   running: '#38bdf8',
+  interrupted: '#f43f5e',
   missed: '#fbbf24',
   skipped_max_instances: '#f59e0b',
   failed: '#f43f5e',
@@ -13,6 +14,7 @@ const STATUS_COLOR: Record<JobRunStatus, string> = {
 export const STATUS_LABEL: Record<JobRunStatus, string> = {
   completed: 'OK',
   running: 'running',
+  interrupted: 'interrupted',
   missed: 'missed',
   skipped_max_instances: 'skipped',
   failed: 'failed',
