@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Web gate: fix tsc, add the CI web job"
-status: pending
+status: completed
 priority: P2
 effort: 1h
 dependencies: [3]
