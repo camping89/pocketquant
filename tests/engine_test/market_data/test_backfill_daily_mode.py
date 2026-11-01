@@ -1,13 +1,6 @@
-# The vendor builds a session calendar's daily bar from its own session (Exness publishes
-# its own D1 candles), so cascade_tfs omits DAY_1 for a session calendar: a cascade backfill
-# would persist 1m bars and build no daily bar at all.
-
 from __future__ import annotations
 
 from typing import cast
-
-import pytest
-import structlog.testing
 
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.shared.enums import Interval
@@ -16,22 +9,12 @@ from pocketquant.core.domain.symbol.value_objects import (
     CALENDAR_EXNESS_FX,
 )
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
-from pocketquant.engine.market_data import tracked_symbols_backfill
 from pocketquant.engine.market_data.tracked_symbols_backfill import (
     BackfillTrackedSymbolCommand,
     TrackedSymbolBackfillService,
 )
 
 EURUSD = "EURUSD:EXNESS"
-
-
-@pytest.fixture(autouse=True)
-def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
-    # structlog caches a module logger on first use; one cached before
-    # capture_logs() ignores the capture. A fresh proxy per test avoids that.
-    monkeypatch.setattr(
-        tracked_symbols_backfill, "logger", structlog.get_logger(tracked_symbols_backfill.__name__)
-    )
 
 
 class _RecordingProvider:
@@ -70,17 +53,6 @@ def _service(provider: _RecordingProvider, calendar_id: str) -> TrackedSymbolBac
     )
 
 
-async def test_session_calendar_daily_backfill_goes_direct() -> None:
-    provider = _RecordingProvider()
-    result = await _service(provider, CALENDAR_EXNESS_FX).run(
-        BackfillTrackedSymbolCommand(symbol=EURUSD, interval=Interval.DAY_1, n=10)
-    )
-
-    assert result["mode_used"] == "direct"
-    # The cascade path would have asked for 1m bars instead.
-    assert provider.requested == [Interval.DAY_1]
-
-
 async def test_crypto_daily_backfill_still_cascades() -> None:
     provider = _RecordingProvider()
     result = await _service(provider, CALENDAR_CRYPTO_24_7).run(
@@ -91,31 +63,11 @@ async def test_crypto_daily_backfill_still_cascades() -> None:
     assert provider.requested == [Interval.MINUTE_1]
 
 
-# Honouring the cascade would persist 1m bars, build no daily bar and still report success.
-# Overriding without a word would be the other kind of silence, so the override is logged
-# when it contradicts the caller.
-async def test_an_explicit_cascade_is_overridden_audibly() -> None:
+async def test_a_session_calendar_daily_auto_backfill_cascades() -> None:
     provider = _RecordingProvider()
-    with structlog.testing.capture_logs() as logs:
-        result = await _service(provider, CALENDAR_EXNESS_FX).run(
-            BackfillTrackedSymbolCommand(
-                symbol=EURUSD, interval=Interval.DAY_1, n=10, mode="cascade"
-            )
-        )
+    result = await _service(provider, CALENDAR_EXNESS_FX).run(
+        BackfillTrackedSymbolCommand(symbol=EURUSD, interval=Interval.DAY_1, n=10)
+    )
 
-    assert result["mode_used"] == "direct"
-    assert provider.requested == [Interval.DAY_1]
-    overridden = [e for e in logs if e["event"] == "backfill.mode_overridden"]
-    assert len(overridden) == 1
-    assert overridden[0]["log_level"] == "warning"
-    assert overridden[0]["requested_mode"] == "cascade"
-
-
-async def test_auto_mode_is_overridden_silently() -> None:
-    provider = _RecordingProvider()
-    with structlog.testing.capture_logs() as logs:
-        await _service(provider, CALENDAR_EXNESS_FX).run(
-            BackfillTrackedSymbolCommand(symbol=EURUSD, interval=Interval.DAY_1, n=10)
-        )
-
-    assert [e for e in logs if e["event"] == "backfill.mode_overridden"] == []
+    assert result["mode_used"] == "cascade"
+    assert provider.requested == [Interval.MINUTE_1]

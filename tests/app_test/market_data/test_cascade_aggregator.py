@@ -17,13 +17,12 @@ from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
     aggregate_ohlcv,
     cascade_for_symbol,
-    cascade_tfs,
     compute_boundaries,
     tf_seconds,
 )
 
 CALENDAR = Continuous24x7Calendar()
-EURUSD, XAUUSD, _ = EXNESS_CALENDARS
+_, XAUUSD, _ = EXNESS_CALENDARS
 
 
 @pytest.fixture(autouse=True)
@@ -508,26 +507,17 @@ class TestCascadedBarsCarryTheirCalendar:
         assert bar.session_date is None
 
 
-class TestCascadeTimeframesDependOnTheCalendar:
-    def test_a_continuous_market_cascades_its_daily_bar(self) -> None:
-        assert Interval.DAY_1 in cascade_tfs(CALENDAR)
-        assert cascade_tfs(CALENDAR) == CASCADE_TFS
-
-    def test_a_session_market_fetches_its_daily_bar_instead(self) -> None:
-        tfs = cascade_tfs(EURUSD)
-        assert Interval.DAY_1 not in tfs
-        # Intraday timeframes are still derived, in the same order.
-        assert tfs == [t for t in CASCADE_TFS if t is not Interval.DAY_1]
-
-    @pytest.mark.asyncio
-    async def test_a_session_symbol_never_upserts_a_cascaded_daily_bar(self) -> None:
+class TestEveryCalendarCascadesTheDailyBar:
+    async def _cascade(self, calendar, boundary_for) -> tuple[AsyncMock, AsyncMock]:
         bar_repo = AsyncMock()
-        bar_repo.find = AsyncMock(
-            return_value=[
+        bar_repo.upsert_bar = AsyncMock()
+
+        async def find(**kwargs):
+            return [
                 Bar(
-                    symbol="EURUSD:EXNESS",
+                    symbol="XAUUSD:EXNESS",
                     interval=Interval.MINUTE_1,
-                    datetime=datetime(2026, 6, 10, 14, 0, tzinfo=UTC),
+                    datetime=kwargs["start_date"],
                     open=1.0,
                     high=1.0,
                     low=1.0,
@@ -535,10 +525,40 @@ class TestCascadeTimeframesDependOnTheCalendar:
                     volume=1.0,
                 )
             ]
-        )
-        bar_repo.upsert_bar = AsyncMock()
 
-        await cascade_for_symbol("EURUSD:EXNESS", 60, bar_repo, EURUSD)
+        bar_repo.find = AsyncMock(side_effect=find)
+        with patch(
+            "pocketquant.engine.market_data.app_services.cascade_aggregator.compute_boundaries",
+            side_effect=lambda t, *a: boundary_for(t),
+        ):
+            await cascade_for_symbol("XAUUSD:EXNESS", 60, bar_repo, calendar)
+        return bar_repo.find, bar_repo.upsert_bar
 
-        written = [c.args[0].interval for c in bar_repo.upsert_bar.await_args_list]
-        assert Interval.DAY_1 not in written
+    async def _cascade_day(self, calendar, day: datetime) -> tuple[AsyncMock, AsyncMock]:
+        return await self._cascade(calendar, lambda t: [day] if t is Interval.DAY_1 else [])
+
+    @pytest.mark.asyncio
+    async def test_a_session_calendar_cascades_its_daily_bar_at_utc_midnight(self) -> None:
+        day = datetime(2026, 6, 8, tzinfo=UTC)
+        find, upsert = await self._cascade_day(XAUUSD, day)
+
+        assert len(upsert.await_args_list) == 1
+        bar = upsert.await_args_list[0].args[0]
+        assert bar.interval is Interval.DAY_1
+        assert bar.datetime == day
+        assert bar.session_date == date(2026, 6, 8)
+        assert bar.calendar_id == XAUUSD.calendar_id
+        assert find.await_args.kwargs["limit"] == 1383
+
+    @pytest.mark.asyncio
+    async def test_a_short_session_day_bounds_the_daily_read(self) -> None:
+        find, _ = await self._cascade_day(XAUUSD, datetime(2026, 6, 7, tzinfo=UTC))
+        assert find.await_args.kwargs["limit"] == 124
+
+    @pytest.mark.parametrize("calendar", [CALENDAR, XAUUSD], ids=["24x7", "xauusd"])
+    @pytest.mark.asyncio
+    async def test_every_calendar_cascades_the_same_timeframes_in_order(self, calendar) -> None:
+        noon = datetime(2026, 6, 10, 12, tzinfo=UTC)
+        _, upsert = await self._cascade(calendar, lambda t: [calendar.bar_start(noon, t)])
+
+        assert [c.args[0].interval for c in upsert.await_args_list] == CASCADE_TFS

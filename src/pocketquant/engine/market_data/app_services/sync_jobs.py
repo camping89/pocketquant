@@ -45,15 +45,10 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# All timeframes synced / integrity-checked: 1m via REST, 5m–1d via cascade,
-# 1w via REST (Binance serves Monday-aligned weekly klines natively — cascading
-# from 1m would mis-bucket since floor-of-epoch aligns weeks to Thursday).
-#
-# For a calendar-based asset class both 1d and 1w are REST-only: the vendor
-# builds them from its own session, so a cascade bucketed across UTC midnight
-# need not match the vendor chart. The list below is
-# unchanged because REST already fetches both for every symbol; what differs is
-# that ``cascade_tfs`` stops deriving 1d for those calendars.
+# 1m comes from REST; 5m-1d are cascaded from stored 1m bars for every calendar.
+# 1w stays REST: Binance weeks open on Monday and Exness weeks on Sunday, and no
+# cascade convention exists. REST 1d stays listed as the backfill for history older
+# than the stored 1m bars.
 SYNC_INTERVALS = [
     Interval.MINUTE_1,
     Interval.MINUTE_5,

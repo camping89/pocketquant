@@ -7,7 +7,6 @@ from pocketquant.core.common.logging import get_logger
 from pocketquant.core.domain.bar.entities import SOURCE_CASCADE, Bar
 from pocketquant.core.domain.market_data.trading_calendar_port import ITradingCalendarPort
 from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.domain.symbol.value_objects import CALENDAR_CRYPTO_24_7
 
 if TYPE_CHECKING:
     from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
@@ -22,24 +21,6 @@ CASCADE_TFS: list[Interval] = [
     Interval.HOUR_4,
     Interval.DAY_1,
 ]
-
-_INTRADAY_CASCADE_TFS: list[Interval] = [
-    Interval.MINUTE_5,
-    Interval.MINUTE_15,
-    Interval.HOUR_1,
-    Interval.HOUR_4,
-]
-
-
-# A market that never closes can cascade its daily bar across UTC midnight, where
-# its day begins. A session market's vendor builds the daily bar from its own
-# session, so a cascaded one need not match the vendor's chart; those come from the
-# provider.
-def cascade_tfs(calendar: ITradingCalendarPort) -> list[Interval]:
-    if calendar.calendar_id == CALENDAR_CRYPTO_24_7:
-        return CASCADE_TFS
-    return _INTRADAY_CASCADE_TFS
-
 
 def tf_seconds(tf: Interval) -> int:
     mapping: dict[Interval, int] = {
@@ -129,7 +110,7 @@ async def cascade_for_symbol(
 
     persisted_per_tf: dict[Interval, int] = {}
 
-    for tf in cascade_tfs(calendar):
+    for tf in CASCADE_TFS:
         boundaries = compute_boundaries(tf, range_start, now, calendar)
         tf_secs = tf_seconds(tf)
         upserted = 0

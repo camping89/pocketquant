@@ -7,7 +7,6 @@ from pocketquant.core.domain.bar.entities import SOURCE_TRACKED_SYMBOL_BACKFILL
 from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.symbol.entities import COMPOSITE_SYMBOL_PATTERN
-from pocketquant.core.domain.symbol.value_objects import CALENDAR_CRYPTO_24_7
 from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
 from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
@@ -76,30 +75,6 @@ class TrackedSymbolBackfillService:
     async def run(self, cmd: BackfillTrackedSymbolCommand) -> dict:
         mode = cmd.resolved_mode()
         symbol = cmd.symbol.upper()
-
-        # A session calendar's daily bar must come from the provider. The vendor
-        # builds it from its own session (Exness publishes its own D1 candles),
-        # so a cascaded daily bar need not match the vendor's chart — which is
-        # why ``cascade_tfs`` already omits DAY_1 for a session calendar. The
-        # consequence for a backfill is that cascade mode would persist 1m bars
-        # and produce no daily bar at all, reporting success for work it did not
-        # do. Crypto is unaffected: its trading day IS the UTC day.
-        if cmd.interval is Interval.DAY_1:
-            calendar = await self._calendar_factory.for_symbol(symbol)
-            if calendar.calendar_id != CALENDAR_CRYPTO_24_7 and mode != "direct":
-                # Audible when it contradicts an explicit request: a caller who
-                # asked for cascade is not being quietly ignored, they are being
-                # told the mode cannot deliver a daily bar for this calendar.
-                if cmd.mode != "auto":
-                    logger.warning(
-                        "backfill.mode_overridden",
-                        symbol=symbol,
-                        requested_mode=cmd.mode,
-                        used_mode="direct",
-                        calendar_id=calendar.calendar_id,
-                        reason="cascade cannot build a session-calendar daily bar",
-                    )
-                mode = "direct"
 
         logger.info(
             "backfill.started",

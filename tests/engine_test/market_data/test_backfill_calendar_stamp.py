@@ -60,7 +60,9 @@ async def test_direct_backfill_stamps_the_session_calendar() -> None:
         calendar_factory=cast("TradingCalendarFactory", _XauusdFactory()),
     )
 
-    await service.run(BackfillTrackedSymbolCommand(symbol=XAUUSD, interval=Interval.DAY_1, n=1))
+    await service.run(
+        BackfillTrackedSymbolCommand(symbol=XAUUSD, interval=Interval.DAY_1, n=1, mode="direct")
+    )
 
     [bar] = repo.upserted
     assert bar.calendar_id == CALENDAR_EXNESS_XAUUSD
