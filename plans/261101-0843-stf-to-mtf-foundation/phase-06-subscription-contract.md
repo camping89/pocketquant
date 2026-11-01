@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Subscription contract: intervals, parameters, edit, defaults, reload"
-status: pending
+status: completed
 priority: P1
 effort: 1.5d
 dependencies: [5]
