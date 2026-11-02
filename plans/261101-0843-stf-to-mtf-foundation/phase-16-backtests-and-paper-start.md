@@ -1,7 +1,7 @@
 ---
 phase: 16
 title: "Prod backtests, pick the live set, start one paper subscription"
-status: pending
+status: completed
 priority: P1
 effort: "0.5d + backtest run time + three entry bars"
 dependencies: [15]
@@ -90,6 +90,8 @@ print(f"worst_pct={worst:.2f}")
 **Success criteria:** `first_1m` is on or before `2025-11-03`; `bar_calendar=EXNESS_XAUUSD`; every interval's `pct` is at least 99; `before` for `4h`, `1d` and `1h` is at least 36, or the owner's answer is recorded.
 
 **Verify:** the first output line is `first_1m=<date> bar_calendar=EXNESS_XAUUSD` with `<date> <= 2025-11-03`; the last line is `worst_pct=<n>` with `n >= 99.00`; the `1h`, `4h` and `1d` lines show `before=` values `>= 36` (or the report holds the owner's yes with the shifted start).
+
+**Amended 2026-11-02 (owner answer `coverage_ask=yes` in the report).** The first run failed: stored 5m and 15m bars started 2026-09-23 and 2026-08-03, and the Exness calendar has no holidays, so sub-daily intervals cannot reach 99 % of calendar buckets. The owner approved a backup of the `XAUUSD:EXNESS` bars, one full-range `cascade_for_symbol` from 2025-10-21, and this pass rule: `expected` is the set of buckets of the calendar minutes that have a stored 1m bar; every interval's `pct` is at least 99.9 and the last line is `worst_pct=<n>` with `n >= 99.90`; each line also prints the calendar coverage as `cal_pct`, and the report lists the missing 1m dates (venue holidays and early closes). The `first_1m`, `bar_calendar` and `before` conditions are unchanged.
 
 ### Task 16.2 — Six backtests, one at a time, the `5m,15m,1h` set first
 
@@ -187,6 +189,8 @@ print(
 
 **Verify:** `grep -c -E "^live_set=(15m,1h,4h|1h,4h,1d|5m,15m,1h)$" plans/261101-0843-stf-to-mtf-foundation/reports/phase-16-backtests-and-paper-start.md` prints `1`.
 
+**Amended 2026-11-02 (owner answer `live_set_owner_answer=` in the report).** The owner put all three sets on paper, one subscription per set, each with `entry_type=stop, exit_mode=strategy`, without naming a primary. `live_set=15m,1h,4h` (the recommended set) is the primary that the Task 16.5-16.6 and Phase 17 contracts bind to. The answer is recorded in English as `live_set_owner_answer=`.
+
 ### Task 16.5 — Create and start the paper subscription
 
 **Goal:** one paper Triple Screen subscription on `XAUUSD:EXNESS` runs on the picked set.
@@ -230,6 +234,8 @@ print(f"state={d['desired_state']}/{d['actual_state']} broker={d['broker']} inte
 
 **Verify:** the output's second line is `state=running/running broker=paper intervals_key=<live_set> parameters={"entry_type": "stop", "exit_mode": "strategy"}`.
 
+**Amended 2026-11-02 (owner answer `live_set_owner_answer=` in the report).** The script runs once per set, primary first. The primary keeps the `paper_started_at=`, `paper_sub_id=` and `state=` lines. Each extra set records `extra_paper_sub=<set> id=<id> started_at=<ISO>` and `extra_state=<set> <state line>`, then one `free_after_paper_start=` line. The three subscriptions share one pooled paper broker and so one paper account balance; positions and resting stops stay per subscription.
+
 ### Task 16.6 — Snapshot ring after live entry bars
 
 <!-- Red team 2026-11-01: #14, D8 -->
@@ -255,9 +261,11 @@ print(json.dumps(live[-1], sort_keys=True)[:400] if live else "no live entry")
 
 **Verify:** the first output line matches `^entries=[0-9]+ live_entries=[0-9]+ live_distinct_bar_start=([2-9]|[1-9][0-9]+)$`.
 
+**Amended 2026-11-02 (owner answer `live_set_owner_answer=` in the report).** The wait in step 1 is the latest of the three `started_at + 3 x <entry interval> + 2 min`. The primary keeps the lines above. Each extra set appends `extra_ring=<set> <first output line>`, and every `extra_ring=` line must also show `live_distinct_bar_start` of at least 2.
+
 ## Rollback
 
-[ASK] each step. Stop the subscription (`POST /api/v1/subscriptions/<paper_sub_id>/stop`), wait until `actual_state` is `stopped`, then `DELETE /api/v1/subscriptions/<paper_sub_id>` (from a PRODPY script with the token header). The six backtest runs stay; the owner can delete them in the UI.
+[ASK] each step. Stop the subscription (`POST /api/v1/subscriptions/<paper_sub_id>/stop`), wait until `actual_state` is `stopped`, then `DELETE /api/v1/subscriptions/<paper_sub_id>` (from a PRODPY script with the token header). The six backtest runs stay; the owner can delete them in the UI. Amended 2026-11-02: the rollback covers the two `extra_paper_sub=` ids the same way.
 
 ## Report
 

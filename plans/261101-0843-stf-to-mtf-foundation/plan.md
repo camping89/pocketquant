@@ -37,7 +37,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | D1 | The reconcile loop may gain two steps: apply and clear a subscription's `manual_action`, and reload the config of a non-running instance whose `(intervals, parameters)` changed. Its period, lease gating and load/unload ownership stay unchanged. This is an allowed exception to C13. |
 | D2 | Add a CI `web` job (lint, `tsc -b`, vitest) that `build-web` depends on; fix the two existing `tsc` errors first. |
 | D3 | Triple Screen backtests on `XAUUSD:EXNESS` use three interval sets: `15m,1h,4h`, `1h,4h,1d` and `5m,15m,1h`. Each set runs with both parameter settings: `entry_type=market, exit_mode=sl_tp` and `entry_type=stop, exit_mode=strategy`. Six runs. The compare view keeps its cap of 3 runs, so the runs are read across several compare views plus a metrics table. Do not call the settings "versions" or "V1/V2"; name them by their parameter values. |
-| D4 | The first paper subscription uses `entry_type=stop, exit_mode=strategy` on the interval set the owner picks from the backtests, so the pending stop and the strategy EXIT are observed on prod. After the observation the owner may switch parameters. |
+| D4 | The first paper subscription uses `entry_type=stop, exit_mode=strategy` on the interval set the owner picks from the backtests, so the pending stop and the strategy EXIT are observed on prod. After the observation the owner may switch parameters. Amended 2026-11-02 by the owner: three paper subscriptions, one per D3 set; `15m,1h,4h` is the primary for the Phase 16-17 contracts. |
 | D5 | At the prod delete, positions, orders and trades that belong to no existing subscription (orphans) are deleted too, listed separately and confirmed by their own explicit yes. No backup (C12). |
 | D6 | A manual close or cancel has no expiry: an action requested while the trader is down runs when the trader holds the lease again. The row shows the pending action. |
 | D7 | `closePosition` and `cancelPendingOrder` are not fenced by the live-trading flag (they only reduce exposure); `openPosition` and `placePendingOrder` stay fenced. Every attempt to apply a manual action clears it and records its outcome (`accepted` or `rejected:<code>`); the owner retries if needed. Checked in the Exness spec 2026-11-01: close and cancel are unavailable only when the instrument `trade_mode` is `trading_disabled`; a close may still fail asynchronously with `MARKET_SESSION_CLOSED` or `MARKET_NO_QUOTES`. |
@@ -111,7 +111,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 13 | [Generic subscription UI: form, row, drawer, actions](./phase-13-subscription-ui.md) | none (CI) | 11, 12 | Completed |
 | 14 | [Triple Screen strategy and tests](./phase-14-triple-screen.md) | none (CI) | 09, 11 | Completed |
 | 15 | [D-2 release: prod migration, index drop, deploy, post-checks](./phase-15-release-d2.md) | D-2 [ASK] | 03-14 | Completed |
-| 16 | [Prod backtests, pick the live set, start one paper subscription](./phase-16-backtests-and-paper-start.md) | none | 15 | Pending |
+| 16 | [Prod backtests, pick the live set, start one paper subscription](./phase-16-backtests-and-paper-start.md) | none | 15 | Completed |
 | 17 | [Observe; one-week 1d comparison; prod STF delete; close](./phase-17-observe-compare-delete.md) | none | 16, D-1 + 7 days | Pending |
 
 ## Acceptance criteria
