@@ -42,8 +42,12 @@ _ENDPOINTS: dict[str, tuple[str, str]] = {
         "/v1/trading/accounts/{account_id}/operations/{operation_id}",
     ),
     "openPosition": ("POST", "/v1/trading/accounts/{account_id}/positions"),
+    "closePosition": ("DELETE", "/v1/trading/accounts/{account_id}/positions/{position_id}"),
+    "placePendingOrder": ("POST", "/v1/trading/accounts/{account_id}/orders"),
+    "cancelPendingOrder": ("DELETE", "/v1/trading/accounts/{account_id}/orders/{order_id}"),
 }
-_ORDER_OPS = frozenset({"openPosition"})
+_ORDER_OPS = frozenset({"openPosition", "placePendingOrder", "closePosition", "cancelPendingOrder"})
+_EXPOSURE_OPS = frozenset({"openPosition", "placePendingOrder"})
 _PRIORITY_OPS = _ORDER_OPS | {"getOperationStatus"}
 _BOOTSTRAP_OPS = frozenset({"getAccessPoint", "getLimits"})
 _RATE_LIMIT_RETRIES = 3
@@ -112,7 +116,7 @@ def order_request_interval(limits: dict[str, Any], fraction: float) -> float:
     own = max(
         m["rate_limit"]["window_seconds"] / m["rate_limit"]["limit"]
         for m in rest["methods"]
-        if m["api_operation_id"] in ("openPosition", "getOperationStatus")
+        if m["api_operation_id"] in _PRIORITY_OPS
     )
     shared = rest["global_account_rate"]["window_seconds"] / rest["global_account_rate"]["limit"]
     # Only the trader sends order calls, so their own limits are not scaled by the
@@ -228,7 +232,9 @@ class ExnessClient:
     ) -> dict[str, Any]:
         if not self.is_configured:
             raise ExnessApiError(0, "NOT_CONFIGURED", "exness settings missing or invalid")
-        if op in _ORDER_OPS and not self._settings.exness_live_trading:
+        # Close and cancel only reduce exposure, so the live flag never blocks them; they
+        # still use the order lane and are never retried on a rate limit.
+        if op in _EXPOSURE_OPS and not self._settings.exness_live_trading:
             raise ExnessApiError(0, "LIVE_TRADING_DISABLED", "EXNESS_LIVE_TRADING is false")
         method, template = _ENDPOINTS[op]
         if op == "getAccessPoint":

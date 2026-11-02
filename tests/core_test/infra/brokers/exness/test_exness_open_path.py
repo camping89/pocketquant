@@ -5,12 +5,10 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import pytest
 import structlog
 
 from pocketquant.core.common.time.simulation import clear_simulation_time, set_simulation_time
 from pocketquant.core.domain.order import OrderStatus
-from pocketquant.core.infra.brokers.exness import exness_broker_adapter as adapter_module
 from pocketquant.core.infra.exness.exness_client import ExnessApiError
 from tests.core_test.infra.brokers.exness.test_exness_broker_adapter import (
     _deal,
@@ -170,11 +168,7 @@ async def test_a_close_during_the_deals_read_keeps_the_cache_stale() -> None:
 T = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
 
 
-async def test_an_order_whose_deadline_passes_inside_the_open_lock_is_not_registered(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
-    monkeypatch.setattr(adapter_module, "logger", structlog.get_logger("test.exness_open_path"))
+async def test_an_order_whose_deadline_passes_inside_the_open_lock_is_not_registered() -> None:
     h = await _Harness().start()
     original = h.broker._loss_cap_reason
 

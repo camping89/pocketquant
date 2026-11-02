@@ -89,7 +89,11 @@ class _FakeClient:
                 raise self.deals_error
             cursor = kwargs["params"].get("cursor")
             return self.deal_pages[1 if cursor else 0]
-        if op == "openPosition":
+        if op in ("closePosition", "cancelPendingOrder"):
+            if self.order_error:
+                raise self.order_error
+            return {}
+        if op in ("openPosition", "placePendingOrder"):
             if self.on_order_call:
                 await self.on_order_call(kwargs)
             if self.order_error:
@@ -187,6 +191,7 @@ def _order(
     order_type: OrderType = OrderType.MARKET,
     sl_price: float | None = 2300.12345,
     subscription_id: str = "sub1",
+    stop_price: float | None = None,
 ) -> OrderAggregate:
     return OrderAggregate.create(
         subscription_id=subscription_id,
@@ -195,6 +200,7 @@ def _order(
         order_type=order_type,
         quantity=quantity,
         price=2345.0,
+        stop_price=stop_price,
         sl_price=sl_price,
         tp_price=None,
     )
@@ -205,26 +211,13 @@ async def _drain() -> None:
         await asyncio.sleep(0)
 
 
-# Keeps the operation watcher from outliving a test unless the test drives it.
-@pytest.fixture(autouse=True)
-def _no_watch_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(adapter_module, "_STATUS_POLLS", 0)
-    monkeypatch.setattr(adapter_module, "_FILL_TIMEOUT_S", 3600)
-
-
-@pytest.fixture(autouse=True)
-def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
-    monkeypatch.setattr(adapter_module, "logger", structlog.get_logger("test.exness_broker"))
-
-
 # ── rejections before any order call ────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
     ("kwargs", "cap", "snapshot", "reason"),
     [
-        ({"order_type": OrderType.LIMIT}, 50.0, True, "market orders only"),
+        ({"order_type": OrderType.LIMIT}, 50.0, True, "market and stop orders only"),
         ({"sl_price": None}, 50.0, True, "stop loss required"),
         ({}, None, True, "EXNESS_DAILY_LOSS_CAP not set"),
         ({}, 50.0, False, "awaiting trading snapshot reconciliation"),
@@ -566,6 +559,7 @@ async def test_partial_broker_close_reduces_the_hold() -> None:
 async def test_fill_for_dropped_request_blocks_the_instrument() -> None:
     h = await _Harness().start()
     deal = {**_open_deal(), "instrument": "XAUUSD"}
+    h.client.snapshot["positions"] = [_venue_p1()]
 
     await h.event(
         "transaction_event",
@@ -574,9 +568,14 @@ async def test_fill_for_dropped_request_blocks_the_instrument() -> None:
         payload={"deals": [deal]},
     )
 
-    assert h.broker._held_unmapped == {"XAUUSD"}
     assert h.broker._needs_snapshot
+    await _drain()
+    assert h.broker._held_unmapped == {"XAUUSD"}
     assert h.results == []
+
+
+def _venue_p1() -> dict[str, Any]:
+    return {"position_id": "p1", "instrument": "XAUUSD", "direction": "buy", "open_price": "1"}
 
 
 # ── recovery ────────────────────────────────────────────────────────────────

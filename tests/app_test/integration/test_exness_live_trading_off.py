@@ -1,5 +1,6 @@
 # Two independent locks: BrokerFactory refuses the exness broker, and the client refuses
-# every order call before any network use. The trader flag in the store never opens them.
+# every call that opens exposure before any network use. The trader flag in the store
+# never opens them.
 
 from __future__ import annotations
 

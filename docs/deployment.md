@@ -77,6 +77,7 @@ The VPS is a Vultr machine on Ubuntu. It runs `deploy/compose.prod.yml` with Doc
 - Each deploy copies `vps/default/.env` onto the VPS. A manual edit of the `.env` on the VPS is lost at the next deploy.
 - Env vars and defaults: `src/pocketquant/core/config.py::Settings`. The full prod set is `vps/default/.env`.
 - Only an approved go-live sets `EXNESS_LIVE_TRADING=true`.
+- Before arming, read the Exness pending-stop limits in `docs/system-architecture.md`: after a crash the trader does not re-adopt a venue pending stop, and a pause does not cancel one.
 - The Exness strip shows the flag the last trader wrote at takeover. With no trader holding the lease it can still read ON, so check `"lease":"held"` in the trader's `/health` too.
 
 **Change a prod value:** edit the file in `pocketquant-config` and push there. Then run `gh workflow run cicd.yml --ref master`. If an `exness` subscription is live, follow [Restart while live](#restart-while-live).
@@ -117,7 +118,7 @@ printf 'X-Admin-Token: %s\n' "$ADMIN_TOKEN" | curl -s -H @- -X POST http://local
 EOF
 ```
 
-Then close any open position in the Exness app. The pause is stored and survives a restart.
+Then close any open position in the Exness app. A pause does not cancel Exness pending stops. Cancel them in the Exness app first. The pause is stored and survives a restart.
 
 ## Restart while live
 

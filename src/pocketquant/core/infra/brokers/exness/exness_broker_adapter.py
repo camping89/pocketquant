@@ -1,9 +1,12 @@
-# Every live-money rule is enforced before any HTTP call: market orders only, a stop
-# loss on every open, at most the minimum lot unless max_lots is raised, a daily loss cap
-# from real deals, and no new position until the trading snapshot is reconciled.
-# openPosition is acknowledged asynchronously: the fill arrives on the events stream or
-# is recovered from the operation status and the deals history. Positions close only by
-# venue SL/TP or a broker stop-out. An unreadable entry-pause store refuses the open.
+# Every live-money rule is checked at placement only, before any HTTP call: market and
+# stop orders only, a stop loss on every open, at most the minimum lot unless max_lots is
+# raised, a daily loss cap from real deals, and no new order until the trading snapshot is
+# reconciled. An unreadable entry-pause store refuses the order. Orders are acknowledged
+# asynchronously: a fill arrives on the events stream or is recovered from the operation
+# status and the deals history. A position closes by venue SL/TP, a stop-out or
+# close_position. A pending stop is tracked from the events stream only; a venue order this
+# process does not track blocks its instrument. A pause or the loss cap does not cancel a
+# resting venue stop.
 
 from __future__ import annotations
 
@@ -57,6 +60,8 @@ _CACHE_MAX_AGE_S = 90
 # Deal types whose profit is realized PnL; ``balance`` (deposits, withdrawals) never counts.
 _PNL_DEAL_TYPES = frozenset({"close", "swap_fee", "admin_fee", "dividend"})
 _SIDE_BY_DIRECTION = {"buy": PositionSide.LONG, "sell": PositionSide.SHORT}
+# Venue order types that rest on their own; ``sltp`` orders belong to a position.
+_PENDING_ORDER_TYPES = frozenset({"stop", "limit"})
 
 
 @dataclass
@@ -107,6 +112,8 @@ class ExnessBrokerAdapter(IBrokerPort):
         self._open_lock = asyncio.Lock()
         self._held_unmapped: set[str] = set()
         self._inflight: dict[str, _Inflight] = {}
+        # Request id to the resting stop order and its venue order id.
+        self._parked: dict[str, tuple[OrderAggregate, str]] = {}
         self._pending_ack: set[str] = set()
         self._early: dict[str, OrderResult] = {}
         self._acked_at: dict[str, float] = {}
@@ -209,8 +216,8 @@ class ExnessBrokerAdapter(IBrokerPort):
     async def submit_order(
         self, order: OrderAggregate, *, deadline: datetime | None = None
     ) -> OrderResult:
-        if order.order_type != OrderType.MARKET:
-            return _rejected(order, "exness adapter supports market orders only")
+        if order.order_type not in (OrderType.MARKET, OrderType.STOP_MARKET):
+            return _rejected(order, "exness adapter supports market and stop orders only")
         return await self._submit_open(order, deadline)
 
     async def _submit_open(self, order: OrderAggregate, deadline: datetime | None) -> OrderResult:
@@ -241,6 +248,8 @@ class ExnessBrokerAdapter(IBrokerPort):
                 i.order.subscription_id == order.subscription_id for i in self._inflight.values()
             ):
                 return _rejected(order, "entry already in flight for subscription")
+            if any(o.subscription_id == order.subscription_id for o, _ in self._parked.values()):
+                return _rejected(order, "pending order already resting for subscription")
             reason = self._presubmit_reason(order)
             if reason:
                 return _rejected(order, reason)
@@ -268,8 +277,14 @@ class ExnessBrokerAdapter(IBrokerPort):
                 "instrument": name,
                 "side": "buy" if order.side == OrderSide.BUY else "sell",
                 "volume": str(lots),
-                "stop_loss_price": format_price(order.sl_price, digits),
             }
+            op = "openPosition"
+            if order.order_type is OrderType.STOP_MARKET:
+                assert order.stop_price is not None
+                op = "placePendingOrder"
+                body["type"] = "stop"
+                body["price"] = format_price(order.stop_price, digits)
+            body["stop_loss_price"] = format_price(order.sl_price, digits)
             if order.tp_price:
                 body["take_profit_price"] = format_price(order.tp_price, digits)
             if deadline is not None and get_current_time() >= deadline:
@@ -283,7 +298,7 @@ class ExnessBrokerAdapter(IBrokerPort):
             rid = str(order.id)
             self._inflight[rid] = _Inflight(order, name, datetime.now(UTC))
             self._pending_ack.add(rid)
-        return await self._send_tracked(order, body, deadline)
+        return await self._send_tracked(order, body, deadline, op)
 
     def _presubmit_reason(self, order: OrderAggregate) -> str | None:
         if self._safeguards.daily_loss_cap is None:
@@ -383,13 +398,13 @@ class ExnessBrokerAdapter(IBrokerPort):
         )
 
     async def _send_tracked(
-        self, order: OrderAggregate, json_body: dict[str, Any], deadline: datetime | None
+        self, order: OrderAggregate, json_body: dict[str, Any], deadline: datetime | None, op: str
     ) -> OrderResult:
         rid = str(order.id)
         name = instrument_name(order.symbol) or ""
         try:
             ack = await self._client.call(
-                "openPosition", json_body=json_body, idempotency_key=rid, deadline=deadline
+                op, json_body=json_body, idempotency_key=rid, deadline=deadline
             )
         except ExnessApiError as e:
             if rid not in self._early:
@@ -397,6 +412,9 @@ class ExnessBrokerAdapter(IBrokerPort):
                     # The request may have reached the venue: reconcile before the next open.
                     self._reconcile_later(rid)
                 self._inflight.pop(rid, None)
+                if self._parked.pop(rid, None) is not None:
+                    # The venue took the stop before the error: the snapshot blocks it.
+                    self._reconcile_later(rid)
                 logger.warning("exness.order_rejected", order_id=rid, code=e.code)
                 return _rejected(order, f"{e.code}: {e.message}")
             # Its outcome already arrived on the stream, so the venue took the request:
@@ -408,7 +426,8 @@ class ExnessBrokerAdapter(IBrokerPort):
             if rid in self._early:
                 # Hand off after OrderAppService.submit has recorded SUBMITTED.
                 self._spawn(self._complete(self._early.pop(rid)))
-        self._acked_at[rid] = time.monotonic()
+        if rid not in self._parked:
+            self._acked_at[rid] = time.monotonic()
         logger.info(
             "exness.order_submitted",
             order_id=rid,
@@ -431,7 +450,7 @@ class ExnessBrokerAdapter(IBrokerPort):
         try:
             await asyncio.sleep(_FILL_TIMEOUT_S)
             for _ in range(_STATUS_POLLS):
-                if rid in self._seen_terminal:
+                if rid in self._seen_terminal or rid in self._parked:
                     return
                 body = await self._client.call(
                     "getOperationStatus", path_params={"operation_id": operation_id}
@@ -455,6 +474,12 @@ class ExnessBrokerAdapter(IBrokerPort):
         inflight = self._inflight.get(rid)
         if inflight is None or rid in self._seen_terminal:
             return
+        if inflight.order.order_type is OrderType.STOP_MARKET:
+            # The venue took the stop but its order id never arrived, so it cannot be cancelled.
+            logger.error("exness.pending_ack_missing", order_id=rid)
+            self._reconcile_later(rid)
+            await self._finish(rid, _stop_dropped(rid, "pending_ack_missing"))
+            return
         async for deal in self._deals(since=inflight.sent_at, instrument=inflight.instrument):
             if deal.get("type") == "open":
                 await self._apply_success(rid, None, deal)
@@ -474,7 +499,7 @@ class ExnessBrokerAdapter(IBrokerPort):
                 logger.debug("exness.events_ack", id=frame["id"], code=frame["code"])
             elif kind == "trading_state_snapshot":
                 async with self._state_lock:
-                    await self._on_snapshot(frame.get("payload") or {})
+                    await self._on_snapshot(frame.get("payload") or {}, set(self._parked))
             elif kind == "transaction_event":
                 await self._on_transaction(frame)
             elif kind in ("hmr_snapshot", "hmr_update"):
@@ -482,15 +507,21 @@ class ExnessBrokerAdapter(IBrokerPort):
         except Exception as e:
             logger.error("exness.event_handler_failed", error=str(e), exc_info=True)
 
-    # The caller holds _state_lock.
-    async def _on_snapshot(self, snapshot: dict[str, Any]) -> None:
+    # The caller holds _state_lock. ``known`` holds the request ids parked before the
+    # snapshot was read; only those can be missing from it.
+    async def _on_snapshot(self, snapshot: dict[str, Any], known: set[str]) -> None:
         repo_open = [
             p for p in await self._position_repository.find_open() if p.symbol.endswith(":EXNESS")
         ]
         positions: dict[str, _Held] = {}
         unmapped: set[str] = set()
         matched: set[str] = set()
-        for pos in snapshot.get("positions", []):
+        # Positions mapped from our own fills claim their rows first.
+        venue_positions = sorted(
+            snapshot.get("positions", []),
+            key=lambda p: str(p["position_id"]) not in self._positions,
+        )
+        for pos in venue_positions:
             pid = str(pos["position_id"])
             if pid in self._positions:
                 # Mapped from our own fill; the repo may lag behind it, and its
@@ -505,7 +536,11 @@ class ExnessBrokerAdapter(IBrokerPort):
             instrument = pos["instrument"]
             side = _SIDE_BY_DIRECTION.get(pos["direction"])
             composite = composite_for(instrument)
-            candidates = [p for p in repo_open if p.symbol == composite and p.side == side]
+            candidates = [
+                p
+                for p in repo_open
+                if p.symbol == composite and p.side == side and str(p.id) not in matched
+            ]
             if len(candidates) != 1:
                 unmapped.add(instrument)
                 reason = "no_match" if not candidates else "ambiguous"
@@ -514,6 +549,25 @@ class ExnessBrokerAdapter(IBrokerPort):
             repo = candidates[0]
             matched.add(str(repo.id))
             positions[pid] = _held_from_repo(repo, float(pos["open_price"]))
+        venue_orders = {str(o["order_id"]) for o in snapshot.get("orders", [])}
+        for rid in known & self._parked.keys():
+            if "orders" in snapshot and self._parked[rid][1] not in venue_orders:
+                # Filled while away, or cancelled in the Exness app or by the venue.
+                self._parked.pop(rid)
+                self._seen_terminal.add(rid)
+                logger.error("exness.pending_order_gone", order_id=rid)
+                await self._notify(_stop_dropped(rid, "pending order gone from the venue"))
+        parked = {venue_id for _, venue_id in self._parked.values()}
+        for order in snapshot.get("orders", []):
+            if order.get("order_type") in _PENDING_ORDER_TYPES and (
+                str(order["order_id"]) not in parked
+            ):
+                unmapped.add(order["instrument"])
+                logger.error(
+                    "exness.pending_order_unmapped",
+                    order_id=str(order["order_id"]),
+                    instrument=order["instrument"],
+                )
         for gone in self._positions.keys() - positions.keys():
             logger.warning("exness.held_position_gone", position_id=gone)
         self._positions = positions
@@ -555,21 +609,71 @@ class ExnessBrokerAdapter(IBrokerPort):
                 deal = next((d for d in deals if d.get("type") == "open"), None)
                 if deal is not None:
                     await self._apply_success(rid, event.get("operation_id"), deal)
+                elif self._inflight[rid].order.order_type is OrderType.STOP_MARKET:
+                    await self._park(rid, event)
             elif status in ("rejected", "failed"):
                 logger.warning(
                     "exness.order_rejected_async", order_id=rid, error=event.get("error_message")
                 )
                 await self._finish(rid, _cancelled(rid, event))
             return
+        # Anything below that this process cannot attribute closes the order gate until a
+        # snapshot shows the venue state; the snapshot alone decides which instrument stays
+        # blocked.
         opened = next((d for d in deals if d.get("type") == "open"), None)
-        if rid and opened is not None:
-            # The request was dropped after a lost ACK, yet it opened a position.
-            self._held_unmapped.add(str(opened.get("instrument")))
-            self._reconcile_later(rid)
-            logger.error("exness.unknown_request_fill", order_id=rid)
+        link = None if opened is None else str(opened.get("order_id"))
+        filled = next((r for r, (_, vid) in self._parked.items() if vid == link), None)
+        if opened is not None and filled is not None:
+            order, _ = self._parked.pop(filled)
+            name = instrument_name(order.symbol) or ""
+            self._inflight[filled] = _Inflight(order, name, datetime.now(UTC))
+            await self._apply_success(filled, event.get("operation_id"), opened)
+        elif opened is not None and str(opened.get("position_id")) not in self._positions:
+            # A dropped request, a stop filled after its cancel was accepted, or a manual open.
+            logger.error(
+                "exness.unattributed_open_deal",
+                client_request_id=rid,
+                instrument=opened.get("instrument"),
+                order_id=opened.get("order_id"),
+            )
+            self._reconcile_later(rid or "")
+        parked = {venue_id for _, venue_id in self._parked.values()}
+        placed = [
+            o
+            for o in (event.get("payload") or {}).get("orders") or []
+            if o.get("order_type") in _PENDING_ORDER_TYPES
+            and o.get("state") == "placed"
+            and str(o.get("order_id")) not in parked
+        ]
+        if event.get("status") == "success" and placed:
+            logger.error("exness.unattributed_pending_order", client_request_id=rid)
+            self._reconcile_later(rid or "")
+        if event.get("status") in ("rejected", "failed"):
+            # A close or cancel the venue refused after its ACK, or a dropped request.
+            logger.error(
+                "exness.async_op_failed",
+                client_request_id=rid,
+                error_code=event.get("error_code"),
+            )
+            self._reconcile_later(rid or "")
         for deal in deals:
             if deal.get("type") == "close":
                 await self._on_broker_close(deal, _close_reason(event, deal))
+
+    async def _park(self, rid: str, event: dict[str, Any]) -> None:
+        orders = (event.get("payload") or {}).get("orders") or []
+        venue_id = next((str(o["order_id"]) for o in orders if o.get("order_type") == "stop"), None)
+        if venue_id is None:
+            logger.error("exness.pending_ack_missing", order_id=rid)
+            self._reconcile_later(rid)
+            await self._finish(rid, _stop_dropped(rid, "pending_ack_missing"))
+            return
+        self._parked[rid] = (self._inflight.pop(rid).order, venue_id)
+        self._acked_at.pop(rid, None)
+        # A stop may move every bar, so its placement is not a per-trade event.
+        logger.debug("exness.pending_placed", order_id=rid, venue_order_id=venue_id)
+        if not self._inflight and (self._needs_snapshot or not self._snapshot_ready):
+            await self._reconcile_snapshot()
 
     async def _on_broker_close(self, deal: dict[str, Any], reason: str | None) -> None:
         pid = str(deal["position_id"])
@@ -688,8 +792,9 @@ class ExnessBrokerAdapter(IBrokerPort):
         # The read sits inside the lock too: a fill applied between the read and the
         # rebuild would be missing from the snapshot and dropped as gone.
         async with self._state_lock:
+            known = set(self._parked)
             try:
-                await self._on_snapshot(await self._client.call("getTradingStateSnapshot"))
+                await self._on_snapshot(await self._client.call("getTradingStateSnapshot"), known)
             except Exception as e:
                 logger.error("exness.reconcile_failed", error=str(e))
 
@@ -747,20 +852,57 @@ class ExnessBrokerAdapter(IBrokerPort):
             )
         return result
 
+    # Only a stop this process parked can be cancelled; after a restart none is.
     async def cancel_order(self, broker_order_id: str) -> bool:
-        logger.warning("exness.cancel_unsupported", broker_order_id=broker_order_id)
-        return False
+        rid = next(
+            (r for r, (o, _) in self._parked.items() if o.broker_order_id == broker_order_id),
+            None,
+        )
+        if not broker_order_id or rid is None:
+            return False
+        venue_id = self._parked[rid][1]
+        try:
+            await self._client.call(
+                "cancelPendingOrder",
+                path_params={"order_id": venue_id},
+                idempotency_key=generate_id_str(),
+            )
+        except ExnessApiError as e:
+            logger.warning("exness.cancel_failed", order_id=rid, code=e.code)
+            return False
+        self._parked.pop(rid, None)
+        logger.debug("exness.pending_cancelled", order_id=rid, venue_order_id=venue_id)
+        return True
 
+    # No pause or loss-cap check: a close only reduces risk. True means the venue took the
+    # request; the close can still fail later (MARKET_SESSION_CLOSED, MARKET_NO_QUOTES), and
+    # then the position stays held.
     async def close_position(
         self, subscription_id: str, symbol: str, *, reason: str, deadline: datetime | None = None
     ) -> bool:
-        logger.warning(
-            "exness.close_unsupported",
-            subscription_id=subscription_id,
-            symbol=symbol,
-            reason=reason,
+        held = self._held_for(subscription_id)
+        if held is None:
+            return False
+        if deadline is not None and get_current_time() >= deadline:
+            logger.warning(
+                "exness.close_rejected", subscription_id=subscription_id, reason="deadline"
+            )
+            return False
+        pid = held[0]
+        try:
+            await self._client.call(
+                "closePosition",
+                path_params={"position_id": pid},
+                idempotency_key=generate_id_str(),
+                deadline=deadline,
+            )
+        except ExnessApiError as e:
+            logger.warning("exness.close_failed", subscription_id=subscription_id, code=e.code)
+            return False
+        logger.info(
+            "exness.close_sent", subscription_id=subscription_id, position_id=pid, reason=reason
         )
-        return False
+        return True
 
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         self._order_callbacks.append(callback)
@@ -807,6 +949,12 @@ def _cancelled(rid: str, body: dict[str, Any]) -> OrderResult:
         broker_order_id=str(body.get("operation_id", "")),
         status=OrderStatus.CANCELLED,
         error_message=f"{body.get('error_code')}: {body.get('error_message')}",
+    )
+
+
+def _stop_dropped(rid: str, reason: str) -> OrderResult:
+    return OrderResult(
+        order_id=rid, broker_order_id="", status=OrderStatus.CANCELLED, error_message=reason
     )
 
 

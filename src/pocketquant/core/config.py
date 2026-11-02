@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # lease; compose sets the roles per service.
     app_roles: str = "api"
 
-    # Exness Trader API (optional). Every order call is refused while
+    # Exness Trader API (optional). Every call that opens exposure is refused while
     # exness_live_trading is false, which is the default.
     exness_api_base_url: str | None = None
     exness_account_id: str | None = None

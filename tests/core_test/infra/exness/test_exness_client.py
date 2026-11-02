@@ -270,19 +270,44 @@ async def test_bad_settings_fail_closed_without_a_request(
     assert exness.requests == []
 
 
-async def test_order_calls_are_refused_while_live_trading_is_off(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(("op", "path_params"), [("openPosition", {}), ("placePendingOrder", {})])
+async def test_exposure_calls_are_refused_while_live_trading_is_off(
+    op: str, path_params: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     exness = _Exness()
     client = _client(exness, monkeypatch, exness_live_trading=False)
 
     with pytest.raises(ExnessApiError) as opened:
         await client.call(
-            "openPosition", json_body={"instrument": "XAUUSD"}, idempotency_key="order-00001"
+            op,
+            path_params=path_params,
+            json_body={"instrument": "XAUUSD"},
+            idempotency_key="order-00001",
         )
 
     assert opened.value.code == "LIVE_TRADING_DISABLED"
     assert exness.requests == []
+
+
+@pytest.mark.parametrize(
+    ("op", "path_params", "tail"),
+    [
+        ("closePosition", {"position_id": "p1"}, "/positions/p1"),
+        ("cancelPendingOrder", {"order_id": "o1"}, "/orders/o1"),
+    ],
+)
+async def test_close_and_cancel_are_sent_while_live_trading_is_off(
+    op: str, path_params: dict[str, str], tail: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    exness = _Exness()
+    client = _client(exness, monkeypatch, exness_live_trading=False)
+
+    body = await client.call(op, path_params=path_params, idempotency_key="k-1")
+
+    assert body == {}
+    (sent,) = exness.other()
+    assert sent.method == "DELETE"
+    assert sent.url.path.endswith(tail)
 
 
 async def test_a_transport_error_is_retried_with_the_same_idempotency_key(
@@ -415,6 +440,20 @@ async def test_a_rate_limited_order_call_is_never_retried(
     assert _delays(sleeps) == []
 
 
+async def test_a_rate_limited_close_is_not_retried(
+    monkeypatch: pytest.MonkeyPatch, sleeps: AsyncMock
+) -> None:
+    exness = _Exness([httpx.Response(429)])
+    client = _client(exness, monkeypatch, exness_live_trading=False)
+
+    with pytest.raises(ExnessApiError) as exc:
+        await client.call("closePosition", path_params={"position_id": "p1"}, idempotency_key="c")
+
+    assert exc.value.code == "REQUEST_RATE_LIMIT"
+    assert len(exness.other()) == 1
+    assert _delays(sleeps) == []
+
+
 def _fake_time() -> tuple[list[float], Callable[[], float]]:
     now = [0.0]
     return now, lambda: now[0]
@@ -465,6 +504,15 @@ async def test_order_calls_use_their_own_lane(monkeypatch: pytest.MonkeyPatch) -
     data = await client._pacer_for("getCandleHistory")
     assert data is not order
     assert data.min_interval_s == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("op", ["placePendingOrder", "closePosition", "cancelPendingOrder"])
+async def test_close_and_pending_calls_use_the_order_lane(
+    op: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _client(_Exness(), monkeypatch, paced=True, exness_rate_fraction=0.6)
+
+    assert await client._pacer_for(op) is await client._pacer_for("openPosition")
 
 
 async def test_the_rate_fraction_widens_the_pacer_interval(
