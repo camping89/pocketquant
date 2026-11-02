@@ -1,7 +1,7 @@
 ---
 phase: 12
 title: "Backtest UI: intervals, defaults, labels"
-status: pending
+status: completed
 priority: P1
 effort: 0.5d
 dependencies: [8]
