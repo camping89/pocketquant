@@ -1,7 +1,7 @@
 ---
 phase: 14
 title: "Triple Screen strategy and tests"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: [9, 11]
