@@ -20,6 +20,7 @@ REASON_NO_MARKET_PRICE = "no_market_price"
 REASON_UNSUPPORTED_ORDER_TYPE = "unsupported_order_type"
 REASON_STOP_FILL = "stop_fill"
 REASON_STRATEGY_EXIT = "strategy_exit"
+REASON_MANUAL_CLOSE = "manual_close"
 REASON_CANCELLED = "cancelled"
 
 

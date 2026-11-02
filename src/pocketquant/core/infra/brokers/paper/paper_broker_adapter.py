@@ -330,6 +330,9 @@ class PaperBrokerAdapter(IBrokerPort):
     async def unsubscribe_order_event(self) -> None:
         self._event_callbacks.clear()
 
+    def has_price(self, symbol: str) -> bool:
+        return symbol.upper() in self._current_prices
+
     def set_current_price(self, symbol: str, price: float) -> None:
         self._current_prices[symbol.upper()] = price
 

@@ -23,6 +23,7 @@ CACHE_KEY_QUOTE_LATEST = "quote:latest:{symbol}"
 CACHE_KEY_BAR_CURRENT = "bar:current:{symbol}:{interval}"
 CACHE_KEY_OHLCV = "ohlcv:{symbol}:{interval}:{limit}"
 CACHE_KEY_DATA_LAG = "data_lag:{symbol}"
+CACHE_KEY_STRATEGY_SNAPSHOT = "strategy:snapshot:{subscription_id}"
 
 # Cache time-to-live (seconds)
 TTL_QUOTE_LATEST = 60
@@ -30,6 +31,8 @@ TTL_OHLCV_QUERY = 300
 # Five missed minute checks: a stopped job lets the flag lapse to "unknown"
 # rather than leave a stale reading on screen.
 TTL_DATA_LAG = 300
+# No cleanup job: subscription ids are UUIDv7 and never reused, and no reader lists these keys.
+TTL_STRATEGY_SNAPSHOT = 7 * 86400
 
 # System constraints
 LIMIT_SYNC_MAX_BARS = 5000

@@ -1,19 +1,24 @@
 import asyncio
 from bisect import bisect_right
+from collections import deque
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING
 
 import structlog
 
-from pocketquant.core.common.constants import INTERVAL_SECONDS
+from pocketquant.core.common.constants import (
+    CACHE_KEY_STRATEGY_SNAPSHOT,
+    INTERVAL_SECONDS,
+    TTL_STRATEGY_SNAPSHOT,
+)
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPort
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
-from pocketquant.core.domain.brokers.events import REASON_STRATEGY_EXIT
+from pocketquant.core.domain.brokers.events import REASON_MANUAL_CLOSE, REASON_STRATEGY_EXIT
 from pocketquant.core.domain.order import (
     OrderAggregate,
     OrderCancelledEvent,
@@ -27,11 +32,13 @@ from pocketquant.core.domain.risk import PositionCalculatorDomainService
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.strategy_service_interface import IStrategyService
 from pocketquant.core.domain.strategy.value_objects import Direction, Signal, StrategyConfig
+from pocketquant.core.domain.subscription import ManualAction
 from pocketquant.core.domain.symbol import ContractSpec
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 
 if TYPE_CHECKING:
     from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
+    from pocketquant.core.infra.persistence.redis import Cache
     from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
     from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
     from pocketquant.engine.execution.order_app_service import OrderAppService
@@ -49,6 +56,8 @@ _WARMUP_BARS = 500
 # sync_1m settles the last bucket of every cascaded interval at second 12; a start with stored
 # entry bars before second 20 waits for it.
 _WARMUP_READY_SECOND = 20
+# Snapshot records kept per subscription.
+_SNAPSHOT_RING = 20
 
 
 def _direction_of(position: PositionAggregate | None) -> Direction | None:
@@ -74,6 +83,20 @@ def _bar_dict(symbol: str, interval: str, source: Bar | BarCompletedEvent, start
     }
 
 
+# What the strategy reported for the bar, with what the engine did about it.
+def _bar_record(
+    strategy: IStrategyService, bar_start: datetime, interval: str | None, outcome: str
+) -> dict:
+    snapshot = strategy.snapshot or {}
+    return {
+        "bar_start": bar_start.isoformat(),
+        "interval": interval,
+        "readings": snapshot.get("readings", []),
+        "decision": snapshot.get("decision"),
+        "outcome": outcome,
+    }
+
+
 class StrategyAppService:
     def __init__(
         self,
@@ -87,6 +110,7 @@ class StrategyAppService:
         bar_repository: BarRepository,
         calendar_factory: TradingCalendarFactory,
         trade_repository: TradeRepository,
+        cache: Cache | None = None,
     ) -> None:
         self._event_bus = event_bus
         self._broker_factory = broker_factory
@@ -97,6 +121,7 @@ class StrategyAppService:
         self._bar_repository = bar_repository
         self._calendar_factory = calendar_factory
         self._trade_repository = trade_repository
+        self._cache = cache
 
         self._strategies: dict[str, IStrategyService] = {}
         self._brokers: dict[str, IBrokerPort] = {}
@@ -111,7 +136,7 @@ class StrategyAppService:
         # None = no new entry (standby, drained or lease lost): signals are discarded.
         # Before roles exist every engine trades.
         self.trading_until: datetime | None = datetime.max.replace(tzinfo=UTC)
-        self._signal_tasks: dict[str, asyncio.Task[None]] = {}
+        self._signal_tasks: dict[str, asyncio.Task[str]] = {}
         self._last_bar_start: dict[str, datetime] = {}
         # _on_bar_completed calls still running, inline paper fills included; the trader
         # hands over at 0.
@@ -125,6 +150,9 @@ class StrategyAppService:
         self._context: dict[tuple[str, str], tuple[datetime, list[Bar], bool]] = {}
         # A backtest's higher bars for the whole run, oldest first, with their starts.
         self._preloaded: dict[tuple[str, str], tuple[list[datetime], list[Bar]]] = {}
+        # The last decided bars per subscription, oldest first; the lease holder mirrors
+        # them to Redis for the UI.
+        self._snapshots: dict[str, deque[dict]] = {}
 
     @property
     def is_running(self) -> bool:
@@ -291,6 +319,12 @@ class StrategyAppService:
                 )
                 if signal:
                     await strategy.on_order_rejected("warmup")
+                outcome = "skipped:warmup" if signal else "no_signal"
+                await self._record_snapshot(
+                    strategy_id,
+                    _bar_record(strategy, stored.datetime, config.intervals[0], outcome),
+                    write=False,
+                )
             if last is not None:
                 self._last_bar_start[strategy_id] = last
             else:
@@ -386,6 +420,7 @@ class StrategyAppService:
         return out
 
     async def _decide(self, strategy: IStrategyService, bar: dict) -> Signal | None:
+        strategy.snapshot = None
         bar["context"] = self._context_at(strategy.config, bar["timestamp"])
         return await strategy.on_bar_completed(bar)
 
@@ -418,6 +453,53 @@ class StrategyAppService:
         )
         return False
 
+    # None leaves the action queued for the next reconcile tick. Any other return is an
+    # attempt through the paths a strategy uses, and the caller clears the action with it.
+    async def manual_action(self, subscription_id: str, action: ManualAction) -> str | None:
+        if self.trading_until is None:
+            return None
+        broker = self._brokers.get(subscription_id)
+        if broker is None:
+            outcome = "rejected:no_broker"
+        elif isinstance(broker, PaperBrokerAdapter) and not broker.has_price(
+            self._configs[subscription_id].symbol
+        ):
+            # Right after a takeover the paper broker has no price, and a close would fill
+            # at the stored entry price.
+            logger.debug("manual_action.waiting_for_price", subscription_id=subscription_id)
+            return None
+        else:
+            pending = self._order_app_service.pending_stop(subscription_id)
+            # A close goes even when the cancel fails.
+            cancelled = pending is not None and await self._cancel_stop(pending, broker)
+            position = self._position_app_service.get(subscription_id)
+            if action == "close" and position is not None:
+                closed = await broker.close_position(
+                    subscription_id,
+                    position.symbol,
+                    reason=REASON_MANUAL_CLOSE,
+                    deadline=self.trading_until,
+                )
+                outcome = "accepted" if closed else "rejected:close_failed"
+            elif pending is None:
+                outcome = (
+                    "rejected:nothing_pending" if action == "cancel" else "rejected:nothing_open"
+                )
+            else:
+                outcome = "accepted" if cancelled else "rejected:cancel_failed"
+        record = {
+            "bar_start": get_current_time().isoformat(),
+            "interval": None,
+            "readings": [],
+            "decision": {"action": f"manual_{action}", "reason": "owner request"},
+            "outcome": outcome,
+        }
+        await self._record_snapshot(subscription_id, record, write=True)
+        logger.info(
+            "manual_action.done", subscription_id=subscription_id, action=action, outcome=outcome
+        )
+        return outcome
+
     # A paper broker simulates the position, so the subscription's position is dropped
     # and a broker with no other holder is disconnected; otherwise it keeps checking
     # SL/TP for no one. A venue keeps its position under its own SL/TP, so that one is
@@ -430,6 +512,7 @@ class StrategyAppService:
             broker = self._brokers.pop(strategy_id, None)
             self._configs.pop(strategy_id, None)
             self._last_bar_start.pop(strategy_id, None)
+            self._snapshots.pop(strategy_id, None)
 
             if isinstance(broker, PaperBrokerAdapter):
                 dropped = broker.drop_positions(strategy_id)
@@ -502,66 +585,101 @@ class StrategyAppService:
                     except Exception:
                         logger.error("paper.stop_fill_failed", symbol=event.symbol, exc_info=True)
             for strategy in self._find_strategies(event.symbol, event.interval):
+                outcome = await self._handle_bar(strategy, event, published_at)
+                if outcome is None:
+                    continue
                 assert event.bar_start is not None
-                last = self._last_bar_start.get(strategy.id)
-                if last is not None and event.bar_start <= last:
-                    continue
-                # Recorded before the next await, so a second publish of this bar is ignored.
-                self._last_bar_start[strategy.id] = event.bar_start
-                successor = True
-                if event.bar_end is not None and last is not None:
-                    calendar = await self._calendar_factory.for_symbol(event.symbol)
-                    step = timedelta(seconds=INTERVAL_SECONDS[event.interval])
-                    successor = not calendar.trading_minutes(last + step, event.bar_start)
-
-                try:
-                    await self._refresh_context(strategy.config, event.bar_start)
-                    signal = await self._decide(
-                        strategy, _bar_dict(event.symbol, event.interval, event, event.bar_start)
-                    )
-                except Exception as e:
-                    logger.error("strategy_on_bar_error", strategy_id=strategy.id, error=str(e))
-                    continue
-                if not signal:
-                    continue
-
-                signal_at = get_current_time()
-                reason = None
-                age_s = None
-                if event.bar_end is not None and signal.direction is not Direction.EXIT:
-                    age_s = (signal_at - event.bar_end).total_seconds()
-                    if age_s > _STALE_AFTER_S[event.interval]:
-                        reason = "stale"
-                    elif event.gap or not successor:
-                        reason = "gap"
-                inflight = self._signal_tasks.get(strategy.id)
-                if reason is None and inflight is not None and not inflight.done():
-                    reason = "inflight"
-                if reason is not None:
-                    logger.warning(
-                        "strategy.entry_skipped",
-                        reason=reason,
-                        subscription_id=strategy.id,
-                        symbol=event.symbol,
-                        interval=event.interval,
-                        bar_start=event.bar_start.isoformat(),
-                        age_s=None if age_s is None else round(age_s, 1),
-                    )
-                    await self._notify_rejected(strategy, reason)
-                    continue
-                broker = self._brokers.get(strategy.id)
-                if broker is None or not broker.fills_async:
-                    await self._process_signal(strategy, signal, event, signal_at, published_at)
-                    continue
-                task = asyncio.create_task(
-                    self._process_signal(strategy, signal, event, signal_at, published_at)
+                await self._record_snapshot(
+                    strategy.id,
+                    _bar_record(strategy, event.bar_start, event.interval, outcome),
+                    write=event.bar_end is not None,
                 )
-                self._signal_tasks[strategy.id] = task
-                task.add_done_callback(partial(self._forget_signal_task, strategy.id))
         finally:
             self._running_bar_handlers -= 1
 
-    def _forget_signal_task(self, strategy_id: str, task: asyncio.Task[None]) -> None:
+    # The outcome of the bar for the snapshot: no_signal, sent (a venue task counts once
+    # spawned), skipped:<reason> or rejected:<reason>; None for a bar already seen.
+    async def _handle_bar(
+        self, strategy: IStrategyService, event: BarCompletedEvent, published_at: datetime
+    ) -> str | None:
+        assert event.bar_start is not None
+        last = self._last_bar_start.get(strategy.id)
+        if last is not None and event.bar_start <= last:
+            return None
+        # Recorded before the next await, so a second publish of this bar is ignored.
+        self._last_bar_start[strategy.id] = event.bar_start
+        successor = True
+        if event.bar_end is not None and last is not None:
+            calendar = await self._calendar_factory.for_symbol(event.symbol)
+            step = timedelta(seconds=INTERVAL_SECONDS[event.interval])
+            successor = not calendar.trading_minutes(last + step, event.bar_start)
+
+        try:
+            await self._refresh_context(strategy.config, event.bar_start)
+            signal = await self._decide(
+                strategy, _bar_dict(event.symbol, event.interval, event, event.bar_start)
+            )
+        except Exception as e:
+            logger.error("strategy_on_bar_error", strategy_id=strategy.id, error=str(e))
+            return "skipped:strategy_error"
+        if not signal:
+            return "no_signal"
+
+        signal_at = get_current_time()
+        reason = None
+        age_s = None
+        if event.bar_end is not None and signal.direction is not Direction.EXIT:
+            age_s = (signal_at - event.bar_end).total_seconds()
+            if age_s > _STALE_AFTER_S[event.interval]:
+                reason = "stale"
+            elif event.gap or not successor:
+                reason = "gap"
+        inflight = self._signal_tasks.get(strategy.id)
+        if reason is None and inflight is not None and not inflight.done():
+            reason = "inflight"
+        if reason is not None:
+            logger.warning(
+                "strategy.entry_skipped",
+                reason=reason,
+                subscription_id=strategy.id,
+                symbol=event.symbol,
+                interval=event.interval,
+                bar_start=event.bar_start.isoformat(),
+                age_s=None if age_s is None else round(age_s, 1),
+            )
+            await self._notify_rejected(strategy, reason)
+            return f"skipped:{reason}"
+        broker = self._brokers.get(strategy.id)
+        if broker is None or not broker.fills_async:
+            return await self._process_signal(strategy, signal, event, signal_at, published_at)
+        task = asyncio.create_task(
+            self._process_signal(strategy, signal, event, signal_at, published_at)
+        )
+        self._signal_tasks[strategy.id] = task
+        task.add_done_callback(partial(self._forget_signal_task, strategy.id))
+        return "sent"
+
+    # The ring stays in memory for every bar; only live bars reach Redis, and only while
+    # this engine holds the lease. A failed write never blocks trading.
+    async def _record_snapshot(self, sid: str, record: dict, *, write: bool) -> None:
+        pending = self._order_app_service.pending_stop(sid)
+        record["pending"] = (
+            None if pending is None else {"side": pending.side.value, "price": pending.stop_price}
+        )
+        ring = self._snapshots.setdefault(sid, deque(maxlen=_SNAPSHOT_RING))
+        ring.append(record)
+        if not write or self._cache is None or self.trading_until is None:
+            return
+        try:
+            await self._cache.set(
+                CACHE_KEY_STRATEGY_SNAPSHOT.format(subscription_id=sid),
+                list(ring),
+                ttl=TTL_STRATEGY_SNAPSHOT,
+            )
+        except Exception:
+            logger.warning("strategy.snapshot_write_failed", subscription_id=sid, exc_info=True)
+
+    def _forget_signal_task(self, strategy_id: str, task: asyncio.Task[str]) -> None:
         # A later task of the same subscription may already hold the slot.
         if self._signal_tasks.get(strategy_id) is task:
             del self._signal_tasks[strategy_id]
@@ -639,7 +757,7 @@ class StrategyAppService:
         event: BarCompletedEvent,
         signal_at: datetime,
         published_at: datetime,
-    ) -> None:
+    ) -> str:
         try:
             if self.trading_until is None:
                 reason = self._discard_reason
@@ -648,7 +766,7 @@ class StrategyAppService:
                 log = logger.debug if reason == "standby" else logger.info
                 log("strategy.signal_discarded", reason=reason, subscription_id=strategy.id)
                 await strategy.on_order_rejected(reason)
-                return
+                return f"rejected:{reason}"
             deadline = self.trading_until
             if get_current_time() >= deadline:
                 logger.warning(
@@ -661,13 +779,13 @@ class StrategyAppService:
                     age_s=None,
                 )
                 await strategy.on_order_rejected("lease")
-                return
+                return "rejected:lease"
 
             broker = self._brokers.get(strategy.id)
             if not broker:
                 logger.warning("no_broker_for_strategy", strategy_id=strategy.id)
                 await strategy.on_order_rejected("no broker")
-                return
+                return "rejected:no broker"
 
             pending = self._order_app_service.pending_stop(strategy.id)
             side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
@@ -682,15 +800,12 @@ class StrategyAppService:
                 logger.debug(
                     "strategy.stop_kept", subscription_id=strategy.id, order_id=str(pending.id)
                 )
-                return
+                return "skipped:stop_unchanged"
             # An exit goes flat even when the cancel fails.
-            if (
-                pending is not None
-                and not await self._cancel_stop(pending, broker)
-                and signal.direction is not Direction.EXIT
-            ):
+            cancelled = pending is not None and await self._cancel_stop(pending, broker)
+            if pending is not None and not cancelled and signal.direction is not Direction.EXIT:
                 await strategy.on_order_rejected("pending cancel failed")
-                return
+                return "rejected:pending cancel failed"
 
             current_price = signal.entry_price if signal.entry_type == "stop" else event.close
             assert current_price is not None
@@ -710,7 +825,8 @@ class StrategyAppService:
                         logger.debug(
                             "strategy.exit_ignored", subscription_id=strategy.id, reason=reason
                         )
-                    return
+                        return "skipped:nothing_open"
+                    return "sent" if cancelled else "rejected:cancel_failed"
                 assert position is not None
                 closed = await broker.close_position(
                     strategy.id, position.symbol, reason=REASON_STRATEGY_EXIT, deadline=deadline
@@ -721,7 +837,7 @@ class StrategyAppService:
                     reason=REASON_STRATEGY_EXIT,
                     closed=closed,
                 )
-                return
+                return "sent" if closed else "rejected:close_failed"
             if not valid:
                 logger.info(
                     "signal_rejected_by_risk",
@@ -729,7 +845,7 @@ class StrategyAppService:
                     reason=reason,
                 )
                 await strategy.on_order_rejected(reason)
-                return
+                return f"rejected:{reason}"
 
             stop_loss = signal.stop_loss_price or (
                 current_price * (1 - _FALLBACK_SL_PCT)
@@ -749,13 +865,13 @@ class StrategyAppService:
             if size <= 0:
                 logger.info("zero_position_size", strategy_id=strategy.id)
                 await strategy.on_order_rejected("zero position size")
-                return
+                return "rejected:zero position size"
 
             normalized = await broker.normalize_quantity(signal.symbol, size)
             if normalized is None:
                 logger.info("order_quantity_below_broker_minimum", strategy_id=strategy.id)
                 await strategy.on_order_rejected("quantity below broker minimum")
-                return
+                return "rejected:quantity below broker minimum"
             size = normalized
 
             order = self._create_order(strategy, signal, size, current_price)
@@ -767,7 +883,9 @@ class StrategyAppService:
                 t6 = get_current_time()
             finally:
                 self._sending.discard(strategy.id)
+            outcome = "sent"
             if not result.is_success:
+                outcome = f"rejected:{result.error_message or 'rejected'}"
                 await strategy.on_order_rejected(result.error_message or "rejected")
             # A stop or unload that ran while this stop was in flight saw no SUBMITTED order
             # to cancel.
@@ -808,9 +926,11 @@ class StrategyAppService:
                     t0_t5_ms=int((t5 - event.bar_end).total_seconds() * 1000),
                     t0_t6_ms=int((t6 - event.bar_end).total_seconds() * 1000),
                 )
+            return outcome
         except Exception as e:
             logger.error("strategy_on_bar_error", strategy_id=strategy.id, error=str(e))
             await self._notify_rejected(strategy, str(e))
+            return f"rejected:{e}"
 
     def _create_order(
         self,

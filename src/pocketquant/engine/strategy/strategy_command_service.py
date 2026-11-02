@@ -7,7 +7,7 @@ from pocketquant.core.common.exceptions import DomainError, NotFoundError
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.strategy.services import check_strategy_inputs
-from pocketquant.core.domain.subscription import Subscription
+from pocketquant.core.domain.subscription import ManualAction, Subscription
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 from pocketquant.core.infra.persistence.repositories.position_repository import (
     PositionRepository,
@@ -141,6 +141,15 @@ class StrategyCommandService:
         if await self._sub_repo.update_config(edited) == 0:
             raise _running(sub_id)
         return _sub_dict(edited)
+
+    # The lease holder's reconcile tick attempts the action and clears it.
+    async def request_action(self, sub_id: str, action: ManualAction) -> None:
+        if await self._sub_repo.get(sub_id) is None:
+            raise NotFoundError(f"Subscription '{sub_id}' not found.")
+        if await self._sub_repo.request_action(sub_id, action) == 0:
+            raise DomainError(
+                "an action is already pending", error_code="ACTION_PENDING", status_code=409
+            )
 
     async def remove_symbol(self, sub_id: str) -> int:
         return await self._sub_repo.delete(sub_id)

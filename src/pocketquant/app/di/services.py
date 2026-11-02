@@ -131,6 +131,7 @@ class ServicesProvider(Provider):
         bar_repository: BarRepository,
         calendar_factory: TradingCalendarFactory,
         trade_repository: TradeRepository,
+        cache: Cache,
     ) -> AsyncIterator[StrategyAppService]:
         engine = StrategyAppService(
             event_bus=event_bus,
@@ -147,6 +148,7 @@ class ServicesProvider(Provider):
             bar_repository=bar_repository,
             calendar_factory=calendar_factory,
             trade_repository=trade_repository,
+            cache=cache,
         )
         await engine.start()
         yield engine

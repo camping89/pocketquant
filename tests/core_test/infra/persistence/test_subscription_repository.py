@@ -211,3 +211,46 @@ async def test_update_desired_state_idempotent_reset_still_matches(repo):
     await repo.add(sub)
     assert await repo.update_desired_state(str(sub.id), "running") == 1
     assert await repo.update_desired_state(str(sub.id), "running") == 1
+
+
+@pytest.mark.asyncio
+async def test_request_action_sets_only_when_none(repo):
+    sub = _make_sub("probe", "BTCUSDT:BINANCE", Interval.MINUTE_5)
+    await repo.add(sub)
+
+    assert await repo.request_action(str(sub.id), "close") == 1
+    assert await repo.request_action(str(sub.id), "cancel") == 0
+
+    stored = await repo.get(str(sub.id))
+    assert stored is not None
+    assert stored.manual_action == "close"
+
+
+@pytest.mark.asyncio
+async def test_clear_action_clears_only_the_same_value(repo):
+    sub = _make_sub("probe", "BTCUSDT:BINANCE", Interval.MINUTE_5)
+    await repo.add(sub)
+    await repo.request_action(str(sub.id), "close")
+
+    assert await repo.clear_action(str(sub.id), "cancel", "accepted") == 0
+
+    stored = await repo.get(str(sub.id))
+    assert stored is not None
+    assert stored.manual_action == "close"
+
+
+@pytest.mark.asyncio
+async def test_clear_action_records_the_outcome(repo):
+    sub = _make_sub("probe", "BTCUSDT:BINANCE", Interval.MINUTE_5)
+    await repo.add(sub)
+    await repo.request_action(str(sub.id), "close")
+
+    assert await repo.clear_action(str(sub.id), "close", "rejected:close_failed") == 1
+
+    stored = await repo.get(str(sub.id))
+    assert stored is not None
+    assert stored.manual_action is None
+    assert stored.manual_action_outcome is not None
+    assert stored.manual_action_outcome["action"] == "close"
+    assert stored.manual_action_outcome["outcome"] == "rejected:close_failed"
+    assert isinstance(stored.manual_action_outcome["at"], datetime)

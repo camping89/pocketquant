@@ -11,6 +11,7 @@ from pocketquant.core.domain.shared.enums import Interval
 # Control-plane run-state: desired = what a human/handler wants, actual = the
 # reconcile loop's mirror of RAM truth. Two values only (YAGNI); widen later.
 RunState = Literal["running", "stopped"]
+ManualAction = Literal["close", "cancel"]
 BROKERS = ("paper", "exness")
 
 
@@ -39,6 +40,10 @@ class Subscription:
     actual_state: RunState = "stopped"
     broker: str = "paper"
     parameters: dict = field(default_factory=dict)
+    # A close or cancel the owner asked for, until the lease holder attempts it; the
+    # outcome of the last attempt is {action, outcome, at}.
+    manual_action: ManualAction | None = None
+    manual_action_outcome: dict | None = None
 
     def to_mongo(self) -> dict:
         return {
@@ -52,6 +57,8 @@ class Subscription:
             "desired_state": self.desired_state,
             "actual_state": self.actual_state,
             "broker": self.broker,
+            "manual_action": self.manual_action,
+            "manual_action_outcome": self.manual_action_outcome,
         }
 
     @classmethod
@@ -73,4 +80,6 @@ class Subscription:
             actual_state=doc.get("actual_state", "stopped"),
             broker=broker,
             parameters=dict(doc["parameters"]),
+            manual_action=doc.get("manual_action"),
+            manual_action_outcome=doc.get("manual_action_outcome"),
         )

@@ -22,6 +22,8 @@ class IStrategyService(ABC):
         self.id = config.id
         self._is_running = False
         self._open_direction: Direction | None = None
+        # {"readings": [...], "decision": {...}} for the bar just decided; the engine resets it.
+        self.snapshot: dict | None = None
 
     @property
     def is_running(self) -> bool:

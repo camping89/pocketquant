@@ -9,15 +9,23 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+import structlog
 
 from pocketquant.core.common.uuid import generate_id
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import RunState, Subscription
+from pocketquant.engine.live import strategy_reconcile_app_service as reconcile_module
 from pocketquant.engine.live.strategy_reconcile_app_service import (
     StrategyReconcileAppService,
 )
 
 pytestmark = pytest.mark.usefixtures("probe_registry")
+
+
+@pytest.fixture(autouse=True)
+def _fresh_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A module logger cached by an earlier test ignores capture_logs; rebind a fresh one.
+    monkeypatch.setattr(reconcile_module, "logger", structlog.get_logger("test.reconcile"))
 
 NOW = datetime(2026, 1, 5, 10, tzinfo=UTC)
 _STRATEGY = "probe"  # must be in STRATEGY_REGISTRY
@@ -60,6 +68,8 @@ class _FakeStrategyService:
         self.load_calls: list[str] = []
         self.unload_calls: list[str] = []
         self.start_raises_for: set[str] = set()
+        self.manual_outcome: str | None = "accepted"
+        self.manual_calls: list[tuple[str, str]] = []
 
     def load(self, sub: Subscription, running: bool) -> None:
         config = SimpleNamespace(
@@ -96,11 +106,16 @@ class _FakeStrategyService:
         if inst:
             inst._running = False
 
+    async def manual_action(self, sub_id: str, action: str) -> str | None:
+        self.manual_calls.append((sub_id, action))
+        return self.manual_outcome
+
 
 class _FakeSubRepo:
     def __init__(self, subs: list[Subscription]) -> None:
         self._subs: dict[str, Subscription] = {str(s.id): s for s in subs}
         self.actual_writes: list[tuple[str, str]] = []
+        self.cleared: list[tuple[str, str, str]] = []
 
     async def list_all(self) -> list[Subscription]:
         return list(self._subs.values())
@@ -108,6 +123,11 @@ class _FakeSubRepo:
     async def update_actual_state(self, sub_id: str, state: RunState) -> int:
         self.actual_writes.append((sub_id, state))
         self._subs[sub_id] = replace(self._subs[sub_id], actual_state=state)
+        return 1
+
+    async def clear_action(self, sub_id: str, action: str, outcome: str) -> int:
+        self.cleared.append((sub_id, action, outcome))
+        self._subs[sub_id] = replace(self._subs[sub_id], manual_action=None)
         return 1
 
 
@@ -362,3 +382,49 @@ async def test_a_running_subscription_is_never_reloaded() -> None:
 
     assert svc.unload_calls == []
     assert svc.load_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["accepted", "rejected:close_failed"])
+async def test_an_attempted_action_is_cleared_with_its_outcome(outcome: str) -> None:
+    sub = replace(_sub(desired="running", actual="running"), manual_action="close")
+    sid = str(sub.id)
+    svc = _FakeStrategyService()
+    svc.load(sub, running=True)
+    svc.manual_outcome = outcome
+    recon, sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.manual_calls == [(sid, "close")]
+    assert sub_repo.cleared == [(sid, "close", outcome)]
+
+
+@pytest.mark.asyncio
+async def test_a_queued_action_stays_for_the_next_tick() -> None:
+    sub = replace(_sub(desired="running", actual="running"), manual_action="cancel")
+    svc = _FakeStrategyService()
+    svc.load(sub, running=True)
+    svc.manual_outcome = None
+    recon, sub_repo = _service([sub], svc)
+
+    await recon._reconcile()
+
+    assert svc.manual_calls == [(str(sub.id), "cancel")]
+    assert sub_repo.cleared == []
+
+
+@pytest.mark.asyncio
+async def test_an_action_without_an_instance_is_cleared_with_a_warning() -> None:
+    sub = replace(_sub(strategy_code="no_such_template"), manual_action="close")
+    sid = str(sub.id)
+    svc = _FakeStrategyService()
+    recon, sub_repo = _service([sub], svc)
+
+    with structlog.testing.capture_logs() as logs:
+        await recon._reconcile()
+
+    assert svc.manual_calls == []
+    assert sub_repo.cleared == [(sid, "close", "rejected:not_loaded")]
+    dropped = [e for e in logs if e["event"] == "reconcile.manual_action_dropped"]
+    assert [e["log_level"] for e in dropped] == ["warning"]

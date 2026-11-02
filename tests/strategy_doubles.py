@@ -30,6 +30,8 @@ class ScriptedStrategy(IStrategyService):
             raise ValueError(f"min_bars must be >= 0, got {self.min_bars}")
         self.bars: list[dict] = []
         self.script: list[dict | None] | None = None if self.SCRIPT is None else list(self.SCRIPT)
+        # Per-bar snapshots, set on the loaded instance; None once used up.
+        self.snapshots: list[dict | None] | None = None
 
     async def on_start(self) -> None:
         await super().on_start()
@@ -38,6 +40,8 @@ class ScriptedStrategy(IStrategyService):
 
     async def on_bar_completed(self, bar: dict) -> Signal | None:
         self.bars.append(bar)
+        if self.snapshots is not None:
+            self.snapshot = self.snapshots.pop(0) if self.snapshots else None
         if self.script is not None:
             item = self.script.pop(0) if self.script else None
             if item is None:

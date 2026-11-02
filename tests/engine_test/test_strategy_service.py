@@ -8,6 +8,7 @@ import pytest
 
 from pocketquant.core.common.exceptions import DomainError, NotFoundError
 from pocketquant.core.common.uuid import UUID, generate_id
+from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
 from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.core.domain.shared.enums import Interval
@@ -82,12 +83,16 @@ def _query_svc(
     *,
     sub_repo: object | None = None,
     position_repo: object | None = None,
+    order_repo: object | None = None,
+    cache: object | None = None,
 ) -> StrategyQueryService:
     sub_repo = sub_repo or MagicMock()
-    position_repo = position_repo or MagicMock()
+    position_repo = position_repo or MagicMock(find_open=AsyncMock(return_value=[]))
     return StrategyQueryService(
         subscription_repository=sub_repo,
         position_repository=position_repo,
+        order_repository=order_repo or AsyncMock(),
+        cache=cache or MagicMock(mget=AsyncMock(side_effect=lambda keys: [None] * len(keys))),
     )
 
 
@@ -423,6 +428,85 @@ async def test_list_symbols_derives_is_running_from_actual_state(
     assert rows[0]["actual_state"] == actual_state
     assert rows[0]["intervals"] == ["1h", "4h"]
     assert rows[0]["parameters"] == {"min_bars": 2}
+
+
+@pytest.mark.asyncio
+async def test_list_symbols_adds_position_snapshot_and_action() -> None:
+    held = _stored_sub(
+        manual_action="close",
+        manual_action_outcome={"action": "cancel", "outcome": "accepted", "at": "t"},
+    )
+    idle = _stored_sub(intervals=(Interval.HOUR_4,))
+    sub_repo = MagicMock(list_all=AsyncMock(return_value=[held, idle]))
+    pos_repo = MagicMock(find_open=AsyncMock(return_value=[_open_position(str(held.id))]))
+    ring = [{"bar_start": "a"}, {"bar_start": "b"}]
+    cache = MagicMock(mget=AsyncMock(return_value=[ring, None]))
+    svc = _query_svc(sub_repo=sub_repo, position_repo=pos_repo, cache=cache)
+
+    first, second = await svc.list_symbols()
+
+    pos_repo.find_open.assert_awaited_once()
+    cache.mget.assert_awaited_once_with(
+        [f"strategy:snapshot:{held.id}", f"strategy:snapshot:{idle.id}"]
+    )
+    assert first["position"] == {
+        "direction": "LONG",
+        "entry_price": 100.0,
+        "quantity": 2.0,
+        "sl_price": 95.0,
+        "tp_price": 120.0,
+        "unrealized_pnl": 20.0,
+    }
+    assert first["snapshot"] == {"bar_start": "b"}
+    assert first["manual_action"] == "close"
+    assert first["manual_action_outcome"]["outcome"] == "accepted"
+    assert first["intervals"] == ["1h"]
+    assert (
+        second["position"],
+        second["snapshot"],
+        second["manual_action"],
+        second["manual_action_outcome"],
+    ) == (None, None, None, None)
+
+
+@pytest.mark.asyncio
+async def test_get_orders_maps_orders() -> None:
+    order = OrderAggregate.create(
+        subscription_id="sub-1",
+        symbol="BTCUSDT:BINANCE",
+        side=OrderSide.BUY,
+        order_type=OrderType.STOP_MARKET,
+        quantity=1.0,
+        stop_price=105.0,
+        sl_price=100.0,
+        tp_price=125.0,
+    )
+    order_repo = MagicMock(list_by_subscription=AsyncMock(return_value=[order]))
+    svc = _query_svc(order_repo=order_repo)
+
+    [row] = await svc.get_orders("sub-1", 50)
+
+    order_repo.list_by_subscription.assert_awaited_once_with("sub-1", 50)
+    assert set(row) == {
+        "id",
+        "side",
+        "order_type",
+        "status",
+        "quantity",
+        "price",
+        "stop_price",
+        "sl_price",
+        "tp_price",
+        "filled_price",
+        "created_at",
+        "updated_at",
+    }
+    assert (row["id"], row["side"], row["order_type"], row["stop_price"]) == (
+        str(order.id),
+        "buy",
+        "stop_market",
+        105.0,
+    )
 
 
 @pytest.mark.asyncio

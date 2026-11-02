@@ -24,6 +24,15 @@ class OrderRepository(SymbolScopedRepository):
         ).limit(limit)
         return [OrderAggregate.from_mongo(doc) async for doc in cursor]
 
+    async def list_by_subscription(self, subscription_id: str, limit: int) -> list[OrderAggregate]:
+        cursor = (
+            self._collection()
+            .find({"subscription_id": subscription_id})
+            .sort("created_at", -1)
+            .limit(limit)
+        )
+        return [OrderAggregate.from_mongo(doc) async for doc in cursor]
+
     async def ensure_indexes(self) -> None:
         collection = self._collection()
         await collection.create_index("subscription_id", name="ix_orders_subscription_id")

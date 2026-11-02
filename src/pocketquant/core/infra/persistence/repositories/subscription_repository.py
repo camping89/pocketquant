@@ -1,7 +1,9 @@
 from pymongo.errors import DuplicateKeyError
 
 from pocketquant.core.common.logging import get_logger
+from pocketquant.core.common.time import utc_now
 from pocketquant.core.domain.subscription import (
+    ManualAction,
     RunState,
     Subscription,
     SubscriptionAlreadyExistsError,
@@ -83,6 +85,31 @@ class SubscriptionRepository(BaseRepository):
         result = await collection.update_one({"_id": sub_id}, {"$set": {"actual_state": state}})
         logger.debug("subscription_actual_state_updated", sub_id=sub_id, state=state)
         return result.matched_count
+
+    # A missing field matches None, so documents written before the field existed need no
+    # migration.
+    async def request_action(self, sub_id: str, action: ManualAction) -> int:
+        result = await self._collection().update_one(
+            {"_id": sub_id, "manual_action": None}, {"$set": {"manual_action": action}}
+        )
+        return result.modified_count
+
+    # The filter on the attempted action leaves a different, newer request in place.
+    async def clear_action(self, sub_id: str, action: ManualAction, outcome: str) -> int:
+        result = await self._collection().update_one(
+            {"_id": sub_id, "manual_action": action},
+            {
+                "$set": {
+                    "manual_action": None,
+                    "manual_action_outcome": {
+                        "action": action,
+                        "outcome": outcome,
+                        "at": utc_now(),
+                    },
+                }
+            },
+        )
+        return result.modified_count
 
     async def delete(self, sub_id: str) -> int:
         collection = self._collection()

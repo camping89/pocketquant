@@ -1,10 +1,13 @@
 from typing import Literal
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field
 
+from pocketquant.app.middleware.admin_auth_middleware import require_admin_token
+from pocketquant.core.common.constants import CACHE_KEY_STRATEGY_SNAPSHOT
 from pocketquant.core.common.exceptions import NotFoundError
+from pocketquant.core.infra.persistence.redis import Cache
 from pocketquant.engine.live.live_metrics_query_service import LiveMetricsQueryService
 from pocketquant.engine.strategy.strategy_command_service import StrategyCommandService
 from pocketquant.engine.strategy.strategy_query_service import StrategyQueryService
@@ -67,7 +70,7 @@ subscription_router = APIRouter(
 )
 
 
-@subscription_router.get("/")
+@subscription_router.get("/", dependencies=[Depends(require_admin_token)])
 async def list_subscriptions(
     query_svc: FromDishka[StrategyQueryService],
     strategy_code: str | None = None,
@@ -102,7 +105,25 @@ async def stop_subscription(
     return {"subscription_id": sub_id, "status": "stopped"}
 
 
-@subscription_router.get("/{sub_id}/positions")
+@subscription_router.post("/{sub_id}/close", status_code=202)
+async def close_subscription(
+    sub_id: str,
+    cmd_svc: FromDishka[StrategyCommandService],
+) -> dict:
+    await cmd_svc.request_action(sub_id, "close")
+    return {"subscription_id": sub_id, "action": "close"}
+
+
+@subscription_router.post("/{sub_id}/cancel", status_code=202)
+async def cancel_subscription(
+    sub_id: str,
+    cmd_svc: FromDishka[StrategyCommandService],
+) -> dict:
+    await cmd_svc.request_action(sub_id, "cancel")
+    return {"subscription_id": sub_id, "action": "cancel"}
+
+
+@subscription_router.get("/{sub_id}/positions", dependencies=[Depends(require_admin_token)])
 async def get_subscription_positions(
     sub_id: str,
     query_svc: FromDishka[StrategyQueryService],
@@ -110,13 +131,31 @@ async def get_subscription_positions(
     return await query_svc.get_positions(sub_id)
 
 
-@subscription_router.get("/{sub_id}/trades")
+@subscription_router.get("/{sub_id}/trades", dependencies=[Depends(require_admin_token)])
 async def get_subscription_trades(
     sub_id: str,
     query_svc: FromDishka[StrategyQueryService],
     limit: int = Query(100, ge=1, le=500),
 ) -> list[dict]:
     return await query_svc.get_trades(sub_id, limit)
+
+
+# Oldest first; the engine writes the whole ring as one value.
+@subscription_router.get("/{sub_id}/snapshot", dependencies=[Depends(require_admin_token)])
+async def get_subscription_snapshot(
+    sub_id: str,
+    cache: FromDishka[Cache],
+) -> list[dict]:
+    return await cache.get(CACHE_KEY_STRATEGY_SNAPSHOT.format(subscription_id=sub_id)) or []
+
+
+@subscription_router.get("/{sub_id}/orders", dependencies=[Depends(require_admin_token)])
+async def get_subscription_orders(
+    sub_id: str,
+    query_svc: FromDishka[StrategyQueryService],
+    limit: int = Query(50, ge=1, le=200),
+) -> list[dict]:
+    return await query_svc.get_orders(sub_id, limit)
 
 
 @subscription_router.get("/{sub_id}/metrics")

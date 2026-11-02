@@ -95,3 +95,41 @@ async def test_the_template_serves_its_default_parameters(app_client):
     r = await app_client.get(f"/api/v1/strategies/{_STRATEGY_CODE}")
     assert r.status_code == 200, r.text
     assert r.json()["parameters"] == {"min_bars": 0}
+
+
+@pytest.mark.asyncio
+async def test_close_returns_202_then_409_while_pending(app_client):
+    sub_id = (await _create(app_client, ["15m"])).json()["id"]
+
+    first = await app_client.post(f"/api/v1/subscriptions/{sub_id}/close")
+    assert first.status_code == 202, first.text
+    assert first.json() == {"subscription_id": sub_id, "action": "close"}
+
+    second = await app_client.post(f"/api/v1/subscriptions/{sub_id}/cancel")
+    assert second.status_code == 409, second.text
+    assert second.json()["error"]["code"] == "ACTION_PENDING"
+
+
+@pytest.mark.asyncio
+async def test_cancel_on_a_missing_subscription_is_404(app_client):
+    r = await app_client.post("/api/v1/subscriptions/no-such-id/cancel")
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_snapshot_is_an_empty_list_before_any_bar(app_client):
+    sub_id = (await _create(app_client, ["15m"])).json()["id"]
+
+    r = await app_client.get(f"/api/v1/subscriptions/{sub_id}/snapshot")
+
+    assert r.status_code == 200, r.text
+    assert r.json() == []
+
+
+@pytest.mark.asyncio
+async def test_orders_limit_is_bounded(app_client):
+    sub_id = (await _create(app_client, ["15m"])).json()["id"]
+
+    assert (await app_client.get(f"/api/v1/subscriptions/{sub_id}/orders")).json() == []
+    r = await app_client.get(f"/api/v1/subscriptions/{sub_id}/orders?limit=0")
+    assert r.status_code == 422, r.text

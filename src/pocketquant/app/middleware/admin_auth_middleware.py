@@ -18,7 +18,16 @@ async def verify_admin_token(
 ) -> None:
     if request.method in _SAFE_METHODS:
         return
+    _check_token(x_admin_token)
 
+
+# Reads that expose positions, orders and strategy state need the token too; none of them
+# is an EventSource stream.
+async def require_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
+    _check_token(x_admin_token)
+
+
+def _check_token(x_admin_token: str | None) -> None:
     settings = get_settings()
     expected_secret = settings.admin_token
 

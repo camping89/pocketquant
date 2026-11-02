@@ -90,6 +90,23 @@ class StrategyReconcileAppService:
             # of this tick. start/stop already lock + early-return on no-op.
             try:
                 observed = await self._converge_one(sub_id, sub.desired_state)
+                # Applied by the lease holder only. Every attempt clears the action and records
+                # its outcome; the owner retries. It stays queued only while this trader cannot
+                # act yet.
+                if sub.manual_action is not None:
+                    if self._strategy_service.get_strategy(sub_id) is None:
+                        outcome: str | None = "rejected:not_loaded"
+                        logger.warning(
+                            "reconcile.manual_action_dropped",
+                            sub_id=sub_id,
+                            action=sub.manual_action,
+                        )
+                    else:
+                        outcome = await self._strategy_service.manual_action(
+                            sub_id, sub.manual_action
+                        )
+                    if outcome is not None:
+                        await self._sub_repo.clear_action(sub_id, sub.manual_action, outcome)
             except Exception as exc:
                 logger.error("reconcile.sub_failed", sub_id=sub_id, error=str(exc))
                 continue
