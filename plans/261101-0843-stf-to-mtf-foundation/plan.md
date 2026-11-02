@@ -103,7 +103,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 05 | [Delete STF code, tests, docs, web comments; shared test doubles](./phase-05-delete-stf-code.md) | none (CI) | 04 | Complete |
 | 06 | [Subscription contract: intervals, parameters, edit, defaults, reload](./phase-06-subscription-contract.md) | none (CI) | 05 | Complete |
 | 07 | [Higher-timeframe context: live and warm-up](./phase-07-htf-context-live-and-warmup.md) | none (CI) | 06 | Complete |
-| 08 | [Backtest intervals, real sandbox wiring, backtest-path context test](./phase-08-backtest-intervals-backend.md) | none (CI) | 07 | Pending |
+| 08 | [Backtest intervals, real sandbox wiring, backtest-path context test](./phase-08-backtest-intervals-backend.md) | none (CI) | 07 | Completed |
 | 09 | [Capabilities in paper: stop entry, EXIT, risk, order SL/TP persistence, restore; architecture doc](./phase-09-capabilities-in-paper.md) | none (CI) | 08 | Pending |
 | 10 | [Exness close, pending stop and cancel; only exposure ops behind the live flag](./phase-10-exness-close-pending-cancel.md) | none (CI) | 09 | Pending |
 | 11 | [Snapshot ring, manual actions, read endpoints](./phase-11-snapshot-manual-actions-endpoints.md) | none (CI) | 10 | Pending |

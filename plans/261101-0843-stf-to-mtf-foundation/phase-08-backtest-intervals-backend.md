@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Backtest intervals, real sandbox wiring, backtest-path context test"
-status: pending
+status: completed
 priority: P1
 effort: 0.75d
 dependencies: [7]
