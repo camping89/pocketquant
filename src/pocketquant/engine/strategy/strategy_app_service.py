@@ -368,7 +368,8 @@ class StrategyAppService:
             # Cached bars are oldest first, so when the newest is closed at the instant all are
             # (live and backtest); warm-up replays earlier instants and filters.
             if closed_before(cached[-1:], step, instant):
-                out[n] = list(cached)
+                # Strategies must never mutate a context list, because it is the shared cache.
+                out[n] = cached
             else:
                 out[n] = closed_before(cached, step, instant)
         return out
