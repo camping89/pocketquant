@@ -69,7 +69,7 @@ indexes=_id_,ix_subscriptions_strategy_code
 
 Pre-push LIVECHK: `trader_live=False`.
 
-- `d2_pushed_at=2026-11-02T08:43:47Z`
+d2_pushed_at=2026-11-02T08:43:47Z
 - Push printed `released` (origin/master = origin/develop = 36e435858597fd7e5d549e8b1d2d11ea75599772).
 - Master run id `41415187720`.
 - Master run `41415187720`: `completed success 36e435858597fd7e5d549e8b1d2d11ea75599772` (equals origin/develop).
