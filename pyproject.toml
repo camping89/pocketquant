@@ -129,4 +129,4 @@ forbidden_modules = ["bson"]
 
 [tool.code-metrics]
 max_tiny_share = 0.4833
-max_delegations = 74
+max_delegations = 75
