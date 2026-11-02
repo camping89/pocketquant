@@ -64,7 +64,8 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 from datetime import UTC, datetime, timedelta
 D1 = datetime.fromisoformat("<D1_ISO>".replace("Z", "+00:00"))
 syms = sorted(d["symbol"] for d in db.tracked_symbols.find({"symbol": {"$regex": ":EXNESS$"}}, {"symbol": 1}))
-first_day = (D1 + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+# The deploy day counts: the cascade re-aggregates the whole UTC day from 1m bars, so its bar is complete once the day closes.
+first_day = D1.replace(hour=0, minute=0, second=0, microsecond=0)
 today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 days = non_cascade = late = 0
 for sym in syms:
@@ -81,7 +82,8 @@ for sym in syms:
 repair_1d = db.bars.count_documents({"interval": "1d", "source": "rest_repair", "created_at": {"$gt": D1}})
 print(f"symbols={len(syms)} days={days} non_cascade={non_cascade} late={late} repair_1d={repair_1d}")
 ```
-2. Any non-zero of `non_cascade`, `late`, `repair_1d`, or `days=0`: [ASK] (intent) "the 1d cascade check found <line>; release anyway?" `Recommended: no`, reason: the one-week comparison would start from a broken cascade. A non-yes ends with `NOT_YET`.
+2. Owner decision 2026-11-02: the D-1 deploy day counts as the first checked day (it was `days=0` before this fix). <!-- Updated 2026-11-02 after the Task 15.1 stop -->
+3. Any non-zero of `non_cascade`, `late`, `repair_1d`, or `days=0`: [ASK] (intent) "the 1d cascade check found <line>; release anyway?" `Recommended: no`, reason: the one-week comparison would start from a broken cascade. A non-yes ends with `NOT_YET`.
 
 **Success criteria:** the last line ends `non_cascade=0 late=0 repair_1d=0` with `days` above 0.
 
