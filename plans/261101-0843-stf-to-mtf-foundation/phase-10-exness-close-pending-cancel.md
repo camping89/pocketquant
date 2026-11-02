@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Exness close, pending stop and cancel; only exposure ops behind the live flag"
-status: pending
+status: completed
 priority: P2
 effort: 1d
 dependencies: [9]

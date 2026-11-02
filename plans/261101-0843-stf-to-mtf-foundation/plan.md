@@ -105,7 +105,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 07 | [Higher-timeframe context: live and warm-up](./phase-07-htf-context-live-and-warmup.md) | none (CI) | 06 | Complete |
 | 08 | [Backtest intervals, real sandbox wiring, backtest-path context test](./phase-08-backtest-intervals-backend.md) | none (CI) | 07 | Completed |
 | 09 | [Capabilities in paper: stop entry, EXIT, risk, order SL/TP persistence, restore; architecture doc](./phase-09-capabilities-in-paper.md) | none (CI) | 08 | Completed |
-| 10 | [Exness close, pending stop and cancel; only exposure ops behind the live flag](./phase-10-exness-close-pending-cancel.md) | none (CI) | 09 | Pending |
+| 10 | [Exness close, pending stop and cancel; only exposure ops behind the live flag](./phase-10-exness-close-pending-cancel.md) | none (CI) | 09 | Completed |
 | 11 | [Snapshot ring, manual actions, read endpoints](./phase-11-snapshot-manual-actions-endpoints.md) | none (CI) | 10 | Pending |
 | 12 | [Backtest UI: intervals, defaults, labels](./phase-12-backtest-ui.md) | none (CI) | 08 | Pending |
 | 13 | [Generic subscription UI: form, row, drawer, actions](./phase-13-subscription-ui.md) | none (CI) | 11, 12 | Pending |
