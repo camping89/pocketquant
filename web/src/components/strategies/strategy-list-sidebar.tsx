@@ -1,17 +1,22 @@
 import { useState, useMemo } from 'react'
 import { StrategyCard } from './strategy-card'
-import { NewSubscriptionDialog } from './new-subscription-dialog'
+import { SubscriptionFormDialog } from './subscription-form-dialog'
+import { errorText } from '../../lib/subscription-view'
 import type { Subscription } from '../../api/strategy-api'
 
 interface StrategyListSidebarProps {
   subs: Subscription[]
   isLoading: boolean
+  error: unknown
   selectedSubId: string | null
   onSelect: (sub: Subscription) => void
 }
 
-export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }: StrategyListSidebarProps) {
+export function StrategyListSidebar({ subs, isLoading, error, selectedSubId, onSelect }: StrategyListSidebarProps) {
   const [showDialog, setShowDialog] = useState(false)
+  // Only the id: the form reads the row from the polled list, so its stopped check stays current.
+  const [editId, setEditId] = useState<string | null>(null)
+  const editSub = subs.find((s) => s.id === editId)
   const [filter, setFilter] = useState('')
 
   const filtered = useMemo(() => {
@@ -21,7 +26,7 @@ export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }
       (s) =>
         s.symbol.toLowerCase().includes(lc) ||
         s.strategy_code.toLowerCase().includes(lc) ||
-        s.interval.toLowerCase().includes(lc),
+        s.intervals.join(' ').toLowerCase().includes(lc),
     )
   }, [subs, filter])
 
@@ -32,7 +37,6 @@ export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }
         flexDirection: 'column',
         height: '100%',
         background: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border-color)',
         overflow: 'hidden',
       }}
     >
@@ -52,7 +56,7 @@ export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }
         <button type="button"
           className="btn-sm"
           onClick={() => setShowDialog(true)}
-          title="Creates a paper subscription"
+          title="New subscription"
           style={{ padding: '2px 10px', fontSize: 11 }}
         >
           + New
@@ -78,13 +82,15 @@ export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
+        {error != null && <div className="drawer-error" style={{ margin: 8 }}>{errorText(error)}</div>}
+
         {isLoading && (
           <div style={{ padding: '12px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
             Loading…
           </div>
         )}
 
-        {!isLoading && subs.length === 0 && (
+        {!isLoading && error == null && subs.length === 0 && (
           <div style={{ padding: '12px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
             No subscriptions yet. Click + New to add one.
           </div>
@@ -101,7 +107,8 @@ export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }
             key={sub.id}
             sub={sub}
             selected={sub.id === selectedSubId}
-            onClick={() => onSelect(sub)}
+            onOpen={() => onSelect(sub)}
+            onEdit={() => setEditId(sub.id)}
           />
         ))}
       </div>
@@ -120,7 +127,8 @@ export function StrategyListSidebar({ subs, isLoading, selectedSubId, onSelect }
         </div>
       )}
 
-      {showDialog && <NewSubscriptionDialog onClose={() => setShowDialog(false)} />}
+      {showDialog && <SubscriptionFormDialog onClose={() => setShowDialog(false)} />}
+      {editSub && <SubscriptionFormDialog sub={editSub} onClose={() => setEditId(null)} />}
     </div>
   )
 }

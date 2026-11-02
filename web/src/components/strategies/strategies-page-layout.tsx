@@ -1,236 +1,42 @@
-import { useState, useMemo } from 'react'
+import { useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ExnessStrip } from './exness-strip'
 import { StrategyListSidebar } from './strategy-list-sidebar'
-import { StrategyConfigCard } from './strategy-config-card'
-import { DashboardColumn } from './dashboard-column'
-import { StrategyChart } from './strategy-chart'
-import { IndicatorToggles } from '../controls/indicator-toggles'
-import { useStrategyTrades } from '../../hooks/use-strategy-trades'
-import { useOpenPosition } from '../../hooks/use-open-position'
+import { SubscriptionDrawer } from './subscription-drawer'
 import { listSubscriptions, type Subscription } from '../../api/strategy-api'
-import type { Interval, IndicatorConfig } from '../../types/market-data'
-import type { Trade, OpenPosition as ChartOpenPosition } from '../../types/strategy'
-
-type MobileTab = 'list' | 'config' | 'dashboard'
-
-const MOBILE_TABS: { key: MobileTab; label: string }[] = [
-  { key: 'list', label: 'List' },
-  { key: 'config', label: 'Config' },
-  { key: 'dashboard', label: 'Dashboard' },
-]
-
-const INDICATORS_STORAGE_KEY = 'strategies.indicators'
-
-const DEFAULT_INDICATORS: IndicatorConfig = {
-  sma: false,
-  ema: true,
-  rsi: false,
-  macd: false,
-  bollinger: false,
-  engulfing: true,
-}
-
-function readStoredIndicators(): IndicatorConfig {
-  try {
-    const raw = localStorage.getItem(INDICATORS_STORAGE_KEY)
-    if (raw) return { ...DEFAULT_INDICATORS, ...JSON.parse(raw) }
-  } catch { /* fall through to default */ }
-  return DEFAULT_INDICATORS
-}
 
 export function StrategiesPageLayout() {
   // Keep only the id: the selected row is read from the polled list on every
-  // render, so the config card follows Start/Stop without re-selecting.
+  // render, so the drawer follows Start/Stop without re-selecting.
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const { data: subs = [], isLoading: subsLoading } = useQuery({
+  const { data: subs = [], isLoading: subsLoading, error } = useQuery({
     queryKey: ['subscriptions'],
     queryFn: () => listSubscriptions(),
     staleTime: 10_000,
     refetchInterval: 5_000,
   })
   const selectedSub = subs.find((s) => s.id === selectedId) ?? null
-  const [mobileTab, setMobileTab] = useState<MobileTab>('list')
-  const [indicators, setIndicators] = useState<IndicatorConfig>(readStoredIndicators)
-
-  function handleIndicatorsChange(next: IndicatorConfig) {
-    setIndicators(next)
-    try { localStorage.setItem(INDICATORS_STORAGE_KEY, JSON.stringify(next)) } catch { /* swallow */ }
-  }
-
-  const { data: rawTrades = [] } = useStrategyTrades(selectedSub?.id ?? null)
-  const { data: apiPosition = null } = useOpenPosition(selectedSub?.id ?? null)
-
-  // TODO(backend): once the /trades endpoint returns the Trade shape directly, drop this
-  // adapter and type rawTrades as Trade[].
-  const trades = useMemo<Trade[]>(() => {
-    const result: Trade[] = []
-    for (const t of rawTrades) {
-      result.push({
-        timestamp: t.entry_time,
-        side: t.direction.toLowerCase() as 'long' | 'short',
-        is_entry: true,
-        qty: t.quantity,
-        price: t.entry_price,
-      })
-      if (t.exit_time && t.exit_price != null) {
-        result.push({
-          timestamp: t.exit_time,
-          side: t.direction.toLowerCase() as 'long' | 'short',
-          is_entry: false,
-          qty: t.quantity,
-          price: t.exit_price,
-        })
-      }
-    }
-    return result
-  }, [rawTrades])
-
-  const openPos = useMemo<ChartOpenPosition | null>(() => {
-    if (!apiPosition) return null
-    return {
-      side: apiPosition.direction.toLowerCase() as 'long' | 'short',
-      entry_price: apiPosition.entry_price,
-      liq_price: apiPosition.liq_price ?? null,
-      leverage: apiPosition.leverage ?? 1,
-      qty: apiPosition.quantity,
-    }
-  }, [apiPosition])
+  const closeDrawer = useCallback(() => setSelectedId(null), [])
 
   function handleSelectSub(sub: Subscription) {
     setSelectedId((prev) => (prev === sub.id ? null : sub.id))
-    setMobileTab('config')
   }
-
-  const emptyCenter = (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--text-secondary)',
-        fontSize: 13,
-      }}
-    >
-      Select a subscription from the list.
-    </div>
-  )
 
   return (
     <div className="strategies-page">
       <ExnessStrip />
 
-      <div className="strategies-layout">
-        <div className="strategies-sidebar">
-          <StrategyListSidebar
-            subs={subs}
-            isLoading={subsLoading}
-            selectedSubId={selectedId}
-            onSelect={handleSelectSub}
-          />
-        </div>
-
-        <main className="strategies-main">
-          {selectedSub ? (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              {/* Embedded chart — locked to subscription's symbol + interval */}
-              <div style={{ padding: '8px 16px 0', flexShrink: 0 }}>
-                <IndicatorToggles value={indicators} onChange={handleIndicatorsChange} />
-              </div>
-              <div style={{ height: 400, flexShrink: 0 }}>
-                <StrategyChart
-                  symbol={selectedSub.symbol}
-                  interval={selectedSub.interval as Interval}
-                  trades={trades}
-                  openPosition={openPos}
-                  indicators={indicators}
-                />
-              </div>
-              <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
-                <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedId(null)} />
-              </div>
-            </div>
-          ) : (
-            emptyCenter
-          )}
-        </main>
-
-        <div className="strategies-dashboard">
-          {selectedSub ? (
-            <DashboardColumn sub={selectedSub} />
-          ) : (
-            <div
-              style={{
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-secondary)',
-                fontSize: 12,
-                borderLeft: '1px solid var(--border-color)',
-              }}
-            >
-              No subscription selected.
-            </div>
-          )}
-        </div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <StrategyListSidebar
+          subs={subs}
+          isLoading={subsLoading}
+          error={error}
+          selectedSubId={selectedId}
+          onSelect={handleSelectSub}
+        />
       </div>
 
-      <div className="strategies-mobile">
-        <div className="strategies-mobile__tabs">
-          {MOBILE_TABS.map(({ key, label }) => (
-            <button type="button"
-              key={key}
-              className={`strategies-mobile__tab${mobileTab === key ? ' strategies-mobile__tab--active' : ''}`}
-              onClick={() => setMobileTab(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="strategies-mobile__pane">
-          {mobileTab === 'list' && (
-            <StrategyListSidebar
-              subs={subs}
-              isLoading={subsLoading}
-              selectedSubId={selectedId}
-              onSelect={handleSelectSub}
-            />
-          )}
-          {mobileTab === 'config' && (
-            selectedSub ? (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '8px 16px 0' }}>
-                  <IndicatorToggles value={indicators} onChange={handleIndicatorsChange} />
-                </div>
-                <div style={{ height: 300 }}>
-                  <StrategyChart
-                    symbol={selectedSub.symbol}
-                    interval={selectedSub.interval as Interval}
-                    trades={trades}
-                    openPosition={openPos}
-                    indicators={indicators}
-                  />
-                </div>
-                <div style={{ padding: 16 }}>
-                  <StrategyConfigCard sub={selectedSub} onDeleted={() => setSelectedId(null)} />
-                </div>
-              </div>
-            ) : emptyCenter
-          )}
-          {mobileTab === 'dashboard' && (
-            selectedSub ? (
-              <DashboardColumn sub={selectedSub} />
-            ) : (
-              <div style={{ padding: 16, color: 'var(--text-secondary)', fontSize: 13 }}>
-                No subscription selected.
-              </div>
-            )
-          )}
-        </div>
-      </div>
+      {selectedSub && <SubscriptionDrawer key={selectedSub.id} sub={selectedSub} onClose={closeDrawer} />}
     </div>
   )
 }

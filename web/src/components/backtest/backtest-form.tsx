@@ -6,6 +6,8 @@ import { useStrategyDefaults } from '../../hooks/use-strategies'
 import { useTimezone } from '../../lib/use-timezone'
 import { SymbolSelector } from '../controls/symbol-selector'
 import { IntervalMultiSelect } from '../controls/interval-multi-select'
+import { ParamsEditor } from '../controls/params-editor'
+import { parseParameters } from '../../lib/subscription-view'
 import type { RunBacktestBody } from '../../api/backtest-api'
 
 dayjs.extend(utc) // idempotent — also extended in datetime.ts
@@ -81,15 +83,8 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
     if (!startDate || !endDate) { setErrorMsg('Start and end datetimes are required.'); return }
     if (startDate > endDate) { setErrorMsg('Start must be on or before end.'); return }
 
-    let parameters: Record<string, unknown> | undefined
-    if (paramsText.trim()) {
-      try {
-        parameters = JSON.parse(paramsText)
-      } catch {
-        setErrorMsg('Parameters must be valid JSON.')
-        return
-      }
-    }
+    const parsed = parseParameters(paramsText)
+    if ('error' in parsed) { setErrorMsg(parsed.error); return }
 
     onSubmit({
       strategy_id: effectiveStrategy,
@@ -98,7 +93,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
       intervals,
       start_date: toUtcSubmit(startDate),
       end_date: toUtcSubmit(endDate),
-      parameters,
+      parameters: parsed.value,
     })
   }
 
@@ -151,13 +146,8 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
       </div>
 
       <div>
-        <label style={labelStyle}>Parameters (JSON, optional)</label>
-        <textarea
-          style={{ ...inputStyle, fontFamily: 'monospace', minHeight: 60, resize: 'vertical' }}
-          placeholder='{}'
-          value={paramsText}
-          onChange={(e) => setParamsText(e.target.value)}
-        />
+        <label style={labelStyle}>Parameters</label>
+        <ParamsEditor defaults={defaults.data ?? {}} text={paramsText} onChange={setParamsText} />
       </div>
 
       {errorMsg && (

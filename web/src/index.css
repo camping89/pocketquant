@@ -1631,14 +1631,6 @@ input, select {
   min-height: 0;
 }
 
-/* Desktop 3-pane grid — always visible on md+ */
-.strategies-layout {
-  display: none;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
 /* Mobile single-pane tab layout */
 .strategies-mobile {
   display: flex;
@@ -1685,35 +1677,9 @@ input, select {
 }
 
 @media (min-width: 768px) {
-  .strategies-layout {
-    display: grid;
-    grid-template-columns: 240px 1fr 360px;
-    grid-template-rows: 1fr;
-  }
-
   .strategies-mobile {
     display: none;
   }
-}
-
-.strategies-sidebar {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.strategies-main {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-  border-left: 1px solid var(--border-color);
-}
-
-.strategies-dashboard {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 /* ===== Backtest Workbench (master-detail) ===== */

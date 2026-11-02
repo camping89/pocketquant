@@ -34,3 +34,15 @@ describe('moneyHint', () => {
     }
   })
 })
+
+describe('moneyHint for manual actions', () => {
+  it('marks an exness close as real money', () => {
+    const hint = moneyHint('exness', 'close')
+    expect(hint.real).toBe(true)
+    expect(hint.title.startsWith('Real money')).toBe(true)
+  })
+
+  it('marks a paper cancel as paper', () => {
+    expect(moneyHint('paper', 'cancel').chip).toBe('Paper')
+  })
+})

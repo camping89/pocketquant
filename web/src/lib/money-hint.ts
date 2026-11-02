@@ -2,7 +2,7 @@
 // chip says the same thing about whether an action touches real money.
 
 export type Broker = 'paper' | 'exness'
-export type MoneyAction = 'start' | 'stop' | 'delete' | 'pause' | 'resume'
+export type MoneyAction = 'start' | 'stop' | 'delete' | 'pause' | 'resume' | 'close' | 'cancel'
 
 export interface MoneyHint {
   real: boolean
@@ -16,6 +16,8 @@ const REAL_TITLES: Record<MoneyAction, string> = {
   start: 'Real money: starts real orders on Exness',
   stop: 'Real money: stops new signals; open position stays with venue SL/TP',
   delete: 'Real money: deletes this Exness subscription (stop it first)',
+  close: 'Real money: closes the Exness position at market and cancels its pending order',
+  cancel: 'Real money: cancels the pending Exness order',
 }
 
 const PAPER_TITLE = 'Paper only, no real orders'

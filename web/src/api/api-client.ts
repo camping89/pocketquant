@@ -34,22 +34,33 @@ async function toApiError(res: Response): Promise<ApiError> {
 
 const TOKEN_KEY = 'pq.adminToken'
 
-// Mutations carry X-Admin-Token from localStorage. The token is never baked in
-// at build time: a VITE_* value would ship in the bundle. A 401 prompts once,
-// stores the answer and retries once.
-async function send(path: string, init: RequestInit): Promise<Response> {
-  const attempt = () => {
+// Set when the owner dismisses the prompt on a read; reset only by a page reload.
+let readPromptDeclined = false
+
+// Mutations and the guarded reads carry X-Admin-Token from localStorage. The token
+// is never baked in at build time: a VITE_* value would ship in the bundle. A 401
+// retries once: silently when another request stored a newer token meanwhile,
+// otherwise after one prompt. A declined prompt is not repeated by polled reads.
+async function send(path: string, init: RequestInit, read = false): Promise<Response> {
+  const attempt = (token: string | null) => {
     const headers = new Headers(init.headers)
-    const token = localStorage.getItem(TOKEN_KEY)
     if (token) headers.set('X-Admin-Token', token)
     return fetch(new URL(path, window.location.origin), { ...init, headers })
   }
-  let res = await attempt()
+  const sent = localStorage.getItem(TOKEN_KEY)
+  let res = await attempt(sent)
   if (res.status === 401) {
-    const answer = window.prompt('Admin token')
-    if (answer) {
-      localStorage.setItem(TOKEN_KEY, answer)
-      res = await attempt()
+    const stored = localStorage.getItem(TOKEN_KEY)
+    if (stored && stored !== sent) {
+      res = await attempt(stored)
+    } else if (!(read && readPromptDeclined)) {
+      const answer = window.prompt('Admin token')
+      if (answer) {
+        localStorage.setItem(TOKEN_KEY, answer)
+        res = await attempt(answer)
+      } else if (read) {
+        readPromptDeclined = true
+      }
     }
   }
   if (!res.ok) throw await toApiError(res)
@@ -78,14 +89,23 @@ export async function apiDelete(path: string): Promise<void> {
   await send(path, { method: 'DELETE' })
 }
 
-export async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
+function buildUrl(path: string, params?: Record<string, string>): string {
   const url = new URL(path, window.location.origin)
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== '') url.searchParams.set(k, v)
     }
   }
-  const res = await fetch(url)
+  return url.toString()
+}
+
+export async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const res = await fetch(buildUrl(path, params))
   if (!res.ok) throw await toApiError(res)
+  return res.json()
+}
+
+export async function apiFetchAdmin<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const res = await send(buildUrl(path, params), { method: 'GET' }, true)
   return res.json()
 }

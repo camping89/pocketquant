@@ -7,7 +7,7 @@ interface StartStopButtonProps {
   onStart: () => void
   onStop: () => void
   broker: Broker
-  // "<code> · <interval>"
+  // "<code> · <intervals>"
   label: string
   disabled?: boolean
 }

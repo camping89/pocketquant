@@ -1,19 +1,25 @@
 import { useQuery } from '@tanstack/react-query'
-import type { StrategyTrade } from '../components/strategies/recent-trades-table'
+import { apiFetchAdmin } from '../api/api-client'
 import type { Trade } from '../types/strategy'
 
 export type { Trade }
 
-async function fetchSubscriptionTrades(subId: string): Promise<StrategyTrade[]> {
-  const res = await fetch(`/api/v1/subscriptions/${subId}/trades`)
-  if (!res.ok) throw new Error(`Trades fetch failed: ${res.status}`)
-  return res.json() as Promise<StrategyTrade[]>
+// A closed position: the backend's completed trade.
+export interface StrategyTrade {
+  id: string
+  direction: 'LONG' | 'SHORT'
+  entry_price: number
+  exit_price: number | null
+  entry_time: string
+  exit_time: string | null
+  pnl: number
+  quantity: number
 }
 
 export function useStrategyTrades(subId: string | null) {
   return useQuery({
     queryKey: ['subscription-trades', subId],
-    queryFn: () => fetchSubscriptionTrades(subId!),
+    queryFn: () => apiFetchAdmin<StrategyTrade[]>(`/api/v1/subscriptions/${subId}/trades`),
     enabled: !!subId,
     staleTime: 10_000,
     refetchInterval: 15_000,

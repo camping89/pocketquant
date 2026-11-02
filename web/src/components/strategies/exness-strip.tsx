@@ -1,22 +1,11 @@
-// The query and both mutations live here because this is their only caller.
+// The pause and resume mutations live here because this is their only caller.
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, apiPost } from '../../api/api-client'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiPost } from '../../api/api-client'
+import { SAFEGUARDS_KEY, useSafeguards, type Safeguards } from '../../hooks/use-safeguards'
 import { moneyHint } from '../../lib/money-hint'
 import { ConfirmDialog } from './start-stop-button'
 
-// Mirrors GET /admin/safeguards: the env caps plus the trader's stored live flag and
-// the entry pause.
-interface Safeguards {
-  live_trading: boolean
-  daily_loss_cap: number | null
-  max_lots: number | null
-  leverage: number
-  risk_per_trade: number
-  entries_paused: boolean
-}
-
-const SAFEGUARDS_KEY = ['safeguards']
 const PAUSE_HINT = moneyHint('exness', 'pause')
 const RESUME_HINT = moneyHint('exness', 'resume')
 
@@ -24,11 +13,7 @@ export function ExnessStrip() {
   const qc = useQueryClient()
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const query = useQuery({
-    queryKey: SAFEGUARDS_KEY,
-    queryFn: () => apiFetch<Safeguards>('/api/v1/admin/safeguards'),
-    refetchInterval: 5_000,
-  })
+  const query = useSafeguards()
   const onSuccess = () => qc.invalidateQueries({ queryKey: SAFEGUARDS_KEY })
   const pauseMut = useMutation({
     mutationFn: () => apiPost<Safeguards>('/api/v1/admin/safeguards/pause', {}),
