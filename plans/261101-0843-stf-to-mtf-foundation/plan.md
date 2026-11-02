@@ -44,6 +44,9 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | D8 | The new reads (`GET /subscriptions/{id}/snapshot`, `GET /subscriptions/{id}/orders`, the enriched subscription list) and the existing positions and trades reads require the admin token; the web sends the token on these reads. |
 | D9 | No freshness column in the subscription row. |
 | D10 | Backtest context cost (spike S4, asked 2026-11-01): a backtest loads each higher interval from Mongo once for the run and slices it in memory, as warm-up does, and keeps the bound `t_mtf_s <= 2 * t_stf_s`. Phase 08 Task 08.3 builds and tests it. The live path is unchanged. Amended 2026-11-02 after CI run 41332031144 measured 2.03x on one runner (owner answer "1+2"): CI asserts only one Mongo read per higher interval; the time ratio is measured locally and recorded in each phase report, not a CI gate; and the context lists are handed to strategies without a per-bar copy, so a strategy must never mutate them. |
+| D13 | Phase 17 observations close on existing prod evidence plus tests, never on synthetic data (owner, 2026-11-03). obs-2 accepts a strategy EXIT trade from any of the three Triple Screen paper subscriptions; with none, it is `obs-2 SKIPPED by owner` and A7 cites the EXIT tests. obs-3 takes `requested_at` from the subscription's `manual_action_outcome` time. obs-4 is asked only when a stop rests and the session is open; otherwise it is `obs-4 SKIPPED by owner` and A7 cites the cancel tests. |
+| D14 | Task 17.2 runs on the day of the close (owner, 2026-11-03): compare the latest 14 stored days ending at the current UTC midnight, before the 03:00 UTC backfill. The pass rule is unchanged. A6 is met on that output. No dated re-check. |
+| D15 | Task 17.2b (owner, 2026-11-03): a read-only review of the live 1d cascade path, written into the phase report. A finding that the 1d bar can go wrong in future stops the run for the owner; Phase 17 never patches code. |
 
 ## Design verdicts (from the synthesis; do not re-decide in a phase)
 
@@ -63,7 +66,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 - **Backtest results** keep the top-level `interval` = entry interval, so the existing index and rail filter stay.
 - **Compare view** keeps its cap of 3.
 - **Prod migration**: before the D-2 push, one idempotent script, re-run before every push attempt, adds `intervals`, `intervals_key` and `parameters` (written as `{"$literal": {}}` inside the update pipeline) to legacy subscriptions and drops `ix_subscriptions_dedup_triple`. Legacy backtest runs are not migrated (all are STF and Phase 17 deletes them). The rollback drops `ix_subscriptions_dedup_intervals`. No compatibility code and no index-drop code in `src`.
-- **1d comparison**: after one week, compare the stored cascaded 1d bars with bars fetched fresh from Exness (`ExnessAdapter.fetch_ohlcv`), because the cascade overwrites the stored REST bar.
+- **1d comparison**: compare the stored cascaded 1d bars with bars fetched fresh from Exness (`ExnessAdapter.fetch_ohlcv`), because the cascade overwrites the stored REST bar. D14 sets the window to the latest 14 stored days, on the day of the close.
 
 ## Conventions (every phase follows these)
 
@@ -112,7 +115,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 14 | [Triple Screen strategy and tests](./phase-14-triple-screen.md) | none (CI) | 09, 11 | Completed |
 | 15 | [D-2 release: prod migration, index drop, deploy, post-checks](./phase-15-release-d2.md) | D-2 [ASK] | 03-14 | Completed |
 | 16 | [Prod backtests, pick the live set, start one paper subscription](./phase-16-backtests-and-paper-start.md) | none | 15 | Completed |
-| 17 | [Observe; one-week 1d comparison; prod STF delete; close](./phase-17-observe-compare-delete.md) | none | 16, D-1 + 7 days | Pending |
+| 17 | [Observe; 1d comparison and review; prod STF delete; close](./phase-17-observe-compare-delete.md) | none | 16 | Pending |
 
 ## Acceptance criteria
 
@@ -123,8 +126,8 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | A3 | Subscription carries `intervals`, `parameters` and a unique `intervals_key` | Phase 06 tests; prod index list in Phase 15 shows `ix_subscriptions_dedup_intervals` and no `ix_subscriptions_dedup_triple` |
 | A4 | No look-ahead in live, warm-up and backtest | Phase 07 and 08 context tests pass: the first entry bar of a new bucket sees the previous bucket's close; the partial current bucket is never served; backtest contexts equal live at every boundary |
 | A5 | No per-bar context reads | Phase 07 test: two instances on one symbol cause at most one `find` per (symbol, interval) rollover |
-| A6 | 1d cascade correct for one week | Phase 17: `mismatches=0 repair_1d=0` against fresh Exness 1d bars |
-| A7 | Stop entry, strategy EXIT, manual close and manual cancel work in paper | Phase 17 observations with order or trade ids |
+| A6 | 1d cascade correct over the latest 14 stored days (D14) | Phase 17: `mismatches=0 repair_1d=0` against fresh Exness 1d bars; Task 17.2b review |
+| A7 | Stop entry, strategy EXIT, manual close and manual cancel work in paper | Phase 17 observations with order or trade ids, or named tests where the owner skipped (D13) |
 | A8 | Exness pending placement is fenced by the live flag; close and cancel are not (D7) | Phase 10: a `LIVE_TRADING_DISABLED` test for `placePendingOrder` passes, and tests show `closePosition` and `cancelPendingOrder` are sent while the flag is off |
 | A9 | Snapshot visible and changing in the UI | Phase 16 ring has at least 2 distinct `bar_start`; Phase 13 and 17 [USER] tokens |
 | A10 | Six backtests comparable | Phase 16 metrics table with 6 run ids and the compare URLs |

@@ -1,20 +1,20 @@
 ---
 phase: 17
-title: "Observe; one-week 1d comparison; prod STF delete; close"
+title: "Observe; 1d comparison and review; prod STF delete; close"
 status: pending
 priority: P1
 effort: "days of observation + 0.5d"
 dependencies: [16]
 ---
 
-# Phase 17: Observe; one-week 1d comparison; prod STF delete; close
+# Phase 17: Observe; 1d comparison and review; prod STF delete; close
 
 <!-- Red team 2026-11-01: #15 -->
 No open issue. AGNOSTIC is the plan.md Conventions check "Strategy-agnostic UI".
 
 ## Goal
 
-Paper proves the stop entry, the strategy EXIT, manual close and manual cancel on prod; the cascaded 1d bars equal fresh Exness bars for one week; the STF and orphan prod data are deleted by exact id lists with the owner's yes; the plan is closed.
+Paper proves the stop entry, the strategy EXIT, manual close and manual cancel on prod, or tests cover them where the owner skipped (D13); the cascaded 1d bars equal fresh Exness bars over the latest 14 stored days (D14) and a code review answers whether they stay correct (D15); the STF and orphan prod data are deleted by exact id lists with the owner's yes; the plan is closed.
 
 ## Context
 
@@ -27,6 +27,7 @@ Paper proves the stop entry, the strategy EXIT, manual close and manual cancel o
 - Synthesis D11 (`reports/kongming-261101-1630-debate-synthesis.md`; plan.md owner decisions stop at D9) and design verdict "1d comparison": <!-- Consistency sweep 2026-11-01 --> the cascade overwrites the stored REST bar (`src/pocketquant/core/infra/persistence/repositories/bar_repository.py:42-98`), so compare stored 1d bars with bars fetched fresh by `ExnessAdapter.fetch_ohlcv` (`src/pocketquant/core/infra/exness/exness_adapter.py:28-66`; op `getCandleHistory` is not an order op, so the live flag does not block it). `ExnessClient(settings)` exposes `is_configured` and `close()` (`src/pocketquant/core/infra/exness/exness_client.py:172-186,364`). The comparison waits for 7 full UTC days after the day of `d1_deployed_at` (at least `d1_deployed_at` + 7 days).
 - C12, D5, R8: no backup; exact `_id` lists; orphans (positions, orders, trades linked to no subscription) listed separately with their own yes; children first; assert each `deleted_count`; re-list to zero; never touch `tracked_symbols`, `bars`, `sync_status`, `job_history`; never call `TrackedSymbolService.remove` (it cascades by symbol, `src/pocketquant/engine/market_data/tracked_symbols_service.py:93-139`). Links: positions and orders by `subscription_id`, trades by `run_id` = subscription id plus `strategy_code`, backtest orders and trades by `run_id` and `strategy_code` (`reports/scout-web-docs-ops.md`, Collections table). Prod before the plan: 4 STF subscriptions, 2 open BTCUSDT:BINANCE positions, 234 positions, 259 orders, 215 trades, 21 backtest runs (`reports/debate-evidence-packet.md`).
 - Amended 2026-11-02 (owner, Phase 16): two extra paper `triple_screen` subscriptions run beside the primary, one per other D3 set (`extra_paper_sub=` lines in `reports/phase-16-*.md`). obs-1..obs-6 bind to the primary `paper_sub_id` only. The extras are observed opportunistically as `extra-obs-<set>` lines, which never gate this phase and never start with `obs-`. They share one paper account balance with the primary, so paper results per set are read from per-subscription trades. They are not in the Task 17.3 lists, which select by STF strategy codes. In the obs-3, obs-4 and obs-6 [USER] asks, name the subscription `15m,1h,4h`, because `/strategies` lists three Triple Screen subscriptions.
+- Amended 2026-11-03 (owner, plan.md D13-D15): the phase closes in one run. Observations use existing prod evidence plus tests, never synthetic data (D13). Task 17.2 compares the latest 14 stored days now, before 2026-11-03T03:00Z (D14). Task 17.2b reviews the live 1d cascade code, read-only (D15). Advice: `plans/reports/advise-261103-0025-finish-mtf-plan-now.md`.
 - Synthesis D12: the delete runs last, after the observations, unless the owner says delete now. <!-- Consistency sweep 2026-11-01 -->
 - Docs line test: `docs/governance/documentation-rules.md:9-25,46-52`. Plan close: `ak plan update <id> --status completed` rewrites `plan.md` front matter (`ak plan update --help`); the plan id is `pocketquant/261101-0843` (`ak plan list --json`).
 
@@ -81,26 +82,26 @@ print(f"ring entries={len(ring)} live_entries={len(live)} live_distinct_bar_star
    EXITLOG = SSH `cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env logs --since <paper_started_at> trader 2>&1` piped locally to `sed 's/\x1b\[[0-9;]*m//g' | grep "strategy.position_close_sent" | grep "subscription_id=<paper_sub_id>" | grep "reason=strategy_exit"`.
 2. Record each item once, as its own report line, only when not yet recorded:
    - `obs-1 PASS order=<id>`: an `order` line with `type=stop_market status=filled`.
-   - `obs-2 PASS trade=<id>`: a `trade` line with `tp=None` and (`dir=LONG` and `exit` > `sl`, or `dir=SHORT` and `exit` < `sl`) whose `exit_time` is not within 120 s after obs-3's `requested_at` (an SL exit fills at or beyond the SL; a manual close is excluded by time). <!-- Red team 2026-11-01: #14 --> Run EXITLOG and append any line whose time is within 120 s of that `exit_time` as `obs-2 log=<line>` (extra evidence; the inference rule decides).
-   - <!-- Red team 2026-11-01: #3, #7 --> `obs-3 PASS trade=<id>`: when an `open_position` line exists, [USER] ask the owner (Vietnamese intent) to press Close at market in the drawer on `https://pocketquant.xyz/strategies`, confirm, and reply `CLOSED`; record `obs-3 requested_at=<UTC>` at the reply; within 30 s run STATUS; pass when no `open_position` line remains, `manual_action=None`, the `manual=` value contains `accepted`, and the newest trade's `exit_time` is at most 120 s before `requested_at` or later and its `exit` differs from its `entry` (a close at the entry price means the broker had no current price).
-   - <!-- Red team 2026-11-01: #7 --> `obs-4 PASS order=<id>`: when an `order` line has `type=stop_market` and `status=submitted` or `pending`, [USER] ask the owner to press Cancel pending, confirm, and reply `CANCELLED`; within 30 s run STATUS; pass when that order shows `status=cancelled`, `manual_action=None` and the `manual=` value contains `accepted`.
+   - `obs-2 PASS trade=<id> sub=<id>`: a `trade` line with `tp=None` and (`dir=LONG` and `exit` > `sl`, or `dir=SHORT` and `exit` < `sl`) whose `exit_time` is not within 120 s after obs-3's `requested_at` (an SL exit fills at or beyond the SL; a manual close is excluded by time). D13: look in the primary first, then run STATUS with each `extra_paper_sub=` id and its `started_at` from `R/phase-16-*.md`; the first matching trade passes. <!-- Red team 2026-11-01: #14 --> Run EXITLOG with that subscription id and append any line whose time is within 120 s of that `exit_time` as `obs-2 log=<line>` (extra evidence; the inference rule decides). With no matching trade in any of the three, record `obs-2 SKIPPED by owner tests=test_strategy_mode_sets_no_take_profit_and_exits_on_a_tide_flip,test_close_cancels_the_stop_and_closes_the_position` (an EXIT sent while flat only cancels the stop).
+   - <!-- Red team 2026-11-01: #3, #7 --> `obs-3 PASS trade=<id>`: D13: the owner closed the primary position through the drawer on 2026-11-02 near 16:22 UTC. Record `obs-3 requested_at=<UTC>` from the time in the subscription's `manual_action_outcome` (the `manual=` value), not from a chat reply. Pass when no `open_position` line remains, `manual_action=None`, the `manual=` value contains `accepted`, and the newest trade's `exit_time` is at most 120 s before `requested_at` or later and its `exit` differs from its `entry` (a close at the entry price means the broker had no current price). If that close does not pass, [USER] ask the owner (Vietnamese intent, name the subscription `15m,1h,4h`) to press Close at market in the drawer, only while an `open_position` line exists.
+   - <!-- Red team 2026-11-01: #7 --> `obs-4 PASS order=<id>`: D13: only when an `order` line of the primary has `type=stop_market` and `status=submitted` or `pending`, and the XAUUSD session is open (closed 20:58 to 22:00:30 UTC), [USER] ask the owner to press Cancel pending, confirm, and reply `CANCELLED`; within 30 s run STATUS; pass when that order shows `status=cancelled`, `manual_action=None` and the `manual=` value contains `accepted`. Otherwise record `obs-4 SKIPPED by owner tests=test_a_cancelled_stop_never_fills,test_cancel_leaves_the_position_open`.
    - <!-- Red team 2026-11-01: #14 --> `obs-5 PASS`: `live_distinct_bar_start>=2` and `live_distinct_readings>=2` on the `ring` line (live entries only).
    - `obs-6 PASS`: [USER] the owner opens the drawer of the paper subscription, checks readings, decision, pending or position, recent decisions, orders and trades, and the interval switcher, and replies `DRAWER OK`.
-3. While any of obs-1..obs-6 is missing, end with `NOT_YET: waiting for <missing items>` and a resume time of now + 12 h (the next run re-reads STATUS). <!-- Consistency sweep 2026-11-01 --> Synthesis D12 escape hatch: only if the owner says on their own to delete now, [ASK] (intent) "skip <missing items> and go to the comparison and the delete?" `Recommended: no`, reason: A7 stays unproven; on an explicit yes record `obs-<n> SKIPPED by owner` for each missing item. An action the owner took that does not show the pass state within 30 s is a failed Verify, with one exception: <!-- Red team 2026-11-01: #3 --> while `manual_action` still shows the action (queued because the trader has no current price, D6), re-run STATUS every 5 min for up to 1 h before calling it failed. Ask for obs-3 and obs-4 only while the XAUUSD market is open.
+3. D13: in the 2026-11-03 run, record obs-2, obs-3 and obs-4 from STATUS as above and ask for obs-6 in the same run; do not wait 12 h for a new event. While any of obs-1..obs-6 is still missing after that, end with `NOT_YET: waiting for <missing items>` and a resume time of now + 12 h (the next run re-reads STATUS). <!-- Consistency sweep 2026-11-01 --> Synthesis D12 escape hatch: only if the owner says on their own to delete now, [ASK] (intent) "skip <missing items> and go to the comparison and the delete?" `Recommended: no`, reason: A7 stays unproven; on an explicit yes record `obs-<n> SKIPPED by owner` for each missing item. An action the owner took that does not show the pass state within 30 s is a failed Verify, with one exception: <!-- Red team 2026-11-01: #3 --> while `manual_action` still shows the action (queued because the trader has no current price, D6), re-run STATUS every 5 min for up to 1 h before calling it failed. Ask for obs-3 and obs-4 only while the XAUUSD market is open.
 
 **Success criteria:** six PASS lines (or owner-approved skips).
 
 **Verify:** `grep -c -E "^obs-[1-6] (PASS|SKIPPED by owner)" plans/261101-0843-stf-to-mtf-foundation/reports/phase-17-observe-compare-delete.md` prints `6`.
 
-### Task 17.2 — One-week 1d comparison against fresh Exness bars
+### Task 17.2 — 1d comparison against fresh Exness bars (latest 14 stored days)
 
-**Goal:** A6: stored cascaded 1d bars equal the vendor's 1d bars for 7 days, with no REST repair.
+**Goal:** A6: stored cascaded 1d bars equal the vendor's 1d bars over the latest 14 stored days, with no REST repair (D14).
 
 **Target files and symbols:** prod `bars` (1d), `ExnessAdapter.fetch_ohlcv`.
 
 **Steps:**
-1. Copy `d1_deployed_at=` from `R/phase-03-*.md`. If now is before the next UTC midnight after it plus 7 days, end with `NOT_YET: 1d comparison window not complete` and that time.
-2. PRODPY with HEADER plus (replace `<D1_ISO>`):
+1. Copy `d1_deployed_at=` from `R/phase-03-*.md` (it still bounds `repair_1d`). D14: run this task before 2026-11-03T03:00Z, when `sync_backfill` may rewrite 1d bars with `source=rest_backfill`. If now is later, run it anyway and read the `source=` column before deciding anything (step 3).
+2. PRODPY with HEADER plus (replace `<D1_ISO>`). D14 window: `LAST` is the current UTC midnight and `FIRST` is 14 days earlier; `n_bars=20`:
 ```python
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -108,8 +109,8 @@ from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.infra.exness.exness_adapter import ExnessAdapter
 from pocketquant.core.infra.exness.exness_client import ExnessClient
 D1 = datetime.fromisoformat("<D1_ISO>".replace("Z", "+00:00"))
-FIRST = (D1 + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-LAST = FIRST + timedelta(days=7)
+LAST = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+FIRST = LAST - timedelta(days=14)
 syms = sorted(d["symbol"] for d in db.tracked_symbols.find({"symbol": {"$regex": ":EXNESS$"}}, {"symbol": 1}))
 def same(a, b, tol):
     return abs(a - b) <= tol * max(1.0, abs(b))
@@ -117,7 +118,7 @@ async def main():
     client = ExnessClient(s)
     assert client.is_configured
     adapter = ExnessAdapter(client)
-    n_bars = max(12, (datetime.now(UTC) - FIRST).days + 2)
+    n_bars = 20
     mismatches, per_sym = 0, {}
     try:
         for sym in syms:
@@ -139,11 +140,29 @@ async def main():
     print(f"mismatches={mismatches} repair_1d={repair}")
 asyncio.run(main())
 ```
-3. Copy the output into the report. A `diff` row or `repair_1d` above 0: [ASK] (intent) "the 1d cascade differs from Exness on <rows>; continue to the delete with A6 failed?" `Recommended: no`, reason: the advice stop rule; the owner decides on reverting the cascade (Phase 03 rollback). A non-yes ends with `NOT_YET`.
+3. Copy the output into the report. On a `diff` row, record its `source=` value first: `rest_backfill` with vendor values points to the overwrite question in Task 17.2b; `cascade` with different values points to the cascade arithmetic or the vendor's day stamp. A `diff` row or `repair_1d` above 0: [ASK] (intent) "the 1d cascade differs from Exness on <rows>; continue to the delete with A6 failed?" `Recommended: no`, reason: the advice stop rule; the owner decides on reverting the cascade (Phase 03 rollback). A non-yes ends with `NOT_YET`.
 
 **Success criteria:** `mismatches=0 repair_1d=0` and every symbol has at least 5 compared days.
 
 **Verify:** the output's last two lines are `min_days=<n>` with `n >= 5` and exactly `mismatches=0 repair_1d=0`.
+
+### Task 17.2b — Review the live 1d cascade path (read-only, D15)
+
+**Goal:** a written answer to whether the 1d bar of a session-calendar symbol stays correct in future, without the 7-day wait.
+
+**Target files and symbols:** `src/pocketquant/engine/market_data/app_services/cascade_aggregator.py` (`compute_boundaries`, `cascade_for_symbol`); `src/pocketquant/engine/market_data/app_services/sync_jobs.py` (`sync_1m`, the schedule block, `sync_backfill`, `SYNC_INTERVALS`, `sync_repair`, `sync_verify_cascade`); `src/pocketquant/core/infra/calendars/exness_session_calendar_adapter.py` (`bar_start`, `session_date`, `session_close`); `src/pocketquant/core/infra/persistence/repositories/bar_repository.py` (`upsert_bar`). Locate each symbol with `git grep -n`.
+
+**Steps:**
+1. Read the code and the tests `test_a_session_calendar_cascades_its_daily_bar_at_utc_midnight` and `test_1d_today_bucket_kept_alive_through_the_day`. Write a `## 1d cascade review` section in the report that answers four questions, each with file and line:
+   - Bucket: which UTC span one 1d bar covers and how it is stamped, and whether the Task 17.2 output shows the vendor uses the same stamp.
+   - Finalisation: when the day bucket stops being re-aggregated by `sync_1m`, and whether a 1m bar repaired later (`sync_repair`, a late REST fill) is folded into the 1d bar.
+   - Overwrite precedence: whether `upsert_bar` or `sync_backfill` can replace a `source=cascade` 1d bar with a REST bar, and on what condition.
+   - Monitoring: which job, if any, checks 1d cascade bars in prod.
+2. A finding that a stored 1d bar can go wrong in future: [ASK] (intent) "the 1d cascade can go wrong in future because <finding>; close the plan and fix it in a new small plan?" `Recommended: yes` when Task 17.2 passed, reason: the code fix is outside Phase 17. A non-yes ends with `NOT_YET`. Never change code in this phase.
+
+**Success criteria:** the section exists and answers all four questions with file and line.
+
+**Verify:** `grep -c "^## 1d cascade review" plans/261101-0843-stf-to-mtf-foundation/reports/phase-17-observe-compare-delete.md` prints `1`.
 
 ### Task 17.3 — Exact delete lists (read-only)
 
@@ -296,7 +315,7 @@ Observations and the comparison are read-only (the owner's paper close and cance
 
 ## Report
 
-`reports/phase-17-observe-compare-delete.md`: entry-gate outputs; the six `obs-` lines with ids and `obs-3 requested_at=`; the comparison output; the three summary lines; `stf_delete=yes`; `orphans=`; the delete output; the re-list line; both doc-check counts; the A1-A13 table; the `ak plan status` line; then `Result: PASS`.
+`reports/phase-17-observe-compare-delete.md`: entry-gate outputs; the six `obs-` lines with ids and `obs-3 requested_at=`; the comparison output; the `## 1d cascade review` section; the three summary lines; `stf_delete=yes`; `orphans=`; the delete output; the re-list line; both doc-check counts; the A1-A13 table; the `ak plan status` line; then `Result: PASS`.
 
 ## Failure Protocol
 If any Verify step does not meet its stated pass condition, STOP this phase.
