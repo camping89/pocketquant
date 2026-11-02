@@ -100,7 +100,7 @@ The rule is in `CLAUDE.md`. These are the places where this code base hides susp
 
 - `await container.get(X)` can run provider I/O.
 - Publish before subscribe. Set module globals and wire handlers before the first call that can start a worker (scheduler, queue consumer, websocket reader, background task). `lifespan()` in `app/main.py` shows the case: `set_sync_container(container)` runs before the worker role starts the scheduler, because persisted jobs can dispatch as soon as it starts.
-- A Dishka `AsyncIterator` factory suspends at `yield`. Do all setup before `yield`, and cleanup in `try/finally` after it.
+- A Dishka `AsyncIterator` factory suspends at `yield`. Do all setup before `yield`, and cleanup in `finally` after it.
 - A check before an `await` may be stale after it. Guard shared in-memory state with the owning service's `asyncio.Lock` across the `await`, or move the invariant into a storage-side condition.
 - When two subsystems do similar startup wiring (`init_backtest_tasks`, `register_sync_jobs`), diff their order. An asymmetry is usually a bug.
 

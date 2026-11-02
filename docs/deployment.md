@@ -54,7 +54,7 @@ The VPS is a Vultr machine on Ubuntu. It runs `deploy/compose.prod.yml` with Doc
 | Public SPA | `https://pocketquant.xyz/` |
 | API docs | `https://pocketquant.xyz/api/v1/docs` |
 | Portainer | `http://localhost:$PORTAINER_PORT` through `just tunnel`. Cloudflare does not expose it. |
-| Docker Hub | The account in `pocketquant-config/vps/default/docker-hub.env`. |
+| Docker Hub | The account in `../pocketquant-config/vps/default/docker-hub.env`. |
 
 - Cloudflare terminates browser TLS.
 - `cloudflared` opens an outbound tunnel to Cloudflare. The tunnel's public routes point at `web`.
@@ -74,8 +74,8 @@ The VPS is a Vultr machine on Ubuntu. It runs `deploy/compose.prod.yml` with Doc
 
 - All prod config lives in the sibling `pocketquant-config` repo. It is the single source of truth.
 - CI reads it at run time with one read-only deploy key. The key is the `POCKETQUANT_CONFIG_DEPLOY_KEY` GitHub secret. `.github/actions/get-vps-config` does the read.
-- Each deploy copies `vps/default/.env` onto the VPS. A manual edit of the `.env` on the VPS is lost at the next deploy.
-- Env vars and defaults: `src/pocketquant/core/config.py::Settings`. The full prod set is `vps/default/.env`.
+- Each deploy copies `../pocketquant-config/vps/default/.env` onto the VPS. A manual edit of the `.env` on the VPS is lost at the next deploy.
+- Env vars and defaults: `src/pocketquant/core/config.py::Settings`. The full prod set is `../pocketquant-config/vps/default/.env`.
 - Only an approved go-live sets `EXNESS_LIVE_TRADING=true`.
 - Before arming, read the Exness pending-stop limits in `docs/system-architecture.md`: after a crash the trader does not re-adopt a venue pending stop, and a pause does not cancel one.
 - The Exness strip shows the flag the last trader wrote at takeover. With no trader holding the lease it can still read ON, so check `"lease":"held"` in the trader's `/health` too.
@@ -86,12 +86,12 @@ Files in `pocketquant-config`:
 
 | File | Holds |
 |---|---|
-| `vps/default/host` | `user@ip` of the VPS, one line |
-| `vps/default/id_rsa` (`.pub`) | SSH key for the VPS |
-| `vps/default/.env` | Prod `.env` |
-| `vps/default/docker-hub.env` | Docker Hub user and token |
-| `vps/default/portainer.env` | Portainer admin creds |
-| `one-time/bootstrap-gh.sh` | Creates or rotates the CI deploy key |
+| `../pocketquant-config/vps/default/host` | `user@ip` of the VPS, one line |
+| `../pocketquant-config/vps/default/id_rsa` (`.pub`) | SSH key for the VPS |
+| `../pocketquant-config/vps/default/.env` | Prod `.env` |
+| `../pocketquant-config/vps/default/docker-hub.env` | Docker Hub user and token |
+| `../pocketquant-config/vps/default/portainer.env` | Portainer admin creds |
+| `../pocketquant-config/one-time/bootstrap-gh.sh` | Creates or rotates the CI deploy key |
 | `local/*.env` | Local profiles. The README covers them. |
 
 ## Prerequisites (one-time)
@@ -178,7 +178,7 @@ ssh -i "$KEY" "$HOST" "docker exec -i pocketquant-mongodb sh -c 'mongorestore --
 ## Local access to prod
 
 - `just tunnel` forwards prod Mongo, Redis and Portainer to localhost. The `justfile` holds the ports. Keep it open while you work.
-- Use it for DataGrip, RedisInsight and Portainer. The creds are in `vps/default/.env` and `vps/default/portainer.env`.
+- Use it for DataGrip, RedisInsight and Portainer. The creds are in `../pocketquant-config/vps/default/.env` and `../pocketquant-config/vps/default/portainer.env`.
 - To run local code against the prod DB, see the README section [Against the prod VPS DB](../README.md#against-the-prod-vps-db).
 
 ## VPS Migration
@@ -186,7 +186,7 @@ ssh -i "$KEY" "$HOST" "docker exec -i pocketquant-mongodb sh -c 'mongorestore --
 The VPS is disposable. To move:
 
 1. Provision Ubuntu. Run `deploy/vps/one-time/00-server-setup.sh` once as root over SSH. Set `SSH_PORT=22`. CI (`cicd.yml`) and `just tunnel` connect on the default SSH port, and the script's default moves SSH elsewhere.
-2. Update `pocketquant-config/vps/default/host` with the `deploy@ip` the script prints. The script turns off root login. Update `id_rsa`/`.pub` too if you made a new key. Push there.
+2. Update `../pocketquant-config/vps/default/host` with the `deploy@ip` the script prints. The script turns off root login. Update `id_rsa`/`.pub` too if you made a new key. Push there.
 3. Run `gh workflow run cicd.yml --ref master`. CI does the first deploy.
 
 The live VPS was not set up by this script as written. SSH listens on 22, CI logs in as `root`, there is no `deploy` user, and ufw has no rules for the script's HTTP ports. Checked over SSH.
@@ -195,22 +195,22 @@ The DB on a new VPS starts empty. Backups stay on the old VPS, so copy the ones 
 
 ## Data Runbooks
 
-The scripts ship in the app image under `/app/scripts`. Run each one in the `api` service with `ssh -i "$KEY" "$HOST" "cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api python scripts/<path>"`. Each script's `--help` lists its flags.
+The scripts ship in the app image under `/app/scripts`. Run each one in the `api` service with `ssh -i "$KEY" "$HOST" "cd /opt/pocketquant/deploy && docker compose -f compose.prod.yml --env-file .env exec -T api python <script>"`. Each script's `--help` lists its flags.
 
 ### Two-year bar re-sync
 
 Refresh historical bars after a data-source change.
 
 1. [Back up Mongo](#mongo-backup-and-restore).
-2. Run `audit_bar_quality.py` over two years for a pre-audit report.
-3. Run `backfill/binance_bars.py` as a bulk two-year replace, first as a dry run.
+2. Run `scripts/audit_bar_quality.py` over two years for a pre-audit report.
+3. Run `scripts/backfill/binance_bars.py` as a bulk two-year replace, first as a dry run.
 4. Run the same command for real.
-5. Run `audit_bar_quality.py` again. Accept the result when the flat and zero-volume shares are at most 1%.
+5. Run `scripts/audit_bar_quality.py` again. Accept the result when the flat and zero-volume shares are at most 1%.
 
 ### Exness symbols and deep history
 
-1. Run `seed_exness_symbols.py` before the first sync reaches the Exness symbols. Dry-run first, then apply.
-2. Run `backfill/provider_bars.py` for history beyond the request cap. Do it before go-live: the script refuses while `EXNESS_LIVE_TRADING` is true.
+1. Run `scripts/seed_exness_symbols.py` before the first sync reaches the Exness symbols. Dry-run first, then apply.
+2. Run `scripts/backfill/provider_bars.py` for history beyond the request cap. Do it before go-live: the script refuses while `EXNESS_LIVE_TRADING` is true.
 
 Exness keeps limited history. A window older than that fails with an Exness error code, for example `REQUEST_INVALID_TIME_RANGE` (observed against the Exness API).
 
