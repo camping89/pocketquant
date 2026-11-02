@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Capabilities in paper: stop entry, EXIT, risk, order SL/TP persistence, restore; architecture doc"
-status: pending
+status: completed
 priority: P1
 effort: 1.5d
 dependencies: [8]
