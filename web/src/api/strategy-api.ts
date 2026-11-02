@@ -31,6 +31,13 @@ export async function addSymbol(
   return apiPost<Subscription>(`/api/v1/strategies/${strategyCode}/subscriptions`, body)
 }
 
+export async function fetchStrategyDefaults(code: string): Promise<Record<string, unknown>> {
+  const doc = await apiFetch<{ parameters?: Record<string, unknown> }>(
+    `/api/v1/strategies/${encodeURIComponent(code)}`,
+  )
+  return doc.parameters ?? {}
+}
+
 export async function removeSubscription(subId: string): Promise<void> {
   return apiDelete(`/api/v1/subscriptions/${subId}`)
 }

@@ -45,6 +45,8 @@ export function BacktestDetailPane({
           name={run.name}
           symbol={run.symbol}
           interval={run.interval}
+          intervals={run.intervals}
+          parameters={run.parameters}
           metrics={run.metrics}
         />
       ) : (

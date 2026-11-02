@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { BacktestMetrics } from '../../api/backtest-api'
 import { useSetBacktestName } from '../../hooks/use-backtest-run'
 import { BacktestStatusBadge } from '../strategy/backtest-status-badge'
+import { configLabel } from '../../lib/intervals'
 
 interface RunHeaderProps {
   runId: string
@@ -11,6 +12,8 @@ interface RunHeaderProps {
   name?: string | null
   symbol?: string
   interval?: string
+  intervals?: string[]
+  parameters?: Record<string, unknown>
   metrics: BacktestMetrics | null
 }
 
@@ -29,7 +32,7 @@ function Stat({ label, value, tone = 'neutral' }: { label: string; value: string
 }
 
 // The full verdict lives in its own card on purpose, not in this header.
-export function RunHeader({ runId, status, errorMsg, strategyCode, name, symbol, interval, metrics }: RunHeaderProps) {
+export function RunHeader({ runId, status, errorMsg, strategyCode, name, symbol, interval, intervals, parameters, metrics }: RunHeaderProps) {
   const [copied, setCopied] = useState(false)
 
   const canonicalName = name ?? ''
@@ -67,7 +70,7 @@ export function RunHeader({ runId, status, errorMsg, strategyCode, name, symbol,
     })
   }
 
-  const pair = [symbol, interval].filter(Boolean).join(' · ')
+  const pair = [symbol, configLabel(intervals, interval, parameters)].filter(Boolean).join(' · ')
   const title = canonicalName || strategyCode
   // Editing is post-run only: while a run is still ``started`` the engine's
   // finalize() rewrites the whole doc (replace_one) and would clobber a PATCHed

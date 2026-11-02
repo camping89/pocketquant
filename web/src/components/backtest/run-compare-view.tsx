@@ -2,6 +2,7 @@ import { useBacktestRun } from '../../hooks/use-backtest-run'
 import type { BacktestRunResult } from '../../api/backtest-api'
 import { EquityOverlay, SERIES_COLORS } from './equity-overlay'
 import { MetricsDiffTable } from './metrics-diff-table'
+import { configLabel } from '../../lib/intervals'
 
 const sectionTitle = {
   fontSize: 12,
@@ -37,7 +38,7 @@ export function RunCompareView({ runIds }: { runIds: string[] }) {
         {runs.map((r, i) => (
           <span key={r.id ?? i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 10, height: 10, borderRadius: 2, background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
-            {r.strategy_code} · {String(r.config_snapshot?.symbol ?? '')}
+            {r.strategy_code} · {String(r.config_snapshot?.symbol ?? '')} · {configLabel(r.intervals, r.interval, r.parameters)}
           </span>
         ))}
       </div>

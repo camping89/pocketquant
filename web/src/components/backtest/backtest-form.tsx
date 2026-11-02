@@ -2,13 +2,13 @@ import { useState, type FormEvent } from 'react'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { useStrategyList } from '../../hooks/use-backtest-run'
+import { useStrategyDefaults } from '../../hooks/use-strategies'
 import { useTimezone } from '../../lib/use-timezone'
 import { SymbolSelector } from '../controls/symbol-selector'
+import { IntervalMultiSelect } from '../controls/interval-multi-select'
 import type { RunBacktestBody } from '../../api/backtest-api'
 
 dayjs.extend(utc) // idempotent — also extended in datetime.ts
-
-const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d']
 
 // datetime-local control format (minute precision, sortable as string).
 const DT_LOCAL_FMT = 'YYYY-MM-DDTHH:mm'
@@ -42,7 +42,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
   const [strategyId, setStrategyId] = useState('')
   const [name, setName] = useState('')
   const [symbol, setSymbol] = useState('BTCUSDT:BINANCE')
-  const [interval, setInterval] = useState('1m')
+  const [intervals, setIntervals] = useState<string[]>(['1m'])
   // Inputs are wall-clock in the active tz mode; default end=now, start=now−1y.
   const [startDate, setStartDate] = useState(() => {
     const base = mode === 'utc' ? dayjs().utc() : dayjs()
@@ -63,6 +63,14 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
   // Default the strategy dropdown to the first available once loaded.
   const effectiveStrategy = strategyId || strategies[0] || ''
 
+  // Prefill parameters once per strategy from its declared defaults (adjust state while rendering).
+  const defaults = useStrategyDefaults(effectiveStrategy)
+  const [paramsFor, setParamsFor] = useState('')
+  if (defaults.data && paramsFor !== effectiveStrategy) {
+    setParamsFor(effectiveStrategy)
+    setParamsText(JSON.stringify(defaults.data, null, 2))
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setErrorMsg(null)
@@ -78,7 +86,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
       try {
         parameters = JSON.parse(paramsText)
       } catch {
-        setErrorMsg('Parameters must be valid JSON (e.g. {"direction": "long"}).')
+        setErrorMsg('Parameters must be valid JSON.')
         return
       }
     }
@@ -87,7 +95,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
       strategy_id: effectiveStrategy,
       name: name.trim() || undefined,
       symbol: sym,
-      interval,
+      intervals,
       start_date: toUtcSubmit(startDate),
       end_date: toUtcSubmit(endDate),
       parameters,
@@ -126,13 +134,12 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
         <SymbolSelector value={symbol} onChange={setSymbol} />
       </div>
 
+      <div>
+        <label style={labelStyle}>Intervals</label>
+        <IntervalMultiSelect value={intervals} onChange={setIntervals} />
+      </div>
+
       <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Interval</label>
-          <select style={inputStyle} value={interval} onChange={(e) => setInterval(e.target.value)}>
-            {INTERVALS.map((iv) => <option key={iv} value={iv}>{iv}</option>)}
-          </select>
-        </div>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>Start ({suffix})</label>
           <input style={inputStyle} type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -147,7 +154,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
         <label style={labelStyle}>Parameters (JSON, optional)</label>
         <textarea
           style={{ ...inputStyle, fontFamily: 'monospace', minHeight: 60, resize: 'vertical' }}
-          placeholder='{"direction": "long", "key_level_lookback_bars": 5}'
+          placeholder='{}'
           value={paramsText}
           onChange={(e) => setParamsText(e.target.value)}
         />

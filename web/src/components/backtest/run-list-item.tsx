@@ -1,4 +1,5 @@
 import type { BacktestRunRow } from '../../api/backtest-api'
+import { configLabel } from '../../lib/intervals'
 
 interface RunListItemProps {
   row: BacktestRunRow
@@ -31,7 +32,7 @@ export function RunListItem({ row, active, selected, disableSelect, onSelect, on
         />
         <span style={{ fontWeight: 600 }}>{row.name || row.strategy_code}</span>
         {row.name && <span style={{ color: 'var(--text-secondary)' }}>{row.strategy_code}</span>}
-        <span style={{ color: 'var(--text-secondary)' }}>{row.symbol} · {row.interval}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>{row.symbol} · {configLabel(row.intervals, row.interval, row.parameters)}</span>
       </div>
       <div className="backtest-run-item__line2">
         <span>{row.started_at.replace('T', ' ').slice(0, 16)}</span>

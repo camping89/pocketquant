@@ -5,8 +5,9 @@ import { useSymbols } from '../../hooks/use-symbols'
 import type { BacktestRunRow } from '../../api/backtest-api'
 import { RunListItem } from './run-list-item'
 import { BacktestForm } from './backtest-form'
+import { ACTIVE_INTERVALS } from '../../constants/active-intervals'
 
-const INTERVALS = ['', '1m', '5m', '15m', '1h', '4h', '1d']
+const INTERVALS = ['', ...ACTIVE_INTERVALS]
 
 type SortKey = 'started_at' | 'total_return' | 'sharpe_ratio' | 'win_rate' | 'max_drawdown' | 'total_trades'
 
@@ -105,7 +106,7 @@ export function RunHistoryRail({ selectedRun, onSelect }: RunHistoryRailProps) {
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Interval (optional)</label>
+          <label style={labelStyle}>Entry interval (optional)</label>
           <select style={inputStyle} value={interval} onChange={(e) => setInterval(e.target.value)}>
             {INTERVALS.map((iv) => <option key={iv} value={iv}>{iv || 'Any'}</option>)}
           </select>

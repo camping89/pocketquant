@@ -53,6 +53,7 @@ export interface BacktestRunResult {
   // Lifted from config_snapshot so a chart can anchor OHLCV to the exact backtest window.
   symbol?: string
   interval?: string
+  intervals?: string[]
   end_date?: string
   verdict?: string | null
   error_message?: string | null
@@ -177,7 +178,7 @@ export interface RunBacktestBody {
   strategy_id: string
   name?: string
   symbol: string
-  interval: string
+  intervals: string[]
   start_date: string
   end_date: string
   initial_capital?: number
@@ -245,6 +246,7 @@ export async function fetchBacktestRun(runId: string): Promise<BacktestRunResult
     config_snapshot: doc.config_snapshot,
     symbol: (cfg.symbol as string | undefined)?.toUpperCase(),
     interval: cfg.interval as string | undefined,
+    intervals: cfg.intervals as string[] | undefined,
     end_date: cfg.end_date as string | undefined,
     verdict: doc.verdict,
     error_message: doc.error_message,
@@ -262,6 +264,8 @@ export interface BacktestRunRow {
   name: string | null
   symbol: string
   interval: string
+  intervals?: string[]
+  parameters?: Record<string, unknown>
   status: BacktestStatus | string
   metrics: BacktestMetrics | null
   date_range: { start: string | null; end: string | null }

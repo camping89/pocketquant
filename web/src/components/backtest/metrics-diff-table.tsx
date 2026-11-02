@@ -1,5 +1,6 @@
 import { type CSSProperties } from 'react'
 import type { BacktestMetrics, BacktestRunResult } from '../../api/backtest-api'
+import { configLabel } from '../../lib/intervals'
 
 type Direction = 'higher' | 'lower' | 'neutral'
 
@@ -46,7 +47,7 @@ export function MetricsDiffTable({ runs }: { runs: BacktestRunResult[] }) {
         <tr>
           <th style={{ ...th, textAlign: 'left' }}>Metric</th>
           {runs.map((r, i) => (
-            <th key={i} style={th}>{r.strategy_code ?? `Run ${i + 1}`}<br /><span style={{ fontWeight: 400, fontSize: 10 }}>{String(r.config_snapshot?.symbol ?? r.id ?? '')}</span></th>
+            <th key={i} style={th}>{r.strategy_code ?? `Run ${i + 1}`}<br /><span style={{ fontWeight: 400, fontSize: 10 }}>{String(r.config_snapshot?.symbol ?? r.id ?? '')}</span><br /><span style={{ fontWeight: 400, fontSize: 10 }}>{configLabel(r.intervals, r.interval, r.parameters)}</span></th>
           ))}
         </tr>
       </thead>
