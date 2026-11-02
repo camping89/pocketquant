@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "Snapshot ring, manual actions, read endpoints"
-status: pending
+status: completed
 priority: P1
 effort: 1d
 dependencies: [10]
