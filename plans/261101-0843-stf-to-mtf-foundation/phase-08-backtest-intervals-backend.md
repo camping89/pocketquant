@@ -112,6 +112,23 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 
 **Verify:** `uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py tests/backtest_test/test_higher_timeframe_context.py -q 2>&1 | tail -1` contains `12 passed` and no `failed`, and `uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py -q -s 2>&1 | grep -c "^context_cost find_1h=1 find_4h=1 "` prints `1`.
 
+### Task 08.3b — Owner amendment to the timing bound (2026-11-02)
+
+**State on resume:** Tasks 08.1-08.3 are on `develop` in `0aba1821`, with three kongming deviations recorded in the untracked `reports/phase-08-backtest-intervals-backend.md`; keep that report and extend it. CI run `41332031144` failed only on job `tests (America/Chicago)`: `context_cost find_1h=1 find_4h=1 t_mtf_s=1.36 t_stf_s=0.67` (2.03x). The owner answered "1+2" (plan.md D10, amended):
+
+**Goal:** CI gates only the read count; the time ratio is a local measurement recorded in the report; the per-bar copy of the context lists is gone.
+
+**Target files and symbols:** `tests/backtest_test/test_backtest_context_cost.py` (the timing assert); `StrategyAppService._context_at` in `src/pocketquant/engine/strategy/strategy_app_service.py` (the `list(cached)` fast path).
+
+**Steps:**
+1. In the cost test, keep `finds.get("1h") == 1` and `finds.get("4h") == 1` unconditional, keep printing the `context_cost` line, and assert `t_mtf_s <= 2 * t_stf_s` only when the `CI` environment variable is unset (GitHub Actions sets `CI=true`). One `#` comment: the ratio depends on the runner's Mongo speed, so CI checks the read count and the ratio is recorded locally.
+2. In `_context_at`, the fast path returns `cached` itself instead of `list(cached)`. Put one `#` comment above it: strategies must never mutate a context list, because it is the shared cache.
+3. Run the cost test locally three times with `-s` and record the three `context_cost` lines in the report under a heading `## Local timing (D10)`, with the ratio for each.
+
+**Success criteria:** the read-count asserts still run in CI; the local ratio is recorded; the boundary-equality test still passes.
+
+**Verify:** `uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py tests/backtest_test/test_higher_timeframe_context.py -q 2>&1 | tail -1` contains `12 passed` and no `failed`; `CI=true uv run python -m pytest tests/backtest_test/test_backtest_context_cost.py -q 2>&1 | tail -1` contains `1 passed`; `git grep -n "list(cached)" -- src/pocketquant/engine/strategy/strategy_app_service.py | wc -l` prints `0`.
+
 ### Task 08.4 — CLOSE
 
 **Goal:** the phase lands on `develop` with every gate green; nothing deploys.
@@ -121,7 +138,7 @@ Resume: /eve:cook-plan D:/w/_me/algotrading/pocketquant/plans/261101-0843-stf-to
 **Steps:**
 1. GATES: `uv run lint-imports | tail -1` prints `Contracts: 6 kept, 0 broken.`; `uv run python scripts/code_metrics.py --ratchet; echo "exit=$?"` prints `exit=0`; `uv run ruff check src tests scripts; echo "exit=$?"` prints `exit=0`. If only the ratchet fails, raise the ceiling in its own commit `chore(metrics): raise the code metric ceiling` and record the old and new values in the report.
 2. FULLSUITE: `uv run python -m pytest tests/ -q > .cache/pytest.txt 2>&1; tail -1 .cache/pytest.txt; grep -E "^(FAILED|ERROR) " .cache/pytest.txt | grep -v -E "test_utc_runtime_guard|test_cron_trigger_timezone" | wc -l`. The tail contains `4 failed` and `4 errors`; the count prints `0`.
-3. Commit: `feat(backtest): run over ordered intervals with stored context and live risk`.
+3. Commit: `feat(backtest): run over ordered intervals with stored context and live risk` (on resume after Task 08.3b, `0aba1821` already carries this; commit the amendment as `test(backtest): gate the context read count in CI and record the time ratio locally`).
 4. Push: `git push "https://x-access-token:$(gh auth token --user camping89)@github.com/camping89/pocketquant.git" develop && git fetch origin && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/develop)" && echo pushed` prints `pushed`.
 5. `sleep 15`, then repeat the Verify command until it prints `completed`.
 
