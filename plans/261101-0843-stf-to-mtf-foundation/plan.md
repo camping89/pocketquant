@@ -47,6 +47,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | D13 | Phase 17 observations close on existing prod evidence plus tests, never on synthetic data (owner, 2026-11-03). obs-2 accepts a strategy EXIT trade from any of the three Triple Screen paper subscriptions; with none, it is `obs-2 SKIPPED by owner` and A7 cites the EXIT tests. obs-3 takes `requested_at` from the subscription's `manual_action_outcome` time. obs-4 is asked only when a stop rests and the session is open; otherwise it is `obs-4 SKIPPED by owner` and A7 cites the cancel tests. |
 | D14 | Task 17.2 runs on the day of the close (owner, 2026-11-03): compare the latest 14 stored days ending at the current UTC midnight, before the 03:00 UTC backfill. The pass rule is unchanged. A6 is met on that output. No dated re-check. |
 | D15 | Task 17.2b (owner, 2026-11-03): a read-only review of the live 1d cascade path, written into the phase report. A finding that the 1d bar can go wrong in future stops the run for the owner; Phase 17 never patches code. |
+| D16 | Task 17.2 pass rule (owner, 2026-11-03, after the first run failed on `source` alone): the D14 window holds days the live cascade never wrote, and `upsert_bar` keeps `source` when values are equal, so `source=cascade` is required only from the deploy day (2026-11-01) on. A day passes when the stored 1d bar equals the fresh Exness bar, a dry-run cascade of its stored 1m bars (no write) equals the Exness bar, and, from the deploy day on, `source=cascade`; plus `min_days>=5` and `repair_1d=0`. The Verify line format is unchanged. |
 
 ## Design verdicts (from the synthesis; do not re-decide in a phase)
 
@@ -126,7 +127,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | A3 | Subscription carries `intervals`, `parameters` and a unique `intervals_key` | Phase 06 tests; prod index list in Phase 15 shows `ix_subscriptions_dedup_intervals` and no `ix_subscriptions_dedup_triple` |
 | A4 | No look-ahead in live, warm-up and backtest | Phase 07 and 08 context tests pass: the first entry bar of a new bucket sees the previous bucket's close; the partial current bucket is never served; backtest contexts equal live at every boundary |
 | A5 | No per-bar context reads | Phase 07 test: two instances on one symbol cause at most one `find` per (symbol, interval) rollover |
-| A6 | 1d cascade correct over the latest 14 stored days (D14) | Phase 17: `mismatches=0 repair_1d=0` against fresh Exness 1d bars; Task 17.2b review |
+| A6 | 1d cascade correct over the latest 14 stored days (D14, D16) | Phase 17: `mismatches=0 repair_1d=0` against fresh Exness 1d bars, stored and dry-run cascade (D16); Task 17.2b review |
 | A7 | Stop entry, strategy EXIT, manual close and manual cancel work in paper | Phase 17 observations with order or trade ids, or named tests where the owner skipped (D13) |
 | A8 | Exness pending placement is fenced by the live flag; close and cancel are not (D7) | Phase 10: a `LIVE_TRADING_DISABLED` test for `placePendingOrder` passes, and tests show `closePosition` and `cancelPendingOrder` are sent while the flag is off |
 | A9 | Snapshot visible and changing in the UI | Phase 16 ring has at least 2 distinct `bar_start`; Phase 13 and 17 [USER] tokens |

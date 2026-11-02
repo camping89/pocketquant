@@ -140,9 +140,10 @@ async def main():
     print(f"mismatches={mismatches} repair_1d={repair}")
 asyncio.run(main())
 ```
+2b. D16 (owner, 2026-11-03): the pass rule is the D16 rule in plan.md. Run the diagnostic script recorded under `#### Diagnosis` in the phase report (the step 2 script plus a dry-run cascade of each day's stored 1m bars, no write); its `ok` is: stored equals Exness, dry-run equals Exness, and `source=cascade` on days from 2026-11-01 on. Its last two lines keep the step 2 format, so the Verify text below is unchanged.
 3. Copy the output into the report. On a `diff` row, record its `source=` value first: `rest_backfill` with vendor values points to the overwrite question in Task 17.2b; `cascade` with different values points to the cascade arithmetic or the vendor's day stamp. A `diff` row or `repair_1d` above 0: [ASK] (intent) "the 1d cascade differs from Exness on <rows>; continue to the delete with A6 failed?" `Recommended: no`, reason: the advice stop rule; the owner decides on reverting the cascade (Phase 03 rollback). A non-yes ends with `NOT_YET`.
 
-**Success criteria:** `mismatches=0 repair_1d=0` and every symbol has at least 5 compared days.
+**Success criteria:** `mismatches=0 repair_1d=0` under the D16 rule and every symbol has at least 5 compared days.
 
 **Verify:** the output's last two lines are `min_days=<n>` with `n >= 5` and exactly `mismatches=0 repair_1d=0`.
 
