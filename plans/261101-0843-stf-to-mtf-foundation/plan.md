@@ -1,7 +1,7 @@
 ---
 title: "Retire single-timeframe strategies; generic multi-timeframe foundation"
 description: "Spike the whole MTF foundation in a throwaway worktree, deploy the 1d cascade for session calendars first, delete the three STF strategies, then build the generic contracts (subscription intervals + parameters, closed higher-timeframe context from Mongo, stop entry, strategy EXIT, manual close/cancel, generic snapshot, generic UI, backtest intervals), add Triple Screen as the first consumer, backtest it, run one paper subscription, and delete the STF prod data last."
-status: pending
+status: completed
 priority: P1
 effort: "about 12-15d code + 2 deploys + 7 days 1d comparison + paper observation"
 branch: develop
@@ -116,7 +116,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 14 | [Triple Screen strategy and tests](./phase-14-triple-screen.md) | none (CI) | 09, 11 | Completed |
 | 15 | [D-2 release: prod migration, index drop, deploy, post-checks](./phase-15-release-d2.md) | D-2 [ASK] | 03-14 | Completed |
 | 16 | [Prod backtests, pick the live set, start one paper subscription](./phase-16-backtests-and-paper-start.md) | none | 15 | Completed |
-| 17 | [Observe; 1d comparison and review; prod STF delete; close](./phase-17-observe-compare-delete.md) | none | 16 | Pending |
+| 17 | [Observe; 1d comparison and review; prod STF delete; close](./phase-17-observe-compare-delete.md) | none | 16 | Completed |
 
 ## Acceptance criteria
 

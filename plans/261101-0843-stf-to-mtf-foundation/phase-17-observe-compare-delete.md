@@ -1,7 +1,7 @@
 ---
 phase: 17
 title: "Observe; 1d comparison and review; prod STF delete; close"
-status: pending
+status: completed
 priority: P1
 effort: "days of observation + 0.5d"
 dependencies: [16]
