@@ -110,7 +110,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 12 | [Backtest UI: intervals, defaults, labels](./phase-12-backtest-ui.md) | none (CI) | 08 | Completed |
 | 13 | [Generic subscription UI: form, row, drawer, actions](./phase-13-subscription-ui.md) | none (CI) | 11, 12 | Completed |
 | 14 | [Triple Screen strategy and tests](./phase-14-triple-screen.md) | none (CI) | 09, 11 | Completed |
-| 15 | [D-2 release: prod migration, index drop, deploy, post-checks](./phase-15-release-d2.md) | D-2 [ASK] | 03-14 | Pending |
+| 15 | [D-2 release: prod migration, index drop, deploy, post-checks](./phase-15-release-d2.md) | D-2 [ASK] | 03-14 | Completed |
 | 16 | [Prod backtests, pick the live set, start one paper subscription](./phase-16-backtests-and-paper-start.md) | none | 15 | Pending |
 | 17 | [Observe; one-week 1d comparison; prod STF delete; close](./phase-17-observe-compare-delete.md) | none | 16, D-1 + 7 days | Pending |
 

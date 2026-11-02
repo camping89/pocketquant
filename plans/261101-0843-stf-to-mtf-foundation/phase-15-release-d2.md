@@ -1,7 +1,7 @@
 ---
 phase: 15
 title: "D-2 release: prod migration, index drop, deploy, post-checks"
-status: pending
+status: completed
 priority: P1
 effort: 0.5d
 dependencies: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
