@@ -9,9 +9,11 @@ logger = structlog.get_logger(__name__)
 
 
 class RiskCheckHandler:
-    # Only LONG and SHORT open an order: the order path maps every other direction to
-    # SELL, so EXIT and FLAT are rejected here. An entry against an open position is
-    # rejected because exits are SL/TP only.
+    # EXIT passes only with an open position; the engine closes it through the broker,
+    # never through an order. FLAT and other non-entry directions are rejected because the
+    # order path maps them to SELL. A subscription holds one position: an opposite entry
+    # against it is rejected, and so is a stop entry, which the paper broker would refuse at
+    # every touch. A same-side market entry adds to it, within the exposure cap.
     def validate(
         self,
         signal: Signal,
@@ -19,6 +21,11 @@ class RiskCheckHandler:
         position: PositionAggregate | None,
         config: RiskConfig | None = None,
     ) -> tuple[bool, str]:
+        if signal.direction is Direction.EXIT:
+            if position is None or position.is_closed:
+                return False, "no open position"
+            return True, ""
+
         if account.available_balance <= 0:
             return False, "Insufficient balance"
 
@@ -30,6 +37,9 @@ class RiskCheckHandler:
 
         if (signal.direction == Direction.LONG) != (position.side == PositionSide.LONG):
             return False, "opposite position open"
+
+        if signal.entry_type == "stop":
+            return False, "position open"
 
         if account.total_equity <= 0:
             return False, "No account equity"

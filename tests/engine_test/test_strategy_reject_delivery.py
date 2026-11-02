@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -130,7 +130,7 @@ async def test_on_order_rejected_clears_open_direction() -> None:
 
 @pytest.mark.asyncio
 async def test_risk_rejection_on_paper_rearms_strategy_without_order() -> None:
-    orders = AsyncMock()
+    orders = AsyncMock(pending_stop=MagicMock(return_value=None))
     engine = _engine(_Risk(False, "max exposure"), orders=orders)
     strategy = await _armed(engine)
     broker = engine._brokers["s1"]

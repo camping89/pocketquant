@@ -13,11 +13,13 @@ from pocketquant.core.domain.bar.entities import Bar
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.broker_factory_port import IBrokerFactoryPort
 from pocketquant.core.domain.brokers.broker_port import IBrokerPort
+from pocketquant.core.domain.brokers.events import REASON_STRATEGY_EXIT
 from pocketquant.core.domain.order import (
     OrderAggregate,
     OrderCancelledEvent,
     OrderFilledEvent,
     OrderSide,
+    OrderStatus,
     OrderType,
 )
 from pocketquant.core.domain.position import PositionAggregate, PositionSide, TradeClosedEvent
@@ -168,7 +170,7 @@ class StrategyAppService:
         async with self._lock:
             await self._order_app_service.load_pending_orders()
             await self._position_app_service.load_open_positions()
-            restored = dropped = 0
+            restored = 0
             papers = {id(b): b for b in self._brokers.values() if isinstance(b, PaperBrokerAdapter)}
             for broker in papers.values():
                 ids = [sid for sid, b in self._brokers.items() if b is broker]
@@ -176,15 +178,6 @@ class StrategyAppService:
                 for sid in ids:
                     row = self._position_app_service.get(sid)
                     if row is None:
-                        continue
-                    if row.sl_price is None and row.tp_price is None:
-                        logger.warning(
-                            "paper_position_dropped_no_exits",
-                            subscription_id=sid,
-                            symbol=row.symbol,
-                        )
-                        await self._position_app_service.drop(sid)
-                        dropped += 1
                         continue
                     rows.append(row)
                 realized = await self._trade_repository.realized_net(ids)
@@ -198,6 +191,24 @@ class StrategyAppService:
                 broker = self._brokers[sid]
                 if not broker.is_connected:
                     await broker.connect()
+            # A stored stop belongs to the previous trader: the strategy re-places it.
+            stops_dropped = 0
+            for sid in self._strategies:
+                order = self._order_app_service.pending_stop(sid)
+                if order is None:
+                    continue
+                bound = self._brokers.get(sid)
+                broker_cancelled = bound is not None and await bound.cancel_order(
+                    order.broker_order_id or ""
+                )
+                await self._order_app_service.cancel(order)
+                logger.info(
+                    "strategy.pending_stop_dropped",
+                    subscription_id=sid,
+                    order_id=str(order.id),
+                    broker_cancelled=broker_cancelled,
+                )
+                stops_dropped += 1
             # From now on a None switch means a drain, unless a lost lease marks it.
             self._discard_reason = "drain"
             logger.info(
@@ -205,7 +216,7 @@ class StrategyAppService:
                 strategies=len(self._strategies),
                 paper_brokers=len(papers),
                 paper_positions=restored,
-                paper_dropped=dropped,
+                paper_stops_dropped=stops_dropped,
             )
 
     async def load_strategy(
@@ -387,7 +398,25 @@ class StrategyAppService:
             if strategy.is_running:
                 await strategy.on_stop()
 
+            # A resting stop never outlives its strategy: stop, unload, edit and handover all
+            # cancel it, and the strategy re-places it on its next bar.
+            pending = self._order_app_service.pending_stop(strategy_id)
+            broker = self._brokers.get(strategy_id)
+            if pending is not None and broker is not None:
+                await self._cancel_stop(pending, broker)
+
             logger.info("strategy_stopped", strategy_id=strategy_id)
+
+    async def _cancel_stop(self, order: OrderAggregate, broker: IBrokerPort) -> bool:
+        if await broker.cancel_order(order.broker_order_id or ""):
+            await self._order_app_service.cancel(order)
+            return True
+        logger.warning(
+            "strategy.pending_cancel_failed",
+            subscription_id=order.subscription_id,
+            order_id=str(order.id),
+        )
+        return False
 
     # A paper broker simulates the position, so the subscription's position is dropped
     # and a broker with no other holder is disconnected; otherwise it keeps checking
@@ -429,6 +458,8 @@ class StrategyAppService:
         config: StrategyConfig,
     ) -> None:
         async with self._lock:
+            if not any(b is broker for b in self._brokers.values()):
+                await broker.subscribe_order_updates(self._order_app_service.on_order_update)
             self._strategies[sid] = strategy
             self._brokers[sid] = broker
             self._configs[sid] = config
@@ -448,12 +479,28 @@ class StrategyAppService:
         return list(self._strategies.keys())
 
     # An entry on a stale, gapped or non-successor live bar, or while the last entry is
-    # still in flight, is skipped; the strategy still sees the bar. A venue entry runs
-    # as a task so one slow venue call never holds the bar; a paper entry fills inline.
+    # still in flight, is skipped; the strategy still sees the bar. An exit is never stale:
+    # going flat is not a look-ahead risk. An exit behind an in-flight entry is skipped as
+    # inflight, and the strategy sends it again on its next bar. A venue entry runs as a
+    # task so one slow venue call never holds the bar; a paper entry fills inline.
     async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
         published_at = get_current_time()
         self._running_bar_handlers += 1
         try:
+            # Stops resting from earlier bars fill, and SL/TP exits run, before any strategy
+            # decides on this bar. A fill is an entry, so it needs the lease like any other.
+            if self.trading_until is not None and published_at < self.trading_until:
+                running = {sid for sid, s in self._strategies.items() if s.is_running}
+                papers = {
+                    id(b): b
+                    for b in self._brokers.values()
+                    if isinstance(b, PaperBrokerAdapter) and b.is_connected
+                }
+                for paper in papers.values():
+                    try:
+                        await paper.fill_resting_stops(event, running)
+                    except Exception:
+                        logger.error("paper.stop_fill_failed", symbol=event.symbol, exc_info=True)
             for strategy in self._find_strategies(event.symbol, event.interval):
                 assert event.bar_start is not None
                 last = self._last_bar_start.get(strategy.id)
@@ -481,14 +528,14 @@ class StrategyAppService:
                 signal_at = get_current_time()
                 reason = None
                 age_s = None
-                if event.bar_end is not None:
+                if event.bar_end is not None and signal.direction is not Direction.EXIT:
                     age_s = (signal_at - event.bar_end).total_seconds()
                     if age_s > _STALE_AFTER_S[event.interval]:
                         reason = "stale"
                     elif event.gap or not successor:
                         reason = "gap"
-                running = self._signal_tasks.get(strategy.id)
-                if reason is None and running is not None and not running.done():
+                inflight = self._signal_tasks.get(strategy.id)
+                if reason is None and inflight is not None and not inflight.done():
                     reason = "inflight"
                 if reason is not None:
                     logger.warning(
@@ -622,7 +669,31 @@ class StrategyAppService:
                 await strategy.on_order_rejected("no broker")
                 return
 
-            current_price = event.close
+            pending = self._order_app_service.pending_stop(strategy.id)
+            side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
+            if (
+                pending is not None
+                and signal.entry_type == "stop"
+                and pending.side == side
+                and pending.stop_price == signal.entry_price
+                and pending.sl_price == signal.stop_loss_price
+                and pending.tp_price == signal.take_profit_price
+            ):
+                logger.debug(
+                    "strategy.stop_kept", subscription_id=strategy.id, order_id=str(pending.id)
+                )
+                return
+            # An exit goes flat even when the cancel fails.
+            if (
+                pending is not None
+                and not await self._cancel_stop(pending, broker)
+                and signal.direction is not Direction.EXIT
+            ):
+                await strategy.on_order_rejected("pending cancel failed")
+                return
+
+            current_price = signal.entry_price if signal.entry_type == "stop" else event.close
+            assert current_price is not None
             balance = await broker.get_balance()
 
             position = self._position_app_service.get(strategy.id)
@@ -633,6 +704,24 @@ class StrategyAppService:
                 position,
                 strategy.config.risk,
             )
+            if signal.direction is Direction.EXIT:
+                if not valid:
+                    if pending is None:
+                        logger.debug(
+                            "strategy.exit_ignored", subscription_id=strategy.id, reason=reason
+                        )
+                    return
+                assert position is not None
+                closed = await broker.close_position(
+                    strategy.id, position.symbol, reason=REASON_STRATEGY_EXIT, deadline=deadline
+                )
+                logger.info(
+                    "strategy.position_close_sent",
+                    subscription_id=strategy.id,
+                    reason=REASON_STRATEGY_EXIT,
+                    closed=closed,
+                )
+                return
             if not valid:
                 logger.info(
                     "signal_rejected_by_risk",
@@ -680,6 +769,14 @@ class StrategyAppService:
                 self._sending.discard(strategy.id)
             if not result.is_success:
                 await strategy.on_order_rejected(result.error_message or "rejected")
+            # A stop or unload that ran while this stop was in flight saw no SUBMITTED order
+            # to cancel.
+            if (
+                order.order_type is OrderType.STOP_MARKET
+                and order.status is OrderStatus.SUBMITTED
+                and (self._strategies.get(strategy.id) is not strategy or not strategy.is_running)
+            ):
+                await self._cancel_stop(order, broker)
 
             logger.debug(
                 "signal_processed",
@@ -689,8 +786,10 @@ class StrategyAppService:
                 order_status=result.status.value,
             )
             if event.bar_end is not None:
-                # One line per live signal: bounded, so INFO.
-                logger.info(
+                # One line per live signal: bounded, so INFO. A stop moved every bar is a
+                # per-bar event, so DEBUG.
+                log = logger.debug if pending is not None else logger.info
+                log(
                     "live.signal_latency",
                     subscription_id=strategy.id,
                     symbol=event.symbol,
@@ -721,14 +820,16 @@ class StrategyAppService:
         current_price: float,
     ) -> OrderAggregate:
         side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
+        stop = signal.entry_type == "stop"
 
         return OrderAggregate.create(
             subscription_id=strategy.id,
             symbol=signal.symbol,
             side=side,
-            order_type=OrderType.MARKET,
+            order_type=OrderType.STOP_MARKET if stop else OrderType.MARKET,
             quantity=size,
-            price=current_price,
+            price=None if stop else current_price,
+            stop_price=signal.entry_price if stop else None,
             sl_price=signal.stop_loss_price,
             tp_price=signal.take_profit_price,
         )
@@ -756,8 +857,7 @@ class StrategyAppService:
         # pool hit above returns already-wired brokers, so N subscriptions
         # sharing one broker get exactly one forward, not one per subscription.
         await broker.subscribe_trades(self._forward_trade_to_bus)
-        if broker.fills_async:
-            await broker.subscribe_order_updates(self._order_app_service.on_order_update)
+        await broker.subscribe_order_updates(self._order_app_service.on_order_update)
         self._broker_pool[key] = broker
         return broker
 

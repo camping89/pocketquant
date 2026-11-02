@@ -109,7 +109,7 @@ def _engine() -> tuple[StrategyAppService, MagicMock]:
     engine = StrategyAppService(
         event_bus=EventBus(),
         broker_factory=factory,
-        order_app_service=MagicMock(),
+        order_app_service=MagicMock(pending_stop=MagicMock(return_value=None)),
         position_app_service=MagicMock(),
         risk_check_handler=MagicMock(),
         bar_repository=NoStoredBars(),  # type: ignore[arg-type]

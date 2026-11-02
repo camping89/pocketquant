@@ -53,6 +53,12 @@ class _RecordingOrderService:
         self.orders.append(order)
         return await broker.submit_order(order)  # type: ignore[attr-defined]
 
+    async def on_order_update(self, result: object) -> None:
+        return None
+
+    def pending_stop(self, subscription_id: str) -> None:
+        return None
+
 
 class _NoPositions:
     def get(self, strategy_id: str) -> None:

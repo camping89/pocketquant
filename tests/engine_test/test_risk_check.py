@@ -36,12 +36,34 @@ def test_an_entry_signal_passes(direction: Direction) -> None:
     assert RiskCheckHandler().validate(_signal(direction), _ACCOUNT, None) == (True, "")
 
 
-@pytest.mark.parametrize("direction", [Direction.EXIT, Direction.FLAT])
-def test_exit_and_flat_signals_are_rejected(direction: Direction) -> None:
-    valid, reason = RiskCheckHandler().validate(_signal(direction), _ACCOUNT, _position())
+def test_an_exit_with_an_open_position_passes() -> None:
+    assert RiskCheckHandler().validate(_signal(Direction.EXIT), _ACCOUNT, _position()) == (
+        True,
+        "",
+    )
+
+
+def test_an_exit_without_a_position_is_rejected() -> None:
+    assert RiskCheckHandler().validate(_signal(Direction.EXIT), _ACCOUNT, None) == (
+        False,
+        "no open position",
+    )
+
+
+def test_an_exit_passes_with_zero_balance() -> None:
+    account = AccountBalance(total_equity=0.0, available_balance=0.0)
+
+    assert RiskCheckHandler().validate(_signal(Direction.EXIT), account, _position()) == (
+        True,
+        "",
+    )
+
+
+def test_a_flat_signal_is_rejected() -> None:
+    valid, reason = RiskCheckHandler().validate(_signal(Direction.FLAT), _ACCOUNT, _position())
 
     assert valid is False
-    assert direction.value in reason
+    assert Direction.FLAT.value in reason
 
 
 def test_zero_equity_with_an_open_position_is_rejected() -> None:
@@ -71,3 +93,17 @@ def test_a_same_side_entry_still_reaches_the_exposure_check() -> None:
         True,
         "",
     )
+
+
+def test_a_stop_entry_against_an_open_position_is_rejected() -> None:
+    stop = Signal(
+        symbol="BTCUSDT:BINANCE",
+        direction=Direction.LONG,
+        confidence=1.0,
+        timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        subscription_id="s1",
+        entry_price=101.0,
+        entry_type="stop",
+    )
+
+    assert RiskCheckHandler().validate(stop, _ACCOUNT, _position()) == (False, "position open")

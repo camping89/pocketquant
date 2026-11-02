@@ -57,11 +57,13 @@ class _Orders:
     def __init__(self) -> None:
         self.rows: dict[str, OrderAggregate] = {}
 
+    # Copies, so a test reads what was saved, not the object the engine holds.
     async def save(self, order: OrderAggregate) -> None:
-        self.rows[str(order.id)] = order
+        self.rows[str(order.id)] = order.model_copy(deep=True)
 
     async def find_pending(self, limit: int = 500) -> list[OrderAggregate]:
-        return [o for o in self.rows.values() if o.status == OrderStatus.PENDING]
+        live = (OrderStatus.PENDING, OrderStatus.SUBMITTED, OrderStatus.PARTIALLY_FILLED)
+        return [o.model_copy(deep=True) for o in self.rows.values() if o.status in live]
 
 
 class _Trades:
@@ -192,7 +194,7 @@ async def test_a_restored_position_exits_on_the_next_crossing_bar() -> None:
     assert await b.broker.get_positions() == []
 
 
-async def test_a_paper_row_without_exits_is_dropped() -> None:
+async def test_a_paper_row_without_exits_is_restored() -> None:
     store = _Store()
     row = PositionAggregate.open(
         subscription_id="a", symbol=_SYM, side=PositionSide.LONG, entry_price=100.0, quantity=1.0
@@ -200,9 +202,33 @@ async def test_a_paper_row_without_exits_is_dropped() -> None:
     await store.positions.save(row)
     b = await _process(store)
 
+    await b.engine.take_over()
+
+    assert len(await store.positions.find_open()) == 1
+    [held] = await b.broker.get_positions()
+    assert (held.sl_price, held.tp_price) == (None, None)
+
+
+async def test_a_takeover_cancels_stored_pending_stops() -> None:
+    store = _Store()
+    stored = OrderAggregate.create(
+        subscription_id="a",
+        symbol=_SYM,
+        side=OrderSide.BUY,
+        order_type=OrderType.STOP_MARKET,
+        quantity=1.0,
+        stop_price=101.0,
+        sl_price=95.0,
+    )
+    stored.submit("old-broker-id")
+    await store.orders.save(stored)
+    b = await _process(store)
+
     with structlog.testing.capture_logs() as logs:
         await b.engine.take_over()
+    await b.bus.publish(_bar(low=99.0, close=102.0))
 
-    assert len([e for e in logs if e["event"] == "paper_position_dropped_no_exits"]) == 1
-    assert await store.positions.find_open() == []
+    assert store.orders.rows[str(stored.id)].status is OrderStatus.CANCELLED
+    assert b.orders.pending_stop("a") is None
+    assert len([e for e in logs if e["event"] == "strategy.pending_stop_dropped"]) == 1
     assert await b.broker.get_positions() == []

@@ -96,3 +96,37 @@ async def test_failing_fill_handler_keeps_the_order_filled() -> None:
     assert result.status == OrderStatus.FILLED
     assert order.status == OrderStatus.FILLED
     assert len(events) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_wired_paper_fill_publishes_one_fill_event() -> None:
+    svc, broker, events = await _wired()
+    await broker.subscribe_order_updates(svc.on_order_update)
+
+    result = await svc.submit(_market(OrderSide.BUY), broker)
+
+    assert result.status == OrderStatus.FILLED
+    assert len(events) == 1
+
+
+@pytest.mark.asyncio
+async def test_pending_stop_and_cancel() -> None:
+    svc, _, _ = await _wired()
+    order = OrderAggregate.create(
+        subscription_id="s1",
+        symbol=_SYM,
+        side=OrderSide.BUY,
+        order_type=OrderType.STOP_MARKET,
+        quantity=1.0,
+        stop_price=101.0,
+    )
+    order.submit("b1")
+    svc._pending[str(order.id)] = order
+
+    assert svc.pending_stop("s1") is order
+
+    await svc.cancel(order)
+
+    assert order.status == OrderStatus.CANCELLED
+    assert await svc._order_repo.get(str(order.id)) is order
+    assert svc.pending_stop("s1") is None

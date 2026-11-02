@@ -11,6 +11,7 @@ from pocketquant.core.domain.order import (
     OrderCancelledEvent,
     OrderFilledEvent,
     OrderStatus,
+    OrderType,
 )
 from pocketquant.core.infra.persistence.repositories.order_repository import OrderRepository
 
@@ -90,7 +91,13 @@ class OrderAppService:
                         order.submit(result.broker_order_id)
                         await self._order_repo.save(order)
 
-                        logger.info(
+                        # A stop may be moved every bar; its fill is the per-trade event.
+                        log = (
+                            logger.debug
+                            if order.order_type is OrderType.STOP_MARKET
+                            else logger.info
+                        )
+                        log(
                             "order_submitted",
                             order_id=str(order.id),
                             broker_order_id=result.broker_order_id,
@@ -131,6 +138,10 @@ class OrderAppService:
             order = self._pending.get(result.order_id)
             if not order:
                 return
+            # submit() owns an order until the broker call returns; a paper broker notifies
+            # inside that call.
+            if order.status is OrderStatus.PENDING:
+                return
 
             if result.status == OrderStatus.FILLED:
                 order.fill(result.filled_quantity, result.filled_price or 0.0)
@@ -163,6 +174,27 @@ class OrderAppService:
                         reason=result.error_message or "",
                     )
                 )
+
+    def pending_stop(self, subscription_id: str) -> OrderAggregate | None:
+        for order in self._pending.values():
+            if (
+                order.subscription_id == subscription_id
+                and order.order_type is OrderType.STOP_MARKET
+                and order.status is OrderStatus.SUBMITTED
+            ):
+                return order
+        return None
+
+    # The engine asked for the cancel, so no OrderCancelledEvent goes out.
+    async def cancel(self, order: OrderAggregate) -> None:
+        async with self._lock:
+            if self._pending.pop(str(order.id), None) is None:
+                return
+            order.cancel()
+            await self._order_repo.save(order)
+        logger.debug(
+            "order_cancelled", order_id=str(order.id), subscription_id=order.subscription_id
+        )
 
     async def load_pending_orders(self) -> None:
         pending = await self._order_repo.find_pending()

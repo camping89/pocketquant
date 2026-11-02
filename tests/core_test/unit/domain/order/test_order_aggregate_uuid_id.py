@@ -32,6 +32,23 @@ def test_roundtrip_preserves_id() -> None:
     assert isinstance(restored.id, UUID)
 
 
+def test_mongo_round_trip_keeps_sl_and_tp() -> None:
+    o = OrderAggregate.create(
+        subscription_id="sub-1",
+        symbol="BTCUSDT:BINANCE",
+        side=OrderSide.BUY,
+        order_type=OrderType.STOP_MARKET,
+        quantity=1.0,
+        stop_price=101.0,
+        sl_price=99.0,
+        tp_price=103.0,
+    )
+
+    restored = OrderAggregate.from_mongo(o.to_mongo())
+
+    assert (restored.sl_price, restored.tp_price) == (99.0, 103.0)
+
+
 def test_from_mongo_reads_legacy_str_uuid_doc() -> None:
     legacy_id = str(uuid7())
     doc = _order().to_mongo()

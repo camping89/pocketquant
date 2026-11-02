@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 
 from pocketquant.core.common.constants import INTERVAL_SECONDS
+from pocketquant.core.common.logging import get_logger
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.common.time.simulation import get_current_time
 from pocketquant.core.common.uuid import generate_id_str
@@ -14,9 +15,11 @@ from pocketquant.core.domain.brokers.broker_port import (
 from pocketquant.core.domain.brokers.events import (
     REASON_AUTO_SL,
     REASON_AUTO_TP,
+    REASON_CANCELLED,
     REASON_INSUFFICIENT_BALANCE,
     REASON_MARKET_FILL,
     REASON_NO_MARKET_PRICE,
+    REASON_STOP_FILL,
     REASON_SUBMIT,
     REASON_UNSUPPORTED_ORDER_TYPE,
     OrderEvent,
@@ -38,11 +41,15 @@ from pocketquant.core.domain.position import (
 from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.domain.trading import CommissionModel, PercentageCommissionModel
 
+logger = get_logger(__name__)
+
 # (from_status, to_status, reason, when) transitions emitted after a lock section.
 _StatusEvents = list[tuple[OrderStatus | None, OrderStatus, str, datetime]]
 # What a fill-handler hands back to submit_order: the result, its status
 # transitions, and any trade closures to forward after the fill notify.
 _FillOutcome = tuple[OrderResult, _StatusEvents, list[TradeClosedEvent]]
+# (position, exit trigger price, exit side, reason) of a synthetic exit to fire.
+_Exit = tuple[PositionAggregate, float, OrderSide, str]
 
 
 # Callers must not use one broker from several concurrent tasks. Subscriber callbacks
@@ -86,6 +93,8 @@ class PaperBrokerAdapter(IBrokerPort):
         # Finest interval seen per symbol: a coarser bar's range starts before
         # entries made inside it, so only the finest stream fills or exits.
         self._finest_interval_s: dict[str, int] = {}
+        # Resting STOP_MARKET orders by broker order id, with the time each was placed.
+        self._resting: dict[str, tuple[OrderAggregate, datetime]] = {}
 
     @property
     def name(self) -> str:
@@ -127,8 +136,22 @@ class PaperBrokerAdapter(IBrokerPort):
             (None, OrderStatus.SUBMITTED, REASON_SUBMIT, now),
         ]
 
-        result, more_events, trades = await self._handle_market(order, broker_order_id, now)
-        pending_events.extend(more_events)
+        if order.order_type is OrderType.STOP_MARKET:
+            async with self._lock:
+                self._resting[broker_order_id] = (order, now)
+            result = OrderResult(
+                order_id=str(order.id),
+                broker_order_id=broker_order_id,
+                status=OrderStatus.SUBMITTED,
+                submitted_at=now,
+                sl_price=order.sl_price,
+                tp_price=order.tp_price,
+                side=order.side,
+            )
+            trades: list[TradeClosedEvent] = []
+        else:
+            result, more_events, trades = await self._handle_market(order, broker_order_id, now)
+            pending_events.extend(more_events)
 
         # Dispatch events + fill notification AFTER lock-protected mutations.
         for from_s, to_s, reason, when in pending_events:
@@ -221,9 +244,31 @@ class PaperBrokerAdapter(IBrokerPort):
                 trades,
             )
 
-    # Nothing to cancel: a paper order is terminal when submit_order returns.
+    # True when no fill can follow. Paper is the only filler of its orders, so an id that
+    # is not resting (filled, refused, dropped on unload or from an earlier process) is as
+    # good as cancelled. The caller asked for the cancel, so no order callback goes out.
     async def cancel_order(self, broker_order_id: str) -> bool:
+        async with self._lock:
+            resting = self._resting.pop(broker_order_id, None)
+        if resting is None:
+            return True
+        await self._emit_event(
+            str(resting[0].id), OrderStatus.SUBMITTED, OrderStatus.CANCELLED, REASON_CANCELLED
+        )
         return True
+
+    # Closes at the last bar close, plus the spread for a BUY.
+    async def close_position(
+        self, subscription_id: str, symbol: str, *, reason: str, deadline: datetime | None = None
+    ) -> bool:
+        pos = self._positions.get(f"{subscription_id}:{symbol}")
+        if pos is None or pos.is_closed:
+            return False
+        side = OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY
+        trigger = self._current_prices.get(symbol.upper(), pos.current_price)
+        if side == OrderSide.BUY:
+            trigger += self._spread
+        return await self._fire_synthetic_exit(pos, trigger, side, reason)
 
     # Used on unload, when no one is left to manage the position. Opening a paper position
     # moves no cash, so the balance stays as it is.
@@ -231,11 +276,16 @@ class PaperBrokerAdapter(IBrokerPort):
         keys = [k for k, p in self._positions.items() if p.subscription_id == subscription_id]
         for key in keys:
             del self._positions[key]
+        self._resting = {
+            k: v for k, v in self._resting.items() if v[0].subscription_id != subscription_id
+        }
         return len(keys)
 
     # Copies, because the mirror reduces its own row on an exit fill.
+    # A takeover restores no stop: the strategy re-places it on its next bar.
     def restore(self, positions: list[PositionAggregate], realized_net: float) -> None:
         self._positions.clear()
+        self._resting.clear()
         entry_commissions = 0.0
         for row in positions:
             commission = self._commission(row.entry_price, row.quantity)
@@ -465,30 +515,169 @@ class PaperBrokerAdapter(IBrokerPort):
         if errors:
             raise errors[0]
 
-    # Only bars of the finest interval seen for the symbol act, and only on positions that
-    # existed when the bar was published: the broker subscribes last, so a position opened
-    # on the signal bar is checked from the next bar. A level the bar opens past fills at
-    # the open; when SL and TP both hit inside one bar, SL fills first (worst case).
-    async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
+    # Only bars of the finest interval seen for the symbol act: a coarser bar's range starts
+    # before entries made inside it.
+    def _is_finest(self, event: BarCompletedEvent) -> bool:
         secs = INTERVAL_SECONDS[event.interval]
         finest = min(secs, self._finest_interval_s.get(event.symbol, secs))
         self._finest_interval_s[event.symbol] = finest
-        if secs > finest:
+        return secs <= finest
+
+    # Call under lock. Only positions that existed when the bar was published act, so a
+    # position opened on the signal bar is checked from the next bar.
+    def _sl_tp_hits(self, event: BarCompletedEvent, skip: set) -> list[_Exit]:
+        hits: list[_Exit] = []
+        for pos in self._positions.values():
+            if pos.is_closed or pos.symbol != event.symbol or pos.id in skip:
+                continue
+            if pos.opened_at >= event.occurred_at:
+                continue
+            if pos.sl_price is None and pos.tp_price is None:
+                continue
+            hit = self._check_sl_tp(pos, event)
+            if hit is not None:
+                hits.append((pos, hit[0], hit[1], hit[2]))
+        return hits
+
+    # The engine calls this before any strategy decides on the bar: the broker's own bar
+    # handler runs after the strategies, so a stop re-placed every bar would be cancelled
+    # before that handler saw a touching bar. A stop fills on a later bar only, and only
+    # for a running subscription. The fill repeats the placement checks as a last guard:
+    # one position per subscription and the balance. BUY fills at max(ask open, stop), SELL
+    # at min(open, stop), which is optimistic in a fast market. On the fill bar only the SL
+    # is checked; the TP waits for the next bar.
+    async def fill_resting_stops(self, event: BarCompletedEvent, running: set[str]) -> None:
+        if not self._is_finest(event):
+            return
+        # An EXIT on this bar closes at its close.
+        self._current_prices[event.symbol.upper()] = event.close
+        now = get_current_time()
+        fills: list[tuple[OrderResult, list[TradeClosedEvent]]] = []
+        refused: list[tuple[OrderAggregate, str, str]] = []
+        to_close: list[_Exit] = []
+        async with self._lock:
+            filled: set = set()
+            for broker_order_id, (order, placed_at) in list(self._resting.items()):
+                if order.symbol != event.symbol or placed_at >= event.occurred_at:
+                    continue
+                stop = order.stop_price or 0.0
+                if order.side == OrderSide.BUY:
+                    if event.high + self._spread < stop:
+                        continue
+                    trigger = max(event.open + self._spread, stop)
+                else:
+                    if event.low > stop:
+                        continue
+                    trigger = min(event.open, stop)
+                if order.subscription_id not in running:
+                    continue
+                price = self._apply_slippage(trigger, order.side)
+                key = f"{order.subscription_id}:{order.symbol}"
+                held = self._positions.get(key)
+                del self._resting[broker_order_id]
+                if held is not None and not held.is_closed:
+                    refused.append((order, broker_order_id, "position open"))
+                    continue
+                if not self._can_afford(order, price):
+                    refused.append((order, broker_order_id, "Insufficient balance"))
+                    continue
+                commission, trades = self._execute_fill_with_commission(order, price)
+                pos = self._positions[key]
+                filled.add(pos.id)
+                fills.append(
+                    (
+                        OrderResult(
+                            order_id=str(order.id),
+                            broker_order_id=broker_order_id,
+                            status=OrderStatus.FILLED,
+                            filled_quantity=order.quantity,
+                            filled_price=price,
+                            submitted_at=placed_at,
+                            sl_price=order.sl_price,
+                            tp_price=order.tp_price,
+                            side=order.side,
+                            commission=commission,
+                        ),
+                        trades,
+                    )
+                )
+                # An SL already past the fill exits at the fill, never at a better price
+                # than the bar traded.
+                sl = pos.sl_price
+                if sl is None:
+                    continue
+                if pos.side == PositionSide.LONG and event.low <= sl:
+                    to_close.append((pos, min(sl, price), OrderSide.SELL, REASON_AUTO_SL))
+                elif pos.side == PositionSide.SHORT and event.high + self._spread >= sl:
+                    to_close.append(
+                        (pos, max(sl, price + self._spread), OrderSide.BUY, REASON_AUTO_SL)
+                    )
+            to_close.extend(self._sl_tp_hits(event, filled))
+
+        # Every outcome is dispatched even when a subscriber raises: the fills above are
+        # already applied, and one that never reaches the order service blocks its next entry.
+        # The first error is raised at the end. No OrderFilledEvent for a stop fill: the order
+        # service publishes it from the FILLED callback.
+        errors: list[Exception] = []
+        for result, trades in fills:
+            try:
+                await self._emit_event(
+                    result.order_id,
+                    OrderStatus.SUBMITTED,
+                    OrderStatus.FILLED,
+                    REASON_STOP_FILL,
+                    now,
+                )
+                await self._notify_callbacks(result)
+                for trade in trades:
+                    await self._notify_trade_callbacks(trade)
+            except Exception as e:
+                errors.append(e)
+        for order, broker_order_id, message in refused:
+            logger.warning(
+                "paper.stop_refused",
+                order_id=str(order.id),
+                subscription_id=order.subscription_id,
+                reason=message,
+            )
+            try:
+                await self._emit_event(
+                    str(order.id),
+                    OrderStatus.SUBMITTED,
+                    OrderStatus.CANCELLED,
+                    REASON_CANCELLED,
+                    now,
+                )
+                await self._notify_callbacks(
+                    OrderResult(
+                        order_id=str(order.id),
+                        broker_order_id=broker_order_id,
+                        status=OrderStatus.CANCELLED,
+                        error_message=message,
+                        submitted_at=now,
+                        side=order.side,
+                    )
+                )
+            except Exception as e:
+                errors.append(e)
+        for pos, exit_price, exit_side, reason in to_close:
+            try:
+                await self._fire_synthetic_exit(pos, exit_price, exit_side, reason)
+            except Exception as e:
+                errors.append(e)
+        if errors:
+            raise errors[0]
+
+    # A level the bar opens past fills at the open; when SL and TP both hit inside one bar,
+    # SL fills first (worst case).
+    async def _on_bar_completed(self, event: BarCompletedEvent) -> None:
+        if not self._is_finest(event):
             return
         self._current_prices[event.symbol.upper()] = event.close
-        fresh = {p.id for p in self._positions.values() if p.opened_at >= event.occurred_at}
-
-        to_close: list[tuple[PositionAggregate, float, OrderSide, str]] = []
+        # After the engine's pre-strategy pass this finds nothing new on the bar; it still
+        # acts while the engine skips that pass (a drain or a lapsed lease).
         async with self._lock:
-            for pos in self._positions.values():
-                if pos.is_closed or pos.symbol != event.symbol or pos.id in fresh:
-                    continue
-                if pos.sl_price is None and pos.tp_price is None:
-                    continue
-                hit = self._check_sl_tp(pos, event)
-                if hit is not None:
-                    exit_price, exit_side, reason = hit
-                    to_close.append((pos, exit_price, exit_side, reason))
+            to_close = self._sl_tp_hits(event, set())
 
         for pos, exit_price, exit_side, reason in to_close:
             await self._fire_synthetic_exit(pos, exit_price, exit_side, reason)
@@ -531,23 +720,29 @@ class PaperBrokerAdapter(IBrokerPort):
         trigger_price: float,
         exit_side: OrderSide,
         reason: str,
-    ) -> None:
+    ) -> bool:
         fill_price = self._apply_slippage(trigger_price, exit_side)
-        exit_order = OrderAggregate.create(
-            subscription_id=pos.subscription_id,
-            symbol=pos.symbol,
-            side=exit_side,
-            order_type=OrderType.MARKET,
-            quantity=pos.quantity,
-            price=trigger_price,
-        )
         broker_order_id = generate_id_str()
         now = get_current_time()
         async with self._lock:
-            # An earlier exit's callbacks may have awaited while this subscription
-            # was unloaded; a fill for its dropped position would open a new one.
-            if self._positions.get(f"{pos.subscription_id}:{pos.symbol}") is not pos:
-                return
+            # An earlier exit's callbacks may have awaited while this subscription was
+            # unloaded, and a fill for its dropped position would open a new one. A second
+            # exit of one position must never reverse it; closed is decided by state, not
+            # by identity.
+            if (
+                self._positions.get(f"{pos.subscription_id}:{pos.symbol}") is not pos
+                or pos.is_closed
+                or pos.quantity <= 0
+            ):
+                return False
+            exit_order = OrderAggregate.create(
+                subscription_id=pos.subscription_id,
+                symbol=pos.symbol,
+                side=exit_side,
+                order_type=OrderType.MARKET,
+                quantity=pos.quantity,
+                price=trigger_price,
+            )
             commission, trades = self._execute_fill_with_commission(exit_order, fill_price)
             result = OrderResult(
                 order_id=str(exit_order.id),
@@ -584,6 +779,7 @@ class PaperBrokerAdapter(IBrokerPort):
                     filled_price=fill_price,
                 )
             )
+        return True
 
     def reset(self) -> None:
         self._balance = self._initial_balance
@@ -591,3 +787,4 @@ class PaperBrokerAdapter(IBrokerPort):
         self._current_prices.clear()
         self._order_events.clear()
         self._finest_interval_s.clear()
+        self._resting.clear()

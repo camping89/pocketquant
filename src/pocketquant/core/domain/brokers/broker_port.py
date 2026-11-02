@@ -49,6 +49,13 @@ class IBrokerPort(ABC):
     @abstractmethod
     async def cancel_order(self, broker_order_id: str) -> bool: ...
 
+    # Closes the subscription's whole open position at market; False when none is open.
+    # It never opens or reverses a position.
+    @abstractmethod
+    async def close_position(
+        self, subscription_id: str, symbol: str, *, reason: str, deadline: datetime | None = None
+    ) -> bool: ...
+
     @abstractmethod
     async def get_positions(self) -> list[PositionAggregate]: ...
 

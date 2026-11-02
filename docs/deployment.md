@@ -121,7 +121,7 @@ Then close any open position in the Exness app. The pause is stored and survives
 
 ## Restart while live
 
-Use this for every planned deploy, rollback or config change while an `exness` subscription exists. A deploy does not stop the subscriptions. The new trader warms up in standby, takes over at a bar boundary, and restores each open direction from the open positions (`StrategyAppService.take_over`). The pause survives a restart.
+Use this for every planned deploy, rollback or config change while an `exness` subscription exists. A deploy does not stop the subscriptions. The new trader warms up in standby, takes over at a bar boundary, restores each open direction from the open positions and cancels the stored pending stop of every loaded subscription; the strategy re-places it on its next bar (`StrategyAppService.take_over`). The pause survives a restart.
 
 1. Pause entries (Exness strip, or the SSH command above).
 2. Deploy.

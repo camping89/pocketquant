@@ -79,6 +79,11 @@ class _VenueBroker(IBrokerPort):
     async def cancel_order(self, broker_order_id: str) -> bool:
         return False
 
+    async def close_position(
+        self, subscription_id: str, symbol: str, *, reason: str, deadline: datetime | None = None
+    ) -> bool:
+        return False
+
     async def get_positions(self) -> list[PositionAggregate]:
         return []
 

@@ -1,5 +1,5 @@
-# Only a broker with fills_async = True is subscribed; PaperBrokerAdapter reports fills
-# inline and stays unsubscribed.
+# Every broker is subscribed to order updates once, when it is created; a paper broker
+# notifies inside submit_order, and the order service ignores an order still PENDING.
 
 from __future__ import annotations
 
@@ -77,6 +77,11 @@ class _AsyncFillBroker(IBrokerPort):
         )
 
     async def cancel_order(self, broker_order_id: str) -> bool:
+        return False
+
+    async def close_position(
+        self, subscription_id: str, symbol: str, *, reason: str, deadline: datetime | None = None
+    ) -> bool:
         return False
 
     async def get_positions(self) -> list[PositionAggregate]:
@@ -163,7 +168,7 @@ async def test_async_fill_reaches_order_service_and_opens_position() -> None:
 
 
 @pytest.mark.asyncio
-async def test_paper_broker_is_not_subscribed_to_order_updates() -> None:
+async def test_a_paper_broker_is_subscribed_to_order_updates_once() -> None:
     bus = EventBus()
     orders = OrderAppService(bus, _InMemoryOrderRepo())  # type: ignore[arg-type]
     positions = PositionAppService(bus, _InMemoryPositionRepo())  # type: ignore[arg-type]
@@ -172,10 +177,13 @@ async def test_paper_broker_is_not_subscribed_to_order_updates() -> None:
     )
 
     await engine.load_strategy(_config("paper"))
+    second = StrategyConfig(id="s2", name="s2", symbol=_SYM, intervals=["1m"], broker="paper")
+    await engine.load_strategy(second)
 
     broker = engine._brokers["s1"]
     assert isinstance(broker, PaperBrokerAdapter)
-    assert len(broker._order_callbacks) == 0
+    assert engine._brokers["s2"] is broker
+    assert broker._order_callbacks == [orders.on_order_update]
 
 
 def test_only_async_brokers_declare_async_fills() -> None:

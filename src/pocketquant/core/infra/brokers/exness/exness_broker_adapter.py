@@ -751,6 +751,17 @@ class ExnessBrokerAdapter(IBrokerPort):
         logger.warning("exness.cancel_unsupported", broker_order_id=broker_order_id)
         return False
 
+    async def close_position(
+        self, subscription_id: str, symbol: str, *, reason: str, deadline: datetime | None = None
+    ) -> bool:
+        logger.warning(
+            "exness.close_unsupported",
+            subscription_id=subscription_id,
+            symbol=symbol,
+            reason=reason,
+        )
+        return False
+
     async def subscribe_order_updates(self, callback: OrderCallback) -> None:
         self._order_callbacks.append(callback)
 

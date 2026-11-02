@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -39,6 +39,9 @@ class _FakeBroker:
     async def disconnect(self) -> None:
         self._connected = False
 
+    async def subscribe_order_updates(self, callback: object) -> None:
+        return None
+
 
 class _CountingStrategy(IStrategyService):
     def __init__(self, config: StrategyConfig) -> None:
@@ -68,7 +71,7 @@ def _service() -> StrategyAppService:
     return StrategyAppService(
         event_bus=EventBus(),
         broker_factory=AsyncMock(),
-        order_app_service=AsyncMock(),
+        order_app_service=AsyncMock(pending_stop=MagicMock(return_value=None)),
         position_app_service=AsyncMock(),
         risk_check_handler=AsyncMock(),
         bar_repository=NoStoredBars(),  # type: ignore[arg-type]
