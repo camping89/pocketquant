@@ -1,7 +1,7 @@
 ---
 phase: 13
 title: "Generic subscription UI: form, row, drawer, actions"
-status: pending
+status: completed
 priority: P1
 effort: 1.5d
 dependencies: [11, 12]

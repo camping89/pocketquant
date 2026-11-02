@@ -108,7 +108,7 @@ C1-C13 in `reports/debate-evidence-packet.md` are the contract. Added while plan
 | 10 | [Exness close, pending stop and cancel; only exposure ops behind the live flag](./phase-10-exness-close-pending-cancel.md) | none (CI) | 09 | Completed |
 | 11 | [Snapshot ring, manual actions, read endpoints](./phase-11-snapshot-manual-actions-endpoints.md) | none (CI) | 10 | Completed |
 | 12 | [Backtest UI: intervals, defaults, labels](./phase-12-backtest-ui.md) | none (CI) | 08 | Completed |
-| 13 | [Generic subscription UI: form, row, drawer, actions](./phase-13-subscription-ui.md) | none (CI) | 11, 12 | Pending |
+| 13 | [Generic subscription UI: form, row, drawer, actions](./phase-13-subscription-ui.md) | none (CI) | 11, 12 | Completed |
 | 14 | [Triple Screen strategy and tests](./phase-14-triple-screen.md) | none (CI) | 09, 11 | Pending |
 | 15 | [D-2 release: prod migration, index drop, deploy, post-checks](./phase-15-release-d2.md) | D-2 [ASK] | 03-14 | Pending |
 | 16 | [Prod backtests, pick the live set, start one paper subscription](./phase-16-backtests-and-paper-start.md) | none | 15 | Pending |
