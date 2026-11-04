@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Hourly 1d self-consistency check"
-status: pending
+status: done
 priority: P2
 effort: 3h
 dependencies: [2, 3]

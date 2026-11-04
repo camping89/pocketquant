@@ -70,7 +70,7 @@ The release push itself stays an [ASK] that needs an explicit owner "yes" at the
 | 01 | [Local dev ports below the Windows dynamic range](./phase-01-local-dev-ports.md) | none (E2 decided) | none | Done |
 | 02 | [Symbol lookup race, cascade read limit, unused positions route](./phase-02-small-fixes.md) | none | none | Done |
 | 03 | [Repair and backfill fold late 1m bars](./phase-03-fold-late-1m-bars.md) | none (E3 decided) | 02 | Done |
-| 04 | [Hourly 1d self-consistency check](./phase-04-daily-bar-check.md) | none | 02, 03 | Pending |
+| 04 | [Hourly 1d self-consistency check](./phase-04-daily-bar-check.md) | none | 02, 03 | Done |
 | 05 | [Redis password rotation, release and prod checks](./phase-05-release-and-prod-checks.md) | release [ASK] | 02, 03, 04 | Pending |
 
 Phase 01 is outside this repo and can run any time; Phases 02-04 verify locally with Docker and do not need it, but `just up` on the all-local profile does.
