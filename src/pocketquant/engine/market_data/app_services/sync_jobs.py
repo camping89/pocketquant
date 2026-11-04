@@ -34,7 +34,9 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
 from pocketquant.engine.market_data.app_services.cascade_aggregator import (
     CASCADE_TFS,
+    aggregate_bucket,
     cascade_for_symbol,
+    compute_boundaries,
 )
 from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
@@ -604,6 +606,7 @@ async def sync_verify_cascade() -> None:
     tracked_symbol_repo = await container.get(TrackedSymbolRepository)
     bar_repo = await container.get(BarRepository)
     provider = await container.get(IDataProviderPort)
+    calendar_factory = await container.get(TradingCalendarFactory)
 
     async def body(_doc: str | None, _done: set[str] | None) -> None:
         tracked = await tracked_symbol_repo.list_all()
@@ -619,27 +622,27 @@ async def sync_verify_cascade() -> None:
                 summary = await _verify_one_symbol(symbol, provider=provider, bar_repo=bar_repo)
             except Exception as exc:
                 logger.error("sync_verify_cascade.symbol_failed", symbol=symbol, error=str(exc))
-                continue
+                summary = None
 
-            if summary.get("rest_empty"):
+            if summary is None:
+                pass
+            elif summary.get("rest_empty"):
                 logger.warning("sync_verify_cascade.rest_empty", symbol=symbol)
-                continue
-            if summary.get("cascade_empty"):
+            elif summary.get("cascade_empty"):
                 logger.warning(
                     "sync_verify_cascade.cascade_empty",
                     symbol=symbol,
                     reason="no_cascade_5m_bars_in_window",
                 )
-                continue
-
-            compared = summary["compared"]
-            div = summary["divergence_count"]
-            if compared > 0 and div / compared > DIVERGENCE_ALERT_FRACTION:
+            elif (
+                summary["compared"] > 0
+                and summary["divergence_count"] / summary["compared"] > DIVERGENCE_ALERT_FRACTION
+            ):
                 logger.warning(
                     "cascade.divergence_alert",
                     symbol=symbol,
-                    divergence_count=div,
-                    compared=compared,
+                    divergence_count=summary["divergence_count"],
+                    compared=summary["compared"],
                     price_threshold_pct=PRICE_THRESHOLD_PCT,
                     volume_threshold_pct=VOLUME_THRESHOLD_PCT,
                     sample_divergences=summary["samples"],
@@ -648,8 +651,47 @@ async def sync_verify_cascade() -> None:
                 logger.debug(
                     "sync_verify_cascade.ok",
                     symbol=symbol,
-                    compared=compared,
-                    divergence_count=div,
+                    compared=summary["compared"],
+                    divergence_count=summary["divergence_count"],
+                )
+
+            # Each stored 1d of the last closed days must equal the aggregate of its
+            # stored 1m. This catches a missed fold, a REST overwrite and a truncated
+            # read without a provider call; the 5m REST check above ties 1m to the
+            # venue. The day in progress is skipped: its 1d trails its newest minute.
+            try:
+                calendar = await calendar_factory.for_symbol(symbol)
+                now = datetime.now(UTC)
+                days = compute_boundaries(Interval.DAY_1, now - timedelta(days=4), now, calendar)
+                for day in days:
+                    if day + timedelta(days=1) > now:
+                        continue
+                    stored = await bar_repo.find(
+                        symbol=symbol,
+                        interval=Interval.DAY_1,
+                        start_date=day,
+                        end_date=day,
+                        limit=1,
+                    )
+                    expected = await aggregate_bucket(
+                        symbol, Interval.DAY_1, day, bar_repo, calendar
+                    )
+                    if not stored or expected is None:
+                        continue
+                    fields = compare_bar_fields(expected, stored[0])
+                    if any(fields.values()):
+                        logger.warning(
+                            "cascade.daily_divergence",
+                            symbol=symbol,
+                            datetime=day.isoformat(),
+                            fields=[name for name, differs in fields.items() if differs],
+                        )
+            except Exception as exc:
+                logger.error(
+                    "sync_verify_cascade.symbol_failed",
+                    symbol=symbol,
+                    check="1d",
+                    error=str(exc),
                 )
 
     await _tracked("sync_verify_cascade", body)
