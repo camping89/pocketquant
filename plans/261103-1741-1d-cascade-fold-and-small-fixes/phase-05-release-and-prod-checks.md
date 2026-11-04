@@ -57,7 +57,7 @@ Run after the first `sync_repair` that starts after `released_at` has finished (
 
 1. Repair touches only 1m and 1w: `grep "integrity.repaired" | grep -E "interval=(5m|15m|1h|4h|1d)" | wc -l` prints `0` (skip this line when E3=no).
 2. Fold ran: no `cascade.symbol_failed` line; PRODPY reads the latest finished `sync_repair` and `sync_backfill` rows of the job history collection (`JobHistoryRepository`, fields `started_at`, `finished_at`, `duration_ms`) and prints `duration_ms=` for each. Pass: each under 600000 (R1).
-3. Daily check: count `cascade.daily_divergence` lines since `released_at`, split before and after the repair end. Lines after the repair end must be `0`; lines before it are recorded as drift the old code left (R3).
+3. Daily check: list `cascade.daily_divergence` lines since `released_at` as `(symbol, datetime, log time)`, split before and after the repair end. The hourly check can overlap a `sync_1m` or repair write, so a single line is not a failure (Phase 04 report). Pass: after the repair end, no `(symbol, datetime)` appears on two consecutive hourly runs. Lines before the repair end are recorded as drift the old code left (R3).
 4. Lookup fix: `grep "binance_ws.callback_failed" | wc -l` prints `0`.
 5. 5m-1d gaps the cascade cannot fill (R4): record every `integrity.issues_found` line for 5m-1d since `released_at`.
 6. LIVECHK still prints `trader_live=False`.
