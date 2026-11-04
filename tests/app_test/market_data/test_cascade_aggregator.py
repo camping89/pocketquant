@@ -405,10 +405,6 @@ class TestBoundaryStepFallback:
 # market has untraded minutes. Real gaps belong to the daily integrity check, so the cascade
 # stays silent about all of them.
 class TestShortBucketsAreNotReportedByTheCascade:
-    # On Wednesday 2026-10-14 (EDT) XAUUSD breaks from 20:58:00 to 22:00:29 UTC:
-    # zero trading minutes in 21:00-22:00, sixty on a market that never closes.
-    HALT_START = datetime(2026, 10, 14, 21, 0, tzinfo=UTC)
-
     async def _cascade_one_bucket(
         self, symbol: str, boundary: datetime, calendar, bar_count: int
     ) -> tuple[AsyncMock, list[EventDict]]:
@@ -450,21 +446,6 @@ class TestShortBucketsAreNotReportedByTheCascade:
         assert bar_repo.upsert_bar.await_count == 1
         assert [e for e in logs if e.get("log_level") in ("warning", "error")] == []
         assert not any("partial" in str(e.get("event")) for e in logs)
-
-    # The break has no trading minutes, so only the edge headroom is fetched.
-    @pytest.mark.asyncio
-    async def test_a_halted_hour_bounds_the_query_by_the_calendar(self) -> None:
-        bar_repo, _ = await self._cascade_one_bucket(
-            "XAUUSD:EXNESS", self.HALT_START, XAUUSD, bar_count=3
-        )
-        assert bar_repo.find.await_args.kwargs["limit"] == 5
-
-    @pytest.mark.asyncio
-    async def test_the_same_hour_on_a_24x7_calendar_fetches_sixty(self) -> None:
-        bar_repo, _ = await self._cascade_one_bucket(
-            "BTCUSDT:BINANCE", self.HALT_START, CALENDAR, bar_count=3
-        )
-        assert bar_repo.find.await_args.kwargs["limit"] == 65
 
 
 class TestCascadedBarsCarryTheirCalendar:
@@ -540,7 +521,7 @@ class TestEveryCalendarCascadesTheDailyBar:
     @pytest.mark.asyncio
     async def test_a_session_calendar_cascades_its_daily_bar_at_utc_midnight(self) -> None:
         day = datetime(2026, 6, 8, tzinfo=UTC)
-        find, upsert = await self._cascade_day(XAUUSD, day)
+        _, upsert = await self._cascade_day(XAUUSD, day)
 
         assert len(upsert.await_args_list) == 1
         bar = upsert.await_args_list[0].args[0]
@@ -548,12 +529,38 @@ class TestEveryCalendarCascadesTheDailyBar:
         assert bar.datetime == day
         assert bar.session_date == date(2026, 6, 8)
         assert bar.calendar_id == XAUUSD.calendar_id
-        assert find.await_args.kwargs["limit"] == 1383
 
+    # A repair or backfill can store minutes the calendar does not count as trading. The
+    # read returns newest first, so a calendar-sized limit used to drop the day's opening bars.
     @pytest.mark.asyncio
-    async def test_a_short_session_day_bounds_the_daily_read(self) -> None:
-        find, _ = await self._cascade_day(XAUUSD, datetime(2026, 6, 7, tzinfo=UTC))
-        assert find.await_args.kwargs["limit"] == 124
+    async def test_a_day_with_more_minutes_than_the_calendar_keeps_its_first_bar(
+        self, mock_bar_repo
+    ) -> None:
+        day = datetime(2026, 6, 8, tzinfo=UTC)
+        for i in range(1440):
+            await mock_bar_repo.upsert_bar(
+                Bar(
+                    symbol="XAUUSD:EXNESS",
+                    interval=Interval.MINUTE_1,
+                    datetime=day + timedelta(minutes=i),
+                    open=100.0 + i,
+                    high=100.0 + i,
+                    low=100.0 + i,
+                    close=100.0 + i,
+                    volume=1.0,
+                ),
+                source="test",
+            )
+
+        with patch(
+            "pocketquant.engine.market_data.app_services.cascade_aggregator.compute_boundaries",
+            side_effect=lambda t, *a: [day] if t is Interval.DAY_1 else [],
+        ):
+            await cascade_for_symbol("XAUUSD:EXNESS", 60, mock_bar_repo, XAUUSD)
+
+        (daily,) = await mock_bar_repo.find("XAUUSD:EXNESS", Interval.DAY_1)
+        assert daily.open == 100.0
+        assert daily.volume == 1440.0
 
     @pytest.mark.parametrize("calendar", [CALENDAR, XAUUSD], ids=["24x7", "xauusd"])
     @pytest.mark.asyncio

@@ -117,16 +117,11 @@ async def cascade_for_symbol(
 
         for boundary in boundaries:
             bucket_end = boundary + timedelta(seconds=tf_secs)
-            # The calendar says how many 1m bars this bucket can hold; a holiday
-            # or an early close makes a session bucket legitimately shorter.
-            expected_count = len(calendar.trading_minutes(boundary, bucket_end))
-
             source_bars = await bar_repo.find(
                 symbol=sym,
                 interval=Interval.MINUTE_1,
                 start_date=boundary,
                 end_date=bucket_end - timedelta(seconds=1),
-                limit=expected_count + 5,  # small headroom for alignment edge bars
             )
 
             # A bucket short of 1m bars is not reported here. An open bucket is
