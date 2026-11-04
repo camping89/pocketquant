@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Local dev ports below the Windows dynamic range"
-status: pending
+status: completed
 priority: P3
 effort: 30m
 dependencies: []

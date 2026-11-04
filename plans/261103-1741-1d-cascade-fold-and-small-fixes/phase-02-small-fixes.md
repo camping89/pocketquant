@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Symbol lookup race, cascade read limit, unused positions route"
-status: pending
+status: completed
 priority: P1
 effort: 3h
 dependencies: []
