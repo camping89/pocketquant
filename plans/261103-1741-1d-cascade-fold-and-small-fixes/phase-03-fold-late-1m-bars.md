@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Repair and backfill fold late 1m bars"
-status: pending
+status: completed
 priority: P1
 effort: 4h
 dependencies: [2]
