@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Redis password rotation, release and prod checks"
-status: pending
+status: completed
 priority: P1
 effort: "1h + two sync_repair runs (up to 24h)"
 dependencies: [2, 3, 4]
