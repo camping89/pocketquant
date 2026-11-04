@@ -98,7 +98,6 @@ def test_the_subscription_reads_carry_the_read_guard(settings: Settings) -> None
     subs = f"{settings.api_prefix}/subscriptions"
     assert guarded == {
         f"{subs}/",
-        f"{subs}/{{sub_id}}/positions",
         f"{subs}/{{sub_id}}/trades",
         f"{subs}/{{sub_id}}/snapshot",
         f"{subs}/{{sub_id}}/orders",

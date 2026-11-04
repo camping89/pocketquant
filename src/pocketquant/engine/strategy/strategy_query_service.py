@@ -84,22 +84,6 @@ class StrategyQueryService:
             for sub, ring in zip(subs, rings, strict=True)
         ]
 
-    async def get_positions(self, subscription_id: str) -> list[dict]:
-        positions = await self._position_repo.find_open_by_subscription(subscription_id)
-        return [
-            {
-                "symbol": p.symbol,
-                "direction": p.side.value.upper(),
-                "entry_price": p.entry_price,
-                "quantity": p.quantity,
-                "unrealized_pnl": p.unrealized_pnl,
-                "entry_time": p.opened_at.isoformat(),
-                "sl_price": p.sl_price,
-                "tp_price": p.tp_price,
-            }
-            for p in positions
-        ]
-
     async def get_orders(self, subscription_id: str, limit: int) -> list[dict]:
         orders = await self._order_repo.list_by_subscription(subscription_id, limit)
         return [

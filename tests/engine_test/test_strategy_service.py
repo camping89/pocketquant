@@ -518,34 +518,8 @@ async def test_list_symbols_returns_empty_when_no_subs() -> None:
 
 
 # ---------------------------------------------------------------------------
-# StrategyQueryService — get_positions / get_trades
+# StrategyQueryService — get_trades
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_get_positions_maps_open_positions() -> None:
-    pos_repo = MagicMock()
-    pos_repo.find_open_by_subscription = AsyncMock(return_value=[_open_position()])
-    svc = _query_svc(position_repo=pos_repo)
-
-    result = await svc.get_positions("sub-1")
-
-    pos_repo.find_open_by_subscription.assert_awaited_once_with("sub-1")
-    assert len(result) == 1
-    row = result[0]
-    assert row["direction"] == "LONG"
-    assert row["entry_price"] == 100.0
-    assert row["unrealized_pnl"] == 20.0
-    assert row["sl_price"] == 95.0
-    assert row["tp_price"] == 120.0
-
-
-@pytest.mark.asyncio
-async def test_get_positions_returns_empty_when_none_open() -> None:
-    pos_repo = MagicMock()
-    pos_repo.find_open_by_subscription = AsyncMock(return_value=[])
-    svc = _query_svc(position_repo=pos_repo)
-    assert await svc.get_positions("sub-1") == []
 
 
 @pytest.mark.asyncio

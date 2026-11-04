@@ -123,14 +123,6 @@ async def cancel_subscription(
     return {"subscription_id": sub_id, "action": "cancel"}
 
 
-@subscription_router.get("/{sub_id}/positions", dependencies=[Depends(require_admin_token)])
-async def get_subscription_positions(
-    sub_id: str,
-    query_svc: FromDishka[StrategyQueryService],
-) -> list[dict]:
-    return await query_svc.get_positions(sub_id)
-
-
 @subscription_router.get("/{sub_id}/trades", dependencies=[Depends(require_admin_token)])
 async def get_subscription_trades(
     sub_id: str,
