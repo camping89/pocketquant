@@ -114,7 +114,7 @@ class BinanceWebSocketAdapter:
                     await self._backoff_sleep()
 
             except Exception as exc:
-                logger.error("binance_ws.error", error=str(exc))
+                logger.error("binance_ws.error", error=str(exc), exc_info=True)
                 await self._close_ws()
                 if self._running:
                     await self._backoff_sleep()

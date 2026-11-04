@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 
 # cast: TTLCache.__init__ does not propagate its generic parameters.
 _CACHE = cast("MutableMapping[str, Symbol | None]", TTLCache(maxsize=500, ttl=60))
+_MISS = object()
 
 
 # Calendar resolution runs once per bar on every sync and cascade path. A 60s TTL keeps
@@ -23,8 +24,11 @@ class SymbolLookupHelper:
 
     async def get(self, composite: str) -> Symbol | None:
         key = composite.upper()
-        if key in _CACHE:
-            return _CACHE[key]
+        # TTLCache checks expiry on every access, so a membership test followed by a read
+        # can raise KeyError when the entry expires in between.
+        hit = _CACHE.get(key, _MISS)
+        if hit is not _MISS:
+            return cast("Symbol | None", hit)
 
         symbol = await self._repo.find_by_symbol(key)
         # Misses are cached too: an unseeded symbol would otherwise hit the
