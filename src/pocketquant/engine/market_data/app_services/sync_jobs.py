@@ -32,7 +32,10 @@ from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository i
     TrackedSymbolRepository,
 )
 from pocketquant.core.infra.scheduling.scheduler import JobScheduler
-from pocketquant.engine.market_data.app_services.cascade_aggregator import cascade_for_symbol
+from pocketquant.engine.market_data.app_services.cascade_aggregator import (
+    CASCADE_TFS,
+    cascade_for_symbol,
+)
 from pocketquant.engine.market_data.app_services.integrity_jobs import (
     check_integrity,
     repair_integrity,
@@ -47,8 +50,9 @@ logger = get_logger(__name__)
 
 # 1m comes from REST; 5m-1d are cascaded from stored 1m bars for every calendar.
 # 1w stays REST: Binance weeks open on Monday and Exness weeks on Sunday, and no
-# cascade convention exists. REST 1d stays listed as the backfill for history older
-# than the stored 1m bars.
+# cascade convention exists. REST backfill still fills 5m-1d history older than the
+# stored 1m bars. Repair fetches only 1m and 1w; the cascade rebuilds 5m-1d from 1m
+# in sync_1m, sync_repair and sync_backfill.
 SYNC_INTERVALS = [
     Interval.MINUTE_1,
     Interval.MINUTE_5,
@@ -90,6 +94,10 @@ _RUNNING: dict[str, asyncio.Task] = {}
 PRICE_THRESHOLD_PCT = 0.0001  # 0.01%
 VOLUME_THRESHOLD_PCT = 0.05  # 5%
 DIVERGENCE_ALERT_FRACTION = 0.05  # alert when >5% of compared bars diverge on any field
+
+# Repair and backfill can write a 1m bar up to this many days back; the re-cascade
+# uses the same window so each such bar reaches its 5m-1d buckets.
+_REPAIR_DAYS = 7
 
 
 # Job entrypoints are module-level coroutines so APScheduler can store them as text
@@ -376,16 +384,39 @@ async def _rest_sync(
     )
 
 
+# A failed symbol is logged and skipped so the rest still fold.
+async def _cascade_all(lookback_minutes: int) -> dict[Interval, int]:
+    container = _get_container()
+    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
+    bar_repo = await container.get(BarRepository)
+    calendar_factory = await container.get(TradingCalendarFactory)
+    cascade_total: dict[Interval, int] = {}
+    for ts in await tracked_symbol_repo.list_all():
+        try:
+            counts = await cascade_for_symbol(
+                ts.symbol,
+                lookback_minutes=lookback_minutes,
+                bar_repo=bar_repo,
+                calendar=await calendar_factory.for_symbol(ts.symbol),
+            )
+        except Exception:
+            logger.error(
+                "cascade.symbol_failed",
+                symbol=ts.symbol,
+                lookback_minutes=lookback_minutes,
+                exc_info=True,
+            )
+            continue
+        for tf, count in counts.items():
+            cascade_total[tf] = cascade_total.get(tf, 0) + count
+    return cascade_total
+
+
 # APScheduler entrypoints — referenced by text as
 # "pocketquant.engine.market_data.app_services.sync_jobs:<funcname>"
 # The cascade runs even when a REST fetch failed: the symbols that did sync still
 # need their higher timeframes. The failure is recorded afterwards.
 async def sync_1m() -> None:
-    container = _get_container()
-    tracked_symbol_repo = await container.get(TrackedSymbolRepository)
-    bar_repo = await container.get(BarRepository)
-    calendar_factory = await container.get(TradingCalendarFactory)
-
     async def body(doc_id: str | None, _done: set[str] | None) -> dict:
         # A cancellation (shutdown) is a BaseException: it skips the cascade.
         sync_error: Exception | None = None
@@ -397,20 +428,7 @@ async def sync_1m() -> None:
         except Exception as exc:
             sync_error = exc
 
-        cascade_total: dict[Interval, int] = {}
-        for ts in await tracked_symbol_repo.list_all():
-            try:
-                counts = await cascade_for_symbol(
-                    ts.symbol,
-                    lookback_minutes=100,
-                    bar_repo=bar_repo,
-                    calendar=await calendar_factory.for_symbol(ts.symbol),
-                )
-            except Exception:
-                logger.error("sync_1m.cascade_failed", symbol=ts.symbol, exc_info=True)
-                continue
-            for tf, count in counts.items():
-                cascade_total[tf] = cascade_total.get(tf, 0) + count
+        cascade_total = await _cascade_all(100)
         logger.debug(
             "sync_1m.cascade_summary",
             cascade_counts={tf.value: n for tf, n in cascade_total.items()},
@@ -423,13 +441,22 @@ async def sync_1m() -> None:
 
 
 async def sync_backfill(resume: bool = False) -> None:
-    await _tracked(
-        "sync_backfill",
-        lambda doc_id, done: _rest_sync(
-            "sync_backfill", SYNC_INTERVALS, 5000, SOURCE_REST_BACKFILL, doc_id, done
-        ),
-        resume,
-    )
+    async def body(doc_id: str | None, done: set[str] | None) -> dict:
+        # A cancellation (shutdown) is a BaseException: it skips the cascade.
+        sync_error: Exception | None = None
+        totals: dict = {}
+        try:
+            totals = await _rest_sync(
+                "sync_backfill", SYNC_INTERVALS, 5000, SOURCE_REST_BACKFILL, doc_id, done
+            )
+        except Exception as exc:
+            sync_error = exc
+        await _cascade_all(_REPAIR_DAYS * 1440)
+        if sync_error:
+            raise sync_error
+        return totals
+
+    await _tracked("sync_backfill", body, resume)
 
 
 async def sync_integrity(resume: bool = False) -> None:
@@ -490,7 +517,7 @@ async def sync_repair(resume: bool = False) -> None:
                 continue
             try:
                 calendar = await calendar_factory.for_symbol(ts.symbol)
-                for interval in SYNC_INTERVALS:
+                for interval in [i for i in SYNC_INTERVALS if i not in CASCADE_TFS]:
                     result = await repair_integrity(
                         ts.symbol,
                         interval,
@@ -498,6 +525,7 @@ async def sync_repair(resume: bool = False) -> None:
                         sync_service,
                         calendar,
                         source=SOURCE_REST_REPAIR,
+                        days_back=_REPAIR_DAYS,
                     )
                     if result["deleted"] or result["gaps_resynced"]:
                         logger.info(
@@ -512,6 +540,7 @@ async def sync_repair(resume: bool = False) -> None:
                 logger.error("integrity.repair_failed", symbol=ts.symbol, exc_info=True)
                 continue
             await _mark_done(history_repo, doc_id, done, ts.symbol)
+        await _cascade_all(_REPAIR_DAYS * 1440)
         if failed:
             raise RuntimeError(f"{failed} of {len(tracked)} symbols failed")
 

@@ -190,6 +190,7 @@ async def test_sync_backfill_dispatches_with_rest_backfill_source(
 ) -> None:
     sync_service = _make_sync_service()
     _wire_container(monkeypatch, sync_service=sync_service)
+    monkeypatch.setattr(sync_jobs, "cascade_for_symbol", AsyncMock(return_value={}))
 
     await sync_jobs.sync_backfill()
 

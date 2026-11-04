@@ -64,6 +64,7 @@ def _wire(
         }
     )
     monkeypatch.setattr(sync_jobs, "_container", container)
+    monkeypatch.setattr(sync_jobs, "cascade_for_symbol", AsyncMock(return_value={}))
     return history
 
 
@@ -138,7 +139,7 @@ async def test_a_cron_repair_starts_fresh_and_closes_cut_runs(
 ) -> None:
     history = _wire(monkeypatch, MagicMock(spec=SyncService), doc_id="hist-1", resumed=("x", {"A"}))
 
-    async def repair(symbol, interval, bar_repo, sync_service, calendar, source):  # noqa: ANN001
+    async def repair(symbol, interval, bar_repo, sync_service, calendar, source, days_back):  # noqa: ANN001
         return {"deleted": 0, "gaps_resynced": 0}
 
     monkeypatch.setattr(sync_jobs, "repair_integrity", repair)
@@ -159,7 +160,7 @@ async def test_a_second_run_of_a_running_job_returns_at_once(
     gate = asyncio.Event()
     entered = asyncio.Event()
 
-    async def repair(symbol, interval, bar_repo, sync_service, calendar, source):  # noqa: ANN001
+    async def repair(symbol, interval, bar_repo, sync_service, calendar, source, days_back):  # noqa: ANN001
         entered.set()
         await gate.wait()
         return {"deleted": 0, "gaps_resynced": 0}
@@ -188,7 +189,7 @@ async def test_a_resumed_repair_runs_only_the_unfinished_symbols(
     )
     seen: list[str] = []
 
-    async def repair(symbol, interval, bar_repo, sync_service, calendar, source):  # noqa: ANN001
+    async def repair(symbol, interval, bar_repo, sync_service, calendar, source, days_back):  # noqa: ANN001
         seen.append(symbol)
         return {"deleted": 0, "gaps_resynced": 0}
 
@@ -276,7 +277,7 @@ async def test_stop_running_jobs_cuts_a_repair_after_its_finished_symbols(
     history = _wire(monkeypatch, MagicMock(spec=SyncService), doc_id="hist-1")
     second = asyncio.Event()
 
-    async def repair(symbol, interval, bar_repo, sync_service, calendar, source):  # noqa: ANN001
+    async def repair(symbol, interval, bar_repo, sync_service, calendar, source, days_back):  # noqa: ANN001
         if symbol == "ETHUSDT:BINANCE":
             second.set()
             await asyncio.Event().wait()
