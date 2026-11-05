@@ -83,7 +83,7 @@ Phase 01 is outside this repo and can run any time; Phases 02-04 verify locally 
 | A2 | A 1d cascade keeps the earliest 1m bar when stored minutes exceed the calendar's count | Phase 02 test; the limit-pinning tests are deleted |
 | A3 | The positions route and `get_positions` are gone; no other caller broke | Phase 02 grep `0` and FULLSUITE |
 | A4 | `sync_repair` and `sync_backfill` re-cascade 7 days for every tracked symbol; repair REST-touches only 1m and 1w | Phase 03 tests; prod repair logs show no `interval=5m`, `15m`, `1h`, `4h`, `1d` |
-| A5 | An hourly job warns `cascade.daily_divergence` when a stored 1d differs from its 1m aggregate | Phase 04 tests; prod shows 0 warnings after the first post-deploy repair |
+| A5 | An hourly job warns `cascade.daily_divergence` when a stored 1d differs from its 1m aggregate | Phase 04 tests; prod shows 0 warnings after the first post-deploy repair. Removed 2026-11-05 (owner): Phases 02 and 03 fix its three causes at the source, so it had nothing left to catch |
 | A6 | Local `just up` and `just be` run on the all-local profile with ports below 49152 | Phase 01 report |
 | A7 | No `binance_ws.callback_failed` with a `KeyError` text after deploy | Phase 05 log grep |
 | A8 | Prod Redis accepts only the new password and refuses the old one | Phase 05 rotation checks |
