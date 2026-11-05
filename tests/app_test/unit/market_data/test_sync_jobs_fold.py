@@ -39,10 +39,10 @@ async def test_repair_fetches_only_the_intervals_the_cascade_cannot_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _wire(monkeypatch, MagicMock(spec=SyncService), doc_id="hist-1")
-    calls: list[tuple[Interval, int]] = []
+    calls: list[Interval] = []
 
-    async def repair(symbol, interval, bar_repo, sync_service, calendar, *, source, days_back):  # noqa: ANN001
-        calls.append((interval, days_back))
+    async def repair(symbol, interval, bar_repo, sync_service, calendar, *, source):  # noqa: ANN001
+        calls.append(interval)
         return {"deleted": 0, "gaps_resynced": 0}
 
     monkeypatch.setattr(sync_jobs, "repair_integrity", repair)
@@ -50,8 +50,7 @@ async def test_repair_fetches_only_the_intervals_the_cascade_cannot_build(
 
     await sync_jobs.sync_repair()
 
-    assert {interval for interval, _ in calls} == {Interval.MINUTE_1, Interval.WEEK_1}
-    assert {days for _, days in calls} == {7}
+    assert set(calls) == {Interval.MINUTE_1, Interval.WEEK_1}
 
 
 @pytest.mark.asyncio

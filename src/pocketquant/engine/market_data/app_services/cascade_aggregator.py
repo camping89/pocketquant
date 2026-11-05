@@ -95,41 +95,6 @@ def compute_boundaries(
     return boundaries
 
 
-# A bucket short of 1m bars is not reported here. An open bucket is still filling,
-# a delayed feed fills closed buckets late, and a thin market has minutes with no
-# trade at all. Real gaps are the daily integrity check's job
-# (``integrity_jobs.check_integrity``), which feeds ``sync_repair``.
-async def aggregate_bucket(
-    symbol: str,
-    tf: Interval,
-    boundary: datetime,
-    bar_repo: BarRepository,
-    calendar: ITradingCalendarPort,
-) -> Bar | None:
-    bucket_end = boundary + timedelta(seconds=tf_seconds(tf))
-    source_bars = await bar_repo.find(
-        symbol=symbol,
-        interval=Interval.MINUTE_1,
-        start_date=boundary,
-        end_date=bucket_end - timedelta(seconds=1),
-    )
-    ohlcv = aggregate_ohlcv(source_bars)
-    if ohlcv is None:
-        return None
-    return Bar(
-        symbol=symbol,
-        interval=tf,
-        datetime=boundary,
-        open=ohlcv["open"],
-        high=ohlcv["high"],
-        low=ohlcv["low"],
-        close=ohlcv["close"],
-        volume=ohlcv["volume"],
-        calendar_id=calendar.calendar_id,
-        session_date=calendar.session_date(boundary) if tf is Interval.DAY_1 else None,
-    )
-
-
 # Higher timeframes are derived from stored 1m bars, not fetched, so the output is
 # deterministic and a re-run gives the same upserts. A partial bucket is still
 # persisted.
@@ -148,12 +113,39 @@ async def cascade_for_symbol(
 
     for tf in CASCADE_TFS:
         boundaries = compute_boundaries(tf, range_start, now, calendar)
+        tf_secs = tf_seconds(tf)
         upserted = 0
 
         for boundary in boundaries:
-            bar = await aggregate_bucket(sym, tf, boundary, bar_repo, calendar)
-            if bar is None:
+            bucket_end = boundary + timedelta(seconds=tf_secs)
+            source_bars = await bar_repo.find(
+                symbol=sym,
+                interval=Interval.MINUTE_1,
+                start_date=boundary,
+                end_date=bucket_end - timedelta(seconds=1),
+            )
+
+            # A bucket short of 1m bars is not reported here. An open bucket is
+            # still filling, a delayed feed fills closed buckets late, and a
+            # thin market has minutes with no trade at all. Real gaps are the
+            # daily integrity check's job (``integrity_jobs.check_integrity``),
+            # which feeds ``sync_repair``.
+            ohlcv = aggregate_ohlcv(source_bars)
+            if ohlcv is None:
                 continue
+
+            bar = Bar(
+                symbol=sym,
+                interval=tf,
+                datetime=boundary,
+                open=ohlcv["open"],
+                high=ohlcv["high"],
+                low=ohlcv["low"],
+                close=ohlcv["close"],
+                volume=ohlcv["volume"],
+                calendar_id=calendar.calendar_id,
+                session_date=calendar.session_date(boundary) if tf is Interval.DAY_1 else None,
+            )
 
             try:
                 await bar_repo.upsert_bar(bar, source=SOURCE_CASCADE)

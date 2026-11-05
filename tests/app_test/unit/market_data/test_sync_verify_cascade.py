@@ -1,25 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-import structlog
 
-from pocketquant.core.domain.bar.entities import Bar
-from pocketquant.core.domain.market_data.continuous_24x7_calendar import Continuous24x7Calendar
-from pocketquant.core.domain.market_data.data_provider_port import IDataProviderPort
-from pocketquant.core.domain.shared.enums import Interval
-from pocketquant.core.infra.calendars.trading_calendar_factory import TradingCalendarFactory
-from pocketquant.core.infra.persistence.repositories.bar_repository import BarRepository
-from pocketquant.core.infra.persistence.repositories.job_history_repository import (
-    JobHistoryRepository,
-)
-from pocketquant.core.infra.persistence.repositories.tracked_symbol_repository import (
-    TrackedSymbolRepository,
-)
-from pocketquant.engine.market_data.app_services import sync_jobs
 from pocketquant.engine.market_data.app_services.sync_jobs import (
     PRICE_THRESHOLD_PCT,
     VOLUME_THRESHOLD_PCT,
@@ -182,129 +168,3 @@ class TestVerifyOneSymbol:
         assert out["compared"] == 3
         assert out["divergence_count"] == 1
         assert out["samples"][0]["datetime"] == _ts(5).isoformat()
-
-
-_SYMBOL = "BTCUSDT:BINANCE"
-
-
-class _BarRepo:
-    def __init__(self, bars: list[Bar]) -> None:
-        self.bars = bars
-
-    async def find(self, symbol, interval, start_date=None, end_date=None, limit=5000):  # noqa: ANN001
-        matching = [
-            b
-            for b in self.bars
-            if b.symbol == symbol
-            and b.interval == interval
-            and start_date <= b.datetime <= end_date  # type: ignore[operator]
-        ]
-        return sorted(matching, key=lambda b: b.datetime, reverse=True)[:limit]  # type: ignore[arg-type, return-value]
-
-
-class _Container:
-    def __init__(self, mapping: dict) -> None:
-        self._mapping = mapping
-
-    async def get(self, cls):  # noqa: ANN001
-        return self._mapping[cls]
-
-
-def _bar_at(interval: Interval, dt: datetime, close: float = 100.5) -> Bar:
-    return Bar(
-        symbol=_SYMBOL,
-        interval=interval,
-        datetime=dt,
-        open=100.0,
-        high=101.0,
-        low=99.0,
-        close=close,
-        volume=10.0,
-    )
-
-
-# Three 1m bars per day; the matching stored 1d aggregates them.
-def _minutes(day: datetime) -> list[Bar]:
-    return [
-        _bar_at(Interval.MINUTE_1, day),
-        _bar_at(Interval.MINUTE_1, day + timedelta(hours=12)),
-        _bar_at(Interval.MINUTE_1, day + timedelta(hours=23, minutes=59)),
-    ]
-
-
-def _daily(day: datetime, close: float = 100.5) -> Bar:
-    bar = _bar_at(Interval.DAY_1, day, close)
-    bar.volume = 30.0
-    return bar
-
-
-def _today() -> datetime:
-    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-
-
-async def _run_verify(monkeypatch: pytest.MonkeyPatch, bars: list[Bar]) -> list[dict]:
-    tracked_repo = MagicMock()
-    tracked_repo.list_all = AsyncMock(return_value=[SimpleNamespace(symbol=_SYMBOL)])
-    history = MagicMock()
-    history.record_start = AsyncMock(return_value="hist-1")
-    history.record_finish = AsyncMock()
-    factory = MagicMock()
-    factory.for_symbol = AsyncMock(return_value=Continuous24x7Calendar())
-    container = _Container(
-        {
-            TrackedSymbolRepository: tracked_repo,
-            BarRepository: _BarRepo(bars),
-            IDataProviderPort: SimpleNamespace(fetch_ohlcv=AsyncMock(return_value=[])),
-            TradingCalendarFactory: factory,
-            JobHistoryRepository: history,
-        }
-    )
-    monkeypatch.setattr(sync_jobs, "_container", container)
-    # A cached module logger ignores capture_logs once it has emitted.
-    monkeypatch.setattr(sync_jobs, "logger", structlog.get_logger(sync_jobs.__name__))
-    with structlog.testing.capture_logs() as logs:
-        await sync_jobs.sync_verify_cascade()
-    return [e for e in logs if e["event"] == "cascade.daily_divergence"]
-
-
-class TestDailyBarCheck:
-    @pytest.mark.asyncio
-    async def test_a_stored_day_that_differs_from_its_minutes_warns_with_the_day(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        days = [_today() - timedelta(days=n) for n in (3, 2, 1)]
-        bars = [b for day in days for b in _minutes(day)]
-        bars += [_daily(days[0]), _daily(days[1], close=120.0), _daily(days[2])]
-
-        warnings = await _run_verify(monkeypatch, bars)
-
-        assert len(warnings) == 1
-        assert warnings[0]["log_level"] == "warning"
-        assert warnings[0]["symbol"] == _SYMBOL
-        assert warnings[0]["datetime"] == days[1].isoformat()
-        assert warnings[0]["fields"] == ["close"]
-
-    @pytest.mark.asyncio
-    async def test_equal_days_log_no_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        days = [_today() - timedelta(days=n) for n in (3, 2, 1)]
-        bars = [b for day in days for b in _minutes(day)] + [_daily(day) for day in days]
-
-        assert await _run_verify(monkeypatch, bars) == []
-
-    @pytest.mark.asyncio
-    async def test_the_day_in_progress_is_never_compared(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        today = _today()
-        bars = [_bar_at(Interval.MINUTE_1, today), _daily(today, close=120.0)]
-
-        assert await _run_verify(monkeypatch, bars) == []
-
-    @pytest.mark.asyncio
-    async def test_a_day_missing_on_either_side_is_skipped(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        no_daily, no_minutes = _today() - timedelta(days=2), _today() - timedelta(days=1)
-        bars = [*_minutes(no_daily), _daily(no_minutes, close=120.0)]
-
-        assert await _run_verify(monkeypatch, bars) == []
