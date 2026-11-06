@@ -44,6 +44,7 @@ const COLUMNS: Col[] = [
   { label: 'Net', numeric: true },
   { key: 'commission', label: 'Fee', numeric: true },
   { key: 'status', label: 'Status' },
+  { label: 'Reason' },
 ]
 
 const ROW_HEIGHT = 30
@@ -189,6 +190,7 @@ export function PositionsTable({
                 </td>
                 <td className="positions-table__td--num">{formatUsdPrecise(t.commission)}</td>
                 <td>{status}</td>
+                <td>{t.exit_reason ?? '—'}</td>
               </tr>
             )
           })}

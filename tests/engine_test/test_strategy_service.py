@@ -13,6 +13,7 @@ from pocketquant.core.domain.position.entities import PositionAggregate
 from pocketquant.core.domain.position.enums import PositionSide
 from pocketquant.core.domain.shared.enums import Interval
 from pocketquant.core.domain.subscription import Subscription
+from pocketquant.core.domain.trading import Trade
 from pocketquant.engine.strategy.strategy_command_service import (
     StrategyCommandService,
 )
@@ -84,6 +85,7 @@ def _query_svc(
     sub_repo: object | None = None,
     position_repo: object | None = None,
     order_repo: object | None = None,
+    trade_repo: object | None = None,
     cache: object | None = None,
 ) -> StrategyQueryService:
     sub_repo = sub_repo or MagicMock()
@@ -92,6 +94,7 @@ def _query_svc(
         subscription_repository=sub_repo,
         position_repository=position_repo,
         order_repository=order_repo or AsyncMock(),
+        trade_repository=trade_repo or AsyncMock(),
         cache=cache or MagicMock(mget=AsyncMock(side_effect=lambda keys: [None] * len(keys))),
     )
 
@@ -111,19 +114,26 @@ def _open_position(subscription_id: str = "sub-1") -> PositionAggregate:
     )
 
 
-def _closed_position(idx: int = 1, subscription_id: str = "sub-1") -> PositionAggregate:
-    return PositionAggregate(
-        id=uuid5(NAMESPACE_OID, f"pos-closed-{idx}"),
-        subscription_id=subscription_id,
+def _trade(idx: int = 1, exit_reason: str | None = "auto_sl") -> Trade:
+    return Trade(
+        trade_id=uuid5(NAMESPACE_OID, f"trade-{idx}"),
+        run_id="sub-1",
+        strategy_code="engulfing",
         symbol="BTCUSDT:BINANCE",
-        side=PositionSide.SHORT,
+        direction="SHORT",
+        entry_order_id=None,
         entry_price=200.0,
-        quantity=0.0,
-        current_price=180.0,
-        realized_pnl=20.0,
-        is_closed=True,
-        opened_at=datetime(2026, 5, 1, 10, 0, tzinfo=UTC),
-        closed_at=datetime(2026, 5, 1, 11, 0, tzinfo=UTC),
+        entry_time=datetime(2026, 5, 1, 10, 0, tzinfo=UTC),
+        quantity=1.0,
+        exit_order_id=None,
+        exit_price=180.0,
+        exit_time=datetime(2026, 5, 1, 11, 0, tzinfo=UTC),
+        sl_price=None,
+        tp_price=None,
+        pnl=20.0,
+        commission=0.0,
+        duration_seconds=3600.0,
+        exit_reason=exit_reason,
     )
 
 
@@ -523,28 +533,29 @@ async def test_list_symbols_returns_empty_when_no_subs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_trades_maps_closed_positions() -> None:
-    pos_repo = MagicMock()
-    pos_repo.find_closed_by_subscription = AsyncMock(
-        return_value=[_closed_position(1), _closed_position(2)]
+async def test_get_trades_maps_trades_with_exit_reason() -> None:
+    trade_repo = MagicMock()
+    trade_repo.list_newest_by_subscription = AsyncMock(
+        return_value=[_trade(1), _trade(2, exit_reason=None)]
     )
-    svc = _query_svc(position_repo=pos_repo)
+    svc = _query_svc(trade_repo=trade_repo)
 
     result = await svc.get_trades("sub-1", 50)
 
-    pos_repo.find_closed_by_subscription.assert_awaited_once_with("sub-1", limit=50)
+    trade_repo.list_newest_by_subscription.assert_awaited_once_with("sub-1", 50)
     assert len(result) == 2
     row = result[0]
-    assert row["id"] == str(uuid5(NAMESPACE_OID, "pos-closed-1"))
+    assert row["id"] == str(uuid5(NAMESPACE_OID, "trade-1"))
     assert row["direction"] == "SHORT"
     assert row["exit_price"] == 180.0
     assert row["pnl"] == 20.0
     assert row["exit_time"] is not None
+    assert [r["exit_reason"] for r in result] == ["auto_sl", None]
 
 
 @pytest.mark.asyncio
 async def test_get_trades_returns_empty_when_no_closed() -> None:
-    pos_repo = MagicMock()
-    pos_repo.find_closed_by_subscription = AsyncMock(return_value=[])
-    svc = _query_svc(position_repo=pos_repo)
+    trade_repo = MagicMock()
+    trade_repo.list_newest_by_subscription = AsyncMock(return_value=[])
+    svc = _query_svc(trade_repo=trade_repo)
     assert await svc.get_trades("sub-1") == []

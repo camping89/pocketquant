@@ -66,6 +66,7 @@ const TRADE: StrategyTrade = {
   exit_time: '2026-11-01T09:30:00+00:00',
   pnl: 50,
   quantity: 0.1,
+  exit_reason: 'auto_sl',
 }
 
 const AT = '2026-11-01T10:00:00+00:00'
@@ -197,9 +198,15 @@ describe('timeline', () => {
     expect(item.text).toContain(formatPrice(71250))
   })
 
-  it('shows a closed trade', () => {
+  it('shows a closed trade with its exit reason', () => {
     const [item] = timeline([], [TRADE])
     expect(item.text).toContain('closed @')
+    expect(item.text).toMatch(/· auto_sl$/)
+  })
+
+  it('omits a missing exit reason', () => {
+    const [item] = timeline([], [{ ...TRADE, exit_reason: null }])
+    expect(item.text).not.toContain('·')
   })
 })
 

@@ -30,7 +30,14 @@ def _tid(name: str) -> UUID:
     return uuid5(NAMESPACE_OID, name)
 
 
-def _trade(name: str, *, pnl: float, direction: str = "LONG", hours: int = 0) -> Trade:
+def _trade(
+    name: str,
+    *,
+    pnl: float,
+    direction: str = "LONG",
+    hours: int = 0,
+    exit_reason: str | None = None,
+) -> Trade:
     return Trade(
         trade_id=_tid(name),
         run_id=_RUN,
@@ -49,6 +56,7 @@ def _trade(name: str, *, pnl: float, direction: str = "LONG", hours: int = 0) ->
         pnl=pnl,
         commission=0.21,
         duration_seconds=3600.0,
+        exit_reason=exit_reason,
     )
 
 
@@ -98,7 +106,7 @@ async def test_list_trades_paged_wins_filter_and_total_pnl(database: Database) -
     trade_repo = BacktestTradeRepository(database)
     await trade_repo.save_many(
         [
-            _trade("w1", pnl=5.0, hours=0),
+            _trade("w1", pnl=5.0, hours=0, exit_reason="auto_tp"),
             _trade("l1", pnl=-3.0, hours=1),
             _trade("w2", pnl=8.0, hours=2),
         ]
@@ -112,6 +120,7 @@ async def test_list_trades_paged_wins_filter_and_total_pnl(database: Database) -
     assert wins.total_pnl == 13.0
     assert wins.total_commission == pytest.approx(0.42)  # 2 wins × 0.21
     assert all(i.pnl > 0 for i in wins.items)
+    assert {i.exit_reason for i in wins.items} == {"auto_tp", None}
 
 
 @pytest.mark.asyncio

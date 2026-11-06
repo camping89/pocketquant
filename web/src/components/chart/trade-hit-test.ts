@@ -41,5 +41,7 @@ export function tradeMarkerToRow(m: TradeMarker): TradeRow {
     pnl: m.pnl,
     commission: m.commission,
     duration_seconds: exit != null ? exit - entry : 0,
+    // The marker does not carry the reason; the chart box does not show it.
+    exit_reason: null,
   }
 }

@@ -10,6 +10,7 @@ from pocketquant.core.infra.persistence.repositories.position_repository import 
 from pocketquant.core.infra.persistence.repositories.subscription_repository import (
     SubscriptionRepository,
 )
+from pocketquant.core.infra.persistence.repositories.trade_repository import TradeRepository
 
 
 class StrategyQueryService:
@@ -18,11 +19,13 @@ class StrategyQueryService:
         subscription_repository: SubscriptionRepository,
         position_repository: PositionRepository,
         order_repository: OrderRepository,
+        trade_repository: TradeRepository,
         cache: Cache,
     ) -> None:
         self._sub_repo = subscription_repository
         self._position_repo = position_repository
         self._order_repo = order_repository
+        self._trade_repo = trade_repository
         self._cache = cache
 
     async def get_all(self) -> list[dict]:
@@ -104,20 +107,20 @@ class StrategyQueryService:
             for o in orders
         ]
 
-    # Closed positions are the canonical completed trade, so the FE never pairs raw fills.
+    # Trades, not closed positions: only a trade row records why it closed.
     async def get_trades(self, subscription_id: str, limit: int = 100) -> list[dict]:
-        closed = await self._position_repo.find_closed_by_subscription(subscription_id, limit=limit)
+        trades = await self._trade_repo.list_newest_by_subscription(subscription_id, limit)
         return [
             {
-                "id": str(p.id),
-                "direction": p.side.value.upper(),
-                "entry_price": p.entry_price,
-                # Position close sets current_price = exit_price.
-                "exit_price": p.current_price,
-                "entry_time": p.opened_at.isoformat(),
-                "exit_time": p.closed_at.isoformat() if p.closed_at else None,
-                "pnl": p.realized_pnl,
-                "quantity": p.quantity,
+                "id": str(t.trade_id),
+                "direction": t.direction,
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "entry_time": t.entry_time.isoformat(),
+                "exit_time": t.exit_time.isoformat(),
+                "pnl": t.pnl,
+                "quantity": t.quantity,
+                "exit_reason": t.exit_reason,
             }
-            for p in closed
+            for t in trades
         ]

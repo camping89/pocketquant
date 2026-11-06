@@ -38,17 +38,6 @@ class PositionRepository(SymbolScopedRepository):
         )
         return result.deleted_count
 
-    async def find_closed_by_subscription(
-        self, subscription_id: str, limit: int = 100
-    ) -> list[PositionAggregate]:
-        collection = self._collection()
-        cursor = (
-            collection.find({"subscription_id": subscription_id, "is_closed": True})
-            .sort("closed_at", -1)
-            .limit(limit)
-        )
-        return [PositionAggregate.from_mongo(doc) async for doc in cursor]
-
     async def ensure_indexes(self) -> None:
         collection = self._collection()
         await collection.create_index("subscription_id", name="ix_positions_subscription_id")

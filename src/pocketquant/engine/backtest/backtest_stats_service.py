@@ -74,6 +74,7 @@ class TradeDto(BaseModel):
     pnl: float
     commission: float
     duration_seconds: float
+    exit_reason: str | None
 
 
 class PagedTradesResponse(BaseModel):
@@ -146,6 +147,7 @@ def _trade_to_dto(t: Trade) -> TradeDto:
         pnl=t.pnl,
         commission=t.commission,
         duration_seconds=t.duration_seconds,
+        exit_reason=t.exit_reason,
     )
 
 
@@ -202,9 +204,7 @@ class BacktestStatsService:
         )
 
         items = [_trade_to_dto(t) for t in trades]
-        next_cursor = (
-            _encode_cursor(trades[-1], query.sort_key) if has_more and trades else None
-        )
+        next_cursor = _encode_cursor(trades[-1], query.sort_key) if has_more and trades else None
         # Footer aggregates describe the whole filtered set, not a page — compute
         # them once on the first page (cursor absent). Later pages skip the extra
         # count + $sum scans; the FE only reads these off page 0.
@@ -266,8 +266,7 @@ class BacktestStatsService:
                 HistogramBinDto(lo=b.lo, hi=b.hi, count=b.count) for b in histogram(pnls)
             ],
             duration_histogram=[
-                HistogramBinDto(lo=b.lo, hi=b.hi, count=b.count)
-                for b in histogram(durations_hours)
+                HistogramBinDto(lo=b.lo, hi=b.hi, count=b.count) for b in histogram(durations_hours)
             ],
             streaks=StreakStatsDto(
                 max_win_streak=streaks.max_win_streak,

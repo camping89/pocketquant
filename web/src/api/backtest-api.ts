@@ -91,6 +91,7 @@ export interface TradeRow {
   pnl: number
   commission: number
   duration_seconds: number
+  exit_reason: string | null
 }
 
 export interface PagedTrades {

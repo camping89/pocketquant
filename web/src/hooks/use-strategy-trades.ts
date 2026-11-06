@@ -4,7 +4,7 @@ import type { Trade } from '../types/strategy'
 
 export type { Trade }
 
-// A closed position: the backend's completed trade.
+// A closed trade; exit_reason is null on rows saved before it was recorded.
 export interface StrategyTrade {
   id: string
   direction: 'LONG' | 'SHORT'
@@ -14,6 +14,7 @@ export interface StrategyTrade {
   exit_time: string | null
   pnl: number
   quantity: number
+  exit_reason: string | null
 }
 
 export function useStrategyTrades(subId: string | null) {

@@ -100,10 +100,10 @@ function orderText(o: SubscriptionOrder): string {
 }
 
 function tradeText(t: StrategyTrade): string {
-  return (
+  const text =
     `${t.direction} ${formatQty(t.quantity)} closed @ ${formatPrice(t.exit_price)}` +
     ` (entry ${formatPrice(t.entry_price)}, PnL ${t.pnl.toFixed(2)})`
-  )
+  return t.exit_reason ? `${text} · ${t.exit_reason}` : text
 }
 
 // ISO strings from one backend share a format, so they sort as text.

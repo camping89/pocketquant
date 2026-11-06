@@ -27,6 +27,12 @@ class TradeRepository(SymbolScopedRepository):
         cursor = collection.find({"run_id": subscription_id}).sort("entry_time", 1).limit(limit)
         return [Trade.from_mongo(doc) async for doc in cursor]
 
+    # One position per subscription at a time, so entry order is also exit order.
+    async def list_newest_by_subscription(self, subscription_id: str, limit: int) -> list[Trade]:
+        collection = self._collection()
+        cursor = collection.find({"run_id": subscription_id}).sort("entry_time", -1).limit(limit)
+        return [Trade.from_mongo(doc) async for doc in cursor]
+
     async def realized_net(self, run_ids: list[str]) -> float:
         cursor = await self._collection().aggregate(
             [
