@@ -54,6 +54,8 @@ async def test_close_sends_one_delete_for_the_held_position() -> None:
     await h.event("transaction_event", **_close_event())
     assert len(h.fills) == 1
     assert len(h.trades) == 1
+    # Our reason wins over the venue order type of a close we requested.
+    assert h.trades[0].exit_reason == "strategy_exit"
     assert "p1" not in h.broker._positions
 
 
@@ -382,6 +384,12 @@ async def test_a_close_the_venue_refuses_later_keeps_the_position() -> None:
     failed = [e for e in logs if e["event"] == "exness.async_op_failed"]
     assert failed[0]["error_code"] == "MARKET_SESSION_CLOSED"
     assert "p1" in h.broker._positions
+
+    # A later venue SL close keeps the venue's reason, not the refused close's.
+    venue_close = _close_event()
+    venue_close["payload"]["orders"][0]["order_type"] = "sltp"
+    await h.event("transaction_event", **venue_close)
+    assert [t.exit_reason for t in h.trades] == ["sltp"]
 
 
 # ── snapshot ────────────────────────────────────────────────────────────────

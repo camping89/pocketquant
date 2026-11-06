@@ -100,6 +100,7 @@ class Trade:
     pnl: float
     commission: float
     duration_seconds: float
+    exit_reason: str | None = None
 
     def to_mongo(self) -> dict[str, Any]:
         return {
@@ -120,6 +121,7 @@ class Trade:
             "pnl": self.pnl,
             "commission": self.commission,
             "duration_seconds": self.duration_seconds,
+            "exit_reason": self.exit_reason,
         }
 
     @classmethod
@@ -142,6 +144,7 @@ class Trade:
             pnl=data.get("pnl", 0.0),
             commission=data.get("commission", 0.0),
             duration_seconds=data.get("duration_seconds", 0.0),
+            exit_reason=data.get("exit_reason"),
         )
 
 

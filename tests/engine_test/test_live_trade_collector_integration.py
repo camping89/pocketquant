@@ -65,6 +65,7 @@ def _closed_event(subscription_id: str, *, pnl: float, commission: float) -> Tra
         pnl=pnl,
         commission=commission,
         duration_seconds=60.0,
+        exit_reason="auto_tp",
     )
 
 
@@ -116,6 +117,7 @@ async def test_broker_closure_flows_through_bus_to_trades(db: Database) -> None:
     assert t.strategy_code == STRATEGY_CODE
     assert t.pnl == 12.0
     assert t.commission == 0.3
+    assert t.exit_reason == "auto_tp"
 
 
 @pytest.mark.asyncio

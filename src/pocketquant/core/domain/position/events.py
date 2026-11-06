@@ -56,3 +56,4 @@ class TradeClosedEvent(DomainEvent):
     pnl: float = 0.0
     commission: float = 0.0
     duration_seconds: float = 0.0
+    exit_reason: str | None = None

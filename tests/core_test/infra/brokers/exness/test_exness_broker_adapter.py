@@ -515,6 +515,7 @@ async def test_broker_side_close_publishes_fill_then_trade() -> None:
     assert len(h.trades) == 1
     trade = h.trades[0]
     assert (trade.pnl, trade.commission, trade.entry_price) == (-3.5, 0.2, 2345.1)
+    assert trade.exit_reason == "sltp"
     assert "p1" not in h.broker._positions
 
 

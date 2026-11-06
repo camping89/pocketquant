@@ -52,6 +52,7 @@ class LiveTradeCollector:
             pnl=event.pnl,
             commission=event.commission,
             duration_seconds=event.duration_seconds,
+            exit_reason=event.exit_reason,
         )
         # Error boundary (mirrors sibling bus handlers): this runs inside the
         # broker's synchronous dispatch chain, which re-raises. An unguarded Mongo

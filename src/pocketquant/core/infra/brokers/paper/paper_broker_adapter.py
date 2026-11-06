@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from datetime import datetime
 
 from pocketquant.core.common.constants import INTERVAL_SECONDS
@@ -747,6 +748,7 @@ class PaperBrokerAdapter(IBrokerPort):
                 price=trigger_price,
             )
             commission, trades = self._execute_fill_with_commission(exit_order, fill_price)
+            trades = [replace(t, exit_reason=reason) for t in trades]
             result = OrderResult(
                 order_id=str(exit_order.id),
                 broker_order_id=broker_order_id,

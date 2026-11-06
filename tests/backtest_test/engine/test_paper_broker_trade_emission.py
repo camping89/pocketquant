@@ -9,6 +9,7 @@ import pytest
 
 from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
+from pocketquant.core.domain.brokers.events import REASON_AUTO_SL
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderStatus, OrderType
 from pocketquant.core.domain.position import TradeClosedEvent
 from pocketquant.core.domain.trading import PercentageCommissionModel
@@ -144,6 +145,7 @@ async def test_synthetic_sl_exit_emits_trade() -> None:
     assert len(trades) == 1
     assert trades[0].exit_price == pytest.approx(95.0)  # filled at stop, slippage 0
     assert trades[0].direction == "LONG"
+    assert trades[0].exit_reason == REASON_AUTO_SL
 
 
 async def test_no_trade_on_open_only() -> None:

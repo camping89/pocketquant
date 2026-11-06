@@ -74,6 +74,8 @@ class _Held:
     opened_at: datetime | None
     sl_price: float | None = None
     tp_price: float | None = None
+    # Our reason for a close we requested; the venue reports only its own order type.
+    close_reason: str | None = None
 
 
 @dataclass
@@ -83,8 +85,9 @@ class _Inflight:
     sent_at: datetime
 
 
-# A closed position, its close deal and the closed units, emitted once the fill is delivered.
-_Trade = tuple[_Held, dict[str, Any], float]
+# A closed position, its close deal, the closed units and the exit reason, emitted once the
+# fill is delivered.
+_Trade = tuple[_Held, dict[str, Any], float, str | None]
 
 
 class ExnessBrokerAdapter(IBrokerPort):
@@ -593,7 +596,7 @@ class ExnessBrokerAdapter(IBrokerPort):
             return
         held = _held_from_repo(pos, pos.entry_price)
         await self._publish_close_fill(held, held.units, latest)
-        await self._emit_trade((held, latest, held.units))
+        await self._emit_trade((held, latest, held.units, None))
         self._realized = None
         self._realized_invalid_at = time.monotonic()
         logger.info("exness.position_closed_while_away", symbol=pos.symbol)
@@ -686,13 +689,21 @@ class ExnessBrokerAdapter(IBrokerPort):
             lots = Decimal(deal["volume"])
             units = min(lots_to_units(lots, Decimal(cond["contract_size"])), held.units)
             await self._publish_close_fill(held, units, deal)
-            await self._emit_trade((held, deal, units))
+            # Our reason applies only to a plain close. A venue SL/TP keeps the venue's
+            # word, so a close we sent that the venue later refused cannot mislabel it.
+            exit_reason = (held.close_reason or reason) if reason in (None, "market") else reason
+            await self._emit_trade((held, deal, units, exit_reason))
             self._realized = None
             self._realized_invalid_at = time.monotonic()
             held.units -= units
             if held.units <= 0:
                 self._positions.pop(pid, None)
-        logger.info("exness.position_closed_by_broker", reason=reason, remaining=held.units)
+        logger.info(
+            "exness.position_closed_by_broker",
+            reason=exit_reason,
+            venue_reason=reason,
+            remaining=held.units,
+        )
 
     async def _apply_success(
         self, rid: str, operation_id: str | None, deal: dict[str, Any]
@@ -755,7 +766,7 @@ class ExnessBrokerAdapter(IBrokerPort):
 
     # Always called after the position's fill was delivered.
     async def _emit_trade(self, trade: _Trade) -> None:
-        held, deal, units = trade
+        held, deal, units, reason = trade
         event = TradeClosedEvent(
             position_id=str(deal["position_id"]),
             subscription_id=held.subscription_id,
@@ -770,6 +781,7 @@ class ExnessBrokerAdapter(IBrokerPort):
             tp_price=held.tp_price,
             pnl=float((deal.get("profit") or {}).get("amount") or 0),
             commission=abs(float(deal.get("commission") or 0)),
+            exit_reason=reason,
         )
         for callback in list(self._trade_callbacks):
             try:
@@ -889,6 +901,8 @@ class ExnessBrokerAdapter(IBrokerPort):
             )
             return False
         pid = held[0]
+        # Set before the call: the venue's close deal can arrive before its reply.
+        held[1].close_reason = reason
         try:
             await self._client.call(
                 "closePosition",

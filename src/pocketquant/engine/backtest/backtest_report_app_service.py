@@ -113,6 +113,7 @@ class BacktestReportAppService:
             pnl=event.pnl,
             commission=event.commission,
             duration_seconds=event.duration_seconds,
+            exit_reason=event.exit_reason,
         )
         self._trades.append(trade)
         balance = await self._broker.get_balance()
