@@ -94,6 +94,13 @@ function fmtBpsRate(bps: number | null): string {
   return `${bps} bps (${(bps / 100).toFixed(2)}%)`
 }
 
+// A per-contract fee replaces the bps rate; runs from before it was recorded fall back to bps.
+function fmtCommission(cfg: Record<string, unknown>): string {
+  const perContract = num(cfg.commission_per_contract)
+  if (perContract != null) return `${perContract} per unit per side`
+  return fmtBpsRate(num(cfg.commission_bps))
+}
+
 // Rates come from the run's config snapshot so each run shows the exact settings it ran with.
 // Slippage has no USD line: it is baked into fill prices, so it already lives inside every trade's PnL.
 export function buildCostCards(
@@ -105,9 +112,16 @@ export function buildCostCards(
     {
       key: 'commission_bps',
       label: 'Commission',
-      value: fmtBpsRate(num(cfg.commission_bps)),
+      value: fmtCommission(cfg),
       tone: 'neutral',
-      tooltip: 'Rate charged on every fill — debited from cash balance',
+      tooltip: 'Charged on every fill — debited from cash balance',
+    },
+    {
+      key: 'spread',
+      label: 'Spread',
+      value: num(cfg.spread) == null ? '—' : String(num(cfg.spread)),
+      tone: 'neutral',
+      tooltip: 'Ask minus bid in price units — BUY fills and SHORT exits pay it, so already in PnL',
     },
     {
       key: 'slippage_bps',

@@ -11,7 +11,7 @@ from pocketquant.core.common.messaging import EventBus
 from pocketquant.core.domain.bar.events import BarCompletedEvent
 from pocketquant.core.domain.brokers.value_objects import OrderResult
 from pocketquant.core.domain.order import OrderAggregate, OrderSide, OrderType
-from pocketquant.core.domain.symbol import LINEAR_SPEC
+from pocketquant.core.domain.symbol import LINEAR_SPEC, ContractSpec
 from pocketquant.core.infra.brokers.paper.paper_broker_adapter import PaperBrokerAdapter
 from pocketquant.engine.backtest.backtest_execution_service import _config_from_dict
 
@@ -114,7 +114,7 @@ async def test_long_sl_triggers_on_bid_low(spread: float) -> None:
     assert exits[0].filled_price == pytest.approx(95.0)
 
 
-def test_config_from_dict_reads_spread() -> None:
+def test_config_from_dict_reads_spread_else_the_symbol_default() -> None:
     payload = {
         "strategy_code": "probe",
         "symbol": _SYM,
@@ -124,6 +124,10 @@ def test_config_from_dict_reads_spread() -> None:
     }
     assert _config_from_dict({**payload, "spread": 0.4}, LINEAR_SPEC).spread == 0.4
     assert _config_from_dict(payload, LINEAR_SPEC).spread == 0.0
+    gold = ContractSpec(spread=0.08)
+    assert _config_from_dict(payload, gold).spread == 0.08
+    assert _config_from_dict({**payload, "spread": None}, gold).spread == 0.08
+    assert _config_from_dict({**payload, "spread": 0.0}, gold).spread == 0.0
 
 
 async def test_short_sl_gap_fills_at_ask_open() -> None:

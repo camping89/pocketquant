@@ -24,12 +24,12 @@ class RunBacktestCommand(BaseModel):
     initial_capital: float = Field(default=10_000.0, ge=100, description="Starting capital")
     slippage_bps: float = Field(default=0.5, ge=0, description="Slippage in basis points")
     commission_bps: float = Field(default=3.0, ge=0, description="Commission in basis points")
-    spread: float = Field(
-        default=0.0,
+    spread: float | None = Field(
+        default=None,
         ge=0,
         description=(
             "Constant spread in price units; ask = bid + spread, "
-            "so BUY entries and SHORT exits fill at ask"
+            "so BUY entries and SHORT exits fill at ask. Omit to use the symbol's typical spread"
         ),
     )
     parameters: dict[str, Any] | None = Field(default=None, description="Strategy parameters")

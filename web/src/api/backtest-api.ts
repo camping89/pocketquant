@@ -185,6 +185,8 @@ export interface RunBacktestBody {
   initial_capital?: number
   slippage_bps?: number
   commission_bps?: number
+  // Omitted means the symbol's typical spread.
+  spread?: number
   parameters?: Record<string, unknown>
 }
 

@@ -29,12 +29,23 @@ SEEDED_FROM = "script"
 # lot step (1 oz, 1000 EUR), so a grid lot_step would size every signal to zero. The
 # Exness broker owns the lot grid. Tick sizes are 10 ** -point_digits from the
 # recorded instrument conditions.
+# Gold costs follow an Exness Raw Spread account: 3.50 USD per 100 oz lot per side is
+# 0.035 per oz per side. Exness publishes no fixed Raw gold spread; 0.08 is the Raw
+# previous-day average reported on 2026-09-30, on the scale where the prod account's
+# own measured median ask - bid (0.168) matches the reported Pro figure.
 SEEDS: list[tuple[str, str, str, ContractSpec]] = [
     (
         "XAUUSD:EXNESS",
         "Gold vs US Dollar (Exness CFD)",
         CALENDAR_EXNESS_XAUUSD,
-        ContractSpec(multiplier=1.0, tick_size=0.001, lot_step=None, currency="USD"),
+        ContractSpec(
+            multiplier=1.0,
+            tick_size=0.001,
+            lot_step=None,
+            currency="USD",
+            commission_per_contract=0.035,
+            spread=0.08,
+        ),
     ),
     (
         "EURUSD:EXNESS",
@@ -79,7 +90,8 @@ async def seed(apply: bool) -> int:
             symbol = _build(composite, name, calendar_id, spec)
             print(
                 f"{symbol.symbol:<16} asset_class={symbol.asset_class.value} "
-                f"calendar_id={symbol.calendar_id} tick_size={spec.tick_size}"
+                f"calendar_id={symbol.calendar_id} tick_size={spec.tick_size} "
+                f"commission_per_contract={spec.commission_per_contract} spread={spec.spread}"
             )
             if not apply:
                 continue

@@ -341,6 +341,8 @@ class BacktestReportAppService:
             "initial_capital": self._config.initial_capital,
             "slippage_bps": self._config.slippage_bps,
             "commission_bps": self._config.commission_bps,
+            # Set when the symbol charges per contract; commission_bps is then unused.
+            "commission_per_contract": self._config.contract_spec.commission_per_contract,
             "spread": self._config.spread,
             "parameters": self._config.parameters,
             "name": self._config.name,

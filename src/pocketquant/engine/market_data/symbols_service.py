@@ -14,6 +14,7 @@ class SymbolQueryService:
                 "asset_class": s.asset_class.value,
                 "calendar_id": s.calendar_id,
                 "is_active": s.is_active,
+                "spread": s.contract_spec.spread,
             }
             for s in symbols
         ]

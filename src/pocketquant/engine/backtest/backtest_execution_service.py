@@ -39,7 +39,8 @@ def _config_from_dict(payload: dict[str, Any], contract_spec: ContractSpec) -> B
         initial_capital=payload.get("initial_capital", 10_000.0),
         slippage_bps=payload.get("slippage_bps", 0.5),
         commission_bps=payload.get("commission_bps", 3.0),
-        spread=payload.get("spread", 0.0),
+        # None means the run took the symbol's typical spread.
+        spread=contract_spec.spread if payload.get("spread") is None else payload["spread"],
         parameters=payload.get("parameters") or {},
         name=payload.get("name"),
         contract_spec=contract_spec,

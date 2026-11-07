@@ -4,6 +4,7 @@ import utc from 'dayjs/plugin/utc'
 import { useStrategyList } from '../../hooks/use-backtest-run'
 import { useStrategyDefaults } from '../../hooks/use-strategies'
 import { useTimezone } from '../../lib/use-timezone'
+import { useSymbols } from '../../hooks/use-symbols'
 import { SymbolSelector } from '../controls/symbol-selector'
 import { IntervalMultiSelect } from '../controls/interval-multi-select'
 import { ParamsEditor } from '../controls/params-editor'
@@ -55,6 +56,9 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
     return base.format(DT_LOCAL_FMT)
   })
   const [paramsText, setParamsText] = useState('')
+  const [spreadText, setSpreadText] = useState('')
+  const { data: symbols = [] } = useSymbols()
+  const symbolSpread = symbols.find((s) => s.symbol === symbol.trim().toUpperCase())?.spread ?? 0
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Inputs hold wall-clock in the selected mode. UTC → send as-is (already UTC);
@@ -86,6 +90,10 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
     const parsed = parseParameters(paramsText)
     if ('error' in parsed) { setErrorMsg(parsed.error); return }
 
+    // Blank means the symbol's typical spread, chosen by the backend.
+    const spread = spreadText.trim() === '' ? undefined : Number(spreadText)
+    if (spread !== undefined && (!Number.isFinite(spread) || spread < 0)) { setErrorMsg('Spread must be a number ≥ 0.'); return }
+
     onSubmit({
       strategy_id: effectiveStrategy,
       name: name.trim() || undefined,
@@ -93,6 +101,7 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
       intervals,
       start_date: toUtcSubmit(startDate),
       end_date: toUtcSubmit(endDate),
+      spread,
       parameters: parsed.value,
     })
   }
@@ -142,6 +151,21 @@ export function BacktestForm({ onSubmit, submitting }: BacktestFormProps) {
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>End ({suffix})</label>
           <input style={inputStyle} type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </div>
+      </div>
+
+      <div>
+        <label style={labelStyle}>Spread</label>
+        <input
+          style={inputStyle}
+          type="text"
+          inputMode="decimal"
+          value={spreadText}
+          onChange={(e) => setSpreadText(e.target.value)}
+          placeholder={`${symbolSpread} (symbol default)`}
+        />
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+          Ask minus bid, in price units. BUY fills and SHORT exits pay it. Leave blank to use the symbol's typical spread ({symbolSpread}).
         </div>
       </div>
 

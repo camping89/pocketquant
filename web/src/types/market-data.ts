@@ -25,6 +25,8 @@ export interface SymbolInfo {
   asset_class: string
   calendar_id: string
   is_active: boolean
+  // Typical ask - bid in price units; a backtest uses it when the run sends no spread.
+  spread: number
 }
 
 export interface QuoteResponse {

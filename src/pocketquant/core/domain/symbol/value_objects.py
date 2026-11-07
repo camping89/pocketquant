@@ -29,6 +29,8 @@ class ContractSpec:
     currency: str = "USD"
     # None falls back to the percentage commission model.
     commission_per_contract: float | None = None
+    # Typical ask - bid in price units; a backtest uses it when the run sets no spread.
+    spread: float = 0.0
 
     @property
     def is_contract(self) -> bool:
@@ -41,6 +43,7 @@ class ContractSpec:
             "lot_step": self.lot_step,
             "currency": self.currency,
             "commission_per_contract": self.commission_per_contract,
+            "spread": self.spread,
         }
 
     # Linear units for a pre-migration document.
@@ -54,6 +57,7 @@ class ContractSpec:
             lot_step=doc.get("lot_step"),
             currency=doc.get("currency", "USD"),
             commission_per_contract=doc.get("commission_per_contract"),
+            spread=doc.get("spread", 0.0),
         )
 
 
