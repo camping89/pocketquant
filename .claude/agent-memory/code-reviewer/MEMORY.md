@@ -10,7 +10,8 @@
 - **Single process**: `pocketquant.app.main` on :41921 — full runtime + ALL API routes + SPA fallback. Single uvicorn worker only (scheduler/WS/broker are in-process singletons)
 - `OrderPositionQueryService` routes (in-RAM engine state) now WORK publicly via nginx (previously 500'd in bff by design) — unauthenticated read of live orders/positions, consistent with overall no-auth API posture
 - (2026-10-20) tracked_symbols router now mounted ONCE (`main_extensions.py` api.include_router prefix="/market-data"); 17 mutation routes; import-linter = 8 contracts; `tests/baseline` gone
-- Broker pool gotcha: `_get_or_create_broker` reuses only while a loaded strategy holds the broker. (2026-10-27) `unload_strategy` now drops paper positions + disconnects an unheld paper broker; venue brokers still never disconnect → delete-last-then-reload builds a 2nd venue adapter
+- Broker pool (verified 2026-10-28): paper reused only while held; venue broker ALWAYS returned from pool (one adapter per process)
+- (2026-10-30) Roles now run under Mongo leases (`app/roles.py`, TTL 30 s): worker scheduler only while lease held; stop = pause, wait 90 s, cancel, release. Lease exclusivity is NOT airtight: lease-lost path and >5 s cancel overrun leave old-process job writes landing after the next worker starts. APScheduler max_instances is per job id, so `<job>_catchup` one-offs can overlap the cron run of the same job
 - (2026-10-27) EventRegistry deleted; handlers subscribe explicitly. EventBus.publish runs ALL handlers on a copied list, then re-raises the first error. PositionAppService boot DELETES open rows of paper subs (closing them made fake trades); every other open row stays for the venue snapshot
 - Plan-review gotcha: go-live plans mix bare `reports/x.md` with `plans/<dir>/reports/x.md`; cwd is repo root, so bare paths split state files
 

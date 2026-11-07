@@ -1,0 +1,1 @@
+- [No waiting, no fake data](feedback-no-waiting-no-fake-data.md) — owner replaces blocked waits with existing prod/test evidence via plan amendments; never synthetic prod docs
