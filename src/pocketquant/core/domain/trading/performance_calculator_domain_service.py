@@ -194,7 +194,9 @@ class PerformanceCalculatorDomainService:
                 returns_values, periods_per_year=periods_per_year
             )
 
-        pnl_list = [t.pnl for t in closed_trades]
+        # The balance behind total_return pays commission, so profit factor and win
+        # rate read net PnL too; otherwise a run can show PF > 1 and lose money.
+        pnl_list = [t.net_pnl for t in closed_trades]
         avg_win, avg_loss, winning, losing = PerformanceCalculatorDomainService.average_win_loss(
             pnl_list
         )

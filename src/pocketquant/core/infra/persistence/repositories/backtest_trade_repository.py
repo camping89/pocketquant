@@ -46,12 +46,14 @@ class BacktestTradeRepository(SymbolScopedRepository):
         "status": "exit_time",
     }
 
+    # A win or loss is judged net of commission, the basis of win rate and profit factor.
     @staticmethod
     def _pnl_filter_clause(pnl_filter: str | None) -> dict:
+        net = {"$subtract": ["$pnl", "$commission"]}
         if pnl_filter == "wins":
-            return {"pnl": {"$gt": 0}}
+            return {"$expr": {"$gt": [net, 0]}}
         if pnl_filter == "losses":
-            return {"pnl": {"$lt": 0}}
+            return {"$expr": {"$lt": [net, 0]}}
         return {}
 
     # Ordered by (sort_key, _id) so ties never drop or duplicate a row across pages. The

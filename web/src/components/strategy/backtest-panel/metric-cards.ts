@@ -163,14 +163,14 @@ export function buildMetricCards(m: BacktestMetrics): MetricCardModel[] {
       label: 'Win Rate',
       value: (m.win_rate * 100).toFixed(1) + '%',
       tone: toneWinRate(m.win_rate),
-      tooltip: 'Winning positions / total positions',
+      tooltip: 'Positions with PnL > 0 after commission / total positions',
     },
     {
       key: 'profit_factor',
       label: 'Profit Factor',
       value: isFinite(m.profit_factor) ? m.profit_factor.toFixed(2) : '∞',
       tone: toneProfitFactor(m.profit_factor),
-      tooltip: 'Gross profit / gross loss',
+      tooltip: 'Sum of winning PnL / sum of losing PnL, each trade net of commission',
     },
     {
       key: 'total_trades',
@@ -198,14 +198,14 @@ export function buildMetricCards(m: BacktestMetrics): MetricCardModel[] {
       label: 'Avg Win',
       value: fmtNumber(m.avg_win, true),
       tone: 'positive',
-      tooltip: 'Mean PnL of winning positions',
+      tooltip: 'Mean PnL after commission of winning positions',
     },
     {
       key: 'avg_loss',
       label: 'Avg Loss',
       value: fmtNumber(m.avg_loss, true),
       tone: 'negative',
-      tooltip: 'Mean PnL of losing positions',
+      tooltip: 'Mean PnL after commission of losing positions',
     },
     {
       key: 'avg_duration',

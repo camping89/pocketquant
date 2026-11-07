@@ -255,10 +255,10 @@ class BacktestStatsService:
         # excluded open positions from all of these, so we read the closed set.
         trades = await self._trade_repo.list_by_run(run_id)
 
-        pnls = [t.pnl for t in trades]
+        pnls = [t.net_pnl for t in trades]
         durations_hours = [t.duration_seconds / _HOUR_SECONDS for t in trades]
         streaks = win_loss_streaks(pnls)
-        pf = profit_factor_by_direction([(t.direction, t.pnl) for t in trades])
+        pf = profit_factor_by_direction([(t.direction, t.net_pnl) for t in trades])
         periods = drawdown_periods(result.equity_curve, top_n=5)
 
         return BacktestStatsResponse(

@@ -102,6 +102,12 @@ class Trade:
     duration_seconds: float
     exit_reason: str | None = None
 
+    # pnl is the price move only, like a broker's realized PnL; commission is the
+    # fee beside it. Performance metrics read the net value, as the balance does.
+    @property
+    def net_pnl(self) -> float:
+        return self.pnl - self.commission
+
     def to_mongo(self) -> dict[str, Any]:
         return {
             "_id": str(self.trade_id),

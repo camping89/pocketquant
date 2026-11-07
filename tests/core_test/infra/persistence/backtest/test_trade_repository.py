@@ -191,6 +191,15 @@ async def test_paged_wins_filter(database: Database) -> None:
 
 
 @pytest.mark.asyncio
+async def test_wins_filter_is_net_of_commission(database: Database) -> None:
+    repo = BacktestTradeRepository(database)
+    # pnl 0.1 is below the 0.21 commission, so the trade is a net loss.
+    await repo.save_many([_trade(trade_id="t1", run_id="r1", pnl=0.1)])
+    assert await repo.count_by_run("r1", "wins") == 0
+    assert await repo.count_by_run("r1", "losses") == 1
+
+
+@pytest.mark.asyncio
 async def test_sum_pnl_by_run(database: Database) -> None:
     repo = BacktestTradeRepository(database)
     await repo.save_many(

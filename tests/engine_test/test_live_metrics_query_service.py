@@ -73,7 +73,8 @@ async def test_metrics_from_trades(db: Database) -> None:
     assert m["winning_trades"] == 2
     assert m["losing_trades"] == 1
     assert m["win_rate"] == pytest.approx(2 / 3)
-    assert m["profit_factor"] == pytest.approx(5.0)  # gross_profit 50 / gross_loss 10
+    # Net of the 0.2 commission per trade: (29.8 + 19.8) / 10.2.
+    assert m["profit_factor"] == pytest.approx(49.6 / 10.2)
     assert m["total_commission"] == pytest.approx(0.6)
     # %-of-capital returns omitted — live subs share one account.
     assert m["total_return"] is None
@@ -81,6 +82,20 @@ async def test_metrics_from_trades(db: Database) -> None:
     # M1: trade-keyed curve is not bar-annualizable → Sharpe/Sortino report 0.0.
     assert m["sharpe_ratio"] == 0.0
     assert m["sortino_ratio"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_commission_turns_a_small_win_into_a_loss(db: Database) -> None:
+    sub_id = str(generate_id())
+    await TradeRepository(db).save_many(
+        [_trade(sub_id, pnl=0.1, hour=0), _trade(sub_id, pnl=-1.0, hour=1)]
+    )
+    m = await _service(db).get_metrics(sub_id)
+
+    assert m["winning_trades"] == 0
+    assert m["losing_trades"] == 2
+    # Equity falls by the net sum, 0.1 - 1.0 - 2 * 0.2.
+    assert m["max_drawdown"] == pytest.approx(-1.3 / BASELINE)
 
 
 @pytest.mark.asyncio
@@ -109,7 +124,10 @@ class _EsLookup:
         )
 
 
-@pytest.mark.parametrize(("symbol", "drawdown"), [("ES1!:TV", -0.0025), ("BTC:BIN", -0.05)])
+# A -500 trade also pays its 0.2 commission.
+@pytest.mark.parametrize(
+    ("symbol", "drawdown"), [("ES1!:TV", -500.2 / 200_000.0), ("BTC:BIN", -500.2 / BASELINE)]
+)
 @pytest.mark.asyncio
 async def test_futures_drawdown_is_measured_against_the_futures_balance(
     db: Database, symbol: str, drawdown: float

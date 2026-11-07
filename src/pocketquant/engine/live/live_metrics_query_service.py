@@ -42,7 +42,7 @@ class LiveMetricsQueryService:
                 baseline = self._futures_baseline
 
         equity_curve = self._equity_curve(trades, baseline)
-        current_equity = baseline + sum(t.pnl for t in trades)
+        current_equity = baseline + sum(t.net_pnl for t in trades)
         total_commission = sum(t.commission for t in trades)
 
         metrics = PerformanceCalculatorDomainService.build(
@@ -68,7 +68,7 @@ class LiveMetricsQueryService:
         points = [EquityPoint(timestamp=trades[0].entry_time, equity=baseline, drawdown=0.0)]
         equity = baseline
         for t in trades:
-            equity += t.pnl
+            equity += t.net_pnl
             points.append(EquityPoint(timestamp=t.exit_time, equity=equity, drawdown=0.0))
         return points
 
