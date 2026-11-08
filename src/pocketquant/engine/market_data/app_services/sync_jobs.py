@@ -242,6 +242,17 @@ async def _mark_done(
         )
 
 
+async def _record_detail(
+    history_repo: JobHistoryRepository, doc_id: str | None, job_name: str, **fields: Any
+) -> None:
+    if not doc_id:
+        return
+    try:
+        await history_repo.record_detail(doc_id, **fields)
+    except Exception:
+        logger.warning("job_history.record_detail_failed", job_id=job_name, exc_info=True)
+
+
 # Every symbol is tried and the first error is raised at the end. A shut market is
 # skipped without calling the provider: asking anyway spends rate limit on an empty
 # answer.
@@ -260,12 +271,7 @@ async def _sync_by_intervals(
     logger.debug(f"market_data.{job_name}.started")
 
     async def detail(**fields: Any) -> None:
-        if not doc_id:
-            return
-        try:
-            await history_repo.record_detail(doc_id, **fields)
-        except Exception:
-            logger.warning("job_history.record_detail_failed", job_id=job_name, exc_info=True)
+        await _record_detail(history_repo, doc_id, job_name, **fields)
 
     symbols = [ts.symbol for ts in await tracked_symbol_repo.list_all()]
     totals = {"total_inserted": 0, "total_fetched": 0}
@@ -489,6 +495,26 @@ async def sync_integrity(resume: bool = False) -> None:
                             missing=report["missing_count"],
                             unexpected=report.get("unexpected_count", 0),
                             unexpected_ranges=report.get("unexpected_ranges", [])[:5],
+                        )
+                        # Container logs die on every redeploy; the run doc keeps the
+                        # issue for the job history TTL.
+                        await _record_detail(
+                            history_repo,
+                            doc_id,
+                            "sync_integrity",
+                            symbol=ts.symbol,
+                            interval=interval.value,
+                            bars_fetched=0,
+                            bars_inserted=0,
+                            filtered_existing=0,
+                            filtered_misaligned=report["misaligned_count"],
+                            status="issues_found",
+                            error=(
+                                f"missing={report['missing_count']}"
+                                f" unexpected={report.get('unexpected_count', 0)}"
+                                f" gaps={report.get('gap_ranges', [])[:5]}"
+                                f" unexpected_ranges={report.get('unexpected_ranges', [])[:5]}"
+                            ),
                         )
             except Exception:
                 failed += 1

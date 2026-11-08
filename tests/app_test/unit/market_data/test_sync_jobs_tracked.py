@@ -268,6 +268,34 @@ async def test_one_failing_symbol_does_not_stop_integrity_for_the_rest(
     assert finish["error"] == "1 of 2 symbols failed"
 
 
+@pytest.mark.asyncio
+async def test_integrity_issues_are_stored_on_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    history = _wire(monkeypatch, MagicMock(spec=SyncService), doc_id="hist-1")
+
+    async def check(symbol, interval, bar_repo, calendar):  # noqa: ANN001
+        if symbol == "BTCUSDT:BINANCE" and interval == sync_jobs.Interval.HOUR_1:
+            return {
+                "misaligned_count": 1,
+                "missing_count": 3,
+                "gap_ranges": [("2026-11-07T01:00:00+00:00", "2026-11-07T03:00:00+00:00")],
+            }
+        return {"misaligned_count": 0, "missing_count": 0}
+
+    monkeypatch.setattr(sync_jobs, "check_integrity", check)
+
+    await sync_jobs.sync_integrity()
+
+    history.record_detail.assert_awaited_once()
+    args, kwargs = history.record_detail.await_args
+    assert args == ("hist-1",)
+    assert kwargs["symbol"] == "BTCUSDT:BINANCE"
+    assert kwargs["interval"] == "1h"
+    assert kwargs["status"] == "issues_found"
+    assert kwargs["filtered_misaligned"] == 1
+    assert "missing=3" in kwargs["error"]
+    assert "2026-11-07T01:00:00+00:00" in kwargs["error"]
+
+
 # The worker stop cuts a repair after its first symbol; the row ends interrupted with
 # that symbol marked, and the task ends cleanly.
 @pytest.mark.asyncio
