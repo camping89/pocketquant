@@ -101,12 +101,12 @@ Phase 01 is outside this repo and can run any time; Phases 02-04 verify locally 
 
 | # | Item | Owner decision | Due |
 |---|---|---|---|
-| F1 | Final D16 run: one read-only run of the script below on or after 2026-11-11. By then the released code has built every day of the 7-day fold window. Pass: `mismatches=0 repair_1d=0`. On pass, retire the script. On a fail inside the window, run the Failure Protocol. | proposed 2026-11-07 (`plans/reports/kongming-261107-1227-open-questions-and-prod-state.md`); owner: pending | 2026-11-11 to 2026-11-15 |
-| F2 | D16 amendment for a day older than the 7-day fold window (`_REPAIR_DAYS` in `sync_jobs.py`): the row passes when the stored 1d equals the dry-run aggregate of its stored 1m bars (OHLC tolerance 1e-9, volume 1e-4). Vendor equality is required only inside the window. Reason: since E3 no job refreshes a 1d bar older than the window, so a vendor revision there never heals. Example: BTCUSD 2026-10-24, vendor volume 113120, then 113100, then 113120 across reads; the stored 1d is within tolerance of its 1m aggregate. | owner: pending | before F1 |
+| F1 | Final D16 run: one read-only run of the script below on or after 2026-11-11. By then the released code has built every day of the 7-day fold window. Pass: `mismatches=0 repair_1d=0`. On pass, retire the script. On a fail inside the window, run the Failure Protocol. | proposed 2026-11-07 (`plans/reports/kongming-261107-1227-open-questions-and-prod-state.md`); owner: yes, 2026-11-08 | 2026-11-11 to 2026-11-15 |
+| F2 | D16 amendment for a day older than the 7-day fold window (`_REPAIR_DAYS` in `sync_jobs.py`): the row passes when the stored 1d equals the dry-run aggregate of its stored 1m bars (OHLC tolerance 1e-9, volume 1e-4). Vendor equality is required only inside the window. Reason: since E3 no job refreshes a 1d bar older than the window, so a vendor revision there never heals. Example: BTCUSD 2026-10-24, vendor volume 113120, then 113100, then 113120 across reads; the stored 1d is within tolerance of its 1m aggregate. | owner: yes, 2026-11-08 | before F1 |
 
 The BTCUSD 2026-10-24 row leaves the script's 14-day window by 2026-11-11, so F1 can pass without F2. F2 guards only against later vendor revisions.
 
-F1 runs with PRODPY (Ops recipe) and the script below. It is the Phase 05 script plus the F2 branch (`if d < WINDOW`). If F2 is declined, delete that branch and keep the `else` line.
+F1 runs with PRODPY (Ops recipe) and the script below. It is the Phase 05 script plus the F2 branch (`if d < WINDOW`).
 
 ```python
 import asyncio
