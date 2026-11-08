@@ -1,0 +1,5 @@
+A=raw-2
+B=raw-5
+C=raw-4
+D=raw-3
+E=raw-1

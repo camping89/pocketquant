@@ -1,0 +1,41 @@
+# advise-state
+phase: advise
+input: "i dont want to do this way, it is wasting time, you can simulate the order and position created and finish the work, analyse this again and we aim to finish the plan now"
+flags: --agent
+
+## scout-findings
+- Phase 17 report (2026-11-02T14:10Z): obs-1 PASS, obs-5 PASS; missing obs-2, obs-3, obs-4, obs-6; Task 17.2 blocked until 2026-11-09T00:00Z. Orchestrator reports the owner closed position 01a19bd8 via the drawer at 2026-11-02 16:22 UTC ("close accepted", open position "-") — not yet re-verified by STATUS. Phase 16 report: the 1h,4h,1d extra sub sent a strategy EXIT ("setup gone", outcome sent) on its 12:00Z bar.
+- Tests already cover every obs-* capability: `tests/core_test/infra/brokers/test_paper_broker_stop_entry.py` (stop fill, cancelled stop never fills, close_position fills whole position, idempotent close), `tests/engine_test/test_manual_action.py` (close cancels stop + closes, cancel leaves position, rejected codes, queued in drain, waits for price after takeover), `tests/engine_test/test_strategy_reconcile_service.py` (action cleared with outcome), `tests/core_test/unit/domain/strategy/test_triple_screen.py` (EXIT on setup gone / tide flip, snapshot readings), Exness fakes in `test_exness_pending_and_close.py`.
+- `cascade_for_symbol` (engine/market_data/app_services/cascade_aggregator.py:100) is the single function used by the live sync job (sync_jobs.py:403) and backfill (tracked_symbols_backfill.py:160). Phase 16 ran it full-range on 2026-11-02 09:14Z (323 1d bars, source=cascade). The vendor comparison of Task 17.2 has never been run; the 7-day window adds live-timing evidence only.
+- `ScriptedStrategy` exists only in tests/strategy_doubles.py (0 hits in src): forcing signals on a running trader needs code changes. deploy/compose.local.yml = Mongo + Redis only.
+- Plan rules that bind: Conventions (Failure Protocol, NOT_YET, [ASK] explicit yes, no prod write without recorded result), D5 (orphans, own yes), D7 (every manual attempt records accepted/rejected), D12 escape hatch (skip obs-* only on owner's own "delete now"), A6/A7/A9/A11 acceptance rows, C12 no backup, memory: symbol delete cascades (never TrackedSymbolService.remove). User global rule: no fake data to satisfy a check.
+- XAUUSD Exness session closes 20:58 UTC daily (calendar adapter); the 1d bar is stamped at UTC midnight with session_date (test_a_session_calendar_cascades_its_daily_bar_at_utc_midnight).
+- Live 1d timing (verified in code): sync_1m cron `*/1` at +12 s, lookback 100 min; compute_boundaries includes any bucket overlapping the range (strict `B + tf_secs > range_start`), so the day bucket is re-aggregated every minute all day and ~100 min past midnight (test_1d_today_bucket_kept_alive_through_the_day). sync_verify_cascade (hourly) compares 5m only, not 1d. sync_repair every 12 h writes SOURCE_REST_REPAIR (the 17.2 script counts 1d repairs since D1). A 1m bar arriving >100 min after midnight would not be re-cascaded into the 1d bar (inference from the lookback; repair path interplay not read).
+- upsert_bar (bar_repository.py:42-98) has no source precedence: it overwrites whenever OHLCV differs and stamps the writer's source; equal values return early. sync_backfill (daily 03:00 UTC, SYNC_INTERVALS includes DAY_1, source rest_backfill, 5000 bars) has no cascade-aware skip (grep of sync_jobs.py and sync_service.py). Inference: a REST 1d bar that differs from the cascaded one replaces it after the day bucket leaves the 100-min lookback (~01:40 UTC).
+- Review scope for the owner's "review code lại": cascade_aggregator.py compute_boundaries + cascade_for_symbol (lines 60-175), sync_jobs.py sync_1m (383-422) and schedule (718-780), exness_session_calendar_adapter.py bar_start/session_date/session_close for DAY_1 (170-240), bar_repository.py upsert_bar source overwrite (42-98), sync_repair (477-518) vs cascade 1d precedence.
+
+## qa-log
+- Q1: which evidence standard replaces the live paper observations (prod evidence already present + tests / synthetic prod docs / local e2e run / skip all)? -> A1: prod evidence already present + tests (recommended option). No synthetic data; obs-3 from the owner's 16:22Z close, obs-2 may come from the 1h,4h,1d sub's EXIT trade, obs-6 owner drawer check, obs-4 cancel if a stop rests else SKIPPED by owner.
+- Q2: how to handle the 7-day 1d comparison (A6)? -> A2: run the vendor comparison today over stored cascade bars and treat A6 as met, no dated re-check. Owner adds verbatim: "Và review code lại lần nữa cho chắc chắn tương lại chạy đúng" = also re-review the live 1d cascade code path (scheduling/timing after the 20:58Z session close, not only the arithmetic) so it keeps running correctly in future.
+- Q3: does "finish now" include the irreversible prod STF + orphan delete today? -> A3: yes, delete today in the same run (recommended option); the per-list explicit yeses of 17.4/17.5 still apply.
+- Q4 (preview confirmation): does the single-run diagram match? -> A4: Matches.
+
+## reframing-draft
+problem: Phase 17 is parked on two waits (next live paper events; 7-day 1d window to 2026-11-09). The owner wants the plan closed in one run today. "Simulate" is settled as: use the prod evidence that already exists plus the test suite, never synthetic documents.
+requirements:
+1. Amend phase-17 (plan file only, before the run) so obs-2 may be satisfied by a strategy EXIT trade of any of the three Triple Screen paper subscriptions (same deployed code), recorded with the sub id; obs-3 is re-verified from the owner's 2026-11-02 16:22Z close by STATUS (manual outcome accepted, exit != entry, exit_time near the drawer action); obs-4 is asked only if STATUS shows a resting stop_market order, else recorded "obs-4 SKIPPED by owner"; obs-6 is one owner drawer check (DRAWER OK).
+2. Amend Task 17.2: run the vendor comparison today over the latest 14 stored trading days ending at the last fully closed 1d bar (window end = today's UTC midnight), same pass rule mismatches=0 repair_1d=0, min_days>=5; A6 recorded as met on that output.
+3. Add a read-only code review of the live 1d cascade path (compute_boundaries, cascade_for_symbol, sync_1m schedule and lookback, Exness calendar DAY_1 bar_start/session_date, bar_repository upsert source overwrite, sync_repair precedence) with findings written in the phase report; a finding that shows the 1d bar can be wrong in future is a stop condition, not a silent fix.
+4. Tasks 17.3-17.7 run today: exact id lists, two explicit yeses (STF, orphans), children first, deleted_count asserted, re-list to zero, guards unchanged.
+5. Task 17.8 unchanged: docs line test, A1-A13 table with evidence lines (A6, A7 rows cite the amended evidence), ak plan update completed, commit + push.
+6. No synthetic orders/positions/trades anywhere; no code change in src/web; no prod write other than the owner's own drawer actions and the Task 17.6 delete.
+goals: plan 261101-0843 closed today with every acceptance row backed by real evidence (prod ids or test names), the STF prod data gone, and a written assurance that the 1d cascade keeps running correctly.
+done means: phase-17 report ends with Result: PASS; six obs-* lines (PASS or SKIPPED by owner) with ids; 17.2 output mismatches=0 repair_1d=0 min_days>=5; review findings section present; stf-delete-relist.json shows stf_total=0 orphans_total=0 paper=running/running; plan.md status: completed; HEAD pushed to origin/develop.
+non-goals: no synthetic prod data; no local end-to-end simulation; no changes to src, tests or web; no dated re-check on 2026-11-09; no change to the three running paper subscriptions.
+constraints: plan Conventions (entry gate, Failure Protocol, [ASK] explicit yes, NOT_YET on no); D5, D7, D12; C12 no backup; never TrackedSymbolService.remove; questions in Vietnamese; amendments recorded in phase-17 file and plan.md owner decisions before the run.
+
+## preview
+round 1: plans/reports/advise-261103-0025-finish-mtf-plan-now-preview.html (diagram of the single resumed Phase 17 run with the three amendments and the two owner yes gates) — owner: Matches
+
+## next
+Advice report written to plans/reports/advise-261103-0025-finish-mtf-plan-now.md; ADVICE_READY.

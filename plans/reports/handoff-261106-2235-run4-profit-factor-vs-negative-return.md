@@ -1,0 +1,11 @@
+# Handoff: run 4 profit factor vs negative return
+
+PocketQuant backtest metric anomaly: profit factor above 1 but negative total return.
+
+Facts (from plans/261101-0843-stf-to-mtf-foundation/reports/phase-16-backtests-and-paper-start.md, lines 85-117): six Triple Screen backtests on prod, XAUUSD:EXNESS, 2025-11-03..2026-10-30. Run 4 = intervals 15m,1h,4h, entry_type=stop, exit_mode=strategy, id 01a19ba6-2f0e-73e6-9a2e-22ea60e177c7: trades=933, total_return=-0.0324, profit_factor=1.1421, max_drawdown=-0.0334, sharpe=-1.19, win_rate=0.2497. With profit factor = gross profit / gross loss above 1, the net PnL should be positive, yet return, sharpe and drawdown say the run lost money. The other five runs have pf < 1 and negative returns, consistent with each other. The Phase 16 worker wrote "profit factor 1.142 before commission" but never checked why; commission/fees/swap/spread being excluded from pf but included in equity is only a hypothesis, not verified.
+
+Goal: prove the root cause. Is it a metric bug (pf and return computed from different PnL bases, e.g. gross vs net of commission, or pf over a different trade set), an equity/accounting bug in the backtest engine, or correct behaviour that the UI and reports should label? Recompute pf and return from the stored backtest_trades of run 4 and compare with the stored metrics. Check whether runs 1-3, 5, 6 show the same gap between their pf and their recomputed net PnL.
+
+Where to look: the backtest metrics code under src/pocketquant (grep profit_factor, total_return, commission), the backtest engine's equity and fee handling, prod collections backtest_runs / backtest_trades / backtest_orders for that run id (the STF delete in Phase 17 removed only STF runs; confirm run 4 still exists).
+
+Constraints: prod access is read-only (Mongo reads through the PRODPY recipe in plans/261101-0843-stf-to-mtf-foundation/plan.md Ops recipe; creds live in ../pocketquant-config; never print secrets; remove .cache/ssh/vps_key when done). Do not change code until the cause is proven; propose the fix in the report. Questions to the owner in Vietnamese; report in English at plans/reports/debugger-261106-2226-run4-profit-factor-vs-negative-return.md. Working directory D:\w\_me\algotrading\pocketquant, branch develop, timezone Asia/Bangkok.
