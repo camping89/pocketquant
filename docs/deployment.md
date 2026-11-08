@@ -216,7 +216,7 @@ Exness keeps limited history. A window older than that fails with an Exness erro
 
 ### Sync gap repair
 
-Check for bar-data gaps when `job_history` shows `missed` events for `sync_backfill`. A deploy that cuts the job leaves no gap, because the next worker resumes it ([System Architecture](system-architecture.md#decisions)). The schedule is in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.py`). The web `/monitor` page shows the same audit for all symbols.
+Check for bar-data gaps when `job_history` shows `missed` events for `sync_backfill`. Check also when the latest `sync_integrity` run in `/monitor` lists details: each row is a (symbol, interval) with missing or misaligned bars, and the pill tooltip holds the gap ranges. A deploy that cuts the job leaves no gap, because the next worker resumes it ([System Architecture](system-architecture.md#decisions)). The schedule is in `register_sync_jobs` (`engine/market_data/app_services/sync_jobs.py`). The web `/monitor` page shows the same audit for all symbols.
 
 Audit first. Run the repair only if the audit shows gaps. The repair deletes misaligned bars and re-syncs the gap ranges.
 
