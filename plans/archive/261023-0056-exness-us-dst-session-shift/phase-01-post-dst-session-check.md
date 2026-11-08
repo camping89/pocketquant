@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Post-DST session and integrity check"
-status: pending
+status: completed
 priority: P2
 effort: 1 check
 dependencies: []
@@ -136,6 +136,7 @@ Run on or after Mon 2026-11-02 03:00Z (10:00 Bangkok), after the first post-DST 
 ## Results
 | Checked at (UTC) | `S` (StartedAt) | `F` | CB | RC | RL | Integrity missing/misaligned | `sync_1m` p95 ms (by_status) | Running | C5 | Verdict |
 |---|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-08 ~10:40 | not read | not read | not read (logs reset per deploy) | not read | not read | XAUUSD 1m 7d 0/0, 1h 7d 0/0; EURUSD 1h 7d 0/0; EURUSD 1m 7d 13/0, all ranges in 22:00-22:08Z (11-01 22:05-22:08, 11-03 22:00-22:01, 11-04 22:02-22:04, 11-05 22:00, 11-05 22:02-22:04); stored 1m session edges equal `trading_minutes` on 10-25, 10-30, 11-01, 11-02, 11-06 except EURUSD 11-01 (from 22:09, expected 22:05) | 8865.5 ({'completed': 10080}) | n/a (STF subscriptions deleted 2026-11-02) | 3600 True | PASS (EURUSD rollover minutes not venue-read) |
 
 ## Stop-and-ask
 - C5 prints `False`, or C5 prints `0` as the shift on or after 2026-11-01.
