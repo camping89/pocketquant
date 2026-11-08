@@ -97,6 +97,99 @@ Phase 01 is outside this repo and can run any time; Phases 02-04 verify locally 
 | R3 | Before the first post-deploy repair, the new 1d check may warn on days the old code never folded | Phase 05 reads the warnings, then re-reads after the next repair; a warning that persists after a repair is a failure |
 | R4 | Dropping 5m-1d from REST repair loses repairs that the cascade cannot make (a bucket with no stored 1m) | `sync_integrity` still reports 5m-1d gaps; Phase 05 reads its warnings |
 
+## Follow-ups
+
+| # | Item | Owner decision | Due |
+|---|---|---|---|
+| F1 | Final D16 run: one read-only run of the script below on or after 2026-11-11. By then the released code has built every day of the 7-day fold window. Pass: `mismatches=0 repair_1d=0`. On pass, retire the script. On a fail inside the window, run the Failure Protocol. | proposed 2026-11-07 (`plans/reports/kongming-261107-1227-open-questions-and-prod-state.md`); owner: pending | 2026-11-11 to 2026-11-15 |
+| F2 | D16 amendment for a day older than the 7-day fold window (`_REPAIR_DAYS` in `sync_jobs.py`): the row passes when the stored 1d equals the dry-run aggregate of its stored 1m bars (OHLC tolerance 1e-9, volume 1e-4). Vendor equality is required only inside the window. Reason: since E3 no job refreshes a 1d bar older than the window, so a vendor revision there never heals. Example: BTCUSD 2026-10-24, vendor volume 113120, then 113100, then 113120 across reads; the stored 1d is within tolerance of its 1m aggregate. | owner: pending | before F1 |
+
+The BTCUSD 2026-10-24 row leaves the script's 14-day window by 2026-11-11, so F1 can pass without F2. F2 guards only against later vendor revisions.
+
+F1 runs with PRODPY (Ops recipe) and the script below. It is the Phase 05 script plus the F2 branch (`if d < WINDOW`). If F2 is declined, delete that branch and keep the `else` line.
+
+```python
+import asyncio
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from pymongo import MongoClient
+from pocketquant.core.config import get_settings
+from pocketquant.core.domain.shared.enums import Interval
+from pocketquant.core.infra.exness.exness_adapter import ExnessAdapter
+from pocketquant.core.infra.exness.exness_client import ExnessClient
+from pocketquant.engine.market_data.app_services.cascade_aggregator import aggregate_ohlcv
+s = get_settings()
+db = MongoClient(str(s.mongodb_url))[s.mongodb_database]
+D1 = datetime.fromisoformat("2026-11-01T14:50:40+00:00")
+DEPLOY_DAY = datetime(2026, 11, 1, tzinfo=UTC)
+LAST = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+FIRST = LAST - timedelta(days=14)
+# _REPAIR_DAYS: the fold never rebuilds a day older than this
+WINDOW = LAST - timedelta(days=7)
+syms = sorted(d["symbol"] for d in db.tracked_symbols.find({"symbol": {"$regex": ":EXNESS$"}}, {"symbol": 1}))
+
+
+def same(a, b, tol):
+    return abs(a - b) <= tol * max(1.0, abs(b))
+
+
+def eq(x, v):
+    return (x is not None and v is not None
+            and all(same(x[k], getattr(v, k), 1e-9) for k in ("open", "high", "low", "close"))
+            and same(x["volume"], v.volume, 1e-4))
+
+
+def dry(sym, day):
+    q = {"symbol": sym, "interval": "1m",
+         "datetime": {"$gte": day, "$lte": day + timedelta(days=1) - timedelta(seconds=1)}}
+    docs = list(db.bars.find(q).sort("datetime", -1).limit(5000))
+    total = db.bars.count_documents(q)
+    bars = [SimpleNamespace(datetime=d["datetime"].replace(tzinfo=UTC), open=d["open"], high=d["high"],
+                            low=d["low"], close=d["close"], volume=d["volume"]) for d in docs]
+    return aggregate_ohlcv(bars), len(docs), total
+
+
+async def main():
+    client = ExnessClient(s)
+    assert client.is_configured
+    adapter = ExnessAdapter(client)
+    mismatches, truncated, post_not_cascade, per_sym = 0, 0, 0, {}
+    try:
+        for sym in syms:
+            exn = {b.datetime.replace(tzinfo=UTC): b for b in await adapter.fetch_ohlcv(sym, Interval.DAY_1, n_bars=20)}
+            stored = {b["datetime"].replace(tzinfo=UTC): b for b in db.bars.find(
+                {"symbol": sym, "interval": "1d", "datetime": {"$gte": FIRST, "$lt": LAST}})}
+            days = sorted(d for d in set(exn) | set(stored) if FIRST <= d < LAST)
+            per_sym[sym] = len(days)
+            for d in days:
+                v, st = exn.get(d), stored.get(d)
+                agg, n, total = dry(sym, d)
+                truncated += 1 if n < total else 0
+                src = st.get("source") if st else None
+                post = d >= DEPLOY_DAY
+                if post and src != "cascade":
+                    post_not_cascade += 1
+                s_ok, d_ok = eq(st, v), eq(agg, v)
+                if d < WINDOW:
+                    ok = st is not None and agg is not None and eq(st, SimpleNamespace(**agg))
+                else:
+                    ok = s_ok and d_ok and (not post or src == "cascade")
+                mismatches += 0 if ok else 1
+                upd = st.get("updated_at").isoformat() if st and st.get("updated_at") else None
+                print(sym, d.date(), "stored=" + ("equal" if s_ok else "diff"), "dry=" + ("equal" if d_ok else "diff"),
+                      "window=" + str(int(d >= WINDOW)), "source=" + str(src), "post_d1=" + str(int(post)),
+                      "updated_at=" + str(upd), f"n1m={n}/{total}")
+    finally:
+        await client.close()
+    repair = db.bars.count_documents({"interval": "1d", "source": "rest_repair", "created_at": {"$gt": D1}})
+    print(f"diag_truncated={truncated} post_d1_not_cascade={post_not_cascade}")
+    print(f"min_days={min(per_sym.values()) if per_sym else 0}")
+    print(f"mismatches={mismatches} repair_1d={repair}")
+
+
+asyncio.run(main())
+```
+
 ## Failure Protocol (copied verbatim into every phase file)
 
 ```markdown
