@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Track B: spec check, hitnrun2 rewrite with cost filter, tests, CI"
-status: pending
+status: completed
 priority: P2
 effort: "1d"
 dependencies: [2]
