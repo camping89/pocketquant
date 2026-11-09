@@ -1,5 +1,8 @@
 from pocketquant.core.common.constants import INTERVAL_SECONDS
 from pocketquant.core.common.exceptions import DomainError, NotFoundError
+from pocketquant.core.domain.strategy.services.hitnrun2_strategy_service import (
+    HitNRun2StrategyService,
+)
 from pocketquant.core.domain.strategy.services.triple_screen_strategy_service import (
     TripleScreenStrategyService,
 )
@@ -8,6 +11,7 @@ from pocketquant.core.domain.strategy.value_objects import StrategyConfig
 
 STRATEGY_REGISTRY: dict[str, type[IStrategyService]] = {
     "triple_screen": TripleScreenStrategyService,
+    "hitnrun2": HitNRun2StrategyService,
 }
 
 
@@ -73,4 +77,9 @@ def check_strategy_inputs(
     return cls
 
 
-__all__ = ["STRATEGY_REGISTRY", "TripleScreenStrategyService", "check_strategy_inputs"]
+__all__ = [
+    "STRATEGY_REGISTRY",
+    "HitNRun2StrategyService",
+    "TripleScreenStrategyService",
+    "check_strategy_inputs",
+]
