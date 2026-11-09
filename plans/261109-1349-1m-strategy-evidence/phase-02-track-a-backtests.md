@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Track A: four Triple Screen 1m backtests, table, verdicts"
-status: pending
+status: completed
 priority: P2
 effort: "about 2.5h wall time (4 runs at an estimated 20-25 min each)"
 dependencies: [1]
