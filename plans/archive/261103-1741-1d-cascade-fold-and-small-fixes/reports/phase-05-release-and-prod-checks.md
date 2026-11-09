@@ -125,6 +125,6 @@ mismatches=1 repair_1d=0
 ## Unresolved
 
 - R4: closed on 2026-11-07. The 11-05 to 11-07 `integrity.issues_found` lines were lost with the redeployed containers. A read-only `check_integrity` run over the same 7-day window printed `issues_total=0` for all six symbols and 5m-1d (`plans/reports/kongming-261107-1227-open-questions-and-prod-state.md`, Q2). `fc173b5f` stores each future issue on the `sync_integrity` run doc.
-- The D16 amendment and the final D16 run are tracked as F1 and F2 in `plan.md` "Follow-ups".
+- None. The D16 amendment (F2) and the final D16 run (F1) closed on 2026-11-09 with `mismatches=0 repair_1d=0`; see `plan.md` "Follow-ups".
 
 Result: PASS
