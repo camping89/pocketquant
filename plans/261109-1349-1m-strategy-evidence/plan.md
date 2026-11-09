@@ -1,7 +1,7 @@
 ---
 title: "1m strategy evidence: Triple Screen 1m entry and revived hitnrun2, backtest gate, paper reconcile"
 description: "Backtest Triple Screen with a 1m entry screen and a revived hitnrun2 with a cost filter on 12 months of XAUUSD:EXNESS, gate each set on net profit_factor >= 1.2 and total_trades >= 100, paper-reconcile passing sets for 14 days, and close with a verdict per set."
-status: pending
+status: in-progress
 priority: P2
 effort: "about 2d work + 14d paper window"
 branch: develop
@@ -204,7 +204,7 @@ for set_name, runs in sets.items():
 
 | # | Phase | Prod write | Depends on | Status |
 |---|---|---|---|---|
-| 01 | [Push the plan; no-look-ahead tests; spec, baseline and 1m coverage](./phase-01-coverage-and-baseline.md) | none | none | Pending |
+| 01 | [Push the plan; no-look-ahead tests; spec, baseline and 1m coverage](./phase-01-coverage-and-baseline.md) | none | none | Completed |
 | 02 | [Track A: four Triple Screen 1m backtests, table, verdicts](./phase-02-track-a-backtests.md) | 4 backtest runs | 01 | Pending |
 | 03 | [Track B: spec check, hitnrun2 rewrite with cost filter, tests, CI](./phase-03-hitnrun2-strategy.md) | none | 02 | Pending |
 | 04 | [Track B release to master and post-deploy checks](./phase-04-release-hitnrun2.md) | release [ASK] | 03 | Pending |

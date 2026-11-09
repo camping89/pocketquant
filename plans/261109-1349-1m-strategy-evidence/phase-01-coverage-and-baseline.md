@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Push the plan; no-look-ahead tests; spec, baseline and 1m coverage"
-status: pending
+status: completed
 priority: P2
 effort: "0.5h"
 dependencies: []
