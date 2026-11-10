@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Paper for passing sets: create, 14 days of checks, reconcile"
-status: pending
+status: completed
 priority: P2
 effort: "1h work + 14 calendar days (resumes daily)"
 dependencies: [2, 5]

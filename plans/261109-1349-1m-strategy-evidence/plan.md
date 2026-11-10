@@ -209,7 +209,7 @@ for set_name, runs in sets.items():
 | 03 | [Track B: spec check, hitnrun2 rewrite with cost filter, tests, CI](./phase-03-hitnrun2-strategy.md) | none | 02 | Completed |
 | 04 | [Track B release to master and post-deploy checks](./phase-04-release-hitnrun2.md) | release [ASK] | 03 | Completed |
 | 05 | [Track B: two hitnrun2 backtests, table, verdict](./phase-05-track-b-backtests.md) | 2 backtest runs | 04 | Completed |
-| 06 | [Paper for passing sets: create, 14 days of checks, reconcile](./phase-06-paper-reconcile.md) | 0-3 subscriptions | 02, 05 | Pending |
+| 06 | [Paper for passing sets: create, 14 days of checks, reconcile](./phase-06-paper-reconcile.md) | 0-3 subscriptions | 02, 05 | Completed |
 | 07 | [Written verdict per set, status completed, archive](./phase-07-verdicts-and-archive.md) | none | 06 | Pending |
 
 Dependency graph: `01 -> 02 -> 03 -> 04 -> 05 -> 06 -> 07`. Track A (01-02) runs before any Track B code (advice: Track B starts only once Track A numbers exist). Paper (06) starts after the Track B release, so the release deploy cannot restart the trader in the middle of a paper window and drop its logs.
