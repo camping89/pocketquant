@@ -208,7 +208,7 @@ for set_name, runs in sets.items():
 | 02 | [Track A: four Triple Screen 1m backtests, table, verdicts](./phase-02-track-a-backtests.md) | 4 backtest runs | 01 | Completed |
 | 03 | [Track B: spec check, hitnrun2 rewrite with cost filter, tests, CI](./phase-03-hitnrun2-strategy.md) | none | 02 | Completed |
 | 04 | [Track B release to master and post-deploy checks](./phase-04-release-hitnrun2.md) | release [ASK] | 03 | Completed |
-| 05 | [Track B: two hitnrun2 backtests, table, verdict](./phase-05-track-b-backtests.md) | 2 backtest runs | 04 | Pending |
+| 05 | [Track B: two hitnrun2 backtests, table, verdict](./phase-05-track-b-backtests.md) | 2 backtest runs | 04 | Completed |
 | 06 | [Paper for passing sets: create, 14 days of checks, reconcile](./phase-06-paper-reconcile.md) | 0-3 subscriptions | 02, 05 | Pending |
 | 07 | [Written verdict per set, status completed, archive](./phase-07-verdicts-and-archive.md) | none | 06 | Pending |
 

@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Track B: two hitnrun2 backtests, table, verdict"
-status: pending
+status: completed
 priority: P2
 effort: "about 1.5h wall time"
 dependencies: [4]
