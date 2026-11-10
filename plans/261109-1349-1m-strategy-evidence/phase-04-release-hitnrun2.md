@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Track B release to master and post-deploy checks"
-status: pending
+status: completed
 priority: P2
 effort: "0.5h + CI time"
 dependencies: [3]
