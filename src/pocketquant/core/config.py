@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     # Unset balance falls back to paper_initial_balance; leverage 1 is unleveraged.
     paper_futures_initial_balance: float | None = Field(default=None, gt=0)
     paper_futures_leverage: float = Field(default=1.0, ge=1)
-    paper_slippage_bps: float = 0.5  # 0.5 bp = 0.005%
+    paper_slippage_bps: float = 0.1  # 0.1 bp = 0.001%, about 0.04 USD/oz on gold near 4000
     paper_commission_bps: float = 3.0  # 3 bps
     reconcile_interval_seconds: float = 5.0
 

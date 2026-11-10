@@ -37,7 +37,7 @@ def _config_from_dict(payload: dict[str, Any], contract_spec: ContractSpec) -> B
         start_date=datetime.fromisoformat(payload["start_date"]),
         end_date=datetime.fromisoformat(payload["end_date"]),
         initial_capital=payload.get("initial_capital", 10_000.0),
-        slippage_bps=payload.get("slippage_bps", 0.5),
+        slippage_bps=payload.get("slippage_bps", 0.1),
         commission_bps=payload.get("commission_bps", 3.0),
         # None means the run took the symbol's typical spread.
         spread=contract_spec.spread if payload.get("spread") is None else payload["spread"],
